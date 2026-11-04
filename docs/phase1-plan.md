@@ -86,7 +86,11 @@ module that imports OpenDTA, so swapping engines later (OpenStat or our own) tou
 its own `Engine`.
 - **Workdir:** with stdio, the launch directory or `--workdir`. That's the main local use: a replication package
   with relative `use data/x.dta` / `do 01_clean.do` paths. With HTTP, a fresh temp dir per session.
-- **Session key:** `ctx.session_id` on stateful HTTP. On stdio, one worker for the process. Each call has a timeout (default 60 s, configurable). On timeout or a dead
+- **Session key:** `ctx.session_id` on stateful HTTP. On stdio, one worker for the process.
+- Built (step 4, `src/dofile/worker.py`): `Worker` (spawned child, pipe, per-call timeout) and `WorkerPool`
+  (LRU cap, idle reaping, a temp workdir per session that is deleted on close). If the child died between
+  calls, that call returns rc 9998 without running the code, so the agent knows its data is gone.
+  The next call starts fresh. Startup is about 1 s per new session. Each call has a timeout (default 60 s, configurable). On timeout or a dead
 worker, the process is killed and the tool returns `rc=9998` with "session reset: data in memory was lost". The
 next call starts a fresh worker. Idle workers are reaped after 15 minutes, with a cap on concurrent workers.
 
