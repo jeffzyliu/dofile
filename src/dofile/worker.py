@@ -124,6 +124,15 @@ class WorkerPool:
             self._workers.move_to_end(key)
             return w
 
+    def find(self, key: str) -> Worker | None:
+        """The live worker for `key`, or None if it never existed or was reaped/evicted."""
+        with self._lock:
+            self._reap_locked()
+            w = self._workers.get(key)
+            if w is not None:
+                self._workers.move_to_end(key)
+            return w
+
     def reap(self) -> None:
         with self._lock:
             self._reap_locked()

@@ -159,6 +159,11 @@ JSON results. It's useful in CI for replication packages and is the cheapest end
    and run a regression from a prompt.
 6. `cli.py`, README (install, MCP config, sandbox limits, OpenDTA attribution), CI workflow.
 
+**Status (2026-11-03): steps 1–6 built and committed.** Step 6 added `dofile run` (`src/dofile/cli.py`: sandboxed
+by default, the do-file's folder readable, exit 1 on error, `--json`) and CI (`.github/workflows/ci.yml`). It also
+fixed expired HTTP tokens: they now fail with "unknown or expired session" instead of silently getting a fresh
+session. Not yet verified: CI on Linux (the sandbox has only run on macOS) and Windows (not in CI).
+
 Publishing to PyPI, and reporting OpenDTA bugs upstream, are separate and need your go-ahead.
 
 ## Verification (end of Phase 1)

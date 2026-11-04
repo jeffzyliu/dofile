@@ -16,6 +16,7 @@ mcp = [
 ]
 
 [project.scripts]
+dofile = "dofile.cli:main"
 dofile-mcp = "dofile.mcp_server:main"
 
 [dependency-groups]

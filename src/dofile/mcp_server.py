@@ -41,24 +41,23 @@ class Sessions:
         kw = dict(read_dirs=read_dirs, sandbox=sandbox, timeout=timeout)
         self.single = None if http else Worker(workdir, **kw)
         self.pool = WorkerPool(max_workers=max_sessions, idle_seconds=idle_seconds, **kw) if http else None
-        self.tokens: set[str] = set()
 
     def new(self) -> str:
         token = secrets.token_urlsafe(16)
-        self.tokens.add(token)
-        self.pool.get(token)
+        self.pool.get(token)  # the pool's keys are the valid tokens
         return token
 
     def get(self, session: str | None) -> Worker:
         if not self.http:
             return self.single
-        if not session or session not in self.tokens:
-            raise ToolError("unknown or missing session: call start_session and pass its token as `session`")
-        return self.pool.get(session)
+        w = self.pool.find(session) if session else None
+        if w is None:  # never started, reset, idle too long, or evicted: never silently hand out a fresh one
+            raise ToolError("unknown or expired session (data from an expired session is gone): call "
+                            "start_session and pass its token as `session`")
+        return w
 
     def drop(self, session: str | None) -> None:
         if self.http:
-            self.tokens.discard(session)
             self.pool.close(session)
         else:
             self.single.close()

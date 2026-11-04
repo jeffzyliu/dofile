@@ -1,0 +1,46 @@
+"""`dofile run file.do`: run a do-file in batch mode, like `stata -b do file.do`.
+
+Prints the log, exits 0 on success and 1 on an error (the Stata rc is in the log and in --json).
+Runs sandboxed by default, in the current directory; --unsafe lifts the sandbox for trusted code.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="dofile", description="Run Stata-syntax .do files without a Stata license.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    run = sub.add_parser("run", help="run a .do file and print its log")
+    run.add_argument("dofile", type=Path)
+    run.add_argument("--json", type=Path, metavar="OUT", help="also write rc, error and e()/r() results as JSON")
+    run.add_argument("--workdir", type=Path, default=Path("."), help="working directory (default: current)")
+    run.add_argument("--read-dir", action="append", default=[], help="extra read-only data directory (repeatable)")
+    run.add_argument("--unsafe", action="store_true", help="disable the sandbox (trusted code only)")
+    a = ap.parse_args(argv)
+
+    dofile = a.dofile.resolve()
+    if not dofile.is_file():
+        ap.error(f"no such file: {a.dofile}")
+    workdir = a.workdir.resolve()
+    json_out = a.json.resolve() if a.json else None  # resolved before the sandbox confines the process
+    if not a.unsafe:
+        from . import sandbox
+        # the do-file's own folder stays readable, so `do other.do` next to it works
+        sandbox.install(workdir, (str(dofile.parent), *(str(Path(d).resolve()) for d in a.read_dir)))
+    from .engine import Engine
+
+    os.chdir(workdir)
+    r = Engine().run(f'do "{dofile}"')
+    sys.stdout.write(r.log)
+    if json_out:
+        json_out.write_text(json.dumps({"rc": r.rc, "error": r.error, "results": r.results}, indent=2) + "\n")
+    return 1 if r.rc else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

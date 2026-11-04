@@ -4,6 +4,16 @@ Run Stata-syntax `.do` files without a Stata license, and expose them to AI agen
 
 Status: Phase 1 in progress (see `docs/phase1-plan.md`).
 
+## Command line
+
+```bash
+uv run dofile run analysis.do --json results.json
+```
+
+Prints the log like `stata -b`, exits 1 if the do-file stops on an error, and optionally writes the return code
+and `e()`/`r()` results as JSON. It runs in the current folder with the sandbox on (see below); `--unsafe` turns it
+off for trusted code that needs `shell`, `cd` or `erase`.
+
 ## MCP server
 
 ```bash
@@ -28,6 +38,19 @@ and `webuse` are disabled. Files can only be written in the working folder, and 
 folders and from the Python installation. No subprocesses or network. Each call has a timeout (`--timeout`,
 default 60 s); a timeout or crash resets that session (rc 9998). The sandbox is a policy layer, not a security
 boundary: run public HTTP deployments in a container.
+
+## Development
+
+```bash
+uv sync --extra mcp
+uv run pytest            # ~4.5 min; tests_opendta/ holds OpenDTA's suite and the Stata 14 log comparison
+uv run pytest tests -k "not stata14"   # quicker: dofile's own tests
+```
+
+- `tests/conformance/`: dofile's corpus with reference values from statsmodels/linearmodels, plus breadth probes.
+  Known engine gaps are strict xfails, so a fix in OpenDTA shows up as a failure to remove.
+- `scripts/vendor_opendta.py [COMMIT]`: re-vendor OpenDTA, then run the full suite.
+- CI: Ubuntu and macOS, Python 3.12–3.14 (`.github/workflows/ci.yml`). Dev default is 3.14 (`.python-version`).
 
 ## Engine
 

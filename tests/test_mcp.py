@@ -130,3 +130,19 @@ def test_real_http_transport():
     finally:
         proc.terminate()
         proc.wait(10)
+
+
+def test_http_expired_session_is_reported_not_silently_replaced():
+    s = Sessions(http=True, workdir=Path("."), read_dirs=(), sandbox=True, timeout=30)
+
+    async def steps(c):
+        a = (await tool(c, "start_session")).structured_content["session"]
+        await tool(c, "run_do", code="clear\nset obs 5", session=a)
+        s.pool.idle_seconds = 0  # the session idles out
+        r = await tool(c, "run_do", code="count", session=a)
+        assert r.is_error and "expired" in r.content[0].text
+        assert len(s.pool) == 0
+    try:
+        call(build_server(s), steps)
+    finally:
+        s.close()
