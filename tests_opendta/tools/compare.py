@@ -1,0 +1,309 @@
+"""Compares OpenDTA's output with reference logs produced in Stata 14.
+
+Usage:
+    python tools/compare.py              # runs all compat/do/*.do
+    python tools/compare.py 0001         # only those starting with 0001
+    python tools/compare.py --show-diff  # shows the differences line by line
+    python tools/compare.py --brief      # short output: only the cases that differ, diffs
+                                         # without iteration lines and cut at --max-diff lines
+
+For each compat/do/NAME.do:
+  1. runs it in OpenDTA in batch mode, writing compat/out/NAME.log;
+  2. if compat/expected/NAME.log exists (produced in Stata), compares the two.
+
+Before comparing, the log header and footer, `. do ...`/`. log close` lines
+and trailing spaces are dropped; blank lines are ignored.
+
+Numbers written with 15 or more characters on either side (return list,
+ereturn list) may differ in the last digit: the order of floating-point sums is not
+the same as Stata's. These lines count as equal when the rest of the text is
+identical and the relative difference is below 1e-11 (Wald statistics and
+computations with numerical Hessians accumulate error in the last two digits).
+"""
+
+from __future__ import annotations
+
+import argparse
+import difflib
+import os
+import re
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+COMPAT = ROOT / "compat"
+_HEADER = re.compile(r"^\s*(name|log|log type|opened on|closed on):")
+_SKIP = re.compile(r"^\.\s+((capture\s+)?(noisily\s+)?(do|run)|log close|log using|set linesize|quietly set (dp|hints|linesize|superscript|numerics))\b")
+
+
+# .dta date stamp (describe): changes on every run
+# dates: "24 Oct 2026 09:52" and, in SAS XPORT files, "24oct26:09:52:24"
+_STAMP = re.compile(r"\b\d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}\b|\b\d{2}[a-z]{3}\d{2}:\d{2}:\d{2}:\d{2}\b")
+# absolute path of the case's temporary files (graph export to PDF shows the full path, which
+# changes from machine to machine): absolute path of odta_* files (macOS/Linux "/..."; Windows
+# "C:\\...")
+# e(datasignature): Stata's checksum algorithm is undocumented; N and k are compared, the two
+# checksums are not
+_DATASIG = re.compile(r'(e\(datasignature\) : "\d+:\d+)(?:\(\d+\))?:\d+:\d+"')
+_ABSPATH = re.compile(r"(?<=\(file )(?:[A-Za-z]:)?[\\/]\S*[\\/](odta_\S+)")
+
+
+def normalize(text: str) -> list[str]:
+    out: list[str] = []
+    lines = text.splitlines()
+    for k, raw in enumerate(lines):
+        line = _ABSPATH.sub(r"<folder>/\1", _STAMP.sub("<date>", raw.rstrip()))
+        line = _DATASIG.sub(r'\1:<checksum>"', line)
+        if not line or _HEADER.match(line) or _SKIP.match(line):
+            continue
+        if set(line) <= {"-"}:
+            # only the dashed lines of the log header and footer are dropped; those of the tables
+            # are part of the output
+            near = lines[max(0, k - 1):k] + lines[k + 1:k + 2]
+            if any(_HEADER.match(n) for n in near) or k == 0 or k == len(lines) - 1:
+                continue
+        if line in (".",):
+            continue
+        out.append(line)
+    # batch mode ends an interrupted do-file with "end of do-file" and r(#); in Stata the
+    # references run under capture noisily, without the final r(#)
+    if len(out) >= 2 and out[-2] == "end of do-file" and re.fullmatch(r"r\(\d+\);", out[-1]):
+        out.pop()
+    return out
+
+
+# iteration logs of the optimizers, left out of the --brief diffs
+_ITER = re.compile(r"^(Iteration \d+:|Grid node \d+:|Refining estimates|Fitting )")
+
+_NUM = re.compile(r"-?(?:\d+\.?\d*|\.\d+)(?:e[-+]\d+)?")
+
+
+def _digits(tok: str) -> int:
+    mant = tok.lstrip("-").split("e")[0].replace(".", "").lstrip("0")
+    return len(mant)
+
+
+def _close_line(a: str, b: str) -> bool:
+    """Same line, up to noise in the 16th digit of long numbers."""
+    if _NUM.sub("#", a) != _NUM.sub("#", b):
+        return False
+    na, nb = _NUM.findall(a), _NUM.findall(b)
+    for x, y in zip(na, nb):
+        if x == y:
+            continue
+        # long numbers (%18.0g): 15+ characters, such as .0032959009263453, on either side
+        # (112.8 against 112.8000000000001)
+        if max(len(x.lstrip("-")), len(y.lstrip("-"))) < 15:
+            return False
+        fx, fy = float(x), float(y)
+        if abs(fx - fy) > 1e-11 * max(abs(fx), abs(fy)):
+            return False
+    return True
+
+
+def same_logs(a: list[str], b: list[str]) -> bool:
+    return len(a) == len(b) and all(x == y or _close_line(x, y) for x, y in zip(a, b))
+
+
+def run_opendta(dofile: Path, outdir: Path, setup: str = "") -> Path:
+    from dofile._vendor.opendta.cli import run_batch
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    # OpenDTA's error explanations and superscript exponent turned off: Stata does not have them.
+    # `setup` (e.g. set dp comma) runs first, without appearing in the compared log
+    target = outdir / dofile.name
+    # gerar_esperados.do runs the cases with set linesize 255
+    pre = ("quietly set hints off\nquietly set superscript off\nquietly set numerics stata\n"
+           "quietly set linesize 255\n"
+           + (f"quietly {setup}\n" if setup else ""))
+    target.write_text(pre + dofile.read_text(encoding="utf-8"), encoding="utf-8")
+    # leftovers of an interrupted case (odta_*) must not affect the next one; gerar_esperados.do
+    # does the same cleanup in Stata
+    for leftover in outdir.glob("odta_*"):
+        if leftover.is_file():
+            leftover.unlink()
+    cwd = os.getcwd()
+    os.chdir(outdir)
+    try:
+        run_batch(str(target), [])
+    finally:
+        os.chdir(cwd)
+    return outdir / (dofile.stem + ".log")
+
+
+_LIMIT = re.compile(r"^(ignore\(/(.*?)/\)|skip\(/(.*?)/\)|tolerance\(([0-9.eE+-]+)\))\s*")
+
+
+@dataclass
+class Known:
+    """A known difference: the reason and, optionally, its limits. ignore(/REGEX/) drops the
+    lines matching REGEX from both logs; skip(/REGEX/) drops, from both logs, the whole output of
+    the commands whose `. command` line matches REGEX; tolerance(REL) accepts numbers that differ
+    by at most REL relative to the larger of |a|, |b| and 1. With limits, the rest of the log must
+    still be equal, so layout regressions are still caught."""
+    why: str
+    ignore: re.Pattern | None = None
+    tol: float | None = None
+    skip: re.Pattern | None = None
+
+    def limited(self) -> bool:
+        return self.ignore is not None or self.tol is not None or self.skip is not None
+
+    def filtered(self, lines: list[str]) -> list[str]:
+        if self.skip is not None:
+            out, dropping = [], False
+            for x in lines:
+                if x.startswith(". "):
+                    dropping = bool(self.skip.search(x))
+                if not dropping:
+                    out.append(x)
+            lines = out
+        if self.ignore is not None:
+            lines = [x for x in lines if not self.ignore.search(x)]
+        return lines
+
+    def accepts(self, a: list[str], b: list[str]) -> bool:
+        if not self.limited():
+            return True
+        a, b = self.filtered(a), self.filtered(b)
+        if len(a) != len(b):
+            return False
+        return all(x == y or _close_line(x, y) or (self.tol is not None and _within(x, y, self.tol))
+                   for x, y in zip(a, b))
+
+
+def _within(a: str, b: str, tol: float) -> bool:
+    # numbers with fewer digits shift the columns: spacing is not compared here
+    if " ".join(_NUM.sub("#", a).split()) != " ".join(_NUM.sub("#", b).split()):
+        return False
+    for x, y in zip(_NUM.findall(a), _NUM.findall(b)):
+        fx, fy = float(x), float(y)
+        if abs(fx - fy) > tol * max(abs(fx), abs(fy), 1.0):
+            return False
+    return True
+
+
+def _known_differences() -> dict[str, Known]:
+    """compat/known_differences.txt: cases that may differ, with the reason. The reason may
+    start with ignore(/REGEX/) and/or tolerance(REL) (see Known)."""
+    path = COMPAT / "known_differences.txt"
+    out: dict[str, Known] = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip() and not line.lstrip().startswith("#"):
+                name, _, why = line.strip().partition(" ")
+                k = Known(why.strip())
+                while True:
+                    m = _LIMIT.match(k.why)
+                    if not m:
+                        break
+                    if m.group(2) is not None:
+                        k.ignore = re.compile(m.group(2))
+                    elif m.group(3) is not None:
+                        k.skip = re.compile(m.group(3))
+                    else:
+                        k.tol = float(m.group(4))
+                    k.why = k.why[m.end():]
+                out[name] = k
+    return out
+
+
+def main(argv: list[str] | None = None) -> int:
+    # the Windows console (cp1252) cannot print "≈", "·" etc. from the descriptions
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+    p = argparse.ArgumentParser()
+    p.add_argument("prefix", nargs="?", default="")
+    p.add_argument("--show-diff", action="store_true")
+    p.add_argument("--expected", default=str(COMPAT / "expected"),
+                   help="folder with the reference logs (default: compat/expected)")
+    p.add_argument("--setup", default="",
+                   help="command run before each do-file, e.g. 'set dp comma'")
+    p.add_argument("--brief", action="store_true",
+                   help="print only the cases that differ (known differences without their reason); "
+                        "with --show-diff, leave out the iteration lines and cut each diff")
+    p.add_argument("--max-diff", type=int, default=60,
+                   help="with --brief, the most diff lines shown per case (default 60)")
+    ns = p.parse_args(argv)
+    if ns.brief:
+        import warnings
+        warnings.simplefilter("ignore")      # numpy overflow notes of boundary fits
+
+    files = sorted(f for f in (COMPAT / "do").glob("*.do") if f.name.startswith(ns.prefix))
+    known = _known_differences()
+    passed = failed = missing = tolerated = 0
+    for f in files:
+        try:
+            got = run_opendta(f, COMPAT / "out", ns.setup)
+        except Exception as exc:   # a crash in one case must not hide the others (nor the CI annotation)
+            import traceback
+            print(f"  XX {f.stem}  (OpenDTA raised {type(exc).__name__})")
+            failed += 1
+            if os.environ.get("GITHUB_ACTIONS"):
+                lines = traceback.format_exc().splitlines()
+                tail = [ln for ln in lines if "opendta" in ln and "File" in ln][-4:] + lines[-2:]
+                print(f"::error title=compat {f.stem}::" + "%0A".join(ln.replace("%", "%25") for ln in tail))
+            continue
+        exp = Path(ns.expected) / (f.stem + ".log")
+        if not exp.exists():
+            print(f"  ?  {f.stem:<32} no Stata reference log")
+            missing += 1
+            continue
+        a = normalize(exp.read_text(encoding="utf-8", errors="replace"))
+        b = normalize(got.read_text(encoding="utf-8", errors="replace"))
+        if same_logs(a, b):
+            if not ns.brief:
+                print(f"  ok {f.stem}")
+            passed += 1
+        else:
+            k = known.get(f.stem)
+            if k is not None and k.accepts(a, b):
+                print(f"  ~~ {f.stem}" if ns.brief else f"  ~~ {f.stem:<32} known difference: {k.why}")
+                tolerated += 1
+            else:
+                print(f"  XX {f.stem}")
+                failed += 1
+                if os.environ.get("GITHUB_ACTIONS"):
+                    # GitHub annotation with the first differing lines, to read the difference
+                    # without opening the whole CI log
+                    # with a known difference that did not cover everything, only the lines it
+                    # does not accept
+                    fa, fb = (a, b) if k is None else (k.filtered(a), k.filtered(b))
+                    ok = (lambda x, y: x == y or _close_line(x, y)
+                          or (k is not None and k.tol is not None and _within(x, y, k.tol)))
+                    diff = []
+                    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, fa, fb, autojunk=False).get_opcodes():
+                        if tag == "equal" or (i2 - i1 == j2 - j1 and all(ok(x, y) for x, y in
+                                                                          zip(fa[i1:i2], fb[j1:j2]))):
+                            continue
+                        diff += ["-" + x for x in fa[i1:i2]] + ["+" + y for y in fb[j1:j2]]
+                    diff = diff[:12]
+                    body = "%0A".join(ln.replace("%", "%25") for ln in diff)
+                    print(f"::error title=compat {f.stem}::{body}")
+            if ns.show_diff and not (ns.brief and k is not None and k.accepts(a, b)):
+                da, db = a, b
+                if ns.brief:
+                    # only what the known difference (if any) does not cover, without iteration lines
+                    if k is not None:
+                        da, db = k.filtered(a), k.filtered(b)
+                    da = [x for x in da if not _ITER.match(x)]
+                    db = [x for x in db if not _ITER.match(x)]
+                lines = list(difflib.unified_diff(da, db, "Stata 14", "OpenDTA", lineterm="", n=1))
+                cut = ns.max_diff if ns.brief else len(lines)
+                for line in lines[:cut]:
+                    print("     " + line)
+                if len(lines) > cut:
+                    print(f"     ... {len(lines) - cut} more diff lines (run without --brief to see them)")
+    extra = f", {tolerated} with a known difference" if tolerated else ""
+    print(f"\n{passed} equal, {failed} different{extra}, {missing} without a reference")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

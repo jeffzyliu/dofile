@@ -1,0 +1,378 @@
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/yaskepalhares/opendta/compat/stata/1002_melogit.log
+  log type:  text
+ opened on:  15 Oct 2026, 16:21:42
+
+. * Phase 10: melogit, meprobit and mepoisson (adaptive Gauss-Hermite quadrature)
+. clear
+
+. set seed 1003
+
+. set obs 40
+number of observations (_N) was 0, now 40
+
+. gen g = _n
+
+. gen u = invnormal(runiform())*.9
+
+. gen v = invnormal(runiform())*.3
+
+. expand 15
+(560 observations created)
+
+. gen x = invnormal(runiform())
+
+. gen yb = runiform() < invlogit(-.4 + .8*x + u + v*x)
+
+. * Poisson counts by inversion of the distribution function (rpoisson() draws differ from Stata's)
+. gen double lam = exp(.2 + .5*x + u/2)
+
+. gen double pu = runiform()
+
+. gen double pk = exp(-lam)
+
+. gen double cp = pk
+
+. gen yc = 0
+
+. forvalues k = 1/30 {
+  2.     quietly replace yc = yc + 1 if pu > cp
+  3.     quietly replace pk = pk*lam/`k'
+  4.     quietly replace cp = cp + pk
+  5. }
+
+. drop lam pu pk cp
+
+. melogit yb x || g:
+
+Fitting fixed-effects model:
+
+Iteration 0:   log likelihood = -363.12443  
+Iteration 1:   log likelihood = -363.08324  
+Iteration 2:   log likelihood = -363.08324  
+
+Refining starting values:
+
+Grid node 0:   log likelihood = -358.69253
+
+Fitting full model:
+
+Iteration 0:   log likelihood = -358.69253  
+Iteration 1:   log likelihood = -356.83348  
+Iteration 2:   log likelihood = -355.97747  
+Iteration 3:   log likelihood = -355.94355  
+Iteration 4:   log likelihood = -355.94336  
+Iteration 5:   log likelihood = -355.94336  
+
+Mixed-effects logistic regression               Number of obs     =        600
+Group variable:               g                 Number of groups  =         40
+
+                                                Obs per group:
+                                                              min =         15
+                                                              avg =       15.0
+                                                              max =         15
+
+Integration method: mvaghermite                 Integration pts.  =          7
+
+                                                Wald chi2(1)      =      62.86
+Log likelihood = -355.94336                     Prob > chi2       =     0.0000
+------------------------------------------------------------------------------
+          yb |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+           x |   .8978391   .1132408     7.93   0.000     .6758913    1.119787
+       _cons |  -.5579021   .1392817    -4.01   0.000    -.8308892   -.2849149
+-------------+----------------------------------------------------------------
+g            |
+   var(_cons)|   .4066642   .1847569                      .1669228    .9907324
+------------------------------------------------------------------------------
+LR test vs. logistic model: chibar2(01) = 14.28       Prob >= chibar2 = 0.0001
+
+. melogit yb x || g:, or
+
+Fitting fixed-effects model:
+
+Iteration 0:   log likelihood = -363.12443  
+Iteration 1:   log likelihood = -363.08324  
+Iteration 2:   log likelihood = -363.08324  
+
+Refining starting values:
+
+Grid node 0:   log likelihood = -358.69253
+
+Fitting full model:
+
+Iteration 0:   log likelihood = -358.69253  
+Iteration 1:   log likelihood = -356.83348  
+Iteration 2:   log likelihood = -355.97747  
+Iteration 3:   log likelihood = -355.94355  
+Iteration 4:   log likelihood = -355.94336  
+Iteration 5:   log likelihood = -355.94336  
+
+Mixed-effects logistic regression               Number of obs     =        600
+Group variable:               g                 Number of groups  =         40
+
+                                                Obs per group:
+                                                              min =         15
+                                                              avg =       15.0
+                                                              max =         15
+
+Integration method: mvaghermite                 Integration pts.  =          7
+
+                                                Wald chi2(1)      =      62.86
+Log likelihood = -355.94336                     Prob > chi2       =     0.0000
+------------------------------------------------------------------------------
+          yb | Odds Ratio   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+           x |   2.454294   .2779261     7.93   0.000     1.965784    3.064201
+       _cons |   .5724087   .0797261    -4.01   0.000     .4356617    .7520782
+-------------+----------------------------------------------------------------
+g            |
+   var(_cons)|   .4066642   .1847569                      .1669228    .9907324
+------------------------------------------------------------------------------
+LR test vs. logistic model: chibar2(01) = 14.28       Prob >= chibar2 = 0.0001
+
+. estat icc
+
+Residual intraclass correlation
+
+------------------------------------------------------------------------------
+                       Level |        ICC   Std. Err.     [95% Conf. Interval]
+-----------------------------+------------------------------------------------
+                           g |   .1100123   .0444826      .0482884    .2314471
+------------------------------------------------------------------------------
+
+. meprobit yb x || g:
+
+Fitting fixed-effects model:
+
+Iteration 0:   log likelihood = -363.11849  
+Iteration 1:   log likelihood = -363.09711  
+Iteration 2:   log likelihood =  -363.0971  
+
+Refining starting values:
+
+Grid node 0:   log likelihood = -368.17953
+
+Fitting full model:
+
+Iteration 0:   log likelihood = -368.17953  (not concave)
+Iteration 1:   log likelihood = -359.42513  
+Iteration 2:   log likelihood = -356.33421  
+Iteration 3:   log likelihood = -356.12033  
+Iteration 4:   log likelihood = -356.11678  
+Iteration 5:   log likelihood = -356.11677  
+
+Mixed-effects probit regression                 Number of obs     =        600
+Group variable:               g                 Number of groups  =         40
+
+                                                Obs per group:
+                                                              min =         15
+                                                              avg =       15.0
+                                                              max =         15
+
+Integration method: mvaghermite                 Integration pts.  =          7
+
+                                                Wald chi2(1)      =      68.62
+Log likelihood = -356.11677                     Prob > chi2       =     0.0000
+------------------------------------------------------------------------------
+          yb |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+           x |   .5331547   .0643601     8.28   0.000     .4070113    .6592981
+       _cons |  -.3338541   .0829318    -4.03   0.000    -.4963974   -.1713109
+-------------+----------------------------------------------------------------
+g            |
+   var(_cons)|   .1464419   .0657742                      .0607225    .3531679
+------------------------------------------------------------------------------
+LR test vs. probit model: chibar2(01) = 13.96         Prob >= chibar2 = 0.0001
+
+. mepoisson yc x || g:
+
+Fitting fixed-effects model:
+
+Iteration 0:   log likelihood = -1020.5094  
+Iteration 1:   log likelihood = -918.26509  
+Iteration 2:   log likelihood = -917.44146  
+Iteration 3:   log likelihood =   -917.441  
+Iteration 4:   log likelihood =   -917.441  
+
+Refining starting values:
+
+Grid node 0:   log likelihood =   -896.512
+
+Fitting full model:
+
+Iteration 0:   log likelihood =   -896.512  (not concave)
+Iteration 1:   log likelihood = -885.31869  
+Iteration 2:   log likelihood = -882.49673  
+Iteration 3:   log likelihood = -882.40758  
+Iteration 4:   log likelihood = -881.90292  
+Iteration 5:   log likelihood = -881.89907  
+Iteration 6:   log likelihood = -881.89907  
+
+Mixed-effects Poisson regression                Number of obs     =        600
+Group variable:               g                 Number of groups  =         40
+
+                                                Obs per group:
+                                                              min =         15
+                                                              avg =       15.0
+                                                              max =         15
+
+Integration method: mvaghermite                 Integration pts.  =          7
+
+                                                Wald chi2(1)      =     207.54
+Log likelihood = -881.89907                     Prob > chi2       =     0.0000
+------------------------------------------------------------------------------
+          yc |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+           x |   .5181799   .0359695    14.41   0.000      .447681    .5886788
+       _cons |   .1741186   .0769509     2.26   0.024     .0232975    .3249396
+-------------+----------------------------------------------------------------
+g            |
+   var(_cons)|   .1693506   .0524643                      .0922757    .3108037
+------------------------------------------------------------------------------
+LR test vs. Poisson model: chibar2(01) = 71.08        Prob >= chibar2 = 0.0000
+
+. melogit yb x || g: x, covariance(unstructured)
+
+Fitting fixed-effects model:
+
+Iteration 0:   log likelihood = -363.12443  
+Iteration 1:   log likelihood = -363.08324  
+Iteration 2:   log likelihood = -363.08324  
+
+Refining starting values:
+
+Grid node 0:   log likelihood = -360.05596
+
+Fitting full model:
+
+Iteration 0:   log likelihood = -360.05596  (not concave)
+Iteration 1:   log likelihood = -357.29127  
+Iteration 2:   log likelihood = -354.62867  
+Iteration 3:   log likelihood = -354.10494  
+Iteration 4:   log likelihood = -354.09385  
+Iteration 5:   log likelihood = -354.09383  
+
+Mixed-effects logistic regression               Number of obs     =        600
+Group variable:               g                 Number of groups  =         40
+
+                                                Obs per group:
+                                                              min =         15
+                                                              avg =       15.0
+                                                              max =         15
+
+Integration method: mvaghermite                 Integration pts.  =          7
+
+                                                Wald chi2(1)      =      39.53
+Log likelihood = -354.09383                     Prob > chi2       =     0.0000
+------------------------------------------------------------------------------
+          yb |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+           x |   .9589692   .1525324     6.29   0.000     .6600112    1.257927
+       _cons |  -.5509249   .1425711    -3.86   0.000    -.8303592   -.2714906
+-------------+----------------------------------------------------------------
+g            |
+       var(x)|   .2482473   .1955534                      .0530106    1.162537
+   var(_cons)|   .4020503   .1885817                      .1603335    1.008176
+-------------+----------------------------------------------------------------
+g            |
+ cov(_cons,x)|   .1205406   .1467122     0.82   0.411    -.1670101    .4080913
+------------------------------------------------------------------------------
+LR test vs. logistic model: chi2(3) = 17.98               Prob > chi2 = 0.0004
+
+Note: LR test is conservative and provided only for reference.
+
+. predict p
+(predictions based on fixed effects and posterior means of random effects)
+(option mu assumed)
+(using 7 quadrature points)
+
+. capture noisily predict re, reffects
+(calculating posterior means of random effects)
+too few variables specified
+
+. predict rex rec, reffects
+(calculating posterior means of random effects)
+(using 7 quadrature points)
+
+. summarize p rex rec
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+           p |        600    .3905177    .2145628   .0363359   .9843129
+         rex |        600    2.23e-07    .3007342   -.586363   .6048708
+         rec |        600    4.70e-07    .4664408  -1.178591   1.128291
+
+. ereturn list
+
+scalars:
+               e(rank) =  5
+                  e(N) =  600
+                 e(ic) =  5
+          e(converged) =  1
+                 e(rc) =  0
+                 e(ll) =  -354.093826841382
+                  e(k) =  5
+               e(k_eq) =  4
+         e(k_eq_model) =  1
+               e(ll_c) =  -363.0832367502777
+               e(k_rs) =  2
+               e(k_rc) =  1
+               e(k_dv) =  1
+                e(k_r) =  2
+                e(k_f) =  1
+                e(p_c) =  .0004442959582047
+               e(df_c) =  3
+             e(chi2_c) =  17.97881981779142
+                  e(p) =  3.23686359058e-10
+               e(chi2) =  39.52620620639341
+               e(df_m) =  1
+
+macros:
+                e(cmd) : "meglm"
+          e(estat_cmd) : "melogit_estat"
+            e(predict) : "melogit_p"
+            e(cmdline) : "melogit yb x || g: x, covariance(unstructured)"
+               e(cmd2) : "melogit"
+              e(model) : "logistic"
+              e(title) : "Mixed-effects logistic regression"
+               e(link) : "logit"
+             e(family) : "bernoulli"
+             e(n_quad) : "7"
+              e(ivars) : "g"
+           e(chi2type) : "Wald"
+  e(datasignaturevars) : "g x yb"
+      e(datasignature) : "600:3:3909794517:382429669"
+          e(intmethod) : "mvaghermite"
+             e(depvar) : "yb"
+       e(marginsnotok) : "LATent1(passthru) LATent se(passthru)"
+         e(covariates) : "x"
+                e(opt) : "moptimize"
+                e(vce) : "oim"
+               e(user) : "_gsem_eval_chol()"
+          e(ml_method) : "gf2"
+          e(technique) : "nr"
+              e(which) : "max"
+         e(properties) : "b V"
+
+matrices:
+                  e(b) :  1 x 5
+                  e(V) :  5 x 5
+              e(g_max) :  1 x 1
+              e(g_avg) :  1 x 1
+              e(g_min) :  1 x 1
+                e(N_g) :  1 x 1
+           e(gradient) :  1 x 5
+               e(ilog) :  1 x 20
+
+functions:
+             e(sample)   
+
+. 
+end of do-file
+      name:  <unnamed>
+       log:  /Users/yaskepalhares/opendta/compat/stata/1002_melogit.log
+  log type:  text
+ closed on:  15 Oct 2026, 16:21:43
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -1,0 +1,343 @@
+"""frontier ([R] frontier): stochastic frontier models by maximum likelihood, with half-normal,
+exponential or truncated-normal inefficiency. Layout from the manual; lines marked VERIFY wait for
+the Stata 14 log of case 1908."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from ..core import missing as M
+from ..core.errors import StataError
+from ..core.stats import chi2_tail
+from ..lazy import lazy
+from .ml import maximize
+from .mleq import (Engine, aux_row, block_from_pr, block_from_text, constant_only, display_eq, finish_model, lab,
+                   names_in, peek, std_right, sub_options)
+from .models2 import _log, _Prep, g
+from .results import CoefRow
+from .regress import comma
+
+special = lazy("scipy.special")
+st = lazy("scipy.stats")
+
+if TYPE_CHECKING:
+    from ..session import Session
+
+SYS = M.SYSMISS
+
+_TITLES = {"hnormal": "Stoc. frontier normal/half-normal model",
+           "exponential": "Stoc. frontier normal/exponential model",
+           "tnormal": "Stoc. frontier normal/truncated-normal model"}
+
+
+def _ll(e: np.ndarray, lsv: float, lsu: float, mu: float, dist: str) -> np.ndarray:
+    """Log density of the composed error e = v - u (u subtracted after the sign for costs)."""
+    sv2, su2 = np.exp(lsv), np.exp(lsu)
+    sv, su = np.sqrt(sv2), np.sqrt(su2)
+    s2 = sv2 + su2
+    if dist == "hnormal":
+        lam = su / sv
+        return 0.5 * np.log(2 / np.pi) - 0.5 * np.log(s2) + special.log_ndtr(-e * lam / np.sqrt(s2)) - e * e / (2 * s2)
+    if dist == "exponential":
+        return -np.log(su) + 0.5 * sv2 / su2 + special.log_ndtr(-(e + sv2 / su) / sv) + e / su
+    mt = (-e * su2 + mu * sv2) / s2
+    st_ = su * sv / np.sqrt(s2)
+    return (-0.5 * np.log(2 * np.pi) - 0.5 * np.log(s2) - special.log_ndtr(mu / su)
+            + special.log_ndtr(mt / st_) - 0.5 * (e + mu) ** 2 / s2)
+
+
+def cmd_frontier(s: "Session", args: str) -> None:
+    from .postest import replay
+    if not args.strip() or args.strip().startswith(","):
+        replay(s, "frontier", args)
+        return
+    spec = {"distribution": 3, "cost": 4, "uhet": 4, "vhet": 4, "from": 4, "cm": 2, "constraints": 3}
+    o0 = peek(args, spec)
+    het_txt = {k: (sub_options(str(o0[k]), {"noconstant": 4})) for k in ("uhet", "vhet", "cm")
+               if o0.get(k) not in (None, False, True)}
+    pr = _Prep(s, args, spec, extra_vars=names_in(*[t for t, _ in het_txt.values()]))
+    pr.write_notes(s.output)
+    o = pr.o
+    if o.get("constraints"):
+        raise StataError(198, "option constraints() is not available yet in frontier")   # OpenDTA
+    dist = str(o.get("distribution", "hnormal")).strip().lower()
+    for full in ("hnormal", "exponential", "tnormal"):
+        if dist and full.startswith(dist):
+            dist = full
+            break
+    else:
+        raise StataError(198, "option distribution() invalid")   # VERIFY
+    if "cm" in het_txt and dist != "tnormal":
+        raise StataError(198, "cm() allowed only with truncated-normal models")              # compat 1918
+    if het_txt:
+        return _frontier_het(s, args, pr, o, dist, het_txt)
+    sign = -1.0 if o.get("cost") else 1.0
+    y = pr.y
+    main = block_from_pr(pr, pr.smp.depname)
+    w = pr.w
+    n = len(y)
+    n_theta = 3 if dist == "tnormal" else 2
+
+    def lik(etas, th):
+        th = np.asarray(th, dtype=float)
+        e0 = sign * (y - etas[0])
+        mu = th[2] if dist == "tnormal" else 0.0
+        ll = _ll(e0, th[0], th[1], mu, dist)
+        h = 1e-6
+        d_e = (_ll(e0 + h, th[0], th[1], mu, dist) - _ll(e0 - h, th[0], th[1], mu, dist)) / (2 * h)
+        d_eta = -sign * d_e
+        dth = np.zeros((n, n_theta))
+        for a in range(n_theta):
+            tu, td = th.copy(), th.copy()
+            tu[a] += h
+            td[a] -= h
+            mu_u = tu[2] if dist == "tnormal" else 0.0
+            mu_d = td[2] if dist == "tnormal" else 0.0
+            dth[:, a] = (_ll(e0, tu[0], tu[1], mu_u, dist) - _ll(e0, td[0], td[1], mu_d, dist)) / (2 * h)
+        return ll, [d_eta], dth
+
+    eng = Engine(lik, [main], w, n_theta)
+    # starting values: OLS, with the residual variance split between v and u
+    b_ols = np.linalg.lstsq(main.X, y, rcond=None)[0]
+    r = y - main.X @ b_ols
+    s2 = float(r @ r / max(n - main.k, 1))
+    th0 = np.array([np.log(s2 / 2), np.log(s2 / 2)] + ([0.0] if dist == "tnormal" else []))
+    b0 = np.concatenate([b_ols, th0])
+    from scipy import optimize as opt
+    try:
+        rr = opt.minimize(lambda b: tuple(-v for v in eng.fun(b, 1)[:2]), b0, jac=True, method="BFGS",
+                          options={"gtol": 1e-7, "maxiter": 500})
+        if np.isfinite(rr.fun):
+            b0 = rr.x
+    except Exception:
+        pass
+    res = pr.maximize(eng.fun, b0)
+    V, n_clust = pr.vce(res.H, eng.scores(res.b) if pr.robust else None)
+    # the model with sigma_u = 0 is least squares
+    ll_ols = float(-0.5 * n * (np.log(2 * np.pi) + np.log(float(r @ r) / n) + 1))
+    lsv, lsu = float(res.b[main.k]), float(res.b[main.k + 1])
+    lr = max(2 * (res.ll - ll_ols), 0.0)
+    p_lr = 0.5 * float(chi2_tail(lr, 1)) if lr > 0 else 0.5
+    off = main.k
+    sv2, su2 = np.exp(lsv), np.exp(lsu)
+    Vt = V[off:off + 2, off:off + 2]
+
+    def delta(f_val, grad):
+        g_ = np.asarray(grad, dtype=float)
+        return float(np.sqrt(max(g_ @ Vt @ g_, 0)))
+
+    def aux_rows(level):
+        from .results import crit
+        c = crit("z", level, None)
+        rows = [CoefRow("sep"),
+                aux_row("/lnsig2v", lsv, float(np.sqrt(V[off, off])), level),
+                aux_row("/lnsig2u", lsu, float(np.sqrt(V[off + 1, off + 1])), level)]
+        if dist == "tnormal":
+            rows.append(aux_row("/mu", float(res.b[off + 2]), float(np.sqrt(V[off + 2, off + 2])), level))
+        rows.append(CoefRow("sep"))
+        stats_ = [("sigma_v", np.exp(lsv / 2), [0.5 * np.exp(lsv / 2), 0.0]),
+                  ("sigma_u", np.exp(lsu / 2), [0.0, 0.5 * np.exp(lsu / 2)]),
+                  ("sigma2", sv2 + su2, [sv2, su2]),
+                  ("lambda", np.exp((lsu - lsv) / 2), [-0.5 * np.exp((lsu - lsv) / 2), 0.5 * np.exp((lsu - lsv) / 2)])]
+        for nm, val, gr in stats_:
+            se_ = delta(val, gr)
+            if nm.startswith("sigma_"):
+                # the interval is the transformed interval of the log variance
+                i = 0 if nm == "sigma_v" else 1
+                l_, se_l = (lsv, np.sqrt(V[off, off])) if i == 0 else (lsu, np.sqrt(V[off + 1, off + 1]))
+                rows.append(aux_row(nm, float(val), float(se_), level,
+                                    ci=(float(np.exp((l_ - c * se_l) / 2)), float(np.exp((l_ + c * se_l) / 2)))))
+            else:
+                rows.append(aux_row(nm, float(val), float(se_), level, ci=(float(val - c * se_), float(val + c * se_))))
+        return rows
+
+    def hdr(est):
+        x = est.extra
+        ll4 = g(x["ll"], "%10.0g").strip()
+        left = [est.title, "", f"{lab(est)} = {ll4:>9}"]
+        right = [("Number of obs", comma(x["N"])), (f"Wald chi2({int(x['df_m'])})", g(x["chi2"], "%10.2f")),
+                 ("Prob > chi2", g(x["p"], "%10.4f"))]
+        return left, right
+
+    def footer(s_, est):
+        s_.output.write(f"Likelihood-ratio test of sigma_u=0: chibar2(01) = {lr:<5.2f}"
+                        f"  Prob>=chibar2 = {p_lr:.3f}\n", "text")
+
+    names = [("lnsig2v", "_cons"), ("lnsig2u", "_cons")] + ([("mu", "_cons")] if dist == "tnormal" else [])
+    est = finish_model(s, pr, "frontier", args, title=_TITLES[dist], blocks=[main], eng=eng, res=res, V=V,
+                       n_clust=n_clust, ll0=SYS, aux_names=names, aux_rows_fn=aux_rows, hdr_fn=hdr, wald=True,
+                       footer=footer, k_eq=1 + len(names),
+                       extra_scalars=[("sigma_u", float(np.exp(lsu / 2))), ("sigma_v", float(np.exp(lsv / 2))),
+                                      ("lambda", float(np.exp((lsu - lsv) / 2))), ("sigma2", float(sv2 + su2)),
+                                      ("chi2_c", lr), ("p_c", p_lr)],
+                       extra_macros=[("function", "cost" if o.get("cost") else "production"), ("dist", dist)])
+    est.coef_title, est.eform_on = "Coef.", False
+    display_eq(s, est)
+
+
+def _frontier_het(s, args, pr, o, dist, het_txt) -> None:
+    """frontier with uhet(), vhet() or cm(): ln sigma_u^2, ln sigma_v^2 and (truncated normal)
+    the mean of the inefficiency are linear in their own variables, each an equation of its own;
+    the derivatives of the likelihood are numerical."""
+    sign = -1.0 if o.get("cost") else 1.0
+    y = pr.y
+    main = block_from_pr(pr, pr.smp.depname)
+    blocks = [main]
+    where = {}
+    for key, nm in (("vhet", "lnsig2v"), ("uhet", "lnsig2u"), ("cm", "mu")):
+        if key in het_txt or (dist != "tnormal" and nm != "mu"):
+            # with uhet() or vhet() both variances are equations, the constant one with _cons only
+            # (compat 1918)
+            txt, so = het_txt.get(key, ("", {}))
+            blk = block_from_text(pr, nm, txt, constant=not so.get("noconstant"))
+            for note in blk.notes:
+                s.output.write(f"note: {note} omitted because of collinearity\n", "text")
+            where[nm] = len(blocks)
+            blocks.append(blk)
+    thetas = [nm for nm in ("lnsig2v", "lnsig2u") + (("mu",) if dist == "tnormal" else ()) if nm not in where]
+    n = len(y)
+    w = pr.w
+
+    def parts(etas, th):
+        vals = {}
+        for nm in ("lnsig2v", "lnsig2u", "mu"):
+            if nm in where:
+                vals[nm] = etas[where[nm]]
+            elif nm in thetas:
+                vals[nm] = np.full(n, th[thetas.index(nm)])
+            else:
+                vals[nm] = np.zeros(n)
+        return vals
+
+    def f(e0, v):
+        return _ll(e0, v["lnsig2v"], v["lnsig2u"], v["mu"], dist)
+
+    def lik(etas, th):
+        th = np.asarray(th, dtype=float)
+        e0 = sign * (y - etas[0])
+        v = parts(etas, th)
+        ll = f(e0, v)
+        h = 1e-6
+        d = [-sign * (f(e0 + h, v) - f(e0 - h, v)) / (2 * h)]
+        for blk_i in range(1, len(blocks)):
+            nm = blocks[blk_i].name
+            vu, vd = dict(v), dict(v)
+            vu[nm], vd[nm] = v[nm] + h, v[nm] - h
+            d.append((f(e0, vu) - f(e0, vd)) / (2 * h))
+        dth = np.zeros((n, len(thetas)))
+        for a, nm in enumerate(thetas):
+            vu, vd = dict(v), dict(v)
+            vu[nm], vd[nm] = v[nm] + h, v[nm] - h
+            dth[:, a] = (f(e0, vu) - f(e0, vd)) / (2 * h)
+        return ll, d, (dth if thetas else None)
+
+    eng = Engine(lik, blocks, w, len(thetas))
+    b_ols = np.linalg.lstsq(main.X, y, rcond=None)[0]
+    r = y - main.X @ b_ols
+    s2 = float(r @ r / max(n - main.k, 1))
+    starts = [b_ols]
+    for blk in blocks[1:]:
+        z = np.zeros(blk.k)
+        if blk.constant and blk.name != "mu":
+            z[-1] = np.log(s2 / 2)
+        starts.append(z)
+    th0 = [np.log(s2 / 2) if nm != "mu" else 0.0 for nm in thetas]
+    b0 = np.concatenate(starts + [np.array(th0)])
+    from scipy import optimize as opt
+    try:
+        rr = opt.minimize(lambda b: tuple(-v for v in eng.fun(b, 1)[:2]), b0, jac=True, method="BFGS",
+                          options={"gtol": 1e-7, "maxiter": 1000})
+        if np.isfinite(rr.fun):
+            b0 = rr.x
+    except Exception:
+        pass
+    res = pr.maximize(eng.fun, b0)
+    V, n_clust = pr.vce(res.H, eng.scores(res.b) if pr.robust else None)
+    off = sum(b.k for b in blocks)
+
+    aux_names = [(nm, "_cons") for nm in thetas]
+    if dist == "tnormal" and thetas == ["lnsig2v", "lnsig2u"]:
+        # truncated normal: the variances are reported as ln(sigma2) and the logit of
+        # gamma = sigma_u^2/sigma2 (compat 1918); b and V are carried over by the delta method
+        lv, lu = float(res.b[off]), float(res.b[off + 1])
+        s2v, s2u = np.exp(lv), np.exp(lu)
+        sig2 = s2v + s2u
+        gam = s2u / sig2
+        J = np.eye(len(res.b))
+        J[off:off + 2, off:off + 2] = [[s2v / sig2, s2u / sig2], [-1.0, 1.0]]
+        res.b = res.b.copy()
+        res.b[off], res.b[off + 1] = np.log(sig2), np.log(gam / (1 - gam))
+        V = J @ V @ J.T
+        aux_names = [("lnsigma2", "_cons"), ("ilgtgamma", "_cons")]
+    sigma_rows = {"lnsig2v": "sigma_v", "lnsig2u": "sigma_u"}
+
+    def aux_rows(level):
+        from .results import crit
+        c = crit("z", level, None)
+        rows = []
+        if aux_names and aux_names[0][0] == "lnsigma2":
+            ls, lg = float(res.b[off]), float(res.b[off + 1])
+            se_s, se_g = float(np.sqrt(V[off, off])), float(np.sqrt(V[off + 1, off + 1]))
+            rows += [CoefRow("sep"), aux_row("/lnsigma2", ls, se_s, level), aux_row("/ilgtgamma", lg, se_g, level),
+                     CoefRow("sep")]
+            s2_, g_ = np.exp(ls), 1 / (1 + np.exp(-lg))
+            V2 = V[off:off + 2, off:off + 2]
+            dg = g_ * (1 - g_)
+            for nm, val, grad, ci in (
+                    ("sigma2", s2_, [s2_, 0.0], (np.exp(ls - c * se_s), np.exp(ls + c * se_s))),
+                    ("gamma", g_, [0.0, dg], (1 / (1 + np.exp(-(lg - c * se_g))), 1 / (1 + np.exp(-(lg + c * se_g))))),
+                    ("sigma_u2", g_ * s2_, [g_ * s2_, s2_ * dg], None),
+                    ("sigma_v2", (1 - g_) * s2_, [(1 - g_) * s2_, -s2_ * dg], None)):
+                gr = np.asarray(grad)
+                se_ = float(np.sqrt(max(gr @ V2 @ gr, 0)))
+                rows.append(aux_row(nm, float(val), se_, level, ci=ci if ci else (val - c * se_, val + c * se_)))
+            return rows
+        for a, nm in enumerate(thetas):
+            rows.append(aux_row(f"/{nm}", float(res.b[off + a]), float(np.sqrt(V[off + a, off + a])), level))
+        if rows:
+            rows.insert(0, CoefRow("sep"))
+        # the standard deviation of a variance equation with a constant only (compat 1918)
+        const_only = [blk for blk in blocks[1:] if blk.name in sigma_rows and blk.k == 1 and blk.constant]
+        if const_only:
+            rows.append(CoefRow("sep"))
+        for blk in const_only:
+            j = sum(b_.k for b_ in blocks[:blocks.index(blk)])
+            l_, se_l = float(res.b[j]), float(np.sqrt(V[j, j]))
+            val = np.exp(l_ / 2)
+            rows.append(aux_row(sigma_rows[blk.name], float(val), float(0.5 * val * se_l), level,
+                                ci=(float(np.exp((l_ - c * se_l) / 2)), float(np.exp((l_ + c * se_l) / 2)))))
+        return rows
+
+    def hdr(est):
+        x = est.extra
+        ll4 = g(x["ll"], "%10.0g").strip()
+        left = [est.title, "", f"{lab(est)} = {ll4:>9}"]
+        right = [("Number of obs", comma(x["N"])), (f"Wald chi2({int(x['df_m'])})", g(x["chi2"], "%10.2f")),
+                 ("Prob > chi2", g(x["p"], "%10.4f"))]
+        return left, right
+
+    # VERIFY the title with uhet() and vhet()
+    _log(s, pr, res)
+    het = " ".join(k for k in ("u", "v") if f"{k}het" in het_txt)
+    hetvars = [(f"{k}_hetvar", " ".join(c.name for c in blocks[i].cols if c.values is not None))
+               for k, i in (("u", where.get("lnsig2u")), ("v", where.get("lnsig2v"))) if f"{k}het" in het_txt]
+    const_sig = [(sigma_rows[blk.name], float(np.exp(res.b[sum(b_.k for b_ in blocks[:i]) ] / 2)))
+                 for i, blk in enumerate(blocks) if blk.name in sigma_rows and blk.k == 1 and blk.constant]
+    # e() as Stata lists it with uhet() (compat 1918; the other cases follow it, VERIFY)
+    order = (["rank", "N", "ic", "k", "k_eq", "k_dv", "converged", "rc", "ll", "N_clust", "k_eq_model", "df_m",
+              "chi2", "p", "sigma_u", "sigma_v"],
+             ["cmdline", "cmd", "het", "function", "dist", "predict", "u_hetvar", "v_hetvar", "chi2type", "opt", "vce",
+              "vcetype", "clustvar", "title", "user", "ml_method", "technique", "which", "wtype", "wexp", "depvar",
+              "properties"],
+             ["ilog", "gradient"])
+    est = finish_model(s, pr, "frontier", args, title=_TITLES[dist], blocks=blocks, eng=eng, res=res, V=V,
+                       n_clust=n_clust, ll0=SYS, aux_names=aux_names, aux_rows_fn=aux_rows,
+                       hdr_fn=hdr, wald=True, k_eq=len(blocks) + len(thetas), test_idx=list(range(main.nslopes)),
+                       extra_scalars=const_sig, order=order,
+                       extra_macros=[("function", "cost" if o.get("cost") else "production"), ("dist", dist),
+                                     ("predict", "fron_p"), ("user", f"fron_{ {'hnormal': 'hn', 'exponential': 'ex', 'tnormal': 'tn'}[dist]}"),
+                                     ("ml_method", "e2")] + ([("het", het)] if het else []) + hetvars)
+    est.coef_title, est.eform_on = "Coef.", False
+    display_eq(s, est)

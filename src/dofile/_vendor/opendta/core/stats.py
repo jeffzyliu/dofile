@@ -1,0 +1,145 @@
+"""Basic weighted statistics, with the definitions of manual [R] (Methods and
+formulas of summarize, centile, pctile, correlate, ttest).
+
+Weights (w):
+    fweight  integer frequencies: each obs. counts w times
+    aweight  analytic weights: normalized to sum to N (number of obs.)
+    iweight  "importance" weights: used as data, not normalized
+    pweight  sampling weights (treated as aweight in means)
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+import numpy as np
+
+from . import missing as M
+
+
+def valid(x: np.ndarray) -> np.ndarray:
+    return x < M.SYSMISS
+
+
+@dataclass
+class Moments:
+    N: float          # number of observations (fweight: sum of the weights)
+    sum_w: float
+    mean: float
+    var: float
+    sd: float
+    min: float
+    max: float
+    sum: float
+    skewness: float = M.SYSMISS
+    kurtosis: float = M.SYSMISS
+
+
+def moments(x: np.ndarray, w: np.ndarray | None = None, wtype: str = "") -> Moments:
+    """x and w already filtered (no missing). Variance with divisor N-1."""
+    n_obs = len(x)
+    if n_obs == 0:
+        return Moments(0, 0, M.SYSMISS, M.SYSMISS, M.SYSMISS, M.SYSMISS, M.SYSMISS, 0.0)
+    if w is None or wtype == "":
+        w = np.ones(n_obs)
+        wtype = "fweight"
+    w = w.astype(np.float64)
+    sum_w = float(w.sum())
+    if wtype == "fweight":
+        N = sum_w
+        ww = w
+    elif wtype == "iweight":
+        N = sum_w
+        ww = w
+    else:                                  # aweight / pweight: normalized to sum to n
+        N = float(n_obs)
+        ww = w * n_obs / sum_w if sum_w else w
+    mean = float((ww * x).sum() / ww.sum()) if ww.sum() else M.SYSMISS
+    dev = x - mean
+    m2 = float((ww * dev ** 2).sum())
+    var = m2 / (N - 1) if N > 1 else M.SYSMISS
+    sd = math.sqrt(var) if var < M.SYSMISS and var >= 0 else M.SYSMISS
+    total = float((ww * x).sum()) if wtype != "aweight" else float((w * x).sum())
+    skew = kurt = M.SYSMISS
+    W = float(ww.sum())
+    if W > 0 and m2 > 0:
+        mm2 = m2 / W
+        mm3 = float((ww * dev ** 3).sum()) / W
+        mm4 = float((ww * dev ** 4).sum()) / W
+        skew = mm3 / mm2 ** 1.5
+        kurt = mm4 / mm2 ** 2
+    return Moments(N, sum_w, mean, var, sd, float(x.min()), float(x.max()), total, skew, kurt)
+
+
+def percentile(xs: np.ndarray, p: float, w: np.ndarray | None = None) -> float:
+    """Percentile p (0–100) as defined by summarize/pctile: with P = W·p/100,
+    it is x_(i) for the first i with W_i > P, or the mean of x_(i) and x_(i+1)
+    when W_i = P. xs sorted; w aligned with xs."""
+    n = len(xs)
+    if n == 0:
+        return M.SYSMISS
+    if w is None:
+        w = np.ones(n)
+    cw = np.cumsum(w)
+    W = cw[-1]
+    P = W * p / 100.0
+    i = int(np.searchsorted(cw, P, side="left"))
+    if i >= n:
+        return float(xs[-1])
+    if abs(cw[i] - P) <= 1e-12 * max(1.0, W) and i + 1 < n:
+        return float((xs[i] + xs[i + 1]) / 2)
+    if cw[i] <= P and i + 1 < n:
+        i += 1
+    return float(xs[i])
+
+
+def centile_value(xs: np.ndarray, p: float) -> float:
+    """Definition of the centile command: interpolation at R = (n+1)p/100."""
+    n = len(xs)
+    if n == 0:
+        return M.SYSMISS
+    R = (n + 1) * p / 100.0
+    r = math.floor(R)
+    f = R - r
+    if r < 1:
+        return float(xs[0])
+    if r >= n:
+        return float(xs[-1])
+    return float(xs[r - 1] + f * (xs[r] - xs[r - 1]))
+
+
+def t_ci(mean: float, se: float, df: float, level: float) -> tuple[float, float]:
+    from scipy import stats as st
+    if se >= M.SYSMISS or df <= 0:
+        return M.SYSMISS, M.SYSMISS
+    t = st.t.ppf(1 - (1 - level / 100) / 2, df)
+    return mean - t * se, mean + t * se
+
+
+def z_crit(level: float) -> float:
+    from scipy import stats as st
+    return float(st.norm.ppf(1 - (1 - level / 100) / 2))
+
+
+def chi2_tail(x: float, df: float) -> float:
+    """P(χ²(df) > x). Like Stata's chi2tail(), returns subnormal
+    numbers (down to ~5e-324) instead of zero when the tail is tiny
+    (compat 0509: e(p) = 1.4821969375e-323)."""
+    from scipy import stats as _st
+    p = float(_st.chi2.sf(x, df))
+    if p > 0 or not math.isfinite(x) or x <= 0:
+        return p
+    # asymptotic series of Q(a, z) = Γ(a, z)/Γ(a), z = x/2, a = df/2
+    a, z = df / 2.0, x / 2.0
+    term, total = 1.0, 1.0
+    for k in range(1, 60):
+        term *= (a - k) / z
+        if abs(term) < 1e-17:
+            break
+        total += term
+    logq = (a - 1) * math.log(z) - z - math.lgamma(a) + math.log(total)
+    try:
+        return math.exp(logq)
+    except OverflowError:
+        return 0.0

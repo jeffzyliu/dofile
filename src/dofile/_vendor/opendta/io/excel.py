@@ -1,0 +1,508 @@
+"""Excel spreadsheets: reading (.xlsx, and .xls with xlrd) and writing (.xlsx, and .xls with
+xlwt).
+
+Used by import excel / export excel. The rules follow Stata 14's
+[D] import excel manual; undocumented points are marked
+VERIFY and have cases in compat/do/0106_excel.do.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+from ..core import missing as M
+from ..core import storage
+from ..core.dataset import (NAME_RE, RESERVED, Dataset, Variable, smallest_type_for,
+                            str_len, str_type_for)
+from ..core.errors import StataError
+
+EPOCH = _dt.datetime(1960, 1, 1)
+_CELL = re.compile(r"^([A-Za-z]{1,3})(\d+)$")
+
+
+def col_letters(n: int) -> str:
+    """1 -> A, 27 -> AA."""
+    s = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def col_number(letters: str) -> int:
+    n = 0
+    for ch in letters.upper():
+        n = n * 26 + ord(ch) - 64
+    return n
+
+
+def parse_cell(text: str) -> tuple[int, int]:
+    """'B3' -> (linha 3, coluna 2)."""
+    m = _CELL.match(text.strip())
+    if not m:
+        raise StataError(198, f"{text} invalid cell name")
+    return int(m.group(2)), col_number(m.group(1))
+
+
+def parse_range(text: str) -> tuple[tuple[int, int] | None, tuple[int, int] | None]:
+    """'A2:C10', 'A2', ':C10', 'A2:' -> ((linha, coluna) | None, (linha, coluna) | None)."""
+    a, colon, b = text.strip().partition(":")
+    start = parse_cell(a) if a.strip() else None
+    end = parse_cell(b) if colon and b.strip() else None
+    return start, end
+
+
+# ---------------------------------------------------------------------------
+# leitura
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ExcelOptions:
+    sheet: str | None = None
+    cellrange: str | None = None
+    firstrow: bool = False
+    case: str = "preserve"          # VERIFY: import excel's default
+    allstring: bool = False
+
+
+def _open(path: Path):
+    """Returns (sheet names, a function that reads a sheet as rows)."""
+    suffix = path.suffix.lower()
+    if suffix == ".xls":
+        try:
+            import xlrd
+        except ImportError:
+            raise StataError(603, "reading .xls files requires the xlrd package (pip install xlrd)")
+        book = xlrd.open_workbook(str(path))
+
+        def rows_xls(name: str):
+            sh = book.sheet_by_name(name)
+            for r in range(sh.nrows):
+                out = []
+                for c in range(sh.ncols):
+                    cell = sh.cell(r, c)
+                    if cell.ctype == xlrd.XL_CELL_DATE:
+                        out.append(xlrd.xldate.xldate_as_datetime(cell.value, book.datemode))
+                    elif cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                        out.append(None)
+                    else:
+                        out.append(cell.value)
+                yield out
+        return book.sheet_names(), rows_xls, None
+    import openpyxl
+    try:
+        book = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    except Exception as e:  # noqa: BLE001
+        raise StataError(603, f"file {path} could not be read as an Excel file ({e})")
+
+    def rows_xlsx(name: str):
+        for row in book[name].iter_rows(values_only=True):
+            yield list(row)
+    return book.sheetnames, rows_xlsx, book
+
+
+def _trim(rows: list[list]) -> list[list]:
+    """Removes empty rows and columns at the end."""
+    while rows and all(v is None or v == "" for v in rows[-1]):
+        rows.pop()
+    width = 0
+    for r in rows:
+        for j in range(len(r) - 1, -1, -1):
+            if r[j] is not None and r[j] != "":
+                width = max(width, j + 1)
+                break
+    return [list(r[:width]) + [None] * (width - len(r[:width])) for r in rows]
+
+
+def describe_excel(path: Path) -> list[tuple[str, str]]:
+    names, reader, book = _open(path)
+    out = []
+    for name in names:
+        rows = _trim(list(reader(name)))
+        if rows and rows[0]:
+            out.append((name, f"A1:{col_letters(len(rows[0]))}{len(rows)}"))
+        else:
+            out.append((name, ""))
+    if book is not None:
+        book.close()
+    return out
+
+
+def _cell_text(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if isinstance(v, float) and v.is_integer() and abs(v) < 1e15:
+        return str(int(v))
+    if isinstance(v, _dt.datetime):
+        # allstring: the date as Excel shows it (m/d/yyyy; observed in Stata 14)
+        if not (v.hour or v.minute or v.second or v.microsecond):
+            return f"{v.month}/{v.day}/{v.year}"
+        return f"{v.month}/{v.day}/{v.year} {v.hour}:{v.minute:02d}:{v.second:02d}"   # VERIFY
+    if isinstance(v, _dt.date):
+        return f"{v.month}/{v.day}/{v.year}"
+    return str(v)
+
+
+def _make_name(raw: str, case: str) -> str | None:
+    t = raw.strip()
+    if case == "lower":
+        t = t.lower()
+    elif case == "upper":
+        t = t.upper()
+    # invalid characters are removed ("Renda mensal" → Rendamensal, observed in Stata 14)
+    t = re.sub(r"[^A-Za-z0-9_]", "", t)[:32]
+    if not t or not NAME_RE.match(t) or t in RESERVED:
+        return None
+    return t
+
+
+def read_excel(path: str | Path, opts: ExcelOptions | None = None) -> Dataset:
+    opts = opts or ExcelOptions()
+    path = Path(path)
+    names, reader, book = _open(path)
+    sheet = opts.sheet if opts.sheet is not None else names[0]
+    if sheet not in names:
+        raise StataError(601, f"worksheet {sheet} not found")
+    rows = list(reader(sheet))
+    if book is not None:
+        book.close()
+
+    if opts.cellrange:
+        start, end = parse_range(opts.cellrange)
+        r0, c0 = start or (1, 1)
+        r1, c1 = end or (len(rows), max((len(r) for r in rows), default=0))
+        rows = [r[c0 - 1:c1] + [None] * max(0, c1 - max(len(r), c0 - 1)) for r in rows[r0 - 1:r1]]
+        first_col = c0
+    else:
+        first_col = 1
+    rows = _trim(rows)
+    if not opts.cellrange:
+        # VERIFY: empty rows at the start are also dropped
+        while rows and all(v is None or v == "" for v in rows[0]):
+            rows.pop(0)
+
+    header = None
+    if opts.firstrow and rows:
+        header = rows[0]
+        rows = rows[1:]
+    ncols = len(rows[0]) if rows else (len(header) if header else 0)
+
+    ds = Dataset()
+    ds.nobs = len(rows)
+    used: set[str] = set()
+    for j in range(ncols):
+        letters = col_letters(first_col + j)
+        raw_name = _cell_text(header[j]) if header is not None and j < len(header) else ""
+        name = _make_name(raw_name, opts.case) if raw_name.strip() else None
+        if name is None or name in used:
+            name = letters
+        used.add(name)
+        # VERIFY: the header becomes the variable label
+        label = raw_name.strip() if header is not None else ""
+        col = [r[j] if j < len(r) else None for r in rows]
+        filled = [v for v in col if v is not None and v != ""]
+        is_num = (not opts.allstring and bool(filled)
+                  and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in filled))
+        is_date = (not opts.allstring and bool(filled)
+                   and all(isinstance(v, (_dt.datetime, _dt.date)) for v in filled))
+        if is_date:
+            has_time = any(isinstance(v, _dt.datetime) and (v.hour or v.minute or v.second
+                                                             or v.microsecond) for v in filled)
+            vals = np.full(len(col), M.SYSMISS)
+            for i, v in enumerate(col):
+                if v is None or v == "":
+                    continue
+                d = v if isinstance(v, _dt.datetime) else _dt.datetime(v.year, v.month, v.day)
+                delta = d - EPOCH
+                vals[i] = (delta.days * 86_400_000 + delta.seconds * 1000
+                           + delta.microseconds // 1000) if has_time else delta.days
+            vtype = "double" if has_time else smallest_type_for(vals)
+            # VERIFY: datetime format (the date one was observed in Stata 14)
+            var = Variable(name, vtype, vals,
+                           fmt="%tcnn/dd/CCYY_hh:MM:SS" if has_time else "%tdnn/dd/CCYY")
+        elif is_num:
+            vals = np.array([M.SYSMISS if v is None or v == "" else float(v) for v in col])
+            vtype = smallest_type_for(vals)
+            if vtype == "float":
+                vtype = "double"        # VERIFY: Excel decimals stay double
+            var = Variable(name, vtype, vals)
+        else:
+            # dates as text are right-aligned in 10 positions: Stata creates str10 and lists
+            # "1/1/2020" in a column of 10 (VERIFY whether the space really is in the text)
+            texts = [_cell_text(v).rjust(10) if isinstance(v, (_dt.datetime, _dt.date)) else _cell_text(v)
+                     for v in col]
+            width = max((str_len(s) for s in texts), default=1) or 1
+            var = Variable(name, str_type_for(width), texts)
+        var.label = label
+        ds.vars.append(var)
+    ds.changed = True
+    return ds
+
+
+# ---------------------------------------------------------------------------
+# writing
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ExcelWriteOptions:
+    sheet: str = "Sheet1"
+    mode: str = "new"            # new | replace (file) | modify | sheetreplace
+    cell: str = "A1"
+    firstrow: str | None = None  # None | variables | varlabels
+    nolabel: bool = False
+
+
+def _date_kind(v: Variable) -> str:
+    fmt = v.fmt.lstrip("%-")
+    if fmt.startswith(("td", "d")):
+        return "date"
+    if fmt.startswith(("tc", "tC")):
+        return "datetime"
+    return ""
+
+
+def _excel_values(ds: Dataset, v: Variable, idx: np.ndarray, nolabel: bool) -> list:
+    """Values of a column for the spreadsheet (None = empty cell)."""
+    if v.is_string:
+        return [s if s != "" else None for s in v.raw[idx].tolist()]
+    dec = storage.decode(v.raw[idx], v.vtype)
+    miss = (dec >= M.SYSMISS).tolist()
+    vals = dec.tolist()
+    kind = _date_kind(v)
+    if kind == "date":
+        return [None if m else (EPOCH + _dt.timedelta(days=x)).date() for x, m in zip(vals, miss)]
+    if kind == "datetime":
+        return [None if m else EPOCH + _dt.timedelta(milliseconds=x) for x, m in zip(vals, miss)]
+    lab = ds.value_labels.get(v.value_label, {}) if v.value_label and not nolabel else {}
+    out = []
+    for x, m in zip(vals, miss):
+        if m:
+            out.append(None)
+        elif x.is_integer() and abs(x) < 1e15:
+            k = int(x)
+            out.append(lab.get(k, k))
+        else:
+            out.append(x)
+    return out
+
+
+_NUMBER_FORMAT = {"date": "m/d/yyyy", "datetime": "m/d/yyyy h:mm:ss"}  # VERIFY
+
+
+def write_excel(ds: Dataset, path: str | Path, names: list[str], rows: np.ndarray,
+                opts: ExcelWriteOptions | None = None) -> None:
+    """New file: openpyxl's write_only mode (fast, row by row).
+    sheetmodify/sheetreplace: opens the existing workbook."""
+    import openpyxl
+    from openpyxl.cell import WriteOnlyCell
+
+    opts = opts or ExcelWriteOptions()
+    path = Path(path)
+    if path.suffix.lower() == ".xls":
+        _write_xls(ds, path, names, np.asarray(rows), opts)
+        return
+    vars_ = [ds.get(n) for n in names]
+    kinds = [_date_kind(v) for v in vars_]
+    r0, c0 = parse_cell(opts.cell)
+    header = None
+    if opts.firstrow:
+        header = [(v.label or v.name) if opts.firstrow == "varlabels" else v.name for v in vars_]
+    rows = np.asarray(rows)
+
+    def data_rows():
+        step = 50_000
+        for start in range(0, len(rows), step):
+            idx = rows[start:start + step]
+            cols = [_excel_values(ds, v, idx, opts.nolabel) for v in vars_]
+            yield from zip(*cols)
+
+    if path.exists() and opts.mode in ("modify", "sheetreplace"):
+        book = openpyxl.load_workbook(str(path))
+        if opts.sheet in book.sheetnames and opts.mode == "sheetreplace":
+            pos = book.sheetnames.index(opts.sheet)
+            del book[opts.sheet]
+            ws = book.create_sheet(opts.sheet, pos)
+        elif opts.sheet in book.sheetnames:
+            ws = book[opts.sheet]
+        else:
+            ws = book.create_sheet(opts.sheet)
+        r = r0
+        if header:
+            for j, text in enumerate(header):
+                ws.cell(row=r, column=c0 + j, value=text)
+            r += 1
+        for values in data_rows():
+            for j, x in enumerate(values):
+                if x is not None:
+                    c = ws.cell(row=r, column=c0 + j, value=x)
+                    if kinds[j]:
+                        c.number_format = _NUMBER_FORMAT[kinds[j]]
+            r += 1
+    else:
+        book = openpyxl.Workbook(write_only=True)
+        ws = book.create_sheet(opts.sheet)
+        pad = [None] * (c0 - 1)
+        for _ in range(r0 - 1):
+            ws.append([])
+        if header:
+            ws.append(pad + header)
+        for values in data_rows():
+            row = list(pad)
+            for j, x in enumerate(values):
+                if x is not None and kinds[j]:
+                    cell = WriteOnlyCell(ws, value=x)
+                    cell.number_format = _NUMBER_FORMAT[kinds[j]]
+                    row.append(cell)
+                else:
+                    row.append(x)
+            ws.append(row)
+    tmp = path.with_name(path.name + ".opendta-tmp")
+    try:
+        book.save(str(tmp))
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    tmp.replace(path)
+
+
+def _write_xls(ds: Dataset, path: Path, names: list[str], rows: np.ndarray,
+               opts: ExcelWriteOptions) -> None:
+    """Excel 97-2003 workbook (.xls) through xlwt. With sheetmodify/sheetreplace the other
+    sheets of an existing file are copied cell by cell (values only, through xlrd)."""
+    try:
+        import xlwt
+    except ImportError:
+        raise StataError(603, "writing .xls files requires the xlwt package (pip install xlwt)")
+    vars_ = [ds.get(n) for n in names]
+    kinds = [_date_kind(v) for v in vars_]
+    r0, c0 = parse_cell(opts.cell)
+    nrows = len(rows) + (1 if opts.firstrow else 0) + r0 - 1
+    if nrows > 65536 or len(vars_) + c0 - 1 > 256:
+        # VERIFY: Stata's message for the limits of the .xls format
+        raise StataError(198, "too many rows or columns for an .xls file (65,536 rows, 256 columns)")
+    book = xlwt.Workbook(encoding="utf-8")
+    styles = {k: xlwt.easyxf(num_format_str=f) for k, f in _NUMBER_FORMAT.items()}
+    old: dict[str, list[list]] = {}
+    order: list[str] = []
+    if path.exists() and opts.mode in ("modify", "sheetreplace"):
+        try:
+            import xlrd
+        except ImportError:
+            raise StataError(603, "reading .xls files requires the xlrd package (pip install xlrd)")
+        rb = xlrd.open_workbook(str(path))
+        for sh in rb.sheets():
+            order.append(sh.name)
+            old[sh.name] = [[sh.cell(i, j) for j in range(sh.ncols)] for i in range(sh.nrows)]
+    if opts.sheet not in order:
+        order.append(opts.sheet)
+    for name in order:
+        ws = book.add_sheet(name, cell_overwrite_ok=True)
+        if name in old and not (name == opts.sheet and opts.mode == "sheetreplace"):
+            import xlrd
+            for i, line in enumerate(old[name]):
+                for j, cell in enumerate(line):
+                    if cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                        continue
+                    ws.write(i, j, cell.value)
+        if name != opts.sheet:
+            continue
+        r = r0 - 1
+        if opts.firstrow:
+            for j, v in enumerate(vars_):
+                ws.write(r, c0 - 1 + j, (v.label or v.name) if opts.firstrow == "varlabels" else v.name)
+            r += 1
+        cols = [_excel_values(ds, v, rows, opts.nolabel) for v in vars_]
+        for i in range(len(rows)):
+            for j, col in enumerate(cols):
+                x = col[i]
+                if x is None:
+                    continue
+                if kinds[j]:
+                    ws.write(r + i, c0 - 1 + j, x, styles[kinds[j]])
+                else:
+                    ws.write(r + i, c0 - 1 + j, x)
+    tmp = path.with_name(path.name + ".opendta-tmp")
+    try:
+        book.save(str(tmp))
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    tmp.replace(path)
+
+
+class XlsSheet:
+    """Cells of one sheet of an .xls workbook; `cell(row=, column=, value=)` as in openpyxl."""
+
+    def __init__(self, title: str):
+        self.title = title
+        self.cells: dict[tuple[int, int], object] = {}
+
+    def cell(self, row: int, column: int, value=None):
+        if value is None:
+            self.cells.pop((row, column), None)
+        else:
+            self.cells[(row, column)] = value
+
+
+class XlsBook:
+    """An .xls workbook kept in memory (xlrd to read, xlwt to write); putexcel changes cells and
+    saves the whole book. Only the values of the other sheets survive, not their formats."""
+
+    def __init__(self, path: Path | None = None):
+        self.sheets: dict[str, XlsSheet] = {}
+        if path is not None:
+            try:
+                import xlrd
+            except ImportError:
+                raise StataError(603, "reading .xls files requires the xlrd package (pip install xlrd)")
+            book = xlrd.open_workbook(str(path))
+            for sh in book.sheets():
+                xs = self.create_sheet(sh.name)
+                for i in range(sh.nrows):
+                    for j in range(sh.ncols):
+                        c = sh.cell(i, j)
+                        if c.ctype not in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                            xs.cells[(i + 1, j + 1)] = c.value
+
+    @property
+    def sheetnames(self) -> list[str]:
+        return list(self.sheets)
+
+    @property
+    def active(self) -> XlsSheet:
+        return next(iter(self.sheets.values())) if self.sheets else self.create_sheet("Sheet1")
+
+    def __getitem__(self, name: str) -> XlsSheet:
+        return self.sheets[name]
+
+    def create_sheet(self, title: str) -> XlsSheet:
+        self.sheets[title] = XlsSheet(title)
+        return self.sheets[title]
+
+    def save(self, path: Path) -> None:
+        try:
+            import xlwt
+        except ImportError:
+            raise StataError(603, "writing .xls files requires the xlwt package (pip install xlwt)")
+        book = xlwt.Workbook(encoding="utf-8")
+        for name, sh in (self.sheets or {"Sheet1": XlsSheet("Sheet1")}).items():
+            ws = book.add_sheet(name, cell_overwrite_ok=True)
+            for (r, c), v in sh.cells.items():
+                if r > 65536 or c > 256:
+                    # VERIFY: Stata's message for the limits of the .xls format
+                    raise StataError(198, "too many rows or columns for an .xls file (65,536 rows, 256 columns)")
+                ws.write(r - 1, c - 1, v)
+        tmp = path.with_name(path.name + ".opendta-tmp")
+        try:
+            book.save(str(tmp))
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        tmp.replace(path)

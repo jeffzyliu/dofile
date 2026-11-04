@@ -1,0 +1,774 @@
+"""tabulate (one- and two-way), tab1, tab2 and table ([R] tabulate, [R] table).
+
+Layouts reproduced from Stata 14; undocumented details have the
+VERIFY mark and cases in compat/do/0302_tabulate.do.
+"""
+
+from __future__ import annotations
+
+import itertools
+import math
+import re
+import textwrap
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from ..core import missing as M
+from ..core import stats as S
+from ..core.dataset import Variable
+from ..core.errors import StataError
+from ..core.formats import format_value
+from ..lang.syntax import match_options, parse_standard
+from ._util import touse
+from .data import _by_header
+from .registry import command
+from .summarize import by_groups, g9, weights
+
+if TYPE_CHECKING:
+    from ..session import Session
+
+
+# ---------------------------------------------------------------------------
+# categorias
+# ---------------------------------------------------------------------------
+
+def _categories(s: "Session", v: Variable, mask: np.ndarray, *, missing: bool, nolabel: bool):
+    """Distinct values (sorted, missing last) and the labels shown."""
+    if v.is_string:
+        vals = v.raw
+        ok = mask if missing else mask & np.array([x != "" for x in vals], dtype=bool)
+        cats = sorted(set(vals[ok].tolist()))
+        if "" in cats:
+            cats.remove("")
+            cats.append("")
+        labels = [c for c in cats]
+        return cats, labels, ok
+    x = v.data
+    ok = mask if missing else mask & S.valid(x)
+    cats = sorted(set(x[ok].tolist()))
+    lab = s.data.value_labels.get(v.value_label, {}) if v.value_label and not nolabel else {}
+    labels = []
+    for c in cats:
+        if c >= M.SYSMISS:
+            labels.append(M.missing_name(c))
+        elif c == int(c) and int(c) in lab:
+            labels.append(lab[int(c)])
+        else:
+            labels.append(format_value(c, v.fmt, pad=False).strip())
+    return cats, labels, ok
+
+
+def _codes(v: Variable, cats: list) -> np.ndarray:
+    """Category index of each observation (-1 outside)."""
+    lookup = {c: k for k, c in enumerate(cats)}
+    src = v.raw.tolist() if v.is_string else v.data.tolist()
+    return np.array([lookup.get(x, -1) for x in src], dtype=np.int64)
+
+
+def _header_lines(text: str, width: int) -> list[str]:
+    """Variable label wrapped in lines as wide as the 1st column."""
+    lines = textwrap.wrap(text, width) or [""]
+    return lines[-2:] if len(lines) > 2 else lines   # VERIFY: at most two lines
+
+
+def _fmt_freq(x: float) -> str:
+    return f"{x:,.0f}" if x == int(x) else g9(x).strip()
+
+
+# ---------------------------------------------------------------------------
+# one-way
+# ---------------------------------------------------------------------------
+
+def _oneway(s: "Session", v: Variable, mask, w, wtype, o: dict) -> None:
+    out = s.output
+    cats, labels, ok = _categories(s, v, mask, missing=bool(o.get("missing")),
+                                   nolabel=bool(o.get("nolabel")))
+    codes = _codes(v, cats)
+    ww = w if w is not None else np.ones(s.data.nobs)
+    freq = np.zeros(len(cats))
+    sel = ok & (codes >= 0)
+    np.add.at(freq, codes[sel], ww[sel])
+    total = float(freq.sum())
+    if total == 0:
+        out.write("no observations\n", "text")
+        s.r = {"N": 0.0, "r": 0.0}
+        return
+    order = list(range(len(cats)))
+    if o.get("sort"):
+        order.sort(key=lambda k: -freq[k])
+    title = v.label or v.name
+    # the column fits all labels of the value label, even those absent from the data (_merge: 23
+    # columns; observed in Stata 14)
+    all_labels = []
+    if v.value_label and not o.get("nolabel"):
+        all_labels = list(s.data.value_labels.get(v.value_label, {}).values())
+    W = max([11] + [len(lb) for lb in labels] + [len(lb) for lb in all_labels])
+    W = min(W, 30)
+    out.write("\n", "text")
+    head = _header_lines(title, W)
+    for k, line in enumerate(head):
+        last = k == len(head) - 1
+        out.write(f"{line:>{W}} |" + ("      Freq.     Percent        Cum." if last else "") + "\n", "text")
+    sep = "-" * (W + 1) + "+" + "-" * 35 + "\n"
+    out.write(sep, "text")
+    cum = 0.0
+    for k in order:
+        cum += freq[k]
+        out.write(f"{labels[k][:W]:>{W}} |", "text")
+        out.write(f"{_fmt_freq(freq[k]):>11}{100 * freq[k] / total:>12.2f}{100 * cum / total:>12.2f}\n",
+                  "result")
+    out.write(sep, "text")
+    out.write(f"{'Total':>{W}} |", "text")
+    out.write(f"{_fmt_freq(total):>11}{100.0:>12.2f}\n", "result")
+    s.r = {"N": total, "r": float(len(cats))}
+    _store_mats(s, o, cell=freq[:, None], rows=cats, v=v)
+    if o.get("generate"):
+        stub = str(o["generate"]).strip()
+        for k, c in enumerate(cats, start=1):
+            col = np.where(codes == k - 1, 1.0, 0.0)
+            col[~(mask & (S.valid(v.data) if not v.is_string else True))] = M.SYSMISS
+            nv = Variable(f"{stub}{k}", "byte", col)
+            nv.label = f"{v.name}=={labels[k - 1]}"
+            s.data.add(nv)
+        s.notify_state()
+
+
+def _store_mats(s: "Session", o: dict, *, cell, rows, v, cols=None) -> None:
+    from .matrix import Matrix, _store
+    if o.get("matcell"):
+        _store(s)[str(o["matcell"]).strip()] = Matrix(np.asarray(cell, dtype=np.float64))
+    if o.get("matrow") and not v.is_string:
+        _store(s)[str(o["matrow"]).strip()] = Matrix(np.asarray(rows, dtype=np.float64)[:, None])
+    if o.get("matcol") and cols is not None:
+        _store(s)[str(o["matcol"]).strip()] = Matrix(np.asarray(cols, dtype=np.float64)[None, :])
+
+
+# ---------------------------------------------------------------------------
+# duas vias
+# ---------------------------------------------------------------------------
+
+def _twoway(s: "Session", rv: Variable, cv: Variable, mask, w, wtype, o: dict) -> None:
+    out = s.output
+    miss, nolab = bool(o.get("missing")), bool(o.get("nolabel"))
+    rcats, rlabels, rok = _categories(s, rv, mask, missing=miss, nolabel=nolab)
+    ccats, clabels, cok = _categories(s, cv, mask, missing=miss, nolabel=nolab)
+    ok = rok & cok
+    rc, cc = _codes(rv, rcats), _codes(cv, ccats)
+    sel = ok & (rc >= 0) & (cc >= 0)
+    ww = w if w is not None else np.ones(s.data.nobs)
+    T = np.zeros((len(rcats), len(ccats)))
+    np.add.at(T, (rc[sel], cc[sel]), ww[sel])
+    N = float(T.sum())
+    if N == 0:
+        out.write("no observations\n", "text")
+        s.r = {"N": 0.0}
+        return
+    rowt, colt = T.sum(1), T.sum(0)
+    E = np.outer(rowt, colt) / N
+    shows = []
+    if not o.get("nofreq"):
+        shows.append("frequency")
+    if o.get("expected"):
+        shows.append("expected frequency")
+    if o.get("row"):
+        shows.append("row percentage")
+    if o.get("column"):
+        shows.append("column percentage")
+    if o.get("cell"):
+        shows.append("cell percentage")
+    if len(shows) > 1 and not o.get("nokey"):
+        wkey = max(len(x) for x in shows)
+        out.write("\n+" + "-" * (wkey + 2) + "+\n", "text")
+        out.write("| " + "Key".ljust(wkey) + " |\n", "text")
+        out.write("|" + "-" * (wkey + 2) + "|\n", "text")
+        for x in shows:
+            pad = wkey - len(x)          # odd leftover goes to the right (Stata 14)
+            out.write("| " + " " * (pad // 2) + x + " " * (pad - pad // 2) + " |\n", "text")
+        out.write("+" + "-" * (wkey + 2) + "+\n", "text")
+
+    def values(i: int | None, j: int | None) -> list[str]:
+        f = (T[i, j] if i is not None and j is not None else
+             rowt[i] if i is not None else colt[j] if j is not None else N)
+        rtot = rowt[i] if i is not None else N
+        ctot = colt[j] if j is not None else N
+        res = []
+        for x in shows:
+            if x == "frequency":
+                res.append(_fmt_freq(f))
+            elif x == "expected frequency":
+                e = E[i, j] if i is not None and j is not None else f
+                res.append(f"{e:.1f}")
+            elif x == "row percentage":
+                res.append(f"{100 * f / rtot:.2f}" if rtot else ".")
+            elif x == "column percentage":
+                res.append(f"{100 * f / ctot:.2f}" if ctot else ".")
+            else:
+                res.append(f"{100 * f / N:.2f}")
+        return res
+
+    W = min(30, max([10] + [len(x) for x in rlabels]))
+    rtitle = rv.label or rv.name
+    ctitle = cv.label or cv.name
+    per_panel = max(1, (79 - (W + 2) - 11) // 11)   # VERIFY: splitting into panels
+    ncol = len(ccats)
+    for start in range(0, ncol, per_panel):
+        cols = list(range(start, min(ncol, start + per_panel)))
+        last_panel = cols[-1] == ncol - 1
+        block = 11 * len(cols)
+        out.write("\n", "text")
+        rhead = _header_lines(rtitle, W)
+        above = rhead[:-1] if len(rhead) > 1 else [""]
+        for k, left in enumerate(above):
+            # centered, an odd leftover space on the left (compat 1402)
+            mid = " " * ((block - len(ctitle) + 1) // 2) + ctitle if k == len(above) - 1 else ""
+            out.write(f"{left:>{W}} |{mid}\n", "text")
+        lab = "".join(f"{clabels[j][:10]:>10} " for j in cols)
+        tot = "|     Total" if last_panel else ""
+        out.write(f"{rhead[-1]:>{W}} |" + lab + tot + "\n", "text")
+        sep = "-" * (W + 1) + "+" + "-" * block + ("+" + "-" * 10 if last_panel else "") + "\n"
+        out.write(sep, "text")
+        for i in range(len(rcats)):
+            cells = [values(i, j) for j in cols]
+            tot = values(i, None)
+            for line in range(len(shows)):
+                label = rlabels[i][:W] if line == 0 else ""
+                out.write(f"{label:>{W}} |", "text")
+                out.write("".join(f"{c[line]:>10} " for c in cells), "result")
+                if last_panel:
+                    out.write("|", "text")
+                    out.write(f"{tot[line]:>10} ", "result")
+                out.write("\n", "text")
+            if len(shows) > 1 and i < len(rcats) - 1:
+                out.write(sep, "text")      # groups of rows separated by dashes
+        out.write(sep, "text")
+        cells = [values(None, j) for j in cols]
+        tot = values(None, None)
+        for line in range(len(shows)):
+            label = "Total" if line == 0 else ""
+            out.write(f"{label:>{W}} |", "text")
+            out.write("".join(f"{c[line]:>10} " for c in cells), "result")
+            if last_panel:
+                out.write("|", "text")
+                out.write(f"{tot[line]:>10} ", "result")
+            out.write("\n", "text")
+    s.r = {"N": N, "r": float(len(rcats)), "c": float(len(ccats))}
+    _tests(s, T, E, N, o)
+    _store_mats(s, o, cell=T, rows=rcats, v=rv, cols=ccats if not cv.is_string else None)
+
+
+def _twoway_summarize(s: "Session", rv: Variable, cv: Variable, yname: str, mask, w, o: dict) -> None:
+    """tabulate var1 var2, summarize(var3): mean, standard deviation and frequency of var3 in
+    each cell ([R] tabulate, summarize(); layout VERIFY, case compat 0805)."""
+    from ..estimation.anova import _g
+    out = s.output
+    yv = s.data.get(yname)
+    if yv.is_string:
+        raise StataError(109, "type mismatch")
+    mask = mask & (yv.data < M.SYSMISS)
+    miss, nolab = bool(o.get("missing")), bool(o.get("nolabel"))
+    rcats, rlabels, rok = _categories(s, rv, mask, missing=miss, nolabel=nolab)
+    ccats, clabels, cok = _categories(s, cv, mask, missing=miss, nolabel=nolab)
+    rc, cc = _codes(rv, rcats), _codes(cv, ccats)
+    sel = mask & rok & cok & (rc >= 0) & (cc >= 0)
+    if not sel.any():
+        out.write("no observations\n", "text")
+        return
+    y = yv.data.astype(float)
+    ww = w if w is not None else np.ones(s.data.nobs)
+    show = [k for k in ("means", "standard", "freq", "obs") if o.get(k)] or ["means", "standard", "freq"]
+    for k in ("means", "standard", "freq", "obs"):
+        if o.get("no" + k) and k in show:
+            show.remove(k)
+    names = {"means": "Means", "standard": "Standard Deviations", "freq": "Frequencies",
+             "obs": "Number of Observations"}
+    parts = [names[k] for k in show]
+    what = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    title = f"{what} of {yv.label or yv.name}"
+
+    def values(rmask, cmask) -> list[str]:
+        m_ = sel & rmask & cmask
+        x, wx = y[m_], ww[m_]
+        n = float(wx.sum())
+        mean = float((wx * x).sum() / n) if n else M.SYSMISS
+        sd = math.sqrt(float((wx * (x - mean) ** 2).sum()) / (n - 1)) if n > 1 else M.SYSMISS
+        v = {"means": _g(mean), "standard": _g(sd), "freq": _fmt_freq(n), "obs": f"{int(m_.sum()):,}"}
+        return [v[k] for k in show]
+
+    every = np.ones(s.data.nobs, dtype=bool)
+    W = min(30, max([10] + [len(x) for x in rlabels]))
+    rtitle, ctitle = rv.label or rv.name, cv.label or cv.name
+    per_panel = max(1, (79 - (W + 2) - 11) // 11)   # VERIFY: splitting into panels
+    ncol = len(ccats)
+    out.write("\n", "text")
+    total_w = W + 2 + 11 * min(ncol, per_panel) + 11
+    # centered over the table width plus 8 (compat 0805, 4 columns; VERIFY other widths)
+    for line in _header_lines(title, 60):
+        out.write(" " * max(0, (total_w + 8 - len(line)) // 2) + line + "\n", "text")
+    for start in range(0, ncol, per_panel):
+        cols = list(range(start, min(ncol, start + per_panel)))
+        last_panel = cols[-1] == ncol - 1
+        block = 11 * len(cols)
+        out.write("\n", "text")
+        rhead = _header_lines(rtitle, W)
+        above = rhead[:-1] if len(rhead) > 1 else [""]
+        for k, left in enumerate(above):
+            # (block - 4) wide: 18 spaces before a 4-letter name over 4 columns (compat 0805)
+            mid = " " * max(0, (block - 4 - len(ctitle)) // 2) + ctitle if k == len(above) - 1 else ""
+            out.write(f"{left:>{W}} |{mid}\n", "text")
+        lab = "".join(f"{clabels[j][:10]:>10} " for j in cols)
+        out.write(f"{rhead[-1]:>{W}} |" + lab + ("|     Total" if last_panel else "") + "\n", "text")
+        sep = "-" * (W + 1) + "+" + "-" * block + ("+" + "-" * 10 if last_panel else "") + "\n"
+        out.write(sep, "text")
+        groups = [(rlabels[i], rc == i) for i in range(len(rcats))] + [("Total", every)]
+        for gi, (rlab, rmask) in enumerate(groups):
+            if gi == len(groups) - 1:
+                out.write(sep, "text")
+            cells = [values(rmask, cc == j) for j in cols]
+            tot = values(rmask, every)
+            for line in range(len(show)):
+                out.write(f"{(rlab[:W] if line == 0 else ''):>{W}} |", "text")
+                out.write("".join(f"{c[line]:>10} " for c in cells), "result")
+                if last_panel:
+                    out.write("|", "text")
+                    out.write(f"{tot[line]:>10} ", "result")
+                out.write("\n", "text")
+            if len(show) > 1 and gi < len(groups) - 2:
+                out.write(sep, "text")
+
+
+def _tests(s: "Session", T: np.ndarray, E: np.ndarray, N: float, o: dict) -> None:
+    from scipy import stats as st
+    out = s.output
+    r, c = T.shape
+    df = (r - 1) * (c - 1)
+    lines = []
+    if o.get("chi2") or o.get("all"):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            chi2 = float(np.nansum((T - E) ** 2 / E))
+        p = float(st.chi2.sf(chi2, df)) if df > 0 else M.SYSMISS
+        lines.append((f"Pearson chi2({df})", f"{chi2:8.4f}", f"Pr = {p:5.3f}"))
+        s.r.update({"chi2": chi2, "p": p})
+    if o.get("lrchi2") or o.get("all"):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            lr = float(2 * np.nansum(np.where(T > 0, T * np.log(T / E), 0.0)))
+        p = float(st.chi2.sf(lr, df)) if df > 0 else M.SYSMISS
+        lines.append((f"likelihood-ratio chi2({df})", f"{lr:8.4f}", f"Pr = {p:5.3f}"))
+        s.r.update({"chi2_lr": lr, "p_lr": p})
+    if o.get("v") or o.get("all"):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            chi2 = float(np.nansum((T - E) ** 2 / E))
+        V = math.sqrt(chi2 / (N * (min(r, c) - 1))) if min(r, c) > 1 else M.SYSMISS
+        if r == 2 and c == 2:
+            V = float((T[0, 0] * T[1, 1] - T[0, 1] * T[1, 0])
+                      / math.sqrt(np.prod(T.sum(0)) * np.prod(T.sum(1))))
+        lines.append(("Cramér's V", f"{V:8.4f}", ""))
+        s.r["CramersV"] = V
+    if o.get("gamma") or o.get("all"):
+        g, ase = _gamma(T)
+        lines.append(("gamma", f"{g:8.4f}", f"ASE = {ase:.3f}"))
+        s.r.update({"gamma": g, "ase_gam": ase})
+    if o.get("taub") or o.get("all"):
+        tb, ase = _taub(T)
+        lines.append(("Kendall's tau-b", f"{tb:8.4f}", f"ASE = {ase:.3f}"))
+        s.r.update({"taub": tb, "ase_taub": ase})
+    if lines:
+        out.write("\n", "text")
+        for name, value, extra in lines:
+            out.write(f"{name:>25} = ", "text")
+            gap = "  " if extra.startswith("ASE") else "   "
+            out.write(value + (gap + extra if extra else "") + "\n", "result")
+    if o.get("exact"):
+        if np.any(T != np.trunc(T)):
+            raise StataError(198, "exact requires frequency counts")   # VERIFY
+        if not lines:
+            out.write("\n", "text")
+        if (r, c) == (2, 2):
+            _, p2 = st.fisher_exact(T.astype(int))
+            # 1-sided: in the observed direction (VERIFY)
+            _, pl = st.fisher_exact(T.astype(int), alternative="less")
+            _, pg = st.fisher_exact(T.astype(int), alternative="greater")
+            p1 = min(pl, pg)
+            out.write(f"{'Fisher' + chr(39) + 's exact':>25} = ", "text")
+            out.write(f"{p2:>21.3f}\n", "result")
+            out.write(f"{'1-sided Fisher' + chr(39) + 's exact':>25} = ", "text")
+            out.write(f"{p1:>21.3f}\n", "result")
+            s.r.update({"p_exact": float(p2), "p1_exact": float(p1)})
+        else:
+            p2 = fisher_rxc(T.astype(int))
+            # VERIFY: Stata first prints the progress of the network algorithm ("Enumerating
+            # sample-space combinations:", "stage k: enumerations = #"), which OpenDTA does not
+            # reproduce
+            out.write(f"{'Fisher' + chr(39) + 's exact':>25} = ", "text")
+            out.write(f"{p2:>21.3f}\n", "result")
+            s.r["p_exact"] = float(p2)
+
+
+def fisher_rxc(T: np.ndarray, limit: int = 5_000_000) -> float:
+    """Fisher's exact test for r x c tables: adds the probabilities
+    (multivariate hypergeometric) of the tables with the same margins and
+    probability less than or equal to the observed one, enumerating them one by one."""
+    from math import lgamma
+    rows = [int(x) for x in T.sum(1)]
+    cols = [int(x) for x in T.sum(0)]
+    n = sum(rows)
+    const = sum(lgamma(x + 1) for x in rows) + sum(lgamma(x + 1) for x in cols) - lgamma(n + 1)
+
+    def logp(table_cells) -> float:
+        return const - sum(lgamma(x + 1) for x in table_cells)
+
+    obs = logp(T.ravel().tolist())
+    tol = 1e-7
+    total = 0.0
+    count = [0]
+    r, c = len(rows), len(cols)
+
+    def fill_row(i: int, colrem: list[int], acc: float) -> None:
+        nonlocal total
+        if i == r - 1:
+            cells = colrem
+            if sum(cells) != rows[i]:
+                return
+            lp = acc - sum(lgamma(x + 1) for x in cells)
+            count[0] += 1
+            if count[0] > limit:
+                raise StataError(908, "table too large for the exact test; "
+                                      "OpenDTA enumerates every table with the same margins")
+            if lp <= obs + tol:
+                total += math.exp(lp)
+            return
+
+        def place(j: int, left: int, cur: list[int], colrem: list[int]) -> None:
+            if j == c - 1:
+                if left <= colrem[j]:
+                    row_cells = cur + [left]
+                    rest = [colrem[k] - row_cells[k] for k in range(c)]
+                    fill_row(i + 1, rest, acc - sum(lgamma(x + 1) for x in row_cells))
+                return
+            hi = min(left, colrem[j])
+            for x in range(hi + 1):
+                place(j + 1, left - x, cur + [x], colrem)
+        place(0, rows[i], [], colrem)
+
+    fill_row(0, cols, const)
+    return min(1.0, total)
+
+
+def _concordance(T: np.ndarray):
+    r, c = T.shape
+    P = Q = 0.0
+    A = np.zeros_like(T)    # concordant pairs for each cell
+    D = np.zeros_like(T)
+    for i in range(r):
+        for j in range(c):
+            A[i, j] = T[:i, :j].sum() + T[i + 1:, j + 1:].sum()
+            D[i, j] = T[:i, j + 1:].sum() + T[i + 1:, :j].sum()
+    P = float((T * A).sum())
+    Q = float((T * D).sum())
+    return P, Q, A, D
+
+
+def _gamma(T: np.ndarray) -> tuple[float, float]:
+    P, Q, A, D = _concordance(T)
+    if P + Q == 0:
+        return M.SYSMISS, M.SYSMISS
+    g = (P - Q) / (P + Q)
+    ase = 4 / (P + Q) ** 2 * math.sqrt(float((T * (Q * A - P * D) ** 2).sum()))
+    return g, ase
+
+
+def _taub(T: np.ndarray) -> tuple[float, float]:
+    P, Q, A, D = _concordance(T)
+    n = T.sum()
+    wr = n ** 2 - float((T.sum(1) ** 2).sum())
+    wc = n ** 2 - float((T.sum(0) ** 2).sum())
+    if wr <= 0 or wc <= 0:
+        return M.SYSMISS, M.SYSMISS
+    w = math.sqrt(wr * wc)
+    tb = (P - Q) / w
+    # ASE (Agresti); VERIFY contra o Stata
+    rows, cols = T.sum(1), T.sum(0)
+    vij = np.zeros_like(T)
+    for i in range(T.shape[0]):
+        for j in range(T.shape[1]):
+            vij[i, j] = 2 * w * (A[i, j] - D[i, j]) + tb * (rows[i] * wc + cols[j] * wr)
+    ase = math.sqrt(max(0.0, float((T * vij ** 2).sum()) - n ** 3 * tb ** 2 * (wr + wc) ** 2)) / w ** 2
+    return tb, ase
+
+
+# ---------------------------------------------------------------------------
+# comandos
+# ---------------------------------------------------------------------------
+
+def _opts(text: str) -> dict:
+    # Cramér's option is capital V
+    return match_options(re.sub(r"\bV\b", "v", text), _OPTS) if text.strip() else {}
+
+
+_OPTS = {"missing": 1, "nolabel": 5, "sort": 4, "generate": 3, "matcell": 7, "matrow": 6,
+         "matcol": 7, "chi2": 2, "lrchi2": 3, "v": 1, "gamma": 1, "taub": 2, "exact": 2,
+         "row": 1, "column": 3, "cell": 4, "expected": 5, "nofreq": 5, "nokey": 5, "all": 3,
+         "plot": 4, "subpop": 3, "wrap": 4, "nolog": 5, "firstonly": 5,
+         "summarize": 2, "means": 2, "standard": 2, "freq": 2, "obs": 2, "nomeans": 3,
+         "nostandard": 4, "noobs": 4}
+
+
+@command("tabulate", "ta", byable=True)
+def cmd_tabulate(s: "Session", args: str) -> None:
+    p = parse_standard(args)
+    o = _opts(p.options)
+    names = s.expand_varlist(p.varlist)
+    if not 1 <= len(names) <= 2:
+        raise StataError(103 if len(names) > 2 else 100,
+                         "too many variables specified" if len(names) > 2 else "varlist required")
+    base = touse(s, p)
+    w, wtype, base = weights(s, p, base, ("fweight", "aweight", "iweight"))
+    vs = [s.data.get(n) for n in names]
+    for group, first in by_groups(s):
+        if first is not None:
+            _by_header(s, first)
+        mask = base & group
+        if isinstance(o.get("summarize"), str):
+            yname = s.expand_varlist(o["summarize"])[0]
+            if len(vs) == 2:
+                _twoway_summarize(s, vs[0], vs[1], yname, mask, w, o)
+            else:
+                from ..estimation.anova import tab_summarize
+                tab_summarize(s, vs[0], yname, mask, w, o)
+        elif len(vs) == 1:
+            _oneway(s, vs[0], mask, w, wtype, o)
+        else:
+            _twoway(s, vs[0], vs[1], mask, w, wtype, o)
+
+
+@command("tab1")
+def cmd_tab1(s: "Session", args: str) -> None:
+    p = parse_standard(args)
+    o = _opts(p.options)
+    base = touse(s, p)
+    w, wtype, base = weights(s, p, base, ("fweight", "aweight", "iweight"))
+    for n in s.expand_varlist(p.varlist):
+        s.output.write(f"\n-> tabulation of {n}  \n", "text")
+        _oneway(s, s.data.get(n), base, w, wtype, o)
+
+
+@command("tab2")
+def cmd_tab2(s: "Session", args: str) -> None:
+    p = parse_standard(args)
+    o = _opts(p.options)
+    base = touse(s, p)
+    w, wtype, base = weights(s, p, base, ("fweight", "aweight", "iweight"))
+    names = s.expand_varlist(p.varlist)
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            s.output.write(f"\n-> tabulation of {names[i]} by {names[j]}  \n", "text")
+            _twoway(s, s.data.get(names[i]), s.data.get(names[j]), base, w, wtype, o)
+
+
+# ---------------------------------------------------------------------------
+# table (Stata 14 syntax)
+# ---------------------------------------------------------------------------
+
+_STATS = {"freq", "mean", "sd", "sum", "rawsum", "count", "n", "max", "min", "median", "iqr",
+          "p1", "p2", "p5", "p10", "p25", "p50", "p75", "p90", "p95", "p98", "p99"}
+
+
+def _stat_value(stat: str, x: np.ndarray, w: np.ndarray | None) -> float:
+    if stat in ("count", "n"):
+        return float(len(x))
+    if len(x) == 0:
+        return M.SYSMISS
+    m = S.moments(x, w, "fweight" if w is not None else "")
+    if stat == "mean":
+        return m.mean
+    if stat == "sd":
+        return m.sd
+    if stat in ("sum", "rawsum"):
+        return float(m.sum)
+    if stat == "max":
+        return m.max
+    if stat == "min":
+        return m.min
+    xs = np.sort(x)
+    if stat == "median":
+        return S.percentile(xs, 50)
+    if stat == "iqr":
+        return S.percentile(xs, 75) - S.percentile(xs, 25)
+    if stat.startswith("p"):
+        return S.percentile(xs, float(stat[1:]))
+    return M.SYSMISS
+
+
+@command("table", byable=True)
+def cmd_table(s: "Session", args: str) -> None:
+    """table rowvar [colvar [supercolvar]] [, contents() by(superrowvars) row col scol ...].
+    The layout of supercolumns and by() groups is VERIFY (compat 1911)."""
+    p = parse_standard(args)
+    o = match_options(p.options, {"contents": 1, "format": 1, "row": 3, "col": 3, "scol": 4,
+                                  "missing": 1, "by": 2, "center": 3, "left": 4, "cellwidth": 5,
+                                  "stubwidth": 5}) if p.options.strip() else {}
+    names = s.expand_varlist(p.varlist)
+    if not 1 <= len(names) <= 3:
+        raise StataError(103, "too many variables specified")
+    bynames = s.expand_varlist(str(o["by"])) if o.get("by") not in (None, True) else []
+    if len(bynames) > 4:
+        raise StataError(103, "too many variables specified")             # VERIFY
+    contents = str(o.get("contents", "freq")).split()
+    specs: list[tuple[str, str | None]] = []
+    k = 0
+    while k < len(contents):
+        st = contents[k]
+        if st not in _STATS:
+            raise StataError(198, f"{st} invalid statistic")   # VERIFY
+        if st == "freq":
+            specs.append(("freq", None))
+            k += 1
+        else:
+            specs.append((st, s.expand_varlist(contents[k + 1])[0]))
+            k += 2
+    if len(specs) > 5:
+        raise StataError(198, "too many statistics")
+    fmt = str(o.get("format", "%9.0g")).strip()
+    base = touse(s, p)
+    w, wtype, base = weights(s, p, base, ("fweight", "aweight", "iweight", "pweight"))
+    out = s.output
+    miss = bool(o.get("missing"))
+
+    def cats_of(name: str):
+        v = s.data.get(name)
+        cats, labels, ok = _categories(s, v, base, missing=miss, nolabel=False)
+        return v, labels, _codes(v, cats), ok
+
+    rv, rlabels, rc, ok = cats_of(names[0])
+    if len(names) >= 2:
+        cv, clabels, cc, cok = cats_of(names[1])
+        ok = ok & cok
+    else:
+        cv, clabels, cc = None, [""], np.zeros(s.data.nobs, dtype=np.int64)
+    if len(names) == 3:
+        sv, slabels, sc, sok = cats_of(names[2])
+        ok = ok & sok
+    else:
+        sv, slabels, sc = None, [""], np.zeros(s.data.nobs, dtype=np.int64)
+    byinfo = []
+    for n in bynames:
+        bv, blabels, bc, bok = cats_of(n)
+        ok = ok & bok
+        byinfo.append((bv, blabels, bc))
+    # by() groups: every combination of the values of the by() variables, empty ones included
+    # (compat 1911)
+    keys = list(itertools.product(*[range(len(bl)) for _, bl, _ in byinfo]))
+
+    def cell(sel: np.ndarray) -> list[str]:
+        if not sel.any():
+            return [""] * len(specs)          # a cell without observations is blank (compat 1911)
+        res = []
+        for st, var in specs:
+            if st == "freq":
+                n = float((w[sel] if w is not None else np.ones(int(sel.sum()))).sum())
+                # format() applies to the frequencies too (compat 1911)
+                res.append(format_value(n, fmt, pad=False).strip() if "format" in o else _fmt_freq(n))
+            else:
+                x = s.data.get(var).data
+                ss = sel & S.valid(x)
+                val = _stat_value(st, x[ss], w[ss] if w is not None else None)
+                res.append("" if val >= M.SYSMISS else format_value(val, fmt, pad=False).strip())
+        return res
+
+    # columns: (supercolumn, column) pairs; "T" is a total
+    sgroups = list(range(len(slabels))) + (["T"] if o.get("scol") and sv is not None else [])
+    cols_in = list(range(len(clabels))) + (["T"] if o.get("col") and cv is not None else [])
+    cols = [(g, c) for g in sgroups for c in cols_in]
+
+    def colsel(g, c) -> np.ndarray:
+        m = ok
+        if g != "T" and sv is not None:
+            m = m & (sc == g)
+        if c != "T" and cv is not None:
+            m = m & (cc == c)
+        return m
+
+    rows = list(range(len(rlabels))) + (["T"] if o.get("row") else [])
+    grids = []
+    for key in keys:
+        gsel = ok.copy()
+        for (_, _, bc), code in zip(byinfo, key):
+            gsel &= bc == code
+        present = rows                   # every row, empty ones included (compat 1911)
+        grid = {}
+        for r in present:
+            rsel = gsel & (rc == r) if r != "T" else gsel
+            if cv is None:
+                grid[r] = [cell(rsel)]            # one line, the statistics side by side
+                continue
+            vals = [cell(rsel & colsel(g, c)) for g, c in cols]
+            grid[r] = [[v[line] for v in vals] for line in range(len(specs))]
+        grids.append((key, present, grid))
+
+    if cv is None:
+        heads = ["Freq." if st == "freq" else f"{st}({var})" for st, var in specs]
+    else:
+        heads = [clabels[c] if c != "T" else "Total" for _, c in cols]
+    every = heads + [x for _, pr, gr in grids for r in pr for line in gr[r] for x in line]
+    # one-way tables have cells at least 10 wide (compat 0302, 1911; VERIFY)
+    CW = max([4 if cv is not None else 10] + [len(x) for x in every])
+    parts = [b.label or b.name for b, _, _ in byinfo] + [rv.label or rv.name]
+    stub_title = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    W = max([9] + [len(x) for x in rlabels] + [len(rv.name)] + [len(x) for _, bl, _ in byinfo for x in bl])   # VERIFY minimum width 9
+    title_lines = textwrap.wrap(stub_title, W) or [rv.name]
+    per = len(cols_in) if sv is not None else 0
+
+    def gap(k: int) -> str:
+        # supercolumns are 4 blanks apart (compat 1911)
+        return " " if k == 0 else "    " if per and k % per == 0 else "  "
+
+    def row_text(values: list[str]) -> str:
+        from ..core.layout import center_text
+        if o.get("center"):
+            return "".join(gap(k) + center_text(v, CW) for k, v in enumerate(values))
+        return "".join(gap(k) + f"{v:>{CW}}" for k, v in enumerate(values))
+
+    block = len(row_text([""] * len(heads if cv is None else cols)))
+    width = W + 2 + block
+    rule = "-" * (W + 1) + "+" + "-" * block + "\n"
+    out.write("\n" + "-" * width + "\n", "text")
+    if cv is None:
+        head_lines = [row_text(heads)]
+    else:
+        ctitle = cv.label or cv.name
+        if sv is not None:
+            ctitle = f"{sv.label or sv.name} and {ctitle}"
+        left = -(-(block - len(ctitle)) // 2)
+        head_lines = [" " * max(0, left) + ctitle]
+        if sv is not None:
+            # each supercolumn: its label centered in a dashed line over its columns
+            n = len(cols_in)
+            gw = n * CW + 2 * (n - 1)
+            parts = []
+            for g in sgroups:
+                lab = f" {slabels[g] if g != 'T' else 'Total'} "
+                dl = max(0, gw - len(lab))
+                # the extra dash goes on the left (compat 1911)
+                parts.append("-" * (dl - dl // 2) + lab + "-" * (dl // 2))
+            head_lines.append(" " + "    ".join(parts))
+        head_lines.append(row_text(heads))
+    # the stub title sits at the bottom of the header lines, right-aligned on one line and
+    # left-aligned when it wraps (compat 1911)
+    n = max(len(title_lines), len(head_lines))
+    for t, h in zip([""] * (n - len(title_lines)) + title_lines, [""] * (n - len(head_lines)) + head_lines):
+        out.write((f"{t:<{W}}" if len(title_lines) > 1 else f"{t:>{W}}") + " |" + h + "\n", "text")
+    out.write(rule, "text")
+    for gk, (key, present, grid) in enumerate(grids):
+        if gk:
+            out.write(rule, "text")
+        for code, (_, lab, _) in zip(key, byinfo):
+            out.write(f"{lab[code]:<{W}} |\n", "text")         # one line per by() variable
+        for ri, r in enumerate(present):
+            # a blank line before the total and between rows of several lines (compat 1911)
+            if ri and (r == "T" or len(grid[r]) > 1):
+                out.write(" " * W + " |\n", "text")
+            for line in range(len(grid[r])):
+                label = (rlabels[r] if r != "T" else "Total") if line == 0 else ""
+                out.write(f"{label:>{W}} |", "text")
+                out.write(row_text(grid[r][line]) + "\n", "result")
+    out.write("-" * width + "\n", "text")
