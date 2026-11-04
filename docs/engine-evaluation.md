@@ -54,7 +54,7 @@ failed or never ran.
 | `histogram` + `graph export` | ok | ok |
 | `tabstat …, by()` | ok | rc 198 |
 | `svyset` + `svy: mean` | ok | rc 199 |
-| `xtlogit, re` | ok | rc 199 |
+| `xtlogit, re` | **crash** (uncaught `OverflowError`; first scored ok by mistake, see note) | rc 199 |
 | `mixed y x || id:` | ok | rc 199 |
 | `correlate` / `pwcorr, sig` | ok | rc 199 |
 | `xtivreg, fe` | ok | rc 199 |
@@ -62,7 +62,10 @@ failed or never ran.
 | `putexcel` | ok | rc 199 |
 | `esttab` (community) | rc 199 | ok |
 | `outreg2` (community) | rc 199 | rc 199 |
-| **Total** | **10/12** | **4/12** |
+| **Total** | **9/12** | **4/12** |
+
+Correction (2026-11-03): the first scoring only grepped for Stata `r(#);` lines, so a Python traceback counted as
+a pass. Running the probes through `dofile.engine` (`tests/test_conformance.py`) found `xtlogit, re` crashing.
 
 OpenDTA's roadmap lists what's still missing for Stata 14 parity, and it's almost all advanced *options* (for
 example `ivprobit, twostep`, `xtunitroot llc`, `vec` constraints, Stata's class system). That's the project's own
@@ -94,7 +97,7 @@ claim, checked here only by the probe above.
 So a client-side teaching IDE with no server compute is realistic with either engine, and easiest with OpenDTA.
 
 ## Why OpenDTA, and the risks
-For it: clearly broader (10/12 vs 4/12 on the probe; its roadmap claims near-full Stata 14 coverage), the largest
+For it: clearly broader (9/12 vs 4/12 on the probe; its roadmap claims near-full Stata 14 coverage), the largest
 test suite and CI, Stata-like output, beginner error hints, runs in the browser as-is, no pandas/statsmodels
 dependency, and a clean-room policy. The core corpus is effectively a tie (60/63 vs 61/63).
 
