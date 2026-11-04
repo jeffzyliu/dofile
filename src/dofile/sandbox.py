@@ -69,10 +69,12 @@ def _inside(path: str, roots: tuple[str, ...]) -> bool:
 def install(workdir: str | os.PathLike, read_dirs: tuple[str, ...] = ()) -> None:
     """Confine this process. Call once, before running untrusted code."""
     work = os.path.realpath(workdir)
-    # keep temp files and matplotlib's cache inside the workdir
+    # temp files and matplotlib's cache go to a hidden folder inside the workdir, out of the user's files
+    scratch = os.path.join(work, ".dofile")
+    os.makedirs(scratch, exist_ok=True)
     for var in ("TMPDIR", "HOME", "MPLCONFIGDIR"):
-        os.environ[var] = work
-    tempfile.tempdir = work
+        os.environ[var] = scratch
+    tempfile.tempdir = scratch
     sys.dont_write_bytecode = True
     os.chdir(work)
     deny_commands()

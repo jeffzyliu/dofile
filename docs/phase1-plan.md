@@ -107,6 +107,17 @@ next call starts a fresh worker. Idle workers are reaped after 15 minutes, with 
   sessions are keyed by MCP session id, and there's no auth in Phase 1, so it binds to localhost unless `--host`
   is given.
 
+**Built (step 5, `src/dofile/mcp_server.py`), with changes from the table above:**
+- `load_dataset` became `upload_file(name, text | base64_data)`. Agents then `use`/`import` the file with
+  `run_do`, which covers datasets, .do files and anything else.
+- `get_results` was dropped, because `run_do` already returns e()/r().
+- HTTP sessions are **explicit tokens** from a `start_session` tool. The 2026-07-28 HTTP protocol has no MCP
+  session (no handshake, no `Mcp-Session-Id`), so `ctx.session_id` can't key the workers.
+- Deliberate errors are raised as `ToolError` so their message reaches the agent; other exceptions are hidden
+  by the SDK. Temp files and matplotlib's cache live in a hidden `.dofile/` folder inside the workdir.
+- Checked with a headless `claude -p` run: the agent ran a robust regression on cps.dta and reported
+  b = 0.1177832, SE = 0.0054437 (statsmodels HC1: 0.11778324, 0.00544367), and was refused `shell ls` with rc 199.
+
 **5. `cli.py`:** `dofile run file.do [--json out.json]` prints the log, exits with Stata's rc, and can write
 JSON results. It's useful in CI for replication packages and is the cheapest end-to-end test.
 
