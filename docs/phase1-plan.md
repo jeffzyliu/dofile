@@ -74,6 +74,11 @@ module that imports OpenDTA, so swapping engines later (OpenStat or our own) tou
   server was started with, and the Python install.
 - Before the engine is imported, the worker sets `TMPDIR`, `MPLCONFIGDIR` and `HOME` to the session workdir.
   `tempfile`, `preserve` and matplotlib's cache then stay inside the allowed area.
+- Built (step 3, `src/dofile/sandbox.py`): the audit hook also blocks DNS lookups. `mimetypes` is pre-loaded,
+  since openpyxl reads `/etc/mime.types`, and a refused file access returns Stata's rc 603 with the reason.
+  `graph export` is the exception: OpenDTA prints its own 603 text there. OpenDTA has no URL support in
+  `use`/`import`, so `webuse` and `copy` were the only network commands. The whole corpus and every probe give
+  the same results with the sandbox on.
 - This is defense in depth, not a security boundary. Audit hooks are sufficient here because clients send Stata,
   not Python. The docs will say a public HTTP deployment should also run in a container.
 

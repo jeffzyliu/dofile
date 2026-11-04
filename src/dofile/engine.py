@@ -16,6 +16,7 @@ from ._vendor.opendta.core.output import Capture
 from ._vendor.opendta.session import Session
 
 RC_INTERNAL = 9999  # a Python exception escaped the interpreter (an engine bug, not a Stata error)
+RC_FILE = 603  # Stata: file could not be opened
 
 
 @dataclass
@@ -57,16 +58,20 @@ class Engine:
         error = None
         try:
             rc = self.session.run(code, echo=True)
+        except PermissionError as e:  # the sandbox refused a file access: Stata's "file could not be opened"
+            rc, error = RC_FILE, f"file could not be opened: {e.strerror or e}"
+            self._capture(f"{error}\nr({rc});\n", "error")
+            self._recover(rc)
         except Exception as e:  # noqa: BLE001 - any engine bug becomes an error result, not a crash
             rc = RC_INTERNAL
             error = f"internal engine error: {type(e).__name__}: {e}"
             self._capture(f"{error}\n{traceback.format_exc(limit=-3)}r({rc});\n", "error")
-            self._recover()
+            self._recover(rc)
         if rc and error is None:
             error = _last_error(self._capture.text)
         return Result(self._capture.text, rc, error, self.results())
 
-    def _recover(self) -> None:
+    def _recover(self, rc: int) -> None:
         """Leave the interpreter usable after an escaped exception: close open scopes and prefixes."""
         s = self.session
         for scope in reversed(s.scopes):  # close_scope() cleans up but does not pop
@@ -74,7 +79,7 @@ class Engine:
         s.scopes.clear()
         s.do_depth = 0
         s.by_groups = None
-        s.set_rc(RC_INTERNAL)
+        s.set_rc(rc)
 
     def results(self) -> dict[str, Any]:
         s = self.session
