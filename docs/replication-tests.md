@@ -134,7 +134,8 @@ Session behavior
 Agent ergonomics
 - Result size: an IV regression's results should be about 1 KB; the log carries the tables.
 - The log keeps 8,000 characters (first and last 4,000) and each command's first 40 and last 15 lines; a short
-  result between long outputs can be cut (TODO in `_cut_log`). `log_file` names the full log for `get_file`.
+  result between long outputs, or a loop's output, can be cut (ERG-1 in [agent-ergonomics.md](agent-ergonomics.md)).
+  `log_file` names the full log for `get_file`.
 - Graphs come back as images automatically; `graph export` only to keep a file.
 - Community commands (`reghdfe`, `esttab`, `outreg2`) don't exist (GAP-1); use built-ins.
 

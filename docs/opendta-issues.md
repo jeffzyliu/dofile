@@ -22,7 +22,6 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-4 | `confirm variable` on a missing variable returns rc 198, not 111 | corpus `capture_rc` (xfail) | unverified |
 | ODT-5 | `%w.dg` ignores d: `%20.12g` prints 18 significant digits, `%12.4g` 10 | `::test_odt_fixes`; corpus `CHECK` lines use it | patched |
 | ODT-6 | regressing a variable on its own interaction crashes (decimal InvalidOperation, rc 9999) | `::test_odt_fixes` | patched |
-| ODT-7 | `graph export` refused by the sandbox prints a generic OS message, not the sandbox's reason | `tests/test_sandbox.py` | unverified |
 | ODT-8 | backslash escapes `\$` and ``\` `` don't stop macro expansion | found 2026-11-04 (`dofile run` passes its path through a local instead) | unverified |
 | ODT-9 | `ivregress` prints a long `Instruments:` list on one line instead of wrapping it at 80 columns | `::test_odt_fixes` | patched |
 | ODT-10 | `graph bar ..., over(x, relabel(...))` ignores `relabel()` | `::test_odt10_relabel` | patched |
@@ -37,6 +36,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-19 | a matrix subscript on `e()`/`r()` matrices inside `display` fails: `display e(b)[1,1]` and `display r(table)[1,1]` give rc 109 "type mismatch"; with a format, `display %6.3f (r(table)[1,1])` gives rc 198 "invalid syntax" | found 2026-11-05, no test | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | ODT-20 | `histogram` (and `bar`'s) outline ignores `lcolor()`/`lwidth()`: histogram bars always get a background-colored edge, so `fcolor(none) lcolor(navy)` draws nothing | `::test_odt20_histogram_outline` | patched |
+| ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | found 2026-11-05, no test | unverified |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
@@ -116,21 +116,6 @@ regress yrsed c.yrsed#i.sex
   ~1e14 to 1e29, and `%f` formatting crashed for values that need more than Decimal's default 28 digits; it now
   uses enough precision. To verify: how Stata 14 prints such huge F and t values (here they overflow the
   table's columns).
-
-### ODT-7: `graph export` message under the sandbox
-```stata
-clear
-set obs 5
-gen x = _n
-scatter x x
-graph export "/tmp/nope.png", replace
-```
-- dofile: rc 603 with OpenDTA's generic text ("The operating system did not allow the file to be written...")
-  instead of the sandbox's reason. Other file commands show the reason.
-- Expected: rc 603 is right; the message is a dofile/OpenDTA interaction, not a Stata difference.
-- Workaround: export inside the working directory.
-- 2026-11-05: `graph export` into a folder that doesn't exist also gives rc 603 `file ... could not be opened`; an agent
-  can't tell that from the sandbox's refusal, which CLAUDE.md also reports as rc 603.
 
 ### ODT-8: backslash escapes for macros
 ```stata
@@ -301,6 +286,21 @@ twoway (histogram x, fcolor(none) lcolor(navy))
   more than 40 bins, which had no edge), an explicit `lwidth()` its width; with neither, the background-colored edge
   stays as before. `color()` alone still does not outline. Not checked: `lpattern`, and whether Stata outlines with
   `color()` (it sets both fill and outline there).
+
+### ODT-21: numeric axis tick steps
+```stata
+clear
+set obs 18
+gen educ = _n
+gen w = educ / 3
+twoway line w educ
+```
+- dofile: the x axis labels are `0.0 2.5 5.0 7.5 10.0 12.5 15.0 17.5 20.0`. `graphics/render.py` leaves the x axis on
+  matplotlib's default `AutoLocator`, whose steps include 2.5, and its `ScalarFormatter` then adds `.0` to every label.
+  The y axis of bar charts already uses `MaxNLocator(steps=[1, 2, 5, 10])` (`render.py`, near line 371).
+- Expected in Stata: "nice" ticks in steps of 1, 2, 5 or 10 times a power of ten, here `5 10 15 20`, labelled `5`, `10`,
+  `15`, `20`. Not run in Stata (our reading of how its default axes look), so the exact tick choice is unverified.
+- Cosmetic, but it is in nearly every plot. Sketch: use the same `MaxNLocator` for numeric x and y axes.
 
 ### GAP-2: `estat firststage`
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat
