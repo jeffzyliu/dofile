@@ -1,0 +1,39 @@
+diff --git a/src/dofile/_vendor/opendta/graphics/render.py b/src/dofile/_vendor/opendta/graphics/render.py
+index ab467fa..4571b54 100644
+--- a/src/dofile/_vendor/opendta/graphics/render.py
++++ b/src/dofile/_vendor/opendta/graphics/render.py
+@@ -654,9 +654,18 @@ def draw(container, g: Graph, sch: dict) -> None:
+         else:
+             for idx, (h, lab) in enumerate(handles, start=1):
+                 items.append((h, labels_over.get(str(idx), lab)))
+-        ncol = leg.get("cols") or (math.ceil(len(items) / leg["rows"]) if leg.get("rows") else min(2, len(items)))
+-        L = container.legend([h for h, _ in items], [t for _, t in items], loc="outside lower center",
+-                             ncol=ncol, fontsize=8, frameon=True, title=leg.get("title"))
++        loc = _LEGEND_LOC.get(leg.get("position"), "lower center")   # dofile patch (ODT-17): position(); ring() ignored
++        beside = loc.startswith(("left", "right"))                  # a legend at the side is one column, as in Stata
++        ncol = leg.get("cols") or (math.ceil(len(items) / leg["rows"]) if leg.get("rows")
++                                   else 1 if beside else min(2, len(items)))
++        hh, tt = [h for h, _ in items], [t for _, t in items]
++        if loc == "upper center" and head and n == 1:
++            # a figure legend at the top sits on the figure title; above the axes it is laid out below it
++            L = axes[0][0].legend(hh, tt, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=ncol, fontsize=8,
++                                  frameon=True, title=leg.get("title"))
++        else:
++            L = container.legend(hh, tt, loc="outside " + loc, ncol=ncol, fontsize=8, frameon=True,
++                                 title=leg.get("title"))
+         L.get_frame().set_edgecolor(sch["grid"])
+         L.get_frame().set_facecolor(sch["background"])
+         for t in L.get_texts():
+@@ -664,6 +673,12 @@ def draw(container, g: Graph, sch: dict) -> None:
+     _notes(container, o, sch)
+ 
+ 
++# legend(position(#)): the clock position of the legend around the plot region, outside it (dofile patch, ODT-17).
++# ring(0) (inside the plot region), bplacement() and position(0) are not supported: they use the default.
++_LEGEND_LOC = {12: "upper center", 1: "right upper", 2: "right upper", 3: "right center", 4: "right lower",
++               5: "right lower", 6: "lower center", 7: "left lower", 8: "left lower", 9: "left center",
++               10: "left upper", 11: "left upper"}
++
+ def _notes(container, o: dict, sch: dict) -> None:
+     parts = [_join(o.get("note")), _join(o.get("caption"))]
+     text = "\n".join(p for p in parts if p)

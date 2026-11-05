@@ -8,7 +8,8 @@ reference logs (`tests_opendta/compat/expected/`), not a Stata run.
 
 Status values: `unverified` (seen in dofile, Stata behavior not checked), `confirmed` (checked against Stata),
 `reported` (issue opened upstream), `fixed upstream` (fixed in a commit we have not vendored yet), `vendored`
-(the fix is in our copy), `patched` (fixed by a dofile patch in `scripts/patches/`, to report upstream), `known`
+(the fix is in our copy), `patched` (fixed by a dofile patch in `scripts/patches/`, to report upstream), `partly patched` (the patch covers part
+of the entry; the rest is listed in its details), `known`
 (a missing feature, not a bug). PATCH-1's status describes its own progress.
 The repros were last run on 2026-11-04 in dofile (`dofile run` or the MCP server). The cps and panel data are
 in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (Card 1995), not in the repo.
@@ -29,8 +30,15 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-13 | bare `mean` (replay) refuses with rc 100 even right after `mean`; `estimates replay` works | found 2026-11-04, no test | unverified |
 | ODT-12 | `nbreg` prints a NumPy warning (`invalid value encountered in sqrt`) computing alpha's standard error | `::test_odt_fixes` (smoke test; trigger checked on the Card data) | patched |
 | ODT-14 | Stata code reaches Python's `eval()` (empty `__builtins__`, escapable): `arch ..., archmexp()` and `bayesstats` `{param}` expressions | `::test_safe_eval_allows_only_arithmetic`, `::test_stata_expressions_cannot_reach_python` | patched |
-| GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
+| ODT-15 | `predict` after `mean` or `bootstrap` crashes (AttributeError `'Estimates' object has no attribute 'terms'`, rc 9999, traceback in the log; `capture` doesn't catch it) | found 2026-11-05 (student replication run), no test | unverified |
+| ODT-16 | `color()` specs: `gs#` is inverted (`gs0` white, `gs16` black); `none`, `*#` intensity (`navy*.5`) and `%#` opacity (`maroon%50`) fall back to the default palette color without an error; also unhandled: CMYK/`hsv` specs, color lists, about 20 of Stata's named colors | `::test_odt16_*` | partly patched |
+| ODT-17 | `legend(pos(#))` ignored: the legend is always at the bottom center | `::test_odt17_legend_position` | partly patched |
+| ODT-18 | `ttest a == b, unequal` without `unpaired` runs a paired test (prints "Paired t test") instead of refusing | found 2026-11-05 (student replication run), no test | unverified |
+| ODT-19 | a matrix subscript on `e()`/`r()` matrices inside `display` fails: `display e(b)[1,1]` and `display r(table)[1,1]` give rc 109 "type mismatch"; with a format, `display %6.3f (r(table)[1,1])` gives rc 198 "invalid syntax" | found 2026-11-05, no test | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
+| ODT-20 | `histogram` (and `bar`'s) outline ignores `lcolor()`/`lwidth()`: histogram bars always get a background-colored edge, so `fcolor(none) lcolor(navy)` draws nothing | `::test_odt20_histogram_outline` | patched |
+| GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
+| GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 
 ## Details
@@ -121,6 +129,8 @@ graph export "/tmp/nope.png", replace
   instead of the sandbox's reason. Other file commands show the reason.
 - Expected: rc 603 is right; the message is a dofile/OpenDTA interaction, not a Stata difference.
 - Workaround: export inside the working directory.
+- 2026-11-05: `graph export` into a folder that doesn't exist also gives rc 603 `file ... could not be opened`; an agent
+  can't tell that from the sandbox's refusal, which CLAUDE.md also reports as rc 603.
 
 ### ODT-8: backslash escapes for macros
 ```stata
@@ -190,10 +200,117 @@ arch y, arch(1) archm archmexp(().__class__.__mro__.__len__()*X)
   power (it failed before).
 - To report upstream as a security issue.
 
+### ODT-15: `predict` after `mean` or `bootstrap`
+```stata
+clear
+set obs 50
+gen x = rnormal()
+gen y = x + rnormal()
+mean y
+predict yh
+```
+- dofile: rc 9999 `internal engine error: AttributeError: 'Estimates' object has no attribute 'terms'`
+  (`estimation/postest.py`, `xb_all`). `bootstrap _b[x], reps(5): regress y x` then `predict` does the same.
+- Expected in Stata: an ordinary error (these commands have no `predict`), not an engine crash. Which rc: unchecked.
+- The session survives and keeps its data, but rc 9999 skips `capture` and ends the call.
+
+### ODT-16: `color()` specs
+```stata
+twoway (histogram x, color(maroon%50))
+twoway (histogram x, color(gs2))
+```
+`graphics/scheme.py:color()` returned the default palette color for any text it did not know, so these drew in
+the wrong color with no error:
+- `gs#`: the formula ran the wrong way, `gs0` white and `gs16` black (Stata: `gs0` black, `gs16` white). The
+  table entries `gs4`, `gs8`, `gs12` were right, so only the other levels were wrong.
+- `maroon%50` (opacity suffix, Stata 15+): the color was dropped.
+- `navy*.5` (intensity multiplier, the Stata 14 way to lighten or darken a color): dropped.
+- `none` (`fcolor(none)`, `lcolor(none)`, `mcolor(none)`): dropped, so a hollow bar or invisible line was drawn filled.
+- Patched (`opendta-odt16-color-specs.patch`): `gs#` fixed; `none` returns matplotlib's transparent
+  `"none"`; `%#` returns `#rrggbbaa`; `*#` mixes toward white below 1 and darkens above 1. VERIFY: the intensity
+  formula is an approximation of Stata's, not checked against Stata output; a combined `navy*.5%50` is read in that order.
+- Still open (not patched, the semantics or the full list are not certain):
+  - four-number CMYK specs and `hsv ...`;
+  - color lists such as `mcolor(red blue)`;
+  - named colors Stata has that the table lacks (for example `lime`, `bluishgray`, `ltbluishgray`, `midblue`,
+    `ebblue`, `ebg`, `emidblue`, `erose`, `dknavy`; from memory, check the manual before adding any);
+  - an unknown color still falls back silently. Stata refuses an invalid color; doing the same here would make a
+    valid-but-missing name fail outright, so wait until the name table is complete.
+- `docs/replication-tests.md` said `%50` is "accepted"; since the patch the opacity is applied.
+
+### ODT-17: legend placement
+```stata
+twoway (scatter y x) (lfit y x), legend(pos(3))
+```
+- dofile: legend stays at the bottom center (`graphics/render.py`, `loc="outside lower center"`).
+  `legend(order(...))`, `label()` and `off` work.
+- Expected in Stata (our reading of [G-3] legend_options, not a Stata run): `pos()` is short for `position()`, a
+  clock position (1 to 12; 0 is the center) giving the side or corner of the plot region the legend sits at;
+  `ring(#)` sets how far out it sits (`ring(0)` is inside the plot region, larger is farther out, values are
+  ordinal), and `bplacement(compass)` places a legend with `ring(0)`. The Stata 14 default is the bottom
+  (`pos(6)`), which is what dofile draws; newer Stata defaults to the right. Under `by()`, location suboptions go
+  inside `by()`. Minimum fix: honor `pos(3|6|9|12)` (and 1, 2, 4, 5, 7, 8, 10, 11 as corners) with the default
+  `ring`; `ring(0)` (inside the plot) can wait.
+- Patched (`opendta-odt17-legend-position.patch`): `position()` is read as the clock position, outside the plot
+  region (12 top, 3 right, 6 bottom, 9 left; 1-2 and 10-11 are top right and top left, 4-5 and 7-8 bottom right
+  and bottom left), a legend at a side defaults to one column. Not done: `ring()` (the parser stores it but it is
+  ignored), `ring(0)` inside the plot region, `bplacement()`, `position(0)`.
+
+### ODT-18: `ttest` with `unequal` but no `unpaired`
+```stata
+clear
+set obs 50
+gen x = _n
+gen y = x + rnormal()
+gen z = x + rnormal()
+ttest y == z, unequal
+```
+- dofile: rc 0, "Paired t test". `ttest y == z, unpaired unequal` correctly gives the two-sample test with unequal variances.
+- Expected in Stata: in the manual's syntax (stata.com/manuals14/rttest.pdf) `unequal` and `welch` belong to the
+  `unpaired` form, and without `unpaired` the two-variable form is the paired test, so Stata should refuse the option
+  rather than ignore it (the rc is not checked). Silently ignoring it matters because the user asked for Welch
+  and gets a paired test.
+
+### ODT-19: matrix subscripts of `e()`/`r()` in `display`
+```stata
+clear
+set obs 50
+gen x = _n
+gen y = x + rnormal()
+regress y x
+display e(b)[1,1]
+display r(table)[1,1]
+display %6.3f (r(table)[1,1])
+```
+- dofile: the first two give rc 109 `type mismatch`; the third rc 198 `invalid syntax`. Copying first works:
+  `matrix T = r(table)` then `display %6.3f T[1,1]`.
+- Expected in Stata: [P] matrix define says subscripting with scalar expressions may be used in any expression
+  context, and `display` takes expressions, so these should print the coefficient. Not run in Stata; `r(table)`
+  and `e(b)` are both covered. Named subscripts (`T[1,"x"]`) are said to work in a matrix context only.
+- Agent-facing: the messages name no cause, and an agent will try this form first.
+
+### ODT-20: histogram outline ignores `lcolor()`
+```stata
+twoway (histogram x, fcolor(none) lcolor(navy))
+```
+- dofile: no bars are visible. `graphics/render.py` (`draw_layer`, kinds `bar` and `histogram`) sets the edge to the
+  background color for histograms (`edge = sch["background"]`) so that narrow bins keep their fill, and never reads
+  `lcolor`; with `fcolor(none)` (ODT-16) the whole bar is invisible.
+- Expected in Stata: `lcolor()` and `lwidth()` set the bar outline; `fcolor(none)` gives hollow bars. Not run in Stata.
+- Patched (`opendta-odt20-bar-outline.patch`): an explicit `lcolor()` sets the outline color (also for histograms of
+  more than 40 bins, which had no edge), an explicit `lwidth()` its width; with neither, the background-colored edge
+  stays as before. `color()` alone still does not outline. Not checked: `lpattern`, and whether Stata outlines with
+  `color()` (it sets both fill and outline there).
+
 ### GAP-2: `estat firststage`
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat
 firststage is unrecognized". It's the standard weak-instrument check, so it's worth implementing upstream.
 - Workaround: run the first stage with `regress endog instruments exog`, then `test instruments`.
+
+### GAP-3: other `estat` subcommands after `ivregress`
+`estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).
+A student running Card (1995) or any IV paper reaches for all three. (`estat overid` is an error in Stata for an
+exactly identified model, so test it with two instruments.)
 
 ### GAP-1: community commands
 `reghdfe`, `esttab` and `outreg2` are SSC packages, not part of Stata, and OpenDTA doesn't implement them. Not

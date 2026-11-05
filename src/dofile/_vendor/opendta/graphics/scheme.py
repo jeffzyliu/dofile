@@ -5,6 +5,8 @@ in spirit (color or monochrome)."""
 
 from __future__ import annotations
 
+import re
+
 SCHEMES: dict[str, dict] = {
     "opendta": {
         "colors": ["#1f5f8b", "#c8553d", "#3c8d5a", "#8a5fa3", "#c9a227", "#4a9bb5", "#7a6a58", "#b8456b"],
@@ -68,19 +70,44 @@ def get(name: str | None) -> dict:
     return SCHEMES.get(n, SCHEMES["opendta"])
 
 
-def color(text: str | None, default: str) -> str:
-    if not text:
-        return default
-    t = text.strip().strip('"').lower()
+_SUFFIXES = re.compile(r"^(?P<base>.*?)(?:\*(?P<k>\d*\.?\d+))?(?:%(?P<a>\d*\.?\d+))?$")
+
+
+def _base_color(t: str) -> str | None:
+    """A color name, `# # #` RGB, `#rrggbb` or `gs#`; None if it is none of these."""
     if t in COLOR_NAMES:
         return COLOR_NAMES[t]
     parts = t.split()
     if len(parts) == 3 and all(p.isdigit() for p in parts):
-        r, g, b = (int(p) for p in parts)
+        r, g, b = (min(255, int(p)) for p in parts)
         return f"#{r:02x}{g:02x}{b:02x}"
     if t.startswith("#"):
         return t
     if t.startswith("gs") and t[2:].isdigit():
-        v = int(255 * (1 - int(t[2:]) / 16))
+        v = round(255 * min(16, int(t[2:])) / 16)   # gs0 is black, gs16 white
         return f"#{v:02x}{v:02x}{v:02x}"
-    return default
+    return None
+
+
+def color(text: str | None, default: str) -> str:
+    """dofile patch (ODT-16): `none`, the `*#` intensity multiplier (Stata 14) and the `%#` opacity suffix
+    (Stata 15+); `gs#` runs from black (gs0) to white (gs16). Anything else unknown still gives `default`
+    (VERIFY: Stata refuses an invalid color; not done here because the name table is incomplete).
+    `*#` below 1 mixes toward white, above 1 darkens: an approximation of Stata's intensity (VERIFY)."""
+    if not text:
+        return default
+    t = text.replace('"', "").strip().lower()
+    if t == "none":
+        return "none"
+    m = _SUFFIXES.match(t)
+    c = _base_color(m.group("base").strip()) if m else None
+    if c is None:
+        return default
+    if m.group("k") and len(c) == 7:
+        k = float(m.group("k"))
+        rgb = [int(c[i:i + 2], 16) for i in (1, 3, 5)]
+        rgb = [255 - (255 - v) * k if k <= 1 else v / k for v in rgb]
+        c = "#" + "".join(f"{max(0, min(255, round(v))):02x}" for v in rgb)
+    if m.group("a") and len(c) == 7:
+        c += f"{max(0, min(255, round(255 * float(m.group('a')) / 100))):02x}"
+    return c

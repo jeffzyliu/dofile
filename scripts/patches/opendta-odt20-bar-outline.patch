@@ -1,0 +1,16 @@
+diff --git a/src/dofile/_vendor/opendta/graphics/render.py b/src/dofile/_vendor/opendta/graphics/render.py
+index 4571b54..42b757f 100644
+--- a/src/dofile/_vendor/opendta/graphics/render.py
++++ b/src/dofile/_vendor/opendta/graphics/render.py
+@@ -144,6 +144,11 @@ def draw_layer(ax, ly: Layer, i: int, sch: dict) -> list:
+         edge = sch["background"] if kind == "histogram" else fcol
+         # many narrow bins: an edge in the background color would eat the fill
+         lw = 0.0 if kind == "histogram" and len(x) > 40 else 0.6
++        if st.get("lcolor"):   # dofile patch (ODT-20): an explicit lcolor()/lwidth() sets the outline
++            edge = lcol
++            lw = lw or 0.6
++        if st.get("lwidth"):
++            lw = _lw(st, 0.6)
+         if horiz:
+             h = ax.barh(x, y - base, height=w, left=base, color=fcol, edgecolor=edge, linewidth=lw,
+                         label=label, zorder=1)

@@ -66,7 +66,7 @@ support: 1,040 of 2,490 PSID and 3,856 of 15,992 CPS men kept). They aren't the 
 stratification estimators, so compare them for direction and size, not to the dollar.
 
 Watch for:
-- `%50` color opacity (`color(navy%50)`) is accepted although it's a Stata 15 feature.
+- `%50` color opacity (`color(navy%50)`) is applied as transparency (ODT-16, patched); it is a Stata 15 feature, not Stata 14.
 - Overlap histograms: about 80% (PSID) and 90% (CPS) of comparison men sit in the lowest score bin. That's the
   paper's point, not a bug.
 

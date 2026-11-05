@@ -144,6 +144,11 @@ def draw_layer(ax, ly: Layer, i: int, sch: dict) -> list:
         edge = sch["background"] if kind == "histogram" else fcol
         # many narrow bins: an edge in the background color would eat the fill
         lw = 0.0 if kind == "histogram" and len(x) > 40 else 0.6
+        if st.get("lcolor"):   # dofile patch (ODT-20): an explicit lcolor()/lwidth() sets the outline
+            edge = lcol
+            lw = lw or 0.6
+        if st.get("lwidth"):
+            lw = _lw(st, 0.6)
         if horiz:
             h = ax.barh(x, y - base, height=w, left=base, color=fcol, edgecolor=edge, linewidth=lw,
                         label=label, zorder=1)
@@ -654,15 +659,30 @@ def draw(container, g: Graph, sch: dict) -> None:
         else:
             for idx, (h, lab) in enumerate(handles, start=1):
                 items.append((h, labels_over.get(str(idx), lab)))
-        ncol = leg.get("cols") or (math.ceil(len(items) / leg["rows"]) if leg.get("rows") else min(2, len(items)))
-        L = container.legend([h for h, _ in items], [t for _, t in items], loc="outside lower center",
-                             ncol=ncol, fontsize=8, frameon=True, title=leg.get("title"))
+        loc = _LEGEND_LOC.get(leg.get("position"), "lower center")   # dofile patch (ODT-17): position(); ring() ignored
+        beside = loc.startswith(("left", "right"))                  # a legend at the side is one column, as in Stata
+        ncol = leg.get("cols") or (math.ceil(len(items) / leg["rows"]) if leg.get("rows")
+                                   else 1 if beside else min(2, len(items)))
+        hh, tt = [h for h, _ in items], [t for _, t in items]
+        if loc == "upper center" and head and n == 1:
+            # a figure legend at the top sits on the figure title; above the axes it is laid out below it
+            L = axes[0][0].legend(hh, tt, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=ncol, fontsize=8,
+                                  frameon=True, title=leg.get("title"))
+        else:
+            L = container.legend(hh, tt, loc="outside " + loc, ncol=ncol, fontsize=8, frameon=True,
+                                 title=leg.get("title"))
         L.get_frame().set_edgecolor(sch["grid"])
         L.get_frame().set_facecolor(sch["background"])
         for t in L.get_texts():
             t.set_color(tcolor)
     _notes(container, o, sch)
 
+
+# legend(position(#)): the clock position of the legend around the plot region, outside it (dofile patch, ODT-17).
+# ring(0) (inside the plot region), bplacement() and position(0) are not supported: they use the default.
+_LEGEND_LOC = {12: "upper center", 1: "right upper", 2: "right upper", 3: "right center", 4: "right lower",
+               5: "right lower", 6: "lower center", 7: "left lower", 8: "left lower", 9: "left center",
+               10: "left upper", 11: "left upper"}
 
 def _notes(container, o: dict, sch: dict) -> None:
     parts = [_join(o.get("note")), _join(o.get("caption"))]

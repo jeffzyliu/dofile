@@ -29,6 +29,12 @@ the `dev` group), not `uv run --with pytest-xdist`: the overlay env's `sys.prefi
 sandbox refuses the project's own packages and graph/sandbox tests fail with rc 603. The Stata comparison is one test
 per case, so `-n auto` runs those in parallel too. There is no linter or formatter configured.
 
+Agents: run the whole suite (`poe test`, `poe slow`, `poe ci`) as a background task with its output going to a
+file, and read the file while it runs: `uv run poe test > .dofile/test.log 2>&1` (`.dofile/` is gitignored). Don't
+pipe it through `tail` or `head`: they print nothing until the command ends, so a run in progress looks like an
+empty one. pytest prints dots as tests finish and a summary line at the end; wait for the completion notice, then
+read the last lines of the log. A single test or file is quick enough to run in the foreground.
+
 ## Architecture
 
 Layers, bottom up (`src/dofile/`):

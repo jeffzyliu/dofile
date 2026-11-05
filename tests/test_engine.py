@@ -231,6 +231,72 @@ def test_odt10_relabel():
     assert _relabel(["a", "b"], {"relabel": '2 "B"'}) == ["a", "B"] and _relabel(["a"], {}) == ["a"]
 
 
+def test_odt16_color_specs():
+    """ODT-16: gs# runs black to white; `none`, `*#` intensity and `%#` opacity are understood; unknown stays default."""
+    from dofile._vendor.opendta.graphics.scheme import color
+    d = "DEFAULT"
+    assert (color("gs0", d), color("gs16", d), color("gs2", d)) == ("#000000", "#ffffff", "#202020")
+    assert color("none", d) == color('"none"', d) == "none"
+    assert color("navy%50", d) == color('"navy%50"', d) == color("navy", d) + "80"
+    assert color("maroon%100", d) == color("maroon", d) + "ff" and color("#336699%10", d) == "#3366991a"
+    assert color('"255 0 0"*.5', d) == "#ff8080" and color("navy*.5%50", d).endswith("80")
+    lighter, darker = color("navy*.5", d), color("navy*1.5", d)
+    assert lighter > color("navy", d) > darker      # hex strings of equal length compare by brightness here
+    assert color("bogus", d) == d and color("", d) == d and color(None, d) == d
+
+
+def test_odt16_color_opacity_is_drawn(eng):
+    import io
+    from dofile._vendor.opendta.graphics import render, store as graph_store
+    r = eng.run("clear\nset obs 30\nset seed 1\ngen x = rnormal()\nhistogram x, color(maroon%50)")
+    assert r.rc == 0, r.error
+    fig = render.figure(graph_store.store(eng.session).get())
+    fig.savefig(io.BytesIO(), format="png")
+    bar = fig.axes[0].patches[0]
+    assert abs(bar.get_facecolor()[3] - 0.5) < 0.01 and bar.get_facecolor()[0] > bar.get_facecolor()[2]  # maroon, half opaque
+
+
+def test_odt17_legend_position(eng):
+    """ODT-17: legend(position(#)) is a clock position outside the plot region; the default stays at the bottom."""
+    import io
+    from dofile._vendor.opendta.graphics import render, store as graph_store
+    eng.run("clear\nset obs 20\ngen x = _n\ngen y = x\ngen z = x^.5")
+    centers = {}
+    for pos in (None, 3, 9, 12):
+        opt = "" if pos is None else f", legend(position({pos}))"
+        assert eng.run(f"twoway (line y x) (line z x){opt}").rc == 0
+        fig = render.figure(graph_store.store(eng.session).get())
+        fig.savefig(io.BytesIO(), format="png")
+        box = (fig.legends or [lg for sf in fig.subfigs for lg in sf.legends])[0].get_window_extent()
+        centers[pos] = ((box.x0 + box.x1) / 2 / fig.bbox.width, (box.y0 + box.y1) / 2 / fig.bbox.height)
+    assert centers[None][1] < 0.2 and 0.4 < centers[None][0] < 0.6
+    assert centers[3][0] > 0.8 and centers[9][0] < 0.2 and centers[12][1] > 0.8
+    # at the top the legend must sit below the title, not on it
+    assert eng.run('twoway (line y x) (line z x), legend(position(12)) title("A title")').rc == 0
+    fig = render.figure(graph_store.store(eng.session).get())
+    fig.savefig(io.BytesIO(), format="png")
+    legend = (fig.legends or [ax.get_legend() for ax in fig.axes if ax.get_legend()])[0].get_window_extent()
+    assert legend.y1 <= fig._suptitle.get_window_extent().y0 + 1   # its top edge is under the title's bottom edge
+
+
+def test_odt20_histogram_outline(eng):
+    """ODT-20: lcolor()/lwidth() set a histogram's outline; with neither the edge stays the background color."""
+    import io
+    from dofile._vendor.opendta.graphics import render, store as graph_store
+
+    def first_bar(opt):
+        assert eng.run(f"clear\nset obs 200\nset seed 1\ngen x = rnormal()\nhistogram x, bin(10) {opt}").rc == 0
+        fig = render.figure(graph_store.store(eng.session).get())
+        fig.savefig(io.BytesIO(), format="png")
+        return fig.axes[0].patches[0]
+
+    plain, navy, thick, hollow = (first_bar(o) for o in ("", "lcolor(navy)", "lwidth(thick)", "fcolor(none) lcolor(navy)"))
+    assert tuple(plain.get_edgecolor()) == (1, 1, 1, 1) and plain.get_linewidth() == 0.6   # unchanged default
+    assert tuple(navy.get_edgecolor()[:3]) != (1, 1, 1) and navy.get_linewidth() == 0.6
+    assert thick.get_linewidth() > 2 and tuple(thick.get_edgecolor()) == (1, 1, 1, 1)
+    assert hollow.get_facecolor()[3] == 0 and tuple(hollow.get_edgecolor()) == tuple(navy.get_edgecolor())
+
+
 def test_safe_eval_allows_only_arithmetic():
     """Expression text from Stata code (arch's archmexp(), bayesstats {param} expressions) is evaluated without
     Python's eval(), whose empty __builtins__ still let ().__class__... reach Python's internals."""
