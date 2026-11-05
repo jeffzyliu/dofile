@@ -14,8 +14,11 @@ jobs:
         # 3.12: floor (OpenDTA's own CI); 3.14: dev default and Pyodide 314's Python
         python: ["3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
+    env:
+      # poe runs tasks through a nested `uv run`, which would otherwise pick .python-version (3.14)
+      UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v10.3.3
-      - run: uv sync --extra mcp --python ${{ matrix.python }}
-      - run: uv run --python ${{ matrix.python }} pytest -q -m "" -n auto   # includes the slow Stata comparison; -n auto: pytest-xdist (dev group)
+      - run: uv sync --extra mcp
+      - run: uv run poe ci   # everything, including the slow Stata comparison

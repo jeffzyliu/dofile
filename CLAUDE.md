@@ -10,19 +10,21 @@ processes, MCP server and CLI around it.
 
 ```bash
 uv sync --extra mcp                                   # dev env (Python 3.14 per .python-version; floor 3.12)
-uv run --extra mcp pytest -q                          # default run, ~90 s; skips the slow Stata comparison
-uv run --extra mcp pytest -q -n auto                  # same in parallel (pytest-xdist), ~35 s
-uv run --extra mcp pytest -q tests/test_mcp.py::test_stdio_mode_tools   # one test
-uv run --extra mcp pytest -q tests                    # dofile's own tests only (not OpenDTA's vendored suite)
-uv run --extra mcp pytest -q -m slow -n auto          # Stata 14 log comparison only (~75 s; ~3.5 min serial)
-uv run --extra mcp pytest -q -m ""                    # everything, as CI does
+uv run poe                                            # list tasks (poethepoet; defined in pyproject.toml)
+uv run poe test                                       # default suite in parallel, ~35 s; skips the slow Stata comparison
+uv run poe test tests/test_mcp.py::test_stdio_mode_tools   # one test (extra args go to pytest)
+uv run poe test tests                                 # dofile's own tests only (not OpenDTA's vendored suite)
+uv run poe slow                                       # Stata 14 log comparison only (~75 s)
+uv run poe ci                                         # everything, as CI does
 uv run dofile run path/to/file.do --json out.json     # batch run (sandboxed; --unsafe to lift it)
-uv run --extra mcp dofile-mcp [--http --port 8000]    # MCP server, stdio by default
-uv run python scripts/vendor_opendta.py [COMMIT]      # re-vendor OpenDTA, re-apply patches
+uv run poe mcp [--http --port 8000]                   # MCP server, stdio by default
+uv run poe vendor [COMMIT]                            # re-vendor OpenDTA, re-apply patches
 uv build                                              # sdist + wheel (the wheel is built from the sdist)
 ```
 
-Without `--extra mcp`, `tests/test_mcp.py` is skipped (`importorskip`). Run xdist from the project env (it's in
+poe runs every task as `uv run --extra=mcp ...` (`[tool.poe] executor`), so the MCP tests always run; with plain
+`pytest` and no `--extra mcp`, `tests/test_mcp.py` is skipped (`importorskip`). That nested `uv run` ignores an outer
+`--python`: set `UV_PYTHON` to test another version (CI does). Run xdist from the project env (it's in
 the `dev` group), not `uv run --with pytest-xdist`: the overlay env's `sys.prefix` isn't the `.venv`, so the
 sandbox refuses the project's own packages and graph/sandbox tests fail with rc 603. The Stata comparison is one test
 per case, so `-n auto` runs those in parallel too. There is no linter or formatter configured.

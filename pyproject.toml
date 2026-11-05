@@ -28,6 +28,7 @@ dev = [
     "xlrd>=2.0",
     "xlwt>=1.3",
     "pytest-xdist>=3.8.0",
+    "poethepoet>=0.49.0",
 ]
 
 [build-system]
@@ -51,3 +52,15 @@ addopts = [
   "--deselect=tests_opendta/tests/test_i18n.py::test_dialog_commands_run",
   "--deselect=tests_opendta/tests/test_i18n.py::test_graph_editor_edits",
 ]
+
+# Task runner: `uv run poe <task>` (or `poe <task>` in the activated .venv); `poe` alone lists them.
+# The uv executor runs each task as `uv run --extra=mcp ...`, so the MCP tests are never skipped.
+[tool.poe]
+executor = { type = "uv", extra = "mcp" }
+
+[tool.poe.tasks]
+test = { cmd = "pytest -q -n auto", help = "default suite in parallel (skips the slow Stata comparison)" }
+slow = { cmd = "pytest -q -m slow -n auto", help = "Stata 14 log comparison only" }
+ci = { cmd = "pytest -q -m '' -n auto", help = "everything, as CI runs it" }
+vendor = { cmd = "python scripts/vendor_opendta.py", help = "re-vendor OpenDTA and re-apply patches (pass a COMMIT)" }
+mcp = { cmd = "dofile-mcp", help = "MCP server (stdio; pass --http --port 8000 for HTTP)" }

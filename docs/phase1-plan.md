@@ -185,7 +185,8 @@ readable. `--json` writes rc, error, the failing command, e()/r() and `versions`
   everything (`-m "" -n auto`) 1,275 passed, 13 skipped, 5 xfailed (2.5 min).
 - GitHub Actions (`.github/workflows/ci.yml`, repo `jeffzyliu/dofile`): uv, Python 3.12/3.13/3.14 on Ubuntu and
   macOS, running everything (`-m ""`). First run 2026-11-05 on `978fad4`: all 6 jobs green, 1,167 passed each,
-  8–13 minutes per job (serial). The workflow now runs with `-n auto`.
+  8–13 minutes per job (serial). The workflow now runs `uv run poe ci` (poethepoet
+  tasks in `pyproject.toml`, parallel with `-n auto`), with `UV_PYTHON` set per job.
 - **Replication tests** ([replication-tests.md](replication-tests.md)): three papers replicated through the MCP
   server by an agent (Card & Krueger 1994, LaLonde / Dehejia & Wahba, Card 1995), with published versus dofile
   numbers and a checklist of what to look out for. Manual, not in CI: the data belongs to its authors.
