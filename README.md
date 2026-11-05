@@ -27,8 +27,8 @@ claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-m
 ```
 
 Tools: `run_do` (run Stata code; returns log, rc, error, e()/r() as JSON and new files), `describe_data`,
-`get_file` (returns exported graphs as images), `upload_file`, `request_upload` (HTTP), `reset`. Resource `dofile://commands` lists the
-supported commands. Data stays in memory between `run_do` calls.
+`get_file` (returns exported graphs as images), `get_matrix` (one matrix, or part of it, at full precision), `upload_file`, `request_upload` and `request_download` (HTTP), `reset`. Resource `dofile://commands` lists the
+supported commands. Data stays in memory between `run_do` calls. Full inputs, outputs and return codes: [MCP-SCHEMA.md](MCP-SCHEMA.md).
 
 HTTP: `dofile-mcp --http --port 8000` (localhost only by default). Call `start_session` first and pass its
 token as `session`; each session gets its own temporary folder, deleted when the session ends.
@@ -48,7 +48,8 @@ go inline with `upload_file(name, text=...)`.
 **Sandbox (on by default; `--unsafe` turns it off):** `shell`/`!`, `erase`/`rm`, `rmdir`, `mkdir`, `cd`, `copy`
 and `webuse` are disabled. Files can only be written in the working folder, and read from it, from `--read-dir`
 folders and from the Python installation. No subprocesses or network. Each call has a timeout (`--timeout`,
-default 60 s); a timeout or crash resets that session (rc 9998). The sandbox is a policy layer, not a security
+default 60 s); a call that runs too long or is cancelled is interrupted like Stata's Break key (rc 1, data
+kept), and only code that does not stop, or a crash, resets that session (rc 9998). The sandbox is a policy layer, not a security
 boundary: run public HTTP deployments in a container.
 
 ## Development
@@ -78,7 +79,8 @@ uv run pytest tests -k "not stata14"   # quicker: dofile's own tests
 ## Engine
 
 A vendored copy of [OpenDTA](https://github.com/yaskepalhares/opendta) (MIT), pinned in
-`src/dofile/_vendor/opendta/VENDORED`. Not affiliated with StataCorp; Stata is a registered trademark of StataCorp LLC.
+`src/dofile/_vendor/opendta/VENDORED`. dofile's own changes to it are patches in `scripts/patches/`
+(currently: `r(table)` after estimation), re-applied by the vendor script. Not affiliated with StataCorp; Stata is a registered trademark of StataCorp LLC.
 
 ## License
 

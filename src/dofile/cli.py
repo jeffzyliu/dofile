@@ -32,13 +32,14 @@ def main(argv: list[str] | None = None) -> int:
         from . import sandbox
         # the do-file's own folder stays readable, so `do other.do` next to it works
         sandbox.install(workdir, (str(dofile.parent), *(str(Path(d).resolve()) for d in a.read_dir)))
-    from .engine import Engine
+    from .engine import Engine, about
 
     os.chdir(workdir)
     r = Engine().run(f'do "{dofile}"')
     sys.stdout.write(r.log)
     if json_out:
-        json_out.write_text(json.dumps({"rc": r.rc, "error": r.error, "results": r.results}, indent=2) + "\n")
+        json_out.write_text(json.dumps({"rc": r.rc, "error": r.error, "error_command": r.error_command,
+                                          "results": r.results, "versions": about()}, indent=2) + "\n")
     return 1 if r.rc else 0
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from dofile.worker import RC_RESET, Worker, WorkerPool
+from dofile.worker import GRACE, RC_RESET, Worker, WorkerPool
 
 PANEL = Path(__file__).parent / "conformance" / "data" / "panel.dta"
 
@@ -21,16 +21,45 @@ def worker(tmp_path):
 def test_state_persists_between_calls(worker):
     assert worker.run("use panel, clear").rc == 0
     r = worker.run("quietly regress y x1 x2")
-    assert r.rc == 0 and r.results["e"]["N"] == 1000
+    assert r.rc == 0 and r.results["e"]["scalars"]["N"] == 1000
     assert worker.data_summary()["nobs"] == 1000
 
 
-def test_timeout_resets_the_session(worker):
+def test_timeout_interrupts_and_keeps_the_data(worker):
     worker.run("use panel, clear")
+    t = time.monotonic()
     r = worker.run("while 1 {\n}", timeout=2)
-    assert r.rc == RC_RESET and "did not finish within 2 seconds" in r.error
-    after = worker.run("count")  # a fresh session: the data is gone, but it works
-    assert after.rc == 0 and after.results["r"]["N"] == 0
+    assert r.rc == 1 and "did not finish within 2 seconds" in r.error and "keeps its data" in r.error
+    assert "--Break--" in r.log and time.monotonic() - t < 2 + GRACE
+    after = worker.run("count")  # same session: the data is still there
+    assert after.rc == 0 and after.results["r"]["scalars"]["N"] == 1000
+
+
+def test_code_that_ignores_the_interrupt_is_killed(worker, monkeypatch):
+    worker.run("use panel, clear")
+    monkeypatch.setattr(Worker, "_signal", lambda self: None)  # as if stuck in C code
+    monkeypatch.setattr("dofile.worker.GRACE", 0.5)
+    r = worker.run("while 1 {\n}", timeout=1)
+    assert r.rc == RC_RESET and "did not stop when interrupted" in r.error
+    assert worker.run("count").results["r"]["scalars"]["N"] == 0  # a fresh session
+
+
+def test_cancel_interrupts_the_running_call_and_skips_waiting_ones(worker):
+    import threading
+    worker.run("use panel, clear")
+    running, waiting, out = object(), object(), {}
+    a = threading.Thread(target=lambda: out.update(a=worker.run("while 1 {\n}", call=running)))
+    a.start()
+    time.sleep(1)
+    b = threading.Thread(target=lambda: out.update(b=worker.run("display 1", call=waiting)))
+    b.start()  # waits for the lock
+    worker.interrupt(waiting)
+    worker.interrupt(running)
+    a.join(GRACE + 5)
+    b.join(5)
+    assert out["a"].rc == 1 and "cancelled" in out["a"].error
+    assert out["b"].rc == 1 and "before it started" in out["b"].error and "1" not in out["b"].log.split("--")[0]
+    assert worker.run("count").results["r"]["scalars"]["N"] == 1000
 
 
 def test_dead_process_is_reported_then_restarted(worker):
@@ -62,7 +91,7 @@ def test_pool_isolates_sessions_evicts_and_reaps():
         a, b = pool.get("a"), pool.get("b")
         assert a.workdir != b.workdir and pool.get("a") is a
         a.run("clear\nset obs 3")
-        assert b.run("count").results["r"]["N"] == 0  # b does not see a's data
+        assert b.run("count").results["r"]["scalars"]["N"] == 0  # b does not see a's data
         b_dir = b.workdir
         pool.get("a")  # a is now the most recently used
         pool.get("c")  # cap of 2: evicts b

@@ -18,7 +18,7 @@ def test_run_success_writes_log_and_json(tmp_path):
     assert p.returncode == 0, p.stdout[-2000:]
     assert "CHECK ols_b_yrsed=" in p.stdout and "end of do-file" in p.stdout
     out = json.loads((tmp_path / "out.json").read_text())
-    assert out["rc"] == 0 and out["results"]["e"]["cmd"] == "regress"
+    assert out["rc"] == 0 and out["results"]["e"]["macros"]["cmd"] == "regress"
 
 
 def test_run_error_exits_1_and_sandbox_blocks_shell(tmp_path):

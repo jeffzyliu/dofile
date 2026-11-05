@@ -89,10 +89,15 @@ def main(commit: str = COMMIT) -> None:
     if left:
         sys.exit("unvendorable imports remain:\n" + "\n".join(left))
 
-    (DEST / "__init__.py").write_text('"""Third-party code vendored into dofile. Do not edit; re-run scripts/vendor_opendta.py."""\n')
+    patches = sorted((ROOT / "scripts" / "patches").glob("*.patch"))  # dofile's own changes, kept small
+    for patch in patches:
+        subprocess.run(["git", "apply", str(patch)], cwd=ROOT, check=True)
+
+    (DEST / "__init__.py").write_text('"""Third-party code vendored into dofile. Do not edit; re-run scripts/vendor_opendta.py (changes go in scripts/patches/)."""\n')
     stamp = (f"source: {REPO}\ncommit: {commit}\nvendored: {date.today()}\n"
              f"removed: {', '.join(DROP)}; tests removed: {', '.join(DROP_TESTS)}\n"
-             f"imports rewritten: package {n_pkg}, tests {n_tests}\n")
+             f"imports rewritten: package {n_pkg}, tests {n_tests}\n"
+             f"patches: {', '.join(p.name for p in patches) or 'none'}\n")
     (target / "VENDORED").write_text(stamp)
     (TESTS / "VENDORED").write_text(stamp)
     print(f"vendored opendta@{commit[:7]}: package -> {target.relative_to(ROOT)}, tests -> {TESTS.relative_to(ROOT)}\n{stamp}")

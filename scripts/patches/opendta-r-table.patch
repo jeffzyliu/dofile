@@ -1,0 +1,70 @@
+diff --git a/src/dofile/_vendor/opendta/estimation/results.py b/src/dofile/_vendor/opendta/estimation/results.py
+index becb7f5..530203e 100644
+--- a/src/dofile/_vendor/opendta/estimation/results.py
++++ b/src/dofile/_vendor/opendta/estimation/results.py
+@@ -151,10 +151,65 @@ def level_text(level: float) -> str:
+     return f"{level:g}"
+ 
+ 
++def post_r_table(s: "Session", rows: list[CoefRow], *, stat: str, df: float | None, level: float,
++                 eform: bool) -> None:
++    """dofile patch: r(table) as Stata leaves it after a coefficient table (rows b se t|z pvalue ll ul
++    df crit eform, one column per coefficient), built from the rows being displayed."""
++    from ..commands.matrix import Matrix
++    c = crit(stat, level, df)
++    dfv = float(df) if stat == "t" and df is not None and df > 0 else SYS
++    cols, names, eqs, eq = [], [], [], "_"
++    for r in rows:
++        if r.kind == "eq":
++            eq = r.label or "_"
++            continue
++        if r.kind in ("header", "blank", "sep"):
++            continue
++        b, se = float(r.b), float(r.se)
++        t = p = lo = hi = SYS
++        ef = 0.0
++        if r.kind in ("base", "omitted", "empty"):
++            b, se = 0.0, SYS
++        elif r.kind == "fixed":
++            b, se = 1.0, SYS
++        elif not (np.isfinite(se) and 0 < se < SYS):
++            se = SYS
++        else:
++            t = b / se if r.kind != "aux" else SYS
++            p = pvalue(stat, t, df) if r.kind != "aux" else SYS
++            lo, hi = b - c * se, b + c * se
++            if r.kind == "aux" and r.eq:
++                lo, hi = (float(v) for v in r.eq.split())
++            if r.zero_lo:
++                p, lo = float(st.norm.sf(t)), max(lo, 0.0)
++            if eform and not r.noeform:
++                b, se, lo, hi, ef = np.exp(b), np.exp(b) * se, np.exp(lo), np.exp(hi), 1.0
++        cols.append([b, se, t, p, lo, hi, dfv, c, ef])
++        names.append(r.name or r.label)
++        eqs.append(eq)
++    if not cols:
++        return
++    # Stata's columns are e(b)'s, including base levels and base outcomes the table hides. Use them when
++    # every displayed eq:name is in e(b); otherwise (a stale e(), a table of its own) keep the rows.
++    eb = s.e.get("b")
++    full = lambda q, n: n if q == "_" else f"{q}:{n}"
++    shown = [full(q, n) for q, n in zip(eqs, names)]
++    if eb is not None and len(set(shown)) == len(shown):
++        ebfull = [full(q, n) for q, n in zip(eb.coleq, eb.colnames)]
++        if set(shown) <= set(ebfull):
++            by = dict(zip(shown, cols))
++            hidden = [0.0, SYS, SYS, SYS, SYS, SYS, dfv, c, cols[0][8]]
++            cols = [by.get(f, hidden) for f in ebfull]
++            names, eqs = list(eb.colnames), list(eb.coleq)
++    s.r["table"] = Matrix(np.array(cols, dtype=float).T,
++                          ["b", "se", stat, "pvalue", "ll", "ul", "df", "crit", "eform"], names, coleq=eqs)
++
++
+ def coef_table(s: "Session", depvar: str, rows: list[CoefRow], *, stat: str, df: float | None,
+                level: float, vcetype: str = "", coef_title: str = "Coef.",
+                footer: bool = True, eq_headers: bool = False, eform: bool = False,
+                top_line: str | None = None, depvar_left: bool = False) -> None:
++    post_r_table(s, rows, stat=stat, df=df, level=level, eform=eform)  # dofile patch
+     out = s.output
+     lv = level_text(level)
+     ci = f"[{lv}% Conf. Interval]"
