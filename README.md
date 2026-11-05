@@ -67,8 +67,10 @@ For HTTP mode, start `uv run --extra mcp dofile-mcp --http` and connect the Insp
 
 ```bash
 uv sync --extra mcp
-uv run pytest            # ~4.5 min; tests_opendta/ holds OpenDTA's suite and the Stata 14 log comparison
-uv run pytest tests -k "not stata14"   # quicker: dofile's own tests
+uv run --extra mcp pytest -q            # ~90 s; skips the slow Stata 14 log comparison
+uv run --extra mcp pytest -q tests      # dofile's own tests only, without OpenDTA's suite in tests_opendta/
+uv run --extra mcp pytest -q -m slow    # the Stata 14 log comparison (~3 min)
+uv run --extra mcp pytest -q -m ""      # everything, as CI does
 ```
 
 - `tests/conformance/`: dofile's corpus with reference values from statsmodels/linearmodels, plus breadth probes.
