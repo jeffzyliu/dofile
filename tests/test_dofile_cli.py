@@ -25,7 +25,16 @@ def test_run_error_exits_1_and_sandbox_blocks_shell(tmp_path):
     (tmp_path / "bad.do").write_text("display 1\nshell echo hi\n")
     p = dofile("run", "bad.do", "--json", "out.json", cwd=tmp_path)
     assert p.returncode == 1
-    assert json.loads((tmp_path / "out.json").read_text())["rc"] == 199
+    out = json.loads((tmp_path / "out.json").read_text())
+    assert out["rc"] == 199 and "sandbox" in out["error"]  # the error itself, not the do wrapper's "end of do-file"
+
+
+def test_error_message_inside_nested_do_files(tmp_path):
+    (tmp_path / "main.do").write_text(f'do "{tmp_path / "inner.do"}"\n')
+    (tmp_path / "inner.do").write_text("use nosuch, clear\n")
+    dofile("run", "main.do", "--json", "out.json", cwd=tmp_path)
+    out = json.loads((tmp_path / "out.json").read_text())
+    assert out["rc"] == 601 and "nosuch" in out["error"] and out["error_command"] == "use nosuch, clear"
 
 
 def test_unsafe_allows_shell(tmp_path):

@@ -226,11 +226,14 @@ def _failed_command(log: str) -> str | None:
 
 
 def _last_error(log: str) -> str | None:
-    """The Stata error message: the line before the last `r(#);`, skipping OpenDTA's hint lines."""
+    """The Stata error message: the line before the last `r(#);`, skipping OpenDTA's hint lines and the
+    `end of do-file` / `r(#);` pair each enclosing `do` adds when it passes the error up."""
+    is_rc = lambda ln: ln.startswith("r(") and ln.rstrip().endswith(");")
     lines = [ln for ln in log.splitlines() if ln.strip()]
     for i in range(len(lines) - 1, -1, -1):
-        if lines[i].startswith("r(") and lines[i].rstrip().endswith(");"):
+        if is_rc(lines[i]):
             for j in range(i - 1, -1, -1):
-                if not lines[j].startswith(" "):  # hints are indented
-                    return lines[j].strip()
+                ln = lines[j]
+                if not ln.startswith(" ") and ln.strip() != "end of do-file" and not is_rc(ln):  # hints are indented
+                    return ln.strip()
     return None
