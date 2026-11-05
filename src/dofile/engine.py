@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import traceback
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from ._vendor.opendta.session import Session
 RC_INTERNAL = 9999  # a Python exception escaped the interpreter (an engine bug, not a Stata error)
 RC_FILE = 603  # Stata: file could not be opened
 RC_BREAK = 1  # Stata: --Break-- (the user pressed Break); the session keeps its data
+BREAK = "--Break--"
 
 
 @dataclass
@@ -31,6 +33,7 @@ class Result:
     nvars: int = 0
     new_graphs: int = 0  # graphs drawn by this call
     images: list[bytes] = field(default_factory=list)  # PNGs of the last few of them, when asked for
+    files: list[dict[str, Any]] = field(default_factory=list)  # workdir files the call created or changed
 
 
 def to_json(v: Any) -> Any:
@@ -38,8 +41,7 @@ def to_json(v: Any) -> Any:
     if isinstance(v, str):
         return v
     if hasattr(v, "data") and hasattr(v, "rownames"):  # Matrix
-        full = lambda eqs, names: [n if q == "_" else f"{q}:{n}" for q, n in zip(eqs, names)]  # Stata's fullnames
-        return {"rows": full(v.roweq, v.rownames), "cols": full(v.coleq, v.colnames),
+        return {"rows": _fullnames(v.roweq, v.rownames), "cols": _fullnames(v.coleq, v.colnames),
                 "data": [[to_json(float(x)) for x in row] for row in v.data]}
     try:
         x = float(v)
@@ -51,6 +53,11 @@ def to_json(v: Any) -> Any:
         name = missing.missing_name(x) if x == x else "."
         return None if name == "." else name
     return int(x) if x.is_integer() and abs(x) < 2**53 else x
+
+
+def _fullnames(eqs, names) -> list[str]:
+    """Stata's row/column fullnames: `eq:name`, or just `name` without an equation."""
+    return [n if q == "_" else f"{q}:{n}" for q, n in zip(eqs, names)]
 
 
 def empty_results() -> dict[str, dict]:
@@ -77,6 +84,40 @@ def about() -> dict[str, Any]:
 
 
 MAX_IMAGES = 3
+LOG_KEEP = 1_000_000  # MCP workers: characters kept from the start and from the end of one call's log
+
+
+class _BoundedCapture:
+    """OpenDTA's Capture, but past 2 x `keep` characters only the start and the end of the log are kept. A runaway
+    loop prints ~5 MB/s; the worker, the pipe and the server would each hold all of it."""
+
+    def __init__(self, keep: int) -> None:
+        self.keep = keep
+        self.clear()
+
+    def clear(self) -> None:
+        self.head: list[str] = []
+        self.tail: deque[str] = deque()
+        self.head_n = self.tail_n = self.dropped = 0
+
+    def __call__(self, text: str, style: str = "") -> None:
+        if self.head_n < self.keep:
+            first = text[:self.keep - self.head_n]
+            self.head.append(first)
+            self.head_n += len(first)
+            text = text[len(first):]
+        if text:
+            self.tail.append(text)
+            self.tail_n += len(text)
+            while self.tail_n - len(self.tail[0]) >= self.keep:  # drop old pieces; the tail keeps >= keep
+                old = self.tail.popleft()
+                self.tail_n -= len(old)
+                self.dropped += len(old)
+
+    @property
+    def text(self) -> str:
+        cut = f"\n[... {self.dropped:,} characters of output omitted ...]\n" if self.dropped else ""
+        return "".join(self.head) + cut + "".join(self.tail)
 
 
 def _tracked_store():
@@ -107,10 +148,12 @@ def _png(g) -> bytes | None:
 
 
 class Engine:
-    def __init__(self, workdir: str | os.PathLike | None = None):
+    def __init__(self, workdir: str | os.PathLike | None = None, log_keep: int | None = None):
+        """`log_keep`: cap each call's log to its first and last `log_keep` characters (None: keep it all,
+        as `dofile run` does, like a Stata batch log)."""
         if workdir is not None:
             os.chdir(workdir)
-        self._capture = Capture()
+        self._capture = _BoundedCapture(log_keep) if log_keep else Capture()
         self.session = Session()
         self.session._graphs = _tracked_store()  # the attribute OpenDTA's graphics.store.store() looks up
         self.session.output.add_listener(self._capture)
@@ -125,8 +168,8 @@ class Engine:
         try:
             rc = self.session.run(code, echo=True)
         except KeyboardInterrupt:  # the worker's interrupt (cancel or timeout), like Stata's Break key
-            rc, error = RC_BREAK, "--Break--"
-            self._capture("--Break--\nr(1);\n", "error")
+            rc, error = RC_BREAK, BREAK
+            self._capture(f"{BREAK}\nr({RC_BREAK});\n", "error")
             self._recover(rc)
         except PermissionError as e:  # the sandbox refused a file access: Stata's "file could not be opened"
             rc, error = RC_FILE, f"file could not be opened: {e.strerror or e}"
@@ -148,11 +191,11 @@ class Engine:
 
     def break_result(self) -> Result:
         """Result for an interrupt that came after the code itself finished (while building the result)."""
-        self._capture("--Break--\nr(1);\n", "error")
+        self._capture(f"{BREAK}\nr({RC_BREAK});\n", "error")
         self._recover(RC_BREAK)
         self.session._graphs.drawn.clear()
         d = self.session.data
-        return Result(self._capture.text, RC_BREAK, "--Break--", self.results(), None, d.nobs, len(d.names))
+        return Result(self._capture.text, RC_BREAK, BREAK, self.results(), None, d.nobs, len(d.names))
 
     def _recover(self, rc: int) -> None:
         """Leave the interpreter usable after an escaped exception: close open scopes and prefixes."""
@@ -168,25 +211,30 @@ class Engine:
         s = self.session
         return {"e": group_results(s.e), "r": group_results(s.r)}
 
-    def matrix(self, name: str, rows: list[str] | None = None, cols: list[str] | None = None) -> dict[str, Any]:
-        """One matrix as JSON (`e(V)`, `r(table)` or a user matrix), optionally only the named rows/cols.
-        Problems come back as {"error": message}."""
+    def matrix(self, name: str, rows: list[str] | None = None, cols: list[str] | None = None,
+               max_cells: int | None = None) -> dict[str, Any]:
+        """One matrix as JSON (`e(V)`, `r(table)` or a user matrix), optionally only the named rows/cols, and
+        refused above `max_cells` before any conversion. Problems come back as {"error": message}."""
         from ._vendor.opendta.commands.matrix import get_matrix
         from ._vendor.opendta.core.errors import StataError
         try:
-            m = to_json(get_matrix(self.session, name))
+            mx = get_matrix(self.session, name)
         except StataError as e:
             return {"error": e.message}
+        names = {"rows": _fullnames(mx.roweq, mx.rownames), "cols": _fullnames(mx.coleq, mx.colnames)}
         idx = {}
         for axis, want in (("rows", rows), ("cols", cols)):
-            names = m[axis]
-            bad = [w for w in want or () if w not in names]
+            have = names[axis]
+            bad = [w for w in want or () if w not in have]
             if bad:
-                return {"error": f"{name} has no {axis[:-1]} named {', '.join(bad)} (it has {len(names)}, e.g. "
-                                 f"{', '.join(names[:5])})"}
-            idx[axis] = [names.index(w) for w in want] if want else range(len(names))
-        return {"rows": [m["rows"][i] for i in idx["rows"]], "cols": [m["cols"][j] for j in idx["cols"]],
-                "data": [[m["data"][i][j] for j in idx["cols"]] for i in idx["rows"]]}
+                return {"error": f"{name} has no {axis[:-1]} named {', '.join(bad)} (it has {len(have)}, e.g. "
+                                 f"{', '.join(have[:5])})"}
+            idx[axis] = [have.index(w) for w in want] if want else range(len(have))
+        n_rows, n_cols = len(idx["rows"]), len(idx["cols"])
+        if max_cells is not None and n_rows * n_cols > max_cells:
+            return {"error": f"{name} has {n_rows}x{n_cols} values, more than {max_cells}; ask for some rows/cols"}
+        return {"rows": [names["rows"][i] for i in idx["rows"]], "cols": [names["cols"][j] for j in idx["cols"]],
+                "data": [[to_json(float(mx.data[i][j])) for j in idx["cols"]] for i in idx["rows"]]}
 
     def data_summary(self, vars: str | None = None, offset: int = 0, limit: int | None = None) -> dict[str, Any]:
         """The dataset's variables; `vars` is a Stata varlist (`inc* age`), `offset`/`limit` page through it.

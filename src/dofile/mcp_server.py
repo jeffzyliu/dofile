@@ -30,7 +30,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 
 from .engine import about
-from .worker import Worker, WorkerPool, warm_up
+from .worker import PoolFull, Worker, WorkerPool, warm_up
 
 LOG_LIMIT = 8_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
 KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
@@ -50,15 +50,19 @@ A call that runs too long, or that the client cancels, is interrupted like Stata
 and the session keeps its data. Pass `timeout` to run_do for a shorter limit.
 Commands that run programs, delete files, change directory or download are disabled (rc 199);
 file access is limited to the session's working directory. rc 9998 means the session was reset
-(the code did not stop when interrupted, or it crashed): its data is gone, so re-run your setup.
+(the code did not stop when interrupted, it crashed, or it could not start): its data is gone, so
+re-run your setup.
 Community commands (reghdfe, esttab, outreg2) are not available."""
 
 
 # Tool outputs: typed so tools/list advertises their real shape as outputSchema.
 # Tool arguments: described so tools/list tells the model what each one is.
 SessionArg = Annotated[str | None, Field(description="the session token from start_session")]
+RequiredSession = Annotated[str, Field(description="the session token from start_session")]
 FileName = Annotated[str, Field(description="a plain file name in the session's working directory, e.g. "
                                             "'data.csv' (no folders)")]
+Replace = Annotated[bool, Field(description="overwrite a file that already has this name, like Stata's `replace` "
+                                            "(default: refuse, so the user's files aren't lost)")]
 NameList = Annotated[list[str] | None, Field(description="only these names, exactly as in the matrix's "
                                                          "rows/cols (default: all)")]
 
@@ -114,7 +118,8 @@ class RunResult(TypedDict):
     log: Annotated[str, Field(description="output as Stata shows it. Each command's long output keeps its "
                                           "first 40 and last 15 lines, with a marker for the omitted lines")]
     log_file: Annotated[str | None, Field(description="when the log was cut: the full log, readable with "
-                                                      "get_file(name); else null")]
+                                                      "get_file(name) (at most 2 MB: very long output keeps its "
+                                                      "start and end); else null")]
     results: Results
     files: Annotated[list[FileChange], Field(description="files in the working directory (top level) this "
                                                          "call created or changed")]
@@ -186,7 +191,10 @@ class Sessions:
 
     def new(self) -> str:
         token = secrets.token_urlsafe(16)
-        self.pool.get(token)  # the pool's keys are the valid tokens
+        try:
+            self.pool.get(token)  # the pool's keys are the valid tokens
+        except PoolFull as e:
+            raise ToolError(f"{e}, so no new session can start now; try again when one finishes") from None
         return token
 
     def get(self, session: str | None) -> Worker:
@@ -233,9 +241,22 @@ class Sessions:
 def _safe_name(workdir: str, name: str) -> Path:
     """A plain file name inside the workdir (trust boundary: no paths, no traversal)."""
     p = Path(name)
-    if p.name != name or name in ("", ".", ".."):
+    if p.name != name or name in ("", ".", "..", ".dofile"):  # .dofile/: the session's hidden scratch folder
         raise ToolError(f"{name!r} must be a plain file name inside the session's working directory")
+    if (Path(workdir) / name).is_dir():
+        raise ToolError(f"{name!r} is a folder in the working directory, not a file")
+    # this runs in the unsandboxed server: a symlink to a file elsewhere must not let tools reach outside
+    if (Path(workdir) / name).resolve().parent != Path(workdir).resolve():
+        raise ToolError(f"{name!r} links to a file outside the working directory")
     return Path(workdir) / name
+
+
+def _new_file(workdir: str, name: str, replace: bool) -> Path:
+    """_safe_name for a file about to be written: an existing one is kept unless `replace`, as in Stata."""
+    p = _safe_name(workdir, name)
+    if p.exists() and not replace:
+        raise ToolError(f"{name} already exists in the working directory; pass replace=true to overwrite it")
+    return p
 
 
 def _cut_log(log: str, log_file: str) -> str:
@@ -283,21 +304,6 @@ def _cap(results: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _snapshot(workdir: str) -> dict[str, tuple[int, int]]:
-    """Top-level files -> (mtime in ns, size); the hidden .dofile/ scratch folder is not listed."""
-    out = {}
-    for p in Path(workdir).iterdir():
-        if p.is_file():
-            st = p.stat()
-            out[p.name] = (st.st_mtime_ns, st.st_size)
-    return out
-
-
-def _changes(before: dict, after: dict) -> list[dict[str, Any]]:
-    return [{"name": n, "status": "modified" if n in before else "created", "bytes": after[n][1]}
-            for n in sorted(after) if before.get(n) != after[n]]
-
-
 def _instructions(sessions: Sessions) -> str:
     where = "the server's disk" if sessions.http else "this machine"
     v = about()
@@ -324,11 +330,19 @@ def build_server(sessions: Sessions) -> MCPServer:
                      + ' can be used by absolute path, e.g. `use "<folder>/file.dta"`.')
 
     def tool(**kw):
-        """mcp.tool; over stdio the `session` argument is left out of the schema (one session per process).
-        Annotations are resolved here so they can use this function's locals (code_doc)."""
+        """mcp.tool, with `session` fitted to the transport: left out over stdio (one session per process),
+        required over HTTP (every call needs a token). Annotations are resolved here so they can use this
+        function's locals (code_doc)."""
         def register(fn):
             sig = inspect.signature(fn, eval_str=True, locals={"code_doc": code_doc})
-            params = [p for p in sig.parameters.values() if sessions.http or p.name != "session"]
+            params = []
+            for p in sig.parameters.values():
+                if p.name == "session":
+                    if not sessions.http:
+                        continue
+                    p = p.replace(annotation=RequiredSession, default=inspect.Parameter.empty,
+                                  kind=inspect.Parameter.KEYWORD_ONLY)  # last, after optional ones
+                params.append(p)
             fn.__signature__ = sig.replace(parameters=params)
             return mcp.tool(**kw)(fn)
         return register
@@ -354,7 +368,6 @@ def build_server(sessions: Sessions) -> MCPServer:
                                                                           "default")] = None,
                      session: SessionArg = None) -> Annotated[CallToolResult, RunResult]:
         w = sessions.get(session)
-        before = _snapshot(w.workdir)
         limit = min(timeout, sessions.timeout) if timeout else None
         call = object()
         try:  # abandon_on_cancel: a cancel from the client returns here at once, and interrupts the code
@@ -362,15 +375,14 @@ def build_server(sessions: Sessions) -> MCPServer:
         except anyio.get_cancelled_exc_class():
             w.interrupt(call)
             raise
-        after = _snapshot(w.workdir)
         # don't resend stale or repeated e()/r() (errors keep both); they can be large (V is k×k)
-        last = getattr(w, "last_results", {})
+        last = w.last_results
         w.last_results = dict(r.results)
         for k in ("e", "r"):
             if r.results[k] == last.get(k):
                 r.results[k] = None
         out = {"rc": r.rc, "error": r.error, "error_command": r.error_command, "log": r.log, "log_file": None, "results": _cap(r.results),
-               "files": _changes(before, after), "new_graphs": r.new_graphs,
+               "files": r.files, "new_graphs": r.new_graphs,
                "nobs": r.nobs, "nvars": r.nvars}
         name = f"dofile-log-{secrets.token_hex(4)}.txt"
         cut = _cut_log(r.log, name)
@@ -394,14 +406,11 @@ def build_server(sessions: Sessions) -> MCPServer:
     async def get_matrix(name: Annotated[str, Field(description="e(b), e(V), r(table), or the name of a matrix "
                                                                "made with `matrix`")],
                          rows: NameList = None, cols: NameList = None, session: SessionArg = None) -> Matrix:
-        m = await anyio.to_thread.run_sync(sessions.get(session).matrix, name, rows, cols)
+        m = await anyio.to_thread.run_sync(sessions.get(session).matrix, name, rows, cols, GET_MATRIX_CELLS)
         if not isinstance(m, dict):  # the session was reset
             raise ToolError(m.error)
         if "error" in m:
             raise ToolError(m["error"])
-        if len(m["rows"]) * len(m["cols"]) > GET_MATRIX_CELLS:
-            raise ToolError(f"{name} has {len(m['rows'])}x{len(m['cols'])} values, more than {GET_MATRIX_CELLS}; "
-                            "ask for some rows/cols")
         return m
 
     @tool(description="Describe the dataset in memory: number of observations and, per variable, its exact "
@@ -451,35 +460,41 @@ def build_server(sessions: Sessions) -> MCPServer:
                           "delimited using name.csv`. For large data files, see the server instructions."
                           + session_doc)
     async def upload_file(name: FileName, text: Annotated[str, Field(description="the whole file content")],
-                          session: SessionArg = None) -> Written:
+                          replace: Replace = False, session: SessionArg = None) -> Written:
         data = text.encode("utf-8")
         if len(data) > sessions.file_limit:
             raise ToolError(f"file is larger than {sessions.file_limit} bytes")
-        _safe_name(sessions.get(session).workdir, name).write_bytes(data)
+        _new_file(sessions.get(session).workdir, name, replace).write_bytes(data)
         return {"name": name, "bytes": len(data)}
 
     if sessions.http:
         @mcp.tool()
         async def request_upload(name: FileName,
-                                 session: Annotated[str, Field(description="the session token from start_session")]) -> UploadTicket:
+                                 session: RequiredSession,
+                                 replace: Replace = False) -> UploadTicket:
             """Get a one-time URL to upload a file from your machine into the session's working directory as
             `name`, without its content passing through this conversation. PUT the raw file to the URL, e.g.
             `curl --fail -T local.dta <url>`, then use it in Stata (`use name.dta`). The URL works once and
             expires after 10 minutes."""
-            _safe_name(sessions.get(session).workdir, name)
+            # shortcut: existence is checked when the URL is issued, not again at upload; a file created in between is replaced
+            _new_file(sessions.get(session).workdir, name, replace)
             url = f"{sessions.public_url}/upload/{sessions.new_upload(session, name)}"
             return {"url": url, "method": "PUT", "max_bytes": sessions.file_limit,
                     "expires_in_seconds": int(UPLOAD_TTL), "example": f"curl --fail -T {name} {url}"}
 
         @mcp.custom_route("/upload/{token}", methods=["PUT"])
         async def receive_upload(request: Request):
+            limit = sessions.file_limit
+            try:  # checked before claiming the token, so a bad request doesn't use up the URL
+                declared = int(request.headers.get("content-length") or 0)
+            except ValueError:
+                return PlainTextResponse("invalid Content-Length header\n", 400)
+            if declared > limit:
+                return PlainTextResponse(f"file is larger than {limit} bytes\n", 413)
             claim = sessions.take_upload(request.path_params["token"])
             w = sessions.pool.find(claim[0]) if claim else None
             if w is None:
                 return PlainTextResponse("unknown, used or expired upload URL (or its session ended)\n", 404)
-            limit = sessions.file_limit
-            if int(request.headers.get("content-length") or 0) > limit:
-                return PlainTextResponse(f"file is larger than {limit} bytes\n", 413)
             scratch = Path(w.workdir) / ".dofile"
             scratch.mkdir(exist_ok=True)
             tmp = scratch / f"upload-{secrets.token_hex(8)}.part"  # renamed into place only when complete
@@ -496,10 +511,9 @@ def build_server(sessions: Sessions) -> MCPServer:
                 tmp.unlink(missing_ok=True)
             return JSONResponse({"name": claim[1], "bytes": size})
 
-    if sessions.http:
         @mcp.tool()
         async def request_download(name: FileName,
-                                   session: Annotated[str, Field(description="the session token from start_session")]) -> DownloadTicket:
+                                   session: RequiredSession) -> DownloadTicket:
             """Get a one-time URL to download a file from the session's working directory (e.g. a .dta saved
             with `save`, an .xlsx from `export excel`, a graph) to your machine, without its content passing
             through this conversation: `curl --fail -o <name> <url>`. The URL works once and expires after

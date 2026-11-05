@@ -85,13 +85,15 @@ def main(commit: str = COMMIT) -> None:
         (TESTS / "tests" / name).unlink()
 
     n_pkg, n_tests = rewrite(target), rewrite(TESTS)
+    patches = sorted((ROOT / "scripts" / "patches").glob("*.patch"))  # dofile's own changes, kept small
+    for patch in patches:  # before the import check, so a patch can't bring old imports back unnoticed
+        if subprocess.run(["git", "apply", str(patch)], cwd=ROOT).returncode:
+            sys.exit(f"{patch.name} does not apply to opendta@{commit[:7]}. The vendored copy is now UNPATCHED: "
+                     f"update the patch and re-run, or `git checkout -- {target.relative_to(ROOT)} "
+                     f"{TESTS.relative_to(ROOT)}` to restore the previous version.")
     left = leftovers(target) + leftovers(TESTS)
     if left:
         sys.exit("unvendorable imports remain:\n" + "\n".join(left))
-
-    patches = sorted((ROOT / "scripts" / "patches").glob("*.patch"))  # dofile's own changes, kept small
-    for patch in patches:
-        subprocess.run(["git", "apply", str(patch)], cwd=ROOT, check=True)
 
     (DEST / "__init__.py").write_text('"""Third-party code vendored into dofile. Do not edit; re-run scripts/vendor_opendta.py (changes go in scripts/patches/)."""\n')
     stamp = (f"source: {REPO}\ncommit: {commit}\nvendored: {date.today()}\n"

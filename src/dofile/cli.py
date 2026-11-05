@@ -16,9 +16,11 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="dofile", description="Run Stata-syntax .do files without a Stata license.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run", help="run a .do file and print its log")
-    run.add_argument("dofile", type=Path)
-    run.add_argument("--json", type=Path, metavar="OUT", help="also write rc, error and e()/r() results as JSON")
-    run.add_argument("--workdir", type=Path, default=Path("."), help="working directory (default: current)")
+    run.add_argument("dofile", type=Path, help="the .do file to run; its own folder is readable, for nested `do`")
+    run.add_argument("--json", type=Path, metavar="OUT",
+                     help="also write JSON: rc, error, error_command, results (e() and r()) and versions")
+    run.add_argument("--workdir", type=Path, default=Path("."),
+                     help="working directory, the only folder code can write to (default: current)")
     run.add_argument("--read-dir", action="append", default=[], help="extra read-only data directory (repeatable)")
     run.add_argument("--unsafe", action="store_true", help="disable the sandbox (trusted code only)")
     a = ap.parse_args(argv)
@@ -35,7 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     from .engine import Engine, about
 
     os.chdir(workdir)
-    r = Engine().run(f'do "{dofile}"')
+    eng = Engine()
+    # via a local: Stata doesn't expand a macro's contents again, so `$` and backquotes in the path stay literal
+    eng.session.macros.set_local("__dofile_path", str(dofile))
+    cmd = 'do `"`__dofile_path\'"\''
+    r = eng.run(cmd)
+    shown = f'do "{dofile}"'  # echo the real path, not the macro
+    r.log = r.log.replace(f". {cmd}", f". {shown}", 1)
+    if r.error_command == cmd:
+        r.error_command = shown
     sys.stdout.write(r.log)
     if json_out:
         with json_out:

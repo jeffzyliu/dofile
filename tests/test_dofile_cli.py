@@ -59,3 +59,13 @@ def test_json_outside_the_workdir_is_written(tmp_path):
     p = dofile("run", "t.do", "--json", out / "o.json", cwd=work)
     assert p.returncode == 0, p.stderr[-2000:]
     assert json.loads((out / "o.json").read_text())["rc"] == 0
+
+
+def test_dollar_and_backquote_in_the_path_are_not_macros(tmp_path):
+    for folder in ("proj$v1", "q`x'y"):  # Stata would expand $v1 and `x' if the path went into code as text
+        d = tmp_path / folder
+        d.mkdir()
+        (d / "a.do").write_text('display "ran"\n')
+        p = dofile("run", d / "a.do", cwd=tmp_path)
+        assert p.returncode == 0 and "ran" in p.stdout, p.stdout[-1500:]
+        assert p.stdout.startswith(f'. do "{d / "a.do"}"')

@@ -19,6 +19,7 @@ in `tests/conformance/data/`.
 | ODT-5 | `%20.12g` prints 18 significant digits instead of 12 | corpus `CHECK` lines use it | unverified |
 | ODT-6 | regressing a variable on its own interaction crashes (decimal InvalidOperation, rc 9999) | found 2026-11-04, no test | unverified |
 | ODT-7 | `graph export` refused by the sandbox prints a generic OS message, not the sandbox's reason | `tests/test_sandbox.py` | unverified |
+| ODT-8 | backslash escapes `\$` and ``\` `` don't stop macro expansion | found 2026-11-04 (`dofile run` passes its path through a local instead) | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table | `tests/test_engine.py::test_r_table_after_estimation` | needs expert check |
 
@@ -101,6 +102,17 @@ graph export "/tmp/nope.png", replace
   instead of the sandbox's reason. Other file commands show the reason.
 - Expected: rc 603 is right; the message is a dofile/OpenDTA interaction, not a Stata difference.
 - Workaround: export inside the working directory.
+
+### ODT-8: backslash escapes for macros
+```stata
+global v1 X
+display "a\$v1 b"
+```
+- dofile: `a\X b` (the backslash stays and `$v1` is expanded).
+- Expected in Stata: `a$v1 b`; a backslash before `$` or a backquote stops expansion. Source: [U] 18.3 (macros),
+  to confirm.
+- Workaround: put such text in a macro and reference it, since a macro's contents aren't expanded again. This
+  is how `dofile run` passes the do-file path.
 
 ### GAP-1: community commands
 `reghdfe`, `esttab` and `outreg2` are SSC packages, not part of Stata, and OpenDTA doesn't implement them. Not

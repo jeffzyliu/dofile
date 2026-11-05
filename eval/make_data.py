@@ -26,6 +26,7 @@ panel = pd.DataFrame(dict(id=ids.astype("int16"), year=year.astype("int16"), grp
 panel.to_stata(out / "panel.dta", write_index=False, version=118)
 pd.DataFrame(dict(grp=np.arange(1, G + 1, dtype="int8"),
                   gvar=np.round(rng.normal(10, 2, G), 6))).to_stata(out / "grpinfo.dta", write_index=False, version=118)
-shutil.copy("/Users/cassandra/dev/openstata-new/openstata-engine/stata-functionality/testing/data/cpsmar08_10pct.dta",
-            out / "cps.dta")
+# the 2020 project's CPS extract, kept in legacy/ (gitignored, so only in a checkout that has it)
+REPO = Path(__file__).resolve().parents[1]
+shutil.copy(REPO / "legacy/openstata-engine/stata-functionality/testing/data/cpsmar08_10pct.dta", out / "cps.dta")
 print("ok", panel.shape)

@@ -94,8 +94,10 @@ def test_http_mode_needs_tokens_and_isolates_sessions():
 
     async def steps(c):
         assert "start_session" in {t.name for t in (await c.list_tools()).tools}
-        missing = await tool(c, "run_do", code="display 1")
-        assert missing.is_error and "start_session" in missing.content[0].text
+        missing = await tool(c, "run_do", code="display 1")  # `session` is required in the schema
+        assert missing.is_error
+        unknown = await tool(c, "run_do", code="display 1", session="made-up")
+        assert unknown.is_error and "start_session" in unknown.content[0].text
 
         a = (await tool(c, "start_session")).structured_content["session"]
         b = (await tool(c, "start_session")).structured_content["session"]
@@ -220,6 +222,21 @@ def _put(url: str, chunks) -> tuple[int, bytes]:
         conn.close()
 
 
+def _put_header_only(url: str, content_length: str) -> int:
+    """PUT that only declares a Content-Length (no body): the server must answer from the header alone."""
+    import http.client
+    from urllib.parse import urlsplit
+    u = urlsplit(url)
+    conn = http.client.HTTPConnection(u.hostname, u.port, timeout=30)
+    try:
+        conn.putrequest("PUT", u.path)
+        conn.putheader("Content-Length", content_length)
+        conn.endheaders()
+        return conn.getresponse().status
+    finally:
+        conn.close()
+
+
 def _get(url: str) -> tuple[int, bytes]:
     import http.client
     from urllib.parse import urlsplit
@@ -242,6 +259,9 @@ def test_real_http_upload_url():
             assert up["url"].startswith(f"http://127.0.0.1:{port}/upload/") and up["max_bytes"] == 2**20
 
             data = PANEL.read_bytes()
+            # rejected from the header alone, before the URL is used up: the real upload below still works
+            assert await asyncio.to_thread(_put_header_only, up["url"], str(2**21)) == 413
+            assert await asyncio.to_thread(_put_header_only, up["url"], "abc") == 400
             status, body = await asyncio.to_thread(_put, up["url"], (data[i:i + 4096] for i in range(0, len(data), 4096)))
             assert status == 200 and json.loads(body)["bytes"] == len(data)
             assert (await asyncio.to_thread(_put, up["url"], iter([b"x"])))[0] == 404  # single use
@@ -255,6 +275,8 @@ def test_real_http_upload_url():
                             session=token)).structured_content
             assert "rc=601" in r["log"]  # the oversized upload left no file behind
             assert (await tool(c, "request_upload", name="../x", session=token)).is_error
+            scratch = await tool(c, "request_upload", name=".dofile", session=token)  # the hidden scratch folder
+            assert scratch.is_error and "plain file name" in scratch.content[0].text
 
             # download: the uploaded file comes back byte for byte, once
             down = (await tool(c, "request_download", name="p.dta", session=token)).structured_content
@@ -327,6 +349,8 @@ def test_arguments_are_described_and_session_only_over_http(stdio_sessions):
             for t in asyncio.run(build_server(s).list_tools()):
                 props = t.input_schema["properties"]
                 assert ("session" in props) == s.http or t.name == "start_session", t.name
+                if s.http and t.name != "start_session":  # every call needs a token, so the schema says so
+                    assert "session" in t.input_schema["required"], t.name
                 assert all(p.get("description") for p in props.values()), t.name
     finally:
         http.close()
@@ -394,6 +418,79 @@ def test_only_the_newest_full_logs_are_kept(stdio_sessions, tmp_path, monkeypatc
             await asyncio.sleep(0.05)  # coarse file timestamps (some Linux file systems) must not tie
         kept = sorted(f.name for f in (tmp_path / ".dofile").glob("dofile-log-*.txt"))
         assert kept == sorted(names[1:])
+    call(build_server(stdio_sessions), steps)
+
+
+def test_results_are_resent_after_reset(stdio_sessions):
+    async def steps(c):
+        code = "use panel, clear\nquietly regress y x1"
+        assert (await tool(c, "run_do", code=code)).structured_content["results"]["e"] is not None
+        await tool(c, "reset")
+        # same e() as before the reset, but the reset discarded it: send it again, not null ("unchanged")
+        assert (await tool(c, "run_do", code=code)).structured_content["results"]["e"] is not None
+    call(build_server(stdio_sessions), steps)
+
+
+def test_upload_refuses_the_scratch_folder_and_folders(stdio_sessions, tmp_path):
+    (tmp_path / "sub").mkdir()
+
+    async def steps(c):
+        for name, why in ((".dofile", "plain file name"), ("sub", "is a folder")):
+            r = await tool(c, "upload_file", name=name, text="x")
+            assert r.is_error and why in r.content[0].text, r.content[0].text
+    call(build_server(stdio_sessions), steps)
+
+
+def test_overlapping_calls_report_only_their_own_files(stdio_sessions):
+    async def steps(c):
+        await tool(c, "run_do", code="display 1")
+        a, b = await asyncio.gather(
+            tool(c, "run_do", code="use panel, clear\nsave saved_by_a, replace\nsleep 300"),
+            tool(c, "run_do", code="display 2"))
+        assert [f["name"] for f in a.structured_content["files"]] == ["saved_by_a.dta"]
+        assert b.structured_content["files"] == []
+    call(build_server(stdio_sessions), steps)
+
+
+def test_uploads_keep_existing_files_unless_replace(stdio_sessions, tmp_path):
+    (tmp_path / "data.csv").write_text("user's own\n")
+
+    async def steps(c):
+        r = await tool(c, "upload_file", name="data.csv", text="agent\n")
+        assert r.is_error and "replace=true" in r.content[0].text
+        assert (tmp_path / "data.csv").read_text() == "user's own\n"
+        assert not (await tool(c, "upload_file", name="data.csv", text="agent\n", replace=True)).is_error
+        assert (tmp_path / "data.csv").read_text() == "agent\n"
+    call(build_server(stdio_sessions), steps)
+
+
+def test_start_session_is_refused_when_every_session_is_busy():
+    s = Sessions(http=True, workdir=Path("."), read_dirs=(), sandbox=True, timeout=30, max_sessions=1)
+
+    async def steps(c):
+        a = (await tool(c, "start_session")).structured_content["session"]
+        long_call = asyncio.create_task(tool(c, "run_do", code="sleep 2000", session=a))
+        await asyncio.sleep(1.0)
+        full = await tool(c, "start_session")
+        assert full.is_error and "running code" in full.content[0].text
+        assert not (await long_call).is_error  # the running session was not evicted
+    try:
+        call(build_server(s), steps)
+    finally:
+        s.close()
+
+
+def test_file_tools_do_not_follow_symlinks_out_of_the_workdir(stdio_sessions, tmp_path_factory, tmp_path):
+    outside = tmp_path_factory.mktemp("outside") / "secret.txt"
+    outside.write_text("SECRET\n")
+    (tmp_path / "link.txt").symlink_to(outside)
+
+    async def steps(c):
+        assert (await tool(c, "run_do", code="type link.txt")).structured_content["rc"] == 603  # the sandbox's rule
+        for name, args in (("get_file", {}), ("upload_file", {"text": "x", "replace": True})):
+            r = await tool(c, name, name="link.txt", **args)
+            assert r.is_error and "outside the working directory" in r.content[0].text
+        assert outside.read_text() == "SECRET\n"
     call(build_server(stdio_sessions), steps)
 
 

@@ -4,7 +4,7 @@ Worker: talks to one child over a pipe. On timeout or cancel the child is interr
 key: the call ends with rc 1 and the session keeps its data. If the child does not stop within GRACE
 seconds, or it died, it is killed and the call returns rc 9998 ("session reset"); the next call starts a
 fresh one.
-WorkerPool: one Worker per session key (MCP session id), with idle reaping and a size cap.
+WorkerPool: one Worker per session key (a start_session token), with idle reaping and a size cap.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable
 
-from .engine import Result
+from .engine import BREAK, LOG_KEEP, RC_BREAK, Result
 
 RC_RESET = 9998
 GRACE = 5.0  # seconds an interrupted call gets to stop before the child is killed
@@ -57,7 +57,7 @@ def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> N
         from . import sandbox
         sandbox.install(workdir, read_dirs)
     from .engine import Engine
-    eng = Engine(workdir)
+    eng = Engine(workdir, log_keep=LOG_KEEP)  # bounded: memory, the pipe and the saved full log
     busy = False
 
     def on_interrupt(signum, frame):  # the parent's interrupt: only stop running code, never the loop
@@ -98,13 +98,19 @@ class Worker:
         self._lock = threading.Lock()  # one call at a time per session
         self._active = None  # id of the call running now
         self._cancelled: set = set()  # ids of calls to stop (also ones still waiting for the lock)
+        self.last_results: dict = {}  # e()/r() last sent to the client, so unchanged ones aren't resent
 
     def _start(self) -> None:
         parent, child = _ctx.Pipe()
-        self._proc = _ctx.Process(target=_serve, args=(child, self.workdir, self.read_dirs, self.sandbox), daemon=True)
-        self._proc.start()
-        child.close()
-        self._conn = parent
+        proc = _ctx.Process(target=_serve, args=(child, self.workdir, self.read_dirs, self.sandbox), daemon=True)
+        try:
+            proc.start()
+        except BaseException:
+            parent.close()
+            raise
+        finally:
+            child.close()
+        self._proc, self._conn = proc, parent  # only once started: _kill() needs a started process
 
     def _kill(self) -> None:
         if self._proc is not None:
@@ -129,41 +135,51 @@ class Worker:
 
     def _call(self, op: str, *args: Any, timeout: float | None = None, call: object = None) -> Any:
         with self._lock:
-            self.last_used = time.monotonic()
-            if call is not None and call in self._cancelled:  # cancelled while waiting for the lock
-                self._cancelled.discard(call)
-                return _broken("the call was cancelled before it started")
-            if self._proc is not None and not self._proc.is_alive():
-                self._kill()
-                return _reset("the session process exited")
-            if self._proc is None:
-                self._start()
-            limit = timeout or self.timeout
-            self._active = call
+            before = _snapshot(self.workdir) if op == "run" else None
+            result = self._call_locked(op, args, timeout, call)
+            if before is not None and isinstance(result, Result):
+                result.files = _changes(before, _snapshot(self.workdir))
+            return result
+
+    def _call_locked(self, op: str, args: tuple, timeout: float | None, call: object) -> Any:
+        self.last_used = time.monotonic()
+        if call is not None and call in self._cancelled:  # cancelled while waiting for the lock
+            self._cancelled.discard(call)
+            return _broken("the call was cancelled before it started")
+        if self._proc is not None and not self._proc.is_alive():
+            self._kill()
+            return _reset("the session process exited")
+        if self._proc is None:
             try:
-                self._conn.send((op, args))
-                deadline, why = time.monotonic() + limit, None
-                while not self._conn.poll(_POLL):
-                    now = time.monotonic()
-                    if why is None and (now >= deadline or call in self._cancelled):
-                        why = "was cancelled" if call in self._cancelled else f"did not finish within {limit:g} seconds"
-                        self._signal()
-                        deadline = now + GRACE
-                    elif why is not None and now >= deadline:
-                        self._kill()
-                        return _reset(f"the command {why} and did not stop when interrupted")
-                result = self._conn.recv()
-                if why is None and call in self._cancelled:  # interrupt() signalled before the loop saw it
-                    why = "was cancelled"
-                if why and isinstance(result, Result) and result.rc == 1 and result.error == "--Break--":
-                    result.error = f"--Break-- (the command {why}; the session keeps its data)"
-                return result
-            except (EOFError, OSError, BrokenPipeError):
-                self._kill()
-                return _reset("the session process crashed")
-            finally:
-                self._active = None
-                self._cancelled.discard(call)
+                self._start()
+            except Exception as e:  # noqa: BLE001 - e.g. no processes left; the next call tries again
+                return _reset(f"the session process could not start ({type(e).__name__}: {e})")
+        limit = timeout or self.timeout
+        self._active = call
+        try:
+            self._conn.send((op, args))
+            deadline, why = time.monotonic() + limit, None
+            while not self._conn.poll(_POLL):
+                now = time.monotonic()
+                if why is None and (now >= deadline or call in self._cancelled):
+                    why = "was cancelled" if call in self._cancelled else f"did not finish within {limit:g} seconds"
+                    self._signal()
+                    deadline = now + GRACE
+                elif why is not None and now >= deadline:
+                    self._kill()
+                    return _reset(f"the command {why} and did not stop when interrupted")
+            result = self._conn.recv()
+            if why is None and call in self._cancelled:  # interrupt() signalled before the loop saw it
+                why = "was cancelled"
+            if why and isinstance(result, Result) and result.rc == RC_BREAK and result.error == BREAK:
+                result.error = f"{BREAK} (the command {why}; the session keeps its data)"
+            return result
+        except (EOFError, OSError, BrokenPipeError):
+            self._kill()
+            return _reset("the session process crashed")
+        finally:
+            self._active = None
+            self._cancelled.discard(call)
 
     def run(self, code: str, timeout: float | None = None, images: bool = False, call: object = None) -> Result:
         """`call`: any object identifying this call, for interrupt()."""
@@ -172,24 +188,55 @@ class Worker:
     def data_summary(self, vars: str | None = None, offset: int = 0, limit: int | None = None) -> dict | Result:
         return self._call("data", vars, offset, limit)
 
-    def matrix(self, name: str, rows: list[str] | None = None, cols: list[str] | None = None) -> dict | Result:
-        return self._call("matrix", name, rows, cols)
+    def matrix(self, name: str, rows: list[str] | None = None, cols: list[str] | None = None,
+               max_cells: int | None = None) -> dict | Result:
+        return self._call("matrix", name, rows, cols, max_cells)
+
+    @property
+    def busy(self) -> bool:
+        return self._lock.locked()
 
     def close(self) -> None:
         with self._lock:
             self._kill()
+            self.last_results = {}
         if self.owns_workdir:
             shutil.rmtree(self.workdir, ignore_errors=True)
 
 
+def _snapshot(workdir: str) -> dict[str, tuple[int, int]]:
+    """Top-level files -> (mtime in ns, size); folders (such as the hidden .dofile/) are not listed."""
+    out = {}
+    try:
+        entries = list(os.scandir(workdir))
+    except FileNotFoundError:  # a closed session's temp workdir
+        return out
+    for e in entries:
+        try:
+            if e.is_file():
+                st = e.stat()
+                out[e.name] = (st.st_mtime_ns, st.st_size)
+        except FileNotFoundError:  # gone meanwhile, e.g. a temporary file renamed by `save`
+            pass
+    return out
+
+
+def _changes(before: dict, after: dict) -> list[dict[str, Any]]:
+    return [{"name": n, "status": "modified" if n in before else "created", "bytes": after[n][1]}
+            for n in sorted(after) if before.get(n) != after[n]]
+
+
 def _broken(reason: str) -> Result:
-    msg = f"--Break-- ({reason})"
-    return Result(log="--Break--\nr(1);\n", rc=1, error=msg)
+    return Result(log=f"{BREAK}\nr({RC_BREAK});\n", rc=RC_BREAK, error=f"{BREAK} ({reason})")
 
 
 def _reset(reason: str) -> Result:
     msg = f"session reset: {reason}; data, macros and results in memory were lost"
     return Result(log=f"{msg}\nr({RC_RESET});\n", rc=RC_RESET, error=msg)
+
+
+class PoolFull(RuntimeError):
+    """Every session slot is running code, so none can be evicted for a new one."""
 
 
 class WorkerPool:
@@ -203,41 +250,61 @@ class WorkerPool:
         self._workers: OrderedDict[str, Worker] = OrderedDict()
         self._lock = threading.Lock()
 
+    # Workers are removed under the pool lock but closed after releasing it: close() waits for a running call,
+    # and holding the pool lock meanwhile would stall every other session.
+
     def get(self, key: str) -> Worker:
         with self._lock:
-            self._reap_locked()
+            gone = self._reap_locked()
             w = self._workers.get(key)
             if w is None:
-                while len(self._workers) >= self.max_workers:  # evict the least recently used session
-                    self._workers.popitem(last=False)[1].close()
-                w = self._workers[key] = self.factory()
-            self._workers.move_to_end(key)
-            return w
+                while len(self._workers) >= self.max_workers:
+                    # evict the least recently used session that isn't running code; never kill a running call
+                    idle = next((k for k, v in self._workers.items() if not v.busy), None)
+                    if idle is None:
+                        break
+                    gone.append(self._workers.pop(idle))
+                if len(self._workers) < self.max_workers:
+                    w = self._workers[key] = self.factory()
+            if w is not None:
+                self._workers.move_to_end(key)
+        _close_all(gone)
+        if w is None:
+            raise PoolFull(f"all {self.max_workers} sessions are running code")
+        return w
 
     def find(self, key: str) -> Worker | None:
         """The live worker for `key`, or None if it never existed or was reaped/evicted."""
         with self._lock:
-            self._reap_locked()
+            gone = self._reap_locked()
             w = self._workers.get(key)
             if w is not None:
                 self._workers.move_to_end(key)
-            return w
+        _close_all(gone)
+        return w
 
     def reap(self) -> None:
         with self._lock:
-            self._reap_locked()
+            gone = self._reap_locked()
+        _close_all(gone)
 
-    def _reap_locked(self) -> None:
+    def _reap_locked(self) -> list[Worker]:
+        """Remove idle workers and return them for closing. A worker running a call is not idle, however long
+        ago the call started (a --timeout above idle_seconds)."""
         now = time.monotonic()
-        for key in [k for k, w in self._workers.items() if now - w.last_used > self.idle_seconds]:
-            self._workers.pop(key).close()
+        idle = [k for k, w in self._workers.items() if now - w.last_used > self.idle_seconds and not w.busy]
+        return [self._workers.pop(k) for k in idle]
 
     def close(self, key: str | None = None) -> None:
         with self._lock:
             keys = [key] if key is not None else list(self._workers)
-            for k in keys:
-                if k in self._workers:
-                    self._workers.pop(k).close()
+            gone = [self._workers.pop(k) for k in keys if k in self._workers]
+        _close_all(gone)
 
     def __len__(self) -> int:
         return len(self._workers)
+
+
+def _close_all(workers: list[Worker]) -> None:
+    for w in workers:
+        w.close()

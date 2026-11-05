@@ -10,9 +10,12 @@ Status: Phase 1 in progress (see `docs/phase1-plan.md`).
 uv run dofile run analysis.do --json results.json
 ```
 
-Prints the log like `stata -b`, exits 1 if the do-file stops on an error, and optionally writes the return code
-and `e()`/`r()` results as JSON. It runs in the current folder with the sandbox on (see below); `--unsafe` turns it
-off for trusted code that needs `shell`, `cd` or `erase`.
+Prints the log like `stata -b` and exits 1 if the do-file stops on an error. `--json` also writes
+`{rc, error, error_command, results, versions}`, where `results` holds `e()` and `r()` in the same form as the MCP
+server's (see [MCP-SCHEMA.md](MCP-SCHEMA.md)). It runs with the sandbox on (see below): code writes only to the
+working folder (the current one, or `--workdir`), and reads from it, from the do-file's own folder (so nested
+`do` files work) and from any `--read-dir` folders. `--unsafe` turns the sandbox off for trusted code that needs
+`shell`, `cd` or `erase`.
 
 ## MCP server
 
@@ -27,8 +30,8 @@ claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-m
 ```
 
 Tools: `run_do` (run Stata code; returns log, rc, error, e()/r() as JSON and new files), `describe_data`,
-`get_file` (returns exported graphs as images), `get_matrix` (one matrix, or part of it, at full precision), `upload_file`, `request_upload` and `request_download` (HTTP), `reset`. Resource `dofile://commands` lists the
-supported commands. Data stays in memory between `run_do` calls. Full inputs, outputs and return codes: [MCP-SCHEMA.md](MCP-SCHEMA.md).
+`get_file` (returns exported graphs as images), `get_matrix` (one matrix, or part of it, at full precision), `upload_file`, `start_session`, `request_upload` and `request_download` (HTTP), `reset`. Resources: `dofile://commands` lists the
+supported commands, `dofile://about` the versions. Data stays in memory between `run_do` calls. Full inputs, outputs and return codes: [MCP-SCHEMA.md](MCP-SCHEMA.md).
 
 HTTP: `dofile-mcp --http --port 8000` (localhost only by default). Call `start_session` first and pass its
 token as `session`; each session gets its own temporary folder, deleted when the session ends.
@@ -43,7 +46,8 @@ token as `session`; each session gets its own temporary folder, deleted when the
   to the address clients reach the server at. (`--read-dir` here means folders on the server.)
 
 `--file-limit` sets the largest upload in MB (default 1024). Small files the agent writes itself (CSV, .do)
-go inline with `upload_file(name, text=...)`.
+go inline with `upload_file(name, text=...)`. Uploads never overwrite an existing file unless the agent passes
+`replace=true`, as with Stata's `save, replace`: over stdio the working folder is your own.
 
 **Sandbox (on by default; `--unsafe` turns it off):** `shell`/`!`, `erase`/`rm`, `rmdir`, `mkdir`, `cd`, `copy`
 and `webuse` are disabled. Files can only be written in the working folder, and read from it, from `--read-dir`

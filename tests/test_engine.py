@@ -110,3 +110,24 @@ def test_error_command_names_the_failing_command(eng):
     assert eng.run("clear\nset obs 3\ngen x = 1\nregress y ///\n   x").error_command == "regress y x"
     assert eng.run("forvalues i = 1/2 {\n  summarize nosuch\n}").error_command == "forvalues i = 1/2 {"
     assert eng.run("display 1").error_command is None
+
+
+def test_matrix_size_limit_is_checked_before_converting():
+    eng = Engine()
+    eng.run("matrix A = J(30, 40, 1)")
+    assert "error" not in eng.matrix("A", max_cells=1200)  # at the limit: fine
+    err = eng.matrix("A", max_cells=1199)["error"]
+    assert "30x40" in err and "rows/cols" in err
+    part = eng.matrix("A", rows=["r1", "r2"], max_cells=100)  # a slice under the limit is fine
+    assert len(part["rows"]) == 2 and len(part["data"][0]) == 40
+
+
+def test_worker_log_keeps_only_its_start_and_end():
+    eng = Engine(log_keep=10_000)
+    r = eng.run('forvalues i = 1/5000 {\n    display "line `i\' of output"\n}\ndisplay "the end"')
+    assert r.rc == 0 and len(r.log) < 25_000
+    assert "line 1 of output" in r.log and "line 5000 of output" in r.log and "the end" in r.log
+    assert "characters of output omitted" in r.log
+    r = eng.run("bad_command")  # the error at the end is still found
+    assert r.rc == 199 and r.error and len(r.log) < 25_000
+    assert Engine().run('forvalues i = 1/5000 {\n    display "x"\n}').log.splitlines().count("x") == 5000  # default: all

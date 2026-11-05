@@ -43,14 +43,15 @@ Layers, bottom up (`src/dofile/`):
 - `worker.py`: one child process per session. On Linux and macOS, children fork from a forkserver that has
   preloaded the engine (`_forkserver.py`); Windows uses spawn. The sandbox is installed in the child after the
   fork. A timeout or cancel sends SIGINT (Break, rc 1, data kept); a child that doesn't stop within 5 s is
-  killed (rc 9998, "session reset"). `WorkerPool` keys workers by session token, with LRU eviction and idle
+  killed (rc 9998, "session reset"). `WorkerPool` keys workers by session token; when full it evicts the least recently used idle session (never one running code), with idle
   reaping.
 - `mcp_server.py`: `MCPServer` (mcp 2.3.0). Over stdio there is one session in the launch folder. Over HTTP,
   protocol 2026-07-28 has no MCP session, so sessions are explicit tokens from the `start_session` tool, each
   with its own temp workdir. Errors meant for the agent must be raised as `ToolError` (the SDK hides others).
   Tool outputs are `TypedDict`s, which become the advertised `outputSchema`, and the SDK validates every result
   against them.
-- `cli.py`: `dofile run` wraps the file in `do "..."` inside one sandboxed `Engine`.
+- `cli.py`: `dofile run` runs `do` on the file inside one sandboxed `Engine`, passing the path through a local
+  macro so `$` and backquotes in it aren't expanded (OpenDTA ignores `\$` escapes). The log is not capped.
 
 **Changing the result format or a tool** means updating the TypedDicts in `mcp_server.py` and `MCP-SCHEMA.md`
 together. While dofile is 0.x, a breaking change to the result format raises the minor version.

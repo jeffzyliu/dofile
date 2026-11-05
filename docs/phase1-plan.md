@@ -104,7 +104,9 @@ images)`.
 - **Workdir:** with stdio, the launch directory or `--workdir` (the main local use: a replication package with
   relative `use data/x.dta` / `do 01_clean.do` paths). With HTTP, a fresh temp dir per session, deleted on close.
 - **Session key:** a token from the `start_session` tool over HTTP; one worker for the process over stdio.
-- `Worker` (child process, pipe, per-call timeout) and `WorkerPool` (LRU cap, idle reaping after 15 minutes).
+- `Worker` (child process, pipe, per-call timeout) and `WorkerPool` (idle reaping after 15 minutes; when all
+  `--max-sessions` slots are taken, the least recently used session that isn't running code is closed, and if
+  every session is running code, `start_session` is refused). A session in the middle of a call is never closed.
   If the child died between calls, that call returns rc 9998 without running the code, so the agent knows its
   data is gone.
   The next call starts fresh. Startup was about 0.7 s per new session with spawn; since 2026-11-04 sessions fork from a preloaded forkserver (Linux, macOS) in about 20–50 ms, and Windows still uses spawn.
@@ -116,15 +118,18 @@ images)`.
 **4. `mcp_server.py`.** The full reference, with inputs, outputs and return codes, is
 [MCP-SCHEMA.md](../MCP-SCHEMA.md); every tool except `get_file` advertises a typed output schema.
 - Tools: `start_session` (HTTP), `run_do(code, graphs, timeout)`, `get_matrix(name, rows, cols)`,
-  `describe_data(vars, offset, limit)`, `get_file(name)`, `upload_file(name, text)`, `request_upload` and
+  `describe_data(vars, offset, limit)`, `get_file(name)`, `upload_file(name, text, replace)`, `request_upload` and
   `request_download` (HTTP, one-time URLs valid 10 minutes), `reset`. Resources: `dofile://commands`,
   `dofile://about`.
 - `run_do` returns rc, error, the failing command, the log, e()/r() (each `null` when unchanged since an
   earlier call; matrices over 2,500 values are sent without data), changed files, `nobs`/`nvars`, and the last
   3 graphs as PNG images. Each command's output keeps its first 40 and last 15 lines, and the whole log is capped
-  at 8 KB; the full log goes to `.dofile/`, where the newest 20 are kept.
+  at 8 KB; the full log goes to `.dofile/`, where the newest 20 are kept. A call's log is capped at its first and
+  last 1,000,000 characters in the worker, so a runaway loop can't fill memory or disk (`dofile run` keeps all).
 - Large files never pass through the model: over stdio, code reads them in place from `--read-dir` folders;
-  over HTTP, the client PUTs them to a `request_upload` URL. `upload_file` takes text only.
+  over HTTP, the client PUTs them to a `request_upload` URL. `upload_file` takes text only. Neither overwrites an
+  existing file unless `replace` is true, and file tools refuse links that point outside the working folder.
+- Over HTTP, `session` is required in every tool's schema except `start_session`; over stdio it isn't offered.
 - Deliberate errors are raised as `ToolError`, so their message reaches the agent (the SDK hides other
   exceptions).
 - Transports: `dofile-mcp` (stdio, default) and `dofile-mcp --http --port 8000`. HTTP has no auth, so it binds to

@@ -1,12 +1,14 @@
+import multiprocessing
 import os
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 
 import pytest
 
-from dofile.worker import GRACE, RC_RESET, Worker, WorkerPool
+from dofile.worker import GRACE, RC_RESET, PoolFull, Worker, WorkerPool
 
 PANEL = Path(__file__).parent / "conformance" / "data" / "panel.dta"
 
@@ -72,6 +74,35 @@ def test_dead_process_is_reported_then_restarted(worker):
     assert worker.run("display 3").rc == 0
 
 
+def test_failed_start_is_reported_then_retried(tmp_path, monkeypatch):
+    from dofile import worker as wmod
+    real = wmod._ctx
+
+    class FailFirstStart:  # the real context, except that the first process refuses to start
+        failed = False
+
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def Process(self, *a, **kw):
+            p = real.Process(*a, **kw)
+            if not FailFirstStart.failed:
+                FailFirstStart.failed = True
+
+                def refuse():
+                    raise OSError("no processes left")
+                p.start = refuse
+            return p
+    monkeypatch.setattr(wmod, "_ctx", FailFirstStart())
+    w = Worker(tmp_path, timeout=30)
+    try:
+        r = w.run("display 1")
+        assert r.rc == RC_RESET and "could not start" in r.error and "no processes left" in r.error
+        assert w.run("display 2").rc == 0  # not stuck: the next call starts a process
+    finally:
+        w.close()
+
+
 def test_sandbox_is_on_by_default(worker):
     r = worker.run("shell echo hi")
     assert r.rc == 199 and "sandbox" in r.error
@@ -105,8 +136,55 @@ def test_pool_isolates_sessions_evicts_and_reaps():
         pool.close()
 
 
+def test_pool_neither_reaps_nor_waits_on_a_running_call():
+    pool = WorkerPool(max_workers=4, idle_seconds=3600, timeout=30)
+    try:
+        a = pool.get("a")
+        assert a.run("display 1").rc == 0  # process started
+        long_call = threading.Thread(target=a.run, args=("sleep 2500",))
+        long_call.start()
+        time.sleep(0.5)
+        pool.idle_seconds = 0.01  # by last_used, a now looks idle
+        t = time.perf_counter()
+        pool.get("b")  # reaps; must not wait for a's call
+        assert time.perf_counter() - t < 1.0
+        assert pool.find("a") is a  # a running call is not idle
+        long_call.join()
+        time.sleep(0.05)
+        pool.reap()
+        assert pool.find("a") is None  # idle once its call ended
+    finally:
+        pool.close()
+
+
+def test_full_pool_evicts_only_idle_sessions_and_refuses_when_all_are_busy():
+    pool = WorkerPool(max_workers=2, idle_seconds=3600, timeout=30)
+    try:
+        a, b = pool.get("a"), pool.get("b")  # a is the least recently used
+        assert a.run("display 1").rc == 0 and b.run("display 1").rc == 0
+        pool.get("b")
+        busy_a = threading.Thread(target=a.run, args=("sleep 2000",))
+        busy_a.start()
+        time.sleep(0.5)
+        pool.get("c")  # full: evicts idle b, not a (least recently used, but running code)
+        assert pool.find("a") is a and pool.find("b") is None
+        assert pool.get("c").run("display 1").rc == 0
+        busy_c = threading.Thread(target=pool.find("c").run, args=("sleep 2000",))
+        busy_c.start()
+        time.sleep(0.5)
+        with pytest.raises(PoolFull):  # every session is running code: refuse, evict nothing
+            pool.get("d")
+        assert pool.find("a") is a and pool.find("c") is not None
+        busy_a.join()
+        busy_c.join()
+        pool.get("d")  # idle again: one is evicted
+        assert len(pool) == 2
+    finally:
+        pool.close()
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has only spawn")
-def test_sessions_fork_from_a_preloaded_forkserver(tmp_path):
+def test_sessions_fork_from_a_preloaded_forkserver(tmp_path, monkeypatch):
     import subprocess
     from dofile import worker as wmod
     assert wmod._ctx.get_start_method() == "forkserver"
@@ -118,10 +196,19 @@ def test_sessions_fork_from_a_preloaded_forkserver(tmp_path):
     first = Worker(tmp_path, timeout=30)
     try:
         assert first.run("display 1").rc == 0  # waits for the forkserver if warm_up hasn't finished
-        w = Worker(tmp_path, timeout=30)
-        t = time.perf_counter()
-        assert w.run("display 1").rc == 0
-        assert time.perf_counter() - t < 0.4  # spawn takes ~0.7 s; a preloaded fork ~0.02 s
-        w.close()
     finally:
         first.close()
+
+    def first_call_seconds(ctx):
+        monkeypatch.setattr(wmod, "_ctx", ctx)
+        w = Worker(tmp_path, timeout=60)
+        try:
+            t = time.perf_counter()
+            assert w.run("display 1").rc == 0
+            return time.perf_counter() - t
+        finally:
+            w.close()
+    forked = first_call_seconds(wmod._ctx)
+    spawned = first_call_seconds(multiprocessing.get_context("spawn"))
+    # relative, not a fixed limit, so slow CI machines pass: here ~0.02 s vs ~0.7 s
+    assert forked < spawned / 2, (forked, spawned)

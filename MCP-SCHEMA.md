@@ -10,7 +10,7 @@ the advertised schemas are the reference. `get_file` has no output schema, since
 | | stdio (default) | HTTP (`--http`) |
 |---|---|---|
 | Sessions | one, for the life of the process | many; `start_session` returns a token |
-| `session` argument | not offered (left out of the tools' input schemas) | required on every tool except `start_session` |
+| `session` argument | not offered (left out of the tools' input schemas) | required on every tool except `start_session` (in the schemas too) |
 | Working folder | `--workdir` (default: launch folder) | a new temporary folder per session, deleted when it ends |
 | Large data files | read in place from `--read-dir` folders by absolute path | `request_upload`, then `PUT` to the URL |
 | Output files (`.dta`, `.xlsx`, ...) | already in the working folder | `request_download`, then `GET` the URL |
@@ -21,14 +21,15 @@ revisions (with `initialize` and `Mcp-Session-Id`) on the same `/mcp` endpoint. 
 `Mcp-Session-Id`: a Stata session is always the explicit `session` token (the state-handle pattern of
 SEP-2567).
 
-**Server instructions** (sent to the client at connect) always include the base text, then:
+**Server instructions** (sent to the client at connect) always include the base text and a versions line (dofile,
+the OpenDTA commit, the emulated Stata version), then:
 - the `--read-dir` folders, if any ("on this machine" for stdio, "on the server's disk" for HTTP);
 - for HTTP, how to use `request_upload` for large files and `request_download` for results.
 
 ## Tools
 
-Every argument has a description in the input schema. The schemas below show `session`; over stdio it is not
-part of any tool.
+Every argument has a description in the input schema. The schemas below are the HTTP ones, where `session` is
+required; over stdio `session` is not part of any tool.
 
 ### `start_session` (HTTP only)
 
@@ -42,8 +43,11 @@ Output:
 ```
 
 The token is a 128-bit random string. A session closes after 15 minutes idle, on `reset`, or when the server
-is full (`--max-sessions`, default 8; the least recently used one is closed). After that, every tool returns
-the error `unknown or expired session ...`; the client must start a new session and redo its setup.
+is full (`--max-sessions`, default 8): then the least recently used session that is not running code is
+closed. A session in the middle of a call is never closed this way; if every session is running code,
+`start_session` fails with a tool error (`all 8 sessions are running code ...`) and closes nothing. After a
+session closes, every tool returns the error `unknown or expired session ...`; the client must start a new
+session and redo its setup.
 
 ### `run_do`
 
@@ -58,9 +62,9 @@ Input:
     "code":    {"type": "string"},
     "graphs":  {"type": "boolean", "default": true},
     "timeout": {"anyOf": [{"type": "number", "exclusiveMinimum": 0}, {"type": "null"}], "default": null},
-    "session": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null}
+    "session": {"type": "string"}
   },
-  "required": ["code"]
+  "required": ["code", "session"]
 }
 ```
 
@@ -80,7 +84,11 @@ Output (`RunResult`):
 | `error` | string or null | The error message, without the hint lines that follow it in the log |
 | `error_command` | string or null | The command that failed, as echoed in the log, with `///` continuations joined (`"regress y x"`). For an error inside a loop or block it is that loop's first line (`"forvalues i = 1/2 {"`). `null` on success |
 | `log` | string | Output as Stata shows it; each command echoed as `. cmd`. A command whose output is longer than 56 lines keeps its first 40 and last 15, with `[... N lines omitted; full log: get_file NAME ...]` between them, so every command and how it ended stay visible. If the result is still longer than 8,000 characters, its first and last 4,000 are kept |
-| `log_file` | string or null | When `log` was cut: the name of the full log, for `get_file`. It is kept in the hidden `.dofile/` folder, so it is not in `files` and does not clutter the working folder. Otherwise `null` |
+| `log_file` | string or null | When `log` was cut: the name of the full log, for `get_file`. It is kept in the hidden `.dofile/` folder, so it is not in `files` and does not clutter the working folder; only the newest 20 are kept. Otherwise `null` |
+
+Both `log` and the saved full log start from the same capture, which is capped per call at its first and last
+1,000,000 characters, with `[... N characters of output omitted ...]` between them, so a runaway loop can't fill
+memory or disk.
 | `results` | object | `{"e": ResultSet or null, "r": ResultSet or null}`: the current `e()` and `r()` results; each is `null` when unchanged since an earlier call |
 | `files` | array of `{"name", "status", "bytes"}` | Files in the working folder this call created (`status: "created"`) or changed (`"modified"`), with their size. Top level only; the hidden `.dofile/` folder is not listed |
 | `nobs` | integer | Observations in the dataset in memory after the call |
@@ -171,13 +179,15 @@ Example (`use panel, clear` / `regress y x1` / `scatter y x1` / `graph export s.
 }
 ```
 
-A Stata error is a normal result, not a tool error. Run right after the example above, `e` and `r` are `null`:
+A Stata error is a normal result, not a tool error. Run right after the example above (shortened), `e` and `r`
+are `null`:
 the failed command left `e()` and `r()` as they were, so the `regress y x1` results (and its `r(table)`) are
 still in effect and are not sent again:
 ```json
 {
   "rc": 111,
   "error": "variable nosuchvar not found",
+  "error_command": "regress y nosuchvar",
   "log": ". regress y nosuchvar\nvariable nosuchvar not found\n  → No variable is named ...\nr(111);\n",
   "results": {
     "e": null,
@@ -196,10 +206,14 @@ Stata's layout, but abbreviates long names and cuts long labels; use this tool w
 Input:
 ```json
 {
-  "vars":    {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null},
-  "offset":  {"type": "integer", "minimum": 0, "default": 0},
-  "limit":   {"type": "integer", "minimum": 1, "maximum": 1000, "default": 200},
-  "session": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null}
+  "type": "object",
+  "properties": {
+    "vars":    {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null},
+    "offset":  {"type": "integer", "minimum": 0, "default": 0},
+    "limit":   {"type": "integer", "minimum": 1, "maximum": 1000, "default": 200},
+    "session": {"type": "string"}
+  },
+  "required": ["session"]
 }
 ```
 
@@ -245,9 +259,9 @@ Input:
   "type": "object",
   "properties": {
     "name":    {"type": "string"},
-    "session": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null}
+    "session": {"type": "string"}
   },
-  "required": ["name"]
+  "required": ["name", "session"]
 }
 ```
 
@@ -258,8 +272,9 @@ Output: content, no structured output.
 
 Full logs named in `run_do`'s `log_file` are found in the hidden `.dofile/` folder.
 
-Limits: `name` must be a plain file name (no folders, no `..`). The file can be 5 MB at most, because its
-content goes into the model's context.
+Limits: `name` must be a plain file name (no folders, no `..`), not `.dofile` or a folder, and not a link to a
+file outside the working folder (the server process isn't sandboxed, so it checks this itself). The file can be
+5 MB at most, because its content goes into the model's context.
 
 ### `get_matrix`
 
@@ -275,9 +290,9 @@ Input:
     "name":    {"type": "string"},
     "rows":    {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}], "default": null},
     "cols":    {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}], "default": null},
-    "session": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null}
+    "session": {"type": "string"}
   },
-  "required": ["name"]
+  "required": ["name", "session"]
 }
 ```
 
@@ -300,9 +315,10 @@ Input:
   "properties": {
     "name":    {"type": "string"},
     "text":    {"type": "string"},
-    "session": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null}
+    "replace": {"type": "boolean", "default": false},
+    "session": {"type": "string"}
   },
-  "required": ["name", "text"]
+  "required": ["name", "text", "session"]
 }
 ```
 
@@ -311,7 +327,10 @@ Output:
 {"name": "a.csv", "bytes": 6}
 ```
 
-Limits: `name` must be a plain file name; an existing file with that name is replaced. The size limit is
+Limits: `name` must be a plain file name, not `.dofile` (the hidden scratch folder), a folder, or a link to a
+file outside the working folder. An existing
+file with that name is kept and the call fails, unless `replace` is true, as with Stata's `save, replace`.
+Over stdio the working folder is the user's own folder, so this protects their files. The size limit is
 `--file-limit`.
 
 ### `request_upload` (HTTP only)
@@ -325,11 +344,15 @@ Input:
   "type": "object",
   "properties": {
     "name":    {"type": "string"},
-    "session": {"type": "string"}
+    "session": {"type": "string"},
+    "replace": {"type": "boolean", "default": false}
   },
   "required": ["name", "session"]
 }
 ```
+
+An existing file named `name` makes the call fail unless `replace` is true. This is checked when the URL is
+issued; a file created after that is replaced by the upload.
 
 Output:
 ```json
@@ -372,7 +395,7 @@ Discards the session: data, macros and results.
 - stdio: the session process stops; the next call starts a fresh one in the same working folder.
 - HTTP: the session ends, its working folder is deleted and the token stops working.
 
-Input: `{"session": string | null}`
+Input: `{"session": string}` (HTTP; no input over stdio)
 
 Output: `{"status": "reset"}`
 
@@ -406,13 +429,16 @@ Body: the raw file bytes (Content-Length or chunked)
 | Status | Body | When |
 |---|---|---|
 | 200 | `{"name": "survey.dta", "bytes": 52144}` | The file is in the working folder |
+| 400 | text | The `Content-Length` header is not a number (the token is not used up) |
 | 404 | text | Token unknown, already used, expired, or its session ended |
 | 413 | text | The file is larger than `--file-limit` |
 
-- A token works for one request. It is used up even if that request fails, so call `request_upload` again.
+- A token works for one request. A 400 or 413 decided from the `Content-Length` header alone leaves the
+  token valid; any other failure uses it up, so call `request_upload` again.
 - The file is written to a hidden scratch folder and moved into place only when it is complete. A failed or
   interrupted upload leaves no file behind.
-- An existing file with the same name is replaced.
+- The upload replaces a file with the same name only if `request_upload` was called with `replace: true`
+  (or the file appeared after the URL was issued).
 - The route has no authentication of its own: the token in the URL is the only check.
 
 ```
@@ -444,7 +470,9 @@ Two kinds:
 2. **Tool errors** have `isError: true` and a text message like `Error executing tool get_file: no file
    'nope.txt' in the working directory`. Causes:
    - a missing or expired `session` token (HTTP);
-   - a `name` that is not a plain file name;
+   - `start_session` when every session is running code (HTTP);
+   - a `name` that is not a plain file name, or is `.dofile`, a folder or a link out of the working folder;
+   - an upload whose `name` already exists, without `replace`;
    - a file that is missing or too large;
    - `describe_data` after the session was reset.
 
@@ -457,7 +485,7 @@ Two kinds:
 | 1–999 | Stata's own error codes (e.g. 111 variable not found, 198 invalid syntax, 601 file not found) | Fix the code; the session is intact |
 | 199 | A command disabled by the sandbox: `shell`/`!`, `erase`/`rm`, `rmdir`, `mkdir`, `cd`, `copy`, `webuse` | Do it another way |
 | 603 | File could not be opened: a path outside the allowed folders, or writing to a read-only folder | Use the working folder or a `--read-dir` folder |
-| 9998 | Session reset: the code did not stop within 5 s of being interrupted (for example inside one long numerical routine), or the session process crashed | Data, macros and results are gone; run the setup again |
+| 9998 | Session reset: the code did not stop within 5 s of being interrupted (for example inside one long numerical routine), the session process crashed, or it could not start (the `error` gives the reason; the next call tries again) | Data, macros and results are gone; run the setup again |
 | 9999 | Internal engine error (a bug in the engine; the log has the Python traceback) | Report it; the session's data is kept |
 
 ## Timeouts and cancelling
