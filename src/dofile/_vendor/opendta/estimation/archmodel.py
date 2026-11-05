@@ -277,10 +277,16 @@ def _numlist(v) -> list[int]:
 
 
 def _archm_fn(expr: str):
+    from ..core.safe_expr import safe_eval  # dofile patch: not eval(), which lets Stata code reach Python
     safe = {"sqrt": np.sqrt, "ln": np.log, "log": np.log, "exp": np.exp, "abs": np.abs}
+    text = expr.replace("X", "x").replace("^", "**")  # ^ is Stata's power
 
     def f(x):
-        return float(eval(expr.replace("X", "x"), {"__builtins__": {}}, {**safe, "x": x}))   # noqa: S307
+        return float(safe_eval(text, {**safe, "x": x}))
+    try:
+        f(1.0)  # reject a bad expression up front, as a Stata error
+    except (ValueError, TypeError, ArithmeticError):
+        raise StataError(198, f"invalid archmexp() expression: {expr}")
     return f
 
 

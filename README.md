@@ -72,8 +72,9 @@ For HTTP mode, start `uv run --extra mcp dofile-mcp --http` and connect the Insp
 ```bash
 uv sync --extra mcp
 uv run --extra mcp pytest -q            # ~90 s; skips the slow Stata 14 log comparison
+uv run --extra mcp pytest -q -n auto    # the same in parallel (pytest-xdist), ~35 s
 uv run --extra mcp pytest -q tests      # dofile's own tests only, without OpenDTA's suite in tests_opendta/
-uv run --extra mcp pytest -q -m slow    # the Stata 14 log comparison (~3 min)
+uv run --extra mcp pytest -q -m slow -n auto   # the Stata 14 log comparison (~75 s; ~3.5 min serial)
 uv run --extra mcp pytest -q -m ""      # everything, as CI does
 ```
 
@@ -86,7 +87,8 @@ uv run --extra mcp pytest -q -m ""      # everything, as CI does
 
 A vendored copy of [OpenDTA](https://github.com/yaskepalhares/opendta) (MIT), pinned in
 `src/dofile/_vendor/opendta/VENDORED`. dofile's own changes to it are patches in `scripts/patches/`
-(currently: `r(table)` after estimation), re-applied by the vendor script. Not affiliated with StataCorp; Stata is a registered trademark of StataCorp LLC.
+(`r(table)` after estimation, and fixes for engine bugs listed in
+[docs/opendta-issues.md](docs/opendta-issues.md)), re-applied by the vendor script. Not affiliated with StataCorp; Stata is a registered trademark of StataCorp LLC.
 
 ## License
 

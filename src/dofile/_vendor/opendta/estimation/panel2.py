@@ -529,12 +529,14 @@ def cmd_xtlogit(s: "Session", args: str) -> None:
     c = crit("z", pr.smp.level, None)
     lo2, hi2 = l2 - c * se2, l2 + c * se2
 
-    def rho_of(v):
-        s2 = math.exp(v)
-        return s2 / (s2 + math.pi ** 2 / 3)
+    def rho_of(v):  # s2 / (s2 + pi^2/3) without overflowing exp() at far-out bounds (rho -> 0 or 1)
+        return 1.0 / (1.0 + math.pi ** 2 / 3 * math.exp(-v)) if v > -700 else 0.0
+
+    def sig_of(v):  # exp(v/2); missing when it overflows, as Stata has no infinity
+        return math.exp(0.5 * v) if v < 1400 else SYS
     aux = [CoefRow("sep"), CoefRow("aux", "/lnsig2u", l2, se2, name="_cons"), CoefRow("sep"),
            CoefRow("aux", "sigma_u", sig, 0.5 * sig * se2,
-                   eq=f"{math.exp(0.5 * lo2)} {math.exp(0.5 * hi2)}"),
+                   eq=f"{sig_of(lo2)} {sig_of(hi2)}"),
            CoefRow("aux", "rho", rho, rho * (1 - rho) * se2, eq=f"{rho_of(lo2)} {rho_of(hi2)}")]
     chib = max(2 * (res.ll - rl.ll), 0.0)
     pchib = 0.5 * chi2_tail(chib, 1) if chib > 0 else 0.5

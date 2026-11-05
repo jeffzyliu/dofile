@@ -1,0 +1,11 @@
+--- a/src/dofile/_vendor/opendta/estimation/regress.py
++++ b/src/dofile/_vendor/opendta/estimation/regress.py
+@@ -253,7 +253,7 @@
+     F = SYS
+     df_m_robust = len(slopes)
+     if smp.vce == "ols":
+-        F = (mss / df_m) / s2 if df_m > 0 else 0.0
++        F = (mss / df_m) / s2 if df_m > 0 and s2 > 0 else SYS if df_m > 0 else 0.0  # perfect fit: F missing
+     elif smp.vce == "cluster" and np.linalg.matrix_rank(Vb, tol=1e-12 * max(np.abs(Vb).max(), 1e-300)) < k:
+         # few clusters: V has rank smaller than k; Stata shows F(rank-1, G-1) with a missing value
+         # (compat 0501). VERIFY the general case.

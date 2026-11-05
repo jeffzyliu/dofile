@@ -313,6 +313,19 @@ def _over_groups(s: "Session", m: np.ndarray, overvars: list[str], missing: bool
     return cats, levels, keys
 
 
+def _relabel(labels: list[str], subs: dict) -> list[str]:
+    """dofile patch: over(var, relabel(1 "text" 2 "text")): # is the category's position in that over()."""
+    import shlex
+    spec = subs.get("relabel")
+    if not isinstance(spec, str):
+        return labels
+    words = shlex.split(spec)
+    new = {int(n): txt for n, txt in zip(words[::2], words[1::2]) if n.isdigit()}
+    order = list(dict.fromkeys(labels))  # distinct categories, in display order
+    rename = {lab: new[i] for i, lab in enumerate(order, 1) if i in new}
+    return [rename.get(lab, lab) for lab in labels]
+
+
 def _sort_cats(cats: list[str], levels: list[list[str]], series: list[dict], subs: dict) -> None:
     """over(var, sort(#) descending): orders the categories by the value of the #-th series,
     inside each outer group (in place)."""
@@ -353,6 +366,9 @@ def bar(s: "Session", text: str, family: str) -> tuple[Graph, dict]:
 
     def series_for(m: np.ndarray) -> tuple[list[str], list[list[str]], list[dict]]:
         cats, levels, keys = _over_groups(s, m, overvars, bool(lopts.get("missing")))
+        if overs:  # dofile patch: relabel()
+            cats = _relabel(cats, overs[0]["subs"])
+            levels = [_relabel(lv, o["subs"]) for lv, o in zip(levels, overs[1:])]
         series = []
         if not ys:
             tot = float(m.sum() if w is None else w[m].sum())
@@ -432,6 +448,9 @@ def box(s: "Session", text: str, family: str) -> tuple[Graph, dict]:
 
     def series_for(m: np.ndarray):
         cats, levels, keys = _over_groups(s, m, overvars, bool(lopts.get("missing")))
+        if overs:  # dofile patch: relabel()
+            cats = _relabel(cats, overs[0]["subs"])
+            levels = [_relabel(lv, o["subs"]) for lv, o in zip(levels, overs[1:])]
         series = []
         for nm in names:
             xv = D.numeric(s, nm)

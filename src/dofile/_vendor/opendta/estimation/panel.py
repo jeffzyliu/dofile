@@ -838,8 +838,8 @@ def display_iv(s, est, *, header=True, table=True, level=None, **_kw):
         return
     coef_table(s, est.depvar, est.rows, stat=est.stat, df=est.df_r, level=level or est.level,
                vcetype=est.vcetype)
-    out.write(f"Instrumented:  {x['instd']}\n", "text")
-    out.write(f"Instruments:   {x['insts']}\n", "text")
+    from .results import footnote
+    out.write(footnote(s, "Instrumented:", x['instd']) + footnote(s, "Instruments:", x['insts']), "text")
     if x.get("hac") is not None:
         kern, lags = x["hac"][0], x["hac"][1]
         kname = {"quadraticspectral": "Quadratic spectral"}.get(kern, kern.capitalize())

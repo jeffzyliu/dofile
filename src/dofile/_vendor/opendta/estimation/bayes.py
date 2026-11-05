@@ -994,7 +994,8 @@ def _eval_draws(est, text: str) -> np.ndarray:
         return f"_p{names.index(nm)}"
     py = _BRACE.sub(sub, py).replace("^", "**")
     try:
-        return np.asarray(eval(py, {"__builtins__": {}}, env), float) * np.ones(draws.shape[0])
+        from ..core.safe_expr import safe_eval  # dofile patch: not eval(), which lets Stata code reach Python
+        return np.asarray(safe_eval(py, env), float) * np.ones(draws.shape[0])
     except Exception:
         raise StataError(198, f"invalid expression {text}")   # VERIFY
 

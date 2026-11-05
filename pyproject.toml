@@ -21,7 +21,14 @@ dofile-mcp = "dofile.mcp_server:main"
 
 [dependency-groups]
 # pandas, pyreadstat, xlrd, xlwt: only OpenDTA's own test suite uses them (its dev extra, same caps)
-dev = ["pytest>=8", "pandas>=2", "pyreadstat>=1.3,<1.3.7", "xlrd>=2.0", "xlwt>=1.3"]
+dev = [
+    "pytest>=8",
+    "pandas>=2",
+    "pyreadstat>=1.3,<1.3.7",
+    "xlrd>=2.0",
+    "xlwt>=1.3",
+    "pytest-xdist>=3.8.0",
+]
 
 [build-system]
 requires = ["hatchling>=1.27"]
@@ -36,7 +43,7 @@ exclude = ["tests_opendta/compat/expected"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "tests_opendta/tests"]
-markers = ["slow: the Stata 14 log comparison (~3 min); opt in with -m slow, or -m \"\" for everything"]
+markers = ["slow: the Stata 14 log comparison (~75 s with -n auto, ~3.5 min serial); opt in with -m slow, or -m \"\" for everything"]
 addopts = [
   "-m", "not slow",
   # these OpenDTA tests import the Qt GUI inside the test body; the GUI is not vendored

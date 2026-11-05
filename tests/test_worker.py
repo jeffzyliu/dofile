@@ -28,6 +28,12 @@ def test_state_persists_between_calls(worker):
     assert worker.data_summary()["nobs"] == 1000
 
 
+def test_errors_have_no_console_hints(worker):
+    # OpenDTA's "→ ... How to fix ... help" lines are for people; MCP sessions turn them off
+    r = worker.run("nosuchcommand")
+    assert r.rc == 199 and r.log == ". nosuchcommand\ncommand nosuchcommand is unrecognized\nr(199);\n"
+
+
 def test_timeout_interrupts_and_keeps_the_data(worker):
     worker.run("use panel, clear")
     t = time.monotonic()

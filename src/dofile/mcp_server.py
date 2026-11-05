@@ -35,7 +35,6 @@ from .worker import PoolFull, Worker, WorkerPool, warm_up
 LOG_LIMIT = 8_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
 KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
 CMD_HEAD, CMD_TAIL = 40, 15  # lines kept from the start and end of each command's output
-MATRIX_CELLS = 2_500  # matrices in run_do results above this (e.g. V with >50 terms) are sent without data
 GET_MATRIX_CELLS = 250_000  # get_matrix answers up to this; larger needs rows/cols
 GET_FILE_LIMIT = 5_000_000  # bytes for get_file: its content goes into the model's context
 FILE_LIMIT = 1024 * 1024 * 1024  # default upload limit in bytes (--file-limit)
@@ -44,8 +43,12 @@ IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 INSTRUCTIONS = """Runs Stata-syntax code (.do files) with the open-source dofile engine; no Stata license needed.
 Data, macros and estimation results persist between run_do calls in the same session.
+Each call runs like a do-file: preserve is restored and tempvars/tempfiles dropped when the call ends,
+error or not, so preserve and restore belong in the same call.
 Quote numbers from run_do's `results` (e()/r() as JSON) or its log, never from memory.
-For standard errors, p-values and confidence intervals use r(table), not your own arithmetic.
+`results` always holds the current e() and r() scalars and macros; matrices are listed by size only,
+so fetch values with get_matrix. For standard errors, p-values and confidence intervals read the
+coefficient table in the log or get_matrix("r(table)"), not your own arithmetic.
 A call that runs too long, or that the client cancels, is interrupted like Stata's Break key: rc 1,
 and the session keeps its data. Pass `timeout` to run_do for a shorter limit.
 Commands that run programs, delete files, change directory or download are disabled (rc 199);
@@ -80,25 +83,23 @@ Scalar = Annotated[int | float | ExtendedMissing | None, Field(description="a nu
 class Matrix(TypedDict):
     rows: Annotated[list[str], Field(description="row names, e.g. 'y1' or factor names like '4b.cyl'")]
     cols: list[str]
-    data: Annotated[list[list[Scalar]] | None, Field(description="rows of values, encoded like scalars; "
-                                                                 "null when omitted for size")]
-    omitted: NotRequired[Annotated[str, Field(description="why data is null and how to fetch it")]]
+    data: Annotated[list[list[Scalar]], Field(description="rows of values, encoded like scalars")]
 
 
 class ResultSet(TypedDict):
     """One of e() or r(), grouped like `ereturn list` / `return list`."""
     scalars: Annotated[dict[str, Scalar], Field(description="e.g. N, r2, df_r (e()); N, mean, sd (r())")]
     macros: Annotated[dict[str, str], Field(description="e.g. cmd, depvar, cmdline, vce")]
-    matrices: Annotated[dict[str, Matrix], Field(description="e.g. b (coefficients), V (variance matrix); after "
-                                                           "estimation r() has table: rows b se t|z pvalue ll ul "
-                                                           "df crit eform, one column per coefficient")]
+    matrices: Annotated[dict[str, str], Field(description="each matrix's size as 'rows x cols', e.g. "
+                                                        "{'b': '1x3', 'V': '3x3'}; fetch values with get_matrix "
+                                                        "('e(V)', 'r(table)'). After estimation r() has table: "
+                                                        "rows b se t|z pvalue ll ul df crit eform, one column per "
+                                                        "coefficient")]
 
 
 class Results(TypedDict):
-    e: Annotated[ResultSet | None, Field(description="e() results, or null when e() is unchanged since an "
-                                                     "earlier call returned it (still in effect)")]
-    r: Annotated[ResultSet | None, Field(description="r() results, or null when r() is unchanged since an "
-                                                     "earlier call returned it (still in effect)")]
+    e: Annotated[ResultSet, Field(description="e() as it is after the call (error or not)")]
+    r: Annotated[ResultSet, Field(description="r() as it is after the call (error or not)")]
 
 
 class FileChange(TypedDict):
@@ -133,8 +134,8 @@ class Variable(TypedDict):
     name: str
     type: Annotated[str, Field(description="storage type: byte, int, long, float, double, str#, strL")]
     format: str
-    label: str | None
-    value_label: str | None
+    label: NotRequired[Annotated[str, Field(description="left out when the variable has none")]]
+    value_label: NotRequired[Annotated[str, Field(description="left out when the variable has none")]]
 
 
 class DataSummary(TypedDict):
@@ -280,28 +281,18 @@ def _cut_log(log: str, log_file: str) -> str:
             block.append(line)
     flush()
     text = "\n".join(out)
+    # TODO: cut the longest command outputs first instead of the middle of the whole log, so a short result
+    # between long ones (e.g. `test` between two regressions) isn't lost.
     if len(text) > LOG_LIMIT:
         text = (text[:LOG_LIMIT // 2] + f"\n... [log truncated; full log: get_file {log_file}] ...\n"
                 + text[-LOG_LIMIT // 2:])
     return text
 
 
-def _cap(results: dict[str, Any]) -> dict[str, Any]:
-    """Results with large matrices replaced by their names and size (new dicts: the originals are kept)."""
-    out = {}
-    for k, rs in results.items():
-        if rs is None:
-            out[k] = None
-            continue
-        mats = {}
-        for name, m in rs["matrices"].items():
-            n = len(m["rows"]) * len(m["cols"])
-            mats[name] = m if n <= MATRIX_CELLS else {
-                "rows": m["rows"], "cols": m["cols"], "data": None,
-                "omitted": f"{len(m['rows'])}x{len(m['cols'])} = {n} values; fetch with "
-                           f"get_matrix(name=\"{k}({name})\"), optionally only some rows/cols"}
-        out[k] = {**rs, "matrices": mats}
-    return out
+def _sizes(results: dict[str, Any]) -> dict[str, Any]:
+    """e()/r() with each matrix replaced by its size: values cost many tokens and agents rarely need them inline."""
+    return {k: {**rs, "matrices": {name: f"{len(m['rows'])}x{len(m['cols'])}" for name, m in rs["matrices"].items()}}
+            for k, rs in results.items()}
 
 
 def _instructions(sessions: Sessions) -> str:
@@ -356,7 +347,7 @@ def build_server(sessions: Sessions) -> MCPServer:
 
     @tool(description="Run Stata code (one or more lines, like a .do file) in the session. Returns the "
                           "log (commands echoed as `. cmd`), the return code rc (0 = success), the error "
-                          "message, the current e()/r() results as JSON, and files created or changed. Graphs the code "
+                          "message, the current e()/r() scalars and macros as JSON (matrices by size; values via get_matrix), and files created or changed. Graphs the code "
                           "draws (scatter, histogram, twoway, ...) are attached as images: the last 3, "
                           "unless graphs=false; no `graph export` needed to see them." + session_doc)
     async def run_do(code: Annotated[str, Field(description=code_doc)],
@@ -375,13 +366,7 @@ def build_server(sessions: Sessions) -> MCPServer:
         except anyio.get_cancelled_exc_class():
             w.interrupt(call)
             raise
-        # don't resend stale or repeated e()/r() (errors keep both); they can be large (V is k×k)
-        last = w.last_results
-        w.last_results = dict(r.results)
-        for k in ("e", "r"):
-            if r.results[k] == last.get(k):
-                r.results[k] = None
-        out = {"rc": r.rc, "error": r.error, "error_command": r.error_command, "log": r.log, "log_file": None, "results": _cap(r.results),
+        out = {"rc": r.rc, "error": r.error, "error_command": r.error_command, "log": r.log, "log_file": None, "results": _sizes(r.results),
                "files": r.files, "new_graphs": r.new_graphs,
                "nobs": r.nobs, "nvars": r.nvars}
         name = f"dofile-log-{secrets.token_hex(4)}.txt"
@@ -401,8 +386,8 @@ def build_server(sessions: Sessions) -> MCPServer:
 
     @tool(description="Return one matrix with full precision: e(b), e(V), r(table), or a matrix made "
                           "with `matrix`. Give `rows`/`cols` (names as in the matrix, e.g. ['x1', '_cons']) "
-                          "to get only part of a large one. Use it when run_do results omit a matrix for "
-                          "size." + session_doc)
+                          "to get only part of a large one. run_do results list matrices by size only; this "
+                          "returns the values." + session_doc)
     async def get_matrix(name: Annotated[str, Field(description="e(b), e(V), r(table), or the name of a matrix "
                                                                "made with `matrix`")],
                          rows: NameList = None, cols: NameList = None, session: SessionArg = None) -> Matrix:
@@ -426,6 +411,8 @@ def build_server(sessions: Sessions) -> MCPServer:
             raise ToolError(r.error)
         if "error" in r:
             raise ToolError(r["error"])
+        # no label / value label is common in research data: null fields would repeat on every variable
+        r["variables"] = [{k: v for k, v in x.items() if v is not None} for x in r["variables"]]
         return r
 
     @tool(description="Return a file from the session's working directory: images (.png, .jpg, ...) as "

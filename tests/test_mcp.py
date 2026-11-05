@@ -49,11 +49,13 @@ def test_stdio_mode_tools(stdio_sessions, tmp_path):
         assert r["files"][0]["bytes"] > 1000
         again = (await tool(c, "run_do", code="graph export s.png, replace", graphs=False)).structured_content
         assert [(f["name"], f["status"]) for f in again["files"]] == [("s.png", "modified")]
-        # state persists between calls; unchanged e() is not resent (also after an error)
+        # state persists between calls; every call sends e()/r() in full (no null for "unchanged"), matrices by size
         r = (await tool(c, "run_do", code="summarize y")).structured_content["results"]
-        assert r["e"] is None and r["r"]["scalars"]["N"] == 1000
+        assert r["e"]["macros"]["cmd"] == "regress" and r["e"]["matrices"] == {"b": "1x3", "V": "3x3"}
+        assert r["r"]["scalars"]["N"] == 1000
         r = (await tool(c, "run_do", code="regress y nosuchvar")).structured_content
-        assert r["rc"] == 111 and r["results"] == {"e": None, "r": None}  # the error kept both
+        assert r["rc"] == 111 and r["results"]["e"]["macros"]["cmd"] == "regress"  # the error kept e()
+        assert r["results"]["r"]["scalars"]["N"] == 1000 and "→" not in r["log"]
         assert (await tool(c, "run_do", code="regress y x1")).structured_content["results"]["e"]["scalars"]["df_m"] == 1
         assert (await tool(c, "run_do", code="count")).structured_content["results"]["r"]["scalars"]["N"] == 1000
         assert (await tool(c, "describe_data")).structured_content["nobs"] == 1000
@@ -316,7 +318,7 @@ def test_timeout_and_cancel_interrupt_but_keep_the_session(tmp_path):
         s.close()
 
 
-def test_get_matrix_and_large_matrices_are_omitted(stdio_sessions):
+def test_get_matrix_and_matrix_sizes(stdio_sessions):
     async def steps(c):
         await tool(c, "run_do", code="matrix A = (1, ., 3 \\ .a, 5, 6)\nmatrix rownames A = r1 r2")
         a = (await tool(c, "get_matrix", name="A")).structured_content
@@ -325,9 +327,7 @@ def test_get_matrix_and_large_matrices_are_omitted(stdio_sessions):
         code = "clear\nset obs 300\nset seed 2\nforvalues i = 1/60 {\n    gen x`i' = rnormal()\n}\n" \
                "gen y = x1 + rnormal()\nquietly regress y x*"
         r = (await tool(c, "run_do", code=code)).structured_content["results"]
-        V = r["e"]["matrices"]["V"]
-        assert V["data"] is None and "get_matrix" in V["omitted"] and len(V["cols"]) == 61
-        assert r["e"]["matrices"]["b"]["data"] is not None  # 61 values: small enough to send
+        assert r["e"]["matrices"] == {"b": "1x61", "V": "61x61"} and r["r"]["matrices"] == {"table": "9x61"}
 
         part = (await tool(c, "get_matrix", name="e(V)", rows=["x1", "_cons"], cols=["x1"])).structured_content
         assert part["rows"] == ["x1", "_cons"] and part["cols"] == ["x1"] and part["data"][0][0] > 0
@@ -421,14 +421,6 @@ def test_only_the_newest_full_logs_are_kept(stdio_sessions, tmp_path, monkeypatc
     call(build_server(stdio_sessions), steps)
 
 
-def test_results_are_resent_after_reset(stdio_sessions):
-    async def steps(c):
-        code = "use panel, clear\nquietly regress y x1"
-        assert (await tool(c, "run_do", code=code)).structured_content["results"]["e"] is not None
-        await tool(c, "reset")
-        # same e() as before the reset, but the reset discarded it: send it again, not null ("unchanged")
-        assert (await tool(c, "run_do", code=code)).structured_content["results"]["e"] is not None
-    call(build_server(stdio_sessions), steps)
 
 
 def test_upload_refuses_the_scratch_folder_and_folders(stdio_sessions, tmp_path):
@@ -505,6 +497,11 @@ def test_describe_data_filters_and_pages(stdio_sessions):
         assert [v["name"] for v in d["variables"]] == [f"v1{i}" for i in range(10)] + ["age"] and d["matched"] == 11
         bad = await tool(c, "describe_data", vars="nosuch*")
         assert bad.is_error and bad.content[0].text
+        # label / value_label only when set, not null on every variable
+        await tool(c, "run_do", code='label var age "Age"\nlabel define yn 1 "yes"\nlabel values v1 yn')
+        d = {v["name"]: v for v in (await tool(c, "describe_data", vars="age v1 v2")).structured_content["variables"]}
+        assert d["age"]["label"] == "Age" and "value_label" not in d["age"] and d["v1"]["value_label"] == "yn"
+        assert set(d["v2"]) == {"name", "type", "format"}
     call(build_server(stdio_sessions), steps)
 
 

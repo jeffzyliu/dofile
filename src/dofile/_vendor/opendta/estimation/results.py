@@ -12,6 +12,7 @@ The table follows the Stata 14 layout (78 columns):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -43,6 +44,20 @@ def abbrev(name: str, width: int = 12) -> str:
     if len(name) <= width:
         return name
     return name[: width - 1] + "~" if "#" not in name else name[: width - 1] + "~"
+
+
+def footnote(s: "Session", label: str, text: str, indent: int = 15) -> str:
+    """dofile patch: a footnote list ("Instruments:   a b c") wrapped at the line size, continuation lines
+    indented under the first item, as Stata wraps long instrument lists."""
+    width = int(float(s.settings.get("linesize", 80))) - 1
+    lines, cur = [], f"{label:<{indent}}"
+    for w in text.split():
+        if len(cur) > indent and len(cur) + 1 + len(w) > width:
+            lines.append(cur)
+            cur = " " * indent + w
+        else:
+            cur += ("" if len(cur) == indent else " ") + w
+    return "\n".join(lines + [cur]) + "\n"
 
 
 @dataclass
@@ -100,6 +115,14 @@ def post(s: "Session", est: Estimates, scalars: list[tuple[str, float]],
         e[name] = m
     # matrices first in insertion = listed last; scalars and macros keep the order above
     s.e = e
+    # dofile patch: new estimates start with an empty r(), so an r(table) left by earlier estimates can't pass
+    # as theirs (mean, proportion draw no coefficient table). Kept: a table this same command drew before
+    # posting (xtlogit, gmm, teffects, ...), and the r() of margins/nlcom, post, which is their own result.
+    drew = "table" in s.r and getattr(s, "_r_table_seq", None) == getattr(s, "_cmd_seq", 0)
+    if drew and est.cmd not in ("margins", "nlcom"):
+        post_r_table(s, *s._r_table_args[0], **s._r_table_args[1])  # now with e(b)'s names
+    elif est.cmd not in ("margins", "nlcom"):
+        s.r = {}
     s.data.esample = np.asarray(sample, dtype=bool).copy()
     s._estimates = est
 
@@ -154,10 +177,19 @@ def level_text(level: float) -> str:
 def post_r_table(s: "Session", rows: list[CoefRow], *, stat: str, df: float | None, level: float,
                  eform: bool) -> None:
     """dofile patch: r(table) as Stata leaves it after a coefficient table (rows b se t|z pvalue ll ul
-    df crit eform, one column per coefficient), built from the rows being displayed."""
+    df crit eform, one column per coefficient), built from the rows being displayed. Replaces r(), as Stata's
+    r-class table helper does; commands like lincom set their own r() after the table."""
     from ..commands.matrix import Matrix
+    s._r_table_args = (rows,), dict(stat=stat, df=df, level=level, eform=eform)
+    s._r_table_seq = getattr(s, "_cmd_seq", 0)
     c = crit(stat, level, df)
     dfv = float(df) if stat == "t" and df is not None and df > 0 else SYS
+    labels = ["b", "se", stat, "pvalue", "ll", "ul", "df", "crit", "eform"]
+    from_eb = _r_table_from_eb(s, rows, stat=stat, df=df, c=c, dfv=dfv, eform=eform)
+    if from_eb is not None:
+        cols, names, eqs = from_eb
+        s.r = {"table": Matrix(np.array(cols, dtype=float).T, labels, names, coleq=eqs)}
+        return
     cols, names, eqs, eq = [], [], [], "_"
     for r in rows:
         if r.kind == "eq":
@@ -201,8 +233,54 @@ def post_r_table(s: "Session", rows: list[CoefRow], *, stat: str, df: float | No
             hidden = [0.0, SYS, SYS, SYS, SYS, SYS, dfv, c, cols[0][8]]
             cols = [by.get(f, hidden) for f in ebfull]
             names, eqs = list(eb.colnames), list(eb.coleq)
-    s.r["table"] = Matrix(np.array(cols, dtype=float).T,
-                          ["b", "se", stat, "pvalue", "ll", "ul", "df", "crit", "eform"], names, coleq=eqs)
+    s.r = {"table": Matrix(np.array(cols, dtype=float).T, labels, names, coleq=eqs)}
+
+
+_BASE = re.compile(r"(^|#)(\d*b\.|\d*o\.|o\.|\d*bo\.)")  # base or omitted term: 0b.g, o.x, 1o.g, 1bo.g#2.h
+
+
+def _r_table_from_eb(s, rows, *, stat, df, c, dfv, eform):
+    """dofile patch: r(table) with e(b)'s columns, as Stata builds it, when the table shows the current model:
+    every coefficient row's value is in e(b). Parameters shown transformed (alpha for lnalpha, rho for
+    athrho) are not columns, as in Stata; e(b)'s own (lnalpha, athrho, cut1) are. None: not the model's table
+    (lincom, contrast, a table drawn before its e() is posted), so the caller keeps the displayed rows."""
+    eb, eV = s.e.get("b"), s.e.get("V")
+    coef = [r for r in rows if r.kind == "coef"]
+    if eb is None or eV is None or not coef:
+        return None
+    vals = np.asarray(eb.data, dtype=float).ravel()
+    V = np.asarray(eV.data, dtype=float)
+    if V.shape != (len(vals), len(vals)):
+        return None
+    flags: dict[int, CoefRow] = {}
+    for r in coef:
+        hit = [j for j in range(len(vals)) if j not in flags and np.isclose(vals[j], float(r.b), rtol=1e-9,
+                                                                            atol=1e-12)]
+        if not hit:
+            return None
+        named = [j for j in hit if eb.colnames[j] == (r.name.split(":")[-1] if r.name else r.label)]
+        flags[(named or hit)[0]] = r
+    cols = []
+    for j, (q, n) in enumerate(zip(eb.coleq, eb.colnames)):
+        b, var = float(vals[j]), float(V[j, j])
+        if _BASE.search(n):
+            cols.append([0.0, SYS, SYS, SYS, SYS, SYS, dfv, c, 0.0])
+            continue
+        if not (np.isfinite(var) and var > 0):  # constrained: no standard error
+            cols.append([b, SYS, SYS, SYS, SYS, SYS, dfv, c, 0.0])
+            continue
+        se = float(np.sqrt(var))
+        t = b / se
+        p = pvalue(stat, t, df)
+        lo, hi = b - c * se, b + c * se
+        r = flags.get(j)
+        if r is not None and r.zero_lo:
+            p, lo = float(st.norm.sf(t)), max(lo, 0.0)
+        ef = 0.0
+        if eform and r is not None and not r.noeform:
+            b, se, lo, hi, ef = np.exp(b), np.exp(b) * se, np.exp(lo), np.exp(hi), 1.0
+        cols.append([b, se, t, p, lo, hi, dfv, c, ef])
+    return cols, list(eb.colnames), list(eb.coleq)
 
 
 def coef_table(s: "Session", depvar: str, rows: list[CoefRow], *, stat: str, df: float | None,

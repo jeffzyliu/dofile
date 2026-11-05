@@ -11,7 +11,7 @@ import datetime as _dt
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 from functools import lru_cache
 
 from . import missing as M
@@ -150,7 +150,7 @@ def format_value(value, fmt: Format | str = DEFAULT_NUMERIC, *, pad: bool = True
     elif fmt.kind == "e":
         out = _fmt_e(x, fmt.decimals, sup=dp and _SUP["on"])
     elif fmt.kind == "g":
-        out = general(x, fmt.width, sup=dp and _SUP["on"])
+        out = general(x, fmt.width, sup=dp and _SUP["on"], digits=fmt.decimals)
     elif fmt.kind == "t":
         out = _date(x, fmt)
     else:
@@ -163,7 +163,10 @@ def format_value(value, fmt: Format | str = DEFAULT_NUMERIC, *, pad: bool = True
 def _fmt_f(x: float, decimals: int, comma: bool = False) -> str:
     """Fixed notation with round-half-up applied to the exact binary
     value (Stata gives 1.235e+03 for 1234.5 in %10.3e; Python would give 1.234)."""
-    q = Decimal(x).quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
+    d = Decimal(x)
+    with localcontext() as ctx:  # enough digits for huge values (1e33 with 2 decimals needs 36; default is 28)
+        ctx.prec = max(28, d.adjusted() + decimals + 2)
+        q = d.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
     return f"{q:,.{decimals}f}" if comma else f"{q:.{decimals}f}"
 
 
@@ -185,7 +188,7 @@ def _exp_text(e: int, sup: bool = False) -> str:
     return f"e{'-' if e < 0 else '+'}{abs(e):02d}"
 
 
-def general(x: float, width: int, sup: bool = False) -> str:
+def general(x: float, width: int, sup: bool = False, digits: int = 0) -> str:
     """%w.0g format, with the rule observed in the Stata 14 logs:
 
     * one position is reserved for the sign: the number uses at most
@@ -198,6 +201,8 @@ def general(x: float, width: int, sup: bool = False) -> str:
 
     With `sup` (set superscript on), the exponential form comes out as 1.2346×10⁹ and the
     mantissa loses the digits needed to fit the same width.
+
+    dofile patch: `digits` is the d of %w.dg; when > 0 it caps the significant digits (%9.4g of 1/3 is .3333).
     """
     if x == 0:
         return "0"
@@ -205,6 +210,8 @@ def general(x: float, width: int, sup: bool = False) -> str:
     ax = -x if neg else x
     A = max(width - 1, 1)
     P = max(width - 2, 1)
+    if digits > 0:
+        P = min(P, digits)
 
     X = int(_fmt_e(ax, P - 1).split("e")[1])
     out = None
@@ -222,7 +229,7 @@ def general(x: float, width: int, sup: bool = False) -> str:
             decimals -= 1
     if out is None:
         # exponencial: d.ddd...e+XX ocupando A caracteres
-        for d in range(max(A - 2 - 4, 0), -1, -1):
+        for d in range(min(max(A - 2 - 4, 0), P - 1 if digits > 0 else 99), -1, -1):
             s = _fmt_e(ax, d, sup)
             if len(s) <= A or d == 0:
                 out = s

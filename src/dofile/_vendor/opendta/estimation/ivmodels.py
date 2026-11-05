@@ -152,7 +152,8 @@ def _iv_ml(s: "Session", args: str, cmd: str) -> None:
         return left_, right
 
     def footer(s_, est):
-        s_.output.write(f"Instrumented:  {endog}\nInstruments:   {all_inst}\n", "text")
+        from .results import footnote
+        s_.output.write(footnote(s_, "Instrumented:", endog) + footnote(s_, "Instruments:", all_inst), "text")
         s_.output.write("-" * 78 + "\n", "text")
         if tobit:
             s_.output.write(f"Wald test of exogeneity (/alpha = 0): chi2(1) = {w_exog:8.2f}  "
@@ -452,8 +453,9 @@ def cmd_ivpoisson(s: "Session", args: str) -> None:
         if not table:
             return
         coef_table(s_, e.depvar, e.rows, stat="z", df=None, level=level or e.level, vcetype=e.vcetype)
-        o_.write(f"Instrumented:  {x['instd']}\n", "text")
-        o_.write(f"Instruments:   {x['insts']}\n", "text")
+        from .results import footnote
+        o_.write(footnote(s_, "Instrumented:", x['instd']), "text")
+        o_.write(footnote(s_, "Instruments:", x['insts']), "text")
     est.display = display
     est.predict_opts = {"n": 3, "xb": 3}
     scalars = [("N", float(N)), ("k", float(kk)), ("rank", float(kk))]

@@ -1039,8 +1039,8 @@ def _display_xtivreg(s, est, *, header=True, table=True, level=None, **_kw):
         out.write(f"F  test that all u_i=0:     F({int(x['G'] - 1)},{int(x['df_r'])}) = {x['F_f']:8.2f}          "
                   f"Prob > F    = {x['p_f']:6.4f}\n", "text")
         out.write("-" * 78 + "\n", "text")
-    out.write(f"Instrumented:   {x['instd']}\n", "text")
-    out.write(f"Instruments:    {x['insts']}\n", "text")
+    from .results import footnote
+    out.write(footnote(s, "Instrumented:", x['instd'], 16) + footnote(s, "Instruments:", x['insts'], 16), "text")
     out.write("-" * 78 + "\n", "text")
 
 

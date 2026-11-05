@@ -7,3 +7,4 @@ dist/
 .pytest_cache/
 .dofile/
 tests_opendta/compat/out/
+.claude/

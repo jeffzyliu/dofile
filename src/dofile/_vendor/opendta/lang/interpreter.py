@@ -538,6 +538,7 @@ class Interpreter:
     # ------------------------------------------------------------------
     def execute(self, raw: str) -> None:
         """Expands macros and runs a one-line command."""
+        self.s._cmd_seq = getattr(self.s, "_cmd_seq", 0) + 1  # dofile patch: which command drew r(table)
         text = self.s.expand(raw)
         if self._tracing():
             # set trace on: original line (- ) and expanded line (= ) inside programs

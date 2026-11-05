@@ -723,11 +723,12 @@ def cmd_nbreg(s: "Session", args: str) -> None:
     rows = rows_from_columns(pr.smp.cols, _bmap(pr, res.b, kx), _semap(pr, V, kx), ds,
                              constant=pr.constant)
     rows.append(CoefRow("sep"))
-    lna, se_lna = float(res.b[-1]), float(np.sqrt(V[-1, -1]))
+    lna = float(res.b[-1])
+    se_lna = float(np.sqrt(V[-1, -1])) if V[-1, -1] > 0 else SYS  # dofile patch: no sqrt of a negative
     c = crit("z", pr.smp.level, None)
     alpha = np.exp(lna)
     an = "delta" if nb1 else "alpha"
-    if boundary:
+    if boundary or se_lna >= SYS:  # dofile patch: no variance for lnalpha either way: shown as missing
         rows.append(CoefRow("aux", f"/ln{an}", lna, SYS, name="_cons"))
         rows.append(CoefRow("sep"))
         rows.append(CoefRow("aux", an, alpha, SYS))

@@ -57,7 +57,7 @@ def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> N
         from . import sandbox
         sandbox.install(workdir, read_dirs)
     from .engine import Engine
-    eng = Engine(workdir, log_keep=LOG_KEEP)  # bounded: memory, the pipe and the saved full log
+    eng = Engine(workdir, log_keep=LOG_KEEP, hints=False)  # bounded log; no console hints for agents
     busy = False
 
     def on_interrupt(signum, frame):  # the parent's interrupt: only stop running code, never the loop
@@ -98,7 +98,6 @@ class Worker:
         self._lock = threading.Lock()  # one call at a time per session
         self._active = None  # id of the call running now
         self._cancelled: set = set()  # ids of calls to stop (also ones still waiting for the lock)
-        self.last_results: dict = {}  # e()/r() last sent to the client, so unchanged ones aren't resent
 
     def _start(self) -> None:
         parent, child = _ctx.Pipe()
@@ -199,7 +198,6 @@ class Worker:
     def close(self) -> None:
         with self._lock:
             self._kill()
-            self.last_results = {}
         if self.owns_workdir:
             shutil.rmtree(self.workdir, ignore_errors=True)
 

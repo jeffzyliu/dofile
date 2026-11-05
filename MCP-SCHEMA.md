@@ -73,6 +73,10 @@ Input:
 `timeout`: seconds before this call is interrupted; at most the server's `--timeout` (default 60), which is
 also the default. See [Timeouts and cancelling](#timeouts-and-cancelling).
 
+Each call runs like a do-file: data preserved with `preserve` is restored, and `tempvar`/`tempname`/`tempfile`
+objects are dropped, when the call ends, with or without an error. So `preserve` and `restore` go in the same
+call. Data, local and global macros, programs and `e()`/`r()` results carry over to the next call.
+
 With `--read-dir`, the `code` description also names the read-only folders and says to use their files by
 absolute path, because not every client shows the server instructions to the model.
 
@@ -81,19 +85,19 @@ Output (`RunResult`):
 | Field | Type | Meaning |
 |---|---|---|
 | `rc` | integer | Return code. 0 = success; see [Return codes](#return-codes) |
-| `error` | string or null | The error message, without the hint lines that follow it in the log |
+| `error` | string or null | The error message (the first line of Stata's error output) |
 | `error_command` | string or null | The command that failed, as echoed in the log, with `///` continuations joined (`"regress y x"`). For an error inside a loop or block it is that loop's first line (`"forvalues i = 1/2 {"`). `null` on success |
 | `log` | string | Output as Stata shows it; each command echoed as `. cmd`. A command whose output is longer than 56 lines keeps its first 40 and last 15, with `[... N lines omitted; full log: get_file NAME ...]` between them, so every command and how it ended stay visible. If the result is still longer than 8,000 characters, its first and last 4,000 are kept |
 | `log_file` | string or null | When `log` was cut: the name of the full log, for `get_file`. It is kept in the hidden `.dofile/` folder, so it is not in `files` and does not clutter the working folder; only the newest 20 are kept. Otherwise `null` |
-
-Both `log` and the saved full log start from the same capture, which is capped per call at its first and last
-1,000,000 characters, with `[... N characters of output omitted ...]` between them, so a runaway loop can't fill
-memory or disk.
-| `results` | object | `{"e": ResultSet or null, "r": ResultSet or null}`: the current `e()` and `r()` results; each is `null` when unchanged since an earlier call |
+| `results` | object | `{"e": ResultSet, "r": ResultSet}`: `e()` and `r()` as they are after the call, whether it succeeded or failed |
 | `files` | array of `{"name", "status", "bytes"}` | Files in the working folder this call created (`status: "created"`) or changed (`"modified"`), with their size. Top level only; the hidden `.dofile/` folder is not listed |
 | `nobs` | integer | Observations in the dataset in memory after the call |
 | `nvars` | integer | Variables in the dataset in memory after the call |
 | `new_graphs` | integer | How many graphs this call drew (each `scatter`, `histogram`, `twoway`, `graph bar`, ... counts once) |
+
+Both `log` and the saved full log start from the same capture, which is capped per call at its first and last
+1,000,000 characters, with `[... N characters of output omitted ...]` between them, so a runaway loop can't fill
+memory or disk.
 
 `e` and `r` are each grouped like Stata's `ereturn list` / `return list` (`ResultSet`):
 
@@ -101,13 +105,14 @@ memory or disk.
 |---|---|---|
 | `scalars` | object: name → integer, number, `null` or a string matching `^\.[a-z]$` | Numbers such as `N`, `r2`. Whole numbers are integers. Missing `.` (and infinity, which Stata does not have) is `null`; extended missing is the string `".a"` … `".z"` |
 | `macros` | object: name → string | Text such as `cmd`, `depvar`, `cmdline` |
-| `matrices` | object: name → `{"rows": [...], "cols": [...], "data": [[...], ...]}` | Matrices such as `b`, `V`. Cells are encoded like scalars. In multi-equation models names include the equation, as in Stata: `eq:name`. Matrices with more than 2,500 values are sent without data (see below) |
+| `matrices` | object: name → string `"rows x cols"` | Each matrix's size only, such as `{"b": "1x2", "V": "2x2"}`. Fetch the values with [`get_matrix`](#get_matrix) (`e(V)`, `r(table)`, ...) |
 
-All three groups are always present (possibly `{}`). `e` is `null` when `e()` equals what an earlier call in the
-session already returned: after a command that does not estimate, after an error (Stata keeps `e()`), or after
-re-running the same model. Those `e()` results are still in effect. `r` follows the same rule: it is `null`
-after an error or a command that leaves `r()` as it was. After a session reset (rc 9998) every group
-is empty.
+All three groups are always present (possibly `{}`), and every call sends them in full: nothing is left out
+because an earlier call already returned it, so a result never depends on what the agent still remembers.
+Matrix values are left out because they cost many tokens (`e(V)` grows with the square of the number of
+terms) and the log's coefficient table already shows the usual numbers. After an error, `e` and `r` show
+what the commands before the failing one left (Stata keeps `e()` when a command fails). After a session reset
+(rc 9998) every group is empty.
 
 Which names appear depends on the command. The usual ones (from dofile runs; Stata's are the same names):
 
@@ -125,17 +130,20 @@ Which names appear depends on the command. The usual ones (from dofile runs; Sta
 After any command that shows a coefficient table (all the estimation commands above, and replaying one),
 `r()` also has the matrix `table`, as in Stata: one column per coefficient (the columns of `e(b)`, including
 base levels the table hides) and the rows `b se t pvalue ll ul df crit eform` (`z` instead of `t` for
-z-statistics). Use it for standard errors, p-values and confidence intervals instead of computing them from
-`e(V)`. With `or`/`eform`, the values are exponentiated and `eform` is 1. Base and omitted terms have `b` 0 and
-the rest missing (`null`). Example for `regress y x1` (shortened):
+z-statistics). It replaces whatever `r()` held before. Use it, or the coefficient table in the log, for
+standard errors, p-values and confidence intervals instead of computing them from `e(V)`. With `or`/`eform`,
+the values are exponentiated and `eform` is 1. Base and omitted terms have `b` 0 and the rest missing
+(`null`). In `results` it appears as `"r": {"scalars": {}, "macros": {}, "matrices": {"table": "9x2"}}`;
+`get_matrix(name="r(table)")` after `regress y x1` returns:
 ```json
-"r": {"scalars": {}, "macros": {}, "matrices": {"table": {
+{
   "rows": ["b", "se", "t", "pvalue", "ll", "ul", "df", "crit", "eform"],
   "cols": ["x1", "_cons"],
   "data": [[2.3340184651433287, 0.9678754725351595], [0.07624562357549007, 0.08537199198651615],
            [30.611835220056125, 11.337154610238308], [1.1538335935508048e-145, 4.136372142046254e-28],
            [2.1843983349190386, 0.8003462694211894], [2.4836385953676188, 1.1354046756491296],
-           [998, 998], [1.9623438462163343, 1.9623438462163343], [0, 0]]}}}
+           [998, 998], [1.9623438462163343, 1.9623438462163343], [0, 0]]
+}
 ```
 
 Use `ereturn list` / `return list` in `run_do` to see every name for any other command.
@@ -148,14 +156,6 @@ again. `new_graphs` says how many were drawn, so an agent knows when some were l
 `graphs: false` to save context; `graph export` and `get_file` still work for any graph in memory.
 The structured result (`structuredContent`) is the same either way.
 
-**Large matrices.** A matrix with more than 2,500 values (for example `e(V)` of a model with more than 50
-terms) keeps its `rows` and `cols` but has `"data": null` and an `omitted` note. Fetch it, or only the part
-you need, with [`get_matrix`](#get_matrix):
-```json
-"V": {"rows": ["x1", "x2", "...", "_cons"], "cols": ["x1", "x2", "...", "_cons"], "data": null,
-      "omitted": "61x61 = 3721 values; fetch with get_matrix(name=\"e(V)\"), optionally only some rows/cols"}
-```
-
 Example (`use panel, clear` / `regress y x1` / `scatter y x1` / `graph export s.png`), shortened:
 ```json
 {
@@ -166,32 +166,27 @@ Example (`use panel, clear` / `regress y x1` / `scatter y x1` / `graph export s.
     "e": {
       "scalars": {"N": 1000, "df_r": 998, "r2": 0.4842602362171483},
       "macros": {"cmd": "regress", "depvar": "y", "vce": "ols"},
-      "matrices": {
-        "b": {"rows": ["y1"], "cols": ["x1", "_cons"], "data": [[2.3340184651433287, 0.9678754725351595]]},
-        "V": {"rows": ["x1", "_cons"], "cols": ["x1", "_cons"],
-              "data": [[0.005813395114415328, 0.00035598492099942717],
-                       [0.00035598492099942717, 0.0072883770157457775]]}
-      }
+      "matrices": {"b": "1x2", "V": "2x2"}
     },
-    "r": {"scalars": {}, "macros": {}, "matrices": {"table": {...}}}
+    "r": {"scalars": {}, "macros": {}, "matrices": {"table": "9x2"}}
   },
   "files": [{"name": "s.png", "status": "created", "bytes": 41733}]
 }
 ```
 
-A Stata error is a normal result, not a tool error. Run right after the example above (shortened), `e` and `r`
-are `null`:
-the failed command left `e()` and `r()` as they were, so the `regress y x1` results (and its `r(table)`) are
-still in effect and are not sent again:
+A Stata error is a normal result, not a tool error. Run right after the example above (shortened): the failed
+command left `e()` and `r()` as they were, so the `regress y x1` results and its `r(table)` are still in
+effect, and `results` shows them:
 ```json
 {
   "rc": 111,
   "error": "variable nosuchvar not found",
   "error_command": "regress y nosuchvar",
-  "log": ". regress y nosuchvar\nvariable nosuchvar not found\n  → No variable is named ...\nr(111);\n",
+  "log": ". regress y nosuchvar\nvariable nosuchvar not found\nr(111);\n",
   "results": {
-    "e": null,
-    "r": null
+    "e": {"scalars": {"N": 1000, "df_r": 998, "r2": 0.4842602362171483}, "macros": {"cmd": "regress", ...},
+          "matrices": {"b": "1x2", "V": "2x2"}},
+    "r": {"scalars": {}, "macros": {}, "matrices": {"table": "9x2"}}
   },
   "files": []
 }
@@ -229,7 +224,8 @@ Output (`DataSummary`):
   "matched": 10,
   "offset": 0,
   "variables": [
-    {"name": "id", "type": "int", "format": "%8.0g", "label": null, "value_label": null}
+    {"name": "id", "type": "int", "format": "%8.0g"},
+    {"name": "sex", "type": "byte", "format": "%8.0g", "label": "Sex", "value_label": "sexlbl"}
   ],
   "more": 0,
   "filename": "panel.dta"
@@ -239,8 +235,9 @@ Output (`DataSummary`):
 `nvars` counts all variables, `matched` those that match `vars`, and `more` the matching ones after this
 page.
 
-`type` is the Stata storage type (`byte`, `int`, `long`, `float`, `double`, `str#`, `strL`). `label`,
-`value_label` and `filename` can be null.
+`type` is the Stata storage type (`byte`, `int`, `long`, `float`, `double`, `str#`, `strL`). `label` and
+`value_label` are left out when a variable has none (common, and they'd repeat on every variable);
+`filename` can be null.
 
 ### `get_file`
 
@@ -278,9 +275,8 @@ file outside the working folder (the server process isn't sandboxed, so it check
 
 ### `get_matrix`
 
-Returns one matrix with full precision, in the same `Matrix` form as `results`: `e(b)`, `e(V)`, `r(table)`,
-or a matrix made with `matrix`. Use it for a matrix that `run_do` omitted for size, or for your own matrices,
-which `run_do` does not return.
+Returns one matrix with full precision: `e(b)`, `e(V)`, `r(table)`, or a matrix made with `matrix`. `run_do`
+lists matrices by size only, so this is how to get their values; your own matrices aren't listed there at all.
 
 Input:
 ```json
@@ -296,8 +292,8 @@ Input:
 }
 ```
 
-`rows` / `cols`: names exactly as in the matrix's `rows` / `cols` (e.g. `["x1", "_cons"]`, or `["se"]` for
-`r(table)`); leave out for all. Example: `{"name": "r(table)", "rows": ["b", "se", "pvalue"], "cols": ["x1"]}`
+`rows` / `cols`: names exactly as in the matrix (e.g. `["x1", "_cons"]` as in the log's coefficient table,
+or `["se"]` for `r(table)`); leave out for all. Example: `{"name": "r(table)", "rows": ["b", "se", "pvalue"], "cols": ["x1"]}`
 → `{"rows": ["b", "se", "pvalue"], "cols": ["x1"], "data": [[2.334], [0.0762], [1.15e-145]]}`.
 
 Errors (tool errors): no such matrix; a row or column name that the matrix does not have; more than 250,000
@@ -466,7 +462,8 @@ Data files should not pass through the model's context.
 
 Two kinds:
 
-1. **Stata errors** are normal `run_do` results with `rc` ≠ 0. The session keeps its data.
+1. **Stata errors** are normal `run_do` results with `rc` ≠ 0. The session keeps its data (restored to the
+   preserved copy if the call used `preserve`).
 2. **Tool errors** have `isError: true` and a text message like `Error executing tool get_file: no file
    'nope.txt' in the working directory`. Causes:
    - a missing or expired `session` token (HTTP);

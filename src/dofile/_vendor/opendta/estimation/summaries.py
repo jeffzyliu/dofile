@@ -19,7 +19,7 @@ from ..core import missing as M
 from ..core.errors import StataError
 from ..lang.syntax import Parsed, match_options, parse_standard
 from ..lazy import lazy
-from .results import Estimates, g9, post
+from .results import CoefRow, Estimates, g9, post, post_r_table
 
 # imported on first use (start-up time; see opendta/lazy.py)
 special = lazy("scipy.special")
@@ -295,14 +295,42 @@ def summary_stat(s: "Session", stat: str, args: str,
                       "text")
         out.write("\n", "text")
 
-    def table(ss, *_a, **_kw):
+    def table(ss, *_a, r_table=True, **_kw):
         summary_table(ss, req.info.column, fit.labels, vals, se, df, req.level, vcetype, req.over)
-    table(s)
+        if r_table:  # dofile patch: replay
+            _post_r_table(ss, fit.colnames, vals, se, df, req.level, req.info.column, vcetype)
+    table(s, r_table=False)  # e() isn't posted yet: r(table) follows the post
     est = Estimates(stat, "", fit.colnames, vals, V, eng.n_obs, "t", df)
     est.rows = []
     est.level = req.level
     est.display = table
     eng.post(s, est, req, fit, df)
+    _post_r_table(s, fit.colnames, vals, se, df, req.level, req.info.column, vcetype)  # dofile patch
+
+
+def _ci(column: str, vcetype: str, b: float, e: float, crit: float) -> tuple[float, float]:
+    """The interval the table shows: proportions on the logit scale, the rest symmetric."""
+    if column == "Proportion" and 0 < b < 1 and vcetype in ("Linearized", ""):
+        # CI on the logit scale (proportion's default in Stata 14, VERIFY)
+        half = crit * e / (b * (1 - b))
+        return special.expit(special.logit(b) - half), special.expit(special.logit(b) + half)
+    return b - crit * e, b + crit * e
+
+
+def _post_r_table(s: "Session", names, vals, se, df, level, column: str, vcetype: str) -> None:
+    """dofile patch: r(table) after mean/proportion/total/ratio, as after any estimation table, with ll/ul as
+    the table shows them (proportion's interval is on the logit scale)."""
+    stat = "t" if df and df > 0 else "z"
+    rows = [CoefRow("coef", n, float(b), float(e), name=n) for n, b, e in zip(names, vals, se)]
+    post_r_table(s, rows, stat=stat, df=df if stat == "t" else None, level=level, eform=False)
+    tab = s.r.get("table")
+    if tab is None or column != "Proportion":
+        return
+    q = 1 - (1 - level / 100) / 2
+    crit = st.t.ppf(q, df) if df and df > 0 else st.norm.ppf(q)
+    for j, (b, e) in enumerate(zip(vals, se)):
+        if np.isfinite(e) and e > 0:
+            tab.data[4, j], tab.data[5, j] = _ci(column, vcetype, float(b), float(e), crit)
 
 
 def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetype: str, over: str) -> None:
@@ -338,12 +366,7 @@ def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetyp
         if e is None or not np.isfinite(e):
             out.write(f"  {g9(b):>9}  {'.':>9}     {'.':>9}   {'.':>9}\n", "result")
             continue
-        if column == "Proportion" and 0 < b < 1 and vcetype in ("Linearized", ""):
-            # CI on the logit scale (proportion's default in Stata 14, VERIFY)
-            half = crit * e / (b * (1 - b))
-            lo, hi = special.expit(special.logit(b) - half), special.expit(special.logit(b) + half)
-        else:
-            lo, hi = b - crit * e, b + crit * e
+        lo, hi = _ci(column, vcetype, b, e, crit)
         out.write(f"  {g9(b):>9}  {g9(e):>9}     {g9(lo):>9}   {g9(hi):>9}\n", "result")
     out.write("-" * width + "\n", "text")
 

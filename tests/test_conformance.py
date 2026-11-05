@@ -52,7 +52,6 @@ def test_check_matches_reference(dofile, key, workdir, monkeypatch, request):
 
 
 PROBE_GAPS = {
-    "p04_xtlogit.do": "OpenDTA ODT-2: xtlogit, re raises OverflowError (math range error) on this data",
     "p06_esttab.do": "GAP-1: esttab (community command)",
     "p07_outreg2.do": "GAP-1: outreg2 (community command)",
 }

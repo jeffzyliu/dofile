@@ -14,6 +14,7 @@ from typing import Any
 
 from ._vendor.opendta.core import missing
 from ._vendor.opendta.core.output import Capture
+from ._vendor.opendta.lang.programs import Scope
 from ._vendor.opendta.session import Session
 
 RC_INTERNAL = 9999  # a Python exception escaped the interpreter (an engine bug, not a Stata error)
@@ -148,23 +149,30 @@ def _png(g) -> bytes | None:
 
 
 class Engine:
-    def __init__(self, workdir: str | os.PathLike | None = None, log_keep: int | None = None):
+    def __init__(self, workdir: str | os.PathLike | None = None, log_keep: int | None = None, hints: bool = True):
         """`log_keep`: cap each call's log to its first and last `log_keep` characters (None: keep it all,
-        as `dofile run` does, like a Stata batch log)."""
+        as `dofile run` does, like a Stata batch log). `hints`: OpenDTA's explanations under errors, written for
+        people at a console; off for agents."""
         if workdir is not None:
             os.chdir(workdir)
         self._capture = _BoundedCapture(log_keep) if log_keep else Capture()
         self.session = Session()
+        self.session.run("quietly set superscript off")  # Stata's 1.000e+10, not OpenDTA's 1.00×10¹⁰ (loses a digit)
+        if not hints:
+            self.session.run("quietly set hints off")
         self.session._graphs = _tracked_store()  # the attribute OpenDTA's graphics.store.store() looks up
         self.session.output.add_listener(self._capture)
 
     def run(self, code: str, images: bool = False) -> Result:
         """Runs Stata code like a do-file (commands echoed as `. cmd`) and returns its log. With `images`,
-        the last MAX_IMAGES graphs it drew come back as PNGs."""
+        the last MAX_IMAGES graphs it drew come back as PNGs. Like `do`, each call has its own scope: preserved
+        data is restored and temporaries are dropped when it ends, with or without an error. Locals persist."""
         self._capture.clear()
         drawn = self.session._graphs.drawn
         drawn.clear()
         error = None
+        scope = Scope("do", "run")
+        self.session.scopes.append(scope)
         try:
             rc = self.session.run(code, echo=True)
         except KeyboardInterrupt:  # the worker's interrupt (cancel or timeout), like Stata's Break key
@@ -180,6 +188,9 @@ class Engine:
             error = f"internal engine error: {type(e).__name__}: {e}"
             self._capture(f"{error}\n{traceback.format_exc(limit=-3)}r({rc});\n", "error")
             self._recover(rc)
+        if scope in self.session.scopes:  # _recover() already closed it after an escaped exception
+            self.session.scopes.remove(scope)
+            self.session.close_scope(scope)
         if rc and error is None:
             error = _last_error(self._capture.text)
         failed = _failed_command(self._capture.text) if rc else None

@@ -1,0 +1,87 @@
+--- a/src/dofile/_vendor/opendta/estimation/results.py
++++ b/src/dofile/_vendor/opendta/estimation/results.py
+@@ -44,6 +44,20 @@
+     if len(name) <= width:
+         return name
+     return name[: width - 1] + "~" if "#" not in name else name[: width - 1] + "~"
++
++
++def footnote(s: "Session", label: str, text: str, indent: int = 15) -> str:
++    """dofile patch: a footnote list ("Instruments:   a b c") wrapped at the line size, continuation lines
++    indented under the first item, as Stata wraps long instrument lists."""
++    width = int(float(s.settings.get("linesize", 80))) - 1
++    lines, cur = [], f"{label:<{indent}}"
++    for w in text.split():
++        if len(cur) > indent and len(cur) + 1 + len(w) > width:
++            lines.append(cur)
++            cur = " " * indent + w
++        else:
++            cur += ("" if len(cur) == indent else " ") + w
++    return "\n".join(lines + [cur]) + "\n"
+ 
+ 
+ @dataclass
+--- a/src/dofile/_vendor/opendta/estimation/ivmodels.py
++++ b/src/dofile/_vendor/opendta/estimation/ivmodels.py
+@@ -152,7 +152,8 @@
+         return left_, right
+ 
+     def footer(s_, est):
+-        s_.output.write(f"Instrumented:  {endog}\nInstruments:   {all_inst}\n", "text")
++        from .results import footnote
++        s_.output.write(footnote(s_, "Instrumented:", endog) + footnote(s_, "Instruments:", all_inst), "text")
+         s_.output.write("-" * 78 + "\n", "text")
+         if tobit:
+             s_.output.write(f"Wald test of exogeneity (/alpha = 0): chi2(1) = {w_exog:8.2f}  "
+@@ -452,8 +453,9 @@
+         if not table:
+             return
+         coef_table(s_, e.depvar, e.rows, stat="z", df=None, level=level or e.level, vcetype=e.vcetype)
+-        o_.write(f"Instrumented:  {x['instd']}\n", "text")
+-        o_.write(f"Instruments:   {x['insts']}\n", "text")
++        from .results import footnote
++        o_.write(footnote(s_, "Instrumented:", x['instd']), "text")
++        o_.write(footnote(s_, "Instruments:", x['insts']), "text")
+     est.display = display
+     est.predict_opts = {"n": 3, "xb": 3}
+     scalars = [("N", float(N)), ("k", float(kk)), ("rank", float(kk))]
+--- a/src/dofile/_vendor/opendta/estimation/svyreg.py
++++ b/src/dofile/_vendor/opendta/estimation/svyreg.py
+@@ -684,8 +684,9 @@
+                    vcetype=est.vcetype, coef_title=getattr(est, "coef_title", "Coef."),
+                    eform=getattr(est, "eform_on", False))
+         if x.get("svy_cmd") == "ivregress":
+-            out.write(f"Instrumented:  {x['instd']}\n", "text")
+-            out.write(f"Instruments:   {x['insts']}\n", "text")
++            from .results import footnote
++            out.write(footnote(s, "Instrumented:", x['instd']), "text")
++            out.write(footnote(s, "Instruments:", x['insts']), "text")
+             out.write("-" * 78 + "\n", "text")
+         elif x.get("svy_cmd") in ("intreg", "slogit") and getattr(est, "footer", None):
+             est.footer(s, est)
+--- a/src/dofile/_vendor/opendta/estimation/panel.py
++++ b/src/dofile/_vendor/opendta/estimation/panel.py
+@@ -838,8 +838,8 @@
+         return
+     coef_table(s, est.depvar, est.rows, stat=est.stat, df=est.df_r, level=level or est.level,
+                vcetype=est.vcetype)
+-    out.write(f"Instrumented:  {x['instd']}\n", "text")
+-    out.write(f"Instruments:   {x['insts']}\n", "text")
++    from .results import footnote
++    out.write(footnote(s, "Instrumented:", x['instd']) + footnote(s, "Instruments:", x['insts']), "text")
+     if x.get("hac") is not None:
+         kern, lags = x["hac"][0], x["hac"][1]
+         kname = {"quadraticspectral": "Quadratic spectral"}.get(kern, kern.capitalize())
+--- a/src/dofile/_vendor/opendta/estimation/xtlin.py
++++ b/src/dofile/_vendor/opendta/estimation/xtlin.py
+@@ -1039,8 +1039,8 @@
+         out.write(f"F  test that all u_i=0:     F({int(x['G'] - 1)},{int(x['df_r'])}) = {x['F_f']:8.2f}          "
+                   f"Prob > F    = {x['p_f']:6.4f}\n", "text")
+         out.write("-" * 78 + "\n", "text")
+-    out.write(f"Instrumented:   {x['instd']}\n", "text")
+-    out.write(f"Instruments:    {x['insts']}\n", "text")
++    from .results import footnote
++    out.write(footnote(s, "Instrumented:", x['instd'], 16) + footnote(s, "Instruments:", x['insts'], 16), "text")
+     out.write("-" * 78 + "\n", "text")
+ 
+ 

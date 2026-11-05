@@ -684,8 +684,9 @@ def _display_generic(s: "Session", est, *, header: bool = True, table: bool = Tr
                    vcetype=est.vcetype, coef_title=getattr(est, "coef_title", "Coef."),
                    eform=getattr(est, "eform_on", False))
         if x.get("svy_cmd") == "ivregress":
-            out.write(f"Instrumented:  {x['instd']}\n", "text")
-            out.write(f"Instruments:   {x['insts']}\n", "text")
+            from .results import footnote
+            out.write(footnote(s, "Instrumented:", x['instd']), "text")
+            out.write(footnote(s, "Instruments:", x['insts']), "text")
             out.write("-" * 78 + "\n", "text")
         elif x.get("svy_cmd") in ("intreg", "slogit") and getattr(est, "footer", None):
             est.footer(s, est)
