@@ -30,7 +30,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 
 from .engine import about
-from .worker import Worker, WorkerPool
+from .worker import Worker, WorkerPool, warm_up
 
 LOG_LIMIT = 8_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
 KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
@@ -563,6 +563,7 @@ def main(argv: list[str] | None = None) -> None:
                         sandbox=not a.unsafe, timeout=a.timeout, max_sessions=a.max_sessions,
                         file_limit=int(a.file_limit * 2**20),
                         public_url=a.public_url or f"http://{a.host}:{a.port}")
+    warm_up()  # the first session then starts in ~20 ms
     server = build_server(sessions)
     try:
         if a.http:

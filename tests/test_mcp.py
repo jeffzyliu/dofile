@@ -117,8 +117,14 @@ def test_real_stdio_transport(tmp_path):
 
     async def steps(c):
         r = (await tool(c, "run_do", code="use panel, clear\nquietly regress y x1")).structured_content
-        return r["rc"], r["results"]["e"]["scalars"]["N"]
-    assert call(params, steps) == (0, 1000)
+        await tool(c, "reset")  # the next call starts a new session process
+        t = time.perf_counter()
+        assert (await tool(c, "run_do", code="display 1")).structured_content["rc"] == 0
+        return r["rc"], r["results"]["e"]["scalars"]["N"], time.perf_counter() - t
+    rc, n, restart = call(params, steps)
+    assert (rc, n) == (0, 1000)
+    if sys.platform != "win32":  # under `python -m` the forkserver must preload the server module, or ~0.35 s
+        assert restart < 0.2, f"a new session took {restart:.2f} s"
 
 
 def _free_port() -> int:

@@ -25,7 +25,30 @@ from .engine import Result
 RC_RESET = 9998
 GRACE = 5.0  # seconds an interrupted call gets to stop before the child is killed
 _POLL = 0.1  # seconds between checks for a cancel while waiting for the child
-_ctx = mp.get_context("spawn")  # a clean interpreter: no state or audit hooks inherited from the parent
+
+
+def _context():
+    """forkserver where it exists: a clean process (no server threads, tokens or sockets) that has loaded the
+    engine once, so each session forks ready in ~20 ms instead of ~0.7 s. Windows has only spawn."""
+    if "forkserver" not in mp.get_all_start_methods():
+        return mp.get_context("spawn")
+    ctx = mp.get_context("forkserver")
+    # each child re-runs the parent's main module unless the forkserver has it: "__main__" covers a script,
+    # the module name covers `python -m` (multiprocessing itself skips `*.__main__` names)
+    main = getattr(getattr(sys.modules.get("__main__"), "__spec__", None), "name", None)
+    by_name = [main] if main and not main.endswith("__main__") else []
+    ctx.set_forkserver_preload(["__main__", *by_name, "dofile._forkserver"])
+    return ctx
+
+
+_ctx = _context()
+
+
+def warm_up() -> None:
+    """Start the forkserver in the background now, so the first session doesn't wait ~1 s for it."""
+    if _ctx.get_start_method() == "forkserver":
+        from multiprocessing import forkserver
+        threading.Thread(target=forkserver.ensure_running, daemon=True).start()
 
 
 def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> None:

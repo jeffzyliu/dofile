@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -102,3 +103,25 @@ def test_pool_isolates_sessions_evicts_and_reaps():
         assert len(pool) == 0
     finally:
         pool.close()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has only spawn")
+def test_sessions_fork_from_a_preloaded_forkserver(tmp_path):
+    import subprocess
+    from dofile import worker as wmod
+    assert wmod._ctx.get_start_method() == "forkserver"
+    # the forkserver silently skips preload modules that fail to import, so check it imports here
+    p = subprocess.run([sys.executable, "-c", "import sys, dofile._forkserver; "
+                        "assert 'dofile._vendor.opendta.commands' in sys.modules"], capture_output=True, text=True)
+    assert p.returncode == 0, p.stderr
+    wmod.warm_up()
+    first = Worker(tmp_path, timeout=30)
+    try:
+        assert first.run("display 1").rc == 0  # waits for the forkserver if warm_up hasn't finished
+        w = Worker(tmp_path, timeout=30)
+        t = time.perf_counter()
+        assert w.run("display 1").rc == 0
+        assert time.perf_counter() - t < 0.4  # spawn takes ~0.7 s; a preloaded fork ~0.02 s
+        w.close()
+    finally:
+        first.close()
