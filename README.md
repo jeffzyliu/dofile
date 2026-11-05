@@ -79,3 +79,8 @@ uv run pytest tests -k "not stata14"   # quicker: dofile's own tests
 
 A vendored copy of [OpenDTA](https://github.com/yaskepalhares/opendta) (MIT), pinned in
 `src/dofile/_vendor/opendta/VENDORED`. Not affiliated with StataCorp; Stata is a registered trademark of StataCorp LLC.
+
+## License
+
+MIT ([LICENSE](LICENSE)). Contributions follow the clean-room and license rules in
+[LICENSE-POLICY.md](LICENSE-POLICY.md): no StataCorp files or text, no GPL code.

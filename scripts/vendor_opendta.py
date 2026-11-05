@@ -69,6 +69,7 @@ def main(commit: str = COMMIT) -> None:
         shutil.copytree(src / "src" / "opendta", target, ignore=IGNORE)
         shutil.copy(src / "LICENSE", target / "LICENSE")
         shutil.copy(src / "packaging" / "THIRD_PARTY_NOTICES.md", target / "THIRD_PARTY_NOTICES.md")
+        shutil.copy(src / "docs" / "clean-room-policy.md", target / "CLEAN_ROOM_POLICY.md")
         shutil.copytree(src / "tests", TESTS / "tests", ignore=IGNORE)
         (TESTS / "tools").mkdir()
         shutil.copy(src / "tools" / "compare.py", TESTS / "tools" / "compare.py")
