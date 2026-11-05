@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     if not dofile.is_file():
         ap.error(f"no such file: {a.dofile}")
     workdir = a.workdir.resolve()
-    json_out = a.json.resolve() if a.json else None  # resolved before the sandbox confines the process
+    json_out = open(a.json, "w") if a.json else None  # opened before the sandbox, which blocks writes outside workdir
     if not a.unsafe:
         from . import sandbox
         # the do-file's own folder stays readable, so `do other.do` next to it works
@@ -38,8 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     r = Engine().run(f'do "{dofile}"')
     sys.stdout.write(r.log)
     if json_out:
-        json_out.write_text(json.dumps({"rc": r.rc, "error": r.error, "error_command": r.error_command,
-                                          "results": r.results, "versions": about()}, indent=2) + "\n")
+        with json_out:
+            json_out.write(json.dumps({"rc": r.rc, "error": r.error, "error_command": r.error_command,
+                                       "results": r.results, "versions": about()}, indent=2) + "\n")
     return 1 if r.rc else 0
 
 

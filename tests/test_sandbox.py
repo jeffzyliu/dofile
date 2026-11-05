@@ -24,8 +24,8 @@ print(json.dumps(out))
 """
 
 
-def sandboxed(work: Path, *scripts: str, read_dirs: tuple[str, ...] = ()) -> list[dict]:
-    p = subprocess.run([sys.executable, "-I", "-c", RUNNER, str(work), json.dumps(read_dirs), json.dumps(scripts)],
+def sandboxed(work: Path, *scripts: str, read_dirs: tuple[str, ...] = (), prelude: str = "") -> list[dict]:
+    p = subprocess.run([sys.executable, "-I", "-c", prelude + RUNNER, str(work), json.dumps(read_dirs), json.dumps(scripts)],
                        capture_output=True, text=True, timeout=600)
     assert p.returncode == 0, p.stderr[-3000:]
     return json.loads(p.stdout.splitlines()[-1])
@@ -86,6 +86,16 @@ def test_reads_outside_allowed_dirs_are_blocked(work, tmp_path):
     (r,) = sandboxed(work, f'import delimited using "{secret}", clear\nlist')
     assert r["rc"] != 0
     assert "TOP-SECRET-VALUE" not in r["log"]
+
+
+def test_folders_on_sys_path_are_not_readable(work, tmp_path):
+    # `python -m` puts the launch folder first on sys.path (PYTHONPATH adds more); that must not open it up
+    launch = tmp_path / "launch"
+    launch.mkdir()
+    (launch / "secret.csv").write_text("token\nTOP-SECRET-VALUE\n")
+    (r,) = sandboxed(work, f'import delimited using "{launch / "secret.csv"}", clear\nlist',
+                     prelude=f"import sys; sys.path.insert(0, {str(launch)!r})\n")
+    assert r["rc"] == 603 and "TOP-SECRET-VALUE" not in r["log"]
 
 
 def test_read_dirs_are_readable_and_workdir_is_writable(work, tmp_path):

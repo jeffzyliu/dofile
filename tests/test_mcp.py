@@ -377,6 +377,20 @@ def test_log_is_cut_per_command_and_counts_data(stdio_sessions):
     call(build_server(stdio_sessions), steps)
 
 
+def test_only_the_newest_full_logs_are_kept(stdio_sessions, tmp_path, monkeypatch):
+    import dofile.mcp_server as srv
+    monkeypatch.setattr(srv, "KEEP_LOGS", 2)
+
+    async def steps(c):
+        names = []
+        for _ in range(3):
+            names.append((await tool(c, "run_do", code="use panel, clear\ntab id")).structured_content["log_file"])
+            await asyncio.sleep(0.05)  # coarse file timestamps (some Linux file systems) must not tie
+        kept = sorted(f.name for f in (tmp_path / ".dofile").glob("dofile-log-*.txt"))
+        assert kept == sorted(names[1:])
+    call(build_server(stdio_sessions), steps)
+
+
 def test_describe_data_filters_and_pages(stdio_sessions):
     async def steps(c):
         await tool(c, "run_do", code="clear\nset obs 3\nforvalues i = 1/250 {\n    gen v`i' = `i'\n}\ngen age = 1")

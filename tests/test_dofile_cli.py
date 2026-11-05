@@ -41,3 +41,12 @@ def test_nested_do_next_to_the_file_works(tmp_path):
     (pkg / "step.do").write_text('display "inside step"\n')
     p = dofile("run", pkg / "main.do", cwd=tmp_path)
     assert p.returncode == 0 and "inside step" in p.stdout and "after" in p.stdout
+
+
+def test_json_outside_the_workdir_is_written(tmp_path):
+    work, out = tmp_path / "work", tmp_path / "out"
+    work.mkdir(), out.mkdir()
+    (work / "t.do").write_text("display 1\n")
+    p = dofile("run", "t.do", "--json", out / "o.json", cwd=work)
+    assert p.returncode == 0, p.stderr[-2000:]
+    assert json.loads((out / "o.json").read_text())["rc"] == 0

@@ -33,6 +33,7 @@ from .engine import about
 from .worker import Worker, WorkerPool
 
 LOG_LIMIT = 8_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
+KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
 CMD_HEAD, CMD_TAIL = 40, 15  # lines kept from the start and end of each command's output
 MATRIX_CELLS = 2_500  # matrices in run_do results above this (e.g. V with >50 terms) are sent without data
 GET_MATRIX_CELLS = 250_000  # get_matrix answers up to this; larger needs rows/cols
@@ -377,6 +378,9 @@ def build_server(sessions: Sessions) -> MCPServer:
             scratch = Path(w.workdir) / ".dofile"  # hidden, so long runs don't litter the user's folder
             scratch.mkdir(exist_ok=True)
             (scratch / name).write_text(r.log, encoding="utf-8")
+            logs = sorted(scratch.glob("dofile-log-*.txt"), key=lambda f: f.stat().st_mtime_ns)
+            for f in logs[:-KEEP_LOGS]:  # over stdio this is the user's folder: don't let logs pile up
+                f.unlink(missing_ok=True)
             out["log"], out["log_file"] = cut, name
         images = [ImageContent(type="image", data=base64.b64encode(png).decode(), mime_type="image/png")
                   for png in r.images]

@@ -16,6 +16,7 @@ from __future__ import annotations
 import dataclasses
 import errno
 import os
+import site
 import sys
 import tempfile
 
@@ -82,7 +83,9 @@ def install(workdir: str | os.PathLike, read_dirs: tuple[str, ...] = ()) -> None
     mimetypes.init()  # reads system files like /etc/mime.types once; openpyxl (putexcel, export excel) needs it
 
     py_roots = {os.path.realpath(p) for p in (sys.prefix, sys.base_prefix, sys.exec_prefix)}
-    py_roots |= {os.path.realpath(p) for p in sys.path if p and os.path.isdir(p)}
+    # code folders only, not all of sys.path: `python -m` puts the launch folder there, and PYTHONPATH can add any
+    code_dirs = (*site.getsitepackages(), site.getusersitepackages(), os.path.dirname(os.path.dirname(__file__)))
+    py_roots |= {os.path.realpath(p) for p in code_dirs if os.path.isdir(p)}
     writable = (work,)
     readable = (work, *sorted({os.path.realpath(d) for d in read_dirs} | py_roots), "/dev/null")
 
