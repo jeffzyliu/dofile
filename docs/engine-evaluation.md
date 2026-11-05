@@ -3,6 +3,11 @@
 Date: 2026-11-03. Question: should the refreshed OpenStata build its own Stata interpreter, or use one of the two
 MIT-licensed, license-free .do interpreters that appeared in October 2026?
 
+> **Later changes (2026-11-04):** this report is kept as written. Since then the corpus and probes moved to
+> `tests/conformance/`, and the MCP tools planned below changed: see [MCP-SCHEMA.md](../MCP-SCHEMA.md). OpenDTA
+> issues found here are tracked in [opendta-issues.md](opendta-issues.md); the research behind the project is
+> in [stata-research.md](stata-research.md).
+
 **Recommendation: use OpenDTA as the engine, behind a thin adapter of our own, pinned to a commit. Keep OpenStat as
 the fallback.** This project then becomes the MCP server and the web teaching IDE. Neither engine has those.
 

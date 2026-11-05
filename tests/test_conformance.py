@@ -1,7 +1,8 @@
 """dofile's own conformance corpus (from docs/engine-evaluation.md), run through Engine.
 
 Each corpus .do prints `CHECK name=value`; values must match ref.json (independent statsmodels /
-linearmodels results) to 1e-6 relative. Known OpenDTA gaps are strict xfails, so a fix shows up.
+linearmodels results) to 1e-6 relative. Known OpenDTA gaps are strict xfails, so a fix shows up; their IDs
+(ODT-n, GAP-n) are in docs/opendta-issues.md.
 """
 import json
 import re
@@ -17,9 +18,9 @@ HERE = Path(__file__).parent / "conformance"
 REF = json.loads((HERE / "data" / "ref.json").read_text())
 CHECK = re.compile(r"^CHECK (\w+)=\s*(\S+)", re.M)
 KNOWN_GAPS = {
-    "fv_b_int": "OpenDTA: display _b[c.yrsed#2.sex] does not parse",
-    "hdfe_b_x1": "reghdfe is a community command, not in OpenDTA",
-    "capture_rc": "OpenDTA: confirm variable returns rc 198, not 111",
+    "fv_b_int": "OpenDTA ODT-3: display _b[c.yrsed#2.sex] does not parse",
+    "hdfe_b_x1": "GAP-1: reghdfe is a community command, not in OpenDTA",
+    "capture_rc": "OpenDTA ODT-4: confirm variable returns rc 198, not 111",
 }
 CASES = [(f.name, k) for f in sorted((HERE / "corpus").glob("*.do"))
          for k in re.findall(r'"CHECK (\w+)=', f.read_text())]
@@ -51,9 +52,9 @@ def test_check_matches_reference(dofile, key, workdir, monkeypatch, request):
 
 
 PROBE_GAPS = {
-    "p04_xtlogit.do": "OpenDTA: xtlogit, re raises OverflowError (math range error) on this data",
-    "p06_esttab.do": "esttab (community command)",
-    "p07_outreg2.do": "outreg2 (community command)",
+    "p04_xtlogit.do": "OpenDTA ODT-2: xtlogit, re raises OverflowError (math range error) on this data",
+    "p06_esttab.do": "GAP-1: esttab (community command)",
+    "p07_outreg2.do": "GAP-1: outreg2 (community command)",
 }
 PROBES = sorted(p.name for p in (HERE / "probe").glob("*.do"))
 
