@@ -30,6 +30,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/dofile"]
 
+[tool.hatch.build.targets.sdist]
+# Stata 14 output stays in the git repo, never in a distribution (LICENSE-POLICY.md)
+exclude = ["tests_opendta/compat/expected"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests", "tests_opendta/tests"]
 markers = ["slow: the Stata 14 log comparison (~3 min); opt in with -m slow, or -m \"\" for everything"]

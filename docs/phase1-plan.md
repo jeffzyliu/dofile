@@ -173,7 +173,8 @@ readable. `--json` writes rc, error, the failing command, e()/r() and `versions`
 After step 6 (all on `main`): one-time upload URLs and typed output schemas (`0f2cedc`); `LICENSE-POLICY.md`
 and the vendored clean-room policy (`27d08a9`); grouped results, inline graphs, `get_matrix`,
 `request_download`, r(table) and Break-style timeouts (`275bf96`); review fixes for the sandbox read scope,
-`--json` paths and log pileup (`37be4d0`). The forkserver is in progress.
+`--json` paths and log pileup (`37be4d0`); forkserver session start (`0744700`); real error messages from
+`dofile run` (`b6e6d80`).
 
 ## Verification (end of Phase 1)
 - [x] `uv run pytest` is green; conformance shows 60/63 with 3 strict xfails (plus 3 probe xfails).
@@ -185,15 +186,24 @@ and the vendored clean-room policy (`27d08a9`); grouped results, inline graphs, 
 - [x] Over HTTP: two clients get separate sessions, and a killed worker doesn't affect others
   (`tests/test_mcp.py`, `tests/test_worker.py`).
 - [ ] CI green on Linux.
-- [ ] A built wheel installs into a clean venv, and `dofile run` and `dofile-mcp` work from it.
+- [x] A built wheel installs into a clean venv, and `dofile run` and `dofile-mcp` work from it (2026-11-04,
+  Python 3.12 and 3.14, macOS; see below).
 
 ## Is Phase 1 finished?
-The build is done; the exit checks aren't. Left:
-1. **Forkserver** (in progress in a separate session).
+The build is done; one exit check is left (2):
+1. ~~Forkserver~~ committed (`0744700`).
 2. **CI on Linux once**: push to GitHub, or run the workflow locally in Docker. The sandbox, SIGINT and the
    forkserver have only run on macOS.
-3. **Wheel install test**: `uv build`, install into a clean venv, run `dofile run` and `dofile-mcp` on a sample
-   do-file. This checks that `VENDORED`, the help files and the datasets ship in the wheel.
+3. ~~Wheel install test~~ done 2026-11-04: `uv build` (the wheel is built from the source archive), then
+   `dofile[mcp]` installed from the wheel into fresh Python 3.12 and 3.14 venvs (183 MB, no Qt, no pandas) and
+   run from a folder outside the repo. The wheel has 458 files: the vendored engine, `VENDORED`, all license
+   files, 173 help files, the bundled datasets, no tests. `dofile run` matched `ref.json` on the regression
+   corpus; `sysuse`, `help` and the sandbox worked. `dofile-mcp` over stdio and HTTP (upload, run, download)
+   gave the same robust coefficient and SE as statsmodels. The first server start after installing takes 3–4 s
+   once (bytecode compilation, about 1.2 s of it); later starts give a first `run_do` in 0.07 s.
+   The source archive used to include the Stata 14 reference logs (`tests_opendta/compat/expected`), against
+   `LICENSE-POLICY.md`; they are now excluded from it (`pyproject.toml`), and `test_stata_compat` skips
+   without them. The comparison runs from a git checkout.
 
 After these, Phase 1 is complete. Windows stays "not supported yet".
 

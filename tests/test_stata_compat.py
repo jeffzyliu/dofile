@@ -12,8 +12,10 @@ import pytest
 pytestmark = pytest.mark.slow  # ~3 min; skipped by default, run with `pytest -m slow` or `pytest -m ""`
 
 COMPARE = Path(__file__).resolve().parents[1] / "tests_opendta" / "tools" / "compare.py"
+EXPECTED = COMPARE.parents[1] / "compat" / "expected"
 
 
+@pytest.mark.skipif(not EXPECTED.is_dir(), reason="Stata reference logs are only in the git repo, not the sdist")
 def test_matches_stata14_reference_logs():
     r = subprocess.run([sys.executable, str(COMPARE), "--brief"], capture_output=True, text=True, timeout=900)
     assert r.returncode == 0, r.stdout[-4000:] + r.stderr[-2000:]
