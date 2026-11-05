@@ -27,11 +27,23 @@ claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-m
 ```
 
 Tools: `run_do` (run Stata code; returns log, rc, error, e()/r() as JSON and new files), `describe_data`,
-`get_file` (returns exported graphs as images), `upload_file`, `reset`. Resource `dofile://commands` lists the
+`get_file` (returns exported graphs as images), `upload_file`, `request_upload` (HTTP), `reset`. Resource `dofile://commands` lists the
 supported commands. Data stays in memory between `run_do` calls.
 
 HTTP: `dofile-mcp --http --port 8000` (localhost only by default). Call `start_session` first and pass its
 token as `session`; each session gets its own temporary folder, deleted when the session ends.
+
+**Large files** never need to pass through the model's context:
+
+- stdio: start with `--read-dir /path/to/data`. The folders are listed in the server's instructions, and code
+  reads files in place by absolute path (`use "/path/to/data/file.dta"`). They are read-only; output goes to
+  the working folder.
+- HTTP: the agent calls `request_upload(name, session)` and gets a one-time URL (valid 10 minutes), then sends
+  the file itself, e.g. `curl --fail -T file.dta <url>`. Behind a proxy or in a container, set `--public-url`
+  to the address clients reach the server at. (`--read-dir` here means folders on the server.)
+
+`--file-limit` sets the largest upload in MB (default 1024). Small files the agent writes itself (CSV, .do)
+go inline with `upload_file(name, text=...)`.
 
 **Sandbox (on by default; `--unsafe` turns it off):** `shell`/`!`, `erase`/`rm`, `rmdir`, `mkdir`, `cd`, `copy`
 and `webuse` are disabled. Files can only be written in the working folder, and read from it, from `--read-dir`
@@ -40,6 +52,17 @@ default 60 s); a timeout or crash resets that session (rc 9998). The sandbox is 
 boundary: run public HTTP deployments in a container.
 
 ## Development
+
+Check the local MCP server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) (needs Node):
+
+```bash
+npx @modelcontextprotocol/inspector uv run --extra mcp dofile-mcp        # web UI: list tools, call run_do
+npx @modelcontextprotocol/inspector --cli uv run --extra mcp dofile-mcp --method tools/call \
+  --tool-name run_do --tool-arg 'code=display 2+2'                       # scripted check
+```
+
+For HTTP mode, start `uv run --extra mcp dofile-mcp --http` and connect the Inspector to `http://127.0.0.1:8000/mcp`
+(call `start_session` first).
 
 ```bash
 uv sync --extra mcp

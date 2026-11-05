@@ -32,8 +32,10 @@ packages = ["src/dofile"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "tests_opendta/tests"]
-# these OpenDTA tests import the Qt GUI inside the test body; the GUI is not vendored
+markers = ["slow: the Stata 14 log comparison (~3 min); opt in with -m slow, or -m \"\" for everything"]
 addopts = [
+  "-m", "not slow",
+  # these OpenDTA tests import the Qt GUI inside the test body; the GUI is not vendored
   "--deselect=tests_opendta/tests/test_i18n.py::test_dialog_commands",
   "--deselect=tests_opendta/tests/test_i18n.py::test_dialog_commands_run",
   "--deselect=tests_opendta/tests/test_i18n.py::test_graph_editor_edits",

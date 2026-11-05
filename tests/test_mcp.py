@@ -1,4 +1,5 @@
 import asyncio
+import json
 import shutil
 import socket
 import subprocess
@@ -11,7 +12,7 @@ import pytest
 mcp = pytest.importorskip("mcp")
 from mcp import Client, StdioServerParameters  # noqa: E402
 
-from dofile.mcp_server import LOG_LIMIT, Sessions, build_server  # noqa: E402
+from dofile.mcp_server import LOG_LIMIT, Sessions, _instructions, build_server  # noqa: E402
 
 PANEL = Path(__file__).parent / "conformance" / "data" / "panel.dta"
 
@@ -68,6 +69,9 @@ def test_stdio_mode_tools(stdio_sessions, tmp_path):
         await tool(c, "reset")
         assert (await tool(c, "run_do", code="count")).structured_content["results"]["r"]["N"] == 0
 
+        out = {t.name: t.output_schema for t in (await c.list_tools()).tools}
+        assert out["run_do"]["title"] == "RunResult" and out["describe_data"]["title"] == "DataSummary"
+
         cmds = (await c.read_resource("dofile://commands")).contents[0].text.split("\n")
         assert "regress" in cmds and "shell" not in cmds
     call(build_server(stdio_sessions), steps)
@@ -111,16 +115,21 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def test_real_http_transport():
+def _start_http(*args):
     port = _free_port()
-    proc = subprocess.Popen([sys.executable, "-m", "dofile.mcp_server", "--http", "--port", str(port)],
+    proc = subprocess.Popen([sys.executable, "-m", "dofile.mcp_server", "--http", "--port", str(port), *args],
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    for _ in range(100):  # wait for the server to listen
+        with socket.socket() as s:
+            if s.connect_ex(("127.0.0.1", port)) == 0:
+                break
+        time.sleep(0.1)
+    return proc, port
+
+
+def test_real_http_transport():
+    proc, port = _start_http()
     try:
-        for _ in range(100):  # wait for the server to listen
-            with socket.socket() as s:
-                if s.connect_ex(("127.0.0.1", port)) == 0:
-                    break
-            time.sleep(0.1)
 
         async def steps(c):
             token = (await tool(c, "start_session")).structured_content["session"]
@@ -142,6 +151,92 @@ def test_http_expired_session_is_reported_not_silently_replaced():
         r = await tool(c, "run_do", code="count", session=a)
         assert r.is_error and "expired" in r.content[0].text
         assert len(s.pool) == 0
+    try:
+        call(build_server(s), steps)
+    finally:
+        s.close()
+
+
+def test_read_dirs_are_listed_and_read_in_place(tmp_path):
+    work, data = tmp_path / "work", tmp_path / "data"
+    work.mkdir()
+    data.mkdir()
+    shutil.copy(PANEL, data / "big.dta")
+    s = Sessions(http=False, workdir=work, read_dirs=(str(data),), sandbox=True, timeout=30)
+    assert str(data) in _instructions(s) and "request_upload" not in _instructions(s)
+
+    async def steps(c):
+        r = (await tool(c, "run_do", code=f'use "{data}/big.dta", clear\ncount')).structured_content
+        assert r["results"]["r"]["N"] == 1000
+        r = (await tool(c, "run_do", code=f'save "{data}/big.dta", replace')).structured_content
+        assert r["rc"] == 603  # the original stays read-only
+        assert (await tool(c, "upload_file", name="a.csv", path=str(data / "big.dta"))).is_error  # no copy by path
+    try:
+        call(build_server(s), steps)
+    finally:
+        s.close()
+    assert (data / "big.dta").read_bytes() == PANEL.read_bytes()
+
+
+def test_upload_tokens_are_single_use_and_expire():
+    s = Sessions(http=True, workdir=Path("."), read_dirs=(), sandbox=True, timeout=30)
+    t = s.new_upload("sess", "a.dta")
+    assert s.take_upload(t) == ("sess", "a.dta") and s.take_upload(t) is None
+    t = s.new_upload("sess", "a.dta")
+    s._uploads[t] = ("sess", "a.dta", time.monotonic() - 1)
+    assert s.take_upload(t) is None
+    s.close()
+
+
+def _put(url: str, chunks) -> tuple[int, bytes]:
+    """PUT with a chunked body, as curl -T sends a large file."""
+    import http.client
+    from urllib.parse import urlsplit
+    u = urlsplit(url)
+    conn = http.client.HTTPConnection(u.hostname, u.port, timeout=30)
+    try:
+        conn.request("PUT", u.path, body=chunks, encode_chunked=True)
+        r = conn.getresponse()
+        return r.status, r.read()
+    finally:
+        conn.close()
+
+
+def test_real_http_upload_url():
+    proc, port = _start_http("--file-limit", "1")  # 1 MB
+    try:
+        async def steps(c):
+            token = (await tool(c, "start_session")).structured_content["session"]
+            up = (await tool(c, "request_upload", name="p.dta", session=token)).structured_content
+            assert up["url"].startswith(f"http://127.0.0.1:{port}/upload/") and up["max_bytes"] == 2**20
+
+            data = PANEL.read_bytes()
+            status, body = await asyncio.to_thread(_put, up["url"], (data[i:i + 4096] for i in range(0, len(data), 4096)))
+            assert status == 200 and json.loads(body)["bytes"] == len(data)
+            assert (await asyncio.to_thread(_put, up["url"], iter([b"x"])))[0] == 404  # single use
+
+            big = (await tool(c, "request_upload", name="big.csv", session=token)).structured_content
+            assert (await asyncio.to_thread(_put, big["url"], iter([b"1\n" * 2**19] * 3)))[0] == 413
+
+            r = (await tool(c, "run_do", code="use p, clear\ncount", session=token)).structured_content
+            assert r["results"]["r"]["N"] == 1000
+            r = (await tool(c, "run_do", code='capture confirm file big.csv\ndisplay "rc=" _rc',
+                            session=token)).structured_content
+            assert "rc=601" in r["log"]  # the oversized upload left no file behind
+            assert (await tool(c, "request_upload", name="../x", session=token)).is_error
+        call(f"http://127.0.0.1:{port}/mcp", steps)
+    finally:
+        proc.terminate()
+        proc.wait(10)
+
+
+def test_session_reset_result_matches_output_schema(tmp_path):
+    s = Sessions(http=False, workdir=tmp_path, read_dirs=(), sandbox=True, timeout=1)
+
+    async def steps(c):
+        r = await tool(c, "run_do", code="sleep 5000")
+        assert not r.is_error
+        assert r.structured_content["rc"] == 9998 and r.structured_content["results"] == {"e": {}, "r": {}}
     try:
         call(build_server(s), steps)
     finally:

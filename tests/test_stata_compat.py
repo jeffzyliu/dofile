@@ -7,6 +7,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.slow  # ~3 min; skipped by default, run with `pytest -m slow` or `pytest -m ""`
+
 COMPARE = Path(__file__).resolve().parents[1] / "tests_opendta" / "tools" / "compare.py"
 
 

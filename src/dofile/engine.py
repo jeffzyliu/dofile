@@ -24,7 +24,7 @@ class Result:
     log: str
     rc: int
     error: str | None = None
-    results: dict[str, Any] = field(default_factory=dict)
+    results: dict[str, Any] = field(default_factory=lambda: {"e": {}, "r": {}})
 
 
 def to_json(v: Any) -> Any:
