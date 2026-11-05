@@ -18,7 +18,7 @@ jobs:
       # poe runs tasks through a nested `uv run`, which would otherwise pick .python-version (3.14)
       UV_PYTHON: ${{ matrix.python }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
       - run: uv sync --extra mcp
       - run: uv run poe ci   # everything, including the slow Stata comparison
