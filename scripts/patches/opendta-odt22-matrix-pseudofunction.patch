@@ -1,0 +1,15 @@
+diff --git a/src/dofile/_vendor/opendta/lang/expr.py b/src/dofile/_vendor/opendta/lang/expr.py
+index fc67358..2e3c77c 100644
+--- a/src/dofile/_vendor/opendta/lang/expr.py
++++ b/src/dofile/_vendor/opendta/lang/expr.py
+@@ -288,6 +288,10 @@ class Parser:
+                         continue
+                     break
+             self.expect_op(")")
++            if name == "matrix" and len(args) == 1 and isinstance(args[0], Name):
++                # dofile patch (ODT-22): matrix(xx) is xx. It does not force the matrix reading when a variable
++                # has the same name (VERIFY)
++                return args[0]
+             return Call(name, args)
+         if nxt.kind == "op" and nxt.value == "[":
+             self.advance()

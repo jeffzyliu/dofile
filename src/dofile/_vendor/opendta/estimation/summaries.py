@@ -273,8 +273,22 @@ class SRS:
 # the command
 # ---------------------------------------------------------------------------
 
+def _replay_summary(s: "Session", stat: str, args: str) -> None:
+    """dofile patch (ODT-13): `mean`, `mean, level(90)`, `mean, noheader` redisplay the last mean/proportion/ratio/total."""
+    from .postest import current
+    est = current(s)
+    replay = getattr(est, "replay_summary", None)
+    if est.cmd != stat or replay is None:
+        raise StataError(301, "last estimates not found")
+    o = match_options(args.lstrip(", "), {"level": 1, "noheader": 6}) if args.strip(" ,") else {}
+    replay(s, float(o["level"]) if o.get("level") else None, bool(o.get("noheader")))
+
+
 def summary_stat(s: "Session", stat: str, args: str,
                  engine: Callable[["Session", Request], Engine] = SRS) -> None:
+    if not args.strip() or args.strip().startswith(","):   # dofile patch (ODT-13): replay
+        _replay_summary(s, stat, args)
+        return
     req = parse_request(s, stat, args)
     eng = engine(s, req)
     groups = _over_groups(s, req.over, eng.rows)
@@ -285,15 +299,18 @@ def summary_stat(s: "Session", stat: str, args: str,
     se = np.sqrt(np.maximum(np.diag(V), 0)) if V.size else np.zeros(0)
     if np.isnan(V).any():
         se = np.full(len(vals), np.nan)
-    out = s.output
-    if not req.o.get("noheader"):
-        eng.header(s, req, df)
+    def header(ss):
+        out = ss.output
+        eng.header(ss, req, df)
         if req.over:
             out.write("\n" + "".join(ln + "\n" for ln in fit.legend), "text")
         if stat == "ratio":
             out.write("\n" + "".join(f"{rn[:13]:>13}: {a}/{b}\n" for rn, a, b in zip(req.names, req.num, req.den)),
                       "text")
         out.write("\n", "text")
+
+    if not req.o.get("noheader"):
+        header(s)
 
     def table(ss, *_a, r_table=True, **_kw):
         summary_table(ss, req.info.column, fit.labels, vals, se, df, req.level, vcetype, req.over)
@@ -304,6 +321,14 @@ def summary_stat(s: "Session", stat: str, args: str,
     est.rows = []
     est.level = req.level
     est.display = table
+
+    def replay(ss, level=None, noheader=False):   # dofile patch (ODT-13)
+        lv = req.level if level is None else level
+        if not noheader:
+            header(ss)
+        summary_table(ss, req.info.column, fit.labels, vals, se, df, lv, vcetype, req.over)
+        _post_r_table(ss, fit.colnames, vals, se, df, lv, req.info.column, vcetype)
+    est.replay_summary = replay
     eng.post(s, est, req, fit, df)
     _post_r_table(s, fit.colnames, vals, se, df, req.level, req.info.column, vcetype)  # dofile patch
 

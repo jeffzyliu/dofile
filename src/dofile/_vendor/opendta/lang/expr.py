@@ -52,6 +52,20 @@ _OPS = ("==", "!=", "~=", ">=", "<=", "+", "-", "*", "/", "^", "!", "~",
         ">", "<", "&", "|", "(", ")", "[", "]", ",", "=")
 
 
+def _in_raw_subscript(toks: list[Tok]) -> bool:
+    """Whether the tokens end inside the brackets of _b[...], _se[...] or _coef[...]."""
+    depth = 0
+    for k in range(len(toks) - 1, 0, -1):
+        t = toks[k]
+        if t.kind == "op" and t.value == "]":
+            depth += 1
+        elif t.kind == "op" and t.value == "[":
+            if depth == 0:
+                return toks[k - 1].kind == "name" and toks[k - 1].value in _RAW_SUBSCRIPTS
+            depth -= 1
+    return False
+
+
 def tokenize(text: str, *, stop_on_unknown: bool = False) -> list[Tok]:
     """With stop_on_unknown=True, an unknown character ends the list of
     tokens (used by display and by `if exp command`)."""
@@ -107,6 +121,10 @@ def tokenize(text: str, *, stop_on_unknown: bool = False) -> list[Tok]:
                 i += len(op)
                 break
         else:
+            if c in "#." and _in_raw_subscript(toks):   # dofile patch (ODT-3): _b[c.yrsed#2.sex]
+                toks.append(Tok("op", c, i))
+                i += 1
+                continue
             if stop_on_unknown:
                 toks.append(Tok("end", None, i))
                 return toks
@@ -288,6 +306,10 @@ class Parser:
                         continue
                     break
             self.expect_op(")")
+            if name == "matrix" and len(args) == 1 and isinstance(args[0], Name):
+                # dofile patch (ODT-22): matrix(xx) is xx. It does not force the matrix reading when a variable
+                # has the same name (VERIFY)
+                return args[0]
             return Call(name, args)
         if nxt.kind == "op" and nxt.value == "[":
             self.advance()

@@ -319,6 +319,108 @@ def test_tempfile_name_outliving_its_file_gets_a_hint(eng):
     assert "one run_do call" not in eng.run("use nosuchfile, clear").error  # an ordinary missing file: no hint
 
 
+def test_odt3_interaction_names_in_b(eng):
+    """ODT-3: _b[] and _se[] take interaction names, in either term order; plain names and errors are as before."""
+    eng.run("clear\nset obs 200\nset seed 1\ngen x = rnormal()\ngen g = 1 + mod(_n, 2)\n"
+            "gen y = x + g * x + rnormal()\nquietly regress y c.x##i.g")
+    one, other = eng.run("display %12.8f _b[c.x#2.g]"), eng.run("display %12.8f _b[2.g#c.x]")
+    assert one.rc == other.rc == 0 and one.log.split("\n")[-3:] == other.log.split("\n")[-3:]
+    assert abs(float(one.log.split()[-1])) > 0.1
+    assert eng.run("display _se[c.x#2.g]").rc == 0 and eng.run("display _b[2.g]").rc == 0
+    assert eng.run("display _b[nosuch#2.g]").rc == 111
+    assert eng.run("display 1 # 2").rc == 198      # a # outside _b[...] is still a syntax error
+
+
+def test_odt4_confirm_variable(eng):
+    """ODT-4: confirm [new|numeric|string|<type>] variable gives Stata's return codes."""
+    eng.run("clear\nset obs 3\ngen double x = _n\ngen str3 s = \"ab\"\ngen byte b = 1")
+    rc = lambda code: eng.run(code).rc
+    assert [rc(c) for c in ("confirm variable x", "confirm variable x s", "confirm numeric variable x",
+                            "confirm string variable s", "confirm str# variable s", "confirm double variable x",
+                            "confirm byte variable b", "confirm new variable fresh",
+                            "confirm variable x, exact")] == [0] * 9
+    assert rc("confirm variable nosuch") == 111 and rc("confirm variable x nosuch") == 111
+    assert rc("confirm new variable x") == 110 and rc("confirm new variable 1bad") == 198
+    assert rc("confirm numeric variable s") == 7 and rc("confirm string variable x") == 7
+    assert rc("confirm byte variable x") == 7
+    assert eng.run("capture confirm variable nosuch\ndisplay _rc").log.split()[-1] == "111"
+    eng.run("clear")
+    assert rc("confirm variable x") == 111
+
+
+def test_odt15_predict_after_a_command_without_predict(eng):
+    """ODT-15: predict after mean is Stata's rc 321, not an engine crash (rc 9999)."""
+    eng.run("clear\nset obs 30\nset seed 1\ngen x = rnormal()\ngen y = x + rnormal()\nquietly mean y")
+    r = eng.run("predict yh")
+    assert r.rc == 321 and "not valid after most recent estimation command" in r.error
+    assert eng.run("quietly regress y x\npredict yh").rc == 0
+
+
+def test_odt18_ttest_options_of_the_paired_and_one_sample_forms(eng):
+    """ODT-18: unequal/welch/unpaired belong to the two-sample forms; elsewhere only level() is allowed (rc 198)."""
+    eng.run("clear\nset obs 30\nset seed 1\ngen y = rnormal()\ngen z = rnormal()\ngen g = mod(_n, 2)")
+    for code in ("ttest y == z, unequal", "ttest y == z, welch", "ttest y == 0, unequal", "ttest y == 0, unpaired"):
+        r = eng.run(code)
+        assert r.rc == 198 and "not allowed" in r.error, code
+    for code in ("ttest y == z", "ttest y == z, level(90)", "ttest y == z, unpaired unequal", "ttest y == 0, level(90)",
+                 "ttest y, by(g) unequal", "ttest y, by(g) welch"):
+        assert eng.run(code).rc == 0, code
+
+
+def test_odt22_matrix_pseudofunction(eng):
+    """ODT-22: matrix(name) is the matrix name in an expression."""
+    eng.run("matrix xx = (1, 2 \\ 3, 4)")
+    assert eng.run("display trace(matrix(xx))").log.split()[-1] == "5"
+    assert eng.run("display el(matrix(xx), 2, 1)").log.split()[-1] == "3"
+    assert eng.run("display trace(xx)").log.split()[-1] == "5"
+
+
+def test_odt13_summary_commands_replay(eng):
+    """ODT-13: `mean`, `mean, level(90)` and `mean, noheader` redisplay the last mean (also proportion, ratio, total)."""
+    body = lambda text: [ln for ln in text.splitlines() if ln.strip() and not ln.startswith(". ")]
+    eng.run("clear\nset obs 60\nset seed 3\ngen x = rnormal()\ngen y = x + rnormal()\ngen g = 1 + mod(_n, 3)")
+    first = body(eng.run("mean x y").log)
+    assert body(eng.run("mean").log) == first                       # header and table, as typed the first time
+    r90 = body(eng.run("mean, level(90)").log)
+    assert any("[90% Conf. Interval]" in ln for ln in r90) and r90 != first
+    assert eng.run("mean, level(90)").results["r"]["scalars"].get("level", 90) == 90
+    noheader = body(eng.run("mean, noheader").log)
+    assert not any("Mean estimation" in ln for ln in noheader) and any("Std. Err." in ln for ln in noheader)
+    eng.run("proportion g")
+    assert eng.run("proportion").rc == 0 and body(eng.run("proportion").log)[0].startswith("Proportion estimation")
+    r = eng.run("mean")                                              # the last estimation is not a mean any more
+    assert r.rc == 301 and "last estimates not found" in r.error
+    eng.run("regress y x")
+    assert eng.run("mean").rc == 301
+    assert eng.run("mean x").rc == 0                                 # with arguments it estimates as before
+
+
+def test_odt8_backslash_dollar_is_a_literal_dollar(eng):
+    """ODT-8: `\\$` stops macro expansion and leaves a $; $name still expands."""
+    last = lambda code: [ln for ln in eng.run(code).log.splitlines() if ln.strip()][-1]
+    eng.run("global v1 X")
+    assert last('display "a\\$v1 b"') == "a$v1 b"
+    assert last('display "\\$22.15"') == "$22.15"
+    assert last('display "cost \\$5 and $v1"') == "cost $5 and X"
+    assert last('display "$v1"') == "X"
+
+
+def test_odt21_default_axis_ticks_are_nice_numbers(eng):
+    """ODT-21: numeric axes get about five ticks in steps of 1, 2, 5, 10 and no `.0` labels, as Stata does."""
+    import io
+    from dofile._vendor.opendta.graphics import render, store as graph_store
+    eng.run("clear\nset obs 18\ngen educ = _n\ngen w = educ / 3")
+    assert eng.run("twoway line w educ").rc == 0
+    fig = render.figure(graph_store.store(eng.session).get())
+    fig.savefig(io.BytesIO(), format="png")
+    ax = fig.axes[0]
+    lo, hi = ax.get_xlim()
+    ticks = [t for t in ax.get_xticks() if lo <= t <= hi]
+    labels = [lb.get_text() for lb, t in zip(ax.get_xticklabels(), ax.get_xticks()) if lo <= t <= hi]
+    assert ticks == [5, 10, 15] and all("." not in lb for lb in labels)   # not 2.5, 5.0, 7.5, 10.0, ...
+    assert 3 <= len([t for t in ax.get_yticks() if ax.get_ylim()[0] <= t <= ax.get_ylim()[1]]) <= 6
+
+
 def test_safe_eval_allows_only_arithmetic():
     """Expression text from Stata code (arch's archmexp(), bayesstats {param} expressions) is evaluated without
     Python's eval(), whose empty __builtins__ still let ().__class__... reach Python's internals."""

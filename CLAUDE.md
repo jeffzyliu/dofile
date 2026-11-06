@@ -63,7 +63,7 @@ Layers, bottom up (`src/dofile/`):
   Tool outputs are `TypedDict`s, which become the advertised `outputSchema`, and the SDK validates every result
   against them.
 - `cli.py`: `dofile run` runs `do` on the file inside one sandboxed `Engine`, passing the path through a local
-  macro so `$` and backquotes in it aren't expanded (OpenDTA ignores `\$` escapes). The log is not capped.
+  macro so `$` and backquotes in it aren't expanded (a backslash escapes only `$`, since the ODT-8 patch, not backquotes). The log is not capped.
 
 **Changing the result format or a tool** means updating the TypedDicts in `mcp_server.py` and `MCP-SCHEMA.md`
 together. While dofile is 0.x, a breaking change to the result format raises the minor version.

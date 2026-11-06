@@ -1,0 +1,34 @@
+diff --git a/src/dofile/_vendor/opendta/commands/program.py b/src/dofile/_vendor/opendta/commands/program.py
+index c4226b0..c6bdf7e 100644
+--- a/src/dofile/_vendor/opendta/commands/program.py
++++ b/src/dofile/_vendor/opendta/commands/program.py
+@@ -213,4 +213,29 @@ def cmd_confirm(s: "Session", args: str) -> None:
+             if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,31}$", name):
+                 raise StataError(7, f"{name} invalid name")
+         return
++    m = re.match(r"^(?:(new|numeric|string|str#|strL|byte|int|long|float|double)\s+)?var(?:iable|iabl|iab|ia|i)?\s+(.*)$", t)
++    if m:   # dofile patch (ODT-4): confirm [new|numeric|string|str#|<type>] variable varlist [, exact]
++        kind = m.group(1)
++        varlist, _, opts = m.group(2).partition(",")
++        if opts.strip() and opts.strip() not in ("ex", "exa", "exac", "exact"):
++            raise StataError(198, f"option {opts.strip()} not allowed")
++        ds = s.data
++        if kind == "new":                                  # 7 found where varname expected, 110, 198
++            from ..core.dataset import check_name
++            for name in varlist.split():
++                check_name(name)
++                if ds.has(name):
++                    raise StataError(110, f"{name} already defined")
++            return
++        if not ds.names:
++            raise StataError(111, "no variables defined")
++        names = varlist.split() if opts.strip() else s.expand_varlist(varlist)
++        for name in names:
++            if not ds.has(name):
++                raise StataError(111, f"variable {name} not found")
++            v = ds.get(name)
++            ok = {None: True, "numeric": not v.is_string, "string": v.is_string, "str#": v.is_string and v.vtype != "strL"}
++            if not ok.get(kind, v.vtype == kind):
++                raise StataError(7, f"{name} found where {kind} variable expected")   # VERIFY: message text
++        return
+     raise StataError(198, "invalid syntax")

@@ -365,6 +365,14 @@ def _ha_lines(s: "Session", diff_name: str, hyp: str, stat: str, t: float, df: f
     out.write("".join(line_p).rstrip() + "\n", "result")
 
 
+def _level_only(o: dict) -> None:
+    """dofile patch (ODT-18): the paired and one-sample forms of ttest allow level() only; `unequal`, `welch` and
+    `unpaired` belong to the two-sample forms (VERIFY: Stata's message text)."""
+    for name in ("unequal", "welch", "unpaired"):
+        if o.get(name):
+            raise StataError(198, f"option {name} not allowed")
+
+
 @command("ttest", byable=True)
 def cmd_ttest(s: "Session", args: str) -> None:
     p = parse_standard(args)
@@ -394,8 +402,10 @@ def cmd_ttest(s: "Session", args: str) -> None:
                        other.data[mask & S.valid(other.data)], level, bool(o.get("unequal")),
                        bool(o.get("welch")), names=(v.name, other.name))
             return
+        _level_only(o)
         _ttest_paired(s, v, other, mask, level)
         return
+    _level_only(o)
     mu = float(s.eval(rhs))
     x = v.data[mask & S.valid(v.data)]
     m = S.moments(x)

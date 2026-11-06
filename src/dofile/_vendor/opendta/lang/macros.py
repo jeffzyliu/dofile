@@ -83,6 +83,10 @@ def expand(text: str, store: MacroStore, *,
     i = 0
     while i < len(s):
         c = s[i]
+        if c == "\\" and i + 1 < len(s) and s[i + 1] == "$":   # dofile patch (ODT-8): \$ is a literal $
+            s = s[:i] + s[i + 1:]
+            i += 1
+            continue
         if c == "`":
             if i + 1 < len(s) and s[i + 1] == '"':
                 i += 2  # aspas compostas

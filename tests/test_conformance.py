@@ -18,9 +18,7 @@ HERE = Path(__file__).parent / "conformance"
 REF = json.loads((HERE / "data" / "ref.json").read_text())
 CHECK = re.compile(r"^CHECK (\w+)=\s*(\S+)", re.M)
 KNOWN_GAPS = {
-    "fv_b_int": "OpenDTA ODT-3: display _b[c.yrsed#2.sex] does not parse",
     "hdfe_b_x1": "GAP-1: reghdfe is a community command, not in OpenDTA",
-    "capture_rc": "OpenDTA ODT-4: confirm variable returns rc 198, not 111",
 }
 CASES = [(f.name, k) for f in sorted((HERE / "corpus").glob("*.do"))
          for k in re.findall(r'"CHECK (\w+)=', f.read_text())]

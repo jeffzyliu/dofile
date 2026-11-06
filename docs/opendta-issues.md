@@ -6,7 +6,9 @@ upstream yet.** Each needs a hand check against real Stata by someone who knows 
 The "Expected in Stata" line in each entry's details is our reading of the Stata manual or of OpenDTA's Stata 14
 reference logs (`tests_opendta/compat/expected/`), not a Stata run.
 
-Status values: `unverified` (seen in dofile, Stata behavior not checked), `confirmed` (checked against Stata),
+Status values: `unverified` (seen in dofile, Stata behavior not checked), `documented` (a Stata manual, FAQ or reference
+log states the expected behavior, with the source in the entry; still not a Stata run), `likely not a bug` (the evidence
+suggests Stata does the same), `confirmed` (checked against Stata),
 `reported` (issue opened upstream), `fixed upstream` (fixed in a commit we have not vendored yet), `vendored`
 (the fix is in our copy), `patched` (fixed by a dofile patch in `scripts/patches/`, to report upstream), `partly patched` (the patch covers part
 of the entry; the rest is listed in its details), `known`
@@ -18,25 +20,26 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 |---|---|---|---|
 | ODT-1 | `regress` on a perfect fit crashes (ZeroDivisionError, rc 9999) | `tests/test_engine.py::test_odt_fixes` | patched |
 | ODT-2 | `xtlogit, re` crashes on some data (OverflowError, rc 9999), even inside `capture` | probe `p04_xtlogit.do`, `::test_odt2_xtlogit_bounds_dont_overflow` | patched |
-| ODT-3 | `_b[c.yrsed#2.sex]` does not parse (rc 198) | corpus `fv_b_int` (xfail) | unverified |
-| ODT-4 | `confirm variable` on a missing variable returns rc 198, not 111 | corpus `capture_rc` (xfail) | unverified |
+| ODT-3 | `_b[c.yrsed#2.sex]` does not parse (rc 198) | `::test_odt3_interaction_names_in_b` | patched |
+| ODT-4 | `confirm variable` on a missing variable returns rc 198, not 111 | `::test_odt4_confirm_variable` | patched |
 | ODT-5 | `%w.dg` ignores d: `%20.12g` prints 18 significant digits, `%12.4g` 10 | `::test_odt_fixes`; corpus `CHECK` lines use it | patched |
 | ODT-6 | regressing a variable on its own interaction crashes (decimal InvalidOperation, rc 9999) | `::test_odt_fixes` | patched |
-| ODT-8 | backslash escapes `\$` and ``\` `` don't stop macro expansion | found 2026-11-04 (`dofile run` passes its path through a local instead) | unverified |
+| ODT-8 | backslash escapes `\$` and ``\` `` don't stop macro expansion | `::test_odt8_backslash_dollar_is_a_literal_dollar` | patched |
 | ODT-9 | `ivregress` prints a long `Instruments:` list on one line instead of wrapping it at 80 columns | `::test_odt_fixes` | patched |
 | ODT-10 | `graph bar ..., over(x, relabel(...))` ignores `relabel()` | `::test_odt10_relabel` | patched |
-| ODT-11 | `by g: regress ...` refuses with rc 190 "regress may not be combined with by" | found 2026-11-04, no test | unverified |
-| ODT-13 | bare `mean` (replay) refuses with rc 100 even right after `mean`; `estimates replay` works | found 2026-11-04, no test | unverified |
+| ODT-11 | `by g: regress ...` refuses with rc 190 "regress may not be combined with by" | found 2026-11-04, no test | documented |
+| ODT-13 | bare `mean` (replay) refuses with rc 100 `varlist required`, also `mean, level(90)`, even right after `mean`; `estimates replay` works | `::test_odt13_summary_commands_replay` | patched |
 | ODT-12 | `nbreg` prints a NumPy warning (`invalid value encountered in sqrt`) computing alpha's standard error | `::test_odt_fixes` (smoke test; trigger checked on the Card data) | patched |
 | ODT-14 | Stata code reaches Python's `eval()` (empty `__builtins__`, escapable): `arch ..., archmexp()` and `bayesstats` `{param}` expressions | `::test_safe_eval_allows_only_arithmetic`, `::test_stata_expressions_cannot_reach_python` | patched |
-| ODT-15 | `predict` after `mean` or `bootstrap` crashes (AttributeError `'Estimates' object has no attribute 'terms'`, rc 9999, traceback in the log; `capture` doesn't catch it) | found 2026-11-05 (student replication run), no test | unverified |
+| ODT-15 | `predict` after `mean` or `bootstrap` crashes (AttributeError `'Estimates' object has no attribute 'terms'`, rc 9999, traceback in the log; `capture` doesn't catch it) | `::test_odt15_predict_after_a_command_without_predict` | patched |
 | ODT-16 | `color()` specs: `gs#` is inverted (`gs0` white, `gs16` black); `none`, `*#` intensity (`navy*.5`) and `%#` opacity (`maroon%50`) fall back to the default palette color without an error; also unhandled: CMYK/`hsv` specs, color lists, about 20 of Stata's named colors | `::test_odt16_*` | partly patched |
 | ODT-17 | `legend(pos(#))` ignored: the legend is always at the bottom center | `::test_odt17_legend_position` | partly patched |
-| ODT-18 | `ttest a == b, unequal` without `unpaired` runs a paired test (prints "Paired t test") instead of refusing | found 2026-11-05 (student replication run), no test | unverified |
-| ODT-19 | a matrix subscript on `e()`/`r()` matrices inside `display` fails: `display e(b)[1,1]` and `display r(table)[1,1]` give rc 109 "type mismatch"; with a format, `display %6.3f (r(table)[1,1])` gives rc 198 "invalid syntax" | found 2026-11-05, no test | unverified |
+| ODT-18 | `ttest a == b, unequal` without `unpaired` runs a paired test (prints "Paired t test") instead of refusing | `::test_odt18_ttest_options_of_the_paired_and_one_sample_forms` | patched |
+| ODT-19 | a matrix subscript on `e()`/`r()` matrices in an expression fails, with rc 109 "type mismatch" or 198 depending on the command (table in the details); Stata also rejected `e(b)[1,1]` in Stata 11 (see details), so probably the same | found 2026-11-05, no test | likely not a bug |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | ODT-20 | `histogram` (and `bar`'s) outline ignores `lcolor()`/`lwidth()`: histogram bars always get a background-colored edge, so `fcolor(none) lcolor(navy)` draws nothing | `::test_odt20_histogram_outline` | patched |
-| ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | found 2026-11-05, no test | unverified |
+| ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | `::test_odt21_default_axis_ticks_are_nice_numbers` | patched |
+| ODT-22 | the `matrix(name)` pseudofunction is not supported in expressions: `display trace(matrix(xx))` and `el(matrix(xx),2,1)` give rc 198 (`trace(xx)` works) | `::test_odt22_matrix_pseudofunction` | patched |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
@@ -83,6 +86,16 @@ display _b[c.yrsed#2.sex]
   [U] 11.4.3 (factor variables).
 - Workaround: `matrix b = e(b)` then `display b[1, colnumb(b, "c.yrsed#2.sex")]`; or get it from `run_do`
   results or `get_matrix("e(b)")`.
+- Evidence (2026-11-05): [U] 13 writes interaction coefficients as `b[1.sex#2.group]`, and Stata's linear-regression
+  interaction slides use `_b[1.female#c.age]`, so these names are accepted in Stata
+  ([U] 13, https://www.stata.com/manuals13/u13.pdf). Today dofile gives rc 198 for both `_b[c.yrsed#2.sex]` and
+  `_b[2.sex#c.yrsed]`; `_b[yrsed]` and `_b[2.sex]` work, so only interaction names fail. Not found: whether Stata
+  names this model's term `c.yrsed#2.sex` or `2.sex#c.yrsed` (the Stata 14 reference logs show `g#c.x` for
+  `i.g#c.x` and `c.x#c.x`, the written order, which is what dofile's `e(b)` uses).
+- Patched (`opendta-odt3-coef-interaction-names.patch`): the tokenizer accepts `#` and `.` inside `_b[...]`, `_se[...]`
+  and `_coef[...]` (`c.yrsed` splits at the dot), and `_coef_index` tries the terms of an interaction in any order,
+  since Stata's order for this model is not known (VERIFY). `display _b[c.yrsed#2.sex]` now gives `.00783558`, as
+  `_b[2.sex#c.yrsed]` does. A `#` outside the brackets is still a syntax error.
 
 ### ODT-4: `confirm variable` return code
 ```stata
@@ -94,6 +107,12 @@ display _rc
 - dofile: `198`.
 - Expected in Stata: `111` ("variable nosuch not found"). Source: [P] confirm.
 - Workaround: test `_rc != 0` instead of `_rc == 111`.
+- Evidence (2026-11-05): [P] confirm says a failing `confirm` gives the appropriate error message and a nonzero return
+  code, and its capture example shows `_rc` 111 for a missing variable
+  (https://www.stata.com/manuals14/pconfirm.pdf). Still reproduces: dofile `198`.
+- Patched (`opendta-odt4-confirm-variable.patch`): `confirm [new|numeric|string|str#|<type>] variable varlist [, exact]`
+  with the manual's codes: 111 `variable not found` and `no variables defined`, 110 `already defined` for `new`, 198
+  `invalid name`, 7 for a type mismatch. VERIFY: the type-mismatch message text; `exact` turns off abbreviations.
 
 ### ODT-5: `%w.dg` ignores d
 ```stata
@@ -127,6 +146,15 @@ display "a\$v1 b"
   to confirm.
 - Workaround: put such text in a macro and reference it, since a macro's contents aren't expanded again. This
   is how `dofile run` passes the do-file path.
+- Evidence (2026-11-05): Stata's FAQ on backslashes and macros shows `display "\$myfile"` printing the literal text
+  `$myfile`, and the Programming manual prints `$22.15` with `display "\$22.15"`
+  (https://www.stata.com/support/faqs/programming/backslashes-and-macros/). So `\$` is documented. The backquote
+  half of the entry is not: the FAQ only covers a backslash that precedes a local macro in a path (`\\`myfile'`).
+  Still reproduces: `a\X b`.
+- Patched (`opendta-odt8-macro-backslash-dollar.patch`): in `lang/macros.py:expand`, `\$` leaves a literal `$` (the
+  backslash is dropped) and `$name` still expands. Only `\$` is handled: how Stata treats a backslash before a
+  backquote, or a doubled backslash, is not documented well enough here (the FAQ only covers a path such as
+  ``c:\data\\`myfile'``), so those are unchanged.
 
 ### ODT-9: `Instruments:` footnote does not wrap
 ```stata
@@ -159,6 +187,10 @@ by g, sort: regress lwage educ
 - dofile: rc 190, `regress may not be combined with by`.
 - Expected in Stata: one regression per group; `regress` allows `by`. Source: [R] regress (by is allowed).
 - Workaround: `forvalues` over the groups with `if`.
+- Evidence (2026-11-05): the current [R] regress manual lists `by` among the prefixes `regress` accepts, with
+  `bootstrap`, `jackknife`, `rolling`, `statsby` and others (https://www.stata.com/manuals/rregress.pdf).
+  Still reproduces on the CPS data: `by g, sort: regress ...` and `bysort g: regress ...` both give rc 190, while
+  `bysort g: summarize` works.
 
 ### ODT-12: `nbreg` warning
 `nbreg pos educ` on the Card data (`pos = round(exp(lwage-5))`) prints `RuntimeWarning: invalid value encountered
@@ -168,6 +200,30 @@ the standard error of `lnalpha` is missing where Stata would report one.
   negative variance; the square root is skipped and the row shows missing, as at the boundary. Still to verify:
   the LR test printed `chibar2(01) = 2.5e-03`; Stata 14 shows `%7.2f` and `0.0e+00` for an exact zero, so small
   positive values are unchecked (marked VERIFY in the code).
+
+### ODT-13: bare `mean` (replay)
+```stata
+clear
+set obs 50
+gen x = rnormal()
+mean x
+mean
+mean, level(90)
+```
+- dofile: the last two give rc 100 `varlist required`. `estimates replay` redisplays the results.
+- Expected in Stata 14: [U] 20.3 says typing an estimation command without arguments redisplays its prior results,
+  with options allowed on replay (its example is `regress` and then `regress, coeflegend`)
+  (https://www.stata.com/manuals14/u20.pdf). `mean` is an estimation command (it stores `e(b)` and `e(V)`), and
+  its reporting options `level()`, `noheader`, `nolegend` and `coeflegend` are replay options
+  (https://www.stata.com/manuals14/rmean.pdf). The syntax box in [R] mean shows only `mean varlist ...`, but
+  `regress`'s box has no replay line either. Not run in Stata, so whether `mean` itself replays is documented
+  by the general rule and not shown.
+- Workaround: `estimates replay`.
+- Patched (`opendta-summaries-odt13-mean-replay.patch`, named so that it applies after `opendta-r-table.patch`, which
+  edits the same function): `mean`, `proportion`, `ratio` and `total` with no varlist redisplay the last result, header
+  and table, as typed the first time; `, level(90)` recomputes the intervals, `, noheader` drops the header, and
+  `r(table)` is reposted. Another estimation in between gives rc 301 `last estimates not found`. The first
+  `mean x y` output is identical to the replay (tested).
 
 ### ODT-14: Python `eval()` on expression text (security)
 ```stata
@@ -196,8 +252,17 @@ predict yh
 ```
 - dofile: rc 9999 `internal engine error: AttributeError: 'Estimates' object has no attribute 'terms'`
   (`estimation/postest.py`, `xb_all`). `bootstrap _b[x], reps(5): regress y x` then `predict` does the same.
-- Expected in Stata: an ordinary error (these commands have no `predict`), not an engine crash. Which rc: unchecked.
+- Expected in Stata 14: an ordinary error, rc 321. The `mean` postestimation page lists `estat vce`, `estimates`, `hausman`,
+  `lincom`, `nlcom`, `test` and `testnl`, and no `predict` (https://www.stata.com/manuals14/rmeanpostestimation.pdf); [P] error
+  gives 321 "requested action not valid after most recent estimation command" as what `predict` or `test` return
+  when the action can't be performed (https://www.stata.com/manuals14/perror.pdf). Only `mean` was checked, not
+  `bootstrap`.
 - The session survives and keeps its data, but rc 9999 skips `capture` and ends the call.
+- Status (2026-11-05): a crash is a bug whatever Stata does, since rc 9999 is dofile's own code for an escaped Python
+  exception. The fix is a guard in `estimation/postest.py` raising rc 321 (the message wording is ours). Still
+  reproduces after `mean` on the CPS data.
+- Patched (`opendta-odt15-predict-unsupported.patch`): `predict` raises rc 321 `requested action not valid after most
+  recent estimation command` when the estimation has no terms (`mean`, `bootstrap`). The message wording is ours.
 
 ### ODT-16: `color()` specs
 ```stata
@@ -255,8 +320,16 @@ ttest y == z, unequal
   `unpaired` form, and without `unpaired` the two-variable form is the paired test, so Stata should refuse the option
   rather than ignore it (the rc is not checked). Silently ignoring it matters because the user asked for Welch
   and gets a paired test.
+- Evidence (2026-11-05): [R] ttest's syntax puts `unequal` and `welch` under the `unpaired` form; the paired form is
+  `ttest varname1 == varname2 [if] [in] [, level(#)]`, so `level()` is the only option it allows
+  (https://www.stata.com/manuals14/rttest.pdf). Expected rc 198: [P] error lists "option not allowed" under 198
+  "invalid syntax" (https://www.stata.com/manuals14/perror.pdf); the exact message (likely `option unequal not
+  allowed`) is not in the manuals. The Stata 14 reference logs only use `unequal` with `by()` and with
+  `ttesti`, so they say nothing about the paired form. Still reproduces: "Paired t test", rc 0.
+- Patched (`opendta-odt18-ttest-options.patch`): the paired and one-sample forms refuse `unequal`, `welch` and `unpaired`
+  with rc 198 `option unequal not allowed`; the two-sample forms and `by()` are unchanged. VERIFY: Stata's message text.
 
-### ODT-19: matrix subscripts of `e()`/`r()` in `display`
+### ODT-19: matrix subscripts of `e()`/`r()` in an expression (likely not a bug)
 ```stata
 clear
 set obs 50
@@ -264,15 +337,42 @@ gen x = _n
 gen y = x + rnormal()
 regress y x
 display e(b)[1,1]
+scalar s = e(b)[1,1]
 display r(table)[1,1]
 display %6.3f (r(table)[1,1])
 ```
-- dofile: the first two give rc 109 `type mismatch`; the third rc 198 `invalid syntax`. Copying first works:
-  `matrix T = r(table)` then `display %6.3f T[1,1]`.
-- Expected in Stata: [P] matrix define says subscripting with scalar expressions may be used in any expression
-  context, and `display` takes expressions, so these should print the coefficient. Not run in Stata; `r(table)`
-  and `e(b)` are both covered. Named subscripts (`T[1,"x"]`) are said to work in a matrix context only.
-- Agent-facing: the messages name no cause, and an agent will try this form first.
+- dofile: `display e(b)[1,1]` and `display r(table)[1,1]` give rc 109 `type mismatch`; `scalar s = e(b)[1,1]` and
+  `display %6.3f (r(table)[1,1])` give rc 198 `invalid syntax`. Copying first works:
+  `matrix T = e(b)` then `display T[1,1]`.
+- Stata (2026-11-05): [P] matrix define lets scalar expressions refer to `matname[r,c]`, which is a matrix *name*. A 2010
+  Statalist thread on taking an element of `e(b)` reports `local x = e(b)[1,1]` giving "invalid syntax" and
+  `generate x = e(b)[1,1]` giving r(509), with the advice to copy `e(b)` into a named matrix first
+  (https://www.stata.com/statalist/archive/2010-10/msg00534.html; Stata 11 era). So dofile's rc 198 probably matches
+  Stata for `scalar`/`local`. Differences left: dofile says rc 109 for `display e(b)[1,1]`, and it is unchecked whether
+  Stata 14 (our target) still rejects the form, or what rc `display` gives.
+- An earlier version of this entry said Stata should accept these; that was read from the manual's wording and is
+  not supported by the thread. Close it unless someone shows Stata 14 printing the value.
+- Agent-facing: use `_b[name]` or copy the matrix first; the engine's messages name no cause.
+- More evidence (2026-11-05, Stata 14 manuals): [U] 14.9 says `matname[r,c]` is for matrix and scalar expressions, and
+  [P] matrix define says the subscripts tell Stata that the name is a matrix name (`el(A,i,j)` takes a matrix name,
+  string literal or string variable); [U] 14 says `e(b)` and `e(V)` can be used "in any matrix expression", with
+  `matrix myb = e(b)` as its example. The `e(b)[1,3]` in that chapter is only the heading `matrix list e(b)` prints.
+  Nothing documents `e(b)[1,1]` as an expression. dofile already accepts `e(b)` in matrix expressions and functions
+  (`colsof(e(b))`, `trace(e(V))`, `e(b)*invsym(e(V))*e(b)'`) and is more permissive than Stata for `el(e(b),1,1)`.
+  So the status stays `likely not a bug`; only the rc (109 here for `display`) is unchecked.
+- Return codes (documented mismatch, 2026-11-05). dofile reports the same unsupported expression with different
+  codes depending on the command, because two evaluators handle it:
+
+  | Command | dofile | Stata (Statalist 2010, Stata 11) |
+  |---|---|---|
+  | `local l = e(b)[1,1]` | 198 `invalid syntax` | 198 `invalid syntax` (same) |
+  | `generate z = e(b)[1,1]` | 198 | 509 (matrix operators not allowed in this context) (differs) |
+  | `scalar s = e(b)[1,1]` | 198 | not reported |
+  | `display (e(b)[1,1])`, `display %6.3f (r(table)[1,1])` | 198 | not reported |
+  | `display e(b)[1,1]`, `display r(table)[1,1]`, `display 1 + e(b)[1,1]` | 109 `type mismatch` | not reported |
+
+  Left as it is: the form is rejected everywhere, only the code differs. If it is ever made consistent, 198 is the
+  only code with evidence behind it (and 509 for `generate`).
 
 ### ODT-20: histogram outline ignores `lcolor()`
 ```stata
@@ -301,6 +401,28 @@ twoway line w educ
 - Expected in Stata: "nice" ticks in steps of 1, 2, 5 or 10 times a power of ten, here `5 10 15 20`, labelled `5`, `10`,
   `15`, `20`. Not run in Stata (our reading of how its default axes look), so the exact tick choice is unverified.
 - Cosmetic, but it is in nearly every plot. Sketch: use the same `MaxNLocator` for numeric x and y axes.
+- Evidence (2026-11-05): the Stata manual's "approximately five values are labeled and ticked on each axis by default",
+  chosen by a nice-number routine (https://www.stata.com/manuals/g-3axis_label_options.pdf). dofile labels nine
+  values on this axis (`0.0 ... 20.0`), so the density claim is supported; the exact Stata choice for this axis
+  (`5 10 15 20`?) is still our reading.
+- Patched (`opendta-odt21-axis-ticks.patch`): `_apply_axis` replaces matplotlib's default locator on a linear numeric
+  axis with `MaxNLocator(nbins=5, steps=[1, 2, 5, 10])`. Only the default `AutoLocator` is replaced, so explicit
+  labels, `#`-rule labels, value labels and categorical axes keep theirs. The sample axis now reads `5 10 15`. Not
+  checked: how closely Stata's own tick choice agrees on other ranges (the manual only says about five).
+
+### ODT-22: the `matrix()` pseudofunction
+```stata
+matrix xx = (1,2 \ 3,4)
+display trace(matrix(xx))
+display el(matrix(xx),2,1)
+```
+- dofile: both give rc 198 `invalid syntax`; `display trace(xx)` and `display el(xx,2,1)` work.
+- Expected in Stata: [P] matrix define says `matrix(name)` forces the matrix-name interpretation, for when a data
+  variable has the same name, and gives `local new=trace(matrix(xx))` as its example
+  (https://www.stata.com/manuals14/pmatrixdefine.pdf). Not run in Stata.
+- Low priority: it only matters when a variable and a matrix share a name, but do-files written for programs use it.
+- Patched (`opendta-odt22-matrix-pseudofunction.patch`): `matrix(name)` in an expression is the name. It does not force the
+  matrix reading when a data variable has the same name, which is what the manual's `matrix()` is for (VERIFY).
 
 ### GAP-2: `estat firststage`
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat

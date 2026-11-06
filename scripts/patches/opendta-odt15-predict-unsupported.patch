@@ -1,0 +1,13 @@
+diff --git a/src/dofile/_vendor/opendta/estimation/postest.py b/src/dofile/_vendor/opendta/estimation/postest.py
+index a2672cd..14c16e2 100644
+--- a/src/dofile/_vendor/opendta/estimation/postest.py
++++ b/src/dofile/_vendor/opendta/estimation/postest.py
+@@ -91,6 +91,8 @@ def design_all(s: "Session", est: Estimates) -> tuple[np.ndarray, np.ndarray]:
+ 
+ def xb_all(s: "Session", est: Estimates) -> tuple[np.ndarray, np.ndarray]:
+     """xb for all observations, accumulated column by column (without keeping X)."""
++    if not hasattr(est, "terms"):   # dofile patch (ODT-15): mean, bootstrap, ... have no predict (was an AttributeError)
++        raise StataError(321, "requested action not valid after most recent estimation command")
+     ds = s.data
+     with fvars.caching():
+         ok = ~fvars.term_missing(ds, est.terms)

@@ -238,6 +238,10 @@ def _apply_axis(ax, which: str, o: dict, sch: dict, value_labels: dict | None) -
         keys = sorted(value_labels)
         axis.set_ticks(keys)
         axis.set_ticklabels([value_labels[k] for k in keys])
+    elif axis.get_scale() == "linear" and isinstance(axis.get_major_locator(), _mticker.AutoLocator):
+        # dofile patch (ODT-21): about five "nice" ticks in steps of 1, 2, 5, 10 (matplotlib's default also uses
+        # 2.5 and prints 5.0, 10.0). Only the default locator is replaced; explicit labels and categories keep theirs
+        axis.set_major_locator(_mticker.MaxNLocator(nbins=5, steps=[1, 2, 5, 10]))
     if "angle" in lab:
         for t in axis.get_ticklabels():
             t.set_rotation(lab["angle"])

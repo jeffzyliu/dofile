@@ -91,6 +91,8 @@ def design_all(s: "Session", est: Estimates) -> tuple[np.ndarray, np.ndarray]:
 
 def xb_all(s: "Session", est: Estimates) -> tuple[np.ndarray, np.ndarray]:
     """xb for all observations, accumulated column by column (without keeping X)."""
+    if not hasattr(est, "terms"):   # dofile patch (ODT-15): mean, bootstrap, ... have no predict (was an AttributeError)
+        raise StataError(321, "requested action not valid after most recent estimation command")
     ds = s.data
     with fvars.caching():
         ok = ~fvars.term_missing(ds, est.terms)
@@ -252,6 +254,12 @@ def _coef_index(est: Estimates, s: "Session", name: str, eq: str = "") -> int:
         return None
 
     i = match(name)
+    if i is None and "#" in name:   # dofile patch (ODT-3): the terms of an interaction in any order (VERIFY)
+        import itertools
+        for perm in itertools.permutations(name.split("#")):
+            i = match("#".join(perm))
+            if i is not None:
+                break
     if i is not None:
         return i
     # variable abbreviation/name without operators
