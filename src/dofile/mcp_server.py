@@ -34,7 +34,8 @@ from .worker import PoolFull, Worker, WorkerPool, warm_up
 
 LOG_LIMIT = 8_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
 KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
-CMD_HEAD, CMD_TAIL = 40, 15  # lines kept from the start and end of each command's output
+CMD_HEAD, CMD_TAIL = 40, 15  # lines kept from the start and end of a long block of output (first cut)
+SHORT_HEAD, SHORT_TAIL = 5, 3  # ... and of a block still too big once every block is cut that far (second cut)
 GET_MATRIX_CELLS = 250_000  # get_matrix answers up to this; larger needs rows/cols
 GET_FILE_LIMIT = 5_000_000  # bytes for get_file: its content goes into the model's context
 FILE_LIMIT = 1024 * 1024 * 1024  # default upload limit in bytes (--file-limit)
@@ -44,9 +45,11 @@ IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 INSTRUCTIONS = """Runs Stata-syntax code (.do files) with the open-source dofile engine; no Stata license needed.
 Data, macros and estimation results persist between run_do calls in the same session.
 Each call runs like a do-file: preserve is restored and tempvars/tempfiles dropped when the call ends,
-error or not, so preserve and restore belong in the same call.
+error or not, so preserve and restore belong in the same call (a local that names a tempfile stays, the
+file does not: save it under a name to use it in a later call).
 Quote numbers from run_do's `results` (e()/r() as JSON) or its log, never from memory.
-`results` always holds the current e() and r() scalars and macros; matrices are listed by size only,
+`results` always holds the current e() and r() scalars and macros (e_changed and r_changed say whether
+this call changed them: e() survives `clear`, r() survives a failed command); matrices are listed by size only,
 so fetch values with get_matrix. For standard errors, p-values and confidence intervals read the
 coefficient table in the log or get_matrix("r(table)"), not your own arithmetic.
 A call that runs too long, or that the client cancels, is interrupted like Stata's Break key: rc 1,
@@ -54,7 +57,11 @@ and the session keeps its data. Pass `timeout` to run_do for a shorter limit.
 Commands that run programs, delete files, change directory or download are disabled (rc 199);
 file access is limited to the session's working directory. rc 9998 means the session was reset
 (the code did not stop when interrupted, it crashed, or it could not start): its data is gone, so
-re-run your setup.
+re-run your setup. The same happens when the server is reconnected or restarted (for example to load
+newer dofile code): data, estimates, macros and graphs in memory are lost, files in the working folder stay,
+so save to a .dta first.
+A long log is cut to fit: the biggest tables go first and short results stay, and log_omitted_lines says how
+many lines are missing; use `quietly` in loops and `display` the numbers you need, or read log_file.
 Community commands (reghdfe, esttab, outreg2) are not available."""
 
 
@@ -100,6 +107,11 @@ class ResultSet(TypedDict):
 class Results(TypedDict):
     e: Annotated[ResultSet, Field(description="e() as it is after the call (error or not)")]
     r: Annotated[ResultSet, Field(description="r() as it is after the call (error or not)")]
+    e_changed: Annotated[bool, Field(description="whether this call changed e(). False: e() is left from an earlier "
+                                                 "call (it survives `clear`, so it can describe a model on data "
+                                                 "that is gone)")]
+    r_changed: Annotated[bool, Field(description="whether this call changed r(). False: r() is left from an earlier "
+                                                 "call (a failed command leaves it alone)")]
 
 
 class FileChange(TypedDict):
@@ -116,11 +128,16 @@ class RunResult(TypedDict):
     error_command: Annotated[str | None, Field(description="the command that failed, as echoed in the log (for "
                                                            "an error inside a loop, the loop's first line); "
                                                            "null on success")]
-    log: Annotated[str, Field(description="output as Stata shows it. Each command's long output keeps its "
-                                          "first 40 and last 15 lines, with a marker for the omitted lines")]
+    log: Annotated[str, Field(description="output as Stata shows it. Over about 8,000 characters the biggest "
+                                          "blocks of output (tables, listings) are cut to their first and last "
+                                          "lines, with a marker for the omitted lines; short results stay")]
     log_file: Annotated[str | None, Field(description="when the log was cut: the full log, readable with "
                                                       "get_file(name) (at most 2 MB: very long output keeps its "
                                                       "start and end); else null")]
+    log_omitted_lines: NotRequired[Annotated[int, Field(description="only when the log was cut: how many lines "
+                                                                    "it leaves out. Use `quietly` and `display` "
+                                                                    "for what a loop must report, or read "
+                                                                    "log_file")]]
     results: Results
     files: Annotated[list[FileChange], Field(description="files in the working directory (top level) this "
                                                          "call created or changed")]
@@ -260,38 +277,66 @@ def _new_file(workdir: str, name: str, replace: bool) -> Path:
     return p
 
 
-def _cut_log(log: str, log_file: str) -> str:
-    """Each command's output (the lines after its `. cmd` echo) keeps its first CMD_HEAD and last CMD_TAIL
-    lines, so every command and how it ended stay visible; then the whole log is capped at LOG_LIMIT."""
-    out: list[str] = []
+def _cut_log(log: str, log_file: str) -> tuple[str, int]:
+    """The log as returned inline, and how many lines it omits. A log that fits LOG_LIMIT is kept whole. Otherwise
+    the biggest blocks of output (runs of lines between blank lines: a table, a listing) are cut first, to their
+    first CMD_HEAD and last CMD_TAIL lines, then if that is not enough to SHORT_HEAD and SHORT_TAIL, so the short
+    results around them stay: a `display` line under a table, the `test` between two regressions, the rest of a
+    loop's output (a loop's commands are echoed once, up front, so its output has no per-command markers to cut at).
+    Command echoes (`. cmd`) are never cut. Only if that still leaves too much is the middle of the log dropped."""
+    if len(log) <= LOG_LIMIT:
+        return log, 0
+    units: list[str | list[str]] = []  # a str is a line kept as it is; a list is a block of output lines
     block: list[str] = []
-
-    def flush() -> None:
-        if len(block) > CMD_HEAD + CMD_TAIL + 1:
-            n = len(block) - CMD_HEAD - CMD_TAIL
-            block[CMD_HEAD:-CMD_TAIL] = [f"[... {n} lines omitted; full log: get_file {log_file} ...]"]
-        out.extend(block)
-        block.clear()
-
     for line in log.split("\n"):
-        if line.startswith(". "):  # a command echo starts the next block
-            flush()
-            out.append(line)
+        if line == "" or line.startswith(". "):
+            if block:
+                units.append(block)
+                block = []
+            units.append(line)
         else:
             block.append(line)
-    flush()
-    text = "\n".join(out)
-    # TODO: cut the longest command outputs first instead of the middle of the whole log, so a short result
-    # between long ones (e.g. `test` between two regressions) isn't lost.
-    if len(text) > LOG_LIMIT:
-        text = (text[:LOG_LIMIT // 2] + f"\n... [log truncated; full log: get_file {log_file}] ...\n"
-                + text[-LOG_LIMIT // 2:])
-    return text
+    if block:
+        units.append(block)
+
+    def shown(lines: list[str], level: int) -> list[str]:
+        head, tail = ((), ()) if level == 0 else ((CMD_HEAD, CMD_TAIL), (SHORT_HEAD, SHORT_TAIL))[level - 1]
+        if level == 0 or len(lines) <= head + tail + 1:
+            return lines
+        return lines[:head] + [f"[... {len(lines) - head - tail} lines omitted; full log: get_file {log_file} ...]"] \
+            + lines[-tail:]
+
+    def size(lines: list[str]) -> int:
+        return sum(len(x) + 1 for x in lines)
+
+    level = {i: 0 for i, u in enumerate(units) if isinstance(u, list)}
+    total = len(log)
+    while total > LOG_LIMIT:
+        best = None  # (current size, unit, the next level that makes it smaller)
+        for i, lv in level.items():
+            now = size(shown(units[i], lv))
+            nxt = next((n for n in range(lv + 1, 3) if size(shown(units[i], n)) < now), None)
+            if nxt is not None and (best is None or now > best[0]):
+                best = (now, i, nxt)
+        if best is None:
+            break
+        now, i, nxt = best
+        total -= now - size(shown(units[i], nxt))
+        level[i] = nxt
+    lines = [x for i, u in enumerate(units) for x in (shown(u, level[i]) if isinstance(u, list) else [u])]
+    text = "\n".join(lines)
+    omitted = log.count("\n") + 1 - len(lines) + sum(1 for x in lines if x.startswith("[... ") and "lines omitted" in x)
+    if len(text) > LOG_LIMIT:  # every block is already short: drop the middle of the whole log
+        cut_at, resume = LOG_LIMIT // 2, len(text) - LOG_LIMIT // 2
+        omitted += text[cut_at:resume].count("\n")
+        text = text[:cut_at] + f"\n... [log truncated; full log: get_file {log_file}] ...\n" + text[resume:]
+    return text, omitted
 
 
 def _sizes(results: dict[str, Any]) -> dict[str, Any]:
     """e()/r() with each matrix replaced by its size: values cost many tokens and agents rarely need them inline."""
-    return {k: {**rs, "matrices": {name: f"{len(m['rows'])}x{len(m['cols'])}" for name, m in rs["matrices"].items()}}
+    return {k: ({**rs, "matrices": {name: f"{len(m['rows'])}x{len(m['cols'])}" for name, m in rs["matrices"].items()}}
+                if k in ("e", "r") else rs)
             for k, rs in results.items()}
 
 
@@ -370,7 +415,7 @@ def build_server(sessions: Sessions) -> MCPServer:
                "files": r.files, "new_graphs": r.new_graphs,
                "nobs": r.nobs, "nvars": r.nvars}
         name = f"dofile-log-{secrets.token_hex(4)}.txt"
-        cut = _cut_log(r.log, name)
+        cut, omitted = _cut_log(r.log, name)
         if cut != r.log:
             scratch = Path(w.workdir) / ".dofile"  # hidden, so long runs don't litter the user's folder
             scratch.mkdir(exist_ok=True)
@@ -378,7 +423,7 @@ def build_server(sessions: Sessions) -> MCPServer:
             logs = sorted(scratch.glob("dofile-log-*.txt"), key=lambda f: f.stat().st_mtime_ns)
             for f in logs[:-KEEP_LOGS]:  # over stdio this is the user's folder: don't let logs pile up
                 f.unlink(missing_ok=True)
-            out["log"], out["log_file"] = cut, name
+            out["log"], out["log_file"], out["log_omitted_lines"] = cut, name, omitted
         images = [ImageContent(type="image", data=base64.b64encode(png).decode(), mime_type="image/png")
                   for png in r.images]
         return CallToolResult(content=[TextContent(type="text", text=json.dumps(out)), *images],

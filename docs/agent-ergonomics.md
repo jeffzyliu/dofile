@@ -1,20 +1,19 @@
 # Agent ergonomics (dofile's own issues)
 
-Things that make dofile hard for an agent to use through the MCP server, found by running real replications as a
+Things that made dofile hard for an agent to use through the MCP server, found by running real replications as a
 student would ([replication-tests.md](replication-tests.md)). These are in dofile's adapter, sandbox and MCP layer
 (`src/dofile/`), so they are fixed here, with no patch and no upstream report. Problems in the vendored engine are
 in [opendta-issues.md](opendta-issues.md) (ODT-*, GAP-*).
 
-Status values: `open`, `fixed` (with the test or commit), `docs only` (the behavior stays, the docs need a line).
-The numbers were measured on 2026-11-05 with the code at the time.
+Status values: `open`, `fixed` (with the test that covers it). The numbers were measured on 2026-11-05.
 
 | ID | Symptom | Where | Status |
 |---|---|---|---|
-| ERG-1 | `run_do`'s log cut loses a loop's results and short results between long outputs; the agent can't tell what is gone | `mcp_server._cut_log` | open |
-| ERG-2 | a tempfile's local name outlives the file: next call fails with rc 601 and an internal path | `engine.py` (per-call scope) | open |
-| ERG-3 | `results` shows `e()`/`r()` from data or a command no longer current, unlabeled | `engine.results()` | open |
-| ERG-4 | reconnecting the MCP server (or restarting it after a code change) wipes the session | `mcp_server.py` | docs only |
-| ERG-5 | rc 603 means both "folder missing" and "the sandbox refused" | sandbox, `engine.py` | open |
+| ERG-1 | `run_do`'s log cut lost a loop's results and short results between long outputs, without saying how much | `mcp_server._cut_log` | fixed: `tests/test_log_cut.py` |
+| ERG-2 | a tempfile's local name outlives the file: the next call failed with rc 601 and an internal path, no explanation | `engine.py` (per-call scope) | fixed: `test_tempfile_name_outliving_its_file_gets_a_hint` |
+| ERG-3 | `results` showed `e()`/`r()` from data or a command no longer current, unlabeled | `engine.results()` | fixed: `test_results_say_whether_the_call_changed_e_and_r` |
+| ERG-4 | reconnecting or restarting the MCP server wipes the session, and nothing said so | `mcp_server.py` instructions, `MCP-SCHEMA.md` | fixed (docs) |
+| ERG-5 | rc 603 meant both "folder missing" and "the sandbox refused", and the sandbox's reason was hidden | sandbox, `engine.py` | fixed: `tests/test_sandbox.py` |
 
 ## Details
 
@@ -33,22 +32,21 @@ foreach c in 1 2 3 4 5 {
 }
 display "LAST LINE"
 ```
-- Behavior: the full log is 11,214 characters, 171 lines; `_cut_log` returns 4,139. The `RESULT` lines of iterations
-  2, 3 and 4, printed by the code's own `display`, are gone; iteration 1, 5 and `LAST LINE` survive.
-- The same regressions written flat (no loop, 5 `regress` and 5 `display` lines) come to 11,461 characters; the
-  8,000-character cap cuts the middle and the `RESULT` lines of iterations 2 and 3 are lost.
-- Cause: `_cut_log` starts a block only at a line beginning `. ` (a command echo), and keeps each block's first
-  `CMD_HEAD` = 40 and last `CMD_TAIL` = 15 lines. A `foreach` body is printed as `  2.     regress ...` echo
-  lines, so a whole loop is one block, and only its first 40 and last 15 lines survive. Then `LOG_LIMIT` = 8,000
-  characters cuts the middle of the whole log. The TODO in the code (cut the longest outputs first) is also noted
-  in `replication-tests.md` and `phase1-plan.md`, without this case.
-- Sketch of a fix:
-  - start a new block at a loop-body echo line (`^\s*\d+\.\s`) too, so the cut applies per command;
-  - budget by total size: keep short outputs whole, trim the longest first (the existing TODO);
-  - add the number of omitted lines and characters to the result (`log_omitted`), so the agent knows what is
-    missing and doesn't treat a short log as complete;
-  - tell agents in the `run_do` description to use `quietly` for loop bodies and `display` for the numbers they need.
-- Workaround today: `get_file` on `log_file`, or `quietly` plus explicit `display`.
+- Problem: the full log is 11,214 characters, 171 lines; the old `_cut_log` returned 4,139, and the `RESULT` lines of
+  iterations 2, 3 and 4, printed by the code's own `display`, were gone. The same regressions written flat came to
+  11,461 characters; the 8,000-character cap cut the middle and lost iterations 2 and 3.
+- Cause: the old code started a block only at a `. ` command echo and kept each block's first 40 and last 15 lines.
+  A `foreach` body is echoed once, up front (`  2.     regress ...`), and all of its output follows with no
+  per-command markers, so a whole loop was one block. (An early sketch of this entry proposed splitting blocks at
+  those echo lines; that can't work, because the output doesn't come after each echo.)
+- Fix: a log that fits `LOG_LIMIT` (8,000 characters) is kept whole. Otherwise the biggest blocks of output (runs of
+  lines between blank lines: a table, a listing) are cut first, to their first 40 and last 15 lines and then, if still
+  too long, to their first 5 and last 3. A `display` line under a table is the last line of its block, so it stays.
+  Command echoes are never cut. Only if every block is already short is the middle of the log dropped. The result has
+  `log_omitted_lines` when anything was cut, and the instructions say to use `quietly` in loops and `display` what is
+  needed.
+- Result on the loop above: 7,002 characters, all five `RESULT` lines and `LAST LINE` present, 56 lines omitted.
+- Behavior change: a log under 8,000 characters is no longer cut per command; a 100-row `list` stays whole.
 
 ### ERG-2: tempfile name outlives the file
 ```stata
@@ -58,14 +56,12 @@ save `t'
 * call 2
 use `t', clear
 ```
-- Behavior: call 2 gives rc 601 `file /var/folders/.../opendta-88416/S__000000.dta not found`. The name in `` `t' ``
-  is still there, the file is not.
+- Problem: call 2 gave rc 601 `file /var/folders/.../opendta-88416/S__000000.dta not found`, naming an internal path
+  and not saying why.
 - Cause: `Engine.run` wraps each call in its own do-file scope (`Scope("do", "run")`), and closing it deletes the
-  call's tempfiles, as in Stata. But macros are deliberately kept across calls (the MCP docs say locals, data and
-  estimates carry over), so the name survives. In Stata a do-file's locals die with it, so this combination
-  doesn't exist there. The message text and the internal path are OpenDTA's `use`.
-- Sketch of a fix: either drop macros that name a deleted tempfile at the end of the call, or make `use`/`merge`
-  etc. say "tempfiles last one run_do call; save it under a name". The docs already say tempfiles belong to one call.
+  call's tempfiles, as in Stata. Macros are deliberately kept across calls (locals carry over), so the name survives.
+- Fix: a 601 whose path is an OpenDTA tempfile gets `(a tempfile lasts one run_do call: save it under a name to use
+  it in a later call)` added to the error and the log. The server instructions say the same.
 
 ### ERG-3: `results` can describe things that are gone
 ```stata
@@ -76,19 +72,20 @@ gen y = x + rnormal()
 regress y x
 clear
 ```
-- Behavior: the result after `clear` has `nobs` 0 and `e(N)` 400, `e(cmd)` `regress`. After a failed command, `r()` is
-  the previous command's (a failed `graph export` came back with the earlier `summarize`'s `r()`).
-- Cause: Stata keeps `e()` after `clear` (only `clear all` or `discard` drop it) and keeps `r()` after a failed
-  command, so the engine is faithful. `replication-tests.md` says `e()`/`r()` are "always the current state".
-- The risk is an agent reading `e(N) = 400` as the data in memory. Sketch: put `e(cmdline)` first, or add which
-  command produced `r()`, or a `stale` flag when `nobs` differs from `e(N)`.
+- Problem: after `clear` the result has `nobs` 0 and `e(N)` 400. After a failed command, `r()` is the previous
+  command's (a failed `graph export` came back with an earlier `summarize`'s `r()`). Stata does the same (`e()`
+  survives `clear`, `r()` survives an error), so the engine is faithful; an agent could still read `e(N) = 400` as
+  the data in memory.
+- Fix: `results` has `e_changed` and `r_changed`, true when the call changed that group (its values differ from
+  before the call; a matrix counts as unchanged only if untouched). `clear` gives `false, false`; `summarize` after
+  it gives `false, true`; a failed command `false, false`.
 
 ### ERG-4: reconnecting the server wipes the session
-- Behavior: `/mcp` reconnect or a restart (needed to load changed dofile code, since the server runs the code it
+- Problem: `/mcp` reconnect or a restart (needed to load changed dofile code, since the server runs the code it
   started with) starts a new process: data, stored estimates, macros, scalars, graphs and tempfiles are gone. Files
-  saved in the working folder stay. After rc 9998 ("session reset") the same applies.
-- Needed: one sentence in `MCP-SCHEMA.md` and in the server instructions that reloading loses the session, so
-  agents save to `.dta` before a reload and re-run setup after it. No code change.
+  saved in the working folder stay. Nothing in the docs said so.
+- Fix: a paragraph under `reset` in `MCP-SCHEMA.md` and a sentence in the server instructions: save to a `.dta`
+  before a reload and re-run the setup after it.
 
 ### ERG-5: rc 603 for two different causes
 ```stata
@@ -98,17 +95,17 @@ gen x = _n
 gen y = x^2
 twoway line y x
 graph export nofolder/x.png, replace    // rc 603: file nofolder/x.png could not be opened
-graph export ../escaped.png, replace    // sandbox refusal, also rc 603 (OpenDTA's generic OS text)
+graph export ../escaped.png, replace    // sandbox refusal, also rc 603
 ```
-- Behavior: a folder that doesn't exist and a sandbox refusal both give rc 603. The first is Stata's own behavior
-  and the engine is right. The second is dofile's choice (CLAUDE.md: "603 (sandbox refused a file)"), and the text
-  the agent sees is OpenDTA's generic one ("The operating system did not allow the file to be written..."), not
-  the sandbox's reason; other file commands do show the reason (`tests/test_sandbox.py` notes the `graph export` case).
-- Cost: an agent that sees 603 can't tell "fix the path" from "this path is outside the allowed folders", and
-  keeps retrying the same write.
-- Sketch of a fix: make the sandbox's refusal say so in the message (`dofile sandbox: write outside the working
-  folder`) wherever it is raised, `graph export` included, and keep rc 603. The engine can't do this: it can't
-  tell a sandbox PermissionError from an OS one, and its generic text is right for the OS case, so the adapter
-  (`engine.py`) has to attach the sandbox's reason to the result.
-- This was ODT-7 in `opendta-issues.md` ("`graph export` refused by the sandbox prints a generic OS message"), moved
-  here because nothing is wrong on the engine side.
+- Problem: a folder that doesn't exist and a sandbox refusal both give rc 603. The first is Stata's own behavior and
+  the engine is right. The second is dofile's choice (CLAUDE.md: "603 (sandbox refused a file)"), and OpenDTA's
+  `graph export` printed its generic text ("The operating system did not allow the file to be written...") without
+  the sandbox's reason, where `save`, `export delimited` and `log using` showed it. An agent kept retrying the same
+  write. (This was ODT-7 in `opendta-issues.md`, moved here because nothing is wrong on the engine side.)
+- Fix: `SandboxError` records its message in `sandbox.refusals` (the last 50). When a call ends with rc 603 and the
+  text doesn't already show a sandbox reason, `Engine.run` adds the refusal that names the failing file, to the
+  error and to the log: `... (dofile sandbox: cannot write /path/escaped.png)`.
+- Only a refusal that names the failing file is used: matplotlib scans font folders at the first plot, the sandbox
+  refuses some of them (`cannot list /opt/local/share/fonts`) and the library swallows it, and an earlier version
+  of this fix blamed that on an unrelated missing folder. The match is by file name (the last path component of
+  the refusal appears in the error), so a very short name could match by chance.

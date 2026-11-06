@@ -275,10 +275,10 @@ all published numbers were reproduced. What it led to (uncommitted at the time o
    a container.
 7. **Robustness**: a Break in the middle of `merge`/`reshape` (does the data stay consistent?), clients other than
    the Python SDK (MCP Inspector, Claude Desktop), Windows.
-8. **Agent ergonomics**: the result-format and hint changes are done (see After Phase 1). Left: the 8,000-character
-   log cap cuts the middle of the whole log, which can hide a short result between long outputs (`test`'s F in
-   the Card run); the fix is to cut the longest command outputs first (TODO in `_cut_log`). More replications
-   per [replication-tests.md](replication-tests.md) when the engine changes.
+8. **Agent ergonomics**: the result-format and hint changes are done (see After Phase 1), and so are the five
+   items in [agent-ergonomics.md](agent-ergonomics.md) (log cut, tempfile hint, `e_changed`/`r_changed`, the
+   sandbox's reason on a 603, the reconnect note). More replications per
+   [replication-tests.md](replication-tests.md) when the engine changes.
 9. Later: community commands (`reghdfe`, `esttab`), via OpenDTA upstream or a later decision.
 10. Dropped: a `parse_do` parser tool. The MIT tree-sitter-stata grammar (codedthinking) covers syntax for the web
    demo's highlighting, and `run_do` already reports real errors. If agents need a pre-flight check, the small

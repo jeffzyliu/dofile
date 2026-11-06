@@ -297,6 +297,28 @@ def test_odt20_histogram_outline(eng):
     assert hollow.get_facecolor()[3] == 0 and tuple(hollow.get_edgecolor()) == tuple(navy.get_edgecolor())
 
 
+def test_results_say_whether_the_call_changed_e_and_r(eng):
+    """ERG-3: e() survives `clear` and r() survives a failed command; e_changed/r_changed tell an agent so."""
+    def flags(code):
+        r = eng.run(code)
+        return r.results["e_changed"], r.results["r_changed"]
+    base = "clear\nset obs 40\nset seed 1\ngen x = rnormal()\ngen y = x + rnormal()\n"
+    assert flags(base + "regress y x") == (True, True)
+    assert flags("clear") == (False, False)          # e() still describes the regression on data that is gone
+    assert eng.run("clear").results["e"]["scalars"]["N"] == 40
+    assert flags("set obs 5\ngen z = _n\nsummarize z") == (False, True)
+    assert flags("nosuchcommand") == (False, False)  # a failed command leaves both alone
+    assert flags(base + "regress y x") == (True, True)  # the same model again was still set by this call
+
+
+def test_tempfile_name_outliving_its_file_gets_a_hint(eng):
+    """ERG-2: the local names a tempfile of an earlier call; the file was dropped with that call's scope."""
+    assert eng.run("clear\nset obs 3\ngen x = _n\ntempfile t\nsave `t'").rc == 0
+    r = eng.run("use `t', clear")
+    assert r.rc == 601 and "one run_do call" in r.error and "one run_do call" in r.log
+    assert "one run_do call" not in eng.run("use nosuchfile, clear").error  # an ordinary missing file: no hint
+
+
 def test_safe_eval_allows_only_arithmetic():
     """Expression text from Stata code (arch's archmexp(), bayesstats {param} expressions) is evaluated without
     Python's eval(), whose empty __builtins__ still let ().__class__... reach Python's internals."""

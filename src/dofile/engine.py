@@ -6,6 +6,7 @@ changes the process working directory, so run one Engine per process (see worker
 from __future__ import annotations
 
 import os
+import re
 import traceback
 from collections import deque
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ from ._vendor.opendta.core import missing
 from ._vendor.opendta.core.output import Capture
 from ._vendor.opendta.lang.programs import Scope
 from ._vendor.opendta.session import Session
+from . import sandbox
 
 RC_INTERNAL = 9999  # a Python exception escaped the interpreter (an engine bug, not a Stata error)
 RC_FILE = 603  # Stata: file could not be opened
@@ -23,12 +25,34 @@ RC_BREAK = 1  # Stata: --Break-- (the user pressed Break); the session keeps its
 BREAK = "--Break--"
 
 
+# a tempfile's path (OpenDTA names them <tmp>/opendta-<pid>/S__000001.dta)
+_TEMPFILE = re.compile(r"opendta-\d+[/\\]S__\d+")
+TEMPFILE_HINT = "a tempfile lasts one run_do call: save it under a name to use it in a later call"
+
+
+def _refusal_for(error: str | None) -> str | None:
+    """The sandbox refusal of this call that names the file `error` is about (they end in the path), if any."""
+    for message in reversed(sandbox.refusals):
+        name = os.path.basename(message.split()[-1].rstrip("/\\"))
+        if name and error and name in error:
+            return message
+    return None
+
+
+def _same(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    """Whether e() or r() holds the same values as before a call (a matrix counts as the same only if untouched)."""
+    if before.keys() != after.keys():
+        return False
+    return all(v is after[k] or (isinstance(v, (int, float, str)) and v == after[k]) for k, v in before.items())
+
+
 @dataclass
 class Result:
     log: str
     rc: int
     error: str | None = None
-    results: dict[str, Any] = field(default_factory=lambda: {"e": empty_results(), "r": empty_results()})
+    results: dict[str, Any] = field(default_factory=lambda: {"e": empty_results(), "r": empty_results(),
+                                                             "e_changed": False, "r_changed": False})
     error_command: str | None = None  # the echoed command that failed (a loop's first line, for errors in a loop)
     nobs: int = 0  # dataset in memory after the call
     nvars: int = 0
@@ -171,6 +195,8 @@ class Engine:
         drawn = self.session._graphs.drawn
         drawn.clear()
         error = None
+        sandbox.refusals.clear()
+        self._before = (dict(self.session.e), dict(self.session.r))  # to tell whether the call changed e()/r()
         scope = Scope("do", "run")
         self.session.scopes.append(scope)
         try:
@@ -193,6 +219,13 @@ class Engine:
             self.session.close_scope(scope)
         if rc and error is None:
             error = _last_error(self._capture.text)
+        refused = _refusal_for(error) if rc == RC_FILE and "dofile sandbox" not in self._capture.text else None
+        if refused:  # OpenDTA's own 603 message (graph export) hides why: say it was the sandbox, not a missing folder
+            self._capture(f"{refused}\n", "error")
+            error = f"{error} ({refused})"
+        elif rc == 601 and error and _TEMPFILE.search(error):  # the local names it, the call's scope deleted the file
+            self._capture(f"({TEMPFILE_HINT})\n", "error")
+            error = f"{error} ({TEMPFILE_HINT})"
         failed = _failed_command(self._capture.text) if rc else None
         pngs = [p for p in map(_png, drawn[-MAX_IMAGES:]) if p] if images else []
         d = self.session.data
@@ -219,8 +252,12 @@ class Engine:
         s.set_rc(rc)
 
     def results(self) -> dict[str, Any]:
+        """e() and r() as they are now, with whether the last call changed each (False: left from an earlier call,
+        e.g. e() after `clear` still describes a model on data that is gone, r() after a failed command)."""
         s = self.session
-        return {"e": group_results(s.e), "r": group_results(s.r)}
+        e0, r0 = getattr(self, "_before", (None, None))
+        return {"e": group_results(s.e), "r": group_results(s.r),
+                "e_changed": e0 is None or not _same(e0, s.e), "r_changed": r0 is None or not _same(r0, s.r)}
 
     def matrix(self, name: str, rows: list[str] | None = None, cols: list[str] | None = None,
                max_cells: int | None = None) -> dict[str, Any]:

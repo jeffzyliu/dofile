@@ -70,14 +70,20 @@ def test_denied_commands_return_rc_199(work, cmd):
     ("use panel, clear\nsave ../escaped.dta", "escaped.dta", True),
     ("use panel, clear\nexport delimited using ../escaped.csv", "escaped.csv", True),
     ("log using ../escaped.log, text", "escaped.log", True),
-    # graph export prints OpenDTA's own 603 message, without the reason
-    ("use panel, clear\nscatter y x1\ngraph export ../escaped.png", "escaped.png", False),
+    # graph export prints OpenDTA's own 603 message; Engine.run adds the sandbox's reason (ERG-5)
+    ("use panel, clear\nscatter y x1\ngraph export ../escaped.png", "escaped.png", True),
 ])
 def test_writes_outside_workdir_are_blocked(work, code, outside, reason_shown):
     (r,) = sandboxed(work, code)
     assert r["rc"] == 603
     assert ("dofile sandbox" in r["log"]) == reason_shown  # the agent is told why where possible
     assert not (work.parent / outside).exists()
+
+
+def test_missing_folder_is_not_blamed_on_the_sandbox(work):
+    """ERG-5: rc 603 for a folder that doesn't exist says nothing about the sandbox, so the two can be told apart."""
+    (r,) = sandboxed(work, "use panel, clear\nscatter y x1\ngraph export nofolder/x.png")
+    assert r["rc"] == 603 and "dofile sandbox" not in r["log"] and "dofile sandbox" not in r["error"]
 
 
 def test_reads_outside_allowed_dirs_are_blocked(work, tmp_path):

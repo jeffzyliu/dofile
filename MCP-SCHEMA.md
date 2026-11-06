@@ -87,9 +87,10 @@ Output (`RunResult`):
 | `rc` | integer | Return code. 0 = success; see [Return codes](#return-codes) |
 | `error` | string or null | The error message (the first line of Stata's error output) |
 | `error_command` | string or null | The command that failed, as echoed in the log, with `///` continuations joined (`"regress y x"`). For an error inside a loop or block it is that loop's first line (`"forvalues i = 1/2 {"`). `null` on success |
-| `log` | string | Output as Stata shows it; each command echoed as `. cmd`. A command whose output is longer than 56 lines keeps its first 40 and last 15, with `[... N lines omitted; full log: get_file NAME ...]` between them, so every command and how it ended stay visible. If the result is still longer than 8,000 characters, its first and last 4,000 are kept |
+| `log` | string | Output as Stata shows it; each command echoed as `. cmd`. A log under about 8,000 characters is returned whole. A longer one has its biggest blocks of output (a table, a listing: lines between blank lines) cut first, to their first 40 and last 15 lines and then, if that is not enough, to their first 5 and last 3, each with `[... N lines omitted; full log: get_file NAME ...]` between the kept lines, so short results stay: the `display` line under a table, a `test` between two regressions, every iteration's result of a loop. Command echoes are never cut. Only if every block is already short is the middle of the whole log dropped, with `[log truncated; ...]` |
 | `log_file` | string or null | When `log` was cut: the name of the full log, for `get_file`. It is kept in the hidden `.dofile/` folder, so it is not in `files` and does not clutter the working folder; only the newest 20 are kept. Otherwise `null` |
-| `results` | object | `{"e": ResultSet, "r": ResultSet}`: `e()` and `r()` as they are after the call, whether it succeeded or failed |
+| `log_omitted_lines` | integer, only when `log` was cut | How many lines `log` leaves out. A loop's commands are echoed once, up front, and its output has no per-command markers, so in a loop use `quietly` and `display` the numbers you need, or read `log_file` |
+| `results` | object | `{"e": ResultSet, "r": ResultSet, "e_changed": bool, "r_changed": bool}`: `e()` and `r()` as they are after the call, whether it succeeded or failed. `e_changed` and `r_changed` say whether this call changed them: `false` means they are left from an earlier call. `e()` survives `clear` (so `e(N)` can describe a model on data that is gone) and `r()` survives a failed command |
 | `files` | array of `{"name", "status", "bytes"}` | Files in the working folder this call created (`status: "created"`) or changed (`"modified"`), with their size. Top level only; the hidden `.dofile/` folder is not listed |
 | `nobs` | integer | Observations in the dataset in memory after the call |
 | `nvars` | integer | Variables in the dataset in memory after the call |
@@ -395,6 +396,11 @@ Input: `{"session": string}` (HTTP; no input over stdio)
 
 Output: `{"status": "reset"}`
 
+The same loss happens when the server is reconnected or restarted (for example `/mcp` in Claude Code, which a
+change to dofile's own code needs, since the server runs the code it started with): data, stored estimates, macros,
+scalars, graphs and tempfiles in memory are gone, while files in the working folder stay. Save to a `.dta` first and
+re-run the setup afterwards.
+
 ## Resource
 
 | URI | MIME type | Content |
@@ -479,9 +485,9 @@ Two kinds:
 |---|---|---|
 | 0 | Success | |
 | 1 | `--Break--`: the call was interrupted, because it ran past its timeout or the client cancelled it (the `error` says which) | The session keeps its data, as after Break in Stata; what the interrupted command had done so far stays done. Make the code faster, or pass a larger `timeout` |
-| 1–999 | Stata's own error codes (e.g. 111 variable not found, 198 invalid syntax, 601 file not found) | Fix the code; the session is intact |
+| 1–999 | Stata's own error codes (e.g. 111 variable not found, 198 invalid syntax, 601 file not found) | Fix the code; the session is intact A 601 for a tempfile of an earlier call ends with `(a tempfile lasts one run_do call: save it under a name to use it in a later call)` |
 | 199 | A command disabled by the sandbox: `shell`/`!`, `erase`/`rm`, `rmdir`, `mkdir`, `cd`, `copy`, `webuse` | Do it another way |
-| 603 | File could not be opened: a path outside the allowed folders, or writing to a read-only folder | Use the working folder or a `--read-dir` folder |
+| 603 | File could not be opened. When the sandbox refused the path the error and the log end with `dofile sandbox: cannot write /path` (or `read`, `list`); without that line the folder doesn't exist or isn't writable | A sandbox refusal: use the working folder or a `--read-dir` folder. Otherwise fix the path |
 | 9998 | Session reset: the code did not stop within 5 s of being interrupted (for example inside one long numerical routine), the session process crashed, or it could not start (the `error` gives the reason; the next call tries again) | Data, macros and results are gone; run the setup again |
 | 9999 | Internal engine error (a bug in the engine; the log has the Python traceback) | Report it; the session's data is kept |
 

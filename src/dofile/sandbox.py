@@ -19,6 +19,7 @@ import os
 import site
 import sys
 import tempfile
+from collections import deque
 
 DENIED = ("shell", "erase", "rm", "rmdir", "mkdir", "cd", "copy", "webuse")
 
@@ -32,8 +33,14 @@ _LIST_EVENTS = ("os.listdir", "os.scandir", "glob.glob")
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
 
 
+# The sandbox's recent refusals, for Engine.run: OpenDTA's own 603 message (graph export) hides why. Libraries
+# swallow some refusals (matplotlib scanning font folders), so Engine.run only blames one that names the failing file.
+refusals: deque[str] = deque(maxlen=50)
+
+
 class SandboxError(PermissionError):
     def __init__(self, message: str):
+        refusals.append(message)
         super().__init__(errno.EACCES, message)  # strerror = message, so OpenDTA's own 603 errors show it
 
 
