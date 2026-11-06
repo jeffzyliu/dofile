@@ -1,7 +1,7 @@
 # OpenDTA issues (tracking sheet)
 
 Problems found in the vendored OpenDTA engine (`src/dofile/_vendor/opendta`, commit in its `VENDORED` file):
-bugs (ODT-*), missing features (GAP-*), and dofile's own patch to it (PATCH-1). **None of these are reported
+bugs (ODT-*), missing features (GAP-*), and dofile's own patches to it (PATCH-*). **None of these are reported
 upstream yet.** Each needs a hand check against real Stata by someone who knows it before anything is reported.
 The "Expected in Stata" line in each entry's details is our reading of the Stata manual or of OpenDTA's Stata 14
 reference logs (`tests_opendta/compat/expected/`), not a Stata run.
@@ -42,12 +42,14 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-23 | `capture` does not catch a file error that comes as a Python `PermissionError` (the dofile sandbox's refusal in `type`, ...): the whole call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_sandbox_refusal_like_any_file_error` | patched |
 | ODT-24 | `xtreg ..., fe|re|be` and `areg ..., absorb()` ignore `[aweight=]`, `[pweight=]` and `[fweight=]`: the coefficient is the unweighted one | `tests/test_engine.py::test_odt24_*` | patched |
 | ODT-25 | `describe` prints a long wrong `Sorted by:` list (48 names with repeats) for a Stata-written file whose own sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
+| ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`mkdir C:\proj\out` makes `C:projout`), unlike `use`/`save` and unlike the same path in quotes: their arguments are split with `shlex` in POSIX mode, where `\` is an escape | found 2026-11-06 (path shim tests) | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | GAP-4 | `twoway lpoly` and `twoway lpolyci` are not plot types (rc 198 `lpoly is not a twoway plot type`); standalone `lpoly` works | found 2026-11-05 (Lee 2008 RD replication), no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 | PATCH-2 | dofile patch: Break is taken only at safe points (between commands and loop passes, outside `by`; in the ML optimizer, `bootstrap`/`permute`/`jackknife` replications, Mata loops and `sleep`). An interrupt mid-command could leave the data half changed (an interrupted `append` left columns of different lengths) | `tests/test_break.py` | patched |
+| PATCH-3 | dofile patch: every file name the user writes goes through one hook (`core/userpath.user_path`), after its default extension is added. Unset, nothing changes; dofile's web demo sets it to map paths into its working folder (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
 
 ## Details
 
@@ -527,6 +529,24 @@ areg y x [aweight=w], absorb(id)  // 0.47292
 - Patched (`opendta-odt25-dta-sort-list.patch`, 2026-11-05): the reader stops at the first 0 (`_sort_keys` in `io/dta.py`,
   used for the old and the 117+ formats). `castle.dta` now reports `Sorted by: sid`.
 
+### ODT-26: `mkdir`, `rmdir`, `copy`, `dir` delete backslashes from an unquoted path
+`mkdir C:\proj\out` makes a folder named `C:projout`. `commands/datautil.py` splits the arguments with
+`shlex.split(body, posix=True)`, which treats `\` as an escape character as a Unix shell does, so each backslash is
+removed.
+- The problem is not that a backslash isn't a separator on macOS and Linux: there it is an ordinary character in a
+  file name. The problem is that the text is changed, and inconsistently:
+  - `use C:\proj\d` and `save C:\proj\d` keep the backslashes; only these four commands drop them.
+  - Quoting changes the name: `mkdir "C:\proj\out"` keeps them (inside double quotes POSIX `shlex` keeps a
+    backslash before an ordinary letter), and `mkdir "C:\\x"` turns `\\` into `\`.
+- Expected in Stata (from the documentation, not a Stata run): the command gets the text as written. Windows
+  treats `\` as a separator. On macOS and Linux it is a literal character, so the folder is named `C:\proj\out`.
+  Stata's only backslash rule is in macro expansion (`\$`, `` \` ``), before the command sees its arguments.
+- Impact: small in the CLI (one junk name instead of another). It matters for the web demo, because the path shim
+  needs the original text to map a Windows path, and the separators are gone before it sees the path. Do-files
+  written on Windows use unquoted backslash paths.
+- Fix: split with `posix=False` and strip the outer quotes, or split on whitespace outside quotes as the other file
+  commands do.
+
 ### GAP-2: `estat firststage`
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat
 firststage is unrecognized". It's the standard weak-instrument check, so it's worth implementing upstream.
@@ -613,3 +633,19 @@ Research (2026-11-04):
   `append`, `sort`, `expand`, `bysort: replace`, `merge`, `drop`, `collapse`. The data must equal the state after a
   whole number of commands. Raising `KeyboardInterrupt` at the same points instead (the old behavior) left the data
   half changed at 7 of 60.
+
+### PATCH-3: one hook for user file paths (dofile's own patch)
+- Added 2026-11-06 for the web demo's path shim ([phase2-plan.md](phase2-plan.md), decision 2). OpenDTA has no
+  single place that turns a file name into a path: about 25 sites in 18 files build one with `Path(t).expanduser()`.
+- The patch adds `core/userpath.py` (`mapper`, `user_path(p)`) and calls `user_path` at each site, after the
+  default extension (`.dta`, `.csv`, `.do`, ...) is added, so the mapper can look for the file that will really be
+  opened. Sites: `use`/`save`/`append`/`merge` and other `using` files (`dta_path`), `type`, `erase`, delimited, Excel,
+  `infile`/`infix`, `putexcel`, `mkdir`/`rmdir`/`copy`/`dir` (`datautil._path`), `log`/`cmdlog`, `describe using`,
+  `outfile`, a `saving()` file, `do`/`run`, `confirm file`, `graph export`/`save`/`use`, `file open`, the `dir`
+  macro function, SAS/SPSS import, `irf`, `bcal create`, `view`.
+- Not hooked: `cd` (dofile replaces the command when the shim is on), `adopath`/`sysdir`, `program ..., plugin`,
+  console hints.
+- With the hook unset (the CLI and MCP server) the engine behaves as before: the full suite and the Stata 14
+  comparison pass unchanged.
+- Not for upstream: it exists only for dofile's browser host. `tests/test_pathshim.py` runs each file command with a
+  foreign path, and fails if a new `expanduser` site appears after a re-vendor.

@@ -17,6 +17,7 @@ from ..lang.syntax import Parsed, match_options, parse_standard
 from ..lang.words import strip_outer_quotes
 from ._util import touse
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..core.dataset import Dataset
@@ -32,6 +33,7 @@ def _path(text: str, ext: str) -> Path:
     p = Path(t).expanduser()
     if p.suffix == "":
         p = p.with_suffix(ext)
+    p = user_path(p)
     if not p.exists():
         raise StataError(601, f"file {p} not found")
     return p

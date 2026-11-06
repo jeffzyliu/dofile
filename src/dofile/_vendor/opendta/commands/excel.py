@@ -17,6 +17,7 @@ from ..io.excel import ExcelOptions, ExcelWriteOptions, describe_excel, read_exc
 from ..lang.syntax import Parsed, match_options, parse_standard
 from ..lang.words import strip_outer_quotes
 from ._util import touse
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -29,13 +30,13 @@ def excel_path(text: str, *, must_exist: bool) -> Path:
     p = Path(t).expanduser()
     if p.suffix == "":
         # VERIFY: default extension (Stata 14 uses .xls; OpenDTA writes .xlsx)
-        candidates = [p.with_suffix(".xlsx"), p.with_suffix(".xls")]
+        candidates = [user_path(p.with_suffix(".xlsx")), user_path(p.with_suffix(".xls"))]
         if must_exist:
             for c in candidates:
                 if c.exists():
                     return c
         return candidates[0]
-    return p
+    return user_path(p)
 
 
 def _sheet_arg(arg: str) -> tuple[str, str]:

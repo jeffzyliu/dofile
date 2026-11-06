@@ -16,6 +16,7 @@ from ..core.errors import StataError
 from ..lang.syntax import find_top, match_options
 from ..lang.words import strip_outer_quotes
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -34,7 +35,7 @@ def _split(args: str) -> tuple[list[str], str]:
 
 
 def _path(t: str) -> Path:
-    return Path(os.path.expanduser(strip_outer_quotes(t)))
+    return user_path(Path(os.path.expanduser(strip_outer_quotes(t))))
 
 
 # ---------------------------------------------------------------------------

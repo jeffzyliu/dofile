@@ -10,6 +10,7 @@ from ..core.errors import StataError
 from ..core.formats import number_to_macro
 from ..lang.words import split_words, strip_outer_quotes
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -177,7 +178,7 @@ def _data_function(s: "Session", t: str) -> str | None:
         return chars.get(m.group(2), "")
     m = re.fullmatch(r'dir\s+(\S+|"[^"]*")\s+(files|dirs|other)\s+(\S+|"[^"]*")(\s*,.*)?', t)
     if m:
-        folder = Path(strip_outer_quotes(m.group(1))).expanduser()
+        folder = user_path(Path(strip_outer_quotes(m.group(1))).expanduser())
         pattern = strip_outer_quotes(m.group(3))
         opts = (m.group(4) or "").replace(",", " ").split()
         if not folder.is_dir():

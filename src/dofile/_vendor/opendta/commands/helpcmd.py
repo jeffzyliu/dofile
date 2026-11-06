@@ -16,6 +16,7 @@ from ..core.smcl import render_text
 from ..lang.adopath import find_file
 from ..lang.words import strip_outer_quotes
 from .registry import REGISTRY, command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -180,7 +181,7 @@ def cmd_view(s: "Session", args: str) -> None:
         return
     if t.startswith("file "):
         t = t[5:]
-    path = Path(strip_outer_quotes(t)).expanduser()
+    path = user_path(Path(strip_outer_quotes(t)).expanduser())
     if not path.exists():
         raise StataError(601, f"file {path} not found")
     hook = s.ui_hooks.get("view")

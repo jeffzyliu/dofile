@@ -18,6 +18,7 @@ from ..lang.syntax import Parsed, match_options, parse_standard
 from ..lang.words import parse_numlist, strip_outer_quotes
 from ._util import touse
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -30,7 +31,7 @@ def text_path(text: str, default_ext: str) -> Path:
     p = Path(t).expanduser()
     if p.suffix == "":
         p = p.with_suffix(default_ext)
-    return p
+    return user_path(p)
 
 
 def _delimiter(arg: str) -> str:

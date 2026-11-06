@@ -20,6 +20,7 @@ from ..lang.syntax import match_options, parse_standard
 from ..lang.words import strip_outer_quotes
 from ._util import touse
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -32,7 +33,7 @@ def dta_path(text: str) -> Path:
     p = Path(os.path.expanduser(t))
     if p.suffix == "":
         p = p.with_suffix(".dta")
-    return p
+    return user_path(p)
 
 
 def _shown(p: Path) -> str:
@@ -320,7 +321,7 @@ def cmd_type(s: "Session", args: str) -> None:
     t = strip_outer_quotes(head.strip())
     if not t:
         raise StataError(198, "invalid file specification")
-    path = Path(os.path.expanduser(t))
+    path = user_path(Path(os.path.expanduser(t)))
     if not path.exists():
         raise StataError(601, f"file {t} not found")
     raw = path.read_bytes()
@@ -351,7 +352,7 @@ def _erase(s: "Session", args: str) -> None:
     t = strip_outer_quotes(args.strip())
     if not t:
         raise StataError(198, "invalid file specification")
-    path = Path(os.path.expanduser(t))
+    path = user_path(Path(os.path.expanduser(t)))
     if not path.exists():
         raise StataError(601, f"file {t} not found")
     try:

@@ -22,6 +22,7 @@ from ..lang.syntax import Parsed, match_options, parse_standard
 from ..lang.words import strip_outer_quotes
 from ._util import eval_vector, touse
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -102,6 +103,7 @@ def cmd_log(s: "Session", args: str) -> None:
         path = Path(strip_outer_quotes(head.strip())).expanduser()
         if path.suffix == "":
             path = path.with_suffix(".log" if o.get("text") else ".smcl")
+        path = user_path(path)
         kind = "smcl" if o.get("smcl") or (path.suffix == ".smcl" and not o.get("text")) else "text"
         if path.exists() and not (o.get("replace") or o.get("append")):
             raise StataError(602, f"file {path} already exists")
@@ -194,6 +196,7 @@ def cmd_cmdlog(s: "Session", args: str) -> None:
         path = Path(strip_outer_quotes(head.strip())).expanduser()
         if path.suffix == "":
             path = path.with_suffix(".txt")
+        path = user_path(path)
         if path.exists() and not (o.get("replace") or o.get("append")):
             raise StataError(602, f"file {path} already exists")
         s.cmdlog = {"path": path.resolve(), "fh": open(path, "a" if o.get("append") else "w",

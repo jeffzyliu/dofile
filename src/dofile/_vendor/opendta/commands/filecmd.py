@@ -20,6 +20,7 @@ from ..lang.syntax import match_options
 from ..lang.words import strip_outer_quotes
 from .display import _literal
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -60,7 +61,7 @@ def _open(s: "Session", rest: str) -> None:
                                   "replace": 3, "append": 3, "all": 3}) if comma else {}
     if name in _handles(s):
         raise StataError(110, f"file handle {name} already exists")   # VERIFY
-    path = Path(file).expanduser()
+    path = user_path(Path(file).expanduser())
     binary = bool(o.get("binary"))
     if o.get("read") and o.get("write"):
         # read write: opens an existing file or creates a new one, positioned at the top

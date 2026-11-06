@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from ..core.errors import StataError
 from .model import Graph
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -69,7 +70,7 @@ def gph_path(text: str) -> Path:
     p = Path(t).expanduser()
     if p.suffix == "":
         p = p.with_suffix(".gph")
-    return p
+    return user_path(p)
 
 
 def save_gph(g: Graph, path: Path, *, replace: bool, out=None) -> None:

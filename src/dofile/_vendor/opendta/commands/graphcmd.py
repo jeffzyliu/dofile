@@ -22,6 +22,7 @@ from ..graphics.store import gph_path, load_gph, save_gph, store
 from ..lang.syntax import find_top, match_options
 from ..lang.words import split_words, strip_outer_quotes
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -258,6 +259,7 @@ def _export(s: "Session", text: str) -> None:
     if ext not in R.FORMATS:
         raise StataError(198, f"{ext[1:]} is not a supported graph export format")   # VERIFY
     g = store(s).get(o["name"].strip() if isinstance(o.get("name"), str) else None)
+    path = user_path(path)
     if path.exists() and not o.get("replace"):
         raise StataError(602, f"file {fname} already exists")
     fmt, label = R.FORMATS[ext]

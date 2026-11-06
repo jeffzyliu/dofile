@@ -8,7 +8,7 @@ are no accounts and no hosting cost beyond static files.
 **Not in Phase 2:** accounts, sync between devices, sharing or collaboration, server-side execution, the MCP server
 (Phase 3), community commands, tutorials beyond one sample project, our own estimators.
 
-**Status (2026-11-06):** step 1 (the Pyodide spike) is done, see [Spike results](#spike-results-2026-11-06);
+**Status (2026-11-06):** steps 1 (the Pyodide spike) and 2 (the path shim) are done, see [Spike results](#spike-results-2026-11-06);
 storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)).
 
 ## Facts this plan rests on
@@ -97,9 +97,9 @@ also resolves numpy, scipy, matplotlib and openpyxl). Results on an M-series Mac
      It doesn't give rc 199 as the MCP sandbox does, because do-files from real projects start with `cd`.
    - **Browser only.** The patch adds a hook that does nothing unless the browser entry point turns it on. In the
      CLI and MCP server, absolute paths are real, and the sandbox keeps refusing them (rc 603, tested).
-   - Where: first check whether OpenDTA's path helpers (`dta_path`, `text_path`, `excel_path`, `load_using`) are the
-     single points every file command goes through. If so, the shim is one dofile function hooked there by one
-     patch. It is pure Python, so it is tested in the normal CPython suite.
+   - Where (done): OpenDTA has no single path helper (about 25 sites in 18 files), so PATCH-3 adds one hook,
+     called after the default extension is added, and `dofile/pathshim.py` sets it. Temp files and paths that
+     exist as written are never mapped. `cd` is replaced in the command registry while the shim is on.
 
 ## Open decisions (recommendation first)
 3. **UI framework.** Vite is a build tool and dev server, not a framework. "Plain Vite" means TypeScript that
@@ -208,8 +208,11 @@ that steps 6 and 8 build.
 ## Order of work (each step ends green)
 1. ~~**Spike under Node**~~ done 2026-11-06 ([Spike results](#spike-results-2026-11-06)). Warm start time is left to
    step 4, because a browser's cache differs from Node's.
-2. **Path shim** (decision 2) in Python, with tests in `tests/`: Windows and POSIX absolute paths, a new file,
-   `cd`, a missing file (rc 601 as before, with the path the user wrote in the message).
+2. ~~**Path shim**~~ done 2026-11-06: `src/dofile/pathshim.py` (`install(root, note)`, `uninstall()`) on top of
+   PATCH-3, a hook at the ~25 places OpenDTA turns a file name into a path ([opendta-issues.md](opendta-issues.md)).
+   Tests (`tests/test_pathshim.py`): 22 file commands with a Windows and a POSIX foreign path, the note, tempfiles,
+   a missing file (rc 601 after the note), `cd`, and a guard against unhooked sites after a re-vendor. Unquoted
+   Windows paths in `mkdir`/`rmdir`/`copy`/`dir` lose their backslashes in the engine (ODT-26, open).
 3. **Browser entry point:** a small Python module the Web Worker calls (`run`, `files`, `describe`, `matrix`), plus
    the worker script and its message protocol. The entry point installs its own SIGINT handler that calls
    `break_.request()` (the one in `worker.py` isn't loaded in the browser). The restart path.

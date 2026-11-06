@@ -1,0 +1,439 @@
+diff --git a/src/dofile/_vendor/opendta/commands/datacmds.py b/src/dofile/_vendor/opendta/commands/datacmds.py
+index 46915ac..a76255c 100644
+--- a/src/dofile/_vendor/opendta/commands/datacmds.py
++++ b/src/dofile/_vendor/opendta/commands/datacmds.py
+@@ -22,6 +22,7 @@ from ..lang.words import strip_outer_quotes
+ from ._util import eval_vector, touse
+ from .data import _note
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -943,6 +944,7 @@ def cmd_outfile(s: "Session", args: str) -> None:
+     path = Path(os.path.expanduser(strip_outer_quotes(p.using)))
+     if path.suffix == "":
+         path = path.with_suffix(".dct" if o.get("dictionary") else ".raw")
++    path = user_path(path)
+     if path.exists() and not o.get("replace"):
+         raise StataError(602, f"file {path} already exists")
+     if not path.exists() and o.get("replace"):
+@@ -1158,6 +1160,7 @@ def cmd_statsby(s: "Session", args: str) -> None:
+         path = Path(os.path.expanduser(strip_outer_quotes(fname.strip())))
+         if path.suffix == "":
+             path = path.with_suffix(".dta")
++        path = user_path(path)
+         if path.exists() and "replace" not in rep:
+             raise StataError(602, f"file {path} already exists")
+         write_dta(new, path)
+diff --git a/src/dofile/_vendor/opendta/commands/datasets.py b/src/dofile/_vendor/opendta/commands/datasets.py
+index ef8ecec..69cd495 100644
+--- a/src/dofile/_vendor/opendta/commands/datasets.py
++++ b/src/dofile/_vendor/opendta/commands/datasets.py
+@@ -30,6 +30,7 @@ from ..lang.words import strip_outer_quotes
+ from ._util import touse
+ from .data import _note
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -602,6 +603,7 @@ def cmd_bcal(s: "Session", args: str) -> None:
+         path = Path(os.path.expanduser(words[1]))
+         if path.suffix != ".stbcal":
+             path = path.with_suffix(".stbcal")
++        path = user_path(path)
+         if path.exists() and not o.get("replace"):
+             raise StataError(602, f"file {path} already exists")
+         v = s.data.get(s.expand_varlist(str(o["from"]))[0])
+diff --git a/src/dofile/_vendor/opendta/commands/datautil.py b/src/dofile/_vendor/opendta/commands/datautil.py
+index 611cd04..e093ef3 100644
+--- a/src/dofile/_vendor/opendta/commands/datautil.py
++++ b/src/dofile/_vendor/opendta/commands/datautil.py
+@@ -16,6 +16,7 @@ from ..core.errors import StataError
+ from ..lang.syntax import find_top, match_options
+ from ..lang.words import strip_outer_quotes
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -34,7 +35,7 @@ def _split(args: str) -> tuple[list[str], str]:
+ 
+ 
+ def _path(t: str) -> Path:
+-    return Path(os.path.expanduser(strip_outer_quotes(t)))
++    return user_path(Path(os.path.expanduser(strip_outer_quotes(t))))
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/src/dofile/_vendor/opendta/commands/delimited.py b/src/dofile/_vendor/opendta/commands/delimited.py
+index ca2e3ca..39e58c9 100644
+--- a/src/dofile/_vendor/opendta/commands/delimited.py
++++ b/src/dofile/_vendor/opendta/commands/delimited.py
+@@ -18,6 +18,7 @@ from ..lang.syntax import Parsed, match_options, parse_standard
+ from ..lang.words import parse_numlist, strip_outer_quotes
+ from ._util import touse
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -30,7 +31,7 @@ def text_path(text: str, default_ext: str) -> Path:
+     p = Path(t).expanduser()
+     if p.suffix == "":
+         p = p.with_suffix(default_ext)
+-    return p
++    return user_path(p)
+ 
+ 
+ def _delimiter(arg: str) -> str:
+diff --git a/src/dofile/_vendor/opendta/commands/excel.py b/src/dofile/_vendor/opendta/commands/excel.py
+index 53becea..ed4745c 100644
+--- a/src/dofile/_vendor/opendta/commands/excel.py
++++ b/src/dofile/_vendor/opendta/commands/excel.py
+@@ -17,6 +17,7 @@ from ..io.excel import ExcelOptions, ExcelWriteOptions, describe_excel, read_exc
+ from ..lang.syntax import Parsed, match_options, parse_standard
+ from ..lang.words import strip_outer_quotes
+ from ._util import touse
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -29,13 +30,13 @@ def excel_path(text: str, *, must_exist: bool) -> Path:
+     p = Path(t).expanduser()
+     if p.suffix == "":
+         # VERIFY: default extension (Stata 14 uses .xls; OpenDTA writes .xlsx)
+-        candidates = [p.with_suffix(".xlsx"), p.with_suffix(".xls")]
++        candidates = [user_path(p.with_suffix(".xlsx")), user_path(p.with_suffix(".xls"))]
+         if must_exist:
+             for c in candidates:
+                 if c.exists():
+                     return c
+         return candidates[0]
+-    return p
++    return user_path(p)
+ 
+ 
+ def _sheet_arg(arg: str) -> tuple[str, str]:
+diff --git a/src/dofile/_vendor/opendta/commands/filecmd.py b/src/dofile/_vendor/opendta/commands/filecmd.py
+index dabf5e5..8af534a 100644
+--- a/src/dofile/_vendor/opendta/commands/filecmd.py
++++ b/src/dofile/_vendor/opendta/commands/filecmd.py
+@@ -20,6 +20,7 @@ from ..lang.syntax import match_options
+ from ..lang.words import strip_outer_quotes
+ from .display import _literal
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -60,7 +61,7 @@ def _open(s: "Session", rest: str) -> None:
+                                   "replace": 3, "append": 3, "all": 3}) if comma else {}
+     if name in _handles(s):
+         raise StataError(110, f"file handle {name} already exists")   # VERIFY
+-    path = Path(file).expanduser()
++    path = user_path(Path(file).expanduser())
+     binary = bool(o.get("binary"))
+     if o.get("read") and o.get("write"):
+         # read write: opens an existing file or creates a new one, positioned at the top
+diff --git a/src/dofile/_vendor/opendta/commands/files.py b/src/dofile/_vendor/opendta/commands/files.py
+index 7566d0b..a304f3d 100644
+--- a/src/dofile/_vendor/opendta/commands/files.py
++++ b/src/dofile/_vendor/opendta/commands/files.py
+@@ -20,6 +20,7 @@ from ..lang.syntax import match_options, parse_standard
+ from ..lang.words import strip_outer_quotes
+ from ._util import touse
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -32,7 +33,7 @@ def dta_path(text: str) -> Path:
+     p = Path(os.path.expanduser(t))
+     if p.suffix == "":
+         p = p.with_suffix(".dta")
+-    return p
++    return user_path(p)
+ 
+ 
+ def _shown(p: Path) -> str:
+@@ -320,7 +321,7 @@ def cmd_type(s: "Session", args: str) -> None:
+     t = strip_outer_quotes(head.strip())
+     if not t:
+         raise StataError(198, "invalid file specification")
+-    path = Path(os.path.expanduser(t))
++    path = user_path(Path(os.path.expanduser(t)))
+     if not path.exists():
+         raise StataError(601, f"file {t} not found")
+     raw = path.read_bytes()
+@@ -351,7 +352,7 @@ def _erase(s: "Session", args: str) -> None:
+     t = strip_outer_quotes(args.strip())
+     if not t:
+         raise StataError(198, "invalid file specification")
+-    path = Path(os.path.expanduser(t))
++    path = user_path(Path(os.path.expanduser(t)))
+     if not path.exists():
+         raise StataError(601, f"file {t} not found")
+     try:
+diff --git a/src/dofile/_vendor/opendta/commands/graphcmd.py b/src/dofile/_vendor/opendta/commands/graphcmd.py
+index 47f2b50..0eb25a6 100644
+--- a/src/dofile/_vendor/opendta/commands/graphcmd.py
++++ b/src/dofile/_vendor/opendta/commands/graphcmd.py
+@@ -22,6 +22,7 @@ from ..graphics.store import gph_path, load_gph, save_gph, store
+ from ..lang.syntax import find_top, match_options
+ from ..lang.words import split_words, strip_outer_quotes
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -258,6 +259,7 @@ def _export(s: "Session", text: str) -> None:
+     if ext not in R.FORMATS:
+         raise StataError(198, f"{ext[1:]} is not a supported graph export format")   # VERIFY
+     g = store(s).get(o["name"].strip() if isinstance(o.get("name"), str) else None)
++    path = user_path(path)
+     if path.exists() and not o.get("replace"):
+         raise StataError(602, f"file {fname} already exists")
+     fmt, label = R.FORMATS[ext]
+diff --git a/src/dofile/_vendor/opendta/commands/helpcmd.py b/src/dofile/_vendor/opendta/commands/helpcmd.py
+index 171f17b..c95c706 100644
+--- a/src/dofile/_vendor/opendta/commands/helpcmd.py
++++ b/src/dofile/_vendor/opendta/commands/helpcmd.py
+@@ -16,6 +16,7 @@ from ..core.smcl import render_text
+ from ..lang.adopath import find_file
+ from ..lang.words import strip_outer_quotes
+ from .registry import REGISTRY, command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -180,7 +181,7 @@ def cmd_view(s: "Session", args: str) -> None:
+         return
+     if t.startswith("file "):
+         t = t[5:]
+-    path = Path(strip_outer_quotes(t)).expanduser()
++    path = user_path(Path(strip_outer_quotes(t)).expanduser())
+     if not path.exists():
+         raise StataError(601, f"file {path} not found")
+     hook = s.ui_hooks.get("view")
+diff --git a/src/dofile/_vendor/opendta/commands/infile.py b/src/dofile/_vendor/opendta/commands/infile.py
+index e9ee3d5..fc9f2b4 100644
+--- a/src/dofile/_vendor/opendta/commands/infile.py
++++ b/src/dofile/_vendor/opendta/commands/infile.py
+@@ -17,6 +17,7 @@ from ..lang.syntax import Parsed, match_options, parse_standard
+ from ..lang.words import strip_outer_quotes
+ from ._util import touse
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..core.dataset import Dataset
+@@ -32,6 +33,7 @@ def _path(text: str, ext: str) -> Path:
+     p = Path(t).expanduser()
+     if p.suffix == "":
+         p = p.with_suffix(ext)
++    p = user_path(p)
+     if not p.exists():
+         raise StataError(601, f"file {p} not found")
+     return p
+diff --git a/src/dofile/_vendor/opendta/commands/inspect.py b/src/dofile/_vendor/opendta/commands/inspect.py
+index b39946a..84ab906 100644
+--- a/src/dofile/_vendor/opendta/commands/inspect.py
++++ b/src/dofile/_vendor/opendta/commands/inspect.py
+@@ -17,6 +17,7 @@ from ..core.varlist import expand
+ from ..lang.syntax import match_options, parse_standard
+ from ._util import touse
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..core.dataset import Dataset, Variable
+@@ -384,6 +385,7 @@ def _describe_using(s: "Session", p, opts: dict) -> None:
+     path = Path(strip_outer_quotes(p.using.strip())).expanduser()
+     if path.suffix == "":
+         path = path.with_suffix(".dta")
++    path = user_path(path)
+     if not path.exists():
+         raise StataError(601, f"file {path} not found")
+     saved, saved_r = s.data, s.r
+diff --git a/src/dofile/_vendor/opendta/commands/logcmd.py b/src/dofile/_vendor/opendta/commands/logcmd.py
+index 13ac4f5..ba1c047 100644
+--- a/src/dofile/_vendor/opendta/commands/logcmd.py
++++ b/src/dofile/_vendor/opendta/commands/logcmd.py
+@@ -22,6 +22,7 @@ from ..lang.syntax import Parsed, match_options, parse_standard
+ from ..lang.words import strip_outer_quotes
+ from ._util import eval_vector, touse
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -102,6 +103,7 @@ def cmd_log(s: "Session", args: str) -> None:
+         path = Path(strip_outer_quotes(head.strip())).expanduser()
+         if path.suffix == "":
+             path = path.with_suffix(".log" if o.get("text") else ".smcl")
++        path = user_path(path)
+         kind = "smcl" if o.get("smcl") or (path.suffix == ".smcl" and not o.get("text")) else "text"
+         if path.exists() and not (o.get("replace") or o.get("append")):
+             raise StataError(602, f"file {path} already exists")
+@@ -194,6 +196,7 @@ def cmd_cmdlog(s: "Session", args: str) -> None:
+         path = Path(strip_outer_quotes(head.strip())).expanduser()
+         if path.suffix == "":
+             path = path.with_suffix(".txt")
++        path = user_path(path)
+         if path.exists() and not (o.get("replace") or o.get("append")):
+             raise StataError(602, f"file {path} already exists")
+         s.cmdlog = {"path": path.resolve(), "fh": open(path, "a" if o.get("append") else "w",
+diff --git a/src/dofile/_vendor/opendta/commands/macro.py b/src/dofile/_vendor/opendta/commands/macro.py
+index 2585ec7..867cb21 100644
+--- a/src/dofile/_vendor/opendta/commands/macro.py
++++ b/src/dofile/_vendor/opendta/commands/macro.py
+@@ -10,6 +10,7 @@ from ..core.errors import StataError
+ from ..core.formats import number_to_macro
+ from ..lang.words import split_words, strip_outer_quotes
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -177,7 +178,7 @@ def _data_function(s: "Session", t: str) -> str | None:
+         return chars.get(m.group(2), "")
+     m = re.fullmatch(r'dir\s+(\S+|"[^"]*")\s+(files|dirs|other)\s+(\S+|"[^"]*")(\s*,.*)?', t)
+     if m:
+-        folder = Path(strip_outer_quotes(m.group(1))).expanduser()
++        folder = user_path(Path(strip_outer_quotes(m.group(1))).expanduser())
+         pattern = strip_outer_quotes(m.group(3))
+         opts = (m.group(4) or "").replace(",", " ").split()
+         if not folder.is_dir():
+diff --git a/src/dofile/_vendor/opendta/commands/program.py b/src/dofile/_vendor/opendta/commands/program.py
+index c6bdf7e..04e1927 100644
+--- a/src/dofile/_vendor/opendta/commands/program.py
++++ b/src/dofile/_vendor/opendta/commands/program.py
+@@ -12,6 +12,7 @@ from ..core.errors import (BreakLoop, ContinueLoop, ExitRequest, StataError,
+ from ..lang.lexer import split_commands
+ from ..lang.words import split_words
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -35,6 +36,7 @@ def _resolve_do(path: str) -> Path:
+     p = Path(os.path.expanduser(path))
+     if p.suffix == "":
+         p = p.with_suffix(".do")
++    p = user_path(p)
+     if not p.exists():
+         raise StataError(601, f"file {p} not found")
+     return p
+@@ -201,7 +203,7 @@ def cmd_confirm(s: "Session", args: str) -> None:
+     m = re.match(r"^(new\s+)?f(?:i|il|ile)?\s+(.*)$", t)
+     if m:
+         path = m.group(2).strip().strip('"')
+-        exists = Path(path).exists()
++        exists = user_path(Path(path)).exists()
+         if m.group(1) and exists:
+             raise StataError(602, f"file {path} already exists")
+         if not m.group(1) and not exists:
+diff --git a/src/dofile/_vendor/opendta/commands/putexcel.py b/src/dofile/_vendor/opendta/commands/putexcel.py
+index d0634b0..9471bb9 100644
+--- a/src/dofile/_vendor/opendta/commands/putexcel.py
++++ b/src/dofile/_vendor/opendta/commands/putexcel.py
+@@ -18,6 +18,7 @@ from ..core.errors import StataError
+ from ..lang.syntax import find_top, match_options, parse_options
+ from ..lang.words import strip_outer_quotes
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -40,7 +41,7 @@ def _path(text: str) -> Path:
+     p = Path(t).expanduser()
+     if p.suffix == "":
+         p = p.with_suffix(".xlsx")
+-    return p
++    return user_path(p)
+ 
+ 
+ def _split_cells(text: str) -> list[tuple[str, str]]:
+diff --git a/src/dofile/_vendor/opendta/commands/statpkg.py b/src/dofile/_vendor/opendta/commands/statpkg.py
+index 30540b0..6fe4d6c 100644
+--- a/src/dofile/_vendor/opendta/commands/statpkg.py
++++ b/src/dofile/_vendor/opendta/commands/statpkg.py
+@@ -20,6 +20,7 @@ from ..io import statpkg
+ from ..lang.syntax import Parsed, match_options, parse_standard
+ from ..lang.words import strip_outer_quotes
+ from ._util import touse
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -32,6 +33,7 @@ def _file(text: str, ext: str, *, must_exist: bool = True) -> Path:
+     p = Path(t).expanduser()
+     if p.suffix == "":
+         p = p.with_suffix(ext)
++    p = user_path(p)
+     if must_exist and not p.exists():
+         raise StataError(601, f"file {p} not found")
+     return p
+diff --git a/src/dofile/_vendor/opendta/core/userpath.py b/src/dofile/_vendor/opendta/core/userpath.py
+new file mode 100644
+index 0000000..fea3f77
+--- /dev/null
++++ b/src/dofile/_vendor/opendta/core/userpath.py
+@@ -0,0 +1,13 @@
++"""dofile patch (PATCH-3): every file name the user writes is resolved here, after its default extension is added.
++A host can set `mapper` (dofile's web demo maps paths into its virtual working folder). Unset, nothing changes."""
++
++from __future__ import annotations
++
++from pathlib import Path
++from typing import Callable
++
++mapper: Callable[[Path], Path] | None = None
++
++
++def user_path(p: Path) -> Path:
++    return mapper(p) if mapper is not None else p
+diff --git a/src/dofile/_vendor/opendta/estimation/irf.py b/src/dofile/_vendor/opendta/estimation/irf.py
+index b6e78f9..cc1aa25 100644
+--- a/src/dofile/_vendor/opendta/estimation/irf.py
++++ b/src/dofile/_vendor/opendta/estimation/irf.py
+@@ -32,6 +32,7 @@ from ..core.formats import format_value
+ from ..lang.syntax import match_options, parse_standard
+ from ..lang.words import split_words
+ from ..lazy import lazy
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ st = lazy("scipy.stats")
+ 
+@@ -208,7 +209,7 @@ def _irf_path(name: str) -> Path:
+     p = Path(t)
+     if not p.suffix:
+         p = p.with_suffix(".irf")
+-    return p
++    return user_path(p)
+ 
+ 
+ def _load(path: Path) -> dict:
+diff --git a/src/dofile/_vendor/opendta/graphics/store.py b/src/dofile/_vendor/opendta/graphics/store.py
+index 2c27f72..e5a0fd3 100644
+--- a/src/dofile/_vendor/opendta/graphics/store.py
++++ b/src/dofile/_vendor/opendta/graphics/store.py
+@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
+ 
+ from ..core.errors import StataError
+ from .model import Graph
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -69,7 +70,7 @@ def gph_path(text: str) -> Path:
+     p = Path(t).expanduser()
+     if p.suffix == "":
+         p = p.with_suffix(".gph")
+-    return p
++    return user_path(p)
+ 
+ 
+ def save_gph(g: Graph, path: Path, *, replace: bool, out=None) -> None:

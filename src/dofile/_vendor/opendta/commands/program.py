@@ -12,6 +12,7 @@ from ..core.errors import (BreakLoop, ContinueLoop, ExitRequest, StataError,
 from ..lang.lexer import split_commands
 from ..lang.words import split_words
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -35,6 +36,7 @@ def _resolve_do(path: str) -> Path:
     p = Path(os.path.expanduser(path))
     if p.suffix == "":
         p = p.with_suffix(".do")
+    p = user_path(p)
     if not p.exists():
         raise StataError(601, f"file {p} not found")
     return p
@@ -201,7 +203,7 @@ def cmd_confirm(s: "Session", args: str) -> None:
     m = re.match(r"^(new\s+)?f(?:i|il|ile)?\s+(.*)$", t)
     if m:
         path = m.group(2).strip().strip('"')
-        exists = Path(path).exists()
+        exists = user_path(Path(path)).exists()
         if m.group(1) and exists:
             raise StataError(602, f"file {path} already exists")
         if not m.group(1) and not exists:

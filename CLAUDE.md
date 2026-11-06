@@ -66,6 +66,8 @@ Layers, bottom up (`src/dofile/`):
   thread, and a cancel keeps the lock until the child has stopped. Per-call cancel state is the call's own `Event`.
   Tool outputs are `TypedDict`s, which become the advertised `outputSchema`, and the SDK validates every result
   against them.
+- `pathshim.py`: web demo only (the CLI and MCP server never install it). Through PATCH-3's hook
+  (`core/userpath.py`) it maps file names written for someone's computer into one working folder and replaces `cd`.
 - `cli.py`: `dofile run` runs `do` on the file inside one sandboxed `Engine`, passing the path through a local
   macro so `$` and backquotes in it aren't expanded (a backslash escapes only `$`, since the ODT-8 patch, not backquotes). The log is not capped.
 

@@ -17,6 +17,7 @@ from ..core.varlist import expand
 from ..lang.syntax import match_options, parse_standard
 from ._util import touse
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..core.dataset import Dataset, Variable
@@ -384,6 +385,7 @@ def _describe_using(s: "Session", p, opts: dict) -> None:
     path = Path(strip_outer_quotes(p.using.strip())).expanduser()
     if path.suffix == "":
         path = path.with_suffix(".dta")
+    path = user_path(path)
     if not path.exists():
         raise StataError(601, f"file {path} not found")
     saved, saved_r = s.data, s.r

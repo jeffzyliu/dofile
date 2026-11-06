@@ -18,6 +18,7 @@ from ..core.errors import StataError
 from ..lang.syntax import find_top, match_options, parse_options
 from ..lang.words import strip_outer_quotes
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -40,7 +41,7 @@ def _path(text: str) -> Path:
     p = Path(t).expanduser()
     if p.suffix == "":
         p = p.with_suffix(".xlsx")
-    return p
+    return user_path(p)
 
 
 def _split_cells(text: str) -> list[tuple[str, str]]:

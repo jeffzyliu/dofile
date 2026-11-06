@@ -30,6 +30,7 @@ from ..lang.words import strip_outer_quotes
 from ._util import touse
 from .data import _note
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -602,6 +603,7 @@ def cmd_bcal(s: "Session", args: str) -> None:
         path = Path(os.path.expanduser(words[1]))
         if path.suffix != ".stbcal":
             path = path.with_suffix(".stbcal")
+        path = user_path(path)
         if path.exists() and not o.get("replace"):
             raise StataError(602, f"file {path} already exists")
         v = s.data.get(s.expand_varlist(str(o["from"]))[0])

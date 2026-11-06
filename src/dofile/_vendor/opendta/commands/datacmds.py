@@ -22,6 +22,7 @@ from ..lang.words import strip_outer_quotes
 from ._util import eval_vector, touse
 from .data import _note
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -943,6 +944,7 @@ def cmd_outfile(s: "Session", args: str) -> None:
     path = Path(os.path.expanduser(strip_outer_quotes(p.using)))
     if path.suffix == "":
         path = path.with_suffix(".dct" if o.get("dictionary") else ".raw")
+    path = user_path(path)
     if path.exists() and not o.get("replace"):
         raise StataError(602, f"file {path} already exists")
     if not path.exists() and o.get("replace"):
@@ -1158,6 +1160,7 @@ def cmd_statsby(s: "Session", args: str) -> None:
         path = Path(os.path.expanduser(strip_outer_quotes(fname.strip())))
         if path.suffix == "":
             path = path.with_suffix(".dta")
+        path = user_path(path)
         if path.exists() and "replace" not in rep:
             raise StataError(602, f"file {path} already exists")
         write_dta(new, path)

@@ -32,6 +32,7 @@ from ..core.formats import format_value
 from ..lang.syntax import match_options, parse_standard
 from ..lang.words import split_words
 from ..lazy import lazy
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 st = lazy("scipy.stats")
 
@@ -208,7 +209,7 @@ def _irf_path(name: str) -> Path:
     p = Path(t)
     if not p.suffix:
         p = p.with_suffix(".irf")
-    return p
+    return user_path(p)
 
 
 def _load(path: Path) -> dict:
