@@ -77,3 +77,14 @@ os.kill(os.getpid(), 2)   # handled at once, while no run is going on
 print(browser.run('display 1'))
 """)
     assert r["rc"] == 0
+
+
+def test_the_web_highlighters_command_list_matches_the_engine():
+    """web/src/stata/commands.json is generated from the registry (`cd web && npm run commands`); a re-vendor that
+    adds or renames commands must regenerate it."""
+    from pathlib import Path
+    from dofile._vendor.opendta.session import Session  # noqa: F401  (registers all commands)
+    from dofile._vendor.opendta.commands.registry import REGISTRY
+    saved = json.loads((Path(__file__).parent.parent / "web" / "src" / "stata" / "commands.json").read_text())
+    assert saved["commands"] == {k: v.min_abbrev for k, v in REGISTRY.items()}
+    assert saved["prefixes"] == sorted(k for k, v in REGISTRY.items() if v.prefix)

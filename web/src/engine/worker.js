@@ -94,7 +94,8 @@ self.onmessage = ({ data: { id, op, args } }) => {
   queue = queue.then(async () => {
     try {
       if (!ops[op]) throw new Error(`unknown op ${op}`);
-      self.postMessage({ id, result: await ops[op](args ?? {}) });
+      const result = await ops[op](args ?? {});
+      self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []);   // a file: moved, not copied
     } catch (e) {
       self.postMessage({ id, error: String(e?.message ?? e) });
     }

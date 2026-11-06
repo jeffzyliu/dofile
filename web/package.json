@@ -3,13 +3,27 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pretest": "cd .. && uv build --wheel -q",
-    "test": "node --test test/"
+    "commands": "cd .. && uv run python -c \"import json; from dofile._vendor.opendta.session import Session; from dofile._vendor.opendta.commands.registry import REGISTRY as R; print(json.dumps({'commands': {k: v.min_abbrev for k, v in sorted(R.items())}, 'prefixes': sorted(k for k, v in R.items() if v.prefix)}, indent=0))\" > web/src/stata/commands.json",
+    "wheel": "cd .. && uv build --wheel -q",
+    "dev": "npm run wheel && vite",
+    "build": "npm run wheel && vite build",
+    "preview": "vite preview",
+    "check": "tsc --noEmit",
+    "pretest": "npm run wheel",
+    "test": "node --test test/",
+    "e2e": "npm run build && playwright test"
   },
   "dependencies": {
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "codemirror": "^6.0.2",
     "pyodide": "314.0.7"
   },
   "devDependencies": {
-    "fake-indexeddb": "^6.2.7"
+    "@playwright/test": "^1.65.0",
+    "fake-indexeddb": "^6.2.7",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6"
   }
 }

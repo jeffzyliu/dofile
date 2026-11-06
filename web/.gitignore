@@ -1,1 +1,5 @@
 node_modules/
+public/*.whl
+dist/
+test-results/
+playwright-report/

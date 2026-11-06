@@ -78,3 +78,15 @@ test("engine worker: files, run, describe, matrix, Break, restart", { timeout: 1
 
   eng.worker.terminate();
 });
+
+test("a worker that fails to load is replaced, and start() still finishes", { timeout: 120_000 }, async () => {
+  let first = true;
+  const blocked = () => {   // as WebKit's refusal of a worker script: an error event, no messages
+    const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
+    return port;
+  };
+  const eng = new EngineClient({ createWorker: () => (first ? ((first = false), blocked()) : nodeWorker()), wheel });
+  assert.match(JSON.stringify(await eng.start()), /opendta/i);
+  assert.equal((await eng.run("display 1")).rc, 0);
+  eng.worker.terminate();
+});

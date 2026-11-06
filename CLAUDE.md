@@ -21,6 +21,8 @@ uv run poe mcp [--http --port 8000]                   # MCP server, stdio by def
 uv run poe vendor [COMMIT]                            # re-vendor OpenDTA, re-apply patches
 uv build                                              # sdist + wheel (the wheel is built from the sdist)
 cd web && npm install && npm test                     # web demo engine in Pyodide under Node (rebuilds the wheel)
+cd web && npm run dev                                 # web demo page on localhost (rebuilds the wheel)
+cd web && npm run e2e                                 # the page in Chromium, Firefox, WebKit (Playwright; `npx playwright install` once)
 ```
 
 poe runs every task as `uv run --extra=mcp ...` (`[tool.poe] executor`), so the MCP tests always run; with plain

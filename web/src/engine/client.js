@@ -8,7 +8,7 @@ export const RC_RESET = 9998;
 
 export class EngineClient {
   // createWorker: () => a Worker (in the page: new Worker(new URL("./worker.js", import.meta.url), {type: "module"}))
-  constructor({ createWorker, wheel, indexURL, graceMs = 5000, onStatus = () => {} }) {
+  constructor({ createWorker, wheel, indexURL, graceMs = 5000, onStatus = (_status) => {} }) {
     Object.assign(this, { createWorker, wheel, indexURL, graceMs, onStatus });
     this.nextId = 0;
     this.pending = new Map();
@@ -63,9 +63,12 @@ export class EngineClient {
     this.pending.clear();
     this.running = null;
     const error = `session reset: ${reason}. Data in memory is gone; your files are kept.`;
+    const started = this.start();
     for (const p of pending) {
-      p.op === "run" ? p.resolve({ rc: RC_RESET, error, log: "", results: null, images: [] }) : p.reject(new Error(error));
+      if (p.op === "run") p.resolve({ rc: RC_RESET, error, log: "", results: null, images: [] });
+      else if (p.op === "init") p.resolve(started);   // a crash while starting: the first start() ends with the new one
+      else p.reject(new Error(error));
     }
-    return this.start();
+    return started;
   }
 }

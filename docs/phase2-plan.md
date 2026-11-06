@@ -8,7 +8,8 @@ are no accounts and no hosting cost beyond static files.
 **Not in Phase 2:** accounts, sync between devices, sharing or collaboration, server-side execution, the MCP server
 (Phase 3), community commands, tutorials beyond one sample project, our own estimators.
 
-**Status (2026-11-06):** steps 1 (the Pyodide spike), 2 (the path shim) and 3 (the browser entry point) are done, see [Spike results](#spike-results-2026-11-06);
+**Status (2026-11-06):** steps 1 (the Pyodide spike), 2 (the path shim), 3 (the browser entry point) and 4 (the
+proof-of-concept page) are done, see [Spike results](#spike-results-2026-11-06);
 storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)).
 
 ## Facts this plan rests on
@@ -36,8 +37,10 @@ storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](pha
   browser's rc 9998, data lost; files stay).
 - **SharedArrayBuffer needs cross-origin isolation** (`Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp` or `credentialless`). GitHub Pages cannot set headers. Cloudflare
-  Pages and Netlify can (`_headers`). Pyodide from a CDN must then be loaded with CORS, or self-hosted. Plan on
-  `require-corp`; check `credentialless` in Safari in step 4 (the first browser test) before relying on it.
+  Pages and Netlify can (`_headers`). `require-corp` works with Pyodide from jsDelivr in Chromium, Firefox and
+  WebKit (step 4), so `credentialless` isn't needed. **The headers must be on every response, 304s included:**
+  WebKit refuses a worker script whose cached 304 reply has no COEP header (found in step 4). Check the host does
+  this when deploying (step 9).
 - Highlighting: tree-sitter-stata (codedthinking, MIT) exists. Clean room (`LICENSE-POLICY.md`) applies to all
   page text: no Stata manual or help text, no Stata example datasets. `sysuse` datasets bundled with OpenDTA have
   their own data licenses; check them before using one as the sample.
@@ -70,6 +73,40 @@ also resolves numpy, scipy, matplotlib and openpyxl). Results on an M-series Mac
   callbacks (a browser Web Worker uses the console by default, and the page will capture output anyway).
 - Clean-room reminder: `sysuse auto` gives rc 601, because OpenDTA doesn't ship Stata's example datasets. The
   sample project must use our own data.
+
+## Proof-of-concept results (2026-11-06)
+Playwright on an M-series Mac, `vite preview` on localhost, Pyodide from jsDelivr. Same test in each engine: upload
+`cps.dta`; run a regression that names it by a Windows path (the note shows the mapping; the coefficient matches
+`ref.json` to 1e-6); a graph; Break during `while 1 {}` (rc 1, the data kept); reload (files and the editor's text
+come back from IndexedDB); Reset (a new engine: the data is gone, `use cps` works).
+
+| | ready, cold | ready, after a reload |
+|---|---|---|
+| Chromium | 5.8 s | 4.6 s |
+| Firefox | 6.6 s | 5.1 s |
+| WebKit | 5.9 s | 4.6 s |
+| WebKit, iPhone emulation | 5.5 s | 4.6 s |
+
+Runs alone; with all three in parallel, cold was 6–8 s. A run of the sample (200 observations, `regress`,
+`scatter`) takes about 0.9 s. Cold includes downloading about 36 MB (each test starts with an empty cache) on a fast
+connection; a slow one adds to it. Most of the reload time is installing the wheels and importing, not downloading.
+Lazy matplotlib/openpyxl would shorten both.
+
+Found and fixed:
+- WebKit refused the worker after a reload: `vite preview` sent its 304 replies without the COEP header. The
+  page's dev and preview servers now set the headers on every response, and the client completes a start that
+  crashed by starting again (`test/engine.test.mjs` covers a worker that fails to load).
+- The log wrapped Stata's fixed-width tables; it now scrolls sideways.
+- Data loss (found in review): opening a file and pressing Run wrote the editor's text back over it, which changed
+  the bytes (Latin-1 became U+FFFD, CRLF became LF); an upload of the open file was undone by the next Run;
+  "New" with an existing name emptied it. Now a file is written only after an edit, a file that isn't UTF-8 is not
+  opened (download it instead), an upload of the open file reloads the editor, and "New" refuses an existing name.
+  Test: `e2e/poc.spec.ts`, "the editor never rewrites a file it didn't change". A file opened and edited is still
+  saved with LF line endings.
+- Seen once: Firefox stuck at "starting the engine" with four browsers starting at once; not reproduced in 16 more
+  runs (8 of them four Firefox at once). The page now shows a startup error instead of the last status.
+
+Not checked: a real phone (emulation has no phone keyboard), a slow network, files near the memory limit.
 
 ## Decisions (2026-11-06)
 1. **Where files live:** an Emscripten in-memory folder `/work`, saved to IndexedDB (IDBFS, `FS.syncfs`) after each
@@ -111,6 +148,8 @@ also resolves numpy, scipy, matplotlib and openpyxl). Results on an M-series Mac
      is a handful of elements. Choose the framework after the design step (see UI/UX), when the number of
      components and their state are known. If the design wants ready-made Material components, use React. If not,
      use Preact (with signals for state). The PoC glue is small enough to rewrite either way.
+   - Step 4 was built this way (`web/src/main.ts`, about 200 lines of plain TypeScript). Still open: decided at the
+     design step (5).
 4. **Text editor: CodeMirror 6 or Ace.** Sizes were measured on 2026-11-06 (esbuild, minified, gzip -9). The rest
    comes from the projects' own docs and use, and is checked on real phones in the PoC.
 
@@ -140,11 +179,16 @@ also resolves numpy, scipy, matplotlib and openpyxl). Results on an M-series Mac
    - (Recommended) **CodeMirror 6.** Mobile is the axis where they differ, and both sizes are the same. Ace's
      advantages are a simpler API and the legacy app's familiarity. These count for little once the Stata mode has
      to be written anyway.
-5. **Where the web code goes in the repo** (see [Repository layout](#repository-layout)).
+   - Step 4 used CodeMirror 6: it works in Chromium, Firefox, WebKit and iPhone emulation, and the highlighter took
+     about 100 lines. Ace was not built, and no real phone was tried (emulation has no phone keyboard). **Chosen,
+     unless a real-phone test shows a problem.**
+5. **Where the web code goes in the repo** (see [Repository layout](#repository-layout)). In use since step 3: `web/`
+   next to the Python package, as recommended.
 6. **Hosting.** (Recommended) Cloudflare Pages: free, can set headers, deploys from GitHub Actions. Domain to
    choose.
 7. **Where Pyodide loads from.** jsDelivr CDN (cached across sites, CORS headers) or self-hosted (one origin, no CORS
-   issue). Decide after step 1 measures it.
+   issue). Step 4 loads the runtime and packages from jsDelivr, which works in all three engines; the wheel comes
+   from the page's own origin. Self-hosting stays an option if the CDN is slow or unavailable.
 
 ## Repository layout
 Now: the repo root is the Python package (`pyproject.toml`, `src/dofile/`, `tests/`, `tests_opendta/`, `scripts/`,
@@ -228,13 +272,13 @@ that steps 6 and 8 build.
      thread with an in-memory IndexedDB (`fake-indexeddb`): files, a run with a Windows path, results, describe,
      matrix, a graph, `shell` refused, Break, restart. Not testable in Node: files surviving a restart (the fake
      IndexedDB lives in one thread). That is checked first in step 4.
-4. **Proof-of-concept page** in `web/`, plain TypeScript, unstyled: editor (CodeMirror 6 or Ace, try both on a
-   phone, decision 4), upload into `/work` with IndexedDB persistence, Run, Break, log, graphs. The first Stata
-   highlighter. Ends with decisions 3 and 4 settled. Notes from step 3:
-   - disable Run while a run is going (the client tracks one run, so Break would wait on the wrong one);
-   - micropip fetches openpyxl from PyPI on each cold start: self-host it, or load it on first use, like matplotlib;
-   - pass a transfer list when `read` sends a file back, so a large download isn't copied;
-   - check that files come back after a reload and after a restart (IndexedDB), and Break with the real buffer.
+4. ~~**Proof-of-concept page**~~ done 2026-11-06 ([Proof-of-concept results](#proof-of-concept-results-2026-11-06)):
+   `web/index.html` + `web/src/main.ts`, plain TypeScript, unstyled. CodeMirror 6 with the first Stata highlighter
+   (`web/src/stata/language.ts`; commands from the engine's registry, `npm run commands`). Upload of files or a
+   whole folder into `/work`, download, delete, new .do file; Run (Ctrl/Cmd+Enter: the selection), Break, Reset,
+   log, graphs. A sample do-file on first visit. Run is disabled during a run, and `read` transfers the file's bytes.
+   Test: `cd web && npm run e2e` (Playwright: Chromium, Firefox, WebKit, iPhone emulation). Still open from step 3:
+   micropip fetches openpyxl from PyPI on each cold start.
 5. **UI/UX design** (section above): flows, wireframes, mockups, design tokens.
 6. **Editor page** built to the design: files, editor, run, log, graphs, data view, results.
 7. **Publish to PyPI** (moved from Phase 1): the landing page tells people to `pip install dofile`, so the
