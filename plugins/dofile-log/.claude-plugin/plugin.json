@@ -1,0 +1,6 @@
+{
+  "name": "dofile-log",
+  "description": "Shows each dofile run_do log in the terminal, readable and colored, without adding it to the model's context.",
+  "version": "0.1.0",
+  "author": { "name": "Jeff Liu" }
+}

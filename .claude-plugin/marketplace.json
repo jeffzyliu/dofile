@@ -1,0 +1,12 @@
+{
+  "name": "dofile",
+  "owner": { "name": "Jeff Liu" },
+  "description": "Companion plugins for the dofile MCP server.",
+  "plugins": [
+    {
+      "name": "dofile-log",
+      "source": "./plugins/dofile-log",
+      "description": "Shows each dofile run_do log in the terminal, readable and colored, without adding it to the model's context."
+    }
+  ]
+}

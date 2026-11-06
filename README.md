@@ -33,6 +33,18 @@ Tools: `run_do` (run Stata code; returns log, rc, error, e()/r() as JSON and new
 `get_file` (exported graphs as images, logs and CSVs as text in pages), `get_matrix` (one matrix, or part of it, at full precision), `upload_file`, `start_session`, `request_upload` and `request_download` (HTTP), `reset`. Resources: `dofile://commands` lists the
 supported commands, `dofile://about` the versions. Data stays in memory between `run_do` calls. Full inputs, outputs and return codes: [MCP-SCHEMA.md](MCP-SCHEMA.md).
 
+**Readable logs in Claude Code** (optional): Claude Code shows an MCP result as JSON, so a log is one string full of
+`\n`. The `dofile-log` plugin prints each `run_do` log in the terminal under the call, colored and between two
+rules, and keeps it out of the model's context. It needs `jq`, works with stdio and HTTP, and shows the `log` in
+the result (cut for long runs; the bar names the file with the full log):
+
+```
+/plugin marketplace add jeffzyliu/dofile
+/plugin install dofile-log@dofile
+```
+
+Source: [plugins/dofile-log](plugins/dofile-log). The same text is always in the `log_file` the result names.
+
 HTTP: `dofile-mcp --http --port 8000` (localhost only by default). Call `start_session` first and pass its
 token as `session`; each session gets its own temporary folder, deleted when the session ends.
 
