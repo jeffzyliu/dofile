@@ -98,9 +98,8 @@ class Worker:
         self._proc = None
         self._conn = None
         self._lock = threading.Lock()  # one call at a time per session
-        self._active = None  # id of the call running now
-        self._cancelled: set = set()  # ids of calls to stop (also ones still waiting for the lock)
-        self._pending: set = set()  # ids of calls waiting for the lock or running; a cancel for any other is ignored
+        self._active = None  # the call running now (its threading.Event)
+        self.closed = False  # close() was called: no new child may start (its workdir may be gone)
 
     def _start(self) -> None:
         parent, child = _ctx.Pipe()
@@ -121,11 +120,10 @@ class Worker:
             self._conn.close()
         self._proc = self._conn = None
 
-    def interrupt(self, call: object) -> None:
-        """Stop call `call` (from any thread): interrupt it if it is running, or skip it if it is waiting."""
-        if call not in self._pending:  # already finished: nothing to stop, and nothing would clear the entry
-            return
-        self._cancelled.add(call)
+    def interrupt(self, call: threading.Event) -> None:
+        """Stop `call` (from any thread): interrupt it if it is running, skip it if it has not started.
+        The flag lives on the call itself, so a call that never runs leaves nothing behind."""
+        call.set()
         if self._active is call:
             self._signal()
 
@@ -137,23 +135,19 @@ class Worker:
                 pass
         # shortcut: Windows has no SIGINT for a child process, so an interrupt there waits for GRACE and kills
 
-    def _call(self, op: str, *args: Any, timeout: float | None = None, call: object = None) -> Any:
-        if call is not None:  # data and matrix calls have no id to cancel, and must not share one entry
-            self._pending.add(call)
-        try:
-            with self._lock:
-                before = _snapshot(self.workdir) if op == "run" else None
-                result = self._call_locked(op, args, timeout, call)
-                if before is not None and isinstance(result, Result):
-                    result.files = _changes(before, _snapshot(self.workdir))
-                return result
-        finally:
-            self._pending.discard(call)
+    def _call(self, op: str, *args: Any, timeout: float | None = None, call: threading.Event | None = None) -> Any:
+        with self._lock:
+            before = _snapshot(self.workdir) if op == "run" else None
+            result = self._call_locked(op, args, timeout, call)
+            if before is not None and isinstance(result, Result):
+                result.files = _changes(before, _snapshot(self.workdir))
+            return result
 
-    def _call_locked(self, op: str, args: tuple, timeout: float | None, call: object) -> Any:
+    def _call_locked(self, op: str, args: tuple, timeout: float | None, call: threading.Event | None) -> Any:
         self.last_used = time.monotonic()
-        if call is not None and call in self._cancelled:  # cancelled while waiting for the lock
-            self._cancelled.discard(call)
+        if self.closed:
+            return _reset("the session was closed")
+        if call is not None and call.is_set():  # cancelled while waiting for the lock
             return _broken("the call was cancelled before it started")
         if self._proc is not None and not self._proc.is_alive():
             self._kill()
@@ -170,15 +164,16 @@ class Worker:
             deadline, why = time.monotonic() + limit, None
             while not self._conn.poll(_POLL):
                 now = time.monotonic()
-                if why is None and (now >= deadline or call in self._cancelled):
-                    why = "was cancelled" if call in self._cancelled else f"did not finish within {limit:g} seconds"
+                cancelled = call is not None and call.is_set()
+                if why is None and (now >= deadline or cancelled):
+                    why = "was cancelled" if cancelled else f"did not finish within {limit:g} seconds"
                     self._signal()
                     deadline = now + GRACE
                 elif why is not None and now >= deadline:
                     self._kill()
                     return _reset(f"the command {why} and did not stop when interrupted")
             result = self._conn.recv()
-            if why is None and call in self._cancelled:  # interrupt() signalled before the loop saw it
+            if why is None and call is not None and call.is_set():  # interrupt() signalled before the loop saw it
                 why = "was cancelled"
             if why and isinstance(result, Result) and result.rc == RC_BREAK and result.error == BREAK:
                 result.error = f"{BREAK} (the command {why}; the session keeps its data)"
@@ -188,10 +183,10 @@ class Worker:
             return _reset("the session process crashed")
         finally:
             self._active = None
-            self._cancelled.discard(call)
 
-    def run(self, code: str, timeout: float | None = None, images: bool = False, call: object = None) -> Result:
-        """`call`: any object identifying this call, for interrupt()."""
+    def run(self, code: str, timeout: float | None = None, images: bool = False,
+            call: threading.Event | None = None) -> Result:
+        """`call`: an Event identifying this call, for interrupt()."""
         return self._call("run", code, images, timeout=timeout, call=call)
 
     def data_summary(self, vars: str | None = None, offset: int = 0, limit: int | None = None) -> dict | Result:
@@ -201,23 +196,19 @@ class Worker:
                max_cells: int | None = None) -> dict | Result:
         return self._call("matrix", name, rows, cols, max_cells)
 
-    def expect(self, call: object) -> None:
-        """Count `call` as waiting now. Call it in the event loop right after checking `queued`, before the thread
-        that runs the call starts; `run` removes it when the call ends."""
-        self._pending.add(call)
-
-    @property
-    def queued(self) -> int:
-        """Calls waiting for the lock or running."""
-        return len(self._pending)
-
     @property
     def busy(self) -> bool:
         return self._lock.locked()
 
-    def close(self) -> None:
+    def stop(self) -> None:
+        """End the child after any running call; the next call starts a fresh one (stdio's reset)."""
         with self._lock:
             self._kill()
+
+    def close(self) -> None:
+        """For good: later calls return rc 9998 instead of starting a child in a deleted workdir."""
+        self.closed = True
+        self.stop()
         if self.owns_workdir:
             shutil.rmtree(self.workdir, ignore_errors=True)
 

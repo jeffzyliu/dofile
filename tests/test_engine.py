@@ -411,6 +411,23 @@ def test_odt24_pweights_in_xtreg_fe_and_weight_macros(eng):
     assert eng.run("display \"`e(wtype)' `e(wexp)'\"").log.strip().splitlines()[-1] == "pweight = w"
 
 
+def test_odt24_areg_robust_with_fweights(eng):
+    """An fweight is that many copies of the row: the robust variance weights each squared score by w, not w^2."""
+    eng.run(ODT24_DATA)
+    for wt in ("[fweight=fw]", "[aweight=w]"):
+        lsdv = _slope_and_se(eng, f"regress y x z i.id {wt}, vce(robust)")
+        got = _slope_and_se(eng, f"areg y x z {wt}, absorb(id) vce(robust)")
+        assert all(abs(a - b) < 1e-8 for a, b in zip(got, lsdv)), (wt, got, lsdv)
+
+
+def test_odt24_xtreg_re_and_be_refuse_weights(eng):
+    """[XT] xtreg allows weights with fe only; re and be used to drop them and report the unweighted fit."""
+    eng.run(ODT24_DATA)
+    for model in ("re", "be"):
+        r = eng.run(f"xtreg y x z [aweight=w], {model}")
+        assert r.rc == 101 and "aweights not allowed" in r.error, model
+
+
 def test_odt25_the_sort_list_ends_at_the_first_zero(eng, tmp_path):
     """ODT-25: Stata leaves other bytes after the zero that ends the sort list; they are not sort keys."""
     eng.run("clear\nset obs 20\nforeach i of numlist 1/8 {\n    gen v`i' = _n\n}\nsort v3\nsave t, replace")

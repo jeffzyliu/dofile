@@ -61,6 +61,8 @@ Layers, bottom up (`src/dofile/`):
 - `mcp_server.py`: `MCPServer` (mcp 2.3.0). Over stdio there is one session in the launch folder. Over HTTP,
   protocol 2026-07-28 has no MCP session, so sessions are explicit tokens from the `start_session` tool, each
   with its own temp workdir. Errors meant for the agent must be raised as `ToolError` (the SDK hides others).
+  Calls to one session queue on an async lock (`Sessions.call`), not in threads: only the running call holds a
+  thread, and a cancel keeps the lock until the child has stopped. Per-call cancel state is the call's own `Event`.
   Tool outputs are `TypedDict`s, which become the advertised `outputSchema`, and the SDK validates every result
   against them.
 - `cli.py`: `dofile run` runs `do` on the file inside one sandboxed `Engine`, passing the path through a local

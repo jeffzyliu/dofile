@@ -19,8 +19,9 @@ import secrets
 import sys
 import threading
 import time
+import weakref
 from pathlib import Path
-from typing import Annotated, Any, NotRequired, TypedDict
+from typing import Annotated, Any, Callable, NotRequired, TypedDict
 
 import anyio
 from mcp.server.mcpserver import MCPServer
@@ -209,6 +210,36 @@ class Sessions:
         kw = dict(read_dirs=read_dirs, sandbox=sandbox, timeout=timeout)
         self.single = None if http else Worker(workdir, **kw)
         self.pool = WorkerPool(max_workers=max_sessions, idle_seconds=idle_seconds, **kw) if http else None
+        self._queues: weakref.WeakKeyDictionary[Worker, anyio.Lock] = weakref.WeakKeyDictionary()
+
+    def queue(self, w: Worker) -> anyio.Lock:
+        """The session's call queue (event loop only): calls wait here, holding no thread, and run one at a time."""
+        return self._queues.setdefault(w, anyio.Lock())
+
+    async def call(self, w: Worker, fn: Callable[[threading.Event], Any]) -> Any:
+        """Run fn(call) in a thread once the session's earlier calls are done. A cancel while waiting just leaves the
+        queue; a cancel while running interrupts the code, and the queue stays held until the thread returns (the
+        worker bounds that: the child stops or is killed within GRACE), so the next call never overlaps it."""
+        call = threading.Event()
+
+        async def interrupt_on_cancel() -> None:
+            try:
+                await anyio.sleep_forever()
+            finally:
+                w.interrupt(call)  # also runs when the call ends normally: then it does nothing
+
+        error = None
+        async with self.queue(w), anyio.create_task_group() as tg:
+            tg.start_soon(interrupt_on_cancel)
+            try:
+                result = await anyio.to_thread.run_sync(fn, call)  # not abandoned: a cancel waits for the thread
+            except Exception as e:  # noqa: BLE001 - re-raised below, so it isn't wrapped in an ExceptionGroup
+                error = e
+            finally:
+                tg.cancel_scope.cancel()
+        if error is not None:
+            raise error
+        return result
 
     def new(self) -> str:
         token = secrets.token_urlsafe(16)
@@ -250,7 +281,7 @@ class Sessions:
         if self.http:
             self.pool.close(session)
         else:
-            self.single.close()
+            self.single.stop()  # the next call starts a fresh session in the same folder
 
     def close(self) -> None:
         if self.single:
@@ -420,16 +451,11 @@ def build_server(sessions: Sessions) -> MCPServer:
                                                                           "default")] = None,
                      session: SessionArg = None) -> Annotated[CallToolResult, RunResult]:
         w = sessions.get(session)
-        if w.queued >= 2:  # each waiting call holds one of the server's ~40 worker threads; one may wait (a cancelled call stops soon)
+        q = sessions.queue(w)
+        if q.locked() and q.statistics().tasks_waiting:  # one call runs and one may wait: stops a retry loop piling up
             raise ToolError("this session is still running a call and has another waiting: wait for them to finish")
         limit = min(timeout, sessions.timeout) if timeout else None
-        call = object()
-        w.expect(call)  # counted now, before the thread starts: a burst of calls can't all pass the check above, and a cancel finds it
-        try:  # abandon_on_cancel: a cancel from the client returns here at once, and interrupts the code
-            r = await anyio.to_thread.run_sync(w.run, code, limit, graphs, call, abandon_on_cancel=True)
-        except anyio.get_cancelled_exc_class():
-            w.interrupt(call)
-            raise
+        r = await sessions.call(w, lambda call: w.run(code, limit, graphs, call))
         out = {"rc": r.rc, "error": r.error, "error_command": r.error_command, "log": r.log, "log_file": None, "results": _sizes(r.results),
                "files": r.files, "new_graphs": r.new_graphs,
                "nobs": r.nobs, "nvars": r.nvars}
@@ -456,7 +482,8 @@ def build_server(sessions: Sessions) -> MCPServer:
     async def get_matrix(name: Annotated[str, Field(description="e(b), e(V), r(table), or the name of a matrix "
                                                                "made with `matrix`")],
                          rows: NameList = None, cols: NameList = None, session: SessionArg = None) -> Matrix:
-        m = await anyio.to_thread.run_sync(sessions.get(session).matrix, name, rows, cols, GET_MATRIX_CELLS)
+        w = sessions.get(session)
+        m = await sessions.call(w, lambda call: w.matrix(name, rows, cols, GET_MATRIX_CELLS))
         if not isinstance(m, dict):  # the session was reset
             raise ToolError(m.error)
         if "error" in m:
@@ -471,7 +498,8 @@ def build_server(sessions: Sessions) -> MCPServer:
                             offset: Annotated[int, Field(ge=0, description="skip this many matching variables")] = 0,
                             limit: Annotated[int, Field(ge=1, le=1000, description="return at most this many")] = 200,
                             session: SessionArg = None) -> DataSummary:
-        r = await anyio.to_thread.run_sync(sessions.get(session).data_summary, vars, offset, limit)
+        w = sessions.get(session)
+        r = await sessions.call(w, lambda call: w.data_summary(vars, offset, limit))
         if not isinstance(r, dict):  # the session was reset
             raise ToolError(r.error)
         if "error" in r:
@@ -603,8 +631,9 @@ def build_server(sessions: Sessions) -> MCPServer:
     @tool(description="Discard the session: its data, macros and results. Over stdio a fresh session "
                           "starts on the next call; over HTTP the token stops working." + session_doc)
     async def reset(session: SessionArg = None) -> Status:
-        sessions.get(session)  # validates the token
-        await anyio.to_thread.run_sync(sessions.drop, session)
+        w = sessions.get(session)  # validates the token
+        async with sessions.queue(w):  # after the calls already waiting
+            await anyio.to_thread.run_sync(sessions.drop, session)
         return {"status": "reset"}
 
     @mcp.resource("dofile://about", mime_type="application/json",

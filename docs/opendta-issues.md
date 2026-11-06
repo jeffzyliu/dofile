@@ -40,7 +40,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | `::test_odt21_default_axis_ticks_are_nice_numbers` | patched |
 | ODT-22 | the `matrix(name)` pseudofunction is not supported in expressions: `display trace(matrix(xx))` and `el(matrix(xx),2,1)` give rc 198 (`trace(xx)` works) | `::test_odt22_matrix_pseudofunction` | patched |
 | ODT-23 | `capture` does not catch a file error that comes as a Python `PermissionError` (the dofile sandbox's refusal in `type`, ...): the whole call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_sandbox_refusal_like_any_file_error` | patched |
-| ODT-24 | `xtreg ..., fe` and `areg ..., absorb()` ignore `[aweight=]`, `[pweight=]` and `[fweight=]`: the coefficient is the unweighted one | `tests/test_engine.py::test_odt24_weights_in_xtreg_fe_and_areg` | patched |
+| ODT-24 | `xtreg ..., fe|re|be` and `areg ..., absorb()` ignore `[aweight=]`, `[pweight=]` and `[fweight=]`: the coefficient is the unweighted one | `tests/test_engine.py::test_odt24_*` | patched |
 | ODT-25 | `describe` prints a long wrong `Sorted by:` list (48 names with repeats) for a Stata-written file whose own sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
@@ -492,8 +492,7 @@ areg y x [aweight=w], absorb(id)  // 0.47292
   (`popwt` is constant within state): `post` is 0.0694 (se 0.0559) with `xtreg, fe` and `areg`, and 0.0755 (se 0.0348)
   with `regress ... i.sid`.
 - Workaround: `regress y x i.id [aweight=w], vce(cluster id)`.
-- Not checked: `xtreg, re` and `, be` (the manual's weight notes don't mention them), `xtivreg`, and whether the
-  standard errors use the weights. The Stata 14
+- Not checked: `xtivreg`. The Stata 14
   reference logs (`tests_opendta/compat/expected/`) have no weighted `xtreg` or `areg`.
 - Patched (`opendta-odt24-weighted-within-estimators.patch`, 2026-11-05): `xtreg, fe` and `areg` demean with the weighted
   group means and solve weighted least squares (OLS on sqrt(w)-scaled data), with the weights scaled as `regress` does
@@ -503,7 +502,16 @@ areg y x [aweight=w], absorb(id)  // 0.47292
   for a- and fweights (and the coefficient for pweights, whose variance is robust).
   VERIFY: the rc 101 and its text (a guess), the place of `wtype`/`wexp` among the e() macros, and the secondary statistics
   in the weighted `xtreg, fe` (between and overall R-squared, `sigma_u`, `corr`, the log likelihood), which are still the
-  unweighted formulas. `xtreg, re`/`be` are untouched (they still ignore weights).
+  unweighted formulas.
+- Patch follow-up (2026-11-05, code review):
+  - `areg ..., vce(robust)` with fweights squared the weight in the robust variance (`Xa` and `e` each carry sqrt(w), so
+    the score carried w and its square w^2). That is right for a- and pweights. An fweight stands for w copies of the
+    row, so it needs w. The se was 0.0761 against `regress`'s 0.0487 on a test panel; it now agrees to 1e-8
+    (`test_odt24_areg_robust_with_fweights`). `vce(cluster)` sums the scores first and was already right.
+  - `xtreg, re` and `, be` accepted weights and dropped them, the same bug as `fe`. The manual's weight note lists
+    weights per model (fe: aweights, fweights, pweights; then the pa and mle models) and lists none for re or be. So
+    they now stop with rc 101 `aweights not allowed` (`test_odt24_xtreg_re_and_be_refuse_weights`). VERIFY the text and
+    that Stata 14 refuses them.
 
 ### ODT-25: `Sorted by:` after reading a Stata-written file
 `use castle.dta` then `describe, short` (Cheng and Hoekstra's data, `scunning1975/mixtape`) prints 48 names after

@@ -159,6 +159,8 @@ def cmd_xtreg(s: "Session", args: str) -> None:
     N = len(y)
     k = Xs.shape[1]
     model = "re" if not (o.get("fe") or o.get("be")) else ("fe" if o.get("fe") else "be")
+    if smp.w is not None and model != "fe":   # ODT-24: re and be dropped the weights; [XT] xtreg allows them with fe only
+        raise StataError(101, f"{smp.wtype}s not allowed")   # VERIFY the text
     if model == "fe":
         _xtreg_fe(s, smp, args, y, Xs, est_cols, ids, inv, counts, G, N, k, pvar)
     elif model == "re":
@@ -595,7 +597,9 @@ def cmd_areg(s: "Session", args: str) -> None:
             V, n_clust = _cluster_vce(Xa, e, smp.cluster, Aa, N, k + G)
             df_r = n_clust - 1
         else:
-            sc = Xa * e[:, None]
+            # Xa and e each carry sqrt(w), so the score carries w: right for a- and pweights, but an fweight is
+            # that many copies of the row, whose squared scores add up to w (not w^2) times one row's
+            sc = Xa * (e / sw if smp.wtype == "fweight" else e)[:, None]
             V = (N / df_r) * Aa @ (sc.T @ sc) @ Aa
         vcetype = "Robust"
     V = (V + V.T) / 2

@@ -546,6 +546,148 @@ def test_get_file_pages_text_and_a_busy_session_answers_at_once(stdio_sessions, 
     call(build_server(stdio_sessions), steps)
 
 
+def test_a_call_cancelled_before_its_thread_starts_leaves_nothing_behind(stdio_sessions):
+    """A cancel can land before anyio starts the thread, so the call never runs. It must not count against the
+    session's queue (two such cancels used to block run_do for good, even after reset)."""
+    import anyio
+    w = stdio_sessions.get(None)
+
+    async def go():
+        for _ in range(3):
+            with anyio.CancelScope() as scope:
+                scope.cancel()  # before the first checkpoint: the thread never starts
+                await stdio_sessions.call(w, lambda call: w.run("display 1", None, False, call))
+            assert scope.cancelled_caught
+        q = stdio_sessions.queue(w)
+        assert not q.locked() and q.statistics().tasks_waiting == 0
+        r = await stdio_sessions.call(w, lambda call: w.run("display 41+1", None, False, call))
+        assert r.rc == 0 and "42" in r.log
+    anyio.run(go)
+
+
+def _run(w, code):
+    """A Sessions.call function that runs `code` in worker `w`."""
+    return lambda call: w.run(code, None, False, call)
+
+
+def test_waiting_calls_hold_no_threads(stdio_sessions):
+    """Calls queue on the session's async lock: 20 waiting behind a running call use no thread (they each held one
+    of the ~40 shared threads before), and all run once it ends."""
+    import anyio
+    s, w = stdio_sessions, stdio_sessions.get(None)
+    results = []
+
+    async def describe():
+        results.append(await s.call(w, lambda call: w.data_summary()))
+
+    async def go():
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(s.call, w, _run(w, "sleep 1500"))
+            await anyio.sleep(0.5)
+            for _ in range(20):
+                tg.start_soon(describe)
+            await anyio.sleep(0.3)
+            assert limiter.borrowed_tokens == 1 and s.queue(w).statistics().tasks_waiting == 20
+    anyio.run(go)
+    assert len(results) == 20 and all(r["nobs"] == 0 for r in results)
+
+
+def test_cancels_at_random_moments_leave_the_queue_free(stdio_sessions):
+    """Cancels land before the thread starts, while it starts, while the code runs and just after it ends. After
+    each, the queue must be free and the session must answer."""
+    import random
+    import anyio
+    s, w = stdio_sessions, stdio_sessions.get(None)
+    rng = random.Random(7)
+
+    async def go():
+        await s.call(w, _run(w, "display 0"))  # the child process is up
+        for _ in range(30):
+            with anyio.move_on_after(rng.uniform(0, 0.05)):
+                await s.call(w, _run(w, "sleep 30"))
+            q = s.queue(w)
+            assert not q.locked() and q.statistics().tasks_waiting == 0
+            r = await s.call(w, _run(w, "display 6*7"))
+            assert r.rc == 0 and "42" in r.log
+    anyio.run(go)
+
+
+def test_a_cancelled_waiting_call_never_runs(stdio_sessions):
+    import anyio
+    s, w = stdio_sessions, stdio_sessions.get(None)
+    out = {}
+
+    async def long_call():
+        out["long"] = await s.call(w, _run(w, 'sleep 1000\ndisplay "long done"'))
+
+    async def go():
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(long_call)
+            await anyio.sleep(0.3)
+            with anyio.move_on_after(0.3) as scope:
+                await s.call(w, _run(w, 'global waiter "ran"'))
+            assert scope.cancelled_caught
+        assert out["long"].rc == 0 and "long done" in out["long"].log  # the running call was not disturbed
+        r = await s.call(w, _run(w, 'display "[$waiter]"'))
+        assert r.rc == 0 and "[]" in r.log  # the cancelled call's code never ran
+    anyio.run(go)
+
+
+def test_an_error_in_a_call_comes_out_unwrapped(stdio_sessions):
+    """Sessions.call runs in a task group, which wraps errors in an ExceptionGroup; it must re-raise the error itself."""
+    import anyio
+    s, w = stdio_sessions, stdio_sessions.get(None)
+
+    def boom(call):
+        raise ValueError("boom")
+    with pytest.raises(ValueError, match="boom"):
+        anyio.run(s.call, w, boom)
+    assert not s.queue(w).locked()
+
+
+def test_data_tools_wait_behind_a_running_call(stdio_sessions):
+    """describe_data and get_matrix wait their turn and answer from the state after the running call. A waiting call
+    of any tool counts as the one call that may wait, so a run_do after them is refused."""
+    async def steps(c):
+        await tool(c, "run_do", code="use panel, clear\nmatrix A = (1, 2)")
+        running = asyncio.ensure_future(tool(c, "run_do", code="sleep 1500\ndrop in 1/10\nmatrix A = (3, 4)"))
+        await asyncio.sleep(0.5)
+        described = asyncio.ensure_future(tool(c, "describe_data"))
+        matrix = asyncio.ensure_future(tool(c, "get_matrix", name="A"))
+        await asyncio.sleep(0.3)
+        refused = await tool(c, "run_do", code="display 1")
+        assert refused.is_error and "still running a call" in refused.content[0].text
+        assert not (await running).is_error
+        assert (await described).structured_content["nobs"] == 990
+        assert (await matrix).structured_content["data"] == [[3, 4]]
+    call(build_server(stdio_sessions), steps)
+
+
+def test_http_reset_runs_after_waiting_calls_and_ends_the_session():
+    s = Sessions(http=True, workdir=Path("."), read_dirs=(), sandbox=True, timeout=30)
+
+    async def steps(c):
+        a = (await tool(c, "start_session")).structured_content["session"]
+        await tool(c, "run_do", code="display 0", session=a)
+        w = s.pool.find(a)
+        running = asyncio.ensure_future(tool(c, "run_do", code="sleep 1000", session=a))
+        await asyncio.sleep(0.3)
+        waiting = asyncio.ensure_future(tool(c, "run_do", code='display "second"', session=a))
+        await asyncio.sleep(0.2)
+        assert not (await tool(c, "reset", session=a)).is_error
+        assert not (await running).is_error
+        second = (await waiting).structured_content  # queued before the reset, so it ran first
+        assert second["rc"] == 0 and "second" in second["log"]
+        after = await tool(c, "run_do", code="display 1", session=a)
+        assert after.is_error and "unknown or expired session" in after.content[0].text
+        assert w.closed and w._proc is None and w.run("display 2").rc == 9998  # never restarted
+    try:
+        call(build_server(s), steps)
+    finally:
+        s.close()
+
+
 def test_unsafe_http_only_on_loopback(capsys):
     from dofile.mcp_server import main
     with pytest.raises(SystemExit) as e:

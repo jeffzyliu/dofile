@@ -128,10 +128,14 @@ graph export ../escaped.png, replace    // sandbox refusal, also rc 603
   the end) and `limit` (default 50,000 characters, at most 200,000), with a footer
   `[characters 0-50000 of 80000; next offset 50000]` on a partial page. Images keep the 5 MB limit. (A first version
   refused text over 200,000 bytes; that would have made a large `log_file`, up to 2 MB, unreadable.)
-- A session runs one call; one more may wait (a client cancel returns at once while the code stops a moment later).
-  A third call is refused ("still running a call and has another waiting"). The call is counted in the event loop
-  before its thread starts, so a burst can't all pass the check, and a cancel finds it. So a retrying client can't use up the
-  server's ~40 worker threads and stall every session.
+- A session runs one call; one more may wait. A third `run_do` is refused ("still running a call and has another
+  waiting"). Calls wait on an async lock for the session (`Sessions.queue`, `Sessions.call`), not in threads: a waiting
+  call holds no thread, a cancelled waiter just leaves the queue, and only the running call has a thread (at most one
+  per session). A cancel of the running call interrupts it and keeps the queue until the child stops, so the next call
+  never overlaps it. (The first version counted calls in a set filled in the event loop and emptied in the thread; a
+  cancel before the thread started left an entry behind, and two of them blocked `run_do` for good, even after
+  `reset`. It also let `get_matrix` and `describe_data` wait in threads without a limit.) A closed HTTP session's
+  worker never starts a new process (rc 9998), so a call that waited behind a `reset` can't revive it.
 - `files` (created/changed files) comes from two scans of the working folder per call. Over stdio that is the launch
   folder, possibly a home folder, so a folder with more than 5,000 entries gives an empty `files`.
 - Not changed: over HTTP anyone can call `start_session`, and a full pool evicts the least recently used idle

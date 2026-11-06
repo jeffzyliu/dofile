@@ -56,7 +56,7 @@ def test_code_that_ignores_the_interrupt_is_killed(worker, monkeypatch):
 def test_cancel_interrupts_the_running_call_and_skips_waiting_ones(worker):
     import threading
     worker.run("use panel, clear")
-    running, waiting, out = object(), object(), {}
+    running, waiting, out = threading.Event(), threading.Event(), {}
     a = threading.Thread(target=lambda: out.update(a=worker.run("while 1 {\n}", call=running)))
     a.start()
     time.sleep(1)
@@ -69,6 +69,14 @@ def test_cancel_interrupts_the_running_call_and_skips_waiting_ones(worker):
     assert out["a"].rc == 1 and "cancelled" in out["a"].error
     assert out["b"].rc == 1 and "before it started" in out["b"].error and "1" not in out["b"].log.split("--")[0]
     assert worker.run("count").results["r"]["scalars"]["N"] == 1000
+
+
+def test_a_closed_worker_never_starts_a_new_process(tmp_path):
+    w = Worker(tmp_path, timeout=30)
+    assert w.run("display 1").rc == 0
+    w.close()  # e.g. an HTTP session reset or reaped while another call waited for it
+    r = w.run("display 2")
+    assert r.rc == RC_RESET and "closed" in r.error and w._proc is None
 
 
 def test_dead_process_is_reported_then_restarted(worker):
