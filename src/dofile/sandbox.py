@@ -45,13 +45,13 @@ class SandboxError(PermissionError):
         super().__init__(errno.EACCES, message)  # strerror = message, so OpenDTA's own 603 errors show it
 
 
-def deny_commands() -> None:
+def deny_commands(names: tuple[str, ...] = DENIED) -> None:
     """Replace the dangerous commands in OpenDTA's registry with an rc 199 error."""
     from ._vendor.opendta.commands import registry
     from ._vendor.opendta.core.errors import StataError
     from ._vendor.opendta.session import Session  # noqa: F401  (registers all commands)
 
-    for name in DENIED:
+    for name in names:
         spec = registry.REGISTRY.get(name)
         if spec is None:
             continue

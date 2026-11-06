@@ -8,7 +8,7 @@ are no accounts and no hosting cost beyond static files.
 **Not in Phase 2:** accounts, sync between devices, sharing or collaboration, server-side execution, the MCP server
 (Phase 3), community commands, tutorials beyond one sample project, our own estimators.
 
-**Status (2026-11-06):** steps 1 (the Pyodide spike) and 2 (the path shim) are done, see [Spike results](#spike-results-2026-11-06);
+**Status (2026-11-06):** steps 1 (the Pyodide spike), 2 (the path shim) and 3 (the browser entry point) are done, see [Spike results](#spike-results-2026-11-06);
 storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)).
 
 ## Facts this plan rests on
@@ -20,7 +20,8 @@ storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](pha
 - **Most of dofile's process layer does not apply in a browser.** `worker.py` (forkserver, child processes) and the
   audit hook in `sandbox.py` need processes and signals. The browser tab is the sandbox: the code can reach only
   the files the user gave it. The Web Worker takes the place of the child process. `engine.Engine` is used
-  directly. Only commands that reach outside the page stay denied (`shell`, `webuse`, `copy` from a URL).
+  directly. Only commands that reach outside the page stay denied (`shell`, `webuse`; `copy` from a URL has no
+  network to reach in Pyodide).
   `cd`, `mkdir`, `rmdir` and `erase` touch only the user's own `/work`, so they go through the path shim instead
   (replication do-files often start with `cd` and `cap mkdir output`).
 - **A relative path already works.** `Engine` does `os.chdir(workdir)`, so `use data/x.dta` resolves in an
@@ -202,8 +203,8 @@ that steps 6 and 8 build.
   Run (whole file) and Run selection (a do-file scope per run, as in MCP), Break, a log pane with errors marked,
   graphs inline, a data view (variables like `describe_data`, plus the first rows), and the e()/r() results.
   Ctrl+Enter runs. One sample project loads on first visit.
-- Output that MCP already formats (`Result`, `results()`, `data_summary()`) is reused as is, sent from the Web
-  Worker as JSON.
+- Output that MCP already formats (`Result`, `results()` with `matrix_sizes`, `data_summary()`, `matrix()`) is
+  reused as is, sent from the Web Worker as JSON (`dofile/browser.py`).
 
 ## Order of work (each step ends green)
 1. ~~**Spike under Node**~~ done 2026-11-06 ([Spike results](#spike-results-2026-11-06)). Warm start time is left to
@@ -213,12 +214,27 @@ that steps 6 and 8 build.
    Tests (`tests/test_pathshim.py`): 22 file commands with a Windows and a POSIX foreign path, the note, tempfiles,
    a missing file (rc 601 after the note), `cd`, and a guard against unhooked sites after a re-vendor. Unquoted
    Windows paths in `mkdir`/`rmdir`/`copy`/`dir` lose their backslashes in the engine (ODT-26, open).
-3. **Browser entry point:** a small Python module the Web Worker calls (`run`, `files`, `describe`, `matrix`), plus
-   the worker script and its message protocol. The entry point installs its own SIGINT handler that calls
-   `break_.request()` (the one in `worker.py` isn't loaded in the browser). The restart path.
+3. ~~**Browser entry point**~~ done 2026-11-06:
+   - `src/dofile/browser.py`: `start(root)`, `run(code)`, `describe()`, `matrix()`, JSON text in and out (matrices by
+     size, as MCP sends them). It denies only `shell` and `webuse`, installs the path shim, and sets a SIGINT handler
+     that requests a Break only during a run. Tests: `tests/test_browser.py` (CPython, one subprocess per case).
+   - `web/src/engine/worker.js`: the Web Worker. It loads Pyodide and the wheel, mounts `/work` on IndexedDB when the
+     browser has it, and answers `{id, op, args}` with `{id, result}` or `{id, error}`, one at a time. Ops: `init`,
+     `run`, `describe`, `matrix`, `files`, `read`, `write`, `remove`, `rename`; it saves to IndexedDB after each change
+     and run. The file list is built here, from Emscripten's file system, not in Python.
+   - `web/src/engine/client.js`: the page's side. `run`, `breakRun` (interrupt buffer, then a new worker after 5 s,
+     which ends the run with rc 9998), `restart`.
+   - Test: `cd web && npm install && npm test` (rebuilds the wheel first) runs the real `worker.js` in a Node worker
+     thread with an in-memory IndexedDB (`fake-indexeddb`): files, a run with a Windows path, results, describe,
+     matrix, a graph, `shell` refused, Break, restart. Not testable in Node: files surviving a restart (the fake
+     IndexedDB lives in one thread). That is checked first in step 4.
 4. **Proof-of-concept page** in `web/`, plain TypeScript, unstyled: editor (CodeMirror 6 or Ace, try both on a
    phone, decision 4), upload into `/work` with IndexedDB persistence, Run, Break, log, graphs. The first Stata
-   highlighter. Ends with decisions 3 and 4 settled.
+   highlighter. Ends with decisions 3 and 4 settled. Notes from step 3:
+   - disable Run while a run is going (the client tracks one run, so Break would wait on the wrong one);
+   - micropip fetches openpyxl from PyPI on each cold start: self-host it, or load it on first use, like matplotlib;
+   - pass a transfer list when `read` sends a file back, so a large download isn't copied;
+   - check that files come back after a reload and after a restart (IndexedDB), and Break with the real buffer.
 5. **UI/UX design** (section above): flows, wireframes, mockups, design tokens.
 6. **Editor page** built to the design: files, editor, run, log, graphs, data view, results.
 7. **Publish to PyPI** (moved from Phase 1): the landing page tells people to `pip install dofile`, so the

@@ -1,0 +1,15 @@
+{
+  "name": "dofile-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "cd .. && uv build --wheel -q",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "pyodide": "314.0.7"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.7"
+  }
+}

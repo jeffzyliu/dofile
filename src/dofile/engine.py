@@ -120,6 +120,14 @@ def group_results(d: dict[str, Any]) -> dict[str, dict]:
     return out
 
 
+def matrix_sizes(results: dict[str, Any]) -> dict[str, Any]:
+    """e()/r() with each matrix replaced by its size ("16x16"): a big e(V) would be sent on every call; the
+    values come from Engine.matrix()."""
+    return {k: ({**rs, "matrices": {name: f"{len(m['rows'])}x{len(m['cols'])}" for name, m in rs["matrices"].items()}}
+                if k in ("e", "r") else rs)
+            for k, rs in results.items()}
+
+
 def about() -> dict[str, Any]:
     """Versions: dofile, the vendored OpenDTA commit and patches, and the Stata version it emulates."""
     from . import __version__

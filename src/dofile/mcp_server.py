@@ -32,7 +32,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 
-from .engine import about
+from .engine import about, matrix_sizes
 from .worker import PoolFull, Worker, WorkerPool, warm_up
 
 LOG_LIMIT = 12_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
@@ -382,13 +382,6 @@ def _cut_log(log: str, log_file: str) -> tuple[str, int]:
     return text, omitted
 
 
-def _sizes(results: dict[str, Any]) -> dict[str, Any]:
-    """e()/r() with each matrix replaced by its size: values cost many tokens and agents rarely need them inline."""
-    return {k: ({**rs, "matrices": {name: f"{len(m['rows'])}x{len(m['cols'])}" for name, m in rs["matrices"].items()}}
-                if k in ("e", "r") else rs)
-            for k, rs in results.items()}
-
-
 def _instructions(sessions: Sessions) -> str:
     where = "the server's disk" if sessions.http else "this machine"
     v = about()
@@ -458,7 +451,7 @@ def build_server(sessions: Sessions) -> MCPServer:
             raise ToolError("this session is still running a call and has another waiting: wait for them to finish")
         limit = min(timeout, sessions.timeout) if timeout else None
         r = await sessions.call(w, lambda call: w.run(code, limit, graphs, call))
-        out = {"rc": r.rc, "error": r.error, "error_command": r.error_command, "log": r.log, "log_file": None, "results": _sizes(r.results),
+        out = {"rc": r.rc, "error": r.error, "error_command": r.error_command, "log": r.log, "log_file": None, "results": matrix_sizes(r.results),
                "files": r.files, "new_graphs": r.new_graphs,
                "nobs": r.nobs, "nvars": r.nvars}
         name = f"dofile-log-{secrets.token_hex(4)}.txt"

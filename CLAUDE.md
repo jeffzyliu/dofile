@@ -20,6 +20,7 @@ uv run dofile run path/to/file.do --json out.json     # batch run (sandboxed; --
 uv run poe mcp [--http --port 8000]                   # MCP server, stdio by default
 uv run poe vendor [COMMIT]                            # re-vendor OpenDTA, re-apply patches
 uv build                                              # sdist + wheel (the wheel is built from the sdist)
+cd web && npm install && npm test                     # web demo engine in Pyodide under Node (rebuilds the wheel)
 ```
 
 poe runs every task as `uv run --extra=mcp ...` (`[tool.poe] executor`), so the MCP tests always run; with plain
@@ -66,6 +67,9 @@ Layers, bottom up (`src/dofile/`):
   thread, and a cancel keeps the lock until the child has stopped. Per-call cancel state is the call's own `Event`.
   Tool outputs are `TypedDict`s, which become the advertised `outputSchema`, and the SDK validates every result
   against them.
+- `browser.py`: web demo only. What `web/src/engine/worker.js` (the Web Worker) calls through Pyodide: one Engine
+  in `/work`, JSON text in and out, only `shell`/`webuse` denied, Break through a SIGINT handler (Pyodide's interrupt
+  buffer). `web/src/engine/client.js` is the page's side (Break, restart = rc 9998).
 - `pathshim.py`: web demo only (the CLI and MCP server never install it). Through PATCH-3's hook
   (`core/userpath.py`) it maps file names written for someone's computer into one working folder and replaces `cd`.
 - `cli.py`: `dofile run` runs `do` on the file inside one sandboxed `Engine`, passing the path through a local
