@@ -8,13 +8,15 @@ are no accounts and no hosting cost beyond static files.
 **Not in Phase 2:** accounts, sync between devices, sharing or collaboration, server-side execution, the MCP server
 (Phase 3), community commands, tutorials beyond one sample project, our own estimators.
 
-**Status (2026-11-06):** not started; storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)).
+**Status (2026-11-06):** step 1 (the Pyodide spike) is done, see [Spike results](#spike-results-2026-11-06);
+storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)).
 
-## Facts this plan rests on (check each in step 1)
+## Facts this plan rests on
 - **OpenDTA ran unmodified in Pyodide 314** (Python 3.14) under Node during the engine evaluation
   ([engine-evaluation.md](engine-evaluation.md#browser-pyodide-31407-run-under-node)), with Pyodide's bundled
   numpy, scipy and matplotlib. dofile's other dependency, openpyxl, is pure Python (micropip). The dofile wheel is
-  pure Python. Development is already pinned to 3.14 for this reason.
+  pure Python. Development is already pinned to 3.14 for this reason. Confirmed for the built dofile wheel in the
+  spike (2026-11-06).
 - **Most of dofile's process layer does not apply in a browser.** `worker.py` (forkserver, child processes) and the
   audit hook in `sandbox.py` need processes and signals. The browser tab is the sandbox: the code can reach only
   the files the user gave it. The Web Worker takes the place of the child process. `engine.Engine` is used
@@ -27,18 +29,46 @@ are no accounts and no hosting cost beyond static files.
 - **Break must reach PATCH-2.** Since PATCH-2, the engine stops only at safe points: the host calls
   `break_.request()` and the engine raises KeyboardInterrupt at the next safe point. Pyodide's interrupt buffer
   (`pyodide.setInterruptBuffer`, a SharedArrayBuffer) raises a signal in Python. It must run dofile's SIGINT
-  handler, not raise KeyboardInterrupt mid-command. Otherwise data can be left half changed again. To verify.
+  handler, not raise KeyboardInterrupt mid-command. Otherwise data can be left half changed again. Confirmed in the
+  spike: a handler installed with `signal.signal(SIGINT, ...)` runs, and the engine stops at a safe point.
   A long single command still cannot stop: then the page terminates the Web Worker and starts a new one (the
   browser's rc 9998, data lost; files stay).
 - **SharedArrayBuffer needs cross-origin isolation** (`Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp` or `credentialless`). GitHub Pages cannot set headers. Cloudflare
   Pages and Netlify can (`_headers`). Pyodide from a CDN must then be loaded with CORS, or self-hosted. Plan on
-  `require-corp`; check `credentialless` in Safari in step 1 before relying on it.
+  `require-corp`; check `credentialless` in Safari in step 4 (the first browser test) before relying on it.
 - Highlighting: tree-sitter-stata (codedthinking, MIT) exists. Clean room (`LICENSE-POLICY.md`) applies to all
   page text: no Stata manual or help text, no Stata example datasets. `sysuse` datasets bundled with OpenDTA have
   their own data licenses; check them before using one as the sample.
 - stats.camp is a closed-source browser app with the same idea. Our demo's points are that it is open source,
   needs no account, sends no data and uses the same engine as the CLI and MCP server.
+
+## Spike results (2026-11-06)
+`web/spike/spike.mjs` (`cd web/spike && npm install && node spike.mjs`, after `uv build --wheel`) runs Pyodide
+314.0.7 in a Node worker thread, as a browser Web Worker would, with the built dofile wheel (`micropip.install`, which
+also resolves numpy, scipy, matplotlib and openpyxl). Results on an M-series Mac, cold package cache:
+- **Correctness:** the conformance corpus gives 63/63 as expected (62 matches with `ref.json` to 1e-6, plus the
+  GAP-1 xfail), the same as CPython. All 12 probes behave as in CPython (10 pass, `esttab` and `outreg2` fail).
+- **Graphs:** inline PNGs work (scatter 35 KB, histogram 7 KB), and `graph export s.png` writes the file into
+  `/work` (matplotlib's Agg backend, no changes).
+- **Break:** the interrupt buffer, set from the other thread 1.5 s into `while 1 { quietly replace x = x + 1 }`,
+  called our SIGINT handler once (`request_break()`). The call returned rc 1, and the next `summarize x` saw all
+  100 observations. So the PATCH-2 safe points hold in the browser, using the same handler as `worker.py`.
+- **Download size (cold):** about 36 MB. Pyodide's core is 13.5 MB uncompressed (wasm, stdlib, loader), or 5.5 MB
+  with brotli. The packages are 27.4 MB as wheels, which are already compressed: scipy 14.0, matplotlib 7.0,
+  numpy 3.0, fonttools 1.2, pillow 1.0, and the rest under 1 MB together. The dofile wheel is 2.8 MB, and openpyxl
+  comes from PyPI.
+- **Time (Node, cold, with downloads):** Pyodide starts in 0.8 s. Installing the wheel and its dependencies takes
+  4.4 s. Importing `dofile.engine` and creating `Engine` takes 2.0 s. A `run_do` then takes about 1 ms. The corpus
+  takes 0.2 s. In total it is 11.4 s. Browser times are measured in step 4.
+- **Lazy loading is possible:** `import dofile.engine` loads numpy only. matplotlib and openpyxl are imported on
+  first use (checked natively after a regression). So the page can install dofile with `deps=False`, load numpy
+  and scipy at start, and fetch matplotlib (about 9.5 MB with fonttools, pillow, contourpy and kiwisolver) and
+  openpyxl in the background while the user is idle, or before running code that draws a graph. Decide in step 4.
+- **Pyodide in a Node worker thread** has no file descriptors 1 and 2, so `loadPyodide` needs `stdout`/`stderr`
+  callbacks (a browser Web Worker uses the console by default, and the page will capture output anyway).
+- Clean-room reminder: `sysuse auto` gives rc 601, because OpenDTA doesn't ship Stata's example datasets. The
+  sample project must use our own data.
 
 ## Decisions (2026-11-06)
 1. **Where files live:** an Emscripten in-memory folder `/work`, saved to IndexedDB (IDBFS, `FS.syncfs`) after each
@@ -46,6 +76,18 @@ are no accounts and no hosting cost beyond static files.
    doesn't clear it. Not chosen: OPFS via `pyodide.mountNativeFS` (larger quotas, but more Pyodide edge cases). A
    later option on Chromium is "open a folder" (`showDirectoryPicker` + `mountNativeFS`), which uses a replication
    folder in place with no upload. It is not in the first version.
+   - **Why two copies:** Python's file calls are synchronous, and IndexedDB is async only. So Python works on the
+     in-memory copy, and `syncfs` copies it to or from IndexedDB, which is on disk. Each file takes memory as well
+     as disk. A later Pyodide with WasmFS/OPFS or JSPI could remove the memory copy.
+   - **Steps, in the Web Worker** (`syncfs(load)` wraps `FS.syncfs` in a Promise; one sync at a time, queued with
+     the runs):
+     - start: `FS.mkdirTree("/work")`, `FS.mount(FS.filesystems.IDBFS, {}, "/work")`, `syncfs(true)` (load),
+       `navigator.storage.persist()`; on a first visit, copy in the sample project;
+     - after an upload, an editor save, a delete or rename, and each Run: `syncfs(false)` (save);
+     - a restarted worker repeats the start, so files come back and data in memory doesn't.
+
+     A tab closed in the middle of a run loses only what that run wrote. Not tried yet: Node has no IndexedDB, so
+     the spike used plain in-memory files. The first test is in step 4.
 2. **The path shim** (what "everything is in the working folder" means):
    - Relative paths need no change: they resolve in `/work`.
    - An absolute path is mapped to the longest tail of it that exists in `/work`
@@ -164,10 +206,8 @@ that steps 6 and 8 build.
   Worker as JSON.
 
 ## Order of work (each step ends green)
-1. **Spike under Node** (no UI): build the dofile wheel, load it in Pyodide 314, run the conformance corpus and
-   probes, and check numbers against `ref.json`. Measure the download size and the cold and warm start time. Check
-   that the interrupt buffer reaches dofile's SIGINT handler, and that `graph export` and inline PNGs work with
-   matplotlib's Agg backend. Record the results under Facts.
+1. ~~**Spike under Node**~~ done 2026-11-06 ([Spike results](#spike-results-2026-11-06)). Warm start time is left to
+   step 4, because a browser's cache differs from Node's.
 2. **Path shim** (decision 2) in Python, with tests in `tests/`: Windows and POSIX absolute paths, a new file,
    `cd`, a missing file (rc 601 as before, with the path the user wrote in the message).
 3. **Browser entry point:** a small Python module the Web Worker calls (`run`, `files`, `describe`, `matrix`), plus
@@ -202,8 +242,16 @@ that steps 6 and 8 build.
   If it is too slow, load matplotlib only on the first `graph` command.
 - **Memory.** WebAssembly has at most 4 GB, and less on phones. A large .dta can fail where the CLI works. The page
   must report an out-of-memory error clearly and not freeze.
-- **Browser storage can be cleared** by the browser or the user. The page must say that files are kept only in
-  this browser, and offer a download of everything as a zip.
+- **Browser storage can be cleared**, even though IndexedDB is on disk (from the browsers' docs; check in step 4):
+  - the user clears site data, or uses a private window (kept only until the window closes);
+  - the browser evicts it when the disk is nearly full, unless `navigator.storage.persist()` was granted. Chrome
+    grants it based on use, Firefox may ask, and Safari decides itself;
+  - **Safari deletes a site's IndexedDB after 7 days without a visit**, unless the site was added to the home
+    screen. A student who comes back after a week finds their files gone.
+
+  So the page must say that files are kept only in this browser, offer a download of everything as a zip, and on
+  Safari say that files are kept for 7 days without a visit. Quotas (several GB or more) are not the limit: the
+  4 GB WebAssembly memory is.
 - **Path mapping can pick the wrong file** when two files have the same name in different folders. The log note
   makes this visible. The longest-tail rule makes it rare.
 - Safari: storage and SharedArrayBuffer differences. Test early.
