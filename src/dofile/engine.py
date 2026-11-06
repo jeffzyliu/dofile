@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ._vendor.opendta.core import missing
+from ._vendor.opendta.core import brk, missing
 from ._vendor.opendta.core.output import Capture
 from ._vendor.opendta.lang.programs import Scope
 from ._vendor.opendta.session import Session
@@ -182,6 +182,17 @@ def _tracked_store():
     return TrackedStore()
 
 
+def request_break() -> None:
+    """From a signal handler: Break at the next safe point (between commands, or in a long computation that leaves
+    the data alone). Never mid-command, which could leave the data half changed (PATCH-2)."""
+    brk.request()
+
+
+def clear_break() -> None:
+    """Drop a Break that arrived after its call ended, before the next call starts."""
+    brk.clear()
+
+
 def _png(g) -> bytes | None:
     import io
     from ._vendor.opendta.graphics import render
@@ -223,7 +234,7 @@ class Engine:
         self.session.scopes.append(scope)
         try:
             rc = self.session.run(code, echo=True)
-        except KeyboardInterrupt:  # the worker's interrupt (cancel or timeout), like Stata's Break key
+        except KeyboardInterrupt:  # Break at a safe point (request_break: the worker's cancel or timeout)
             rc, error = RC_BREAK, BREAK
             self._capture(f"{BREAK}\nr({RC_BREAK});\n", "error")
             self._recover(rc)
@@ -258,14 +269,6 @@ class Engine:
         drawn.clear()  # don't keep graphs alive past the call
         return result
 
-    def break_result(self) -> Result:
-        """Result for an interrupt that came after the code itself finished (while building the result)."""
-        self._capture(f"{BREAK}\nr({RC_BREAK});\n", "error")
-        self._recover(RC_BREAK)
-        self.session._graphs.drawn.clear()
-        d = self.session.data
-        return Result(self._capture.text, RC_BREAK, BREAK, self.results(), None, d.nobs, len(d.names))
-
     def _recover(self, rc: int) -> None:
         """Leave the interpreter usable after an escaped exception: close open scopes and prefixes."""
         s = self.session
@@ -274,6 +277,7 @@ class Engine:
         s.scopes.clear()
         s.do_depth = 0
         s.by_groups = None
+        brk.clear()  # the exception left the commands it was in
         s.set_rc(rc)
 
     def results(self) -> dict[str, Any]:

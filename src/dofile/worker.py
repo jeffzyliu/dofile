@@ -1,9 +1,10 @@
 """One Stata session per child process, so a hang or crash only loses that session.
 
 Worker: talks to one child over a pipe. On timeout or cancel the child is interrupted like Stata's Break
-key: the call ends with rc 1 and the session keeps its data. If the child does not stop within GRACE
-seconds, or it died, it is killed and the call returns rc 9998 ("session reset"); the next call starts a
-fresh one.
+key, at the next safe point (between commands, or in a long computation that leaves the data alone): the call
+ends with rc 1 and the data is as the last complete command left it. If the child does not reach a safe point
+within GRACE seconds (one long command), or it died, it is killed and the call returns rc 9998 ("session
+reset"); the next call starts a fresh one.
 WorkerPool: one Worker per session key (a start_session token), with idle reaping and a size cap.
 """
 from __future__ import annotations
@@ -21,10 +22,10 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable
 
-from .engine import BREAK, LOG_KEEP, RC_BREAK, Result
+from .engine import BREAK, LOG_KEEP, RC_BREAK, Result, clear_break, request_break
 
 RC_RESET = 9998
-GRACE = 5.0  # seconds an interrupted call gets to stop before the child is killed
+GRACE = 5.0  # seconds an interrupted call gets to reach a safe point before the child is killed
 SNAPSHOT_MAX = 5000  # entries in the working folder above which run results leave `files` empty
 _POLL = 0.1  # seconds between checks for a cancel while waiting for the child
 
@@ -62,9 +63,9 @@ def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> N
     eng = Engine(workdir, log_keep=LOG_KEEP, hints=False)  # bounded log; no console hints for agents
     busy = False
 
-    def on_interrupt(signum, frame):  # the parent's interrupt: only stop running code, never the loop
+    def on_interrupt(signum, frame):  # the parent's interrupt: Break at the next safe point, never mid-command
         if busy:
-            raise KeyboardInterrupt
+            request_break()
     signal.signal(signal.SIGINT, on_interrupt)
     while True:
         try:
@@ -72,13 +73,10 @@ def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> N
         except EOFError:
             return
         if op == "run":
-            try:
-                busy = True
-                result = eng.run(*args)
-                busy = False
-            except KeyboardInterrupt:  # arrived after the engine's own handler (building the result)
-                busy = False
-                result = eng.break_result()
+            clear_break()  # an interrupt that came after the previous call ended must not stop this one
+            busy = True
+            result = eng.run(*args)
+            busy = False
             conn.send(result)
         elif op == "data":
             conn.send(eng.data_summary(*args))

@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
+from ..core import brk
+
 import numpy as np
 
 from ..core.errors import StataError
@@ -52,6 +54,7 @@ def maximize(fun: Callable[[np.ndarray, int], tuple], b0: np.ndarray, *, maxiter
         log.append((it, ll, ""))
         return MLResult(b, ll, g, H, it, True, log)
     while True:
+        brk.check()   # dofile patch (PATCH-2): iterations only compute
         concave = True
         try:
             np.linalg.cholesky(-H)

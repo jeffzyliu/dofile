@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..core import brk
 from ..core.errors import StataError
 from . import ops
 from .display import render
@@ -361,6 +362,7 @@ class MataEngine:
             if st.init is not None:
                 self.eval(st.init, fr)
             while st.cond is None or truth(self.eval(st.cond, fr)):
+                brk.check()   # dofile patch (PATCH-2): Mata loops stop between passes
                 try:
                     self.exec(st.body, fr)
                 except _Break:
@@ -371,6 +373,7 @@ class MataEngine:
                     self.eval(st.step, fr)
         elif isinstance(st, While):
             while truth(self.eval(st.cond, fr)):
+                brk.check()   # dofile patch (PATCH-2)
                 try:
                     self.exec(st.body, fr)
                 except _Break:
@@ -379,6 +382,7 @@ class MataEngine:
                     continue
         elif isinstance(st, DoWhile):
             while True:
+                brk.check()   # dofile patch (PATCH-2)
                 try:
                     self.exec(st.body, fr)
                 except _Break:

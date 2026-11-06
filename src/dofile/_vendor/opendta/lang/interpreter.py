@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from ..core import brk
 from ..core.errors import (BreakLoop, ContinueLoop, StataError, syntax_error)
 from .expr import Parser, evaluate
 from .lexer import LogicalLine
@@ -480,6 +481,7 @@ class Interpreter:
     # -- loops ----------------------------------------------------------------
     def _loop_body(self, lines: list[LogicalLine], a: int, b: int) -> bool:
         """Runs the body; returns False if there was `continue, break`."""
+        brk.at_command(self.s.by_groups)   # dofile patch (PATCH-2): a pending Break stops between passes
         try:
             self._run_range(lines, a, b, echo=None)
         except ContinueLoop:
@@ -629,12 +631,17 @@ class Interpreter:
             raise err
         if self.s.by_groups is not None and not spec.byable and not spec.prefix:
             raise StataError(190, f"{spec.name} may not be combined with by")
+        brk.at_command(self.s.by_groups)   # dofile patch (PATCH-2): a pending Break stops between commands
+        counted = spec.name not in ("do", "run", "include")
+        brk.depth += counted
         try:
             spec.fn(self.s, rest)
         except StataError as err:
             if err.context is None:
                 err.context = (spec.name, text)   # for the error explanation
             raise
+        finally:
+            brk.depth -= counted
 
     def _with_prefixes(self, words: list[str], action, block: bool = False) -> None:
         out = self.s.output

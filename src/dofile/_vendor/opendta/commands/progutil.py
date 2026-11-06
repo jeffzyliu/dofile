@@ -14,6 +14,7 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
+from ..core import brk
 from ..core.errors import StataError
 from ..lang.adopath import find_file
 from ..lang.words import strip_outer_quotes
@@ -34,7 +35,10 @@ def cmd_sleep(s: "Session", args: str) -> None:
     ms = s.eval(args.strip())
     if isinstance(ms, str) or ms != ms or ms < 0:
         raise StataError(198, "invalid syntax")
-    time.sleep(float(ms) / 1000.0)
+    end = time.monotonic() + float(ms) / 1000.0
+    while (left := end - time.monotonic()) > 0:   # dofile patch (PATCH-2): in steps, so a Break stops it
+        brk.check()
+        time.sleep(min(left, 0.05))
 
 
 def _read_line(s: "Session"):

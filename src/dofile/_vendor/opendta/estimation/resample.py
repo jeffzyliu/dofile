@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..core import brk
 from ..core import missing as M
 from ..core.errors import StataError
 from ..core.stats import chi2_tail as _chi2_tail
@@ -175,6 +176,7 @@ def cmd_jackknife(s: "Session", args: str) -> None:
     mis = 0
     try:
         for r, u in enumerate(units):
+            brk.check()   # dofile patch (PATCH-2): the finally below restores the data
             keep_all[u] = False
             s.data = _subset(work, np.flatnonzero(keep_all))
             keep_all[u] = True
@@ -359,6 +361,7 @@ def cmd_permute(s: "Session", args: str) -> None:
     mis = 0
     try:
         for r in range(reps):
+            brk.check()   # dofile patch (PATCH-2): the finally below restores the data
             perm = np.arange(n)
             for g in groups:
                 key = rng.RNG.uniform(len(g))

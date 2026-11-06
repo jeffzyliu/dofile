@@ -47,6 +47,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | GAP-4 | `twoway lpoly` and `twoway lpolyci` are not plot types (rc 198 `lpoly is not a twoway plot type`); standalone `lpoly` works | found 2026-11-05 (Lee 2008 RD replication), no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
+| PATCH-2 | dofile patch: Break is taken only at safe points (between commands and loop passes, outside `by`; in the ML optimizer, `bootstrap`/`permute`/`jackknife` replications, Mata loops and `sleep`). An interrupt mid-command could leave the data half changed (an interrupted `append` left columns of different lengths) | `tests/test_break.py` | patched |
 
 ## Details
 
@@ -590,3 +591,25 @@ Research (2026-11-04):
   `mod()`: same estimates, and only `r(table)` in r() after `summarize` then `regress`. It has `r(table)` after
   `mean`; its `logit` e(b) has no equation names, unlike Stata 14. It prints newer-Stata text, so it isn't a
   Stata 14 reference.
+
+### PATCH-2: Break at safe points (dofile's own patch)
+- Found 2026-11-05 (code review): the worker's SIGINT raised `KeyboardInterrupt` at whatever Python line was running.
+  `append using t` on 4 million rows with a string column, interrupted by a timeout, returned rc 1 ("the session keeps
+  its data"). The next `summarize x` then failed with rc 9999, `operands could not be broadcast together with shapes
+  (4000000,) (8000000,)`: some columns had been extended and others not. The engine changes data in many places (whole
+  arrays replaced, written in place, the variable list edited, the dataset swapped), so a command can't be rolled back
+  after the fact.
+- Patched (`opendta-patch2-safe-break.patch`): the SIGINT handler calls `core/brk.request()`, which only sets a flag.
+  The interpreter takes the Break before each command and each loop pass (`brk.at_command`). It skips that check inside
+  another engine command and inside `by`, because stopping there would leave that command half done. `do`, `run` and
+  `include` don't count as commands for this, since their lines are commands of their own. Computations that leave the
+  data alone, or restore it in a `finally`, take it at once (`brk.check`): `ml.maximize`'s iterations,
+  `bootstrap`/`permute`/`jackknife` replications, Mata `for`/`while`/`do` loops, and `sleep` (now in 50 ms steps).
+  One long command with no safe point runs on. If it hasn't finished within the worker's 5 s grace, the child is
+  killed (rc 9998, data lost) instead of being stopped half done.
+- Not covered: `simulate` (no `finally` restores the data, so its replications aren't safe points), `statsby`,
+  `rolling`, and optimizers outside `ml.maximize` (scipy's): these run to the end or hit the 5 s fallback.
+- Test: `tests/test_break.py` requests the Break at the k-th engine line executed (`sys.settrace`) for many k across
+  `append`, `sort`, `expand`, `bysort: replace`, `merge`, `drop`, `collapse`. The data must equal the state after a
+  whole number of commands. Raising `KeyboardInterrupt` at the same points instead (the old behavior) left the data
+  half changed at 7 of 60.

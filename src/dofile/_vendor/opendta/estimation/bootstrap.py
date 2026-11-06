@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..core import brk
 from ..core import missing as M
 from ..core.errors import StataError
 from ..core.stats import chi2_tail as _chi2_tail
@@ -254,6 +255,7 @@ def run(s: "Session", command: str, items: list[tuple[str, str]], o: dict) -> No
     mis = 0
     try:
         for r in range(reps):
+            brk.check()   # dofile patch (PATCH-2): the finally below restores the data
             idx = _sample_index(work, strata, clusters, size)
             s.data = _subset(work, idx)
             ok = True

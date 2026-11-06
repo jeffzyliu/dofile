@@ -55,7 +55,8 @@ Layers, bottom up (`src/dofile/`):
   subprocess. Temp files and matplotlib's cache go in a hidden `.dofile/` folder inside the workdir.
 - `worker.py`: one child process per session. On Linux and macOS, children fork from a forkserver that has
   preloaded the engine (`_forkserver.py`); Windows uses spawn. The sandbox is installed in the child after the
-  fork. A timeout or cancel sends SIGINT (Break, rc 1, data kept); a child that doesn't stop within 5 s is
+  fork. A timeout or cancel sends SIGINT, which only sets a flag: the engine takes the Break at the next
+  safe point (PATCH-2: between commands, not mid-command), rc 1, data kept; a child that doesn't stop within 5 s is
   killed (rc 9998, "session reset"). `WorkerPool` keys workers by session token; when full it evicts the least recently used idle session (never one running code), with idle
   reaping.
 - `mcp_server.py`: `MCPServer` (mcp 2.3.0). Over stdio there is one session in the launch folder. Over HTTP,

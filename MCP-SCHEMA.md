@@ -489,11 +489,11 @@ Two kinds:
 | rc | Meaning | What the client should do |
 |---|---|---|
 | 0 | Success | |
-| 1 | `--Break--`: the call was interrupted, because it ran past its timeout or the client cancelled it (the `error` says which) | The session keeps its data, as after Break in Stata; what the interrupted command had done so far stays done. Make the code faster, or pass a larger `timeout` |
+| 1 | `--Break--`: the call was interrupted, because it ran past its timeout or the client cancelled it (the `error` says which) | The session keeps its data, as after Break in Stata: the Break is taken between commands (a loop stops between passes), so the data is as the last complete command left it, never half changed. Make the code faster, or pass a larger `timeout` |
 | 1–999 | Stata's own error codes (e.g. 111 variable not found, 198 invalid syntax, 601 file not found) | Fix the code; the session is intact A 601 for a tempfile of an earlier call ends with `(a tempfile lasts one run_do call: save it under a name to use it in a later call)` |
 | 199 | A command disabled by the sandbox: `shell`/`!`, `erase`/`rm`, `rmdir`, `mkdir`, `cd`, `copy`, `webuse` | Do it another way |
 | 603 | File could not be opened. When the sandbox refused the path the error and the log end with `dofile sandbox: cannot write /path` (or `read`, `list`); without that line the folder doesn't exist or isn't writable | A sandbox refusal: use the working folder or a `--read-dir` folder. Otherwise fix the path |
-| 9998 | Session reset: the code did not stop within 5 s of being interrupted (for example inside one long numerical routine), the session process crashed, or it could not start (the `error` gives the reason; the next call tries again) | Data, macros and results are gone; run the setup again |
+| 9998 | Session reset: the code did not reach a safe point within 5 s of being interrupted (one long command, such as a big `merge` or `append`, or a long numerical routine), the session process crashed, or it could not start (the `error` gives the reason; the next call tries again) | Data, macros and results are gone; run the setup again |
 | 9999 | Internal engine error (a bug in the engine; the log has the Python traceback) | Report it; the session's data is kept |
 
 ## Timeouts and cancelling

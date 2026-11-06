@@ -58,7 +58,9 @@ this call changed them: e() survives `clear`, r() survives a failed command); ma
 so fetch values with get_matrix. For standard errors, p-values and confidence intervals read the
 coefficient table in the log or get_matrix("r(table)"), not your own arithmetic.
 A call that runs too long, or that the client cancels, is interrupted like Stata's Break key: rc 1,
-and the session keeps its data. Pass `timeout` to run_do for a shorter limit.
+and the data is as the last complete command left it (a loop stops between passes). One long command that
+cannot stop safely (a big merge or append) is ended a few seconds later with rc 9998 instead.
+Pass `timeout` to run_do for a shorter limit.
 Commands that run programs, delete files, change directory or download are disabled (rc 199);
 file access is limited to the session's working directory. rc 9998 means the session was reset
 (the code did not stop when interrupted, it crashed, or it could not start): its data is gone, so
