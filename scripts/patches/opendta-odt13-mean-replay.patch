@@ -1,5 +1,5 @@
 diff --git a/src/dofile/_vendor/opendta/estimation/summaries.py b/src/dofile/_vendor/opendta/estimation/summaries.py
-index 05fdebf..75d4d64 100644
+index 2f18e72..c87bd8b 100644
 --- a/src/dofile/_vendor/opendta/estimation/summaries.py
 +++ b/src/dofile/_vendor/opendta/estimation/summaries.py
 @@ -273,8 +273,22 @@ class SRS:
@@ -45,10 +45,10 @@ index 05fdebf..75d4d64 100644
 +    if not req.o.get("noheader"):
 +        header(s)
 +
-     def table(ss, *_a, r_table=True, **_kw):
+     def table(ss, *_a, **_kw):
          summary_table(ss, req.info.column, fit.labels, vals, se, df, req.level, vcetype, req.over)
-         if r_table:  # dofile patch: replay
-@@ -304,6 +321,14 @@ def summary_stat(s: "Session", stat: str, args: str,
+     table(s)
+@@ -302,6 +319,13 @@ def summary_stat(s: "Session", stat: str, args: str,
      est.rows = []
      est.level = req.level
      est.display = table
@@ -58,8 +58,7 @@ index 05fdebf..75d4d64 100644
 +        if not noheader:
 +            header(ss)
 +        summary_table(ss, req.info.column, fit.labels, vals, se, df, lv, vcetype, req.over)
-+        _post_r_table(ss, fit.colnames, vals, se, df, lv, req.info.column, vcetype)
 +    est.replay_summary = replay
      eng.post(s, est, req, fit, df)
-     _post_r_table(s, fit.colnames, vals, se, df, req.level, req.info.column, vcetype)  # dofile patch
+ 
  

@@ -219,11 +219,11 @@ mean, level(90)
   `regress`'s box has no replay line either. Not run in Stata, so whether `mean` itself replays is documented
   by the general rule and not shown.
 - Workaround: `estimates replay`.
-- Patched (`opendta-summaries-odt13-mean-replay.patch`, named so that it applies after `opendta-r-table.patch`, which
-  edits the same function): `mean`, `proportion`, `ratio` and `total` with no varlist redisplay the last result, header
-  and table, as typed the first time; `, level(90)` recomputes the intervals, `, noheader` drops the header, and
-  `r(table)` is reposted. Another estimation in between gives rc 301 `last estimates not found`. The first
-  `mean x y` output is identical to the replay (tested).
+- Patched (`opendta-odt13-mean-replay.patch`): `mean`, `proportion`, `ratio` and `total` with no varlist redisplay the last
+  result, header and table, as typed the first time; `, level(90)` recomputes the intervals, `, noheader` drops the
+  header, and `r(table)` is reposted. Another estimation in between gives rc 301 `last estimates not found`. The first
+  `mean x y` output is identical to the replay (tested). This patch applies before `opendta-patch1-r-table.patch`
+  (patches apply in name order), which edits the same function and adds the `r(table)` call to the replay.
 
 ### ODT-14: Python `eval()` on expression text (security)
 ```stata
@@ -236,7 +236,7 @@ arch y, arch(1) archm archmexp(().__class__.__mro__.__len__()*X)
   access) stood behind it. Present at the pinned commit; upstream `main` (0.10.0) still has it, with the bayes
   code moved to `bayespost.py`.
 - Expected: these options take arithmetic expressions only. Source: [TS] arch (`archmexp()`), [BAYES] bayesstats.
-- Patched (`opendta-safe-expr.patch`): a restricted evaluator (`core/safe_expr.py`) allows numbers, the given
+- Patched (`opendta-odt14-safe-expr.patch`): a restricted evaluator (`core/safe_expr.py`) allows numbers, the given
   names and functions, `+ - * / **` and unary minus; anything else is rc 198. `^` in `archmexp()` now works as
   power (it failed before).
 - To report upstream as a security issue.
@@ -440,7 +440,7 @@ bugs; listed so the xfails have a home. Built-in alternatives: `areg`/`xtreg, fe
 `estimates table` for tables.
 
 ### PATCH-1: `r(table)` (dofile's own patch)
-`scripts/patches/opendta-r-table.patch` gives OpenDTA Stata's `r(table)` (rows `b se t|z pvalue ll ul df crit
+`scripts/patches/opendta-patch1-r-table.patch` gives OpenDTA Stata's `r(table)` (rows `b se t|z pvalue ll ul df crit
 eform`, one column per coefficient):
 - Every estimation table sets it and replaces r(), as Stata's r-class table helper does. `mean`, `proportion`,
   `total` and `ratio` set it too; `proportion`'s `ll`/`ul` are the logit-scale interval its table shows.

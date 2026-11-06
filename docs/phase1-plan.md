@@ -47,8 +47,8 @@ suite locally. See [After Phase 1](#after-phase-1-2026-11-04-and-05).
    `docs/clean-room-policy.md` (as `CLEAN_ROOM_POLICY.md`). The bundled `data/*.dta` and `data/icd` have their own
    data licenses. `scripts/vendor_opendta.py` re-vendors a commit, then applies dofile's own patches from
    `scripts/patches/*.patch` in name order; the `VENDORED` stamp records commit and patches. This fixes both
-   PyPI publishing and Qt. Patches (2026-11-05): `opendta-r-table` (PATCH-1), one per fixed bug
-   (`opendta-odt1-…`, `odt2`, `odt5-odt6`, `odt9`, `odt10`, `odt12`) and `opendta-safe-expr` (ODT-14). Each is
+   PyPI publishing and Qt. Patches (2026-11-05): `opendta-patch1-r-table` (PATCH-1), one per fixed bug
+   (`opendta-odt1-…`, `odt2`, `odt5-odt6`, `odt9`, `odt10`, `odt12`) and `opendta-odt14-safe-expr` (ODT-14). Each is
    recorded in [opendta-issues.md](opendta-issues.md) to report upstream.
 2. **The MCP server is Python, and the Node backend is retired.** This replaces the original "make the backend an
    MCP server". With a Python engine, a Node layer would only add a hop.

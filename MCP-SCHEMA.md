@@ -406,7 +406,7 @@ re-run the setup afterwards.
 | URI | MIME type | Content |
 |---|---|---|
 | `dofile://commands` | `text/plain` | The Stata commands the engine supports, one per line. Commands the sandbox disables are not listed |
-| `dofile://about` | `application/json` | `{"dofile": "0.1.0.dev0", "engine": "OpenDTA", "engine_commit": "0c3f3a2…", "engine_patches": ["opendta-r-table.patch"], "stata_version": 14}` |
+| `dofile://about` | `application/json` | `{"dofile": "0.1.0.dev0", "engine": "OpenDTA", "engine_commit": "0c3f3a2…", "engine_patches": ["opendta-patch1-r-table.patch", "…"], "stata_version": 14}` |
 
 ## Versions
 

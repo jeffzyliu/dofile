@@ -510,7 +510,7 @@ def test_versions_are_reported(stdio_sessions):
     from dofile.engine import Engine, about
     v = about()
     assert v["dofile"] == __version__ and len(v["engine_commit"]) == 40
-    assert "opendta-r-table.patch" in v["engine_patches"]
+    assert "opendta-patch1-r-table.patch" in v["engine_patches"]
     import tempfile
     assert Engine(tempfile.mkdtemp()).run("display c(stata_version)").log.split("\n")[1].strip() == str(v["stata_version"])
     assert f"dofile {__version__}" in _instructions(stdio_sessions)

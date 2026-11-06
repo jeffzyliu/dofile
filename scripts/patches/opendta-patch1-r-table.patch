@@ -146,7 +146,7 @@
      ci = f"[{lv}% Conf. Interval]"
 --- a/src/dofile/_vendor/opendta/estimation/summaries.py
 +++ b/src/dofile/_vendor/opendta/estimation/summaries.py
-@@ -19,7 +19,7 @@
+@@ -19,7 +19,7 @@ from ..core import missing as M
  from ..core.errors import StataError
  from ..lang.syntax import Parsed, match_options, parse_standard
  from ..lazy import lazy
@@ -155,9 +155,9 @@
  
  # imported on first use (start-up time; see opendta/lazy.py)
  special = lazy("scipy.special")
-@@ -295,16 +295,44 @@
-                       "text")
-         out.write("\n", "text")
+@@ -312,9 +312,11 @@ def summary_stat(s: "Session", stat: str, args: str,
+     if not req.o.get("noheader"):
+         header(s)
  
 -    def table(ss, *_a, **_kw):
 +    def table(ss, *_a, r_table=True, **_kw):
@@ -169,7 +169,12 @@
      est = Estimates(stat, "", fit.colnames, vals, V, eng.n_obs, "t", df)
      est.rows = []
      est.level = req.level
-     est.display = table
+@@ -325,8 +327,35 @@ def summary_stat(s: "Session", stat: str, args: str,
+         if not noheader:
+             header(ss)
+         summary_table(ss, req.info.column, fit.labels, vals, se, df, lv, vcetype, req.over)
++        _post_r_table(ss, fit.colnames, vals, se, df, lv, req.info.column, vcetype)
+     est.replay_summary = replay
      eng.post(s, est, req, fit, df)
 +    _post_r_table(s, fit.colnames, vals, se, df, req.level, req.info.column, vcetype)  # dofile patch
 +
@@ -181,8 +186,8 @@
 +        half = crit * e / (b * (1 - b))
 +        return special.expit(special.logit(b) - half), special.expit(special.logit(b) + half)
 +    return b - crit * e, b + crit * e
- 
- 
++
++
 +def _post_r_table(s: "Session", names, vals, se, df, level, column: str, vcetype: str) -> None:
 +    """dofile patch: r(table) after mean/proportion/total/ratio, as after any estimation table, with ll/ul as
 +    the table shows them (proportion's interval is on the logit scale)."""
@@ -197,12 +202,10 @@
 +    for j, (b, e) in enumerate(zip(vals, se)):
 +        if np.isfinite(e) and e > 0:
 +            tab.data[4, j], tab.data[5, j] = _ci(column, vcetype, float(b), float(e), crit)
-+
-+
+ 
+ 
  def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetype: str, over: str) -> None:
-     out = s.output
-     lv = f"{level:g}"
-@@ -338,12 +366,7 @@
+@@ -362,12 +391,7 @@ def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetyp
          if e is None or not np.isfinite(e):
              out.write(f"  {g9(b):>9}  {'.':>9}     {'.':>9}   {'.':>9}\n", "result")
              continue

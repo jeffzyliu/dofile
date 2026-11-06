@@ -41,7 +41,8 @@ Layers, bottom up (`src/dofile/`):
 - `_vendor/opendta/`: the engine. **Never edit it by hand.** `scripts/vendor_opendta.py` copies a pinned
   upstream commit, rewrites `opendta` imports to `dofile._vendor.opendta`, drops `gui/` and `__main__.py`,
   copies OpenDTA's tests into `tests_opendta/`, then applies `scripts/patches/*.patch`. A change to the engine
-  is a new patch file there, then a re-vendor. The `VENDORED` stamp (commit, patches) is read at runtime by
+  is a new patch file there, then a re-vendor. Patches are named `opendta-<id>-<slug>.patch` (`odt<N>` for an
+  `ODT-N` issue, `patch1` for PATCH-1) and apply in name order, so a patch that builds on another must sort after it. The `VENDORED` stamp (commit, patches) is read at runtime by
   `engine.about()`.
 - `engine.py`: the only adapter over OpenDTA's `Session`. `Engine.run(code)` returns a `Result` and never
   raises. Return codes beyond Stata's: 9999 (a Python exception escaped the engine), 603 (sandbox refused a
