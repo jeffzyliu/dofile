@@ -34,7 +34,7 @@ from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 from .engine import about
 from .worker import PoolFull, Worker, WorkerPool, warm_up
 
-LOG_LIMIT = 8_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
+LOG_LIMIT = 12_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
 KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
 CMD_HEAD, CMD_TAIL = 40, 15  # lines kept from the start and end of a long block of output (first cut)
 SHORT_HEAD, SHORT_TAIL = 5, 3  # ... and of a block still too big once every block is cut that far (second cut)
@@ -132,12 +132,11 @@ class RunResult(TypedDict):
     error_command: Annotated[str | None, Field(description="the command that failed, as echoed in the log (for "
                                                            "an error inside a loop, the loop's first line); "
                                                            "null on success")]
-    log: Annotated[str, Field(description="output as Stata shows it. Over about 8,000 characters the biggest "
+    log: Annotated[str, Field(description="output as Stata shows it. Over about 12,000 characters the biggest "
                                           "blocks of output (tables, listings) are cut to their first and last "
                                           "lines, with a marker for the omitted lines; short results stay")]
-    log_file: Annotated[str | None, Field(description="when the log was cut: the full log, readable with "
-                                                      "get_file(name) (at most 2 MB: very long output keeps its "
-                                                      "start and end); else null")]
+    log_file: Annotated[str, Field(description="the full log of this call, readable with get_file(name) "
+                                                 "(at most 2 MB: very long output keeps its start and end)")]
     log_omitted_lines: NotRequired[Annotated[int, Field(description="only when the log was cut: how many lines "
                                                                     "it leaves out. Use `quietly` and `display` "
                                                                     "for what a loop must report, or read "
@@ -148,7 +147,7 @@ class RunResult(TypedDict):
     nobs: Annotated[int, Field(description="observations in the dataset in memory after the call")]
     nvars: Annotated[int, Field(description="variables in the dataset in memory after the call")]
     new_graphs: Annotated[int, Field(description="graphs this call drew; with graphs=true the last (up to "
-                                                 "3) are attached as PNG images after this JSON")]
+                                                 "5) are attached as PNG images after this JSON")]
 
 
 class Variable(TypedDict):
@@ -284,7 +283,8 @@ def _new_file(workdir: str, name: str, replace: bool) -> Path:
 def _cut_log(log: str, log_file: str) -> tuple[str, int]:
     """The log as returned inline, and how many lines it omits. A log that fits LOG_LIMIT is kept whole. Otherwise
     the biggest blocks of output (runs of lines between blank lines: a table, a listing) are cut first, to their
-    first CMD_HEAD and last CMD_TAIL lines, then if that is not enough to SHORT_HEAD and SHORT_TAIL, so the short
+    first CMD_HEAD and last CMD_TAIL lines (coefficient tables last of all), then if that is not enough to SHORT_HEAD
+    and SHORT_TAIL, so the short
     results around them stay: a `display` line under a table, the `test` between two regressions, the rest of a
     loop's output (a loop's commands are echoed once, up front, so its output has no per-command markers to cut at).
     Command echoes (`. cmd`) are never cut. Only if that still leaves too much is the middle of the log dropped."""
@@ -319,10 +319,20 @@ def _cut_log(log: str, log_file: str) -> tuple[str, int]:
     def next_level(i: int) -> int | None:
         return next((n for n in range(level[i] + 1, 3) if sizes[i][n] < sizes[i][level[i]]), None)
 
-    heap = [(-sz[0], i) for i, sz in sizes.items() if next_level(i) is not None]  # biggest block first
-    heapq.heapify(heap)
+    # Coefficient tables (ERG-7) go last: the head of a robust or clustered table is all header, so cutting one to
+    # its first 5 lines loses the estimate the call was run for. Cut every other block first.
+    is_table = {i: any("Std. Err." in x and "Interval]" in x for x in units[i]) for i in sizes}
+    heaps: tuple[list, list] = ([], [])  # other blocks, then coefficient tables; each biggest block first
+    for i, sz in sizes.items():
+        if next_level(i) is not None:
+            heaps[is_table[i]].append((-sz[0], i))
+    for h in heaps:
+        heapq.heapify(h)
     total = len(log)
-    while total > LOG_LIMIT and heap:
+    while total > LOG_LIMIT:
+        heap = next((h for h in heaps if h), None)
+        if heap is None:
+            break
         _, i = heapq.heappop(heap)
         nxt = next_level(i)
         total -= sizes[i][level[i]] - sizes[i][nxt]
@@ -399,10 +409,10 @@ def build_server(sessions: Sessions) -> MCPServer:
     @tool(description="Run Stata code (one or more lines, like a .do file) in the session. Returns the "
                           "log (commands echoed as `. cmd`), the return code rc (0 = success), the error "
                           "message, the current e()/r() scalars and macros as JSON (matrices by size; values via get_matrix), and files created or changed. Graphs the code "
-                          "draws (scatter, histogram, twoway, ...) are attached as images: the last 3, "
+                          "draws (scatter, histogram, twoway, ...) are attached as images: the last 5, "
                           "unless graphs=false; no `graph export` needed to see them." + session_doc)
     async def run_do(code: Annotated[str, Field(description=code_doc)],
-                     graphs: Annotated[bool, Field(description="attach the last (up to 3) graphs this call draws "
+                     graphs: Annotated[bool, Field(description="attach the last (up to 5) graphs this call draws "
                                                                "as images; false to save context")] = True,
                      timeout: Annotated[float | None, Field(gt=0, description="seconds before the call is "
                                                                           "interrupted (rc 1, data kept); at most "
@@ -425,14 +435,15 @@ def build_server(sessions: Sessions) -> MCPServer:
                "nobs": r.nobs, "nvars": r.nvars}
         name = f"dofile-log-{secrets.token_hex(4)}.txt"
         cut, omitted = _cut_log(r.log, name)
+        scratch = Path(w.workdir) / ".dofile"  # hidden, so the logs don't litter the user's folder
+        scratch.mkdir(exist_ok=True)
+        (scratch / name).write_text(r.log, encoding="utf-8")  # every call, so a person can read it with real newlines
+        logs = sorted(scratch.glob("dofile-log-*.txt"), key=lambda f: f.stat().st_mtime_ns)
+        for f in logs[:-KEEP_LOGS]:  # over stdio this is the user's folder: don't let logs pile up
+            f.unlink(missing_ok=True)
+        out["log_file"] = name
         if cut != r.log:
-            scratch = Path(w.workdir) / ".dofile"  # hidden, so long runs don't litter the user's folder
-            scratch.mkdir(exist_ok=True)
-            (scratch / name).write_text(r.log, encoding="utf-8")
-            logs = sorted(scratch.glob("dofile-log-*.txt"), key=lambda f: f.stat().st_mtime_ns)
-            for f in logs[:-KEEP_LOGS]:  # over stdio this is the user's folder: don't let logs pile up
-                f.unlink(missing_ok=True)
-            out["log"], out["log_file"], out["log_omitted_lines"] = cut, name, omitted
+            out["log"], out["log_omitted_lines"] = cut, omitted
         images = [ImageContent(type="image", data=base64.b64encode(png).decode(), mime_type="image/png")
                   for png in r.images]
         return CallToolResult(content=[TextContent(type="text", text=json.dumps(out)), *images],

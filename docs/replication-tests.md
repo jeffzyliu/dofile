@@ -5,7 +5,7 @@ the `dofile` MCP server (`run_do`, `describe_data`, `get_matrix`, `get_file`) an
 paper's. They complement the unit tests and the Stata 14 log comparison: they exercise whole workflows (reading
 raw data, reshaping, several estimators, graphs, stored estimates) and show how the tool feels to an agent.
 
-Three papers were run on 2026-11-04. All published numbers listed below were reproduced. The problems they
+Three papers were run on 2026-11-04, and two more (Lee, and Cheng and Hoekstra) on 2026-11-05. All published numbers listed below were reproduced. The problems they
 turned up are tracked in [opendta-issues.md](opendta-issues.md) (ODT-*, GAP-*, PATCH-1); most are fixed.
 
 ## How to run one
@@ -94,6 +94,62 @@ Watch for:
 - `nbreg` on `pos = round(exp(lwage-5))` reaches the alpha = 0 boundary (ODT-12): standard errors of
   `lnalpha`/`alpha` show as missing, and the LR statistic prints as `2.5e-03` (unverified against Stata).
 
+## 4. Lee (2008), incumbency and House elections: regression discontinuity
+
+Run 2026-11-05.
+- Data: the Mixtape's copy of the Lee, Moretti and Butler (2004) House file,
+  `https://github.com/scunning1975/mixtape/raw/master/lmb-data.dta` (7 MB, Stata 118 format, 13,588 rows, 178
+  variables). It is not Lee's own file. The running variable is `lagdemvoteshare` minus 0.5 (the Democratic margin in
+  the previous election); the outcomes are `demvoteshare` and `democrat` in the next one. 11 rows have a missing lag.
+- Exercises: `gen` with `floor`, `regress` with `c.x#D` and `vce(cluster id2)`, `[pweight=]` with a triangular
+  kernel, `ivregress` (fuzzy RD), `bootstrap`, `preserve`/`collapse`/`restore`, `histogram`, `lpoly`, `rcap`.
+
+| Result | Lee (2008), from memory | dofile |
+|---|---|---|
+| Jump in next vote share, 4th-order polynomial | about 0.08 | 0.0861 (0.0104), N 13,566 |
+| Jump in win probability, 4th-order polynomial | about 0.4 to 0.5 | 0.3996 (0.0389) |
+| Local linear, vote share, h = 0.05 / 0.10 / 0.15 / 0.25 | | 0.0921 (0.0115) / 0.0949 (0.0086) / 0.0969 (0.0075) / 0.0970 (0.0064) |
+| Local linear, win probability, same h | | 0.4761 / 0.4241 / 0.4437 / 0.5064 |
+| Fuzzy RD, effect of winning on next vote share, h = 0.15 | | 0.2013 (0.0126) |
+
+The published values are not checked against the paper's text. The jump is about 0.09 to 0.10 across bandwidths, and
+the bandwidth plot is flat from 0.05 up. The histogram of the margin has spikes at -0.5 and +0.5: uncontested races.
+
+Watch for:
+- `lagscore` is not a placebo: it is the previous incumbent's score and jumps by 48 at the cutoff (a predetermined
+  covariate such as `realincome` or `pcturban` would be).
+- `twoway lpoly`/`lpolyci` fail (GAP-4); `ssc install` and `rdrobust` are not recognized (ERG-8).
+- A long log lost the `D` coefficient row (ERG-7).
+
+## 5. Cheng and Hoekstra (2013), castle doctrine laws: panel fixed effects and event study
+
+Run 2026-11-05.
+- Data: `https://github.com/scunning1975/mixtape/raw/master/castle.dta` (0.5 MB, Stata 118 format): 50 states, 2000
+  to 2010, 550 rows, 185 variables. 21 states adopted between 2005 and 2009 (`effyear`); `post` is the treatment,
+  `popwt` the population weight.
+- Exercises: `xtset`, `xtdescribe`, `xtreg, fe`, `areg`, `regress` with `i.sid`, `[aweight=]`, `vce(cluster)`, factor
+  years, event-study dummies built in a loop, `testparm`, `collapse`, `rcap`, `graph bar (count)`.
+
+| Result (outcome `l_homicide`, weights `popwt`, clustered by state) | dofile |
+|---|---|
+| State and year effects, `xtreg, fe` | 0.0755 (0.0332) |
+| Same, `areg` / `regress` with `i.sid` (same coefficient, different degrees-of-freedom factor) | 0.0755 (0.0348) |
+| + region-by-year effects / + state linear trends / + time-varying controls (`xtreg, fe`) | 0.0857 (0.0263) / 0.0670 (0.0319) / 0.0821 (0.0268) |
+| Falsification: `l_larceny`, `l_motor` | 0.0012 (0.0142), 0.0414 (0.0485) |
+| Event study (weighted `regress` with `i.sid`, leads -5 to -2, lags 0 to 4) | leads 0.028 to 0.053, lags 0.046, 0.124, 0.113, 0.109, 0.097 |
+| Joint test of the four leads | F(4, 49) = 1.37, p = 0.26 |
+
+The paper reports about 8 percent more homicide (from memory, not checked); the estimates are 0.067 to 0.086. Before
+the ODT-24 patch `xtreg, fe` and `areg` ignored the weights and gave 0.0694 (0.0559) for the first row. `areg`'s standard
+error (0.0348) is above `xtreg`'s (0.0332) because `areg` counts the 49 absorbed effects in its small-sample factor,
+as in Stata.
+
+Watch for:
+- `describe, short` printed a wrong `Sorted by:` list for this file before the ODT-25 patch.
+- `pop` is an ambiguous abbreviation here (ERG-9).
+- Never-adopting states have a missing `effyear`, so `rel = year - effyear` is missing for them; their event-time
+  dummies must be 0 (not missing) or `regress` drops them.
+
 ## Third-party comparison: stats.camp
 
 stats.camp (a separate Stata-syntax engine in WebAssembly; not Stata, not OpenDTA) ran the same small probe built
@@ -138,7 +194,7 @@ Session behavior
 
 Agent ergonomics
 - Result size: an IV regression's results should be about 1 KB; the log carries the tables.
-- A log under about 8,000 characters comes back whole. A longer one has its biggest blocks of output cut first (to
+- A log under about 12,000 characters comes back whole. A longer one has its biggest blocks of output cut first (to
   40 + 15 lines, then to 5 + 3), so short results stay; `log_omitted_lines` says how many lines are missing and
   `log_file` names the full log for `get_file` (ERG-1 in [agent-ergonomics.md](agent-ergonomics.md)). In a loop use
   `quietly` and `display` what you need.

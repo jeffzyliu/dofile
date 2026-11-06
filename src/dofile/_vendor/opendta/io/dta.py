@@ -311,7 +311,7 @@ def _read_old(path: Path) -> Dataset:
         var.label = varlabels[j]
         var.value_label = vlabels[j]
         ds.vars.append(var)
-    ds.sortlist = [names[k - 1] for k in sort_idx if 0 < k <= K]
+    ds.sortlist = _sort_keys(sort_idx, names, K)
     ds.label = label
     ds.timestamp = ts
     ds.value_labels = value_labels
@@ -530,6 +530,17 @@ class _Reader:
         chunk = self.b[self.p:j]
         self.p = j
         return chunk
+
+
+def _sort_keys(sort_idx, names, K):
+    """The variables the data are sorted by. The list ends at the first 0: Stata leaves other bytes after it (ODT-25)."""
+    keys = []
+    for k in sort_idx:
+        if k == 0:
+            break
+        if k <= K:
+            keys.append(names[k - 1])
+    return keys
 
 
 def _cstr(b: bytes, release: int = 118) -> str:
@@ -756,7 +767,7 @@ def _read_117plus(f, path: Path) -> Dataset:
         var.value_label = vlabels[j]
         ds.vars.append(var)
         cols[j] = None
-    ds.sortlist = [names[k - 1] for k in sort_idx if k > 0 and k <= K]
+    ds.sortlist = _sort_keys(sort_idx, names, K)
     ds.label = label
     ds.timestamp = ts
     ds.value_labels = value_labels

@@ -40,9 +40,12 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | `::test_odt21_default_axis_ticks_are_nice_numbers` | patched |
 | ODT-22 | the `matrix(name)` pseudofunction is not supported in expressions: `display trace(matrix(xx))` and `el(matrix(xx),2,1)` give rc 198 (`trace(xx)` works) | `::test_odt22_matrix_pseudofunction` | patched |
 | ODT-23 | `capture` does not catch a file error that comes as a Python `PermissionError` (the dofile sandbox's refusal in `type`, ...): the whole call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_sandbox_refusal_like_any_file_error` | patched |
+| ODT-24 | `xtreg ..., fe` and `areg ..., absorb()` ignore `[aweight=]`, `[pweight=]` and `[fweight=]`: the coefficient is the unweighted one | `tests/test_engine.py::test_odt24_weights_in_xtreg_fe_and_areg` | patched |
+| ODT-25 | `describe` prints a long wrong `Sorted by:` list (48 names with repeats) for a Stata-written file whose own sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
+| GAP-4 | `twoway lpoly` and `twoway lpolyci` are not plot types (rc 198 `lpoly is not a twoway plot type`); standalone `lpoly` works | found 2026-11-05 (Lee 2008 RD replication), no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 
 ## Details
@@ -192,6 +195,10 @@ by g, sort: regress lwage educ
   `bootstrap`, `jackknife`, `rolling`, `statsby` and others (https://www.stata.com/manuals/rregress.pdf).
   Still reproduces on the CPS data: `by g, sort: regress ...` and `bysort g: regress ...` both give rc 190, while
   `bysort g: summarize` works.
+- Re-run 2026-11-05 (dofile, Card data): `by g, sort: regress lwage educ` and `bysort g: regress lwage educ` both give rc 190;
+  `bysort g: summarize lwage` works. Stata 13 and 14 manuals list `by` among the prefixes allowed with estimation commands
+  (the [R] glm manual of Stata 14 shows the same list as [R] regress: bootstrap, by, fp, jackknife, mfp, mi estimate,
+  nestreg, rolling, statsby, stepwise, svy). The Stata 14 [R] regress page itself was not read. The Stata 14 reference logs have no `by:` estimation.
 
 ### ODT-12: `nbreg` warning
 `nbreg pos educ` on the Card data (`pos = round(exp(lwage-5))`) prints `RuntimeWarning: invalid value encountered
@@ -288,6 +295,11 @@ the wrong color with no error:
   - an unknown color still falls back silently. Stata refuses an invalid color; doing the same here would make a
     valid-but-missing name fail outright, so wait until the name table is complete.
 - `docs/replication-tests.md` said `%50` is "accepted"; since the patch the opacity is applied.
+- Re-checked 2026-11-05: `gs0` is `#000000` and `gs16` `#ffffff` (the Stata manual labels gs0 black and gs16 white), `gs2`
+  `#202020`; `maroon%50` is `#7b1f2a80`; `navy*.5` `#8d97ad`; `none` is `none`; `lime`, `ltbluishgray`, `midblue`, `ebblue`,
+  `erose`, `dknavy` and `foo` still fall back silently. New: the named colors are the engine's own palette, not Stata's
+  values. The colorstyle manual gives `navy` as RGB 26 71 111; the engine's `navy` is 27 47 91, so `navy*.5` also differs.
+  Only the `gs#` levels follow Stata's definition (no RGB values were found for the other names).
 
 ### ODT-17: legend placement
 ```stata
@@ -306,6 +318,8 @@ twoway (scatter y x) (lfit y x), legend(pos(3))
   region (12 top, 3 right, 6 bottom, 9 left; 1-2 and 10-11 are top right and top left, 4-5 and 7-8 bottom right
   and bottom left), a legend at a side defaults to one column. Not done: `ring()` (the parser stores it but it is
   ignored), `ring(0)` inside the plot region, `bplacement()`, `position(0)`.
+- Re-rendered 2026-11-05: `legend(pos(3))` puts the legend on the right, `pos(12)` on top, `pos(1)` at the top right outside the
+  plot, and `legend(ring(0) pos(11))` still draws it outside the plot (top left), as the entry says. Status stays `partly patched`.
 
 ### ODT-18: `ttest` with `unequal` but no `unpaired`
 ```stata
@@ -374,6 +388,9 @@ display %6.3f (r(table)[1,1])
 
   Left as it is: the form is rejected everywhere, only the code differs. If it is ever made consistent, 198 is the
   only code with evidence behind it (and 509 for `generate`).
+- Re-run 2026-11-05: `display e(b)[1,1]` and `display r(table)[1,1]` give rc 109; `scalar s = e(b)[1,1]`, `local l = e(b)[1,1]`,
+  `generate z = e(b)[1,1]` and `display %6.3f (r(table)[1,1])` give rc 198; `matrix T = e(b)` then `display T[1,1]`, `el(e(b),1,1)` and
+  `_b[x]` work. Same as the table above; status unchanged.
 
 ### ODT-20: histogram outline ignores `lcolor()`
 ```stata
@@ -439,6 +456,68 @@ display _rc
 - Patched (`opendta-odt23-capture-sandbox-refusal.patch`): `capture` turns a `PermissionError` into `StataError(603)`.
   Only needed because of dofile's sandbox, so it is not worth reporting upstream.
 
+### ODT-24: weights in `xtreg, fe` and `areg`
+```stata
+clear
+set seed 12345
+set obs 300
+gen id = ceil(_n/10)
+gen t = mod(_n-1, 10) + 1
+gen x = rnormal()
+gen y = 0.5*x + id/20 + rnormal()
+gen w = 1 + mod(id, 5)          // constant within id
+xtset id t
+regress y x i.id [aweight=w]    // 0.41346
+xtreg y x [aweight=w], fe       // 0.47292, the unweighted value
+areg y x [aweight=w], absorb(id)  // 0.47292
+```
+- With `aweight` and `pweight` (weights varying within id) and `fweight`, `regress` with the dummies moves
+  (0.49189, 0.49189, 0.43677) and `xtreg, fe` and `areg` stay at 0.47292.
+- Cause (read in the code, 2026-11-05): `estimation/panel.py` declares `weights=("aweight", "fweight", "pweight")` for
+  `cmd_xtreg` and `cmd_areg`, and `Sample` parses them into `smp.w`, but `_xtreg_fe` and `cmd_areg` never read `smp.w`:
+  they demean with `_demean(y, ids, inv, counts)` and solve with unweighted cross-products. The weights are accepted and dropped.
+  (Line 653 is the only use of `smp.wtype` in the file.)
+- Expected in Stata (2026-11-05):
+  - [R] areg: `absorb(var)` is "included in the regression as if it were specified by dummy variables", and `areg`
+    takes aweights, fweights and pweights. So `areg y x [aw=w], absorb(id)` should equal `regress y x i.id [aw=w]` (the
+    manual shows that equivalence only unweighted; the weighted case is an inference).
+  - `xtreg, fe`, Stata 14 [XT] xtreg, syntax notes (PDF p. 4, read from the manual with `pypdf`): "aweights, fweights,
+    and pweights are allowed for the fixed-effects model. ... See [U] 11.1.6 weight. Weights must be constant within
+    panel." The current manual (PDF p. 7) has the same sentences. `e(wtype)` and `e(wexp)` are stored, so the weights
+    are part of the fit. Statalist, 2008, Austin Nichols: "Note that -xtreg- will not allow weights that vary over time
+    within panel, but -areg- will." (https://www.stata.com/statalist/archive/2008-06/msg01015.html). So dofile is wrong
+    twice: it ignores constant weights, and it accepts varying ones where Stata stops with an error (the error's
+    return code is not in the manual text).
+- Found with Cheng and Hoekstra (2013), whose main specification is `xtreg l_homicide ... post [aweight=popwt], fe`
+  (`popwt` is constant within state): `post` is 0.0694 (se 0.0559) with `xtreg, fe` and `areg`, and 0.0755 (se 0.0348)
+  with `regress ... i.sid`.
+- Workaround: `regress y x i.id [aweight=w], vce(cluster id)`.
+- Not checked: `xtreg, re` and `, be` (the manual's weight notes don't mention them), `xtivreg`, and whether the
+  standard errors use the weights. The Stata 14
+  reference logs (`tests_opendta/compat/expected/`) have no weighted `xtreg` or `areg`.
+- Patched (`opendta-odt24-weighted-within-estimators.patch`, 2026-11-05): `xtreg, fe` and `areg` demean with the weighted
+  group means and solve weighted least squares (OLS on sqrt(w)-scaled data), with the weights scaled as `regress` does
+  (a- and pweights to the sample size, fweights as they are, N their sum). `xtreg, fe` stops with rc 101
+  `weights must be constant within panel` for weights that vary within a panel; `areg` takes them. `e(wtype)` and `e(wexp)`
+  are set. Checked against `regress` with the panel dummies: coefficient, standard error, N and residual df agree to 1e-8
+  for a- and fweights (and the coefficient for pweights, whose variance is robust).
+  VERIFY: the rc 101 and its text (a guess), the place of `wtype`/`wexp` among the e() macros, and the secondary statistics
+  in the weighted `xtreg, fe` (between and overall R-squared, `sigma_u`, `corr`, the log likelihood), which are still the
+  unweighted formulas. `xtreg, re`/`be` are untouched (they still ignore weights).
+
+### ODT-25: `Sorted by:` after reading a Stata-written file
+`use castle.dta` then `describe, short` (Cheng and Hoekstra's data, `scunning1975/mixtape`) prints 48 names after
+`Sorted by:` (`sid r20052 year state r20083 trend_17 trend_23 ...`, some twice).
+- Cause (checked in the file and the code, 2026-11-05): the file's `<sortlist>` has 186 two-byte entries, `3, 0, 0, ...`,
+  so the real key is the one variable `sid`, and then it holds 127 more nonzero entries after the first 0 (leftover bytes
+  that Stata ignores; the list ends at the first 0). `io/dta.py:314` reads `[names[k - 1] for k in sort_idx if 0 < k <= K]`
+  and so keeps every entry in range, 48 of them. A file that dofile writes has zeros after the list and reads back fine.
+- Fix: stop at the first 0 (`itertools.takewhile(lambda k: k != 0, sort_idx)`). One line, not patched yet.
+- Not checked: whether `by:` or `merge` use the list (it looks cosmetic), and the wording of the .dta format
+  specification ([P] File formats .dta) on the terminator.
+- Patched (`opendta-odt25-dta-sort-list.patch`, 2026-11-05): the reader stops at the first 0 (`_sort_keys` in `io/dta.py`,
+  used for the old and the 117+ formats). `castle.dta` now reports `Sorted by: sid`.
+
 ### GAP-2: `estat firststage`
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat
 firststage is unrecognized". It's the standard weak-instrument check, so it's worth implementing upstream.
@@ -448,6 +527,14 @@ firststage is unrecognized". It's the standard weak-instrument check, so it's wo
 `estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).
 A student running Card (1995) or any IV paper reaches for all three. (`estat overid` is an error in Stata for an
 exactly identified model, so test it with two instruments.)
+
+### GAP-4: `lpoly` and `lpolyci` as twoway plot types
+`twoway (lpolyci y x if x<0, degree(1) bwidth(.1)) (lpolyci y x if x>=0, ...)` stops with rc 198 `lpolyci is not a twoway
+plot type`; `lpoly` gives the same. The standalone `lpoly y x, degree(1) bwidth(.1) ci` runs and draws a graph. Stata documents both as twoway plot
+types (not checked in a Stata 14 log), and a regression-discontinuity plot (a fit on each side of a cutoff) needs them.
+- Workaround: `lpoly ..., nograph generate(...) at(...)` for each side, then `twoway line` on the saved values.
+- Also seen in the same run: the `ci` option's band wasn't visible at bandwidth 0.1 with 5,000 points; not checked
+  whether the band was drawn.
 
 ### GAP-1: community commands
 `reghdfe`, `esttab` and `outreg2` are SSC packages, not part of Stata, and OpenDTA doesn't implement them. Not

@@ -378,13 +378,13 @@ def test_get_file_shows_text_and_refuses_binary(stdio_sessions, tmp_path):
     call(build_server(stdio_sessions), steps)
 
 
-def test_run_do_attaches_last_three_new_graphs(stdio_sessions):
+def test_run_do_attaches_last_five_new_graphs(stdio_sessions):
     async def steps(c):
-        code = "use panel, clear\nscatter y x1\nforvalues i = 1/4 {\n    histogram y, name(h`i', replace)\n}"
+        code = "use panel, clear\nscatter y x1\nforvalues i = 1/6 {\n    histogram y, name(h`i', replace)\n}"
         r = await tool(c, "run_do", code=code)
-        assert r.structured_content["new_graphs"] == 5
+        assert r.structured_content["new_graphs"] == 7
         images = [b for b in r.content if b.type == "image"]
-        assert len(images) == 3 and all(b.mime_type == "image/png" for b in images)
+        assert len(images) == 5 and all(b.mime_type == "image/png" for b in images)
         assert r.content[0].type == "text" and json.loads(r.content[0].text)["rc"] == 0
 
         r = await tool(c, "run_do", code="count")  # no new graph: nothing attached
@@ -395,7 +395,10 @@ def test_run_do_attaches_last_three_new_graphs(stdio_sessions):
     call(build_server(stdio_sessions), steps)
 
 
-def test_log_is_cut_per_command_and_counts_data(stdio_sessions):
+def test_log_is_cut_per_command_and_counts_data(stdio_sessions, monkeypatch):
+    import dofile.mcp_server as srv
+    monkeypatch.setattr(srv, "LOG_LIMIT", 8_000)  # the `tab id` log is about 9,000 characters: over this, under the shipped limit
+
     async def steps(c):
         code = "use panel, clear\ntab id\nregress y x1"  # tab id: one row per id
         r = (await tool(c, "run_do", code=code)).structured_content

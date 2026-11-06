@@ -130,7 +130,7 @@ def about() -> dict[str, Any]:
             "stata_version": 14}  # OpenDTA's c(stata_version); its target is Stata 14
 
 
-MAX_IMAGES = 3
+MAX_IMAGES = 5
 LOG_KEEP = 1_000_000  # MCP workers: characters kept from the start and from the end of one call's log
 
 

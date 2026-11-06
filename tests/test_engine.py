@@ -370,6 +370,60 @@ def test_odt18_ttest_options_of_the_paired_and_one_sample_forms(eng):
         assert eng.run(code).rc == 0, code
 
 
+ODT24_DATA = ("clear\nset seed 12345\nset obs 300\ngen id = ceil(_n/10)\ngen t = mod(_n-1, 10) + 1\ngen x = rnormal()\n"
+              "gen z = rnormal()\ngen y = 0.5*x - 0.3*z + id/20 + rnormal()\ngen w = 1 + mod(id, 5)\n"
+              "gen wv = 0.5 + runiform()\ngen fw = 1 + mod(id, 3)\nxtset id t")
+
+
+def _slope_and_se(eng, cmd):
+    r = eng.run(f"quietly {cmd}\ndisplay %14.10f _b[x] \" \" %14.10f _se[x] \" \" e(N) \" \" e(df_r)")
+    assert r.rc == 0, (cmd, r.error)
+    b, se, n, df = r.log.strip().splitlines()[-1].split()
+    return float(b), float(se), float(n), float(df)
+
+
+def test_odt24_weights_in_xtreg_fe_and_areg(eng):
+    """ODT-24: with weights the within estimators must equal `regress` with the panel dummies (areg is that fit):
+    coefficient, standard error, N and residual df, for a- and fweights constant within the panel."""
+    eng.run(ODT24_DATA)
+    for wt in ("", "[aweight=w]", "[fweight=fw]"):
+        lsdv = _slope_and_se(eng, f"regress y x z i.id {wt}")
+        for cmd in (f"xtreg y x z {wt}, fe", f"areg y x z {wt}, absorb(id)"):
+            got = _slope_and_se(eng, cmd)
+            assert all(abs(a - b) < 1e-8 for a, b in zip(got, lsdv)), (cmd, got, lsdv)
+    assert abs(_slope_and_se(eng, "regress y x z i.id [aweight=w]")[0] - _slope_and_se(eng, "regress y x z i.id")[0]) > 1e-3
+
+
+def test_odt24_areg_takes_weights_that_vary_within_the_group_and_xtreg_refuses_them(eng):
+    """[XT] xtreg (Stata 14): "Weights must be constant within panel." areg has no such limit."""
+    eng.run(ODT24_DATA)
+    for wt in ("[aweight=wv]", "[pweight=wv]"):
+        assert abs(_slope_and_se(eng, f"areg y x z {wt}, absorb(id)")[0] - _slope_and_se(eng, f"regress y x z i.id {wt}")[0]) < 1e-8
+        r = eng.run(f"xtreg y x z {wt}, fe")
+        assert r.rc == 101 and "constant within panel" in r.error, wt
+
+
+def test_odt24_pweights_in_xtreg_fe_and_weight_macros(eng):
+    """pweights: the coefficient is the weighted one, the variance robust (clustered on the panel); e(wtype), e(wexp)."""
+    eng.run(ODT24_DATA)
+    b = _slope_and_se(eng, "xtreg y x z [pweight=w], fe")[0]
+    assert abs(b - _slope_and_se(eng, "regress y x z i.id [pweight=w]")[0]) < 1e-8
+    assert eng.run("display \"`e(wtype)' `e(wexp)'\"").log.strip().splitlines()[-1] == "pweight = w"
+
+
+def test_odt25_the_sort_list_ends_at_the_first_zero(eng, tmp_path):
+    """ODT-25: Stata leaves other bytes after the zero that ends the sort list; they are not sort keys."""
+    eng.run("clear\nset obs 20\nforeach i of numlist 1/8 {\n    gen v`i' = _n\n}\nsort v3\nsave t, replace")
+    f = tmp_path / "t.dta"
+    raw = bytearray(f.read_bytes())
+    i = raw.index(b"<sortlist>") + len(b"<sortlist>")
+    for j in range(2, 9):   # the list is "3, 0, 0, ...": put leftovers where the zeros are
+        raw[i + 2 * j:i + 2 * j + 2] = (j % 8 + 1).to_bytes(2, "little")
+    f.write_bytes(bytes(raw))
+    log = eng.run("use t, clear\ndescribe, short").log
+    assert [ln.rstrip() for ln in log.splitlines() if ln.startswith("Sorted by")] == ["Sorted by: v3"]
+
+
 def test_odt22_matrix_pseudofunction(eng):
     """ODT-22: matrix(name) is the matrix name in an expression."""
     eng.run("matrix xx = (1, 2 \\ 3, 4)")

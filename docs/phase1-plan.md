@@ -146,8 +146,8 @@ new_graphs, images, files)`.
   `dofile://about`.
 - `run_do` returns rc, error, the failing command, the log, the current e()/r() scalars and macros in full on
   every call, also after an error (matrices by size only, e.g. `"V": "16x16"`; values via `get_matrix`; no `null`
-  for "unchanged", since agents' context gets summarized), changed files, `nobs`/`nvars`, and the last 3 graphs
-  as PNG images. `describe_data` leaves out `label`/`value_label` when a variable has none. A log over 8,000
+  for "unchanged", since agents' context gets summarized), changed files, `nobs`/`nvars`, and the last 5 graphs
+  as PNG images. `describe_data` leaves out `label`/`value_label` when a variable has none. A log over 12,000
   characters is cut: the biggest blocks of output (tables, listings) lose their middle first, so short results and
   loop output stay, and `log_omitted_lines` says how many lines are gone; the full log goes to `.dofile/`, where the
   newest 20 are kept (`get_file` reads it in pages). A call's log is capped at its first and

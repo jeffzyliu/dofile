@@ -1,0 +1,204 @@
+diff --git a/src/dofile/_vendor/opendta/estimation/panel.py b/src/dofile/_vendor/opendta/estimation/panel.py
+index 1ec94b2..1582fd1 100644
+--- a/src/dofile/_vendor/opendta/estimation/panel.py
++++ b/src/dofile/_vendor/opendta/estimation/panel.py
+@@ -45,6 +45,35 @@ def _group_means(v, inv, counts):
+     return np.bincount(inv, weights=v, minlength=len(counts)) / counts
+ 
+ 
++def _wdemean(v, w, inv, counts):
++    """v minus its group mean; the mean is weighted by w when given (None: the plain mean, as _demean)."""
++    if w is None:
++        return _demean(v, None, inv, counts)
++    return v - (np.bincount(inv, weights=w * v, minlength=len(counts))
++                / np.bincount(inv, weights=w, minlength=len(counts)))[inv]
++
++
++def _fit_weights(smp, N):
++    """(weights for the fit, N): None and N unchanged without weights. Otherwise the weights as regress uses them
++    (a- and pweights scaled to sum to the sample size, N unchanged; fweights as they are, N their sum)."""
++    if smp.w is None:
++        return None, N
++    w, n_rep = smp.weights_for_fit()
++    return w, (int(round(n_rep)) if smp.wtype == "fweight" else N)
++
++
++def _require_constant_weights(w, inv, counts):
++    """[XT] xtreg: "Weights must be constant within panel." (checked in the Stata 14 manual; the return code is a guess)."""
++    if w is None:
++        return
++    lo = np.full(len(counts), np.inf)
++    hi = np.full(len(counts), -np.inf)
++    np.minimum.at(lo, inv, w)
++    np.maximum.at(hi, inv, w)
++    if np.any(hi - lo > 1e-9 * np.maximum(hi, 1e-300)):
++        raise StataError(101, "weights must be constant within panel")   # VERIFY the return code and the text
++
++
+ def _maps(cols, b, V, constant: bool):
+     bmap, semap = {}, {}
+     j = 0
+@@ -209,22 +238,31 @@ def _drop_within_collinear(smp, Xw, est_cols, out):
+ 
+ def _xtreg_fe(s, smp, args, y, Xs, est_cols, ids, inv, counts, G, N, k, pvar):
+     out = s.output
+-    yw = _demean(y, ids, inv, counts)
+-    Xw = np.column_stack([_demean(Xs[:, j], ids, inv, counts) for j in range(k)]) if k else Xs
++    n_obs = len(y)
++    w, N = _fit_weights(smp, N)   # ODT-24: the weights were accepted and dropped
++    _require_constant_weights(w, inv, counts)
++    yw = _wdemean(y, w, inv, counts)
++    Xw = np.column_stack([_wdemean(Xs[:, j], w, inv, counts) for j in range(k)]) if k else Xs
+     keep = _drop_within_collinear(smp, Xw, est_cols, out)
+     Xw, Xs = Xw[:, keep], Xs[:, keep]
+     est_cols = [est_cols[j] for j in keep]
+     k = Xs.shape[1]
+-    A = np.linalg.inv(Xw.T @ Xw) if k else np.zeros((0, 0))
+-    b = A @ (Xw.T @ yw) if k else np.zeros(0)
+-    e = yw - Xw @ b
++    # weighted least squares is OLS on sqrt(w)-scaled data; without weights nothing changes
++    sw = None if w is None else np.sqrt(w)
++    yws = yw if sw is None else sw * yw
++    Xws = Xw if sw is None else sw[:, None] * Xw
++    A = np.linalg.inv(Xws.T @ Xws) if k else np.zeros((0, 0))
++    b = A @ (Xws.T @ yws) if k else np.zeros(0)
++    e = yws - Xws @ b
+     rss = float(e @ e)
+     df_r = N - G - k
+     s2 = rss / df_r
+-    xbar, ybar = Xs.mean(axis=0), y.mean()
++    xbar, ybar = (Xs.mean(axis=0), y.mean()) if w is None else ((w @ Xs) / w.sum(), float(w @ y) / w.sum())
+     cons = ybar - float(xbar @ b)
+     # V with the constant: regression of (y - ȳi + ȳ) on (x - x̄i + x̄) and 1
+-    Xa = np.column_stack([Xw + xbar, np.ones(N)])
++    Xa = np.column_stack([Xw + xbar, np.ones(n_obs)])
++    if sw is not None:
++        Xa = sw[:, None] * Xa
+     Aa = np.linalg.inv(Xa.T @ Xa)
+     V = s2 * Aa
+     bb = np.append(b, cons)
+@@ -233,7 +271,7 @@ def _xtreg_fe(s, smp, args, y, Xs, est_cols, ids, inv, counts, G, N, k, pvar):
+     if smp.vce in ("robust", "cluster"):
+         # xtreg, vce(robust) = cluster on the panel (Stata)
+         cl = smp.cluster if smp.vce == "cluster" else ids
+-        ea = yw - Xw @ b
++        ea = e
+         uniq = np.unique(cl)
+         n_clust = len(uniq)
+         sc = Xa * ea[:, None]
+@@ -252,7 +290,10 @@ def _xtreg_fe(s, smp, args, y, Xs, est_cols, ids, inv, counts, G, N, k, pvar):
+     sigma_u = float(np.std(u_i, ddof=1)) if G > 1 else 0.0
+     sigma_e = float(np.sqrt(s2 if smp.vce == "ols" else rss / (N - G - k)))
+     rho = sigma_u ** 2 / (sigma_u ** 2 + sigma_e ** 2)
+-    r2_w = float(np.corrcoef(Xw @ b, yw)[0, 1] ** 2) if k else 0.0
++    if w is None:
++        r2_w = float(np.corrcoef(Xw @ b, yw)[0, 1] ** 2) if k else 0.0
++    else:   # weighted: 1 - RSS / total within sum of squares
++        r2_w = 1 - rss / float(yws @ yws) if k else 0.0
+     r2_b = float(np.corrcoef(_group_means(xb_all, inv, counts), _group_means(y, inv, counts))[0, 1] ** 2) if k else 0.0
+     r2_o = float(np.corrcoef(xb_all, y)[0, 1] ** 2) if k else 0.0
+     corr = float(np.corrcoef(u_i[inv], xb_all)[0, 1]) if k else 0.0
+@@ -262,9 +303,13 @@ def _xtreg_fe(s, smp, args, y, Xs, est_cols, ids, inv, counts, G, N, k, pvar):
+         F = float(b @ np.linalg.solve(V[:k, :k], b)) / k if k else SYS
+     pF = float(st.f.sf(F, k, df_r)) if F < SYS else SYS
+     # F test that all u_i = 0: pooled OLS vs fe
+-    Xp = np.column_stack([Xs, np.ones(N)])
+-    bp = np.linalg.lstsq(Xp, y, rcond=None)[0]
+-    rss_p = float(np.sum((y - Xp @ bp) ** 2))
++    Xp = np.column_stack([Xs, np.ones(n_obs)])
++    if w is None:
++        bp = np.linalg.lstsq(Xp, y, rcond=None)[0]
++        rss_p = float(np.sum((y - Xp @ bp) ** 2))
++    else:
++        bp = np.linalg.lstsq(sw[:, None] * Xp, sw * y, rcond=None)[0]
++        rss_p = float(w @ (y - Xp @ bp) ** 2)
+     F_f = ((rss_p - rss) / (G - 1)) / (rss / (N - G - k))
+     p_f = float(st.f.sf(F_f, G - 1, N - G - k))
+     names, bf, Vf = _full(smp.cols, True, bb, V)
+@@ -283,10 +328,10 @@ def _xtreg_fe(s, smp, args, y, Xs, est_cols, ids, inv, counts, G, N, k, pvar):
+     est.predict = _predict_xt
+     est.predict_opts = {"u": 1, "e": 1, "ue": 2, "xbu": 3}
+     # e(): names and order observed in Stata 14 (compat 0510)
+-    tss_w = float(yw @ yw)
++    tss_w = float(yws @ yws)
+     ll = -0.5 * N * (np.log(2 * np.pi) + np.log(rss / N) + 1)
+     ll_0 = -0.5 * N * (np.log(2 * np.pi) + np.log(tss_w / N) + 1)
+-    tss = float(np.sum((y - ybar) ** 2))
++    tss = float(np.sum((y - ybar) ** 2)) if w is None else float(w @ (y - ybar) ** 2)
+     r2_a = 1 - (1 - r2_w) * (N - 1) / (N - G - k)
+     scalars = [("r2_w", r2_w), ("F_f", F_f), ("rank", float(k + 1)), ("Tbar", N / G),
+                ("Tcon", 1.0 if counts.min() == counts.max() else 0.0), ("g_min", float(counts.min())),
+@@ -303,6 +348,7 @@ def _xtreg_fe(s, smp, args, y, Xs, est_cols, ids, inv, counts, G, N, k, pvar):
+     if vcetype:
+         macros += [("vcetype", vcetype), ("clustvar", est.clustvar)]
+     macros += [("ivar", pvar), ("depvar", smp.depname), ("properties", "b V"), ("absvar", pvar)]
++    macros += wexp_macros(smp)   # VERIFY the place among the macros
+     post(s, est, scalars, macros, smp.mask)
+     display_xtreg(s, est)
+ 
+@@ -522,18 +568,25 @@ def cmd_areg(s: "Session", args: str) -> None:
+         out.write(f"note: {nm} omitted because of collinearity\n", "text")
+     est_cols = [c for c in smp.cols if c.values is not None]
+     Xs = np.column_stack([c.values for c in est_cols]) if est_cols else np.zeros((len(y), 0))
+-    N, k = len(y), Xs.shape[1]
+-    yw = _demean(y, ids, inv, counts)
+-    Xw = np.column_stack([_demean(Xs[:, j], ids, inv, counts) for j in range(k)]) if k else Xs
+-    A = np.linalg.inv(Xw.T @ Xw) if k else np.zeros((0, 0))
+-    b = A @ (Xw.T @ yw) if k else np.zeros(0)
+-    e = yw - Xw @ b
++    n_obs, k = len(y), Xs.shape[1]
++    smp.n = n_obs   # the mask lost the rows with a missing absorb() variable
++    w, N = _fit_weights(smp, n_obs)   # ODT-24: the weights were accepted and dropped
++    yw = _wdemean(y, w, inv, counts)
++    Xw = np.column_stack([_wdemean(Xs[:, j], w, inv, counts) for j in range(k)]) if k else Xs
++    sw = None if w is None else np.sqrt(w)   # weighted least squares is OLS on sqrt(w)-scaled data
++    yws = yw if sw is None else sw * yw
++    Xws = Xw if sw is None else sw[:, None] * Xw
++    A = np.linalg.inv(Xws.T @ Xws) if k else np.zeros((0, 0))
++    b = A @ (Xws.T @ yws) if k else np.zeros(0)
++    e = yws - Xws @ b
+     rss = float(e @ e)
+     df_r = N - G - k
+     s2 = rss / df_r
+-    xbar, ybar = Xs.mean(axis=0), y.mean()
++    xbar, ybar = (Xs.mean(axis=0), y.mean()) if w is None else ((w @ Xs) / w.sum(), float(w @ y) / w.sum())
+     cons = ybar - float(xbar @ b)
+-    Xa = np.column_stack([Xw + xbar, np.ones(N)])
++    Xa = np.column_stack([Xw + xbar, np.ones(n_obs)])
++    if sw is not None:
++        Xa = sw[:, None] * Xa
+     Aa = np.linalg.inv(Xa.T @ Xa)
+     V = s2 * Aa
+     vcetype, n_clust = "", None
+@@ -547,14 +600,18 @@ def cmd_areg(s: "Session", args: str) -> None:
+         vcetype = "Robust"
+     V = (V + V.T) / 2
+     bb = np.append(b, cons)
+-    tss = float(np.sum((y - ybar) ** 2))
++    tss = float(np.sum((y - ybar) ** 2)) if w is None else float(w @ (y - ybar) ** 2)
+     r2 = 1 - rss / tss
+     r2_a = 1 - (1 - r2) * (N - 1) / df_r
+     F = float(b @ np.linalg.solve(V[:k, :k], b)) / k if k else SYS
+     pF = float(st.f.sf(F, k, df_r)) if k else SYS
+-    Xp = np.column_stack([Xs, np.ones(N)])
+-    bp = np.linalg.lstsq(Xp, y, rcond=None)[0]
+-    rss_p = float(np.sum((y - Xp @ bp) ** 2))
++    Xp = np.column_stack([Xs, np.ones(n_obs)])
++    if w is None:
++        bp = np.linalg.lstsq(Xp, y, rcond=None)[0]
++        rss_p = float(np.sum((y - Xp @ bp) ** 2))
++    else:
++        bp = np.linalg.lstsq(sw[:, None] * Xp, sw * y, rcond=None)[0]
++        rss_p = float(w @ (y - Xp @ bp) ** 2)
+     F_abs = ((rss_p - rss) / (G - 1)) / (rss / (N - G - k))
+     p_abs = float(st.f.sf(F_abs, G - 1, N - G - k))
+     names, bf, Vf = _full(smp.cols, True, bb, V)
+@@ -575,7 +632,7 @@ def cmd_areg(s: "Session", args: str) -> None:
+                ("F_absorb", F_abs), ("rank", float(k + 1))]
+     macros = [("cmdline", cmdline("areg", args)), ("cmd", "areg"), ("depvar", smp.depname), ("absvar", avar),
+               ("title", "Linear regression, absorbing indicators"),
+-              ("vce", smp.vce), ("properties", "b V"), ("predict", "areg_p")]
++              ("vce", smp.vce), ("properties", "b V"), ("predict", "areg_p")] + wexp_macros(smp)   # VERIFY the place
+     post(s, est, scalars, macros, smp.mask)
+     display_areg(s, est)
+ 
