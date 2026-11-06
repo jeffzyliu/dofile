@@ -127,7 +127,8 @@ Log output (should look like Stata 14)
 - `%w.dg` formats show at most d significant digits (`%12.4g` of 1/3 is `.3333`; ODT-5).
 - No OpenDTA hint lines (`→ ... How to fix`) after errors in MCP sessions.
 - Header and coefficient table layouts match the reference logs in `tests_opendta/compat/expected/`. Known open
-  differences: huge F/t values overflow the table columns (ODT-6), `chibar2` for tiny values (ODT-12).
+  differences: huge F/t values overflow the table columns (ODT-6: the crash is patched, how Stata prints them is
+  unchecked), `chibar2` for tiny values (ODT-12).
 
 Session behavior
 - Each `run_do` call is a do-file scope: `preserve`/`restore` and `tempfile`s belong in the same call; locals,
@@ -145,5 +146,6 @@ Agent ergonomics
 - Graphs come back as images automatically; `graph export` only to keep a file.
 - Community commands (`reghdfe`, `esttab`, `outreg2`) don't exist (GAP-1); use built-ins.
 
-Engine gaps hit so far and still open: GAP-2 (`estat firststage`), ODT-11 (`by: regress`), ODT-13 (bare `mean`
-replay), ODT-3 (`_b[]` with interaction names), PATCH-1 #6 (r(table) details unchecked against real Stata).
+Engine gaps hit so far and still open: GAP-2 and GAP-3 (`estat firststage`, `endogenous`, `overid`), ODT-11 (`by:
+regress`), the leftovers of ODT-16/17 (colour lists, CMYK, `ring()`), PATCH-1 #6 (r(table) details unchecked against
+real Stata). The others found by these replications are patched (see [opendta-issues.md](opendta-issues.md)).

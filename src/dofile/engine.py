@@ -32,9 +32,11 @@ TEMPFILE_HINT = "a tempfile lasts one run_do call: save it under a name to use i
 
 def _refusal_for(error: str | None) -> str | None:
     """The sandbox refusal of this call that names the file `error` is about (they end in the path), if any."""
-    for message in reversed(sandbox.refusals):
-        name = os.path.basename(message.split()[-1].rstrip("/\\"))
-        if name and error and name in error:
+    if not error:
+        return None
+    for path, message in reversed(sandbox.refusals):
+        name = os.path.basename(path.rstrip("/\\"))
+        if name and re.search(rf"(?<![\w.-]){re.escape(name)}", error):  # whole name, so a.png isn't found in data.png
             return message
     return None
 
@@ -45,6 +47,8 @@ _COULD_NOT_OPEN = re.compile(r"^file (.+) could not be opened$")
 def _annotate_refusals(text: str) -> str:
     """OpenDTA's own `file X could not be opened` (graph export) hides why. Under each such line, add the sandbox's
     refusal that names X, so a refusal reads differently from a missing folder even when `capture` swallows the error."""
+    if not sandbox.refusals:
+        return text
     lines = text.split("\n")
     out: list[str] = []
     for k, line in enumerate(lines):
@@ -60,7 +64,8 @@ def _same(before: dict[str, Any], after: dict[str, Any]) -> bool:
     """Whether e() or r() holds the same values as before a call (a matrix counts as the same only if untouched)."""
     if before.keys() != after.keys():
         return False
-    return all(v is after[k] or (isinstance(v, (int, float, str)) and v == after[k]) for k, v in before.items())
+    return all(v is after[k] or (isinstance(v, (int, float, str)) and (v == after[k] or v != v and after[k] != after[k]))
+               for k, v in before.items())  # NaN counts as equal to NaN
 
 
 @dataclass
@@ -244,10 +249,11 @@ class Engine:
         elif rc == 601 and error and _TEMPFILE.search(error):  # the local names it, the call's scope deleted the file
             self._capture(f"({TEMPFILE_HINT})\n", "error")
             error = f"{error} ({TEMPFILE_HINT})"
-        failed = _failed_command(self._capture.text) if rc else None
+        log = self._capture.text  # built once: it joins up to 2 MB
+        failed = _failed_command(log) if rc else None
         pngs = [p for p in map(_png, drawn[-MAX_IMAGES:]) if p] if images else []
         d = self.session.data
-        result = Result(_annotate_refusals(self._capture.text), rc, error, self.results(), failed, d.nobs, len(d.names),
+        result = Result(_annotate_refusals(log), rc, error, self.results(), failed, d.nobs, len(d.names),
                         len(drawn), pngs)
         drawn.clear()  # don't keep graphs alive past the call
         return result

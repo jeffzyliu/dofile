@@ -81,6 +81,8 @@ def _base_color(t: str) -> str | None:
     if len(parts) == 3 and all(p.isdigit() for p in parts):
         r, g, b = (min(255, int(p)) for p in parts)
         return f"#{r:02x}{g:02x}{b:02x}"
+    if re.fullmatch(r"#[0-9a-f]{3}", t):   # #rgb, as in CSS: the opacity suffix needs the long form
+        return "#" + "".join(ch * 2 for ch in t[1:])
     if t.startswith("#"):
         return t
     if t.startswith("gs") and t[2:].isdigit():

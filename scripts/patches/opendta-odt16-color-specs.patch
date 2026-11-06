@@ -11,7 +11,7 @@ index a65a664..de740bd 100644
  SCHEMES: dict[str, dict] = {
      "opendta": {
          "colors": ["#1f5f8b", "#c8553d", "#3c8d5a", "#8a5fa3", "#c9a227", "#4a9bb5", "#7a6a58", "#b8456b"],
-@@ -68,19 +70,44 @@ def get(name: str | None) -> dict:
+@@ -68,19 +70,46 @@ def get(name: str | None) -> dict:
      return SCHEMES.get(n, SCHEMES["opendta"])
  
  
@@ -31,6 +31,8 @@ index a65a664..de740bd 100644
 -        r, g, b = (int(p) for p in parts)
 +        r, g, b = (min(255, int(p)) for p in parts)
          return f"#{r:02x}{g:02x}{b:02x}"
++    if re.fullmatch(r"#[0-9a-f]{3}", t):   # #rgb, as in CSS: the opacity suffix needs the long form
++        return "#" + "".join(ch * 2 for ch in t[1:])
      if t.startswith("#"):
          return t
      if t.startswith("gs") and t[2:].isdigit():

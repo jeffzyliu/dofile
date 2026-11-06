@@ -8,6 +8,7 @@ WorkerPool: one Worker per session key (a start_session token), with idle reapin
 """
 from __future__ import annotations
 
+import itertools
 import multiprocessing as mp
 import os
 import shutil
@@ -24,6 +25,7 @@ from .engine import BREAK, LOG_KEEP, RC_BREAK, Result
 
 RC_RESET = 9998
 GRACE = 5.0  # seconds an interrupted call gets to stop before the child is killed
+SNAPSHOT_MAX = 5000  # entries in the working folder above which run results leave `files` empty
 _POLL = 0.1  # seconds between checks for a cancel while waiting for the child
 
 
@@ -98,6 +100,7 @@ class Worker:
         self._lock = threading.Lock()  # one call at a time per session
         self._active = None  # id of the call running now
         self._cancelled: set = set()  # ids of calls to stop (also ones still waiting for the lock)
+        self._pending: set = set()  # ids of calls waiting for the lock or running; a cancel for any other is ignored
 
     def _start(self) -> None:
         parent, child = _ctx.Pipe()
@@ -120,6 +123,8 @@ class Worker:
 
     def interrupt(self, call: object) -> None:
         """Stop call `call` (from any thread): interrupt it if it is running, or skip it if it is waiting."""
+        if call not in self._pending:  # already finished: nothing to stop, and nothing would clear the entry
+            return
         self._cancelled.add(call)
         if self._active is call:
             self._signal()
@@ -133,12 +138,17 @@ class Worker:
         # shortcut: Windows has no SIGINT for a child process, so an interrupt there waits for GRACE and kills
 
     def _call(self, op: str, *args: Any, timeout: float | None = None, call: object = None) -> Any:
-        with self._lock:
-            before = _snapshot(self.workdir) if op == "run" else None
-            result = self._call_locked(op, args, timeout, call)
-            if before is not None and isinstance(result, Result):
-                result.files = _changes(before, _snapshot(self.workdir))
-            return result
+        if call is not None:  # data and matrix calls have no id to cancel, and must not share one entry
+            self._pending.add(call)
+        try:
+            with self._lock:
+                before = _snapshot(self.workdir) if op == "run" else None
+                result = self._call_locked(op, args, timeout, call)
+                if before is not None and isinstance(result, Result):
+                    result.files = _changes(before, _snapshot(self.workdir))
+                return result
+        finally:
+            self._pending.discard(call)
 
     def _call_locked(self, op: str, args: tuple, timeout: float | None, call: object) -> Any:
         self.last_used = time.monotonic()
@@ -191,6 +201,16 @@ class Worker:
                max_cells: int | None = None) -> dict | Result:
         return self._call("matrix", name, rows, cols, max_cells)
 
+    def expect(self, call: object) -> None:
+        """Count `call` as waiting now. Call it in the event loop right after checking `queued`, before the thread
+        that runs the call starts; `run` removes it when the call ends."""
+        self._pending.add(call)
+
+    @property
+    def queued(self) -> int:
+        """Calls waiting for the lock or running."""
+        return len(self._pending)
+
     @property
     def busy(self) -> bool:
         return self._lock.locked()
@@ -203,11 +223,15 @@ class Worker:
 
 
 def _snapshot(workdir: str) -> dict[str, tuple[int, int]]:
-    """Top-level files -> (mtime in ns, size); folders (such as the hidden .dofile/) are not listed."""
+    """Top-level files -> (mtime in ns, size); folders (such as the hidden .dofile/) are not listed.
+    Empty for a folder with more than SNAPSHOT_MAX entries (stdio uses the launch folder, which can be a home
+    folder): two scans per call would cost more than the file list is worth."""
     out = {}
     try:
-        entries = list(os.scandir(workdir))
+        entries = list(itertools.islice(os.scandir(workdir), SNAPSHOT_MAX + 1))
     except FileNotFoundError:  # a closed session's temp workdir
+        return out
+    if len(entries) > SNAPSHOT_MAX:
         return out
     for e in entries:
         try:

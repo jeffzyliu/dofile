@@ -8,9 +8,10 @@ Background research: `docs/stata-research.md`.
 (`reghdfe`, `esttab`, `outreg2`), fixing OpenDTA upstream.
 
 **Status (2026-11-05):** Phase 1 is complete. All exit checks pass, including CI on Linux and macOS (see
-[Is Phase 1 finished?](#is-phase-1-finished)). Since the CI run, a round of agent testing (three paper
-replications) led to result-format, engine and sandbox changes that aren't committed yet; they pass the full
-suite locally. See [After Phase 1](#after-phase-1-2026-11-04-and-05).
+[Is Phase 1 finished?](#is-phase-1-finished)). Since then, agent testing (three paper replications) led to
+result-format, engine, sandbox and MCP changes. Those up to `4a7d84c` are pushed and CI is green; later work is on
+`main` locally (not pushed) and passes the full suite locally. See
+[After Phase 1](#after-phase-1-2026-11-04-and-05).
 
 ## Facts this plan rests on (checked 2026-11-03, corrected 2026-11-04 and 05)
 - OpenDTA is not on PyPI, and PyPI rejects packages that depend on a git URL. Our installs could pin it by commit,
@@ -47,9 +48,8 @@ suite locally. See [After Phase 1](#after-phase-1-2026-11-04-and-05).
    `docs/clean-room-policy.md` (as `CLEAN_ROOM_POLICY.md`). The bundled `data/*.dta` and `data/icd` have their own
    data licenses. `scripts/vendor_opendta.py` re-vendors a commit, then applies dofile's own patches from
    `scripts/patches/*.patch` in name order; the `VENDORED` stamp records commit and patches. This fixes both
-   PyPI publishing and Qt. Patches (2026-11-05): `opendta-patch1-r-table` (PATCH-1), one per fixed bug
-   (`opendta-odt1-…`, `odt2`, `odt5-odt6`, `odt9`, `odt10`, `odt12`) and `opendta-odt14-safe-expr` (ODT-14). Each is
-   recorded in [opendta-issues.md](opendta-issues.md) to report upstream.
+   PyPI publishing and Qt. Each patch is one file, `opendta-<id>-<slug>.patch` (`odt<N>` for an `ODT-N` issue,
+   `patch1` for PATCH-1), and is recorded in [opendta-issues.md](opendta-issues.md) to report upstream.
 2. **The MCP server is Python, and the Node backend is retired.** This replaces the original "make the backend an
    MCP server". With a Python engine, a Node layer would only add a hop.
 3. **Layout:** the uv project lives at the top of this folder. The three 2020 repos are in `legacy/`, unchanged
@@ -71,7 +71,7 @@ suite locally. See [After Phase 1](#after-phase-1-2026-11-04-and-05).
     cli.py                # `dofile run file.do [--json]` (batch, like stata -b)
   scripts/vendor_opendta.py, scripts/patches/
   tests/                  # unit tests; tests/conformance/ (corpus, probes, fixtures)
-  docs/                   # this plan, research, OpenDTA issue sheet, replication tests
+  docs/                   # this plan, research, OpenDTA issue sheet, agent ergonomics, replication tests
   tests_opendta/          # OpenDTA's own suite and Stata 14 reference logs, vendored
   eval/                   # how the conformance fixtures were made (Phase 0)
 ```
@@ -79,16 +79,19 @@ suite locally. See [After Phase 1](#after-phase-1-2026-11-04-and-05).
 ## Components
 **1. `engine.py` (the engine adapter, in-process).** `Engine(workdir, log_keep, hints)` wraps one `Session` with a
 `Capture` listener. `run(code, images=False) → Result(log, rc, error, results, error_command, nobs, nvars,
-new_graphs, images)`.
+new_graphs, images, files)`.
 - Each `run` call is a do-file scope: data `preserve`d in it is restored, and tempvars/tempfiles dropped, when it
   ends, error or not; locals, data and estimates carry over. Scientific notation prints as Stata does
   (`1.000e+10`; OpenDTA's superscript form is off). `hints=False` (MCP sessions) drops OpenDTA's console hints
   under errors.
 - Any Python exception escaping a command gives `rc=9999` ("internal engine error: Type: message" plus the
-  traceback), so a crash doesn't take the caller down. A sandbox refusal gives rc 603 with the reason; an
+  traceback), so a crash doesn't take the caller down. A sandbox refusal gives rc 603 with the reason (also in the
+  log under OpenDTA's own `file X could not be opened`, so it differs from a missing folder; `capture` catches it,
+  ODT-23). A tempfile used after its call ended gives rc 601 with a hint. An
   interrupt (KeyboardInterrupt from the worker) gives rc 1 `--Break--`, and the session keeps its data.
 - `results()`: `e()` and `r()` each grouped as `{scalars, macros, matrices}`, like `ereturn list`. Missing values
   are `null` or `".a"`–`".z"`, infinity is `null`, and matrix row/column names include the equation (`eq:name`).
+  `e_changed` / `r_changed` say whether the call changed each (e() survives `clear`, r() survives an error).
 - `matrix(name, rows, cols)`: one matrix at full precision. `data_summary(vars, offset, limit)`: variables
   (name, type, format, label, value label), filtered by a varlist and paged. `about()`: versions.
 - After any estimation table, `r(table)` holds e(b)'s columns and replaces r() (PATCH-1, also after `mean`,
@@ -108,7 +111,7 @@ new_graphs, images)`.
   `python -m` it contains the launch folder (fixed in `37be4d0`).
 - `TMPDIR`, `HOME` and `MPLCONFIGDIR` point to a hidden `.dofile/` folder inside the workdir, so `tempfile`,
   `preserve` and matplotlib stay inside the allowed area. `mimetypes` is pre-loaded, since openpyxl reads
-  `/etc/mime.types`. `graph export` prints OpenDTA's own 603 text instead of the sandbox's reason.
+  `/etc/mime.types`. `graph export` prints OpenDTA's own 603 text, so `engine.py` adds the sandbox's reason from `sandbox.refusals`.
 - OpenDTA has no URL support in `use`/`import`, so `webuse` and `copy` were the only network commands. The whole
   corpus and every probe give the same results with the sandbox on.
 - This is defense in depth, not a security boundary. Audit hooks are sufficient here only as long as clients
@@ -124,6 +127,8 @@ new_graphs, images)`.
 - `Worker` (child process, pipe, per-call timeout) and `WorkerPool` (idle reaping after 15 minutes; when all
   `--max-sessions` slots are taken, the least recently used session that isn't running code is closed, and if
   every session is running code, `start_session` is refused). A session in the middle of a call is never closed.
+  A session runs one call and lets one more wait; a third `run_do` is refused, so retries can't use up the server's
+  threads.
   If the child died between calls, that call returns rc 9998 without running the code, so the agent knows its
   data is gone.
   The next call starts fresh. Startup was about 0.7 s per new session with spawn; since 2026-11-04 sessions fork from a preloaded forkserver (Linux, macOS) in about 20–50 ms, and Windows still uses spawn.
@@ -135,14 +140,17 @@ new_graphs, images)`.
 **4. `mcp_server.py`.** The full reference, with inputs, outputs and return codes, is
 [MCP-SCHEMA.md](../MCP-SCHEMA.md); every tool except `get_file` advertises a typed output schema.
 - Tools: `start_session` (HTTP), `run_do(code, graphs, timeout)`, `get_matrix(name, rows, cols)`,
-  `describe_data(vars, offset, limit)`, `get_file(name)`, `upload_file(name, text, replace)`, `request_upload` and
+  `describe_data(vars, offset, limit)`, `get_file(name, offset, limit)` (text in pages of 50,000 characters by default),
+  `upload_file(name, text, replace)`, `request_upload` and
   `request_download` (HTTP, one-time URLs valid 10 minutes), `reset`. Resources: `dofile://commands`,
   `dofile://about`.
 - `run_do` returns rc, error, the failing command, the log, the current e()/r() scalars and macros in full on
   every call, also after an error (matrices by size only, e.g. `"V": "16x16"`; values via `get_matrix`; no `null`
   for "unchanged", since agents' context gets summarized), changed files, `nobs`/`nvars`, and the last 3 graphs
-  as PNG images. `describe_data` leaves out `label`/`value_label` when a variable has none. Each command's output keeps its first 40 and last 15 lines, and the whole log is capped
-  at 8 KB; the full log goes to `.dofile/`, where the newest 20 are kept. A call's log is capped at its first and
+  as PNG images. `describe_data` leaves out `label`/`value_label` when a variable has none. A log over 8,000
+  characters is cut: the biggest blocks of output (tables, listings) lose their middle first, so short results and
+  loop output stay, and `log_omitted_lines` says how many lines are gone; the full log goes to `.dofile/`, where the
+  newest 20 are kept (`get_file` reads it in pages). A call's log is capped at its first and
   last 1,000,000 characters in the worker, so a runaway loop can't fill memory or disk (`dofile run` keeps all).
 - Large files never pass through the model: over stdio, code reads them in place from `--read-dir` folders;
   over HTTP, the client PUTs them to a `request_upload` URL. `upload_file` takes text only. Neither overwrites an
@@ -151,7 +159,8 @@ new_graphs, images)`.
 - Deliberate errors are raised as `ToolError`, so their message reaches the agent (the SDK hides other
   exceptions).
 - Transports: `dofile-mcp` (stdio, default) and `dofile-mcp --http --port 8000`. HTTP has no auth, so it binds to
-  localhost unless `--host` is given; the SDK's DNS-rebinding protection is on for localhost.
+  localhost unless `--host` is given (which prints a warning, and `--unsafe` is then refused); the SDK's
+  DNS-rebinding protection is on for localhost.
 - Checked with a headless `claude -p` run: the agent ran a robust regression on cps.dta and reported
   b = 0.1177832, SE = 0.0054437 (statsmodels HC1: 0.11778324, 0.00544367), and was refused `shell ls` with rc 199.
 
@@ -174,15 +183,15 @@ readable. `--json` writes rc, error, the failing command, e()/r() and `versions`
 - **Conformance** (`tests/conformance/`): the corpus (63 CHECK values) runs through `Engine` with the sandbox
   on and must match `ref.json` (independent statsmodels/linearmodels results) to 1e-6 relative. The probes
   (`tests/conformance/probe/`) run pass/fail with the sandbox on. Known OpenDTA gaps are `xfail(strict=True)`:
-  3 corpus checks and 2 probes, so a fix shows up (the `xtlogit` probe passes since the ODT-2 patch). The fixtures (`cps.dta`, `panel.dta`,
+  1 corpus check and 2 probes (all GAP-1, community commands), so a fix shows up. The fixtures (`cps.dta`, `panel.dta`,
   `grpinfo.dta`, `ref.json`) are committed; `eval/make_data.py` and `eval/reference.py` document how they were
   made.
 - Unit and MCP tests cover the sandbox (denylist, path rules, network, launch folder), the worker (timeouts,
   Break, cancel, crashes, pool), the engine (results JSON, do-file scope per call, r(table), each patched ODT
   bug, the restricted expression evaluator, errors), the MCP tools over in-process stdio and HTTP and real
   transports, and the CLI.
-- Local runs (2026-11-05, uncommitted work): default 1,178 passed, 13 skipped, 5 xfailed (31 s with `-n auto`);
-  everything (`-m "" -n auto`) 1,275 passed, 13 skipped, 5 xfailed (2.5 min).
+- Local runs (2026-11-05, latest work): default 1,206 passed, 13 skipped, 3 xfailed (25 s with `-n auto`); the Stata
+  comparison (`poe slow`) 97 passed (67 s).
 - GitHub Actions (`.github/workflows/ci.yml`, repo `jeffzyliu/dofile`): uv, Python 3.12/3.13/3.14 on Ubuntu and
   macOS, running everything (`-m ""`). First run 2026-11-05 on `978fad4`: all 6 jobs green, 1,167 passed each,
   8–13 minutes per job (serial). The workflow now runs `uv run poe ci` (poethepoet
@@ -209,7 +218,8 @@ and the vendored clean-room policy (`27d08a9`); grouped results, inline graphs, 
 `dofile run` (`b6e6d80`).
 
 ## Verification (end of Phase 1)
-- [x] `uv run pytest` is green; conformance shows 60/63 with 3 strict xfails (plus 2 probe xfails).
+- [x] `uv run pytest` is green; conformance shows 62/63 with 1 strict xfail (plus 2 probe xfails; it was 60/63 at the
+  end of Phase 1, before ODT-3 and the `capture` rc were fixed).
 - [x] `dofile run tests/conformance/corpus/03_regress.do --json r.json` matches the reference
   (`tests/test_dofile_cli.py`).
 - [x] From Claude Code with the MCP server added: "load cps.dta and regress log wage on education with robust
@@ -241,32 +251,39 @@ Windows stays "not supported yet".
 
 ## After Phase 1 (2026-11-04 and 05)
 Agent testing: an agent replicated three papers through the MCP server ([replication-tests.md](replication-tests.md));
-all published numbers were reproduced. What it led to (uncommitted at the time of writing; full suite green):
+all published numbers were reproduced. What it led to (full suite green):
 - **Session semantics:** each `run_do` call is a do-file scope, so a failed call no longer leaves `preserve`
   active (the retry used to fail with rc 621).
 - **Stata-like output:** superscript scientific notation off; OpenDTA's console hints off in MCP sessions.
 - **Result format:** e()/r() scalars and macros sent in full on every call, matrices by size only, no `null`
-  (an IV regression's results went from 10.6 KB to 1.0 KB); `describe_data` without null label fields. Version
-  kept at 0.1.0 by decision (nothing released yet).
+  (an IV regression's results went from 10.6 KB to 1.0 KB); `describe_data` without null label fields;
+  `e_changed`/`r_changed`; `log_omitted_lines`. Version kept at 0.1.0 by decision (nothing released yet).
 - **PATCH-1 (`r(table)`):** replaces r(), follows e(b)'s columns (equation names, ancillary parameters), exists
   after `mean`/`proportion`/`total`/`ratio`, and is never stale; 5 of its 6 items are fixed, the sixth needs
   real Stata. Its four patches were merged into one.
-- **Engine bugs patched:** ODT-1, 2, 5, 6, 9, 10, 12 (crashes, `%w.dg` formats, footnote wrapping, `relabel()`),
-  and the ODT-14 security fix. Each has a test that fails without its patch.
+- **Engine bugs patched:** the ODT issues marked `patched` or `partly patched` in
+  [opendta-issues.md](opendta-issues.md), including the ODT-14 security fix. Each has a test that fails without
+  its patch.
+- **Agent ergonomics:** the problems in [agent-ergonomics.md](agent-ergonomics.md), all fixed in dofile's own code:
+  log cut, tempfile hint, `e_changed`/`r_changed`, the sandbox's reason on a 603, the reconnect note, `get_file`
+  paging, the busy-session limit.
 - **Tests:** pytest-xdist; the Stata comparison split into one test per case.
-- **Upstream check:** OpenDTA `main` (0.10.0, 37 commits after our pin) fixes none of our issues. Six of our eight
-  patches apply to it as is (all but ODT-9, whose code moved; `safe-expr` not yet tried); it adds eight Stata
+- **Upstream check** (made when we had eight patches; not repeated for the later ones): OpenDTA `main` (0.10.0, 37
+  commits after our pin) fixes none of our issues. Six of those eight patches apply to it as is (all but ODT-9,
+  whose code moved; `safe-expr` not yet tried); it adds eight Stata
   reference cases, echoes blank lines in do-files and puts thousands separators in `regress`'s ANOVA df.
 
 ## Next steps
-1. **Confirm CI is green on the post-Phase-1 work** (pushed as `474fac4`; the workflow now runs `-n auto`).
+1. **Push the local commits and confirm CI is green** (the last green run is `4a7d84c`; the workflow runs
+   `poe ci`, parallel).
 2. **Publish to PyPI** (GitHub repo and CI are done). PyPI has no reservations: a name is claimed by uploading a
    release (`dofile` and `dofile-mcp` were free on 2026-11-04). It must be a working package, since PyPI's name
    policy (PEP 541) lets others reclaim squatted names, and a version number can never be re-uploaded. Use
    Trusted Publishing from GitHub Actions, so no API token is stored.
 3. **OpenDTA issues** ([opendta-issues.md](opendta-issues.md)): report upstream, ODT-14 (security) first, then
-   the patched bugs with their patches. Still open, unpatched: ODT-3, 4, 7, 8, 11, 13, GAP-2 (`estat
-   firststage`), and PATCH-1's check against real Stata. Several entries need someone with Stata to confirm.
+   the patched bugs with their patches. Still open: ODT-11 (`by: regress`), GAP-2 and GAP-3 (`estat firststage`,
+   `endogenous`, `overid`), the leftovers of ODT-16/17, and PATCH-1's check against real Stata. Many entries need
+   someone with Stata to confirm.
 4. **Re-vendor to upstream `main`** when it's worth it: redo the ODT-9 patch for the moved code, check the
    `safe-expr` patch and any new `eval`/`exec` on user text, rerun everything including the new reference cases.
 5. **Phase 2: thin Pyodide web demo**: an editor plus a log, one sample dataset, no server. OpenDTA ran unmodified
@@ -275,9 +292,8 @@ all published numbers were reproduced. What it led to (uncommitted at the time o
    a container.
 7. **Robustness**: a Break in the middle of `merge`/`reshape` (does the data stay consistent?), clients other than
    the Python SDK (MCP Inspector, Claude Desktop), Windows.
-8. **Agent ergonomics**: the result-format and hint changes are done (see After Phase 1), and so are the five
-   items in [agent-ergonomics.md](agent-ergonomics.md) (log cut, tempfile hint, `e_changed`/`r_changed`, the
-   sandbox's reason on a 603, the reconnect note). More replications per
+8. **Agent ergonomics**: the result-format and hint changes are done (see After Phase 1), and so are the items in
+   [agent-ergonomics.md](agent-ergonomics.md). More replications per
    [replication-tests.md](replication-tests.md) when the engine changes.
 9. Later: community commands (`reghdfe`, `esttab`), via OpenDTA upstream or a later decision.
 10. Dropped: a `parse_do` parser tool. The MIT tree-sitter-stata grammar (codedthinking) covers syntax for the web
@@ -288,11 +304,12 @@ all published numbers were reproduced. What it led to (uncommitted at the time o
 ## Risks
 - OpenDTA moves fast (439 commits in its first 3 weeks; 37 more, including module splits, the day after our
   pin), so vendoring means we choose when to take updates. Re-vendor deliberately and rerun conformance and the
-  Stata comparison each time; our eight patches must still apply, and moved code means redoing a patch.
+  Stata comparison each time; every patch in `scripts/patches/` must still apply, and moved code means redoing a patch.
 - Agents trust `results` and `r(table)` more than a person would. A mislabeled or stale value is worse than a
   missing one, so changes there need the checks in [replication-tests.md](replication-tests.md).
 - Audit hooks are a policy layer, not a security boundary, and they assume clients can't run Python; an
   engine `eval()` on user text breaks that (ODT-14). Public HTTP hosting needs a container.
-- HTTP has no auth and no per-session memory or disk limits, so it's for localhost only.
+- HTTP has no auth and no per-session memory or disk limits, so it's for localhost only; anyone who can reach the
+  port can start sessions and push idle ones out of a full pool.
 - An interrupted command (Break) may leave half-changed data; not checked yet.
 - Windows is untested, and interrupts there always reset the session.

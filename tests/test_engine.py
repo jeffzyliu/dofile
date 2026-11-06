@@ -243,6 +243,7 @@ def test_odt16_color_specs():
     lighter, darker = color("navy*.5", d), color("navy*1.5", d)
     assert lighter > color("navy", d) > darker      # hex strings of equal length compare by brightness here
     assert color("bogus", d) == d and color("", d) == d and color(None, d) == d
+    assert color("#f00", d) == "#ff0000" and color("#f00%50", d) == "#ff000080"
 
 
 def test_odt16_color_opacity_is_drawn(eng):
@@ -328,6 +329,8 @@ def test_odt3_interaction_names_in_b(eng):
     assert abs(float(one.log.split()[-1])) > 0.1
     assert eng.run("display _se[c.x#2.g]").rc == 0 and eng.run("display _b[2.g]").rc == 0
     assert eng.run("display _b[nosuch#2.g]").rc == 111
+    eng.run("quietly regress y c.x#i.g#c.x")                                    # three terms, any order
+    assert eng.run("display _b[1.g#c.x#c.x]").rc == 0 and eng.run("display _b[c.x#c.x#1.g]").rc == 0
     assert eng.run("display 1 # 2").rc == 198      # a # outside _b[...] is still a syntax error
 
 
@@ -478,3 +481,17 @@ def test_worker_log_keeps_only_its_start_and_end():
     r = eng.run("bad_command")  # the error at the end is still found
     assert r.rc == 199 and r.error and len(r.log) < 25_000
     assert Engine().run('forvalues i = 1/5000 {\n    display "x"\n}').log.splitlines().count("x") == 5000  # default: all
+
+
+def test_same_treats_nan_as_unchanged_and_names_match_whole_files():
+    from dofile import sandbox
+    from dofile.engine import _refusal_for, _same
+    nan = float("nan")
+    assert _same({"a": nan}, {"a": float("nan")}) and not _same({"a": 1.0}, {"a": 2.0})
+    sandbox.refusals.clear()
+    sandbox.refusals.extend([("/x/a.png", "dofile sandbox: cannot write /x/a.png"),
+                             ("/x/my plot.png", "dofile sandbox: cannot write /x/my plot.png")])
+    assert _refusal_for("file my plot.png could not be opened").endswith("my plot.png")
+    assert _refusal_for("file data.png could not be opened") is None      # a.png is not inside data.png
+    assert _refusal_for("file ../a.png could not be opened").endswith("a.png")
+    sandbox.refusals.clear()

@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+import heapq
 import json
 import inspect
 import os
 import secrets
+import sys
 import threading
 import time
 from pathlib import Path
@@ -37,7 +39,9 @@ KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
 CMD_HEAD, CMD_TAIL = 40, 15  # lines kept from the start and end of a long block of output (first cut)
 SHORT_HEAD, SHORT_TAIL = 5, 3  # ... and of a block still too big once every block is cut that far (second cut)
 GET_MATRIX_CELLS = 250_000  # get_matrix answers up to this; larger needs rows/cols
-GET_FILE_LIMIT = 5_000_000  # bytes for get_file: its content goes into the model's context
+GET_FILE_LIMIT = 5_000_000  # bytes for get_file images
+GET_TEXT_PAGE = 50_000  # characters of text get_file returns by default (~12k tokens): it goes into the model's context
+GET_TEXT_MAX = 200_000  # ... and the most it returns when asked for more
 FILE_LIMIT = 1024 * 1024 * 1024  # default upload limit in bytes (--file-limit)
 UPLOAD_TTL = 600.0  # seconds an upload or download URL stays valid
 IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
@@ -309,20 +313,22 @@ def _cut_log(log: str, log_file: str) -> tuple[str, int]:
     def size(lines: list[str]) -> int:
         return sum(len(x) + 1 for x in lines)
 
-    level = {i: 0 for i, u in enumerate(units) if isinstance(u, list)}
+    sizes = {i: [size(shown(u, n)) for n in range(3)] for i, u in enumerate(units) if isinstance(u, list)}
+    level = {i: 0 for i in sizes}
+
+    def next_level(i: int) -> int | None:
+        return next((n for n in range(level[i] + 1, 3) if sizes[i][n] < sizes[i][level[i]]), None)
+
+    heap = [(-sz[0], i) for i, sz in sizes.items() if next_level(i) is not None]  # biggest block first
+    heapq.heapify(heap)
     total = len(log)
-    while total > LOG_LIMIT:
-        best = None  # (current size, unit, the next level that makes it smaller)
-        for i, lv in level.items():
-            now = size(shown(units[i], lv))
-            nxt = next((n for n in range(lv + 1, 3) if size(shown(units[i], n)) < now), None)
-            if nxt is not None and (best is None or now > best[0]):
-                best = (now, i, nxt)
-        if best is None:
-            break
-        now, i, nxt = best
-        total -= now - size(shown(units[i], nxt))
+    while total > LOG_LIMIT and heap:
+        _, i = heapq.heappop(heap)
+        nxt = next_level(i)
+        total -= sizes[i][level[i]] - sizes[i][nxt]
         level[i] = nxt
+        if next_level(i) is not None:
+            heapq.heappush(heap, (-sizes[i][nxt], i))
     lines = [x for i, u in enumerate(units) for x in (shown(u, level[i]) if isinstance(u, list) else [u])]
     text = "\n".join(lines)
     omitted = log.count("\n") + 1 - len(lines) + sum(1 for x in lines if x.startswith("[... ") and "lines omitted" in x)
@@ -404,8 +410,11 @@ def build_server(sessions: Sessions) -> MCPServer:
                                                                           "default")] = None,
                      session: SessionArg = None) -> Annotated[CallToolResult, RunResult]:
         w = sessions.get(session)
+        if w.queued >= 2:  # each waiting call holds one of the server's ~40 worker threads; one may wait (a cancelled call stops soon)
+            raise ToolError("this session is still running a call and has another waiting: wait for them to finish")
         limit = min(timeout, sessions.timeout) if timeout else None
         call = object()
+        w.expect(call)  # counted now, before the thread starts: a burst of calls can't all pass the check above, and a cancel finds it
         try:  # abandon_on_cancel: a cancel from the client returns here at once, and interrupts the code
             r = await anyio.to_thread.run_sync(w.run, code, limit, graphs, call, abandon_on_cancel=True)
         except anyio.get_cancelled_exc_class():
@@ -461,11 +470,16 @@ def build_server(sessions: Sessions) -> MCPServer:
         return r
 
     @tool(description="Return a file from the session's working directory: images (.png, .jpg, ...) as "
-                          "an image, text files (logs, .csv, .do, .tex) as text. Use it to look at exported graphs "
-                          "from `graph export` and full logs from run_do's log_file. Binary files (.dta, "
-                          ".xlsx, .pdf) are refused: open them with run_do instead."
+                          "an image, text files (logs, .csv, .do, .tex) as text, in pages of `limit` characters. Use "
+                          "it to look at exported graphs from `graph export` and full logs from run_do's log_file. "
+                          "Binary files (.dta, .xlsx, .pdf) are refused: open them with run_do instead."
                           + session_doc)
-    async def get_file(name: FileName, session: SessionArg = None) -> Image | str:
+    async def get_file(name: FileName,
+                       offset: Annotated[int, Field(description="text files: the first character to return; "
+                                                                "negative counts from the end (-5000: the last 5000)")] = 0,
+                       limit: Annotated[int, Field(ge=1, le=GET_TEXT_MAX, description="text files: at most this many "
+                                                                                     "characters")] = GET_TEXT_PAGE,
+                       session: SessionArg = None) -> Image | str:
         p = _safe_name(sessions.get(session).workdir, name)
         if not p.is_file() and name.startswith("dofile-log-"):  # full logs live in the hidden scratch folder
             p = p.parent / ".dofile" / name
@@ -476,16 +490,24 @@ def build_server(sessions: Sessions) -> MCPServer:
         if p.suffix.lower() in IMAGE_TYPES:
             return Image(data=p.read_bytes(), format=p.suffix.lower().lstrip(".").replace("jpg", "jpeg"))
         data = p.read_bytes()
+        text = None
         if b"\0" not in data:  # NUL bytes: binary formats (.dta, .xlsx, .pdf)
             try:
-                return data.decode("utf-8")
+                text = data.decode("utf-8")
             except UnicodeDecodeError:
                 text = data.decode("latin-1")  # older Stata logs and Windows CSVs
-                if sum(c.isprintable() or c in "\r\n\t" for c in text) > 0.95 * len(text):
-                    return text
-        raise ToolError(f"{name} is a binary file, which get_file cannot show. Look inside it with run_do "
-                        "instead (`use` for .dta, `import excel` for .xlsx, then `describe` or `list`); "
-                        "for graphs, export .png (e.g. `graph export g.png`).")
+                if sum(c.isprintable() or c in "\r\n\t" for c in text) <= 0.95 * len(text):
+                    text = None
+        if text is None:
+            raise ToolError(f"{name} is a binary file, which get_file cannot show. Look inside it with run_do "
+                            "instead (`use` for .dta, `import excel` for .xlsx, then `describe` or `list`); "
+                            "for graphs, export .png (e.g. `graph export g.png`).")
+        n = len(text)
+        start = min(max(n + offset, 0) if offset < 0 else offset, n)
+        end = min(start + limit, n)
+        if start == 0 and end == n:
+            return text
+        return text[start:end] + f"\n[characters {start}-{end} of {n}; " + (f"next offset {end}]" if end < n else "end of file]")
 
     @tool(description="Write a small text file you wrote yourself (a CSV, a .do file, ...) into the "
                           "session's working directory as `name`, so Stata code can use it, e.g. `import "
@@ -604,6 +626,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--max-sessions", type=int, default=8, help="HTTP: concurrent sessions")
     ap.add_argument("--unsafe", action="store_true", help="disable the sandbox (trusted local use only)")
     a = ap.parse_args(argv)
+    if a.http and a.host not in ("127.0.0.1", "::1", "localhost"):
+        if a.unsafe:  # no login on HTTP: without the sandbox, anyone who reaches the port can run `shell`
+            ap.error("--unsafe with --http is only allowed on a loopback address (127.0.0.1, ::1)")
+        print(f"dofile-mcp: serving HTTP on {a.host} with no authentication: put it behind an authenticating "
+              "proxy or a container", file=sys.stderr)
     sessions = Sessions(http=a.http, workdir=Path(a.workdir).resolve(),
                         read_dirs=tuple(str(Path(d).resolve()) for d in a.read_dir),
                         sandbox=not a.unsafe, timeout=a.timeout, max_sessions=a.max_sessions,

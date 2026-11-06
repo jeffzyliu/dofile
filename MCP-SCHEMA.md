@@ -91,7 +91,7 @@ Output (`RunResult`):
 | `log_file` | string or null | When `log` was cut: the name of the full log, for `get_file`. It is kept in the hidden `.dofile/` folder, so it is not in `files` and does not clutter the working folder; only the newest 20 are kept. Otherwise `null` |
 | `log_omitted_lines` | integer, only when `log` was cut | How many lines `log` leaves out. A loop's commands are echoed once, up front, and its output has no per-command markers, so in a loop use `quietly` and `display` the numbers you need, or read `log_file` |
 | `results` | object | `{"e": ResultSet, "r": ResultSet, "e_changed": bool, "r_changed": bool}`: `e()` and `r()` as they are after the call, whether it succeeded or failed. `e_changed` and `r_changed` say whether this call changed them: `false` means they are left from an earlier call. `e()` survives `clear` (so `e(N)` can describe a model on data that is gone) and `r()` survives a failed command |
-| `files` | array of `{"name", "status", "bytes"}` | Files in the working folder this call created (`status: "created"`) or changed (`"modified"`), with their size. Top level only; the hidden `.dofile/` folder is not listed |
+| `files` | array of `{"name", "status", "bytes"}` | Files in the working folder this call created (`status: "created"`) or changed (`"modified"`), with their size. Top level only; the hidden `.dofile/` folder is not listed. Empty when the working folder has more than 5,000 entries |
 | `nobs` | integer | Observations in the dataset in memory after the call |
 | `nvars` | integer | Variables in the dataset in memory after the call |
 | `new_graphs` | integer | How many graphs this call drew (each `scatter`, `histogram`, `twoway`, `graph bar`, ... counts once) |
@@ -233,7 +233,7 @@ Output (`DataSummary`):
 }
 ```
 
-`nvars` counts all variables, `matched` those that match `vars`, and `more` the matching ones after this
+`variables` lists the matching variables from `offset`, at most `limit`. `nvars` counts all variables, `matched` those that match `vars`, and `more` the matching ones after this
 page.
 
 `type` is the Stata storage type (`byte`, `int`, `long`, `float`, `double`, `str#`, `strL`). `label` and
@@ -257,6 +257,8 @@ Input:
   "type": "object",
   "properties": {
     "name":    {"type": "string"},
+    "offset":  {"type": "integer", "default": 0},
+    "limit":   {"type": "integer", "minimum": 1, "maximum": 200000, "default": 50000},
     "session": {"type": "string"}
   },
   "required": ["name", "session"]
@@ -265,14 +267,16 @@ Input:
 
 Output: content, no structured output.
 - `.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`: `{"type": "image", "mimeType": "image/png", "data": "<base64>"}`
-- text files: `{"type": "text", "text": "..."}`
+- text files: `{"type": "text", "text": "..."}`. A file longer than `limit` characters (default 50,000) comes in pages:
+  `offset` is the first character (negative counts from the end), and a partial page ends with
+  `[characters 0-50000 of 80000; next offset 50000]` (or `; end of file]`)
 - binary files: tool error
 
 Full logs named in `run_do`'s `log_file` are found in the hidden `.dofile/` folder.
 
 Limits: `name` must be a plain file name (no folders, no `..`), not `.dofile` or a folder, and not a link to a
 file outside the working folder (the server process isn't sandboxed, so it checks this itself). The file can be
-5 MB at most, because its content goes into the model's context.
+5 MB at most (images and text); text comes in pages because its content goes into the model's context.
 
 ### `get_matrix`
 
@@ -476,7 +480,8 @@ Two kinds:
    - `start_session` when every session is running code (HTTP);
    - a `name` that is not a plain file name, or is `.dofile`, a folder or a link out of the working folder;
    - an upload whose `name` already exists, without `replace`;
-   - a file that is missing or too large;
+   - a file that is missing or too large (images and text: 5 MB), or a `get_file` `limit` above 200,000;
+   - `run_do` while the session is running one call and has another waiting;
    - `describe_data` after the session was reset.
 
 ### Return codes
@@ -502,7 +507,8 @@ Each session runs in its own process. A call that runs past its time limit, or t
 2. If the process has not stopped 5 seconds later (it is inside one long numerical routine that cannot be
    interrupted), it is killed: rc 9998, and the next call starts a fresh session.
 
-A cancelled call returns at once; the session's next call waits until the interrupted code has stopped.
+A cancelled call returns at once; the session's next call waits until the interrupted code has stopped. A session
+runs one call and lets one more wait; a third `run_do` gets a tool error until one of them ends.
 A call that was still waiting for the session (behind another call) when it was cancelled does not run.
 On Windows a process cannot be interrupted this way, so step 1 is skipped and step 2 always happens.
 
@@ -519,7 +525,7 @@ On Windows a process cannot be interrupted this way, so step 1 is skipped and st
 | `--timeout` | `60` | Seconds per `run_do` call before it is interrupted (rc 1); also the most a call's own `timeout` can ask for |
 | `--max-sessions` | `8` | HTTP: sessions open at the same time |
 | `--file-limit` | `1024` | Largest `upload_file` or upload, in MB |
-| `--unsafe` | off | Turn off the sandbox (trusted local use only) |
+| `--unsafe` | off | Turn off the sandbox (trusted local use only; refused with `--http` on a non-loopback `--host`) |
 
 ## Known gaps
 

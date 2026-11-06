@@ -655,7 +655,9 @@ class Interpreter:
                 else:
                     action()
                 self.s.set_rc(0)
-            except StataError as e:
+            except (StataError, PermissionError) as e:
+                if isinstance(e, PermissionError):   # dofile patch (ODT-23): the sandbox refused a file, rc 603
+                    e = StataError(603, f"file could not be opened: {e.strerror or e}")
                 if noisy:
                     # capture noisily cmd: only the message; in a block, also r(#)
                     self.s.report_error(e, show_rc=block)

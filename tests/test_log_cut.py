@@ -45,3 +45,11 @@ def test_when_every_block_is_short_the_middle_of_the_log_goes():
     cut, omitted = _cut_log(log, "x.txt")
     assert len(cut) < LOG_LIMIT + 200 and "log truncated; full log: get_file x.txt" in cut and omitted > 1000
     assert cut.startswith(". display 0") and cut.endswith("1999")
+
+
+def test_a_log_of_thousands_of_blocks_is_cut_quickly():
+    import time
+    log = "\n".join(f". display {i}\n" + "\n".join(f"line {i}.{k}" for k in range(60)) + "\n" for i in range(3000))
+    t = time.perf_counter()
+    cut, omitted = _cut_log(log, "x.txt")
+    assert time.perf_counter() - t < 2 and len(cut) < LOG_LIMIT + 200 and omitted > 0

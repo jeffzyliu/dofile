@@ -14,6 +14,7 @@ Status values: `open`, `fixed` (with the test that covers it). The numbers were 
 | ERG-3 | `results` showed `e()`/`r()` from data or a command no longer current, unlabeled | `engine.results()` | fixed: `test_results_say_whether_the_call_changed_e_and_r` |
 | ERG-4 | reconnecting or restarting the MCP server wipes the session, and nothing said so | `mcp_server.py` instructions, `MCP-SCHEMA.md` | fixed (docs) |
 | ERG-5 | rc 603 meant both "folder missing" and "the sandbox refused", and the sandbox's reason was hidden (also inside `capture`) | sandbox, `engine.py` | fixed: `tests/test_sandbox.py` |
+| ERG-6 | smaller limits found by the audit: `get_file` returned up to 5 MB of text into the model's context; waiting calls on a busy session could use up the server's threads; every `run_do` listed the whole working folder twice | `mcp_server.py`, `worker.py` | fixed: `test_get_file_pages_text_and_a_busy_session_answers_at_once` |
 
 ## Details
 
@@ -77,7 +78,8 @@ clear
   survives `clear`, `r()` survives an error), so the engine is faithful; an agent could still read `e(N) = 400` as
   the data in memory.
 - Fix: `results` has `e_changed` and `r_changed`, true when the call changed that group (its values differ from
-  before the call; a matrix counts as unchanged only if untouched). `clear` gives `false, false`; `summarize` after
+  before the call; a matrix counts as unchanged only if untouched; NaN equals NaN). A command that re-posts identical values, such as
+  `summarize` run twice, reads as unchanged. `clear` gives `false, false`; `summarize` after
   it gives `false, true`; a failed command `false, false`.
 
 ### ERG-4: reconnecting the server wipes the session
@@ -114,4 +116,21 @@ graph export ../escaped.png, replace    // sandbox refusal, also rc 603
   refuses some of them (`cannot list /opt/local/share/fonts`) and the library swallows it, and an earlier version
   of this fix blamed that on an unrelated missing folder. The match is by file name (the last path component of
   the refusal appears in the line), so a very short name could match by chance.
+- A refusal raised by a command other than `graph export` (for example `type`) used to end the whole call even inside
+  `capture`; that is ODT-23 in `opendta-issues.md`, patched in the engine.
 - Tests: `tests/test_sandbox.py` (the uncaught case, and `test_a_refusal_is_told_apart_from_a_missing_folder_inside_capture`).
+
+### ERG-6: limits
+- `get_file` returned up to 5 MB of text (~1.2M tokens). It now returns pages of text: `offset` (negative counts from
+  the end) and `limit` (default 50,000 characters, at most 200,000), with a footer
+  `[characters 0-50000 of 80000; next offset 50000]` on a partial page. Images keep the 5 MB limit. (A first version
+  refused text over 200,000 bytes; that would have made a large `log_file`, up to 2 MB, unreadable.)
+- A session runs one call; one more may wait (a client cancel returns at once while the code stops a moment later).
+  A third call is refused ("still running a call and has another waiting"). The call is counted in the event loop
+  before its thread starts, so a burst can't all pass the check, and a cancel finds it. So a retrying client can't use up the
+  server's ~40 worker threads and stall every session.
+- `files` (created/changed files) comes from two scans of the working folder per call. Over stdio that is the launch
+  folder, possibly a home folder, so a folder with more than 5,000 entries gives an empty `files`.
+- Not changed: over HTTP anyone can call `start_session`, and a full pool evicts the least recently used idle
+  session. There is no login (see `MCP-SCHEMA.md`), so that is the same trust limit; `--unsafe` with `--http` on a
+  non-loopback address is now refused.

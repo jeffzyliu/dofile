@@ -2,7 +2,7 @@
 
 Run Stata-syntax `.do` files without a Stata license, and expose them to AI agents over MCP.
 
-Status: Phase 1 in progress (see `docs/phase1-plan.md`).
+Status: Phase 1 is complete; work since then is in `docs/phase1-plan.md` ("After Phase 1" and "Next steps").
 
 ## Command line
 
@@ -30,7 +30,7 @@ claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-m
 ```
 
 Tools: `run_do` (run Stata code; returns log, rc, error, e()/r() as JSON and new files), `describe_data`,
-`get_file` (returns exported graphs as images), `get_matrix` (one matrix, or part of it, at full precision), `upload_file`, `start_session`, `request_upload` and `request_download` (HTTP), `reset`. Resources: `dofile://commands` lists the
+`get_file` (exported graphs as images, logs and CSVs as text in pages), `get_matrix` (one matrix, or part of it, at full precision), `upload_file`, `start_session`, `request_upload` and `request_download` (HTTP), `reset`. Resources: `dofile://commands` lists the
 supported commands, `dofile://about` the versions. Data stays in memory between `run_do` calls. Full inputs, outputs and return codes: [MCP-SCHEMA.md](MCP-SCHEMA.md).
 
 HTTP: `dofile-mcp --http --port 8000` (localhost only by default). Call `start_session` first and pass its

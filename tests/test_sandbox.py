@@ -156,3 +156,8 @@ def test_hook_blocks_network_and_subprocess(work):
     p = subprocess.run([sys.executable, "-I", "-c", HOOK_PROBE, str(work)], capture_output=True, text=True, timeout=60)
     out = json.loads(p.stdout)
     assert all("dofile sandbox" in v for v in out.values()), out
+
+
+def test_capture_catches_a_sandbox_refusal_like_any_file_error(work):
+    r = sandboxed(work, 'capture type /etc/passwd\ndisplay "after rc=" _rc\ncapture noisily type /etc/passwd\ndisplay "again"')[0]
+    assert r["rc"] == 0 and "after rc=603" in r["log"] and "again" in r["log"]

@@ -13,7 +13,7 @@ suggests Stata does the same), `confirmed` (checked against Stata),
 (the fix is in our copy), `patched` (fixed by a dofile patch in `scripts/patches/`, to report upstream), `partly patched` (the patch covers part
 of the entry; the rest is listed in its details), `known`
 (a missing feature, not a bug). PATCH-1's status describes its own progress.
-The repros were last run on 2026-11-04 in dofile (`dofile run` or the MCP server). The cps and panel data are
+The repros were run in dofile (`dofile run` or the MCP server) on 2026-11-04 and 05; the patched ones have tests. The cps and panel data are
 in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (Card 1995), not in the repo.
 
 | ID | Symptom | Where it shows up | Status |
@@ -28,18 +28,19 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-9 | `ivregress` prints a long `Instruments:` list on one line instead of wrapping it at 80 columns | `::test_odt_fixes` | patched |
 | ODT-10 | `graph bar ..., over(x, relabel(...))` ignores `relabel()` | `::test_odt10_relabel` | patched |
 | ODT-11 | `by g: regress ...` refuses with rc 190 "regress may not be combined with by" | found 2026-11-04, no test | documented |
-| ODT-13 | bare `mean` (replay) refuses with rc 100 `varlist required`, also `mean, level(90)`, even right after `mean`; `estimates replay` works | `::test_odt13_summary_commands_replay` | patched |
 | ODT-12 | `nbreg` prints a NumPy warning (`invalid value encountered in sqrt`) computing alpha's standard error | `::test_odt_fixes` (smoke test; trigger checked on the Card data) | patched |
+| ODT-13 | bare `mean` (replay) refuses with rc 100 `varlist required`, also `mean, level(90)`, even right after `mean`; `estimates replay` works | `::test_odt13_summary_commands_replay` | patched |
 | ODT-14 | Stata code reaches Python's `eval()` (empty `__builtins__`, escapable): `arch ..., archmexp()` and `bayesstats` `{param}` expressions | `::test_safe_eval_allows_only_arithmetic`, `::test_stata_expressions_cannot_reach_python` | patched |
 | ODT-15 | `predict` after `mean` or `bootstrap` crashes (AttributeError `'Estimates' object has no attribute 'terms'`, rc 9999, traceback in the log; `capture` doesn't catch it) | `::test_odt15_predict_after_a_command_without_predict` | patched |
 | ODT-16 | `color()` specs: `gs#` is inverted (`gs0` white, `gs16` black); `none`, `*#` intensity (`navy*.5`) and `%#` opacity (`maroon%50`) fall back to the default palette color without an error; also unhandled: CMYK/`hsv` specs, color lists, about 20 of Stata's named colors | `::test_odt16_*` | partly patched |
 | ODT-17 | `legend(pos(#))` ignored: the legend is always at the bottom center | `::test_odt17_legend_position` | partly patched |
 | ODT-18 | `ttest a == b, unequal` without `unpaired` runs a paired test (prints "Paired t test") instead of refusing | `::test_odt18_ttest_options_of_the_paired_and_one_sample_forms` | patched |
 | ODT-19 | a matrix subscript on `e()`/`r()` matrices in an expression fails, with rc 109 "type mismatch" or 198 depending on the command (table in the details); Stata also rejected `e(b)[1,1]` in Stata 11 (see details), so probably the same | found 2026-11-05, no test | likely not a bug |
-| GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | ODT-20 | `histogram` (and `bar`'s) outline ignores `lcolor()`/`lwidth()`: histogram bars always get a background-colored edge, so `fcolor(none) lcolor(navy)` draws nothing | `::test_odt20_histogram_outline` | patched |
 | ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | `::test_odt21_default_axis_ticks_are_nice_numbers` | patched |
 | ODT-22 | the `matrix(name)` pseudofunction is not supported in expressions: `display trace(matrix(xx))` and `el(matrix(xx),2,1)` give rc 198 (`trace(xx)` works) | `::test_odt22_matrix_pseudofunction` | patched |
+| ODT-23 | `capture` does not catch a file error that comes as a Python `PermissionError` (the dofile sandbox's refusal in `type`, ...): the whole call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_sandbox_refusal_like_any_file_error` | patched |
+| GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
@@ -121,7 +122,7 @@ display %12.4g 1/3
 ```
 - dofile: ` .333333333333333315` (18 significant digits) and `.3333333333`.
 - Expected in Stata: `.333333333333` and `.3333` (at most d significant digits). Source: [D] format.
-- Patched (`opendta-odt5-odt6-number-formats.patch`): `format_value` passed only the width to `general()`, which
+- Patched (`opendta-odt5-general-digits.patch`): `format_value` passed only the width to `general()`, which
   implements `%w.0g`; d now caps the significant digits. `%w.0g` is unchanged.
 
 ### ODT-6: regression on its own interaction
@@ -131,7 +132,7 @@ regress yrsed c.yrsed#i.sex
 ```
 - dofile: rc 9999, `internal engine error: InvalidOperation`.
 - Expected in Stata: estimates (an unusual model, but valid). Source: to check in Stata.
-- Patched (`opendta-odt5-odt6-number-formats.patch`): the model is a numerically perfect fit, so F and t are
+- Patched (`opendta-odt6-huge-fixed-format.patch`): the model is a numerically perfect fit, so F and t are
   ~1e14 to 1e29, and `%f` formatting crashed for values that need more than Decimal's default 28 digits; it now
   uses enough precision. To verify: how Stata 14 prints such huge F and t values (here they overflow the
   table's columns).
@@ -423,6 +424,20 @@ display el(matrix(xx),2,1)
 - Low priority: it only matters when a variable and a matrix share a name, but do-files written for programs use it.
 - Patched (`opendta-odt22-matrix-pseudofunction.patch`): `matrix(name)` in an expression is the name. It does not force the
   matrix reading when a data variable has the same name, which is what the manual's `matrix()` is for (VERIFY).
+  Inside matrix functions (`trace`, `el`) the name is a matrix anyway, so those are right with a same-named variable;
+  only a 1x1 matrix read as a scalar (`display matrix(one)` with a variable `one`) gives the variable's value.
+
+### ODT-23: `capture` and the sandbox's refusals
+```stata
+capture type /etc/passwd     // under the dofile sandbox
+display _rc
+```
+- dofile before the patch: the call stopped at `capture type ...` with rc 603 and `_rc` was never shown. The sandbox
+  raises a Python `PermissionError`; OpenDTA's `capture` only caught its own `StataError`. (`capture use /etc/passwd` and
+  `capture graph export` were fine: those commands turn the error into a `StataError` themselves.)
+- Expected: `capture` catches any file error and sets `_rc` (Stata: 603 `file could not be opened`).
+- Patched (`opendta-odt23-capture-sandbox-refusal.patch`): `capture` turns a `PermissionError` into `StataError(603)`.
+  Only needed because of dofile's sandbox, so it is not worth reporting upstream.
 
 ### GAP-2: `estat firststage`
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat

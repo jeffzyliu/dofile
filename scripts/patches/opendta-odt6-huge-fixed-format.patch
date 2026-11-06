@@ -1,0 +1,23 @@
+--- a/src/dofile/_vendor/opendta/core/formats.py
++++ b/src/dofile/_vendor/opendta/core/formats.py
+@@ -11,7 +11,7 @@
+ import re
+ from contextlib import contextmanager
+ from dataclasses import dataclass
+-from decimal import ROUND_HALF_UP, Decimal
++from decimal import ROUND_HALF_UP, Decimal, localcontext
+ from functools import lru_cache
+ 
+ from . import missing as M
+@@ -163,7 +163,10 @@
+ def _fmt_f(x: float, decimals: int, comma: bool = False) -> str:
+     """Fixed notation with round-half-up applied to the exact binary
+     value (Stata gives 1.235e+03 for 1234.5 in %10.3e; Python would give 1.234)."""
+-    q = Decimal(x).quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
++    d = Decimal(x)
++    with localcontext() as ctx:  # enough digits for huge values (1e33 with 2 decimals needs 36; default is 28)
++        ctx.prec = max(28, d.adjusted() + decimals + 2)
++        q = d.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
+     return f"{q:,.{decimals}f}" if comma else f"{q:.{decimals}f}"
+ 
+ 

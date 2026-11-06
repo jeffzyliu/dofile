@@ -519,3 +519,42 @@ def test_versions_are_reported(stdio_sessions):
         assert c.server_info.version == __version__
         assert json.loads((await c.read_resource("dofile://about")).contents[0].text) == v
     call(build_server(stdio_sessions), steps)
+
+
+def test_get_file_pages_text_and_a_busy_session_answers_at_once(stdio_sessions, tmp_path):
+    (tmp_path / "big.txt").write_text("".join(f"{i:07d}\n" for i in range(10000)))   # 80,000 characters
+
+    async def steps(c):
+        first = (await tool(c, "get_file", name="big.txt")).content[0].text
+        assert first.startswith("0000000\n") and first.endswith("[characters 0-50000 of 80000; next offset 50000]")
+        rest = (await tool(c, "get_file", name="big.txt", offset=50000)).content[0].text
+        assert rest.endswith("[characters 50000-80000 of 80000; end of file]")
+        tail = (await tool(c, "get_file", name="big.txt", offset=-16)).content[0].text
+        assert tail.startswith("0009998\n0009999\n") and "[characters 79984-80000" in tail
+        assert (await tool(c, "get_file", name="big.txt", limit=500000)).is_error      # over the most a page may hold
+        running = asyncio.ensure_future(tool(c, "run_do", code="sleep 60000", timeout=4))
+        await asyncio.sleep(1)
+        waiting = asyncio.ensure_future(tool(c, "run_do", code="display 1"))   # one call may wait
+        await asyncio.sleep(0.5)
+        busy = await tool(c, "run_do", code="display 2")
+        assert busy.is_error and "still running a call" in busy.content[0].text
+        await running
+        await waiting
+    call(build_server(stdio_sessions), steps)
+
+
+def test_unsafe_http_only_on_loopback(capsys):
+    from dofile.mcp_server import main
+    with pytest.raises(SystemExit) as e:
+        main(["--http", "--host", "0.0.0.0", "--unsafe"])
+    assert e.value.code == 2 and "loopback" in capsys.readouterr().err
+
+
+def test_schema_doc_names_every_output_field():
+    """MCP-SCHEMA.md is written by hand: every field of a tool's output type must appear in it."""
+    from pathlib import Path
+    import dofile.mcp_server as m
+    doc = (Path(__file__).parents[1] / "MCP-SCHEMA.md").read_text()
+    missing = [f"{t.__name__}.{k}" for t in (m.RunResult, m.Results, m.DataSummary) for k in t.__annotations__
+               if f"`{k}`" not in doc]
+    assert missing == []

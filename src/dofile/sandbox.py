@@ -8,7 +8,8 @@ Two layers:
    the Python installation.
 
 This is a policy layer, not a security boundary: clients send Stata, not Python, so the hook only
-has to stop what OpenDTA's commands can do. A public deployment should still run in a container.
+has to stop what OpenDTA's commands can do. It does not audit stat calls, so `confirm file /etc/passwd`
+still tells whether an outside file exists. A public deployment should still run in a container.
 Audit hooks cannot be removed, so install() is for a process that does nothing else.
 """
 from __future__ import annotations
@@ -35,12 +36,12 @@ _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
 
 # The sandbox's recent refusals, for Engine.run: OpenDTA's own 603 message (graph export) hides why. Libraries
 # swallow some refusals (matplotlib scanning font folders), so Engine.run only blames one that names the failing file.
-refusals: deque[str] = deque(maxlen=50)
+refusals: deque[tuple[str, str]] = deque(maxlen=50)  # (path, message)
 
 
 class SandboxError(PermissionError):
-    def __init__(self, message: str):
-        refusals.append(message)
+    def __init__(self, message: str, path: str = ""):
+        refusals.append((path, message))
         super().__init__(errno.EACCES, message)  # strerror = message, so OpenDTA's own 603 errors show it
 
 
@@ -106,15 +107,15 @@ def install(workdir: str | os.PathLike, read_dirs: tuple[str, ...] = ()) -> None
             mode, flags = args[1], args[2] or 0
             write = any(c in mode for c in "wax+") if isinstance(mode, str) else bool(flags & _WRITE_FLAGS)
             if not _inside(path, writable if write else readable):
-                raise SandboxError(f"dofile sandbox: cannot {'write' if write else 'read'} {path}")
+                raise SandboxError(f"dofile sandbox: cannot {'write' if write else 'read'} {path}", path)
         elif event in _WRITE_EVENTS:
             for a in args[:2]:
                 path = _real(a)
                 if path is not None and not _inside(path, writable):
-                    raise SandboxError(f"dofile sandbox: {event} outside the workdir: {path}")
+                    raise SandboxError(f"dofile sandbox: {event} outside the workdir: {path}", path)
         elif event in _LIST_EVENTS:
             path = _real(args[0] if args and args[0] is not None else ".")
             if path is not None and not _inside(path, readable):
-                raise SandboxError(f"dofile sandbox: cannot list {path}")
+                raise SandboxError(f"dofile sandbox: cannot list {path}", path)
 
     sys.addaudithook(hook)

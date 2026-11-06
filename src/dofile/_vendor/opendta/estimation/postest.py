@@ -255,11 +255,9 @@ def _coef_index(est: Estimates, s: "Session", name: str, eq: str = "") -> int:
 
     i = match(name)
     if i is None and "#" in name:   # dofile patch (ODT-3): the terms of an interaction in any order (VERIFY)
-        import itertools
-        for perm in itertools.permutations(name.split("#")):
-            i = match("#".join(perm))
-            if i is not None:
-                break
+        want = sorted(_strip_marks(t) for t in name.split("#"))
+        i = next((k for k, n in enumerate(names) if (not eq or eqs[k] == eq) and "#" in n
+                  and sorted(_strip_marks(t) for t in n.split("#")) == want), None)
     if i is not None:
         return i
     # variable abbreviation/name without operators
