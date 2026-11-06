@@ -4,14 +4,15 @@
 MCP server (`dofile-mcp`) that lets agents use it. Engine: OpenDTA (MIT), chosen in `docs/engine-evaluation.md`.
 Background research: `docs/stata-research.md`.
 
-**Not in Phase 1:** the web demo (Phase 2), accounts/storage, our own estimators, community commands
-(`reghdfe`, `esttab`, `outreg2`), fixing OpenDTA upstream.
+**Not in Phase 1:** the web demo ([Phase 2](phase2-plan.md)), a hosted multi-user MCP server
+([Phase 3](phase3-plan.md)), accounts/storage, our own estimators, community commands (`reghdfe`, `esttab`,
+`outreg2`), fixing OpenDTA upstream.
 
 **Status (2026-11-05):** Phase 1 is complete. All exit checks pass, including CI on Linux and macOS (see
 [Is Phase 1 finished?](#is-phase-1-finished)). Since then, agent testing (three paper replications) led to
-result-format, engine, sandbox and MCP changes. Those up to `4a7d84c` are pushed and CI is green; later work is on
-`main` locally (not pushed) and passes the full suite locally. See
-[After Phase 1](#after-phase-1-2026-11-04-and-05).
+result-format, engine, sandbox and MCP changes, all pushed; CI is green on `b38fc96` (2026-11-06). See
+[After Phase 1](#after-phase-1-2026-11-04-and-05). Every open item in [Next steps](#next-steps) is now done, moved
+to [phase2-plan.md](phase2-plan.md) or [phase3-plan.md](phase3-plan.md), or in the backlog.
 
 ## Facts this plan rests on (checked 2026-11-03, corrected 2026-11-04 and 05)
 - OpenDTA is not on PyPI, and PyPI rejects packages that depend on a git URL. Our installs could pin it by commit,
@@ -268,34 +269,38 @@ all published numbers were reproduced. What it led to (full suite green):
   log cut, tempfile hint, `e_changed`/`r_changed`, the sandbox's reason on a 603, the reconnect note, `get_file`
   paging, the busy-session limit.
 - **Tests:** pytest-xdist; the Stata comparison split into one test per case.
+- **Later on 2026-11-05:** PATCH-2 (Break only at safe points), session calls queued on an async lock instead of
+  threads, the `dofile-log` Claude Code plugin (`plugins/dofile-log/`), and patches ODT-24 and ODT-25.
 - **Upstream check** (made when we had eight patches; not repeated for the later ones): OpenDTA `main` (0.10.0, 37
   commits after our pin) fixes none of our issues. Six of those eight patches apply to it as is (all but ODT-9,
   whose code moved; `safe-expr` not yet tried); it adds eight Stata
   reference cases, echoes blank lines in do-files and puts thousands separators in `regress`'s ANOVA df.
 
 ## Next steps
-1. **Push the local commits and confirm CI is green** (the last green run is `4a7d84c`; the workflow runs
-   `poe ci`, parallel).
-2. **Publish to PyPI** (GitHub repo and CI are done). PyPI has no reservations: a name is claimed by uploading a
-   release (`dofile` and `dofile-mcp` were free on 2026-11-04). It must be a working package, since PyPI's name
-   policy (PEP 541) lets others reclaim squatted names, and a version number can never be re-uploaded. Use
-   Trusted Publishing from GitHub Actions, so no API token is stored.
-3. **OpenDTA issues** ([opendta-issues.md](opendta-issues.md)): report upstream, ODT-14 (security) first, then
-   the patched bugs with their patches. Still open: ODT-11 (`by: regress`), GAP-2 and GAP-3 (`estat firststage`,
-   `endogenous`, `overid`), the leftovers of ODT-16/17, and PATCH-1's check against real Stata. Many entries need
-   someone with Stata to confirm.
-4. **Re-vendor to upstream `main`** when it's worth it: redo the ODT-9 patch for the moved code, check the
-   `safe-expr` patch and any new `eval`/`exec` on user text, rerun everything including the new reference cases.
-5. **Phase 2: thin Pyodide web demo**: an editor plus a log, one sample dataset, no server. OpenDTA ran unmodified
-   in Pyodide 314 during the evaluation.
-6. **HTTP hardening** before any non-local hosting: a bearer-token option, per-session memory and disk limits,
-   a container.
-7. **Robustness**: a Break in the middle of `merge`/`reshape` (does the data stay consistent?), clients other than
-   the Python SDK (MCP Inspector, Claude Desktop), Windows.
-8. **Agent ergonomics**: the result-format and hint changes are done (see After Phase 1), and so are the items in
-   [agent-ergonomics.md](agent-ergonomics.md). More replications per
-   [replication-tests.md](replication-tests.md) when the engine changes.
-9. Later: community commands (`reghdfe`, `esttab`), via OpenDTA upstream or a later decision.
+Status (2026-11-06): each item is done, moved to a later phase, or in the backlog (not tied to a phase).
+1. ~~Push the local commits and confirm CI is green.~~ Done: CI green on `b38fc96` (2026-11-06).
+2. **Publish to PyPI** → moved to [Phase 2](phase2-plan.md), step 7 (the landing page needs `pip install dofile`).
+   PyPI has no reservations: a name is claimed by uploading a release (`dofile` and `dofile-mcp` were free on
+   2026-11-04). It must be a working package, since PyPI's name policy (PEP 541) lets others reclaim squatted names,
+   and a version number can never be re-uploaded. Use Trusted Publishing from GitHub Actions.
+3. **OpenDTA issues** ([opendta-issues.md](opendta-issues.md)) → backlog: report upstream, ODT-14 (security)
+   first, then the patched bugs with their patches. Still open: ODT-11 (`by: regress`), GAP-2 and GAP-3
+   (`estat firststage`, `endogenous`, `overid`), the leftovers of ODT-16/17, and PATCH-1's check against real Stata.
+   Many entries need someone with Stata to confirm.
+4. **Re-vendor to upstream `main`** → backlog, when it's worth it: redo the ODT-9 patch for the moved code, check
+   the `safe-expr` and `safe-break` patches and any new `eval`/`exec` on user text, rerun everything including the
+   new reference cases.
+5. **Web demo** → [Phase 2](phase2-plan.md). The scope grew from "an editor plus a log, one sample dataset, no
+   storage": users upload their own files into a virtual working folder kept in the browser, file paths are mapped
+   into it, and there is a landing page.
+6. **HTTP hardening** (auth, per-session memory and disk limits, a container) → [Phase 3](phase3-plan.md), with
+   authorization, a reverse proxy and hosting.
+7. **Robustness:** ~~a Break in the middle of `merge`/`reshape`~~ fixed by PATCH-2 (`tests/test_break.py`).
+   Clients other than the Python SDK (MCP Inspector, Claude Desktop) → [Phase 3](phase3-plan.md), step 5.
+   Windows → backlog ("not supported yet").
+8. **Agent ergonomics:** ERG-1 to ERG-7 are done. ERG-8 and ERG-9 are open → [Phase 3](phase3-plan.md), step 8.
+   More replications per [replication-tests.md](replication-tests.md) when the engine changes.
+9. Community commands (`reghdfe`, `esttab`) → backlog, via OpenDTA upstream or a later decision.
 10. Dropped: a `parse_do` parser tool. The MIT tree-sitter-stata grammar (codedthinking) covers syntax for the web
    demo's highlighting, and `run_do` already reports real errors. If agents need a pre-flight check, the small
    version is a `check_do` tool (MCP + `dofile check`) that lists unknown or disabled commands using OpenDTA's own
@@ -310,6 +315,7 @@ all published numbers were reproduced. What it led to (full suite green):
 - Audit hooks are a policy layer, not a security boundary, and they assume clients can't run Python; an
   engine `eval()` on user text breaks that (ODT-14). Public HTTP hosting needs a container.
 - HTTP has no auth and no per-session memory or disk limits, so it's for localhost only; anyone who can reach the
-  port can start sessions and push idle ones out of a full pool.
-- An interrupted command (Break) may leave half-changed data; not checked yet.
+  port can start sessions and push idle ones out of a full pool. Moved to [Phase 3](phase3-plan.md).
+- ~~An interrupted command (Break) may leave half-changed data.~~ It did (an interrupted `append`); fixed by
+  PATCH-2, which takes Break only at safe points (`389b38b`, `tests/test_break.py`).
 - Windows is untested, and interrupts there always reset the session.

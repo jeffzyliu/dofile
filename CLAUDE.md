@@ -88,6 +88,7 @@ together. While dofile is 0.x, a breaking change to the result format raises the
   or example datasets; write from documented behavior. No GPL/AGPL code or dependencies. The Stata reference logs
   stay out of distributions (excluded from the sdist in `pyproject.toml`).
 - `legacy/` holds the 2020 OpenStata repos (gitignored); leave it alone.
-- Status and next steps: `docs/phase1-plan.md`. Known OpenDTA problems to verify against Stata:
+- Status and next steps: `docs/phase1-plan.md` (done), `docs/phase2-plan.md` (web demo),
+  `docs/phase3-plan.md` (hosted multi-user MCP server). Known OpenDTA problems to verify against Stata:
   `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
   `docs/agent-ergonomics.md`.
