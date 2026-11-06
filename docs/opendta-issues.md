@@ -451,6 +451,9 @@ eform`, one column per coefficient):
 - New estimates start with an empty r(), so a previous model's `r(table)` can't pass as theirs. Kept: a table
   the same command drew before posting (`xtlogit`, `gmm`, ...; rebuilt with e(b)'s names, tracked by a
   per-command counter in `Interpreter.execute`) and the r() of `margins`/`nlcom, post`.
+- That is the whole guarantee: a *new* estimation never inherits an earlier `r(table)`. Otherwise r() is Stata's (not
+  run in Stata for `estimates restore`): `estimates restore`, `clear` and failed commands leave it alone, so an older
+  `r(table)` can stay while `e()` is another model's. `results.r_changed` tells an agent when that is the case.
 
 Tests: `tests/test_engine.py::test_r_table_*` and `::test_new_estimates_drop_a_stale_r_table`.
 

@@ -13,7 +13,7 @@ Status values: `open`, `fixed` (with the test that covers it). The numbers were 
 | ERG-2 | a tempfile's local name outlives the file: the next call failed with rc 601 and an internal path, no explanation | `engine.py` (per-call scope) | fixed: `test_tempfile_name_outliving_its_file_gets_a_hint` |
 | ERG-3 | `results` showed `e()`/`r()` from data or a command no longer current, unlabeled | `engine.results()` | fixed: `test_results_say_whether_the_call_changed_e_and_r` |
 | ERG-4 | reconnecting or restarting the MCP server wipes the session, and nothing said so | `mcp_server.py` instructions, `MCP-SCHEMA.md` | fixed (docs) |
-| ERG-5 | rc 603 meant both "folder missing" and "the sandbox refused", and the sandbox's reason was hidden | sandbox, `engine.py` | fixed: `tests/test_sandbox.py` |
+| ERG-5 | rc 603 meant both "folder missing" and "the sandbox refused", and the sandbox's reason was hidden (also inside `capture`) | sandbox, `engine.py` | fixed: `tests/test_sandbox.py` |
 
 ## Details
 
@@ -102,10 +102,16 @@ graph export ../escaped.png, replace    // sandbox refusal, also rc 603
   `graph export` printed its generic text ("The operating system did not allow the file to be written...") without
   the sandbox's reason, where `save`, `export delimited` and `log using` showed it. An agent kept retrying the same
   write. (This was ODT-7 in `opendta-issues.md`, moved here because nothing is wrong on the engine side.)
-- Fix: `SandboxError` records its message in `sandbox.refusals` (the last 50). When a call ends with rc 603 and the
-  text doesn't already show a sandbox reason, `Engine.run` adds the refusal that names the failing file, to the
-  error and to the log: `... (dofile sandbox: cannot write /path/escaped.png)`.
+- Fix: `SandboxError` records its message in `sandbox.refusals` (the last 50). `Engine.run` then adds the refusal that
+  names the failing file in two places:
+  - **In the log**, under each `file X could not be opened` line (`_annotate_refusals`), so the reason shows even when
+    `capture noisily` swallows the error and the call ends rc 0: `file ../escaped.png could not be opened`, then
+    `dofile sandbox: cannot write /path/escaped.png`. A missing folder gets no such line. `_rc` stays 603 for both;
+    only the log text tells them apart. (The first version added the reason only when the call ended in rc 603, so
+    inside `capture` the two were indistinguishable again.)
+  - **In `error`**, when the call does end in rc 603: `... (dofile sandbox: cannot write /path/escaped.png)`.
 - Only a refusal that names the failing file is used: matplotlib scans font folders at the first plot, the sandbox
   refuses some of them (`cannot list /opt/local/share/fonts`) and the library swallows it, and an earlier version
   of this fix blamed that on an unrelated missing folder. The match is by file name (the last path component of
-  the refusal appears in the error), so a very short name could match by chance.
+  the refusal appears in the line), so a very short name could match by chance.
+- Tests: `tests/test_sandbox.py` (the uncaught case, and `test_a_refusal_is_told_apart_from_a_missing_folder_inside_capture`).

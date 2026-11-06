@@ -110,12 +110,16 @@ Numbers
 - Cross-checks that must hold exactly: DiD by means equals DiD by regression; Wald ratio equals IV.
 
 Results the agent reads (`run_do`'s `results`)
-- e() and r() are always the current state, after errors too; nothing is `null`. Matrices are listed by size
-  (`"V": "16x16"`); values come from `get_matrix`.
+- e() and r() are what Stata would hold, after errors too; nothing is `null`. `e()` survives `clear`, and `r()` survives
+  `clear`, `estimates restore` and a failed command. `results.e_changed`/`r_changed` say whether the last call changed
+  each. Matrices are listed by size (`"V": "16x16"`); values come from `get_matrix`.
 - `r(table)` (PATCH-1): replaces r() after every estimation table, has e(b)'s columns (equation names such as
   `nearc4:educ`, ancillary parameters such as `lnalpha:_cons`), exists after `mean`/`proportion`/`total`/
-  `ratio`, and never belongs to a previous model. A stale or mislabeled `r(table)` is the most dangerous kind of
-  bug here: the numbers look right but belong to something else.
+  `ratio`, and a new estimation never inherits an earlier one's `r(table)`. Like any r() it is left alone by
+  `estimates restore`, `clear` and failed commands (as in Stata, not run there), so after `estimates restore` it can
+  still be the table of an earlier command: check `r_changed`, or replay the model (`ivregress` with no arguments) to
+  rebuild it. A table that does not match `e(b)` (its column count differs) is the most dangerous kind of bug
+  here: the numbers look right but belong to something else.
 - After `lincom`/`nlcom`/`test`, r() holds their own results, not `r(table)`.
 
 Log output (should look like Stata 14)

@@ -39,6 +39,23 @@ def _refusal_for(error: str | None) -> str | None:
     return None
 
 
+_COULD_NOT_OPEN = re.compile(r"^file (.+) could not be opened$")
+
+
+def _annotate_refusals(text: str) -> str:
+    """OpenDTA's own `file X could not be opened` (graph export) hides why. Under each such line, add the sandbox's
+    refusal that names X, so a refusal reads differently from a missing folder even when `capture` swallows the error."""
+    lines = text.split("\n")
+    out: list[str] = []
+    for k, line in enumerate(lines):
+        out.append(line)
+        if _COULD_NOT_OPEN.match(line) and not (k + 1 < len(lines) and "dofile sandbox" in lines[k + 1]):
+            reason = _refusal_for(line)
+            if reason:
+                out.append(reason)
+    return "\n".join(out)
+
+
 def _same(before: dict[str, Any], after: dict[str, Any]) -> bool:
     """Whether e() or r() holds the same values as before a call (a matrix counts as the same only if untouched)."""
     if before.keys() != after.keys():
@@ -219,17 +236,19 @@ class Engine:
             self.session.close_scope(scope)
         if rc and error is None:
             error = _last_error(self._capture.text)
-        refused = _refusal_for(error) if rc == RC_FILE and "dofile sandbox" not in self._capture.text else None
+        refused = _refusal_for(error) if rc == RC_FILE and "dofile sandbox" not in (error or "") else None
         if refused:  # OpenDTA's own 603 message (graph export) hides why: say it was the sandbox, not a missing folder
-            self._capture(f"{refused}\n", "error")
             error = f"{error} ({refused})"
+            if refused not in _annotate_refusals(self._capture.text):  # not OpenDTA's usual wording: add it at the end
+                self._capture(f"{refused}\n", "error")
         elif rc == 601 and error and _TEMPFILE.search(error):  # the local names it, the call's scope deleted the file
             self._capture(f"({TEMPFILE_HINT})\n", "error")
             error = f"{error} ({TEMPFILE_HINT})"
         failed = _failed_command(self._capture.text) if rc else None
         pngs = [p for p in map(_png, drawn[-MAX_IMAGES:]) if p] if images else []
         d = self.session.data
-        result = Result(self._capture.text, rc, error, self.results(), failed, d.nobs, len(d.names), len(drawn), pngs)
+        result = Result(_annotate_refusals(self._capture.text), rc, error, self.results(), failed, d.nobs, len(d.names),
+                        len(drawn), pngs)
         drawn.clear()  # don't keep graphs alive past the call
         return result
 

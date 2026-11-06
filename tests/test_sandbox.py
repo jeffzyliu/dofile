@@ -86,6 +86,19 @@ def test_missing_folder_is_not_blamed_on_the_sandbox(work):
     assert r["rc"] == 603 and "dofile sandbox" not in r["log"] and "dofile sandbox" not in r["error"]
 
 
+def test_a_refusal_is_told_apart_from_a_missing_folder_inside_capture(work):
+    """ERG-5: `capture` swallows the error and the call ends rc 0, but the log still says which export the sandbox refused."""
+    (r,) = sandboxed(work, "use panel, clear\nscatter y x1\n"
+                           "capture noisily graph export ../escaped.png\ndisplay \"refused rc=\" _rc\n"
+                           "capture noisily graph export nofolder/x.png\ndisplay \"missing rc=\" _rc")
+    log = r["log"].split("\n")
+    assert r["rc"] == 0 and "refused rc=603" in log and "missing rc=603" in log
+    k = log.index("file ../escaped.png could not be opened")
+    assert log[k + 1].startswith("dofile sandbox: cannot write") and log[k + 1].endswith("escaped.png")
+    j = log.index("file nofolder/x.png could not be opened")
+    assert not log[j + 1].startswith("dofile sandbox") and "dofile sandbox" not in "\n".join(log[j:])
+
+
 def test_reads_outside_allowed_dirs_are_blocked(work, tmp_path):
     secret = tmp_path / "secret.csv"
     secret.write_text("token\nTOP-SECRET-VALUE\n")
