@@ -6,7 +6,8 @@ in=$(cat)
 # with graphs attached tool_response is an array of blocks (image, caption, JSON text); without, one JSON string
 res=$(printf '%s' "$in" | jq -c '.tool_response | (if type=="array" then map(.text? // empty) else [.] end) | map(try fromjson catch empty | select(type=="object" and has("log"))) | .[0] // empty' 2>/dev/null)
 [ -n "$res" ] || exit 0
-all=$(printf '%s' "$res" | jq -r '.log')
+# control characters from the data (ESC, BEL: a .dta string can hold them) would reach the terminal: keep only tab and newline
+all=$(printf '%s' "$res" | jq -r '.log' | LC_ALL=C tr -d '\000-\010\013-\037\177')
 [ -n "$all" ] || exit 0
 name=$(printf '%s' "$res" | jq -r '.log_file // empty')
 tint=$'\033[38;5;74m'; reset=$'\033[0m'  # steel blue (256-colour 74): sets the log apart from the hook's label line

@@ -36,7 +36,7 @@ from .engine import about
 from .worker import PoolFull, Worker, WorkerPool, warm_up
 
 LOG_LIMIT = 12_000  # characters of log returned inline; the full log is saved to the workdir's .dofile/
-KEEP_LOGS = 20  # full logs kept in .dofile/; older ones are deleted
+KEEP_LOGS = 50  # full logs kept in .dofile/; older ones are deleted (each at most ~2 MB, so at most ~100 MB)
 CMD_HEAD, CMD_TAIL = 40, 15  # lines kept from the start and end of a long block of output (first cut)
 SHORT_HEAD, SHORT_TAIL = 5, 3  # ... and of a block still too big once every block is cut that far (second cut)
 GET_MATRIX_CELLS = 250_000  # get_matrix answers up to this; larger needs rows/cols

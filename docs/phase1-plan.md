@@ -150,7 +150,7 @@ new_graphs, images, files)`.
   as PNG images. `describe_data` leaves out `label`/`value_label` when a variable has none. A log over 12,000
   characters is cut: the biggest blocks of output (tables, listings) lose their middle first, so short results and
   loop output stay, and `log_omitted_lines` says how many lines are gone; the full log goes to `.dofile/`, where the
-  newest 20 are kept (`get_file` reads it in pages). A call's log is capped at its first and
+  newest 50 are kept (`get_file` reads it in pages). A call's log is capped at its first and
   last 1,000,000 characters in the worker, so a runaway loop can't fill memory or disk (`dofile run` keeps all).
 - Large files never pass through the model: over stdio, code reads them in place from `--read-dir` folders;
   over HTTP, the client PUTs them to a `request_upload` URL. `upload_file` takes text only. Neither overwrites an
