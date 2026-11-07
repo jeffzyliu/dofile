@@ -43,10 +43,13 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-24 | `xtreg ..., fe|re|be` and `areg ..., absorb()` ignore `[aweight=]`, `[pweight=]` and `[fweight=]`: the coefficient is the unweighted one | `tests/test_engine.py::test_odt24_*` | patched |
 | ODT-25 | `describe` prints a long wrong `Sorted by:` list (48 names with repeats) for a Stata-written file whose own sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`mkdir C:\proj\out` makes `C:projout`), unlike `use`/`save` and unlike the same path in quotes: their arguments are split with `shlex` in POSIX mode, where `\` is an escape | found 2026-11-06 (path shim tests) | unverified |
+| ODT-27 | `save using name, replace` is accepted and writes a file called `using name.dta`; `save a b, replace` writes `a b.dta`. `save` has no documented `using` clause, so Stata should refuse the first form with a syntax error (assumed; the closed-source Rust reimplementation at stats.camp accepts it and writes `name.dta`, which is no evidence about Stata) | found 2026-11-06 (web demo); not checked against Stata | unverified |
+| ODT-28 | a missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...) gives rc 9999 `internal engine error: FileNotFoundError` with a traceback; `capture` does not catch it. Stata: r(603) `file ... could not be opened` | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected code assumed, not checked against Stata | patched |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | GAP-4 | `twoway lpoly` and `twoway lpolyci` are not plot types (rc 198 `lpoly is not a twoway plot type`); standalone `lpoly` works | found 2026-11-05 (Lee 2008 RD replication), no test | known |
+| GAP-5 | `estimates` has only `store`, `restore`, `dir`, `drop`, `clear`, `replay` and `table`; `save`, `use`, `describe`, `stats`, `for`, `notes`, `title` and `query` give rc 198 `<sub>: unknown subcommand` | found 2026-11-07 (checking ODT-28's side find), no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 | PATCH-2 | dofile patch: Break is taken only at safe points (between commands and loop passes, outside `by`; in the ML optimizer, `bootstrap`/`permute`/`jackknife` replications, Mata loops and `sleep`). An interrupt mid-command could leave the data half changed (an interrupted `append` left columns of different lengths) | `tests/test_break.py` | patched |
 | PATCH-3 | dofile patch: every file name the user writes goes through one hook (`core/userpath.user_path`), after its default extension is added. Unset, nothing changes; dofile's web demo sets it to map paths into its working folder (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
@@ -547,6 +550,55 @@ removed.
 - Fix: split with `posix=False` and strip the outer quotes, or split on whitespace outside quotes as the other file
   commands do.
 
+### ODT-27: `save using name` is not a syntax error
+`save using my_new_data, replace` prints `file using my_new_data.dta saved` and creates `using my_new_data.dta`
+(with a space in the name). `save a b, replace` creates `a b.dta`. `commands/files.py` takes all the text before the
+comma as the file name.
+- Expected in Stata: **assumed, not checked.** `save` is documented as `save [filename] [, options]`, with no `using`
+  clause (`using` belongs to `use`, `merge`, `append`, `outfile`, ...), so we assume `save using x` is a syntax error
+  (probably rc 198). We do not know the exact code or message, or whether Stata accepts unquoted spaces in a `save`
+  file name at all (which decides whether `save a b` is also an error).
+- Evidence in the repo: none. No Stata 14 reference log runs `save using` or `save` with a space in the name; every
+  `save` in `tests_opendta/compat/do/` is plain (`save odta_u, replace`). `known_differences.txt` doesn't list it.
+- Not evidence about Stata, from the user (2026-11-06): stats.camp accepts `save using x, replace` and writes
+  `x.dta`. It is a closed-source web demo of a Stata reimplementation written in Rust; nothing else is known (which
+  Stata version it targets, how it was tested). Another emulator's choice says nothing about what Stata does, so it
+  does not change the assumption above. It only shows that one other implementation takes `using` there, and that
+  dofile's output differs from it.
+- To verify: run `save using x, replace` and `save a b, replace` in Stata 14, then add them to
+  `gerar_esperados.do` as a case.
+- Fix (once checked): if Stata refuses `using` (the working assumption), reject that name with a syntax error; if it
+  turns out to accept it, drop a leading `using` word so `save using x` writes `x.dta`. Likewise decide what to do
+  with unquoted names that have spaces (`save a b`). A patch in `scripts/patches/`, not an edit of the vendored engine.
+
+### ODT-28: a missing folder or a directory in place of a file gives rc 9999
+```stata
+log using hi/hi, replace      // no folder hi/
+```
+prints `internal engine error: FileNotFoundError: [Errno 2] No such file or directory: 'hi/hi.smcl'` with a Python
+traceback in the log, rc 9999. `capture log using hi/hi, replace` does not catch it either.
+- Cause: `log`, `cmdlog`, `outfile`, `file open`, `copy` (destination) and `bcal create` have no `try/except OSError`
+  around their `open()`. And `use`, `append`, `type`, `infile`, `file open ... read`, `copy` (source) check
+  `path.exists()` and then fail inside `open()` when the path is a directory (`IsADirectoryError`). The commands that
+  did it right each carry their own `except OSError` (`save`, `export delimited`/`excel`, `outsheet`, `postfile`,
+  `putexcel`, `graph save`/`export`, `erase` 693, `mkdir`/`rmdir` 693, `cd` 170).
+- Found 2026-11-07 (web demo), then probed 48 file commands with a missing folder and with a directory; the list
+  above is what gave 9999. Not covered by the probe: commands outside those 48, permission errors that are not the
+  sandbox's, and the rc of `merge`/`cross` with a directory (459 and 110, not looked at).
+- Expected in Stata: **assumed, not checked.** r(603), `file hi/hi.smcl could not be opened`, as `save` already does
+  here (the existing handlers in this engine raise 603 with `(strerror)`). For a directory in place of a file we
+  assume 603 too.
+- Patched (`opendta-odt28-oserror-to-603.patch`): `commands/registry.py` wraps every registered command, so an
+  `OSError` that escapes it becomes `StataError(603, "file <name> could not be opened (<strerror>)")`; `capture` then
+  catches it. A command's own `StataError` (erase 693, cd 170, ...) is untouched. `PermissionError` is left alone: the
+  dofile sandbox's refusals use it (ODT-23: `capture` converts it; `Engine.run` turns an uncaught one into 603). The
+  patch goes in the registry, not in the dispatcher, because PATCH-2 edits the dispatcher's `spec.fn` lines.
+- Tests: `tests/test_engine.py::test_odt28_*` (13 commands, `capture`, and the commands that keep their own codes).
+- Related: ODT-23 is the same family (an `OSError` escaping a command) for the sandbox's `PermissionError`. It stays
+  separate: it only exists because of the sandbox and is not for upstream, while this one is an OpenDTA bug.
+- Side finds: `estimates save` and `estimates use` are a missing feature (GAP-5). `export excel` to a bad path prints a
+  stray `ValueError: I/O operation on closed file` from openpyxl to stderr, although the command returns 603 (not an entry).
+
 ### GAP-2: `estat firststage`
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat
 firststage is unrecognized". It's the standard weak-instrument check, so it's worth implementing upstream.
@@ -564,6 +616,22 @@ types (not checked in a Stata 14 log), and a regression-discontinuity plot (a fi
 - Workaround: `lpoly ..., nograph generate(...) at(...)` for each side, then `twoway line` on the saved values.
 - Also seen in the same run: the `ci` option's band wasn't visible at bandwidth 0.1 with 5,000 points; not checked
   whether the band was drawn.
+
+### GAP-5: `estimates` subcommands
+`cmd_estimates` (`estimation/postest.py`) implements `store`, `restore`, `dir`, `drop`, `clear`, `replay` and `table`.
+Any other word falls to the last line, `raise StataError(198, f"{sub}: unknown subcommand")   # VERIFY`, so
+`estimates save m1, replace` gives rc 198 `save: unknown subcommand`. Run on 2026-11-07 with two stored models.
+- Missing, from memory of Stata 14's `estimates` (not checked in a Stata 14 log or run): `save` and `use` (an estimates
+  file), `describe using`, `stats` (AIC and BIC of stored models), `for` (run a command with a stored model active),
+  `notes`, `title` and `query`. `esample`, `selected` and `change` fail the same way; we don't know whether they exist in Stata 14,
+  so they are not counted.
+- Impact: the error reads like a typo, not "not implemented". `save`/`use` matter most: the usual way to keep fits
+  across sessions, and in the web demo across a page reload.
+- Not a quick fix for `save`/`use`: Stata's `.ster` format is its own, so dofile would need its own file format (as for
+  `.gph`), and real `.ster` files would not load. `stats`, `for`, `notes`, `title`, `query` work on the stored
+  snapshots in `_stored_estimates`, with no file format.
+- A cheap step: make the unknown-subcommand message say it is not implemented for the subcommands Stata has.
+- Not covered by any test, and no xfail.
 
 ### GAP-1: community commands
 `reghdfe`, `esttab` and `outreg2` are SSC packages, not part of Stata, and OpenDTA doesn't implement them. Not

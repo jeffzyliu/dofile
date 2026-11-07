@@ -441,6 +441,45 @@ def test_odt25_the_sort_list_ends_at_the_first_zero(eng, tmp_path):
     assert [ln.rstrip() for ln in log.splitlines() if ln.startswith("Sorted by")] == ["Sorted by: v3"]
 
 
+ODT28_MISSING_FOLDER = [
+    "log using nodir/a, replace", "cmdlog using nodir/a", "outfile using nodir/a.raw, replace",
+    "file open fh using nodir/a.txt, write replace", "copy base.dta nodir/a.dta, replace",
+    "bcal create nodir/cal, from(x) replace", "save nodir/a, replace",
+]
+ODT28_DIRECTORY = ["log using adir.smcl, replace", "type adir.txt", "use adir, clear", "file open fh using adir.txt, read",
+                   "outfile using adir.raw, replace", "append using adir"]
+
+
+def test_odt28_a_missing_folder_or_a_directory_is_rc_603_not_an_internal_error(eng, tmp_path):
+    """ODT-28: log, cmdlog, outfile, file open, copy, bcal create (missing folder) and use, append, type, ... (a directory
+    in place of a file) let a Python OSError escape: rc 9999. Stata: r(603) "file ... could not be opened"."""
+    eng.run("clear\nset obs 3\ngen x = _n\nsave base, replace")
+    for name in ("adir", "adir.dta", "adir.txt", "adir.raw", "adir.smcl"):
+        (tmp_path / name).mkdir()
+    for cmd in ODT28_MISSING_FOLDER + ODT28_DIRECTORY:
+        r = eng.run(cmd)
+        eng.run("capture file close _all\ncapture log close _all\ncapture cmdlog close")
+        assert r.rc == 603, (cmd, r.rc, r.error)
+        assert "could not be opened" in r.error and "internal engine error" not in r.log, (cmd, r.error)
+    assert eng.run("log using nodir/a, replace").error == "file nodir/a.smcl could not be opened (No such file or directory)"
+
+
+def test_odt28_capture_catches_it_and_sets_rc(eng):
+    eng.run("clear\nset obs 3\ngen x = _n")
+    for cmd in ("log using nodir/a, replace", "outfile using nodir/a.raw, replace", "file open fh using nodir/a.txt, write replace"):
+        r = eng.run(f"capture {cmd}\ndisplay _rc")
+        assert r.rc == 0 and r.log.strip().splitlines()[-1] == "603", (cmd, r.log)
+
+
+def test_odt28_commands_with_their_own_error_codes_keep_them(eng):
+    """erase 601/693, cd 170 and the rest are raised by the commands themselves; the 603 conversion must not replace them."""
+    eng.run("clear\nset obs 3\ngen x = _n")
+    assert eng.run("erase nodir/a.dta").rc == 601
+    assert eng.run("cd nodir").rc == 170
+    assert eng.run("mkdir nodir/deeper/still").rc == 693
+    assert eng.run("save nodir/a, replace").rc == 603 and eng.run("use nodir/a, clear").rc == 601
+
+
 def test_odt22_matrix_pseudofunction(eng):
     """ODT-22: matrix(name) is the matrix name in an expression."""
     eng.run("matrix xx = (1, 2 \\ 3, 4)")
