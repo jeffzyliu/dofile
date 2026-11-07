@@ -3,3 +3,4 @@ public/*.whl
 dist/
 test-results/
 playwright-report/
+public/snapshot/

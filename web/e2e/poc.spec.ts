@@ -177,3 +177,38 @@ test("Save writes the file; Discard opens the other file", async ({ page }) => {
   await row("main.do").locator(".name").click();   // the dialog is accepted: Discard
   await expect(page.locator(".cm-content")).toContainText('display "KEPT"');
 });
+
+// ?snapshot=1 starts from the Pyodide memory snapshot `npm run snapshot` builds (public/snapshot/, copied by the build).
+// Skipped when there is none. A second visit reads it from the Cache API instead of downloading it again.
+test("?snapshot=1: starts from the memory snapshot, runs native code and a graph, and caches it", async ({ page, request }) => {
+  const manifest = await request.get("/snapshot/manifest.json");
+  test.skip(!(manifest.ok() && (manifest.headers()["content-type"] ?? "").includes("json")), "no snapshot: run npm run snapshot, then npm run build");
+  const notes: string[] = [];
+  page.on("console", m => { if (m.text().includes("[dofile] snapshot start")) notes.push(m.text()); });
+  page.on("pageerror", e => console.log(`page error: ${e.message}`));
+
+  await page.goto("/?snapshot=1");
+  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 240_000 });
+  await page.locator("#run").click();   // the sample program: regress, robust, and a scatter plot
+  await expect(page.locator("#status")).toHaveText(/^rc 0 in/, { timeout: 120_000 });
+  await expect(page.locator("#graphs img")).toHaveCount(1);
+  expect(notes.at(-1)).toContain("download");
+
+  await page.reload();
+  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 240_000 });
+  await expect.poll(() => notes.length).toBe(2);
+  expect(notes.at(-1)).toContain("read from cache");
+  expect(notes.at(-1)).toContain("decompress");
+
+  // what the browser keeps is the compressed files (about 46 MB), not the 229 MB they decompress to
+  const stored = await page.evaluate(async () => {
+    let bytes = 0;
+    for (const name of await caches.keys()) {
+      const cache = await caches.open(name);
+      for (const req of await cache.keys()) bytes += (await (await cache.match(req))!.blob()).size;
+    }
+    return bytes;
+  });
+  expect(stored).toBeGreaterThan(10e6);
+  expect(stored).toBeLessThan(80e6);
+});
