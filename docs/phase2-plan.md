@@ -18,7 +18,7 @@ are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since,
   fits whose answer the data does not pin down (ODT-30, an OpenDTA optimizer issue). Nothing of this is in CI yet.
 - **The memory snapshot** (opt-in, `?snapshot=1`; [pyodide-snapshot.md](pyodide-snapshot.md)): a return visit starts in 1.2 s
   against 4.6–9.3 s, a first visit in 1.7 s unthrottled and 5.4 s at 100 Mbps, about level with the normal boot at 30 Mbps. It
-  is 42.3 MB (brotli 11). It works in Chromium, Firefox, WebKit and an iPhone profile; a real phone was not tried. Which
+  is 39.9 MB (brotli 11, docstrings stripped; times measured on the 42.3 MB build before that). It works in Chromium, Firefox, WebKit and an iPhone profile; a real phone was not tried. Which
   size optimizations are done and which are not: [File size](pyodide-snapshot.md#file-size-what-is-done-and-what-is-not).
 - **Tools:** `npm run check-snapshot`, `check-pytest`, `check-numeric` and `web/scripts/measure-startup.mjs`.
 
@@ -308,7 +308,7 @@ that steps 6 and 8 build.
    long as on CPython, not 20–500 times or forever. Also fixed: PATCH-4 (`expand` and `stsplit`). Details, evidence and what
    remains: [Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide) and [Known gaps](#known-gaps-in-the-browser-engine).
 4c. ~~**Memory snapshot**~~ done 2026-11-07 (opt-in): [pyodide-snapshot.md](pyodide-snapshot.md). Patched Pyodide loader,
-   42.3 MB at brotli 11, restore in 1.2 s; `web/scripts/make-snapshot.mjs`, `web/src/engine/snapshot.js`. Whether it
+   39.9 MB at brotli 11 (42.3 MB before docstring stripping became the default), restore in 1.2 s; `web/scripts/make-snapshot.mjs`, `web/src/engine/snapshot.js`. Whether it
    becomes the default is open.
 4d. ~~**Check the engine in Pyodide against CPython**~~ done 2026-11-07, by hand, not in CI: `check-snapshot` (conformance
    corpus and the 97 Stata 14 cases), `check-pytest` (OpenDTA's unit suite, test by test against CPython) and

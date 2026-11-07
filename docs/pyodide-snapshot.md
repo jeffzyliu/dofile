@@ -1,7 +1,7 @@
 # Starting the web demo from a Pyodide memory snapshot
 
-Status (2026-11-07): built, measured and checked; opt-in in the demo with `?snapshot=1`. The default build is 42.3 MB
-(brotli 11); a return visit starts in 1.2 s against 4.6–9.3 s for the normal boot, and a first visit in 1.7 s unthrottled
+Status (2026-11-07): built, measured and checked; opt-in in the demo with `?snapshot=1`. The default build is 39.9 MB
+(brotli 11, docstrings and asserts stripped; the times below were measured on the 42.3 MB build before stripping became the default); a return visit starts in 1.2 s against 4.6–9.3 s for the normal boot, and a first visit in 1.7 s unthrottled
 (5.4 s at 100 Mbps, 14.6 s at 30 Mbps, where the normal boot takes 14.1 s). It passes the conformance corpus, 95 of 97 Stata 14
 cases (the other two need packages Pyodide lacks) and the browser tests in Chromium, Firefox, WebKit and an iPhone profile.
 Not tried: a real phone. **Which size optimizations are done and which are not: [File size](#file-size-what-is-done-and-what-is-not).**
@@ -94,13 +94,13 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 - The snapshot is made in Node and runs in the browser. There are two big files: the **snapshot** (the Python heap,
   136 MB) and the **bundle** (the site-packages folder as files, 93 MB, 3,884 files, which the snapshot needs because
   it holds memory and not the filesystem). They are written **brotli-compressed at quality 11**, as
-  `heap.brotli.bin` (22.2 MB) and `site-packages.brotli.bin` (20.0 MB), so 42.3 MB in all (the heap was 26.5 MB, 46.5 MB in all,
-  before the library copies were zeroed; see "Making the files smaller"). The small files are
+  `heap.brotli.bin` (19.8 MB) and `site-packages.brotli.bin` (20.0 MB), so 39.9 MB in all (the heap was 26.5 MB, 46.5 MB in all,
+  before the library copies were zeroed and the docstrings stripped; see "Making the files smaller"). The small files are
   `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` with the wheel's name, the
   Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
   both files again with the decoder the page uses and fails if they are not identical.
 - **Only the compressed files are kept in the browser** (the Cache API, under a name with the build time; older builds
-  are deleted): 42.3 MB of storage, not 229 MB. Every start reads them and decompresses them with brotli-wasm
+  are deleted): 39.9 MB of storage, not 229 MB. Every start reads them and decompresses them with brotli-wasm
   (a 1 MB wasm decoder, about 0.7 s for both files), in steps into one buffer per file so the memory peak stays near
   the decompressed size. The browser's own HTTP cache did not keep files this big across visits in the tests; the
   Cache API did.
@@ -180,7 +180,7 @@ Sizes below are compressed MB, measured unless marked; each row's code is in `we
 | Brotli 11 for both files, decoded in the page by brotli-wasm | **Done, the default** | smallest format tried: gzip -9 72.5, zstd 19 49.7, brotli 5 58.0, brotli 11 46.5 (all before the next row) | `SNAPSHOT_QUALITY` (default 11, window 24; 5 is for development: 52.3 MB, a 7 s build instead of 145 s). The quality of a built file is checked by recompressing the decoded file ([below](#making-the-files-smaller)) |
 | Zero the copies of native libraries in the heap | **Done, the default** | heap 26.5 → 22.2; total 46.5 → 42.3 | Emscripten keeps each `.so`'s bytes after `dlopen`, and the bundle has them too: 135 of 136 buffers (30.5 MB raw) were identical to their files. `zeroLibraryCopies` |
 | Files named `.bin`, kept compressed in the browser | **Done** | the Cache API holds 42 MB, not 229 | a `.br` name makes hosts send `Content-Encoding: br` and the browser decodes before the cache sees it |
-| Strip docstrings and asserts (`PYTHONOPTIMIZE=2`) | **Implemented, off by default** | about 2.3 less (total about 40) | `SNAPSHOT_STRIP_DOCS=1`, recorded as `optimize: 2` in the manifest. Removes the `assert`s of every library. Checked against the corpus, the probes and the Stata cases on a quality-5 build, no new failure; not re-checked on the current build |
+| Strip docstrings and asserts (`PYTHONOPTIMIZE=2`) | **Done, the default** (since 2026-11-07) | heap 22.2 → 19.8; total 42.3 → 39.9 | `SNAPSHOT_STRIP_DOCS=0` builds without it. Recorded as `optimize: 2` in the manifest, and the restore prints it. Removes the `assert`s of every library. Checked on the quality-11 build: 63 corpus checks, 12 probes and 13 native calls clean, 95 of 97 Stata cases in 150 s, the same two package gaps as the unstripped build (152 s) |
 | Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" (core about 32–33, graphics about 8 later) | costs about 0.9 s at the first graph, about 0.3 s if `.pyc` files are shipped; needs the bundle in two parts and a fetch, and `run` has to wait for it. [Experiment: loading matplotlib lazily](phase2-plan.md#experiment-loading-matplotlib-lazily) |
 | Ship `.pyc` files for the lazily loaded part | **Not done** (part of the row above) | 0.6 s of the 0.87 s first graph is compiling matplotlib's source | |
 | Leave out the bundle's tests (6.6 MB raw) and type stubs (1.5 MB raw) | **Not done** | too small to matter (not measured compressed) | `bundle()` takes every file under site-packages, nothing is excluded |
@@ -203,8 +203,7 @@ Sizes below are compressed MB, measured unless marked; each row's code is in `we
 | Normal boot: import scipy lazily | **Not done** | it is imported in `browser.start()` |
 | Normal boot: download the packages lazily | **Not done** | `micropip.install` of the wheel fetches all its dependencies (about 25 MB, an earlier measurement) at boot, and openpyxl from PyPI on every cold start |
 
-In short: brotli 11, the library-copy zeroing and the compressed storage are done and are what the 42.3 MB is; docstring
-stripping exists but is off; **lazy-loading matplotlib, shipping `.pyc` files, trimming the bundle and trimming scipy are not
+In short: brotli 11, the library-copy zeroing and the compressed storage and docstring stripping are done and are what the 39.9 MB is; **lazy-loading matplotlib, shipping `.pyc` files, trimming the bundle and trimming scipy are not
 done**; the normal boot's imports of matplotlib are already lazy, its scipy import and its package downloads are not.
 
 ## Making the files smaller
@@ -228,7 +227,7 @@ the originals and fails on any difference. gzip decodes natively but is half as 
 MB/s output (gzip 490, Node's native brotli 600).
 
 **Found** (the saving is at brotli 11 or 5 as marked; what was done about each is in
-[File size](#file-size-what-is-done-and-what-is-not): zeroing is the default, docstring stripping is opt-in, the others are not done):
+[File size](#file-size-what-is-done-and-what-is-not): zeroing and docstring stripping are the default, the others are not done):
 
 - **The heap holds a copy of every native library.** Emscripten keeps each `.so`'s bytes after `dlopen` (136 wasm
   headers in the 136 MB image), and the bundle has the same bytes. 135 of 136 buffers (30.5 MB) are byte-identical to
@@ -239,20 +238,19 @@ MB/s output (gzip 490, Node's native brotli 600).
   Recompressing the decoded heap at quality 11 with the build's parameters reproduces `heap.brotli.bin` byte for byte (22,211,148
   bytes; at quality 5 it is 28,514,671), which is how the quality of a built file can be checked: the manifest does not record it.
 - **Stripping docstrings** (`PYTHONOPTIMIZE=2`): with the libraries zeroed, **22.1 to 19.8 MB** more at brotli 11 (34.3
-  to 30.7 MB at brotli 5 without the zeroing). It also removes `assert`s from every library. **Opt-in:**
-  `SNAPSHOT_STRIP_DOCS=1 npm run snapshot` (recorded as `optimize: 2` in the manifest). Checked against the corpus,
-  the probes and the Stata 14 cases: no failure that the unstripped normal boot does not also have (see
+  to 30.7 MB at brotli 5 without the zeroing). It also removes `assert`s from every library. **The default since 2026-11-07:**
+  `SNAPSHOT_STRIP_DOCS=0 npm run snapshot` turns it off (recorded as `optimize: 2` in the manifest). Checked against the
+  corpus, the probes and the Stata 14 cases on the quality-11 build: the same result as the unstripped build (see
   [Correctness checks](#correctness-checks)). That is evidence for the code those checks reach, not a proof for all of
-  it, so it stays opt-in.
+  it.
 - **Importing matplotlib costs the heap 4.5 MB** (26.1 to 30.6 MB at brotli 5, from the stage-by-stage build below), and
   its files cost 7.4 MB (matplotlib, pillow, fonttools, kiwisolver, contourpy and the rest, at brotli 5). Loading them
   on the first graph instead would cut about 12 MB from a first visit. It needs the bundle in two parts and a fetch
   at the first graph. **Not done.**
 - **scipy cannot be trimmed much**: the corpus programs import 493 scipy modules, and the only subpackages never
   imported (`io`, `signal`, `cluster`, `odr`) are 4.1 MB of 40.8 MB raw. **Not done.**
-- The combined heap (libraries zeroed and docstrings stripped) is about 19.8 MB against 26.5 MB, so the total would
-  be about 40 MB against 46.5 MB. With the zeroing now the default, the build is 42.3 MB and stripping docstrings (opt-in)
-  would take it to about 40 MB.
+- The combined heap (libraries zeroed and docstrings stripped) is 19.8 MB against 26.5 MB, so the total is
+  39.9 MB against 46.5 MB. Both are the default.
 
 **Tried, no gain:**
 
@@ -312,8 +310,9 @@ stripping docstrings**, since the normal boot fails the same cases.
 **Update, later on 2026-11-07:** the 11 `expand`/`stsplit` cases and the 3 numeric cases now pass in Pyodide, after PATCH-4
 and `src/dofile/linalgshim.py` (numpy's `inv`, `solve` and `cholesky` return NaN instead of raising `LinAlgError` in
 Pyodide, which also made the slow fits run to their iteration limit). That was on a normal boot, one process per case. **The
-whole check was then run on a snapshot start with the shim, three times**: on a brotli 5 build (151 s), on a brotli 5 build
-made without the trampoline (153 s), and on the current build, brotli 11 and without the trampoline, 42.3 MB (153 s). Each
+whole check was then run on a snapshot start with the shim, four times**: on a brotli 5 build (151 s), on a brotli 5 build
+made without the trampoline (153 s), on brotli 11 without the trampoline, 42.3 MB (153 s and again 152 s), and on the current
+build, brotli 11, no trampoline, docstrings and asserts stripped, 39.9 MB (150 s). Each
 time: 63 corpus checks, 12 probes and 13 native-library calls clean, and **95 of 97 cases pass**, the same two failures as on
 a normal boot (`xlwt`, `pyreadstat`). The 7 cases left unfinished above ran
 too: six pass (`1904`, `1910`, `1914`, `1915`, `1919`, `1921`) and `1920_models4` has no Stata reference log, so it is not
@@ -396,12 +395,12 @@ browser refusing storage (`QuotaExceededError`, `SecurityError`, `NotAllowedErro
 uncached, and it is reported with the start's timings (`NOT CACHED: ...`) and in `console.warn`; any other error is thrown.
 The failure of the manifest request now says why.
 - **Browser memory** is higher: the heap image is 136 MB before anything runs, and during the start the compressed
-  files (42.3 MB) and the decompressed ones (229 MB) are in memory together for a moment. Not measured on a phone.
+  files (39.9 MB) and the decompressed ones (229 MB) are in memory together for a moment. Not measured on a phone.
 - **A patched copy of Pyodide's loader.** It is generated from the installed Pyodide file, fails loudly if the text
   changes, and needs a rebuilt snapshot on every Pyodide upgrade. This relies on internals (`loadWebAssemblyModule`,
   `LDSO`, `wasmTable`) that Pyodide may change or fix. Check upstream for native-extension snapshot support before
   each upgrade.
-- **`npm run build` copies `public/snapshot/`** (42.3 MB now) into `dist/` when it exists. The files are already
+- **`npm run build` copies `public/snapshot/`** (39.9 MB now) into `dist/` when it exists. The files are already
   compressed, so the host needs no brotli setting; it must not add a `Content-Encoding` of its own (the `.bin` names
   keep common servers from doing that).
 - The snapshot build needs the network once, for openpyxl from PyPI, and takes about 3 minutes at brotli quality 11.
@@ -416,8 +415,8 @@ level on a 30 Mbps first visit (14.6 s against 14.1 s). What is left, in order o
 
 1. **Decide whether to make it the default, with a fallback to the normal boot.** The four browser profiles pass; a real
    phone has not been tried, and memory there (136 MB heap, 229 MB decompressed during the start) is the open question.
-2. **Decide on stripping docstrings** (about 2.3 MB less; implemented, off by default). It removes the `assert`s of every
-   library, and the checks run on it so far were on a quality-5 build.
+2. ~~**Decide on stripping docstrings**~~ done 2026-11-07: the default (2.4 MB less). It removes the `assert`s of every
+   library; the checks on the quality-11 build match the unstripped build.
 3. **Load matplotlib and its dependencies on the first graph instead of in the snapshot** (not done; about 9.7 MB less before
    "ready" at brotli 11, estimated). The first plot then pays about 0.9 s, mostly compiling, unless `.pyc` files are shipped.
    Findings, conjectures and the plan to measure it: [Experiment: loading matplotlib lazily](phase2-plan.md#experiment-loading-matplotlib-lazily).

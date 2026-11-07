@@ -1,7 +1,7 @@
 // Builds the Pyodide memory snapshot the page uses with ?snapshot=1 (`npm run snapshot`): Python started, the dofile wheel
 // installed, numpy, scipy, matplotlib, openpyxl and the engine's modules imported and one program run, so the page doesn't
 // repeat that. Writes public/snapshot/ (gitignored): the heap image and the site-packages bundle, brotli-compressed
-// (about 42 MB at brotli 11; 229 MB uncompressed), plus small JSON files and a manifest. Rebuild after changing the dofile
+// (about 40 MB at brotli 11 with docstrings stripped; 229 MB uncompressed), plus small JSON files and a manifest. Rebuild after changing the dofile
 // wheel or the pyodide version: the page checks the manifest and refuses a stale snapshot. Needs the network once
 // (micropip fetches openpyxl from PyPI); numpy and the rest come from node_modules/pyodide.
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
@@ -14,9 +14,10 @@ import { patchAsm, makeOptions, makeSnapshot, bundle, inflate, zeroLibraryCopies
 
 const here = new URL("..", import.meta.url);
 const OUT = process.env.SNAPSHOT_OUT ? `${process.env.SNAPSHOT_OUT.replace(/\/*$/, "")}/` : fileURLToPath(new URL("public/snapshot/", here));
-// SNAPSHOT_STRIP_DOCS=1 runs Python with PYTHONOPTIMIZE=2: docstrings and `assert` statements are left out of everything
-// imported or compiled in it, in the snapshot and after the restore (the flag is part of the heap). Smaller heap.
-const stripDocs = process.env.SNAPSHOT_STRIP_DOCS === "1";
+// Python runs with PYTHONOPTIMIZE=2 by default: docstrings and `assert` statements are left out of everything imported or
+// compiled in it, in the snapshot and after the restore (the flag is part of the heap). Smaller heap. SNAPSHOT_STRIP_DOCS=0
+// builds without it.
+const stripDocs = process.env.SNAPSHOT_STRIP_DOCS !== "0";
 const dist = new URL("../dist/", here);
 const wheel = readdirSync(dist).filter(f => f.endsWith(".whl")).sort().at(-1);
 if (!wheel) throw new Error("no wheel in ../dist: run `npm run wheel`");
