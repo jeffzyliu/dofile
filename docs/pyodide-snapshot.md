@@ -88,12 +88,13 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 - The snapshot is made in Node and runs in the browser. There are two big files: the **snapshot** (the Python heap,
   136 MB) and the **bundle** (the site-packages folder as files, 93 MB, 3,884 files, which the snapshot needs because
   it holds memory and not the filesystem). They are written **brotli-compressed at quality 11**, as
-  `heap.brotli.bin` (26.5 MB) and `site-packages.brotli.bin` (20.0 MB), so 46.5 MB in all. The small files are
+  `heap.brotli.bin` (22.2 MB) and `site-packages.brotli.bin` (20.0 MB), so 42.3 MB in all (the heap was 26.5 MB, 46.5 MB in all,
+  before the library copies were zeroed; see "Making the files smaller"). The small files are
   `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` with the wheel's name, the
   Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
   both files again with the decoder the page uses and fails if they are not identical.
 - **Only the compressed files are kept in the browser** (the Cache API, under a name with the build time; older builds
-  are deleted): 46.5 MB of storage, not 229 MB. Every start reads them and decompresses them with brotli-wasm
+  are deleted): 42.3 MB of storage, not 229 MB. Every start reads them and decompresses them with brotli-wasm
   (a 1 MB wasm decoder, about 0.7 s for both files), in steps into one buffer per file so the memory peak stays near
   the decompressed size. The browser's own HTTP cache did not keep files this big across visits in the tests; the
   Cache API did.
@@ -118,30 +119,39 @@ The demo's 1.31 s, in parts: read 0.02 s, **decompress 0.70 s**, start the wasm 
 0.08 s, **re-link 136 libraries 0.42 s**, copy the heap 0.04 s. After a restore the first program runs in 0.04–0.18 s,
 because its imports are done.
 
-Chromium, the built page and the network throttled through the DevTools protocol (the Pyodide runtime and the wheels
-still come from the real jsDelivr CDN, throttled too). Each row is one run; a new browser context is a cold cache,
-and a reload in it is a warm one:
+Chromium 158, the built page, the network throttled through the DevTools protocol; measured on 2026-11-07 with the brotli 11
+snapshot (42.3 MB, trampoline-free: see [The trampoline](#the-trampoline)) by `web/scripts/measure-startup.mjs`, which writes
+`docs/img/startup-times.json` (every run, and the page's own breakdown of each snapshot start); `docs/img/make-startup-times.mjs`
+draws the chart from it. The page is served by a small static server that does what a host does: brotli (quality 5) for text and
+wasm, long caching for the hashed assets, the isolation headers, and the snapshot's `.bin` files as they are. Pyodide's runtime and
+packages come from the real jsDelivr CDN, throttled too, so the unthrottled rows depend on this machine's connection. The time is
+the page's own "ready in X s". Each cell is the median of 3 runs (a new browser context is a cold cache, and a reload in it is a
+warm one); the runs agree within 0.3 s. The earlier version of this table was one run per cell, from a harness that was not kept
+(it is in git history, with the 46.5 MB build):
 
 ![Time until the engine is ready, normal boot vs snapshot, by network speed, for a first and a return visit](img/startup-times.svg)
 
 | Network | Normal, cold | Normal, warm | Snapshot, cold | Snapshot, warm |
 |---|---|---|---|---|
-| Unthrottled | 6.0 s | 5.3 s | 1.7 s | 1.3 s |
-| 100 Mbps, 20 ms | 7.2 s | 5.5 s | 5.8 s | 1.3 s |
-| 30 Mbps, 50 ms | 14.1 s | 9.4 s | 16.0 s | 1.3 s |
+| Unthrottled | 5.8 s | 4.6 s | 1.7 s | 1.2 s |
+| 100 Mbps, 20 ms | 7.1 s | 5.4 s | 5.4 s | 1.2 s |
+| 30 Mbps, 50 ms | 14.1 s | 9.3 s | 14.6 s | 1.3 s |
 
 What it says:
 
-- **Return visits win everywhere.** The snapshot starts in 1.3 s (0.7 s of it decompressing) against 5.3–9.4 s.
-- **First visits depend on the network.** Faster than about 100 Mbps the snapshot wins (1.7 s against 6.0 s
-  unthrottled). At 100 Mbps it is a little ahead (5.8 s against 7.2 s). At 30 Mbps it loses (16.0 s against 14.1 s).
-  A cold visit is the download (3.9 s at 100 Mbps, 12.9 s at 30 Mbps) plus the browser's compile of the wasm module
-  (0.4–1.8 s) plus the 1.3 s of decompressing and restoring.
-- **The download is the cost.** 46.5 MB, against about 25 MB of wheels for the normal boot (both also download the
-  Pyodide runtime). That is the whole of what the browser stores, too.
+- **Return visits win everywhere.** The snapshot starts in 1.2–1.3 s (0.66 s of it decompressing) against 4.6–9.3 s.
+- **First visits depend on the network.** Faster than about 100 Mbps the snapshot wins (1.7 s against 5.8 s
+  unthrottled). At 100 Mbps it is ahead (5.4 s against 7.1 s). At 30 Mbps it is about level and slightly behind (14.6 s against
+  14.1 s; it was 16.0 s against 14.1 s with the 46.5 MB build). A cold visit is the download (the page's own timing: 0.06 s
+  unthrottled, 3.5 s at 100 Mbps, 11.7 s at 30 Mbps) plus the browser's compile of the wasm module (0.5, 0.7 and 1.8 s) plus 1.1 s
+  of decompressing (0.66 s) and restoring (site-packages 0.07 s, re-link 0.36 s, copy the heap 0.03 s). A warm start has the same
+  1.1 s plus 0.02-0.08 s to read the cache and 0.06 s to start the module.
+- **The download is the cost.** 42.3 MB (43.2 MB sent by the host on the first visit, with the page), against about 25 MB of wheels
+  for the normal boot (the earlier measurement; both also download the Pyodide runtime). That is the whole of what the browser stores, too.
 - **What compressed storage cost:** an earlier version kept the decompressed files in the cache and started in 0.6 s
-  warm (1.0 s unthrottled). Keeping the 46.5 MB compressed instead of 229 MB makes every start 0.3–0.7 s slower, and the
-  first visit's download 11.5 MB smaller than the quality-5 brotli a host would send (58 MB).
+  warm (1.0 s unthrottled). Keeping the files compressed (46.5 MB then, 42.3 MB now) instead of 229 MB makes every start 0.3–0.7 s slower (measured
+  with the 46.5 MB build), and the first visit's download 10 MB smaller than the quality-5 brotli a host would send (52.3 MB,
+  measured: 28.5 MB for the heap and 23.8 MB for the bundle).
 - Only about 8 MB of the site-packages bundle is dead weight (tests 6.6 MB, type stubs 1.5 MB), so trimming it
   would not change the picture. The bulk is scipy (41 MB), matplotlib (17) and numpy (11).
 - An earlier unthrottled run against plain `vite preview` gave 2.8 s cold and 2.4 s warm for the snapshot, against
@@ -174,8 +184,9 @@ MB/s output (gzip 490, Node's native brotli 600).
   their files. Zeroing them before the snapshot is taken: **26.5 to 22.1 MB** for the heap at brotli 11 (5.8 MB at
   brotli 5). The restore reads the libraries from the filesystem, so nothing needs the buffers. **Done:**
   `zeroLibraryCopies` in `snapshot.js`, called by `make-snapshot.mjs` on every build, zeroing only a buffer that is
-  byte-identical to its file. The default (brotli 11) build with it has not been made or timed in a browser yet; the
-  snapshots the correctness checks ran on have it.
+  byte-identical to its file. The default (brotli 11) build with it, 42.3 MB, was made and timed on 2026-11-07 (the table above).
+  Recompressing the decoded heap at quality 11 with the build's parameters reproduces `heap.brotli.bin` byte for byte (22,211,148
+  bytes; at quality 5 it is 28,514,671), which is how the quality of a built file can be checked: the manifest does not record it.
 - **Stripping docstrings** (`PYTHONOPTIMIZE=2`): with the libraries zeroed, **22.1 to 19.8 MB** more at brotli 11 (34.3
   to 30.7 MB at brotli 5 without the zeroing). It also removes `assert`s from every library. **Opt-in:**
   `SNAPSHOT_STRIP_DOCS=1 npm run snapshot` (recorded as `optimize: 2` in the manifest). Checked against the corpus,
@@ -189,7 +200,8 @@ MB/s output (gzip 490, Node's native brotli 600).
 - **scipy cannot be trimmed much**: the corpus programs import 493 scipy modules, and the only subpackages never
   imported (`io`, `signal`, `cluster`, `odr`) are 4.1 MB of 40.8 MB raw.
 - The combined heap (libraries zeroed and docstrings stripped) is about 19.8 MB against 26.5 MB, so the total would
-  be about 40 MB against 46.5 MB.
+  be about 40 MB against 46.5 MB. With the zeroing now the default, the build is 42.3 MB and stripping docstrings (opt-in)
+  would take it to about 40 MB.
 
 **Tried, no gain:**
 
@@ -270,8 +282,8 @@ not on a snapshot start; the snapshot start has not been re-run with the shim. S
   file already decoded by a host, and truncated, damaged, wrongly sized and mismatched-manifest files all refused.
   14 of 14 Node tests pass (3 of them these).
 - `web/e2e/poc.spec.ts`: `?snapshot=1` starts, runs the sample program with a graph, a reload reads from the cache and
-  decompresses, and **everything in the browser's caches adds up to between 10 and 80 MB** (it is 46.5 MB; this is the
-  check that found the `.br` problem). Skipped without a snapshot. 5 of 5 pass in Chromium in 42 s.
+  decompresses, and **everything in the browser's caches adds up to between 10 and 80 MB** (about 42 MB now; this is the
+  check that found the `.br` problem). Skipped without a snapshot. 5 of 5 pass in each of the four browser profiles.
 - The test file now ends every worker it starts in an `after` hook. Before, a failing assertion skipped the
   `terminate()` at the end of its test and `npm test` hung with the worker alive.
 
@@ -325,12 +337,12 @@ browser refusing storage (`QuotaExceededError`, `SecurityError`, `NotAllowedErro
 uncached, and it is reported with the start's timings (`NOT CACHED: ...`) and in `console.warn`; any other error is thrown.
 The failure of the manifest request now says why.
 - **Browser memory** is higher: the heap image is 136 MB before anything runs, and during the start the compressed
-  files (46.5 MB) and the decompressed ones (229 MB) are in memory together for a moment. Not measured on a phone.
+  files (42.3 MB) and the decompressed ones (229 MB) are in memory together for a moment. Not measured on a phone.
 - **A patched copy of Pyodide's loader.** It is generated from the installed Pyodide file, fails loudly if the text
   changes, and needs a rebuilt snapshot on every Pyodide upgrade. This relies on internals (`loadWebAssemblyModule`,
   `LDSO`, `wasmTable`) that Pyodide may change or fix. Check upstream for native-extension snapshot support before
   each upgrade.
-- **`npm run build` copies `public/snapshot/`** (46.5 MB now) into `dist/` when it exists. The files are already
+- **`npm run build` copies `public/snapshot/`** (42.3 MB now) into `dist/` when it exists. The files are already
   compressed, so the host needs no brotli setting; it must not add a `Content-Encoding` of its own (the `.bin` names
   keep common servers from doing that).
 - The snapshot build needs the network once, for openpyxl from PyPI, and takes about 3 minutes at brotli quality 11.

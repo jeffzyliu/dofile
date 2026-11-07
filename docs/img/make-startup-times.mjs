@@ -1,16 +1,21 @@
 // Draws startup-times.svg: time until the web demo's engine is ready, normal boot vs memory snapshot, by network speed,
 // for a first visit (cold cache) and a return visit (warm cache). Run: node docs/img/make-startup-times.mjs
-// The numbers are the measurements in docs/pyodide-snapshot.md (Chromium, brotli-served, CDP-throttled); edit them there
-// and here together. Colors: the dataviz reference palette (slots 1-2, validated for light and dark), light/dark by
+// The numbers are read from startup-times.json, written by web/scripts/measure-startup.mjs (Chromium, brotli-served,
+// CDP-throttled; the median of its repetitions); the table in docs/pyodide-snapshot.md is the same data.
+// Colors: the dataviz reference palette (slots 1-2, validated for light and dark), light/dark by
 // prefers-color-scheme, on a surface of the chart's own so it stays legible on any page background.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+const data = JSON.parse(readFileSync(fileURLToPath(new URL("startup-times.json", import.meta.url)), "utf8"));
 const networks = ["Unthrottled", "100 Mbps", "30 Mbps"];
+const keys = data.networks.map(n => n.key);   // unthrottled, 100, 30: the order of `networks`
+const col = (mode, which) => keys.map(k => Number(data.results[mode][k][which].toFixed(1)));
 const panels = [
-  { title: "First visit (cold cache)", normal: [6.0, 7.2, 14.1], snapshot: [1.7, 5.8, 16.0] },
-  { title: "Return visit (warm cache)", normal: [5.3, 5.5, 9.4], snapshot: [1.3, 1.3, 1.3] },
+  { title: "First visit (cold cache)", normal: col("normal", "medianCold"), snapshot: col("snapshot", "medianCold") },
+  { title: "Return visit (warm cache)", normal: col("normal", "medianWarm"), snapshot: col("snapshot", "medianWarm") },
 ];
+const snapMB = data.snapshot.compressedMB.toFixed(1);
 const series = [{ key: "normal", name: "Normal boot (install and import)", cls: "a" }, { key: "snapshot", name: "From the snapshot", cls: "b" }];
 
 const W = 900, H = 430, M = { left: 56, right: 24, top: 118, bottom: 56 };
@@ -38,8 +43,8 @@ panels.forEach((p, pi) => {
     const band = panelW / networks.length, cx = x0 + band * ni + band / 2, left = cx - BAR - GAP / 2;
     series.forEach((s, si) => {
       const v = p[s.key][ni], x = left + si * (BAR + GAP);
-      body += `<path class="${s.cls}" d="${bar(x, v)}"><title>${esc(`${n}, ${p.title.toLowerCase()}: ${s.name} ${v} s`)}</title></path>`;
-      if (s.key === "snapshot") body += `<text class="ink" x="${x + BAR / 2}" y="${y(v) - 7}" font-size="13" font-weight="600" text-anchor="middle">${v} s</text>`;
+      body += `<path class="${s.cls}" d="${bar(x, v)}"><title>${esc(`${n}, ${p.title.toLowerCase()}: ${s.name} ${v.toFixed(1)} s`)}</title></path>`;
+      if (s.key === "snapshot") body += `<text class="ink" x="${x + BAR / 2}" y="${y(v) - 7}" font-size="13" font-weight="600" text-anchor="middle">${v.toFixed(1)} s</text>`;
     });
     body += `<text class="ink2" x="${cx}" y="${y(0) + 22}" font-size="13" text-anchor="middle">${n}</text>`;
   });
@@ -53,7 +58,7 @@ const legend = series.map((s, i) => {
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
 <title id="t">Time until the engine is ready: normal boot vs memory snapshot</title>
-<desc id="d">Grouped bars in seconds, Chromium. First visit: normal boot 6.0, 7.2 and 14.1 s at unthrottled, 100 Mbps and 30 Mbps; snapshot 1.7, 5.8 and 16.0 s. Return visit: normal boot 5.3, 5.5 and 9.4 s; snapshot 1.3, 1.3 and 1.3 s.</desc>
+<desc id="d">Grouped bars in seconds, Chromium. First visit: normal boot ${panels[0].normal.map(v => v.toFixed(1)).join(", ").replace(/, ([^,]*)$/, " and $1")} s at unthrottled, 100 Mbps and 30 Mbps; snapshot ${panels[0].snapshot.map(v => v.toFixed(1)).join(", ").replace(/, ([^,]*)$/, " and $1")} s. Return visit: normal boot ${panels[1].normal.map(v => v.toFixed(1)).join(", ").replace(/, ([^,]*)$/, " and $1")} s; snapshot ${panels[1].snapshot.map(v => v.toFixed(1)).join(", ").replace(/, ([^,]*)$/, " and $1")} s.</desc>
 <style>
   :root { --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7; --a:#2a78d6; --b:#eb6834; }
   @media (prefers-color-scheme: dark) { :root { --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781; --grid:#2c2c2a; --axis:#383835; --a:#3987e5; --b:#d95926; } }
@@ -63,7 +68,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" wid
 </style>
 <rect class="surface" width="${W}" height="${H}" rx="8"/>
 <text class="ink" x="${M.left}" y="34" font-size="18" font-weight="600">Time until the engine is ready, seconds (lower is better)</text>
-<text class="ink2" x="${M.left}" y="54" font-size="13">Web demo in Chromium; the snapshot is 46.5 MB (brotli, kept compressed in the browser), the normal boot about 25 MB of wheels</text>
+<text class="ink2" x="${M.left}" y="54" font-size="13">Web demo in Chromium; the snapshot is ${snapMB} MB (brotli 11, kept compressed in the browser), the normal boot about 25 MB of wheels</text>
 ${legend}
 ${body}
 </svg>

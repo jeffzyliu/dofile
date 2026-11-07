@@ -1,0 +1,155 @@
+{
+ "measured": "2026-11-07",
+ "browser": "Chromium 158.0.8127.18",
+ "reps": 3,
+ "networks": [
+  {
+   "key": "unthrottled",
+   "label": "Unthrottled"
+  },
+  {
+   "key": "100",
+   "label": "100 Mbps, 20 ms"
+  },
+  {
+   "key": "30",
+   "label": "30 Mbps, 50 ms"
+  }
+ ],
+ "snapshot": {
+  "built": 1794084607599,
+  "compressedMB": 42.258386
+ },
+ "results": {
+  "normal": {
+   "30": {
+    "cold": [
+     14.1,
+     14.1,
+     14
+    ],
+    "warm": [
+     9.3,
+     9.3,
+     9.3
+    ],
+    "coldBytesFromHost": 2991793,
+    "coldNotes": [],
+    "warmNotes": [],
+    "medianCold": 14.1,
+    "medianWarm": 9.3
+   },
+   "100": {
+    "cold": [
+     7.1,
+     7.1,
+     7.1
+    ],
+    "warm": [
+     5.5,
+     5.4,
+     5.4
+    ],
+    "coldBytesFromHost": 2991793,
+    "coldNotes": [],
+    "warmNotes": [],
+    "medianCold": 7.1,
+    "medianWarm": 5.4
+   },
+   "unthrottled": {
+    "cold": [
+     6.1,
+     5.8,
+     5.8
+    ],
+    "warm": [
+     4.5,
+     4.6,
+     4.6
+    ],
+    "coldBytesFromHost": 2991793,
+    "coldNotes": [],
+    "warmNotes": [],
+    "medianCold": 5.8,
+    "medianWarm": 4.6
+   }
+  },
+  "snapshot": {
+   "30": {
+    "cold": [
+     14.6,
+     14.6,
+     14.6
+    ],
+    "warm": [
+     1.3,
+     1.3,
+     1.3
+    ],
+    "coldBytesFromHost": 43209714,
+    "coldNotes": [
+     "download 11.65s, decompress 0.67s, start the wasm module 1.75s, write site-packages 0.07s, re-link 136 libraries 0.37s, copy the heap 0.03s, total 14.54s",
+     "download 11.64s, decompress 0.66s, start the wasm module 1.75s, write site-packages 0.07s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 14.51s",
+     "download 11.65s, decompress 0.66s, start the wasm module 1.74s, write site-packages 0.07s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 14.51s"
+    ],
+    "warmNotes": [
+     "read from cache 0.08s, decompress 0.65s, start the wasm module 0.06s, write site-packages 0.06s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.24s",
+     "read from cache 0.08s, decompress 0.66s, start the wasm module 0.06s, write site-packages 0.06s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.25s",
+     "read from cache 0.08s, decompress 0.69s, start the wasm module 0.06s, write site-packages 0.06s, re-link 136 libraries 0.38s, copy the heap 0.03s, total 1.30s"
+    ],
+    "medianCold": 14.6,
+    "medianWarm": 1.3
+   },
+   "100": {
+    "cold": [
+     5.4,
+     5.4,
+     5.3
+    ],
+    "warm": [
+     1.2,
+     1.3,
+     1.2
+    ],
+    "coldBytesFromHost": 43209714,
+    "coldNotes": [
+     "download 3.53s, decompress 0.68s, start the wasm module 0.66s, write site-packages 0.07s, re-link 136 libraries 0.38s, copy the heap 0.03s, total 5.35s",
+     "download 3.52s, decompress 0.67s, start the wasm module 0.70s, write site-packages 0.08s, re-link 136 libraries 0.37s, copy the heap 0.04s, total 5.37s",
+     "download 3.52s, decompress 0.65s, start the wasm module 0.64s, write site-packages 0.06s, re-link 136 libraries 0.37s, copy the heap 0.03s, total 5.28s"
+    ],
+    "warmNotes": [
+     "read from cache 0.05s, decompress 0.66s, start the wasm module 0.05s, write site-packages 0.06s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.22s",
+     "read from cache 0.05s, decompress 0.70s, start the wasm module 0.06s, write site-packages 0.06s, re-link 136 libraries 0.37s, copy the heap 0.03s, total 1.27s",
+     "read from cache 0.05s, decompress 0.66s, start the wasm module 0.06s, write site-packages 0.06s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.21s"
+    ],
+    "medianCold": 5.4,
+    "medianWarm": 1.2
+   },
+   "unthrottled": {
+    "cold": [
+     1.7,
+     1.7,
+     1.7
+    ],
+    "warm": [
+     1.2,
+     1.2,
+     1.2
+    ],
+    "coldBytesFromHost": 43209714,
+    "coldNotes": [
+     "download 0.08s, decompress 0.64s, start the wasm module 0.53s, write site-packages 0.07s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.71s",
+     "download 0.06s, decompress 0.67s, start the wasm module 0.51s, write site-packages 0.07s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.69s",
+     "download 0.06s, decompress 0.65s, start the wasm module 0.44s, write site-packages 0.08s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.63s"
+    ],
+    "warmNotes": [
+     "read from cache 0.02s, decompress 0.65s, start the wasm module 0.05s, write site-packages 0.06s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.18s",
+     "read from cache 0.02s, decompress 0.67s, start the wasm module 0.06s, write site-packages 0.06s, re-link 136 libraries 0.36s, copy the heap 0.03s, total 1.20s",
+     "read from cache 0.02s, decompress 0.66s, start the wasm module 0.06s, write site-packages 0.06s, re-link 136 libraries 0.35s, copy the heap 0.03s, total 1.18s"
+    ],
+    "medianCold": 1.7,
+    "medianWarm": 1.2
+   }
+  }
+ }
+}
