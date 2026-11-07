@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
-import { inflate, unpack } from "../src/engine/snapshot.js";
+import { inflate, isStorageRefusal, unpack } from "../src/engine/snapshot.js";
 
 const brotli = createRequire(import.meta.url)("brotli-wasm");
 const compress = (data, quality = 5) => new Uint8Array(zlib.brotliCompressSync(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality } }));
@@ -35,4 +35,11 @@ test("unpack decodes a file, passes through one a host already decoded, and chec
   const decoded = new Uint8Array(data);
   assert.equal(unpack(brotli, decoded, file), decoded, "bytes of the raw length are used as they are");
   assert.throws(() => unpack(brotli, packed.subarray(0, 100), file), /manifest says .*npm run snapshot/);
+});
+
+test("only the browser refusing storage is carried on from; every other cache error is a bug and is not swallowed", () => {
+  const named = (name, msg = "x") => Object.assign(new Error(msg), { name });
+  for (const name of ["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI"]) assert.equal(isStorageRefusal(named(name)), true, name);
+  for (const e of [new TypeError("Request scheme 'blob' is unsupported"), named("InvalidStateError"), named("AbortError"), new Error("boom"), undefined, null, "QuotaExceededError"])
+    assert.equal(isStorageRefusal(e), false, String(e?.name ?? e));
 });

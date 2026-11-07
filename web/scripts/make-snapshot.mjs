@@ -29,7 +29,7 @@ const lap = what => console.log(`${((performance.now() - t0) / 1000).toFixed(1).
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 const patched = `${OUT}pyodide.asm.patched.mjs`;
-writeFileSync(patched, patchAsm(readFileSync(new URL("pyodide.asm.mjs", pyodideDir), "utf8")));
+writeFileSync(patched, patchAsm(readFileSync(new URL("pyodide.asm.mjs", pyodideDir), "utf8"), { noTrampoline: process.env.SNAPSHOT_TRAMPOLINE !== "1" }));
 const create = (await import(patched)).default;
 
 const py = await loadPyodide({ ...makeOptions(create), ...(stripDocs ? { env: { PYTHONOPTIMIZE: "2" } } : {}) });

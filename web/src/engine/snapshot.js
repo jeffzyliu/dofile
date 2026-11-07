@@ -30,13 +30,27 @@ const SKIPS = [
 ];
 
 // pyodide.asm.mjs's text -> the same with the library log and the re-link. Throws if Pyodide's loader looks different.
-export function patchAsm(src) {
-  for (const [from, to] of [[ALLOC, ALLOC_PATCHED], ...SKIPS]) {
+export function patchAsm(src, { noTrampoline = false } = {}) {
+  for (const [from, to] of [[ALLOC, ALLOC_PATCHED], ...SKIPS, ...(noTrampoline ? [NO_TRAMPOLINE] : [])]) {
     if (!src.includes(from)) throw new Error("pyodide.asm.mjs is not the version the snapshot patch was written for");
     src = src.replace(from, to);
   }
   return src;
 }
+
+// Pyodide writes the pointer of a WebAssembly trampoline function into the Python runtime (in the heap) at start, except on
+// iOS, where it writes 0 and creates no function (getPyEMTrampolinePtr tests the user agent). A snapshot restores the heap
+// of the machine that made it, so a snapshot made with the trampoline fails on an iPhone with "call_indirect to a signature
+// that does not match" (checked: only the user agent matters). This makes the loader behave as on iOS everywhere, so the
+// pointer in the heap is always 0 and one snapshot starts in every browser. The default of make-snapshot.mjs;
+// SNAPSHOT_TRAMPOLINE=1 keeps Pyodide's own choice (a snapshot that then fails on iOS). The build and the restore use the
+// same patched loader file.
+const NO_TRAMPOLINE = ["let isIOS=globalThis.navigator&&(", "let isIOS=true||globalThis.navigator&&("];
+
+// The errors that mean the browser will not give us storage: full, blocked, private mode, or no Cache API at all. The
+// engine can start without the cache, and says so. Any other error from the Cache API is a bug and is not swallowed.
+const STORAGE_REFUSALS = new Set(["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI"]);
+export const isStorageRefusal = e => STORAGE_REFUSALS.has(e?.name);
 
 // loadPyodide options that go with a snapshot being made: two JS objects are still held (a fetch Response and its
 // arrayBuffer method, left by micropip's download of openpyxl), and nothing uses them again, so they are stored as null
