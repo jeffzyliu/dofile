@@ -597,10 +597,11 @@ in a fresh `Engine`, after numpy, scipy and `dofile.engine` were loaded. Not yet
 
 The graphics shares are the brotli 5 figures above scaled by the 0.77 (heap) and 0.84 (files) ratios measured between
 brotli 5 and 11. A visitor who plots downloads about 40.6 MB in all, about the same as eager. The gain is about 9.7 MB
-less before "ready". Timing guesses: warm start about 1.1 s instead of 1.3 s (21% fewer bytes to decompress); the first
-plot after a warm start about 0.4 s with `.pyc` (0.29 s plus writing the files) or about 1.0 s without; a cold start
-about 0.8 s faster at 100 Mbps and about 2.6 s faster at 30 Mbps, which would bring the snapshot at 30 Mbps from 16.0 s
-to about 13.4 s, just ahead of the regular boot's 14.1 s.
+less before "ready". Timing guesses: warm start about 1.05 s instead of 1.2 s (21% fewer bytes to decompress, of the 0.66 s measured on
+2026-11-07); the first plot after a warm start about 0.4 s with `.pyc` (0.29 s plus writing the files) or about 1.0 s without;
+a cold start about 0.8 s faster at 100 Mbps and about 2.6 s faster at 30 Mbps, which would bring the snapshot at 30 Mbps from
+14.6 s (measured 2026-11-07 with the 42.3 MB build; the guess was first made from 16.0 s with the 46.5 MB one) to about 12.0 s,
+ahead of the regular boot's 14.1 s.
 
 **Regular flow.**
 - **(a) Import matplotlib in the background once the engine is ready.** It moves the 0.9 s off the click and changes no
