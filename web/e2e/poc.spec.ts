@@ -1,7 +1,9 @@
 // Phase 2 step 4: the proof-of-concept page in a real browser. What Node can't check: cross-origin isolation, Break
 // through the real interrupt buffer, files kept in IndexedDB across a reload and a new engine, load times.
 import { test, expect, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const data = new URL("../../tests/conformance/data/", import.meta.url);
 const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
@@ -180,9 +182,18 @@ test("Save writes the file; Discard opens the other file", async ({ page }) => {
 
 // ?snapshot=1 starts from the Pyodide memory snapshot `npm run snapshot` builds (public/snapshot/, copied by the build).
 // Skipped when there is none. A second visit reads it from the Cache API instead of downloading it again.
-test("?snapshot=1: starts from the memory snapshot, runs native code and a graph, and caches it", async ({ page, request }) => {
+test("?snapshot=1: starts from the memory snapshot, runs native code and a graph, and caches it", async ({ playwright, browserName, request }, testInfo) => {
   const manifest = await request.get("/snapshot/manifest.json");
   test.skip(!(manifest.ok() && (manifest.headers()["content-type"] ?? "").includes("json")), "no snapshot: run npm run snapshot, then npm run build");
+  // A persistent profile on disk, as a real browser has. Playwright's default context keeps storage in memory, and WebKit
+  // drops the whole Cache API when such a page is reloaded (a 1 KB entry too; entries survive a reload in a persistent
+  // profile), so "read from cache" below could never hold there.
+  const dir = mkdtempSync(join(tmpdir(), "dofile-e2e-"));
+  const u = testInfo.project.use;
+  const context = await playwright[browserName].launchPersistentContext(dir, {
+    baseURL: u.baseURL, userAgent: u.userAgent, viewport: u.viewport, deviceScaleFactor: u.deviceScaleFactor, isMobile: u.isMobile, hasTouch: u.hasTouch });
+  try {
+  const page = await context.newPage();
   const notes: string[] = [];
   page.on("console", m => { if (m.text().includes("[dofile] snapshot start")) notes.push(m.text()); });
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
@@ -199,6 +210,7 @@ test("?snapshot=1: starts from the memory snapshot, runs native code and a graph
   await expect.poll(() => notes.length).toBe(2);
   expect(notes.at(-1)).toContain("read from cache");
   expect(notes.at(-1)).toContain("decompress");
+  expect(notes.join("\n")).not.toContain("NOT CACHED");   // the browser took the files; a refusal would be said here
 
   // what the browser keeps is the compressed files (about 46 MB), not the 229 MB they decompress to
   const stored = await page.evaluate(async () => {
@@ -211,4 +223,8 @@ test("?snapshot=1: starts from the memory snapshot, runs native code and a graph
   });
   expect(stored).toBeGreaterThan(10e6);
   expect(stored).toBeLessThan(80e6);
+  } finally {
+    await context.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

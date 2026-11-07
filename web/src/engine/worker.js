@@ -3,7 +3,7 @@
 // Protocol: the page posts {id, op, args}; the worker answers {id, result} or {id, error}, one op at a time, and
 // posts {status} lines while it starts. client.js is the page's side. Python's side: src/dofile/browser.py.
 import { loadPyodide } from "pyodide";
-import { restoreOptions, unpack } from "./snapshot.js";
+import { isStorageRefusal, restoreOptions, unpack } from "./snapshot.js";
 
 const ROOT = "/work";
 let py, browser, interrupt = null, fromSnapshot = false;
@@ -48,29 +48,33 @@ booted.catch(() => {});   // the error reaches the page through boot's own answe
 
 // The files of a snapshot (scripts/make-snapshot.mjs) at `base`, an http(s) or file: URL ending in "/". The patched
 // pyodide.asm.mjs is imported from there too: Pyodide's own loader has no hook for linking libraries again.
-// `cache`: a Cache the bytes are kept in (the browser's HTTP cache doesn't reliably keep files this big), or undefined.
-async function fetchBytes(url, cache) {
+// `store`: { cache, refused } or undefined. `cache` is a Cache the bytes are kept in (the browser's HTTP cache doesn't
+// reliably keep files this big); `refused(error)` is told when the browser would not take them: it returns for a refusal
+// of storage (the engine then starts uncached, and says so) and throws for anything else.
+async function fetchBytes(url, store) {
   if (url.startsWith("file:")) {
     const fsName = "node:fs/promises";   // Node only (the tests); a variable so the bundler leaves it alone
     return new Uint8Array(await (await import(/* @vite-ignore */ fsName)).readFile(new URL(url)));
   }
-  const hit = await cache?.match(url);
+  const hit = await store?.cache.match(url);
   if (hit) return new Uint8Array(await hit.arrayBuffer());
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
-  await cache?.put(url, new Response(bytes)).catch(() => {});   // over the storage quota: carry on uncached
+  if (store) {
+    try { await store.cache.put(url, new Response(bytes)); } catch (e) { store.refused(e, url); }
+  }
   return bytes;
 }
-const fetchJSON = async (url, cache) => JSON.parse(new TextDecoder().decode(await fetchBytes(url, cache)));
+const fetchJSON = async (url, store) => JSON.parse(new TextDecoder().decode(await fetchBytes(url, store)));
 
 // A cache holding one build of the snapshot: a rebuild has a new `built` in its manifest, and the old build is dropped.
-async function snapshotCache(built) {
-  if (typeof caches === "undefined") return undefined;
+async function snapshotCache(built, refused) {
+  if (typeof caches === "undefined") { refused(Object.assign(new Error("there is no Cache API here (not a secure context?)"), { name: "NoCacheAPI" })); return undefined; }
   try {
     for (const name of await caches.keys()) if (name.startsWith("dofile-snapshot-") && name !== `dofile-snapshot-${built}`) await caches.delete(name);
     return await caches.open(`dofile-snapshot-${built}`);
-  } catch { return undefined; }   // Cache API refused (private mode, no secure context)
+  } catch (e) { refused(e); return undefined; }   // a refusal (private mode, blocked storage) is reported; anything else is thrown
 }
 
 // The brotli-wasm decoder. In a browser it loads its wasm from the page's own files; in Node (the tests) the package's
@@ -87,24 +91,32 @@ async function loadFromSnapshot(base, indexURL, wheelName, io) {
   const t0 = performance.now();
   let last = t0;
   const laps = [];
+  const notCached = [];   // why the browser kept nothing, if it would not (reported with the timings, and in the console)
+  const isFile = base.startsWith("file:");   // Node, the tests: no Cache API by design
+  const refused = (e, url) => {
+    if (!isStorageRefusal(e)) throw e;   // not the browser saying no: a bug, shown as the start's error
+    const why = `${e.name + ": "}${e.message}${url ? ` (${url.split("/").pop()})` : ""}`;
+    if (!isFile) { notCached.push(why); console.warn(`[dofile] snapshot not cached: ${why}`); }
+  };
   const lap = what => { const t = performance.now(); laps.push(`${what} ${((t - last) / 1000).toFixed(2)}s`); last = t; };
   // the manifest is the one file that must be fresh: it says which build the cached files belong to
   const manifest = await (base.startsWith("file:") ? fetchJSON(`${base}manifest.json`)
     : fetch(`${base}manifest.json`, { cache: "no-cache" }).then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-  ).catch(() => {
-    throw new Error(`no snapshot at ${base}: run \`npm run snapshot\` in web/`);
+  ).catch(e => {
+    throw new Error(`no snapshot at ${base}: run \`npm run snapshot\` in web/ (${e?.message ?? e})`);
   });
   if (manifest.wheel !== wheelName) {
     throw new Error(`the snapshot is for ${manifest.wheel} but the page has ${wheelName}: run \`npm run snapshot\` again`);
   }
   if (!manifest.files) throw new Error("the snapshot is in an older format: run `npm run snapshot` again");
   const { snapshot: snapFile, bundle: bundleFile } = manifest.files;
-  const cache = await snapshotCache(manifest.built);
+  const cache = isFile ? undefined : await snapshotCache(manifest.built, refused);
+  const store = cache && { cache, refused };
   const hadCache = Boolean(cache) && Boolean(await cache.match(`${base}${snapFile.name}`));
   // The two big files are kept in the cache as they were sent, compressed (46 MB, not 229), and decompressed here.
   const [snapPacked, dso, index, bundlePacked, { default: create }, brotli] = await Promise.all([
-    fetchBytes(`${base}${snapFile.name}`, cache), fetchJSON(`${base}dso.json`, cache), fetchJSON(`${base}files.json`, cache),
-    fetchBytes(`${base}${bundleFile.name}`, cache), import(/* @vite-ignore */ `${base}pyodide.asm.patched.mjs?v=${manifest.built}`),
+    fetchBytes(`${base}${snapFile.name}`, store), fetchJSON(`${base}dso.json`, store), fetchJSON(`${base}files.json`, store),
+    fetchBytes(`${base}${bundleFile.name}`, store), import(/* @vite-ignore */ `${base}pyodide.asm.patched.mjs?v=${manifest.built}`),
     loadBrotli(),
   ]);
   lap(hadCache ? "read from cache" : "download");
@@ -114,7 +126,8 @@ async function loadFromSnapshot(base, indexURL, wheelName, io) {
   const options = restoreOptions(create, { snapshot, dso, index, blob }, lap);
   const loaded = await loadPyodide({ indexURL, ...options, ...io });
   lap("copy the heap");
-  console.info(`[dofile] snapshot start: ${laps.join(", ")}, total ${((performance.now() - t0) / 1000).toFixed(2)}s`);
+  console.info(`[dofile] snapshot start: ${laps.join(", ")}, total ${((performance.now() - t0) / 1000).toFixed(2)}s` +
+    (notCached.length ? `, NOT CACHED: ${[...new Set(notCached)].join("; ")}` : ""));
   return loaded;
 }
 
