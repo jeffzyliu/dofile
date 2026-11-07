@@ -277,10 +277,25 @@ not on a snapshot start; the snapshot start has not been re-run with the shim. S
 
 ## Not done, and risks
 
-- **Not checked:** Firefox, WebKit and the iPhone profile; Break in the browser with a snapshot (it is tested in
-  Node); files restored from IndexedDB with a snapshot start (the mount is the same code, but the e2e does not exercise
-  it). The conformance corpus and the Stata 14 cases have been run on a snapshot-started engine, in Node; see
-  [Correctness checks](#correctness-checks).
+- **Browsers, checked 2026-11-07** (`npm run e2e`, the `?snapshot=1` test, on a snapshot built at brotli quality 5 for the
+  current wheel; Playwright's Chromium, Firefox, WebKit and iPhone 15 profile). The page without the snapshot passes all five
+  e2e tests in all four. With `?snapshot=1`:
+  - **Chromium and Firefox pass.**
+  - **WebKit starts from the snapshot** ("ready in 1.6 s (snapshot)"; restore 1.56 s) **but a reload downloads the files
+    again** instead of reading them from the cache (the test expects "read from cache" and gets "download 0.04s"). So in
+    WebKit the Cache API did not keep the 52 MB across a reload in this test; why is not known (a Playwright WebKit
+    context? a storage limit? the size?). Nothing is wrong with the engine; a return visit would be slower.
+  - **The iPhone profile does not start from the snapshot**: the status line reads "the engine did not start:
+    call_indirect to a signature that does not match (evaluating 'Module._init_pyodide_proxy()')" (and a page error
+    "undefined is not an object (evaluating 'H.FS')" in the log). The profile is the same WebKit with a phone viewport, and
+    desktop WebKit starts, so the difference is not the engine build; not investigated. The mismatch is the kind a
+    re-link at the wrong table address would give. This has not been compared with an older snapshot or commit, so it may
+    not be new; the snapshot loader was not changed in this work.
+  - **Not checked:** a real phone; Break in the browser with a snapshot (it is tested in Node); files restored from
+    IndexedDB with a snapshot start (the mount is the same code, but the e2e does not exercise it).
+  The conformance corpus and the Stata 14 cases have been run on a snapshot-started engine, in Node, with the
+  `numpy.linalg` shim, on 2026-11-07: 63 corpus checks, 12 probes and 13 native-library calls clean, 95 of 97 cases pass in
+  151 s (the same two package-gap failures as on a normal boot); see [Correctness checks](#correctness-checks).
 - **Browser memory** is higher: the heap image is 136 MB before anything runs, and during the start the compressed
   files (46.5 MB) and the decompressed ones (229 MB) are in memory together for a moment. Not measured on a phone.
 - **A patched copy of Pyodide's loader.** It is generated from the installed Pyodide file, fails loudly if the text
@@ -299,7 +314,7 @@ not on a snapshot start; the snapshot start has not been re-run with the shim. S
 Keep it opt-in for now. It is a clear win for return visitors and fast connections, and a loss for a first visit
 on a slow one. Ways to improve the first visit, in order of effort:
 
-1. Check Firefox and WebKit, then decide whether to make it the default with a fallback to the normal boot.
+1. Fix the two WebKit findings above (a reload that does not use the cache; the iPhone profile's `call_indirect` error), then decide whether to make it the default with a fallback to the normal boot. Firefox and Chromium pass.
 2. Zero the library copies in the heap before the snapshot (4.4 MB less, measured, and nothing reads them), and test
    stripped docstrings against the corpus (2.3 MB more). See "Making the files smaller".
 3. Load matplotlib and its dependencies on the first graph instead of in the snapshot (about 12 MB less for a first
