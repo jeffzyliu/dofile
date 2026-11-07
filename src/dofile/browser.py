@@ -13,7 +13,7 @@ import base64
 import json
 import signal
 
-from . import pathshim, sandbox
+from . import linalgshim, pathshim, sandbox
 from .engine import Engine, about, clear_break, matrix_sizes, request_break
 
 DENIED = ("shell", "webuse")   # no programs and no network in a browser; file commands only touch the page's own files
@@ -30,6 +30,7 @@ def _on_interrupt(signum, frame) -> None:
 def start(root: str = "/work") -> str:
     """Set up the engine in `root` (once per worker). Returns the versions as JSON."""
     global _eng
+    linalgshim.install()   # numpy.linalg in WebAssembly returns NaN instead of raising LinAlgError (before any fit)
     sandbox.deny_commands(DENIED)
     _eng = Engine(root)   # console hints on: a person reads this log
     pathshim.install(root, lambda m: _eng.session.output.write(m + "\n", "text"))
