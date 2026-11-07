@@ -174,7 +174,7 @@ def cmd_stsplit(s: "Session", args: str) -> None:
         cuts = [ref[i] + at for i in rows]
     parent, a, b, last = SV.split_pieces(t0_all[rows], t_all[rows], cuts)
     parent_row = rows[parent]
-    reps = np.ones(n, dtype=np.int64)
+    reps = np.ones(n, dtype=np.intp)   # dofile PATCH-4: np.repeat wants intp
     reps[rows] = np.bincount(parent, minlength=len(rows))
     created = int(len(parent) - len(rows))
     # -- the new values of the pieces
