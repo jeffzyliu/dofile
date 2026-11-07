@@ -7,6 +7,8 @@
     "wheel": "cd .. && uv build --wheel -q",
     "snapshot": "npm run wheel && node scripts/make-snapshot.mjs",
     "check-snapshot": "node scripts/check-snapshot.mjs",
+    "check-pytest": "npm run wheel && node scripts/check-pytest.mjs",
+    "check-numeric": "npm run wheel && node scripts/check-numeric.mjs",
     "dev": "npm run wheel && vite",
     "build": "npm run wheel && vite build",
     "preview": "vite preview",

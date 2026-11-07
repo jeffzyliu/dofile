@@ -308,7 +308,58 @@ check-snapshot`; details in [pyodide-snapshot.md](pyodide-snapshot.md#correctnes
 (63 value checks against `ref.json`, 12 probes including graphs), 13 calls into the native libraries, and the 98
 Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compare.py` and its known-difference rules.
 
-**Passing, in the normal boot and in the snapshot start alike:** all 63 corpus checks, all 12 probes (graphs come out as
+**Update, 2026-11-07, after PATCH-4 and the `numpy.linalg` shim:** the whole comparison was run again in Pyodide on a
+normal boot (`check-snapshot --normal`, one process per case, 600 s limit, four at a time): **95 of 97 cases pass in 200 s,
+none timed out or crashed**, and the corpus (63 checks), the 12 probes and the 13 native-library calls are clean. The two
+that differ are the two package gaps below (1701_datamgmt_options: `xlwt`; 1911_datamgmt: `pyreadstat`). The count is 97,
+not 98, because `1920_models4` has a `.do` file and no Stata reference log, so neither this check nor
+`tests/test_stata_compat.py` runs it (the first run listed it among 7 unfinished cases; that list is therefore also
+doubtful for the other 6, which have now run and pass). The tables below describe the state before the two fixes; the
+snapshot start has not been run again with the shim.
+
+**The unit tests in Pyodide, 2026-11-07** (`npm run check-pytest`, `web/scripts/check-pytest.mjs`; compared with CPython test
+by test by `compare-pytest.mjs`, both through the same plugin `pytest_report.py`; one process per file, 72 files,
+128 s): OpenDTA's own suite (`tests_opendta/tests`) and `tests/test_engine.py`, 1080 tests. CPython: 1067 passed, 13
+skipped. Pyodide: 1048 passed, 31 skipped, 1 failed. **Of the 19 tests that differ, none is an engine problem:** 16 skip
+for lack of `pyreadstat`, 1 for `xlwt` and 1 for `xlrd` (the `.xls` reader, also missing in Pyodide, pure Python like
+`xlwt`), and 1 fails because `shell` cannot start a process in the browser (the page denies `shell` anyway). All other
+1,061 tests have the same outcome on both. Not run in Pyodide because they need subprocesses, the `mcp` package or the
+repo's source tree: `test_mcp`, `test_worker`, `test_sandbox`, `test_break`, `test_dofile_cli`, `test_vendor`,
+`test_log_cut`, `test_pathshim` (its browser side is `web/test/engine.test.mjs`), `test_browser`, `test_linalgshim`
+(`web/test/linalgshim.test.mjs`), `test_conformance` and `test_stata_compat` (those two are `check-snapshot`). The slowest
+tests take 1.5-2.4 times as long as on CPython. What this does not show: the unit tests only reach what they assert on,
+so a silent numeric difference in code they do not check would not appear; the two bugs found today were both visible only
+as a timeout or an exception.
+
+**Numbers, CPython against Pyodide, 2026-11-07** (`npm run check-numeric`; `web/scripts/numeric_probe.py` records e() and r()
+after every command that changes them, at full double precision, for all 98 Stata 14 programs; `compare_numeric.py` diffs
+the two runs; CPython here is macOS, arm64, so "CPython" is one libm and LAPACK, not all of them):
+- **109,265 numbers.** 47.3% are bit-identical, 84.6% agree to 1e-12, 92.4% to 1e-9, 97.8% to 1e-6. Matrix cells are measured
+  against the matrix's largest entry, so a covariance entry of 1e-11 is judged against the entries of 1.
+- **Noise around exact zero** makes up much of the rest: `e(gradient)` at convergence (about 1e-9, with the sign flipped,
+  1028 cells), means of residuals (about 1e-10), `Psi`, `srmr`, `Jacobian` entries. Not a difference in any result.
+- **Random numbers.** `runiform` and the integer generators (`rbinomial`, `rpoisson`, `rnbinomial`) are bit-identical. Anything
+  that goes through a math library differs in the last bits: `rnormal` and `invnormal` in 16% of draws by up to 4 ulp,
+  `normal` 14 ulp, `chi2` 35, `invchi2` 62, `invttail` 82, `lngamma` up to 4096 (4.6e-13 relative). So simulated data is
+  not bit-identical (`datasignature` differs in 1902 and 1916), and everything downstream starts 1e-16 apart. Another
+  libm (CPython on Linux) would probably differ from macOS too; not checked.
+- **Estimates.** Of 1110 estimation results, `e(b)` agrees to 1e-9 in 1056 (95.1%), to 1e-6 in 1091 (98.3%), to 1e-3 in
+  1104 (99.5%). The 6 above 1e-3: **1901 `streg`, 1907 `tnbreg`, `zinb`, 1905 `xtfrontier`** have the same log likelihood to
+  8 or more digits and different parameters (some parameters sit at a boundary: `theta` about 1e-9, `alpha` about 1e-8),
+  which fits a flat likelihood; **1907 `gnbreg`** converged in 7 iterations on CPython and did not converge in 300 on
+  Pyodide, whose log likelihood is higher (-878.294 against -878.310); **1908 `asmprobit`** (a simulated likelihood:
+  82 against 104 iterations, ll -278.540 against -278.381, Pyodide higher). The 13 between 1e-6 and 1e-3 include
+  `0602_svy_ampliado` `nbreg` (ll differs by 0.005 of 30,565, and 4 against 2 iterations: the stopping rule is relative to
+  the log likelihood, so it ends within about 3e-3 of the optimum on either platform).
+- **Logs.** 823 lines differ only in a printed digit. Lines that differ in their text are confined to 1907_models,
+  1905_panel and 1901_survival (the cases above, iteration paths of fits that went another way) and to the two package-gap
+  cases. `tech_steps` of `arfima` in 1904: 4 against 1.
+- **What this shows and does not.** Same answers to the digits printed, except in fits where the answer is not pinned down
+  by the data or the stopping rule, which can land elsewhere on either platform. It does not say which platform is closer
+  to Stata in those cases; that needs the Stata 14 logs, and these cases pass under their known-difference rules. The
+  `gnbreg` non-convergence (300 iterations) has not been looked into.
+
+**Before the two fixes, passing, in the normal boot and in the snapshot start alike:** all 63 corpus checks, all 12 probes (graphs come out as
 PNGs), all 13 native-library calls. Of the 98 Stata 14 cases, **91 were run, 75 pass and 16 fail, and 7 were not run**: the
 two runs were stopped after about 35 minutes with those 7 (`1904_timeseries`, `1910_programming`, `1914_panel`,
 `1915_timeseries`, `1919_other_suites2`, `1920_models4`, `1921_graphics_look`) still going. The two starts agree on every
@@ -316,10 +367,10 @@ one of the 91, so none of the 16 comes from the snapshot or from the stripped do
 
 | Gap | Cases | Cause | What to do |
 |---|---|---|---|
-| **`expand` and `stsplit` fail** | 11: 0304_collapse, 1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology, 1801_programming, 1901_survival, 1902_multilevel, 1908_models2, 1909_other_suites, 1916_multilevel | `np.repeat` gets an int64 counts array and numpy's index type is int32 in WebAssembly (ODT-29 in [opendta-issues.md](opendta-issues.md)) | patch the two call sites (not done); then run the 11 again, since each stops at its first `expand` and the rest of the case has never been compared |
+| **`expand` and `stsplit` fail** | 11: 0304_collapse, 1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology, 1801_programming, 1901_survival, 1902_multilevel, 1908_models2, 1909_other_suites, 1916_multilevel | `np.repeat` gets an int64 counts array and numpy's index type is int32 in WebAssembly (PATCH-4 in [opendta-issues.md](opendta-issues.md)) | **fixed 2026-11-07**: two call sites patched (PATCH-4; no other int64 site fails, checked there). All 11 now pass in Pyodide, 5 with PATCH-4 alone and the other 6 (1001, 1601, 1901, 1902, 1908, 1916) once the `numpy.linalg` shim below was also in: with PATCH-4 only, those 6 passed `expand` and then hit the 600 s limit |
 | `.xls` output | 1 (1701_datamgmt_options) | `putexcel` and `export excel` to `.xls` need `xlwt`, which Pyodide does not have; the log says `writing .xls files requires the xlwt package`, and a later `import excel` of that file says `file ... not found`. `xlwt` is pure Python, so it could be installed with micropip. It is also only a dev dependency of dofile, so a `pip install dofile` user hits the same message | decide: add `xlwt` to the page's install, or document that `.xls` is not supported in the browser |
 | SAS transport files and Stata 12 `.dta` | 1 (1911_datamgmt) | `export sasxport`, `import sasxport` and old `.dta` files need `pyreadstat`, a C extension with no WebAssembly build (`this file format requires the pyreadstat package`) | document as a limit of the web demo |
-| Numeric known differences | 3: 0408_mata_moptimize, 1907_models, 1918_models3 | these cases are accepted on CPython by known-difference rules (iteration paths ignored, tolerances 1e-8, 1e-5 and 3e-4); in Pyodide they leave a difference beyond the rule. The raw diffs show close values (`.9002714` against `.9002712`) and different iteration paths. **They are also the three cases that run 20–500 times slower than on CPython**, so the cause is probably shared: see [Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide). After the known-difference filters the Pyodide log has **more lines** than Stata's: 8 more in 1907, 1 more in 1918 and 1 more in 0408, where the extra line is `convergence not achieved` | the investigation below; then widen the browser's tolerance or leave them as known |
+| Numeric known differences | 3: 0408_mata_moptimize, 1907_models, 1918_models3 | these cases are accepted on CPython by known-difference rules (iteration paths ignored, tolerances 1e-8, 1e-5 and 3e-4); in Pyodide they leave a difference beyond the rule. The raw diffs show close values (`.9002714` against `.9002712`) and different iteration paths. **They are also the three cases that run 20–500 times slower than on CPython**, so the cause is probably shared: see [Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide). After the known-difference filters the Pyodide log has **more lines** than Stata's: 8 more in 1907, 1 more in 1918 and 1 more in 0408, where the extra line is `convergence not achieved` | **fixed 2026-11-07** by the `numpy.linalg` shim ([Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide)): all three pass in Pyodide, in 2.1 s (0408, was 204–220 s), 7.5 s (1907, was 25 s) and 4.2 s (1918, was 17 s), and match Stata under the same known-difference rules as CPython. No tolerance change was needed |
 
 Nothing here is new engine behaviour that the snapshot introduced. The snapshot check did find one bug of the snapshot's
 own, fixed on 2026-11-07: after a restore, `scipy.linalg.solve` crashed with `cannot resolve symbol dsytrf_`
@@ -327,7 +378,64 @@ own, fixed on 2026-11-07: after a restore, `scipy.linalg.solve` crashed with `ca
 
 ### Open investigation: model fits take far longer in Pyodide
 
-Status: **found 2026-11-07, cause not known, not investigated further.** Recorded so it is picked up next time.
+Status: **cause found and fixed 2026-11-07** (`src/dofile/linalgshim.py`, installed by `browser.start()`; results at the end of this section). Everything below this paragraph was written before the cause was
+known; the sections "Not known" and "How to pick it up" are superseded by this paragraph.
+
+**Cause: `np.linalg.cholesky`, `inv` and `solve` do not raise `LinAlgError` in Pyodide's numpy (2.4.6); they return
+NaN.** Checked on `[[1,2],[2,4]]` (singular) and on `-I` (not positive definite): CPython raises `LinAlgError` for
+`inv`, `solve` and `cholesky`; Pyodide returns NaN arrays without an error. `scipy.linalg.cholesky`, `inv`, `solve` and
+`cho_factor` raise correctly in both. (Probable reason, not checked: numpy's gufuncs report these failures through the
+floating-point "invalid" status flag, which WebAssembly has no way to set or read.) The engine has 95 `LinAlgError`
+references in 46 files and about 170 `np.linalg.inv`, 121 `solve` and 43 `cholesky` calls, so every fallback that
+depends on that exception is dead in the browser, silently.
+- **How it was found** (case `1001_mixed`: 0.3 s on CPython, killed at 600 s in Pyodide). The slow command is
+  `mixed y week x || id: week, covariance(unstructured)`: 246 `loglik` calls on CPython, 19,692 in 30 s in Pyodide and
+  still going. At the second iteration the finite-difference Hessian has one positive eigenvalue (+0.845).
+  `ml.maximize` tests concavity with `try: np.linalg.cholesky(-H) / except LinAlgError`; in Pyodide that never raises,
+  so it skips the non-concave correction and takes the plain Newton step, which is the wrong way along that
+  eigenvector (length about 6 instead of 59). No trial point improves until the step is tiny, then the loop accepts
+  gains of about 4e-10 per iteration up to its 16,000-iteration limit.
+- **Confirmed by a shim:** in Pyodide, wrapping `np.linalg.cholesky`, `inv` and `solve` to raise `LinAlgError` when
+  the input is finite and the result is not, `1001_mixed` runs in **1.7 s** in total.
+- **Ruled out:** random relative noise of up to 1e-12 added to `loglik` on CPython does not change its path (246
+  calls each time). The platforms do differ at machine precision (`ll` by 2.3e-13 at the first point, which becomes
+  1e-4 in the Hessian after division by h² of about 1e-8), but that is not what stalls the fit.
+- **Same cause for the others**, shown by running them with the shim (below): 1902, 1908, 1916, 1601, 1901 (timed out at
+  600 s with PATCH-4 applied) and 0408, 1907, 1918 (the slow-fit numeric cases). Only 1001 was traced by hand.
+- **The fix** (made 2026-11-07): `src/dofile/linalgshim.py`, called from `browser.start()`, not an edit of the vendored
+  engine. It runs `inv`, `solve` and `cholesky` on a matrix that must fail and wraps only the ones that do not raise,
+  so it does nothing on CPython and switches itself off if numpy is fixed. The wrapper raises `LinAlgError` when the
+  inputs have no NaN and the result has one. All engine calls are `np.linalg.X` looked up at call time, so replacing
+  the attribute reaches them (a CPython test fails if a `from numpy.linalg import` appears). Tests:
+  `tests/test_linalgshim.py` (CPython, the wrapper against simulated NaN behaviour) and
+  `web/test/linalgshim.test.mjs` (real Pyodide: before the shim all three return NaN, after `browser.start()` all
+  three raise, and a fit that needs the non-concave step converges in 0.3 s).
+- **Results in Pyodide with the shim** (`check-snapshot --normal --cases ...`, one process per case, 600 s limit): 9 of 9
+  pass, 0 differ, 0 time out (total 141 s with 4 at a time): 0408 2.1 s, 1907 7.5 s, 1918 4.2 s, 1001 2.6 s, 1601 2.8 s,
+  1901 2.7 s, 1902 29.7 s, 1916 40.8 s, 1908 138.7 s. Slowdown against CPython is now 1.5-5x for most (1902: 18 s on
+  CPython; 1916: 23 s; 1908: 66 s, about 2x), where it was 20-500x or a timeout.
+- **Other numpy.linalg functions, checked 2026-11-07** (102 probes of 28 functions on singular, zero, NaN, inf,
+  indefinite, ill-conditioned and huge matrices, CPython against Pyodide; 74 identical). `det`, `slogdet`, `qr`, `norm`,
+  `eigh` and `eigvals` agree (`eig` and `eigvals` return complex dtype on this CPython/LAPACK and real in Pyodide when
+  the imaginary parts are zero: cosmetic). Differences:
+  - **Raise on CPython, NaN in Pyodide:** `cholesky` of a NaN matrix (**now covered by the shim**; the first version let
+    NaN input through), and `matrix_power(singular, -1)`, `tensorsolve`, `tensorinv`. These three call `inv`/`solve`
+    through numpy's own module namespace, so the shim does not reach them; the engine uses `matrix_power` 3 times and the
+    other two never.
+  - **Non-finite input to the SVD family (`svd`, `pinv`, `matrix_rank`, `lstsq`):** CPython raises
+    `LinAlgError: SVD did not converge`; Pyodide returns NaN or 0 (`matrix_rank` of a NaN matrix is 0), or raises a
+    `ValueError` ("On entry to DLASCL parameter number 4 had an illegal value": `lstsq` of NaN, `eigvalsh` of inf), which
+    an `except LinAlgError` does not catch. **Not shimmed.** The engine has 74 `lstsq`, 50 `pinv`, 40 `matrix_rank` and 8
+    `svd` calls; only about 7 of them sit in a `try ... except LinAlgError` (`meglm.py:693`, `sspace.py:364`,
+    `archmodel.py:603`, `mata/lib_linalg.py:140`, `graphics/baseplots.py:267`), and they only see non-finite input if
+    missing values reach a design matrix, which the estimation commands drop first. Not shown to matter; a shim that
+    raises `LinAlgError` for non-finite input to these four would match CPython if a case turns one up.
+  - **Numbers on near-singular input** differ in the last digits: `pinv([[1,1],[1,1+1e-14]])` has entries 1.0060e14 on
+    CPython and 9.95e13 in Pyodide, `cond` 4.02e14 and 3.98e14, and `lstsq` of that system returns `[0.997, 0.003]` and
+    `[1, 0]`. A different LAPACK build, so expected; only exactly or nearly collinear regressors can show it.
+  
+  The 7 cases that did not finish in the first run (1904, 1910, 1914, 1915, 1919, 1920, 1921) have since run (see the
+  update at the top of "Known gaps"). Break on a long fit in the browser was not tried.
 
 **What was seen.** Running the Stata 14 comparison cases in Pyodide (`npm run check-snapshot`) took over 30 minutes,
 where the repo's slow test runs the same cases on CPython in about 3 minutes serial. The time is not spread evenly. Timings
@@ -371,7 +479,7 @@ command's fit makes the extra calls; that was not isolated.
 - Whether it is numerics. Hypotheses, none tested: a different BLAS or LAPACK build in Pyodide (reference
   implementations, different summation order) gives gradients that differ in the last digits; `scipy.special`
   (`gammaln`, `digamma`) or `scipy.stats` (`logcdf`) differ slightly; `np.longdouble` is not 80-bit on wasm32; the 32-bit
-  `intp` (ODT-29) changes a code path.
+  `intp` (PATCH-4) changes a code path.
 - How many cases in the browser this affects beyond the three. Seven cases were not finished when the runs were stopped
   (`1904_timeseries`, `1910_programming`, `1914_panel`, `1915_timeseries`, `1919_other_suites2`, `1920_models4`,
   `1921_graphics_look`), the same seven in both runs after 35 minutes; their contents were not looked at, and their names

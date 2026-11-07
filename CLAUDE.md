@@ -24,7 +24,9 @@ cd web && npm install && npm test                     # web demo engine in Pyodi
 cd web && npm run dev                                 # web demo page on localhost (rebuilds the wheel)
 cd web && npm run e2e                                 # the page in Chromium, Firefox, WebKit (Playwright; `npx playwright install` once)
 cd web && npm run snapshot                            # build the Pyodide memory snapshot for the page's ?snapshot=1 (docs/pyodide-snapshot.md)
-cd web && npm run check-snapshot [-- --normal]        # corpus, probes, native calls and the 98 Stata 14 cases inside Pyodide; 10+ min (--normal: no snapshot, the baseline)
+cd web && npm run check-snapshot [-- --normal]        # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide, one process per case with a time limit; ~4 min with the shim (--normal: no snapshot, the baseline; --cases a,b to pick cases)
+cd web && npm run check-numeric                       # e()/r() of all 98 Stata 14 programs at full precision inside Pyodide, ~4 min; CPython baseline and the diff: header of web/scripts/compare_numeric.py
+cd web && npm run check-pytest                        # OpenDTA's unit tests (+ tests/test_engine.py) inside Pyodide, one process per file, ~2 min; compare with CPython: web/scripts/compare-pytest.mjs (see phase2-plan.md)
 ```
 
 poe runs every task as `uv run --extra=mcp ...` (`[tool.poe] executor`), so the MCP tests always run; with plain
@@ -80,6 +82,9 @@ Layers, bottom up (`src/dofile/`):
   `docs/pyodide-snapshot.md`.
 - `pathshim.py`: web demo only (the CLI and MCP server never install it). Through PATCH-3's hook
   (`core/userpath.py`) it maps file names written for someone's computer into one working folder and replaces `cd`.
+- `linalgshim.py`: web demo only. numpy's `inv`, `solve` and `cholesky` return NaN instead of raising `LinAlgError` in
+  Pyodide; `browser.start()` installs wrappers that raise (it probes first, so it is a no-op on CPython). The engine
+  depends on that exception in about 100 places. Tests: `tests/test_linalgshim.py`, `web/test/linalgshim.test.mjs`.
 - `cli.py`: `dofile run` runs `do` on the file inside one sandboxed `Engine`, passing the path through a local
   macro so `$` and backquotes in it aren't expanded (a backslash escapes only `$`, since the ODT-8 patch, not backquotes). The log is not capped.
 

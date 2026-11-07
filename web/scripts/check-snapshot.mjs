@@ -3,9 +3,11 @@
 //   conformance  the corpus (CHECK values against tests/conformance/data/ref.json to 1e-6), the probes, a graph export
 //   compat       the 98 Stata 14 reference cases of tests_opendta/compat, through compare.py's own functions and its
 //                known differences, as tests/test_stata_compat.py does under CPython
-// The compat cases are split over several processes (the slowest ones, asmprobit and the multilevel and irt models,
-// start first on different processes). Exit code 1 if anything differs. About 4-6 minutes. Needs a built snapshot.
-import { readFileSync, readdirSync } from "node:fs";
+// Each compat case runs in its own process (a fresh engine), N at a time (--shards N, default 4), and is killed after
+// --timeout seconds (default 300), reported as a failure "timeout". The cases that are slow in Pyodide start first.
+// Options: --cases a,b,c (only those compat cases; no conformance), --only conformance|compat, --dir, --normal.
+// Exit code 1 if anything differs, times out or crashes. Over 30 minutes for everything. Needs a built snapshot.
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -16,6 +18,10 @@ const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const dir = resolve(arg("--dir", defaultDir));
 const repo = fileURLToPath(new URL("../..", import.meta.url));
+// Slow in Pyodide (phase2-plan.md, "Open investigation"): started first, so a long tail does not hide the rest.
+const PYODIDE_SLOW = ["0408_mata_moptimize", "1907_models", "1918_models3", "1904_timeseries", "1910_programming", "1914_panel",
+  "1915_timeseries", "1919_other_suites2", "1920_models4", "1921_graphics_look", "1908_models2", "1909_other_suites",
+  "1916_multilevel", "1902_multilevel"];
 
 async function boot() {
   if (args.includes("--normal")) {   // the baseline: Pyodide booted and the wheel installed the way the page does without a snapshot
@@ -31,9 +37,11 @@ async function boot() {
 
 // ---- a child process: one share of the work ------------------------------------------------------------------------
 if (args.includes("--child")) {
-  const kind = arg("--child"), shard = Number(arg("--shard", 0)), of = Number(arg("--of", 1));
+  const kind = arg("--child"), mine = arg("--case", "").split(",").filter(Boolean);
   const { py, manifest } = await boot();
-  const say = (...a) => console.log(`[${kind}${kind === "compat" ? ` ${shard + 1}/${of}` : ""}]`, ...a);
+  // what browser.start() does for the page: numpy.linalg must raise LinAlgError (src/dofile/linalgshim.py); --no-shim: the old baseline
+  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
+  const say = (...a) => console.log(`[${kind === "compat" ? mine.join(",") : kind}]`, ...a);
   say(`restored (optimize=${py.runPython("import sys; sys.flags.optimize")}, snapshot built for ${manifest.wheel})`);
   let result;
 
@@ -88,9 +96,6 @@ spec = importlib.util.spec_from_file_location("compat_compare", "/od/tools/compa
 compare = importlib.util.module_from_spec(spec); sys.modules["compat_compare"] = compare; spec.loader.exec_module(compare)
 EXPECTED = compare.COMPAT / "expected"
 KNOWN = compare._known_differences()
-SLOW = ["1908_models2", "1909_other_suites", "1916_multilevel", "1902_multilevel"]
-CASES = sorted(f.stem for f in (compare.COMPAT / "do").glob("*.do") if (EXPECTED / f"{f.stem}.log").exists())
-ORDER = [s for s in SLOW if s in CASES] + [c for c in CASES if c not in SLOW]
 
 def run_case(case):
     t0 = time.perf_counter()
@@ -106,7 +111,6 @@ def run_case(case):
     except BaseException as e:
         return json.dumps({"case": case, "ok": False, "s": round(time.perf_counter() - t0, 1), "why": "".join(traceback.format_exception_only(type(e), e))[-600:]})
 `);
-    const mine = JSON.parse(py.runPython("import json; json.dumps(ORDER)")).filter((_, i) => i % of === shard);
     const results = [];
     for (const c of mine) {
       const r = JSON.parse(py.runPython(`run_case(${JSON.stringify(c)})`));
@@ -122,13 +126,17 @@ def run_case(case):
 }
 
 // ---- the parent: start the children, collect their results -------------------------------------------------------------
-const shards = Number(arg("--shards", 4));
+const shards = Number(arg("--shards", 4)), timeoutS = Number(arg("--timeout", 300));
+const only = arg("--only", null), wanted = arg("--cases", null)?.split(",");
+const passArgs = ["--dir", dir, ...(args.includes("--normal") ? ["--normal"] : []), ...(args.includes("--no-shim") ? ["--no-shim"] : [])];
 const t0 = performance.now();
-const jobs = [["conformance"], ...Array.from({ length: shards }, (_, i) => ["compat", i])];
-const runs = jobs.map(([kind, shard]) => new Promise(done => {
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", kind, "--dir", dir,
-    ...(args.includes("--normal") ? ["--normal"] : []), ...(kind === "compat" ? ["--shard", String(shard), "--of", String(shards)] : [])], { stdio: ["ignore", "pipe", "inherit"] });
-  let out = "", result = null;
+
+// Runs one child; stdout lines are echoed, the RESULT line is parsed. A child over `limitS` seconds is killed.
+const runChild = (childArgs, limitS) => new Promise(done => {
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", ...childArgs, ...passArgs],
+    { stdio: ["ignore", "pipe", "inherit"] });
+  let out = "", result = null, timedOut = false;
+  const timer = limitS ? setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, limitS * 1000) : null;
   child.stdout.on("data", d => {
     out += d;
     let i;
@@ -137,12 +145,40 @@ const runs = jobs.map(([kind, shard]) => new Promise(done => {
       if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7)); else console.log(line);
     }
   });
-  child.on("exit", code => done({ kind, shard, code, result }));
-}));
-const all = await Promise.all(runs);
-const crashed = all.filter(r => r.code !== 0 || !r.result);
-const failed = all.reduce((n, r) => n + (r.result?.failed ?? 0), 0);
-const cases = all.reduce((n, r) => n + (r.result?.cases ?? 0), 0);
-console.log(`\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${cases} compat cases, ${failed} problems${crashed.length ? `, ${crashed.length} process(es) crashed` : ""}`);
-for (const r of all) if (r.result?.failures?.length) console.log(`  failed: ${r.result.failures.join(", ")}`);
-process.exit(failed || crashed.length ? 1 : 0);
+  child.on("exit", code => { clearTimeout(timer); done({ code, result, timedOut }); });
+});
+
+const allCases = readdirSync(`${repo}/tests_opendta/compat/do`).filter(f => f.endsWith(".do")).map(f => f.slice(0, -3))
+  .filter(c => existsSync(`${repo}/tests_opendta/compat/expected/${c}.log`)).sort();
+for (const c of wanted ?? []) if (!allCases.includes(c)) { console.error(`unknown compat case: ${c}`); process.exit(2); }
+const cases = (wanted ?? allCases).sort((a, b) => {
+  const ra = PYODIDE_SLOW.indexOf(a), rb = PYODIDE_SLOW.indexOf(b);
+  return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
+});
+
+const problems = [], timeouts = [], crashed = [];
+let ran = 0;
+const conformance = only === "conformance" || (!only && !wanted)
+  ? runChild(["conformance"], 0).then(r => {
+      if (r.code !== 0 || !r.result) crashed.push("conformance");
+      else if (r.result.failed) problems.push("conformance");
+    })
+  : Promise.resolve();
+const queue = only === "conformance" ? [] : [...cases];
+const worker = async () => {
+  for (let c; (c = queue.shift());) {
+    const started = performance.now();
+    const r = await runChild(["compat", "--case", c], timeoutS);
+    ran++;
+    if (r.timedOut) { timeouts.push(c); console.log(`[${c}] TIMEOUT after ${timeoutS} s (killed)`); }
+    else if (r.code !== 0 || !r.result) { crashed.push(c); console.log(`[${c}] crashed (exit ${r.code}) after ${((performance.now() - started) / 1000).toFixed(0)} s`); }
+    else if (r.result.failed) problems.push(c);
+  }
+};
+await Promise.all([conformance, ...Array.from({ length: shards }, worker)]);
+console.log(`\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${ran} compat cases run (limit ${timeoutS} s each), ` +
+  `${problems.length} differ, ${timeouts.length} timed out, ${crashed.length} crashed`);
+if (problems.length) console.log(`  differ: ${problems.join(", ")}`);
+if (timeouts.length) console.log(`  timed out: ${timeouts.join(", ")}`);
+if (crashed.length) console.log(`  crashed: ${crashed.join(", ")}`);
+process.exit(problems.length || timeouts.length || crashed.length ? 1 : 0);

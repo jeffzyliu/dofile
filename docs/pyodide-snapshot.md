@@ -239,9 +239,15 @@ Of the 98 cases 91 were run, 75 passing and 16 failing, in both starts, with the
 `1921_graphics_look`) were still going when both runs were stopped by hand after about 35 minutes, so they are unchecked,
 for the snapshot and for the normal boot alike. The 16 are
 analysed in the Phase 2 plan, [Known gaps in the browser engine](phase2-plan.md#known-gaps-in-the-browser-engine): 11 are
-one 32-bit numpy bug in `expand` and `stsplit` (ODT-29), 2 need packages Pyodide lacks (`xlwt`, `pyreadstat`), and 3
+one 32-bit numpy bug in `expand` and `stsplit` (PATCH-4), 2 need packages Pyodide lacks (`xlwt`, `pyreadstat`), and 3
 are numeric known-difference cases that exceed their tolerance under WebAssembly. **None is specific to the snapshot or to
 stripping docstrings**, since the normal boot fails the same cases.
+
+**Update, later on 2026-11-07:** the 11 `expand`/`stsplit` cases and the 3 numeric cases now pass in Pyodide, after PATCH-4
+and `src/dofile/linalgshim.py` (numpy's `inv`, `solve` and `cholesky` return NaN instead of raising `LinAlgError` in
+Pyodide, which also made the slow fits run to their iteration limit). They were run on a normal boot, one process per case,
+not on a snapshot start; the snapshot start has not been re-run with the shim. See
+[Open investigation](phase2-plan.md#open-investigation-model-fits-take-far-longer-in-pyodide).
 
 **Bugs the checks found in the snapshot's own code**
 - **A restore bug, found and fixed 2026-11-07.** After a restore, `scipy.linalg.solve` ended the process with
