@@ -45,6 +45,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`mkdir C:\proj\out` makes `C:projout`), unlike `use`/`save` and unlike the same path in quotes: their arguments are split with `shlex` in POSIX mode, where `\` is an escape | found 2026-11-06 (path shim tests) | unverified |
 | ODT-27 | `save using name, replace` is accepted and writes a file called `using name.dta`; `save a b, replace` writes `a b.dta`. `save` has no documented `using` clause, so Stata should refuse the first form with a syntax error (assumed; the closed-source Rust reimplementation at stats.camp accepts it and writes `name.dta`, which is no evidence about Stata) | found 2026-11-06 (web demo); not checked against Stata | unverified |
 | ODT-28 | a missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...) gives rc 9999 `internal engine error: FileNotFoundError` with a traceback; `capture` does not catch it. Stata: r(603) `file ... could not be opened` | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected code assumed, not checked against Stata | patched |
+| ODT-29 | on a 32-bit platform (the web demo's WebAssembly Python) `expand` and `stsplit` fail with `TypeError: Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'`: `np.repeat` gets an int64 counts array and numpy's index type is int32 there. 11 of the 98 Stata 14 comparison cases fail on it, all at their first `expand` or `stsplit` | found 2026-11-07 running `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.mjs --normal`); sites `commands/collapse.py:383` and `commands/stdata.py:177,199`; no patch or test yet; passes on 64-bit CPython | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
@@ -608,6 +609,40 @@ firststage is unrecognized". It's the standard weak-instrument check, so it's wo
 `estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).
 A student running Card (1995) or any IV paper reaches for all three. (`estat overid` is an error in Stata for an
 exactly identified model, so test it with two instruments.)
+
+### ODT-29: `expand` and `stsplit` fail where numpy's index type is 32 bits
+`expand` (and `stsplit`) on WebAssembly Python (Pyodide 314, numpy 2.4.6: `np.dtype(np.intp)` is `int32`, `sys.maxsize`
+is 2147483647) stop with
+`TypeError: Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'`, raised from
+`numpy/_core/fromnumeric.py` `repeat`. It is not a Stata question: the commands work on 64-bit CPython, where
+`tests_opendta/compat` passes. It would fail the same way on any 32-bit Python.
+- Cause: `np.repeat(a, repeats)` needs `repeats` to convert to `intp` with the "safe" rule, and int64 to int32 is not safe.
+  The two sites build the counts as int64:
+  - `commands/collapse.py:382-383` (`cmd_expand`): `copies = np.where(...).astype(np.int64)`, then
+    `extra = np.repeat(np.arange(ds.nobs), copies - 1)`.
+  - `commands/stdata.py:177,199,200` (`cmd_stsplit`): `reps = np.ones(n, dtype=np.int64)`, then
+    `np.repeat(np.arange(n), reps)` and `np.repeat(sel, reps)`.
+- Found 2026-11-07: the 98 Stata 14 comparison cases run inside Pyodide, with the repo's own `compare.py` and
+  known-difference rules (`web/scripts/check-snapshot.mjs`, normal boot and snapshot start gave the same results).
+  Eleven cases fail on this, each at its first `expand` or `stsplit`: `expand` in 0304_collapse, 1001_mixed, 1002_melogit,
+  1402_kappa_roc, 1601_epidemiology, 1801_programming, 1902_multilevel, 1908_models2, 1909_other_suites and
+  1916_multilevel; `stsplit` in 1901_survival. Because each stops there, the rest of those cases has not been
+  compared at all.
+- Not known: other int64 arrays in the engine (96 uses of `int64`; ids from `core/grouping.py` and `core/survival.py`
+  go to `np.bincount`, `np.add.at` and indexing, which can also refuse an int64 array on a 32-bit numpy). The 82 cases that
+  pass do not reach a failing one, and the 11 cases above may meet more after these two sites are fixed.
+  **The check was started and not finished:** the two sites were patched inside Pyodide only (the repo untouched) and
+  the 11 cases re-run in one process; it was stopped by hand after 19 minutes, still inside the first cases, with no
+  output (it reported only at the end). Those cases now run their real models past the `expand`, which in Pyodide can
+  take minutes each (see the open investigation in `phase2-plan.md`). To redo: patch the two lines, run the cases one per
+  process with a time limit, and read the first difference in each.
+- Expected in Stata: not applicable (a platform bug).
+- Fix to try: `.astype(np.intp)` in `cmd_expand` and `dtype=np.intp` for `reps`, as a patch in `scripts/patches/`
+  (`opendta-odt29-intp-repeat.patch`) and a re-vendor. Test: a CPython unit test cannot show it (64-bit); the check is
+  the Pyodide run of `expand` and `stsplit` (`npm run check-snapshot`, or a case added to the Node engine tests).
+- Related: the web demo's other gaps found in the same run are the optional packages `xlwt` (`.xls` output) and
+  `pyreadstat` (SAS transport files, pre-Stata-13 `.dta`), which are not OpenDTA bugs; see `phase2-plan.md`, "Known gaps
+  in the browser engine".
 
 ### GAP-4: `lpoly` and `lpolyci` as twoway plot types
 `twoway (lpolyci y x if x<0, degree(1) bwidth(.1)) (lpolyci y x if x>=0, ...)` stops with rc 198 `lpolyci is not a twoway
