@@ -10,7 +10,7 @@ type FileInfo = { path: string; dir: boolean; size: number };
 type RunResult = { rc: number; error: string | null; log: string; images: string[] };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const [runBtn, breakBtn, resetBtn] = ["run", "break", "reset"].map(id => $<HTMLButtonElement>(id));
+const [runBtn, breakBtn, resetBtn, saveBtn] = ["run", "break", "reset", "save"].map(id => $<HTMLButtonElement>(id));
 const status = $("status"), log = $("log"), graphs = $("graphs"), fileList = $("files");
 const TEXT = /\.(do|ado|txt|csv|log|smcl|md|json|raw|dct)$/i;
 const SAMPLE = `* dofile: Stata-syntax code, run in your browser. Files stay in this browser.
@@ -25,7 +25,7 @@ scatter y x
 `;
 
 let current = "main.do";   // the file in the editor
-let dirty = false;   // edited since it was loaded: only then is it written back (never rewrite a file just opened)
+let dirty = false;   // edited since it was loaded or saved: only then can it be written back (never rewrite a file just opened)
 let ready = false;
 const started = performance.now();
 
@@ -40,7 +40,28 @@ const editor = new EditorView({
   parent: $("editor"),
   extensions: [basicSetup, stata,
     Prec.highest(keymap.of([{ key: "Mod-Enter", run: () => { run(true); return true; } }])),
-    EditorView.updateListener.of(u => { if (u.docChanged) dirty = true; })],
+    EditorView.updateListener.of(u => { if (u.docChanged) setDirty(true); })],
+});
+
+// Files are written only by Save (and by New file and uploads), never by Run: like Stata's do-file editor, Run executes the
+// editor's text and leaves the file alone. `dirty` shows next to the file's name and on the Save button, and the page
+// warns before a switch to another file or closing the page would lose the edits.
+function setDirty(on: boolean) {
+  dirty = on;
+  saveBtn.disabled = !on;
+  document.querySelector("#files .open")?.classList.toggle("dirty", on);
+}
+
+// true when it is fine to replace the editor's text: nothing unsaved, or the user agreed to discard it
+function leave(): boolean {
+  if (!dirty) return true;
+  if (!confirm(`${current} has unsaved changes. Discard them? (Cancel keeps them; then use Save.)`)) return false;
+  setDirty(false);
+  return true;
+}
+addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });   // the browser's own wording
+addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") { e.preventDefault(); saveNow(); }
 });
 
 function setRunning(on: boolean) {
@@ -51,13 +72,26 @@ function setRunning(on: boolean) {
 
 async function save() {
   if (!dirty) return;
-  await engine.call("write", { path: current, data: new TextEncoder().encode(editor.state.doc.toString()) });
-  dirty = false;
+  const path = current, text = editor.state.doc.toString();
+  await engine.call("write", { path, data: new TextEncoder().encode(text) });
+  if (path === current && editor.state.doc.toString() === text) setDirty(false);   // not if typing went on while it was written
 }
+
+async function saveNow() {
+  if (!dirty) return;
+  const path = current;
+  try {
+    await save();
+    status.textContent = `saved ${path}`;
+  } catch (e) {
+    status.textContent = `could not save ${path}: ${(e as Error).message}`;
+  }
+}
+saveBtn.onclick = saveNow;
 
 function show(text: string) {
   editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
-  dirty = false;
+  setDirty(false);
 }
 
 async function open(path: string) {
@@ -69,7 +103,7 @@ async function open(path: string) {
     alert(`${path} is not UTF-8 text, so the editor would change it. Download it to edit it elsewhere.`);
     return;
   }
-  await save();
+  if (!leave()) return;
   current = path;
   show(text);
   await refreshFiles();
@@ -80,7 +114,7 @@ async function refreshFiles() {
   fileList.replaceChildren(...files.filter(f => !f.dir).map(f => {
     const li = document.createElement("li");
     const name = Object.assign(document.createElement("span"), { className: "name", textContent: f.path, title: `${f.size} bytes` });
-    if (f.path === current) name.classList.add("open");
+    if (f.path === current) name.classList.add("open", ...(dirty ? ["dirty"] : []));
     if (TEXT.test(f.path)) name.onclick = () => open(f.path);
     const get = Object.assign(document.createElement("button"), { textContent: "↓", title: "Download" });
     get.onclick = async () => {
@@ -110,7 +144,7 @@ async function upload(files: Iterable<File>) {
     replacedOpen ||= path === current;
   }
   if (replacedOpen) {   // the upload wins over the editor's copy, which would otherwise be saved over it
-    dirty = false;
+    setDirty(false);
     await open(current);
   }
   await refreshFiles();
@@ -120,7 +154,6 @@ async function run(selection = false) {
   if (!ready || engine.running) return;
   const sel = editor.state.selection.main;
   const code = selection && !sel.empty ? editor.state.sliceDoc(sel.from, sel.to) : editor.state.doc.toString();
-  await save();
   setRunning(true);
   status.textContent = "running…";
   const t = performance.now();
@@ -128,7 +161,9 @@ async function run(selection = false) {
   setRunning(false);
   status.textContent = `rc ${r.rc} in ${((performance.now() - t) / 1000).toFixed(2)} s`;
   log.textContent += r.log + (r.rc === RC_RESET ? `\n${r.error}\n` : "") + "\n";
-  for (const png of r.images) graphs.prepend(Object.assign(new Image(), { src: `data:image/png;base64,${png}` }));
+  // Like Stata's Graph window: only the latest graph is shown; a run that draws nothing keeps the previous one.
+  const latest = r.images.at(-1);
+  if (latest) graphs.replaceChildren(Object.assign(new Image(), { src: `data:image/png;base64,${latest}` }));
   $("output").scrollTop = log.scrollHeight;
   await refreshFiles();
 }
@@ -148,7 +183,7 @@ $("new").onclick = async () => {
   const name = prompt("New file name", "analysis.do");
   if (!name) return;
   if ((await engine.call("files") as FileInfo[]).some(f => f.path === name)) return alert(`${name} already exists`);
-  await save();
+  if (!leave()) return;   // the new file replaces the editor's text
   await engine.call("write", { path: name, data: new Uint8Array() });
   await open(name);
 };
@@ -159,18 +194,19 @@ for (const id of ["upload", "upload-dir"]) {
 document.body.ondragover = e => e.preventDefault();
 document.body.ondrop = e => { e.preventDefault(); upload(e.dataTransfer?.files ?? []); };
 
-try {
-  await engine.start();
-} catch (e) {
-  status.textContent = `the engine did not start: ${(e as Error).message}`;
-  throw e;
-}
+// The engine loads in the background. The files and the editor don't wait for it: the worker answers file calls as
+// soon as Python and the saved files are loaded, and edits, uploads and deletes made before the engine is ready are
+// in the same /work folder it will run against. Only Run and Reset wait (`ready`).
+const isolation = crossOriginIsolated ? "" : " (not cross-origin isolated: Break restarts the engine)";
+engine.start().then(() => {
+  ready = true;
+  setRunning(false);
+  status.textContent = `ready in ${((performance.now() - started) / 1000).toFixed(1)} s${isolation}`;
+}, (e: Error) => {
+  status.textContent = `the engine did not start: ${e.message}. You can still edit and download your files.`;
+});
 if (!(await engine.call("files") as FileInfo[]).length) {
   await engine.call("write", { path: current, data: new TextEncoder().encode(SAMPLE) });   // first visit
 }
 const files: FileInfo[] = await engine.call("files");
 await open(files.some(f => f.path === current) ? current : files.find(f => /\.do$/.test(f.path))?.path ?? current);
-ready = true;
-setRunning(false);
-const isolation = crossOriginIsolated ? "" : " (not cross-origin isolated: Break restarts the engine)";
-status.textContent = `ready in ${((performance.now() - started) / 1000).toFixed(1)} s${isolation}`;

@@ -26,7 +26,7 @@ test("engine worker: files, run, describe, matrix, Break, restart", { timeout: 1
   const eng = new EngineClient({ createWorker: nodeWorker, wheel, onStatus: s => statuses.push(s) });
   const about = await eng.start();
   assert.match(JSON.stringify(about), /opendta/i);
-  assert.deepEqual(statuses, ["loading Python", "loading packages", "loading your files", "starting the engine"]);
+  assert.deepEqual(statuses, ["loading Python", "loading your files", "loading packages", "starting the engine"]);
 
   await t.test("files: write, list, read, rename, remove, and nothing outside /work", async () => {
     await eng.call("write", { path: "data/cps.dta", data: readFileSync(`${root}/tests/conformance/data/cps.dta`) });
@@ -88,5 +88,25 @@ test("a worker that fails to load is replaced, and start() still finishes", { ti
   const eng = new EngineClient({ createWorker: () => (first ? ((first = false), blocked()) : nodeWorker()), wheel });
   assert.match(JSON.stringify(await eng.start()), /opendta/i);
   assert.equal((await eng.run("display 1")).rc, 0);
+  eng.worker.terminate();
+});
+
+test("files can be listed, written and read while the engine is still loading, and a run sees them", { timeout: 180_000 }, async () => {
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel });
+  const starting = eng.start();   // not awaited: the page shows the files without waiting for this
+  let booted = false;
+  starting.then(() => { booted = true; });
+  // posted straight after start(): they queue behind "mount" in the worker, so the order holds without waiting
+  const before = eng.call("files");
+  const write = eng.call("write", { path: "early.do", data: new TextEncoder().encode("display 6*7") });
+  assert.deepEqual(await before, []);
+  await write;
+  assert.equal(new TextDecoder().decode(await eng.call("read", { path: "early.do" })), "display 6*7");
+  assert.equal(booted, false, "the files were answered before the engine finished loading");
+  // a run asked for before the engine is up waits for it (it does not fail)
+  const r = await eng.run("do early.do");
+  assert.equal(r.rc, 0, r.log);
+  assert.match(r.log, /42/);
+  await starting;
   eng.worker.terminate();
 });
