@@ -379,7 +379,7 @@ def cmd_expand(s: "Session", args: str) -> None:
     mask = touse(s, Parsed(if_=p.if_, in_=p.in_))
     k = np.broadcast_to(np.asarray(eval_vector(s, p.varlist), dtype=np.float64), (ds.nobs,))
     # VERIFY: non-integer values are truncated; < 1 or missing keep the obs.
-    copies = np.where(mask & (k < M.SYSMISS) & (k >= 1), np.trunc(np.minimum(k, 2**31)), 1).astype(np.intp)   # dofile PATCH-4: np.repeat wants intp
+    copies = np.where(mask & (k < M.SYSMISS) & (k >= 1), np.trunc(np.minimum(k, 2**31 - 1)), 1).astype(np.intp)   # dofile PATCH-4: np.repeat wants intp; the cap fits int32
     extra = np.repeat(np.arange(ds.nobs), copies - 1)
     n0 = ds.nobs
     if len(extra):
