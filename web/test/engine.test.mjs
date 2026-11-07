@@ -1,9 +1,9 @@
 // The engine worker and client, run in Node: worker.js in a worker thread (as a browser Web Worker), Pyodide, the
 // built dofile wheel. Run `uv build --wheel` in the repo first. In Node, /work is in memory (no IndexedDB).
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EngineClient, RC_RESET } from "../src/engine/client.js";
 
@@ -12,9 +12,15 @@ const wheels = readdirSync(`${root}/dist`).filter(f => f.endsWith(".whl")).sort(
 assert.ok(wheels.length, "no wheel in dist/: run `uv build --wheel` first");
 const wheel = { name: wheels.at(-1), bytes: readFileSync(`${root}/dist/${wheels.at(-1)}`) };
 
+// Every worker started here is ended when the file's tests are done, passed or failed: a failing assertion skips the
+// `eng.worker.terminate()` at the end of its test, and a live worker keeps the process (and so `npm test`) from exiting.
+const started = new Set();
+after(() => { for (const w of started) w.terminate(); });
+
 function nodeWorker() {
   const w = new Worker(new URL("./node-worker.mjs", import.meta.url),
     { workerData: { script: new URL("../src/engine/worker.js", import.meta.url).href } });
+  started.add(w);
   const port = { postMessage: (m, t) => w.postMessage(m, t), terminate: () => w.terminate(), onmessage: null, onerror: null };
   w.on("message", data => port.onmessage?.({ data }));
   w.on("error", e => port.onerror?.(e));
@@ -108,5 +114,48 @@ test("files can be listed, written and read while the engine is still loading, a
   assert.equal(r.rc, 0, r.log);
   assert.match(r.log, /42/);
   await starting;
+  eng.worker.terminate();
+});
+
+// The snapshot start (npm run snapshot builds public/snapshot/). Skipped when it has not been built; the build script
+// is deterministic enough that a stale one is caught by the wheel name check below.
+const snapshotDir = fileURLToPath(new URL("../public/snapshot/", import.meta.url));
+const snapshot = new URL("../public/snapshot/", import.meta.url).href;
+const haveSnapshot = existsSync(`${snapshotDir}manifest.json`) &&
+  JSON.parse(readFileSync(`${snapshotDir}manifest.json`, "utf8")).wheel === wheel.name;
+
+test("engine from a memory snapshot: native code, graphs, files, Break", { timeout: 180_000, skip: !haveSnapshot && "no current snapshot: npm run snapshot" }, async t => {
+  const statuses = [];
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel, snapshot, onStatus: s => statuses.push(s) });
+  const t0 = performance.now();
+  const about = await eng.start();
+  console.log(`snapshot start: ${((performance.now() - t0) / 1000).toFixed(2)} s`);
+  assert.match(JSON.stringify(about), /opendta/i);
+  assert.deepEqual(statuses, ["loading Python", "loading your files", "starting the engine"]);
+
+  await t.test("regress, scipy, a graph and a file after the restore", async () => {
+    const r = await eng.run("clear\nset obs 80\ngen x = _n\ngen y = 2*x + mod(_n, 5)\nregress y x\ndisplay \"B=\" %12.8f _b[x]\nscatter y x\ndisplay normal(1.96)");
+    assert.equal(r.rc, 0, r.log);
+    assert.match(r.log, /B=\s+2\.00000000|B=\s+1\.99\d+|B=\s+2\.0\d+/);
+    assert.match(r.log, /\.97500\d+/);
+    assert.equal(r.images.length, 1);
+    await eng.call("write", { path: "notes.txt", data: new TextEncoder().encode("hi") });
+    assert.equal(new TextDecoder().decode(await eng.call("read", { path: "notes.txt" })), "hi");
+  });
+
+  await t.test("Break stops at a safe point and keeps the data", async () => {
+    await eng.run("clear\nset obs 100\ngen x = 0");
+    const running = eng.run("while 1 {\n quietly replace x = x + 1\n}");
+    setTimeout(() => eng.breakRun(), 1000);
+    const r = await running;
+    assert.equal(r.rc, 1, r.log);
+    assert.equal((await eng.run("summarize x")).nobs, 100);
+  });
+  eng.worker.terminate();
+});
+
+test("a snapshot built for another wheel is refused with a message", { timeout: 60_000, skip: !existsSync(`${snapshotDir}manifest.json`) && "no snapshot" }, async () => {
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel: { ...wheel, name: "dofile-0.0.0-py3-none-any.whl" }, snapshot });
+  await assert.rejects(eng.start(), /snapshot is for .* but the page has dofile-0\.0\.0.*npm run snapshot/);
   eng.worker.terminate();
 });

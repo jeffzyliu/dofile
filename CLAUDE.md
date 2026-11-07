@@ -23,6 +23,8 @@ uv build                                              # sdist + wheel (the wheel
 cd web && npm install && npm test                     # web demo engine in Pyodide under Node (rebuilds the wheel)
 cd web && npm run dev                                 # web demo page on localhost (rebuilds the wheel)
 cd web && npm run e2e                                 # the page in Chromium, Firefox, WebKit (Playwright; `npx playwright install` once)
+cd web && npm run snapshot                            # build the Pyodide memory snapshot for the page's ?snapshot=1 (docs/pyodide-snapshot.md)
+cd web && npm run check-snapshot [-- --normal]        # corpus, probes, native calls and the 98 Stata 14 cases inside Pyodide; 10+ min (--normal: no snapshot, the baseline)
 ```
 
 poe runs every task as `uv run --extra=mcp ...` (`[tool.poe] executor`), so the MCP tests always run; with plain
@@ -72,6 +74,10 @@ Layers, bottom up (`src/dofile/`):
 - `browser.py`: web demo only. What `web/src/engine/worker.js` (the Web Worker) calls through Pyodide: one Engine
   in `/work`, JSON text in and out, only `shell`/`webuse` denied, Break through a SIGINT handler (Pyodide's interrupt
   buffer). `web/src/engine/client.js` is the page's side (Break, restart = rc 9998).
+- `web/src/engine/snapshot.js` + `web/scripts/make-snapshot.mjs`: web demo only, opt-in (`?snapshot=1`). Start from a
+  Pyodide memory snapshot with a patched copy of Pyodide's loader that re-links the native libraries; the patch throws
+  if Pyodide's loader text changes, and the snapshot must be rebuilt after a wheel or Pyodide change. See
+  `docs/pyodide-snapshot.md`.
 - `pathshim.py`: web demo only (the CLI and MCP server never install it). Through PATCH-3's hook
   (`core/userpath.py`) it maps file names written for someone's computer into one working folder and replaces `cd`.
 - `cli.py`: `dofile run` runs `do` on the file inside one sandboxed `Engine`, passing the path through a local

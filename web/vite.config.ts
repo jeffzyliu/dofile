@@ -29,6 +29,6 @@ export default defineConfig({
     configureServer: server => { server.middlewares.use(isolate); },
     configurePreviewServer: server => { server.middlewares.use(isolate); },
   }],
-  optimizeDeps: { exclude: ["pyodide"] },
+  optimizeDeps: { exclude: ["pyodide", "brotli-wasm"] },   // both load a wasm file by URL, which pre-bundling breaks
   worker: { format: "es" },
 });

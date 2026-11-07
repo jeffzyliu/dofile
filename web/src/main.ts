@@ -28,11 +28,14 @@ let current = "main.do";   // the file in the editor
 let dirty = false;   // edited since it was loaded or saved: only then can it be written back (never rewrite a file just opened)
 let ready = false;
 const started = performance.now();
+const useSnapshot = new URLSearchParams(location.search).has("snapshot");
 
 const engine = new EngineClient({
   createWorker: () => new Worker(new URL("./engine/worker.js", import.meta.url), { type: "module" }),
   wheel: new URL(`${import.meta.env.BASE_URL}${__WHEEL__}`, location.href).href,
   indexURL: __PYODIDE__,
+  // ?snapshot=1: start from the Pyodide memory snapshot `npm run snapshot` builds (faster to start, a bigger download)
+  snapshot: useSnapshot ? new URL(`${import.meta.env.BASE_URL}snapshot/`, location.href).href : undefined,
   onStatus: (s: string) => { status.textContent = `${s}…`; },
 });
 
@@ -201,7 +204,7 @@ const isolation = crossOriginIsolated ? "" : " (not cross-origin isolated: Break
 engine.start().then(() => {
   ready = true;
   setRunning(false);
-  status.textContent = `ready in ${((performance.now() - started) / 1000).toFixed(1)} s${isolation}`;
+  status.textContent = `ready in ${((performance.now() - started) / 1000).toFixed(1)} s${useSnapshot ? " (snapshot)" : ""}${isolation}`;
 }, (e: Error) => {
   status.textContent = `the engine did not start: ${e.message}. You can still edit and download your files.`;
 });
