@@ -2,7 +2,7 @@
 // test. Complements check-snapshot.mjs, which runs the conformance corpus and the Stata 14 logs: this one runs the unit
 // tests, which reach commands those do not.
 //
-//   node scripts/check-pytest.mjs [--paths a.py,b.py] [--shards 4] [--timeout 900] [--out DIR] [--no-shim] [--normal]
+//   node scripts/check-pytest.mjs [--paths a.py,b.py] [--shards 4] [--timeout 900] [--out DIR] [--no-shim] [--ios]
 //
 // Each test file runs in its own process (a fresh Pyodide, as the page starts one), is killed after --timeout seconds,
 // and writes DIR/<file>.json (see pytest_report.py). Default files: tests_opendta/tests/test_*.py and the dofile tests
@@ -27,6 +27,9 @@ const WEB_TESTS = ["tests/test_engine.py"];
 
 if (args.includes("--child")) {
   const file = arg("--child");
+  // --ios: Pyodide's loader tests navigator.userAgent for iPhone/iPad and then creates no WebAssembly trampoline function
+  // (getPyEMTrampolinePtr); this makes Node look like that, to run the suite the way an iPhone runs the engine
+  if (args.includes("--ios")) Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)", platform: "iPhone", maxTouchPoints: 5 } });
   const py = await loadPyodide({ stdout: s => console.log(s), stderr: s => console.log(s) });
   await py.loadPackage(["pytest", "numpy", "scipy", "matplotlib"], { messageCallback: () => {} });
   await py.loadPackage("micropip", { messageCallback: () => {} });
@@ -48,7 +51,9 @@ os.chdir("/work"); sys.path.insert(0, "/tmp")
 import pytest_report
 pytest_report.run(OUT, ["/repo/" + FILE, "-q", "-p", "no:cacheprovider", "--rootdir=/repo", "-o", "addopts="])`);
   mkdirSync(out, { recursive: true });
-  writeFileSync(`${out}/${basename(file)}.json`, py.FS.readFile("/tmp/result.json"));
+  // the table is one entry shorter when Pyodide created no trampoline (an iPhone user agent): proof of which mode ran
+  const result = { ...JSON.parse(py.FS.readFile("/tmp/result.json", { encoding: "utf8" })), wasmTableLength: py._module.wasmTable.length, ios: args.includes("--ios") };
+  writeFileSync(`${out}/${basename(file)}.json`, JSON.stringify(result));
   process.exit(0);
 }
 
@@ -64,7 +69,7 @@ const queue = [...files];
 const runOne = file => new Promise(done => {
   const started = performance.now();
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", file, "--out", out,
-    ...(args.includes("--no-shim") ? ["--no-shim"] : [])], { stdio: ["ignore", "ignore", "ignore"] });
+    ...(args.includes("--no-shim") ? ["--no-shim"] : []), ...(args.includes("--ios") ? ["--ios"] : [])], { stdio: ["ignore", "ignore", "ignore"] });
   const timer = setTimeout(() => { timeouts.push(file); child.kill("SIGKILL"); }, timeoutS * 1000);
   child.on("exit", code => {
     clearTimeout(timer);

@@ -277,25 +277,53 @@ not on a snapshot start; the snapshot start has not been re-run with the shim. S
 
 ## Not done, and risks
 
-- **Browsers, checked 2026-11-07** (`npm run e2e`, the `?snapshot=1` test, on a snapshot built at brotli quality 5 for the
-  current wheel; Playwright's Chromium, Firefox, WebKit and iPhone 15 profile). The page without the snapshot passes all five
-  e2e tests in all four. With `?snapshot=1`:
-  - **Chromium and Firefox pass.**
-  - **WebKit starts from the snapshot** ("ready in 1.6 s (snapshot)"; restore 1.56 s) **but a reload downloads the files
-    again** instead of reading them from the cache (the test expects "read from cache" and gets "download 0.04s"). So in
-    WebKit the Cache API did not keep the 52 MB across a reload in this test; why is not known (a Playwright WebKit
-    context? a storage limit? the size?). Nothing is wrong with the engine; a return visit would be slower.
-  - **The iPhone profile does not start from the snapshot**: the status line reads "the engine did not start:
-    call_indirect to a signature that does not match (evaluating 'Module._init_pyodide_proxy()')" (and a page error
-    "undefined is not an object (evaluating 'H.FS')" in the log). The profile is the same WebKit with a phone viewport, and
-    desktop WebKit starts, so the difference is not the engine build; not investigated. The mismatch is the kind a
-    re-link at the wrong table address would give. This has not been compared with an older snapshot or commit, so it may
-    not be new; the snapshot loader was not changed in this work.
-  - **Not checked:** a real phone; Break in the browser with a snapshot (it is tested in Node); files restored from
-    IndexedDB with a snapshot start (the mount is the same code, but the e2e does not exercise it).
+- **Browsers, checked 2026-11-07** (`npm run e2e`: Playwright's Chromium, Firefox, WebKit and iPhone 15 profile, 5 tests
+  each, 20 of 20 pass, the snapshot test with a snapshot built for the current wheel). Not checked: a real phone (memory:
+  the heap is 136 MB before anything runs, and 229 MB of files are decompressed during the start); Break in the browser with
+  a snapshot (it is tested in Node); files restored from IndexedDB with a snapshot start (the mount is the same code, but
+  the e2e does not exercise it). The first run found two problems in WebKit, both settled:
+  - **Desktop WebKit: the cache was empty after a reload.** Not the page. In Playwright's default context, which keeps
+    storage in memory, WebKit drops the whole Cache API when the page is reloaded (a 1 KB entry too, written from the page or
+    from a worker, with or without the cross-origin isolation headers); in a persistent profile on disk, entries survive.
+    The snapshot test now runs in a persistent profile, as a real browser has. Real Safari was not tried.
+  - **iPhone profile: "call_indirect to a signature that does not match".** See [The trampoline](#the-trampoline).
   The conformance corpus and the Stata 14 cases have been run on a snapshot-started engine, in Node, with the
   `numpy.linalg` shim, on 2026-11-07: 63 corpus checks, 12 probes and 13 native-library calls clean, 95 of 97 cases pass in
-  151 s (the same two package-gap failures as on a normal boot); see [Correctness checks](#correctness-checks).
+  151 s (the same two package-gap failures as on a normal boot), and again with the snapshot built without the trampoline
+  (153 s, same results); see [Correctness checks](#correctness-checks).
+
+### The trampoline
+
+WebAssembly's `call_indirect` traps when the callee's signature differs from the call site's, and CPython's C code often
+calls through function pointers cast to another type. Pyodide's loader embeds a tiny wasm function (a "trampoline",
+`getWasmTrampolineModule`) that makes such calls with the callee's real signature, and at start it writes that function's
+pointer into the Python runtime (`__PyRuntime`, in the heap). On iOS it writes 0 and creates no function
+(`getPyEMTrampolinePtr` tests `navigator.userAgent` for iPhone/iPad, or a Mac platform with touch). The loader also has a
+JavaScript call path (`_PyEM_TrampolineCall_JS`) that tolerates a mismatch; CPython's choice between the two when the pointer is 0 was
+inferred from that, not read in CPython's source.
+
+**What went wrong.** A snapshot is made in Node, with the trampoline, and restoring it puts the Node-time pointer back into
+the heap. On an iPhone that slot holds nothing valid, and the first call through it fails: `call_indirect to a signature that
+does not match (evaluating 'Module._init_pyodide_proxy()')`. Only the user agent matters (checked in WebKit with the profiles
+mixed: desktop with an iPhone user agent fails; iPhone with a desktop user agent starts; a phone viewport, touch and mobile
+flags with a desktop user agent start). Real iOS devices run the same check; not tried.
+
+**The fix.** `make-snapshot.mjs` now patches the loader so it behaves as on iOS everywhere (`noTrampoline` in
+`snapshot.js`), and the build and the restore use the same patched file, so the pointer in the heap is always 0 and one snapshot
+starts in every browser. `SNAPSHOT_TRAMPOLINE=1` keeps Pyodide's own choice (a snapshot that then fails on iOS).
+
+**What it costs** (Node, a normal boot against one with an iOS user agent, best of 3, ms): a pure Python loop 97 / 99; 2M
+calls of `len` and `abs` 47 / 69 (1.47x); `list.append`, `sorted` with a Python key, tiny-array numpy and scipy calls the same;
+60 `regress` calls 54 / 61 (1.13x). Whole runs: OpenDTA's unit suite 128 s / 134 s (about 5%), conformance and the 97 Stata cases
+151 s / 153 s. The results are identical: the same 1,061 unit tests agree with CPython (`npm run check-pytest -- --ios`; each result file
+records the wasm table length, 51558 in all 72 files against 51559 in a normal run, which is how a run shows the trampoline was
+off), and the same 95 of 97 Stata cases pass on a snapshot. A bare `loadPyodide` has 14175 table entries and 14174 with the iPhone
+user agent. Not measured: a desktop browser, where the trampoline would still be on in a plain boot.
+
+**Cache errors.** The worker used to swallow every error of `cache.put` (and of `caches.open`/`delete`). Now only the
+browser refusing storage (`QuotaExceededError`, `SecurityError`, `NotAllowedError`, or no Cache API) lets the engine start
+uncached, and it is reported with the start's timings (`NOT CACHED: ...`) and in `console.warn`; any other error is thrown.
+The failure of the manifest request now says why.
 - **Browser memory** is higher: the heap image is 136 MB before anything runs, and during the start the compressed
   files (46.5 MB) and the decompressed ones (229 MB) are in memory together for a moment. Not measured on a phone.
 - **A patched copy of Pyodide's loader.** It is generated from the installed Pyodide file, fails loudly if the text
@@ -314,7 +342,7 @@ not on a snapshot start; the snapshot start has not been re-run with the shim. S
 Keep it opt-in for now. It is a clear win for return visitors and fast connections, and a loss for a first visit
 on a slow one. Ways to improve the first visit, in order of effort:
 
-1. Fix the two WebKit findings above (a reload that does not use the cache; the iPhone profile's `call_indirect` error), then decide whether to make it the default with a fallback to the normal boot. Firefox and Chromium pass.
+1. Decide whether to make it the default with a fallback to the normal boot. The four browser profiles pass (see "Not done, and risks"); a real phone has not been tried, and memory there is the open question.
 2. Zero the library copies in the heap before the snapshot (4.4 MB less, measured, and nothing reads them), and test
    stripped docstrings against the corpus (2.3 MB more). See "Making the files smaller".
 3. Load matplotlib and its dependencies on the first graph instead of in the snapshot (about 12 MB less for a first
