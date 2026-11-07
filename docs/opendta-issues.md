@@ -45,7 +45,6 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`mkdir C:\proj\out` makes `C:projout`), unlike `use`/`save` and unlike the same path in quotes: their arguments are split with `shlex` in POSIX mode, where `\` is an escape | found 2026-11-06 (path shim tests) | unverified |
 | ODT-27 | `save using name, replace` is accepted and writes a file called `using name.dta`; `save a b, replace` writes `a b.dta`. `save` has no documented `using` clause, so Stata should refuse the first form with a syntax error (assumed; the closed-source Rust reimplementation at stats.camp accepts it and writes `name.dta`, which is no evidence about Stata) | found 2026-11-06 (web demo); not checked against Stata | unverified |
 | ODT-28 | a missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...) gives rc 9999 `internal engine error: FileNotFoundError` with a traceback; `capture` does not catch it. Stata: r(603) `file ... could not be opened` | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected code assumed, not checked against Stata | patched |
-| ODT-29 | on a 32-bit platform (the web demo's WebAssembly Python) `expand` and `stsplit` fail with `TypeError: Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'`: `np.repeat` gets an int64 counts array and numpy's index type is int32 there. 11 of the 98 Stata 14 comparison cases fail on it, all at their first `expand` or `stsplit` | found 2026-11-07 running `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.mjs --normal`); sites `commands/collapse.py:383` and `commands/stdata.py:177,199`; no patch or test yet; passes on 64-bit CPython | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
@@ -54,6 +53,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 | PATCH-2 | dofile patch: Break is taken only at safe points (between commands and loop passes, outside `by`; in the ML optimizer, `bootstrap`/`permute`/`jackknife` replications, Mata loops and `sleep`). An interrupt mid-command could leave the data half changed (an interrupted `append` left columns of different lengths) | `tests/test_break.py` | patched |
 | PATCH-3 | dofile patch: every file name the user writes goes through one hook (`core/userpath.user_path`), after its default extension is added. Unset, nothing changes; dofile's web demo sets it to map paths into its working folder (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
+| PATCH-4 | dofile patch: `expand` and `stsplit` build their `np.repeat` counts as `np.intp` instead of `np.int64`. Where `intp` is 32 bits (the web demo's WebAssembly Python) numpy refuses an int64 counts array. Identical on 64-bit | `expand` and `stsplit` cases of `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.mjs`); a CPython test cannot show it | patched (dofile-only, wasm32); not yet run in Pyodide |
 
 ## Details
 
@@ -610,40 +610,6 @@ firststage is unrecognized". It's the standard weak-instrument check, so it's wo
 A student running Card (1995) or any IV paper reaches for all three. (`estat overid` is an error in Stata for an
 exactly identified model, so test it with two instruments.)
 
-### ODT-29: `expand` and `stsplit` fail where numpy's index type is 32 bits
-`expand` (and `stsplit`) on WebAssembly Python (Pyodide 314, numpy 2.4.6: `np.dtype(np.intp)` is `int32`, `sys.maxsize`
-is 2147483647) stop with
-`TypeError: Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'`, raised from
-`numpy/_core/fromnumeric.py` `repeat`. It is not a Stata question: the commands work on 64-bit CPython, where
-`tests_opendta/compat` passes. It would fail the same way on any 32-bit Python.
-- Cause: `np.repeat(a, repeats)` needs `repeats` to convert to `intp` with the "safe" rule, and int64 to int32 is not safe.
-  The two sites build the counts as int64:
-  - `commands/collapse.py:382-383` (`cmd_expand`): `copies = np.where(...).astype(np.int64)`, then
-    `extra = np.repeat(np.arange(ds.nobs), copies - 1)`.
-  - `commands/stdata.py:177,199,200` (`cmd_stsplit`): `reps = np.ones(n, dtype=np.int64)`, then
-    `np.repeat(np.arange(n), reps)` and `np.repeat(sel, reps)`.
-- Found 2026-11-07: the 98 Stata 14 comparison cases run inside Pyodide, with the repo's own `compare.py` and
-  known-difference rules (`web/scripts/check-snapshot.mjs`, normal boot and snapshot start gave the same results).
-  Eleven cases fail on this, each at its first `expand` or `stsplit`: `expand` in 0304_collapse, 1001_mixed, 1002_melogit,
-  1402_kappa_roc, 1601_epidemiology, 1801_programming, 1902_multilevel, 1908_models2, 1909_other_suites and
-  1916_multilevel; `stsplit` in 1901_survival. Because each stops there, the rest of those cases has not been
-  compared at all.
-- Not known: other int64 arrays in the engine (96 uses of `int64`; ids from `core/grouping.py` and `core/survival.py`
-  go to `np.bincount`, `np.add.at` and indexing, which can also refuse an int64 array on a 32-bit numpy). The 82 cases that
-  pass do not reach a failing one, and the 11 cases above may meet more after these two sites are fixed.
-  **The check was started and not finished:** the two sites were patched inside Pyodide only (the repo untouched) and
-  the 11 cases re-run in one process; it was stopped by hand after 19 minutes, still inside the first cases, with no
-  output (it reported only at the end). Those cases now run their real models past the `expand`, which in Pyodide can
-  take minutes each (see the open investigation in `phase2-plan.md`). To redo: patch the two lines, run the cases one per
-  process with a time limit, and read the first difference in each.
-- Expected in Stata: not applicable (a platform bug).
-- Fix to try: `.astype(np.intp)` in `cmd_expand` and `dtype=np.intp` for `reps`, as a patch in `scripts/patches/`
-  (`opendta-odt29-intp-repeat.patch`) and a re-vendor. Test: a CPython unit test cannot show it (64-bit); the check is
-  the Pyodide run of `expand` and `stsplit` (`npm run check-snapshot`, or a case added to the Node engine tests).
-- Related: the web demo's other gaps found in the same run are the optional packages `xlwt` (`.xls` output) and
-  `pyreadstat` (SAS transport files, pre-Stata-13 `.dta`), which are not OpenDTA bugs; see `phase2-plan.md`, "Known gaps
-  in the browser engine".
-
 ### GAP-4: `lpoly` and `lpolyci` as twoway plot types
 `twoway (lpolyci y x if x<0, degree(1) bwidth(.1)) (lpolyci y x if x>=0, ...)` stops with rc 198 `lpolyci is not a twoway
 plot type`; `lpoly` gives the same. The standalone `lpoly y x, degree(1) bwidth(.1) ci` runs and draws a graph. Stata documents both as twoway plot
@@ -752,3 +718,43 @@ Research (2026-11-04):
   comparison pass unchanged.
 - Not for upstream: it exists only for dofile's browser host. `tests/test_pathshim.py` runs each file command with a
   foreign path, and fails if a new `expanduser` site appears after a re-vendor.
+
+### PATCH-4: `np.repeat` counts as `intp` (dofile's own patch, for the WebAssembly engine)
+`expand` and `stsplit` in WebAssembly Python (Pyodide 314, numpy 2.4.6: `np.dtype(np.intp)` is `int32`, `sys.maxsize` is
+2147483647) stop with
+`TypeError: Cannot cast array data from dtype('int64') to dtype('int32') according to the rule 'safe'`, raised from
+`numpy/_core/fromnumeric.py` `repeat`. Not a Stata question: both work on 64-bit CPython, where `tests_opendta/compat`
+passes. WebAssembly (wasm32) has 32-bit pointers and sizes, so numpy's index type `intp` is 32 bits; 64-bit integer data
+is unaffected. Any other 32-bit Python would fail the same way, but nothing else dofile supports is 32-bit, so this is
+kept as a dofile patch for the browser demo, not sent upstream.
+- Cause: `np.repeat(a, repeats)` needs `repeats` to convert to `intp` with the "safe" rule, and int64 to int32 is not safe.
+- The patch (`opendta-patch4-intp-counts.patch`, two lines, vendored 2026-11-07):
+  - `commands/collapse.py` (`cmd_expand`): `copies = ...astype(np.intp)` instead of `np.int64`;
+  - `commands/stdata.py` (`cmd_stsplit`): `reps = np.ones(n, dtype=np.intp)` instead of `np.int64`. Its later
+    `reps[rows] = np.bincount(...)` assigns into that array, so both `np.repeat` calls on `reps` are covered.
+  On 64-bit `intp` is `int64`, so nothing changes there. Counts above 2^31 cannot exist in a 4 GiB address space.
+- Found 2026-11-07: the 98 Stata 14 comparison cases run inside Pyodide, with the repo's own `compare.py` and
+  known-difference rules (`web/scripts/check-snapshot.mjs`, normal boot and snapshot start gave the same results).
+  Eleven cases fail on this, each at its first `expand` or `stsplit`: `expand` in 0304_collapse, 1001_mixed, 1002_melogit,
+  1402_kappa_roc, 1601_epidemiology, 1801_programming, 1902_multilevel, 1908_models2, 1909_other_suites and
+  1916_multilevel; `stsplit` in 1901_survival. Because each stops there, the rest of those cases has not been
+  compared at all.
+- **Other int64 sites, checked 2026-11-07: none else is affected.** Probing numpy 2.4.6 in Pyodide with an int64 array
+  showed that only five calls refuse it: `np.repeat` with an array of counts, `np.put`, `np.searchsorted(sorter=...)`,
+  `np.choose` and `ufunc.reduceat` (indices). These accept it: fancy indexing and assignment, `np.take`,
+  `np.bincount`, `np.add.at`, `np.delete`, `np.insert`, `np.split`, `np.unique(return_inverse=True)`, `np.lexsort`,
+  `np.tile`, `reshape`, `np.arange`, `np.full`, `np.unravel_index`, `np.ravel_multi_index`, `np.take_along_axis`
+  and `np.roll`. Against the engine's 96 `int64` uses: the only `np.repeat` calls with an array of counts are the two
+  patched sites, `lang/vexpr.py:68-69`, `commands/egen.py:59` and `commands/{roc,summarize,kappa}.py` (counts built from
+  `flatnonzero`, `bincount`, `np.diff` or `astype(int)`, all `intp`, so they pass). The `reduceat` calls
+  (`core/panelquad.py:48`, `estimation/mlcmd.py:872`) take indices from `cumsum` of a `bincount`, also `intp`. The engine
+  never calls `np.put`, `np.choose` or `sorter=`. Not covered: calls inside scipy and statsmodels-style code that
+  receive an engine int64 array, and numpy functions not in the probe. The 11 cases above are the real test.
+- **Run in Pyodide 2026-11-07, one process per case:** all 11 pass. Five (0304, 1002, 1402, 1801, 1909) with PATCH-4 alone.
+  The other six (1001, 1601, 1901, 1902, 1908, 1916) got past `expand` and then did not finish in 600 s because of a second
+  problem, `numpy.linalg` returning NaN instead of raising `LinAlgError` in Pyodide; with `src/dofile/linalgshim.py` they
+  pass (`phase2-plan.md`, "Open investigation"). The "nothing else is affected" finding above was about the int64 problem
+  only; it did not cover this one.
+- Related: the web demo's other gaps found in the same run are the optional packages `xlwt` (`.xls` output) and
+  `pyreadstat` (SAS transport files, pre-Stata-13 `.dta`), which are not OpenDTA bugs; see `phase2-plan.md`, "Known gaps
+  in the browser engine".
