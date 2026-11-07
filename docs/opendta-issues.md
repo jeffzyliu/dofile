@@ -45,6 +45,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`mkdir C:\proj\out` makes `C:projout`), unlike `use`/`save` and unlike the same path in quotes: their arguments are split with `shlex` in POSIX mode, where `\` is an escape | found 2026-11-06 (path shim tests) | unverified |
 | ODT-27 | `save using name, replace` is accepted and writes a file called `using name.dta`; `save a b, replace` writes `a b.dta`. `save` has no documented `using` clause, so Stata should refuse the first form with a syntax error (assumed; the closed-source Rust reimplementation at stats.camp accepts it and writes `name.dta`, which is no evidence about Stata) | found 2026-11-06 (web demo); not checked against Stata | unverified |
 | ODT-28 | a missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...) gives rc 9999 `internal engine error: FileNotFoundError` with a traceback; `capture` does not catch it. Stata: r(603) `file ... could not be opened` | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected code assumed, not checked against Stata | patched |
+| ODT-30 | the ML optimizer takes Newton steps from a nearly singular numerical Hessian, so where the likelihood is flat its path (and sometimes where it stops) depends on the last digits of the likelihood's derivatives. `gnbreg cnt x1 x2, lnalpha(x3)` in compat 1907 stops at the boundary alpha = 0 (ll equal to the Poisson log likelihood), a false convergence: a relative 1e-13 change in the derivatives gives a run that does not converge, 1e-11 one that converges to a log likelihood 0.17 higher. Its constant-only model is stuck (ll -959.397, Stata -952.7455) | found 2026-11-07 comparing CPython with Pyodide (`web/scripts/compare_numeric.py`); perturbation experiment in `phase2-plan.md`, "`gnbreg` in 1907_models"; no test | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
@@ -604,6 +605,44 @@ traceback in the log, rc 9999. `capture log using hi/hi, replace` does not catch
 `estat firststage` (first-stage F and partial R² after `ivregress`) returns rc 321 "subcommand estat
 firststage is unrecognized". It's the standard weak-instrument check, so it's worth implementing upstream.
 - Workaround: run the first stage with `regress endog instruments exog`, then `test instruments`.
+
+### ODT-30: Newton steps from a nearly singular numerical Hessian (false convergence at a boundary; path depends on rounding)
+```stata
+* compat 1907_models: data from the lines before it in tests_opendta/compat/do/1907_models.do
+gnbreg cnt x1 x2, lnalpha(x3)
+```
+ends on CPython at log likelihood -878.310297 after 7 iterations, with `lnalpha:_cons` = -22.0 (alpha about 1e-10).
+That is the Poisson log likelihood of the same mean equation to every digit printed (-878.3102973): the fit has gone to the
+boundary alpha = 0.
+- Cause, as far as it was traced. `ml.maximize` takes the step `-solve(H, g)` with `H` from `models2.num_hess` (central
+  differences of the analytic gradient, h = 5e-3 scale, Richardson). At that boundary `H` is nearly singular: eig(-H) is
+  6.8e-4, 2.3e-3 and then 620 to 1300 (condition number 1.9e6). A difference of 3e-7 in `H` (from the last bits of the
+  gradient, which uses `lngamma` and `digamma`) moves the step by 1.4e-4, and the path goes elsewhere. The score for
+  `lnalpha` is proportional to alpha, so it vanishes at alpha = 0 and the convergence test (`dp < tol or dv < ltol`, and
+  `nr < nrtol`, and a concave `H`) accepts a point where the likelihood can still be raised.
+- The perturbation experiment (CPython, 8 seeds each, analytic derivatives multiplied by `1 + r u`, u uniform(-1,1)):
+  r = 0: -878.3103 converged, 8 of 8. r = 1e-13: one run does not converge (-878.3053). r = 1e-11: one run converges to
+  **-878.1424**, one does not converge (-878.2737). r = 1e-9: five different outcomes in 8 runs. So the answer at the
+  boundary is not the maximum, and which answer a platform gives is not stable. Pyodide (numpy 2.4.6, other libm and
+  LAPACK) ends at -878.2943 after 300 iterations without converging, and was still creeping after 3000.
+- Same family: the constant-only model that `gnbreg` fits for `ll_0` (separately, from the full model's values) sits in
+  the non-concave branch on both platforms: ll -959.397 on CPython, -957.390 in Pyodide, against -952.7455 in Stata's
+  log. The non-concave step adds `lam * I` with `lam = 1.1 * max eig(H) + 1e-6` (the code says `VERIFY`), which makes the
+  step almost entirely along the one flat eigenvector (length about 59 in 1001_mixed's `covariance(unstructured)` fit,
+  where it was first seen): a nearly singular matrix again.
+- Found 2026-11-07, comparing e() and r() of the 98 comparison programs between CPython and Pyodide. Other fits in the
+  same comparison that end in different places on the two platforms with the same log likelihood to 8 or more digits
+  (1901 `streg`, 1907 `tnbreg` and `zinb`, 1905 `xtfrontier`) probably belong here too; not traced.
+- Expected in Stata: **not known.** Stata's reference log also ends at -878.31024 (after 25 iterations, many of them
+  "(backed up)"), so the boundary answer agrees with Stata, and that is why the case passes. Whether Stata's own path is
+  as sensitive cannot be seen from one log. Stata fits the constant-only model in 4 iterations to -952.7455; ours does
+  not reach it. Both are for someone with Stata to check.
+- Fix to try, not done: a step rule that copes with a nearly singular `H` (Levenberg-Marquardt or a trust region, or the
+  analytic Hessian where the likelihood has one), and a convergence test that does not accept a point because a score is
+  small only through a parameter at its boundary. Either changes the iteration logs, which the Stata 14 comparison checks
+  line by line (with known-difference rules for 1907), so it needs the comparison run again. Cross-platform note: the
+  differences between platforms here are of the size of ordinary libm differences, so the same would be expected from
+  CPython on Linux against macOS; not tested (no Linux machine; the Docker daemon was not running).
 
 ### GAP-3: other `estat` subcommands after `ivregress`
 `estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).
