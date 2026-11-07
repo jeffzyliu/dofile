@@ -347,7 +347,7 @@ the two runs; CPython here is macOS, arm64, so "CPython" is one libm and LAPACK,
   1104 (99.5%). The 6 above 1e-3: **1901 `streg`, 1907 `tnbreg`, `zinb`, 1905 `xtfrontier`** have the same log likelihood to
   8 or more digits and different parameters (some parameters sit at a boundary: `theta` about 1e-9, `alpha` about 1e-8),
   which fits a flat likelihood; **1907 `gnbreg`** converged in 7 iterations on CPython and did not converge in 300 on
-  Pyodide, whose log likelihood is higher (-878.294 against -878.310); **1908 `asmprobit`** (a simulated likelihood:
+  Pyodide, whose log likelihood is higher (-878.294 against -878.310; see "`gnbreg`" below); **1908 `asmprobit`** (a simulated likelihood:
   82 against 104 iterations, ll -278.540 against -278.381, Pyodide higher). The 13 between 1e-6 and 1e-3 include
   `0602_svy_ampliado` `nbreg` (ll differs by 0.005 of 30,565, and 4 against 2 iterations: the stopping rule is relative to
   the log likelihood, so it ends within about 3e-3 of the optimum on either platform).
@@ -356,8 +356,28 @@ the two runs; CPython here is macOS, arm64, so "CPython" is one libm and LAPACK,
   cases. `tech_steps` of `arfima` in 1904: 4 against 1.
 - **What this shows and does not.** Same answers to the digits printed, except in fits where the answer is not pinned down
   by the data or the stopping rule, which can land elsewhere on either platform. It does not say which platform is closer
-  to Stata in those cases; that needs the Stata 14 logs, and these cases pass under their known-difference rules. The
-  `gnbreg` non-convergence (300 iterations) has not been looked into.
+  to Stata in those cases; that needs the Stata 14 logs, and these cases pass under their known-difference rules.
+
+**`gnbreg` in 1907_models (looked into 2026-11-07): a fit that is path-sensitive on CPython too, not a Pyodide problem.**
+- `gnbreg cnt x1 x2, lnalpha(x3)` ends on CPython at ll -878.310297 in 7 iterations, **equal to the Poisson log likelihood of
+  the same mean equation** (-878.3102973) with `lnalpha:_cons` = -22, i.e. alpha about 1e-10. Stata's reference log ends at
+  -878.31024 after many "(backed up)" iterations. That is the boundary alpha = 0, where the score for `lnalpha` is
+  proportional to alpha and so vanishes: a false convergence, since the likelihood can still be raised.
+- In Pyodide with the linalg shim the fit leaves the boundary and creeps upward: ll -878.2943 at 300 iterations, changes of
+  about 1e-6 per thousand iterations after that, never meeting the stopping rule (3000 iterations tried). Without the shim it
+  converged in 4 iterations at the boundary (-878.310303), like CPython: the shim made the non-concave branch run, as it does
+  on CPython, and the path went elsewhere.
+- **On CPython the same happens with a tiny perturbation.** Multiplying the analytic derivatives of the likelihood by
+  (1 + r u), u uniform(-1,1), 8 seeds per r: r = 0 gives -878.3103 8 times; r = 1e-13 gives one run that does not converge
+  (-878.3053); r = 1e-11 gives one run that converges to **-878.1424** (0.17 above the boundary) and one that does not
+  converge (-878.2737); r = 1e-9 gives five different outcomes in 8 runs. Platform differences in the derivatives are of the
+  order of 1e-13 to 1e-10, so a different outcome on another platform is expected, and the boundary answer (CPython, Stata)
+  is not the maximum.
+- Also: the constant-only model of `gnbreg` (fitted separately, starting from the full model) is stuck in the non-concave
+  branch on both platforms (ll -959.397 on CPython, -957.390 in Pyodide, against -952.7455 in Stata's log), so `ll_0` and
+  `Pseudo R2` differ from Stata's everywhere; the case passes because its known-difference rule ignores them.
+- What would fix it is the optimizer's non-concave step (`ml.maximize`, marked `VERIFY` against Stata: a multiple of the
+  identity is added when `cholesky(-H)` fails), not anything in the browser engine. Not done.
 
 **Before the two fixes, passing, in the normal boot and in the snapshot start alike:** all 63 corpus checks, all 12 probes (graphs come out as
 PNGs), all 13 native-library calls. Of the 98 Stata 14 cases, **91 were run, 75 pass and 16 fail, and 7 were not run**: the
