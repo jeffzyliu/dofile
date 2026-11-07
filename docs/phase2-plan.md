@@ -17,9 +17,9 @@ are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since,
   are `shell`), 99.5% of estimation results agree with CPython to 1e-3 and 95% to 1e-9. The differences that remain are in
   fits whose answer the data does not pin down (ODT-30, an OpenDTA optimizer issue). Nothing of this is in CI yet.
 - **The memory snapshot** (opt-in, `?snapshot=1`; [pyodide-snapshot.md](pyodide-snapshot.md)): a return visit starts in 1.2 s
-  against 4.6–9.3 s, a first visit in 1.7 s unthrottled and 5.4 s at 100 Mbps, about level with the normal boot at 30 Mbps. It
-  is 39.9 MB (brotli 11, docstrings stripped; times measured on the 42.3 MB build before that). It works in Chromium, Firefox, WebKit and an iPhone profile; a real phone was not tried. Which
-  size optimizations are done and which are not: [File size](pyodide-snapshot.md#file-size-what-is-done-and-what-is-not).
+  against 4.5–9.2 s, a first visit in 1.7 s unthrottled and 5.1 s at 100 Mbps, level with the normal boot at 30 Mbps. It
+  is 39.9 MB (brotli 11, docstrings stripped). It works in Chromium, Firefox, WebKit and an iPhone profile; a real phone
+  was not tried. Which size optimizations are done and which are not: [File size](pyodide-snapshot.md#file-size-what-is-done-and-what-is-not).
 - **Tools:** `npm run check-snapshot`, `check-pytest`, `check-numeric` and `web/scripts/measure-startup.mjs`.
 
 **Still open in Phase 2:** the lazy-matplotlib experiment (4a, not started), whether the snapshot becomes the default, a real
@@ -648,8 +648,7 @@ brotli 5 and 11. A visitor who plots downloads about 40.6 MB in all, about the s
 less before "ready". Timing guesses: warm start about 1.05 s instead of 1.2 s (21% fewer bytes to decompress, of the 0.66 s measured on
 2026-11-07); the first plot after a warm start about 0.4 s with `.pyc` (0.29 s plus writing the files) or about 1.0 s without;
 a cold start about 0.8 s faster at 100 Mbps and about 2.6 s faster at 30 Mbps, which would bring the snapshot at 30 Mbps from
-14.6 s (measured 2026-11-07 with the 42.3 MB build; the guess was first made from 16.0 s with the 46.5 MB one) to about 12.0 s,
-ahead of the regular boot's 14.1 s.
+13.9 s (measured 2026-11-07) to about 11.3 s, ahead of the regular boot's 13.9 s.
 
 **Regular flow.**
 - **(a) Import matplotlib in the background once the engine is ready.** It moves the 0.9 s off the click and changes no
