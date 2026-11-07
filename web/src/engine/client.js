@@ -26,8 +26,15 @@ export class EngineClient {
       "error" in data ? p.reject(new Error(data.error)) : p.resolve(data.result);
     };
     this.worker.onerror = e => this.restart(`the engine crashed (${e?.message ?? e})`);
-    this.about = await this.call("init", { wheel: this.wheel, indexURL: this.indexURL, interruptBuffer: this.interrupt });
-    return this.about;
+    // Two steps (see worker.js). Calls the page makes after start() begins, such as files and read, queue behind
+    // "mount" in the worker, so they can be made at once: they are answered before the engine has loaded.
+    // If a restart happens during a step, that step's answer is the new start()'s result and this one ends with it.
+    const gen = this.gen = (this.gen ?? 0) + 1;
+    const mounted = await this.call("mount", { indexURL: this.indexURL });
+    if (gen !== this.gen) return mounted;
+    const about = await this.call("boot", { wheel: this.wheel, interruptBuffer: this.interrupt });
+    if (gen === this.gen) this.about = about;
+    return about;
   }
 
   call(op, args = {}) {
@@ -66,7 +73,7 @@ export class EngineClient {
     const started = this.start();
     for (const p of pending) {
       if (p.op === "run") p.resolve({ rc: RC_RESET, error, log: "", results: null, images: [] });
-      else if (p.op === "init") p.resolve(started);   // a crash while starting: the first start() ends with the new one
+      else if (p.op === "mount" || p.op === "boot") p.resolve(started);   // a crash while starting: the first start() ends with the new one
       else p.reject(new Error(error));
     }
     return started;

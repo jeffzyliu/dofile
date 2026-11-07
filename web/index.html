@@ -14,6 +14,7 @@
     #files li { display: flex; gap: .25rem; align-items: center; }
     #files .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
     #files .open { font-weight: bold; }
+    #files .open.dirty::after { content: " ●"; }   /* edited since it was saved */
     #log { margin: 0; padding: .5rem; font: 13px ui-monospace, monospace; white-space: pre; overflow-x: auto; }  /* Stata output is fixed width */
     #graphs img { max-width: 100%; display: block; }
     .cm-editor { height: 100%; }
@@ -24,6 +25,7 @@
   <header>
     <strong>dofile</strong>
     <button id="run" disabled title="Run the file (Ctrl/Cmd+Enter: the selection, or the file)">Run</button>
+    <button id="save" disabled title="Save the open file (Ctrl/Cmd+S). Run uses the editor's text and does not save it.">Save</button>
     <button id="break" disabled>Break</button>
     <button id="reset" disabled title="New engine: data in memory is cleared, files stay">Reset</button>
     <button id="clear">Clear log</button>

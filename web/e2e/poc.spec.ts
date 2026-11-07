@@ -53,7 +53,11 @@ scatter lwage yrsed`);
   await run(page, 'display "N=" _N');
   await expect(page.locator("#log")).toContainText("N=15528");
 
-  // reload: files and the editor's text come back from IndexedDB
+  // Run doesn't save: the edit is still unsaved. Save, then reload: files and the editor's text come back from IndexedDB
+  await expect(page.locator("#save")).toBeEnabled();
+  await page.locator("#save").click();
+  await expect(page.locator("#status")).toHaveText("saved main.do");
+  await expect(page.locator("#save")).toBeDisabled();
   await page.reload();
   const warm = await ready(page);
   await expect(page.locator("#files")).toContainText("cps.dta");
@@ -114,4 +118,62 @@ test("the editor never rewrites a file it didn't change", async ({ page }) => {
   await page.locator("#new").click();
   await expect.poll(() => dialogs.at(-1)).toContain("already exists");
   expect((await download("main.do")).length).toBeGreaterThan(50);
+});
+
+test("Save is explicit: Run doesn't save, a switch or closing the page warns about unsaved edits", async ({ page }) => {
+  const dialogs: { type: string; message: string }[] = [];
+  let answer = "dismiss";
+  page.on("dialog", d => { dialogs.push({ type: d.type(), message: d.message() }); answer === "accept" ? d.accept() : d.dismiss(); });
+  await page.goto("/");
+  await ready(page);
+  const row = (name: string) => page.locator("#files li", { hasText: name });
+  const download = async (name: string) => {
+    const [dl] = await Promise.all([page.waitForEvent("download"), row(name).getByTitle("Download").click()]);
+    return readFileSync((await dl.path())!, "utf8");
+  };
+  await page.locator("#upload").setInputFiles({ name: "other.do", mimeType: "text/plain", buffer: Buffer.from("display 2\n") });
+  await expect(row("other.do")).toBeVisible();
+
+  // an edit: marked, Save enabled, and Run uses it without writing it
+  await expect(page.locator("#save")).toBeDisabled();
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.insertText('display "EDITED"');
+  await expect(page.locator("#save")).toBeEnabled();
+  await expect(page.locator("#files .open")).toHaveClass(/dirty/);
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText(/^rc 0 in/, { timeout: 120_000 });
+  await expect(page.locator("#log")).toContainText("EDITED");
+  expect(await download("main.do")).toContain("dofile: Stata-syntax code");   // the file is as it was
+
+  // another file: asked; Cancel stays on the edit
+  await row("other.do").locator(".name").click();
+  await expect.poll(() => dialogs.at(-1)?.message).toContain("unsaved changes");
+  await expect(page.locator(".cm-content")).toContainText("EDITED");
+
+  // closing the page: the browser's own beforeunload prompt
+  dialogs.length = 0;
+  await page.close({ runBeforeUnload: true });   // doesn't wait for the page: the dialog arrives afterwards
+  await expect.poll(() => dialogs.map(d => d.type)).toEqual(["beforeunload"]);
+});
+
+test("Save writes the file; Discard opens the other file", async ({ page }) => {
+  page.on("dialog", d => d.accept());
+  await page.goto("/");
+  await ready(page);
+  const row = (name: string) => page.locator("#files li", { hasText: name });
+  await page.locator("#upload").setInputFiles({ name: "other.do", mimeType: "text/plain", buffer: Buffer.from("display 2\n") });
+  await expect(row("other.do")).toBeVisible();
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.insertText('display "KEPT"');
+  await page.keyboard.press("ControlOrMeta+s");   // not the browser's "save page"
+  await expect(page.locator("#status")).toHaveText("saved main.do");
+  await expect(page.locator("#files .open")).not.toHaveClass(/dirty/);
+  await row("other.do").locator(".name").click();   // nothing unsaved: no prompt needed
+  await expect(page.locator(".cm-content")).toContainText("display 2");
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("\ndisplay 3");   // an edit to discard
+  await row("main.do").locator(".name").click();   // the dialog is accepted: Discard
+  await expect(page.locator(".cm-content")).toContainText('display "KEPT"');
 });
