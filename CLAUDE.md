@@ -26,7 +26,7 @@ cd web && npm run e2e                                 # the page in Chromium, Fi
 cd web && npm run snapshot                            # build the Pyodide memory snapshot for the page's ?snapshot=1 (docs/pyodide-snapshot.md)
 cd web && npm run check-snapshot [-- --normal]        # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide, one process per case with a time limit; ~4 min with the shim (--normal: no snapshot, the baseline; --cases a,b to pick cases)
 cd web && npm run check-numeric                       # e()/r() of all 98 Stata 14 programs at full precision inside Pyodide, ~4 min; CPython baseline and the diff: header of web/scripts/compare_numeric.py
-cd web && npm run check-pytest                        # OpenDTA's unit tests (+ tests/test_engine.py) inside Pyodide, one process per file, ~2 min; compare with CPython: web/scripts/compare-pytest.mjs (see phase2-plan.md)
+cd web && npm run check-pytest [-- --ios]               # OpenDTA's unit tests (+ tests/test_engine.py) inside Pyodide, one process per file, ~2 min (--ios: an iPhone user agent, so Pyodide creates no trampoline); compare with CPython: web/scripts/compare-pytest.mjs (see phase2-plan.md)
 ```
 
 poe runs every task as `uv run --extra=mcp ...` (`[tool.poe] executor`), so the MCP tests always run; with plain
