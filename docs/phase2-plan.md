@@ -8,9 +8,22 @@ are no accounts and no hosting cost beyond static files.
 **Not in Phase 2:** accounts, sync between devices, sharing or collaboration, server-side execution, the MCP server
 (Phase 3), community commands, tutorials beyond one sample project, our own estimators.
 
-**Status (2026-11-06):** steps 1 (the Pyodide spike), 2 (the path shim), 3 (the browser entry point) and 4 (the
-proof-of-concept page) are done, see [Spike results](#spike-results-2026-11-06);
-storage and the path shim are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)).
+**Status (2026-11-07):** steps 1 (the Pyodide spike), 2 (the path shim), 3 (the browser entry point) and 4 (the
+proof-of-concept page) were done on 2026-11-06, see [Spike results](#spike-results-2026-11-06); storage and the path shim
+are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since, on 2026-11-07 (steps 4b to 4e below):
+- **The engine matches CPython in Pyodide, apart from missing packages.** Two browser-only bugs were found and fixed
+  (PATCH-4: `np.repeat` counts as `intp`; a shim for `numpy.linalg` raising `LinAlgError`). 95 of 97 Stata 14 cases pass
+  (the other two need `pyreadstat` and `xlwt`), 1048 of 1080 unit tests (the others skip for those packages and `xlrd`, or
+  are `shell`), 99.5% of estimation results agree with CPython to 1e-3 and 95% to 1e-9. The differences that remain are in
+  fits whose answer the data does not pin down (ODT-30, an OpenDTA optimizer issue). Nothing of this is in CI yet.
+- **The memory snapshot** (opt-in, `?snapshot=1`; [pyodide-snapshot.md](pyodide-snapshot.md)): a return visit starts in 1.2 s
+  against 4.6–9.3 s, a first visit in 1.7 s unthrottled and 5.4 s at 100 Mbps, about level with the normal boot at 30 Mbps. It
+  is 42.3 MB (brotli 11). It works in Chromium, Firefox, WebKit and an iPhone profile; a real phone was not tried. Which
+  size optimizations are done and which are not: [File size](pyodide-snapshot.md#file-size-what-is-done-and-what-is-not).
+- **Tools:** `npm run check-snapshot`, `check-pytest`, `check-numeric` and `web/scripts/measure-startup.mjs`.
+
+**Still open in Phase 2:** the lazy-matplotlib experiment (4a, not started), whether the snapshot becomes the default, a real
+phone, the `.xls` packages (`xlwt`, `xlrd`) and `pyreadstat`, wiring the checks into CI (step 9), and steps 5 to 10.
 
 ## Facts this plan rests on
 - **OpenDTA ran unmodified in Pyodide 314** (Python 3.14) under Node during the engine evaluation
@@ -282,15 +295,27 @@ that steps 6 and 8 build.
    log, graphs. A sample do-file on first visit. Run is disabled during a run, and `read` transfers the file's bytes.
    Test: `cd web && npm run e2e` (Playwright: Chromium, Firefox, WebKit, iPhone emulation). Still open from step 3:
    micropip fetches openpyxl from PyPI on each cold start.
-4a. **Experiment: load matplotlib lazily** (to do; planned 2026-11-07, not started). Decide whether the snapshot
-   should leave matplotlib out of the heap and load it on the first plot, and what the normal boot should do about its
-   0.9 s first plot. What is measured, what is only a guess, and how to run the experiment:
+4a. **Experiment: load matplotlib lazily** (**not done**; planned 2026-11-07, no code). Decide whether the snapshot
+   should leave matplotlib out of the heap and load it on the first plot (about 9.7 MB less before "ready", estimated), and
+   what the normal boot should do about its 0.8 s first plot (its matplotlib import is already lazy; scipy's is not).
+   What is measured, what is only a guess, and how to run the experiment:
    [Experiment: loading matplotlib lazily](#experiment-loading-matplotlib-lazily). Related:
-   [pyodide-snapshot.md](pyodide-snapshot.md).
-4b. **Investigate: model fits run far longer in Pyodide than on CPython** (to do; found 2026-11-07, cause unknown).
-   Some estimation commands do 20–190 times as many likelihood evaluations in the browser engine, so a fit that takes
-   a second natively can take minutes. Evidence, hypotheses and how to pick it up:
-   [Open investigation: model fits take far longer in Pyodide](#open-investigation-model-fits-take-far-longer-in-pyodide).
+   [pyodide-snapshot.md](pyodide-snapshot.md#file-size-what-is-done-and-what-is-not), which lists every size optimization
+   as done, opt-in or not done.
+4b. ~~**Investigate: model fits run far longer in Pyodide than on CPython**~~ done 2026-11-07: the cause was
+   `numpy.linalg.cholesky`, `inv` and `solve` returning NaN instead of raising `LinAlgError` in Pyodide, which the engine
+   relies on in about 100 places (`src/dofile/linalgshim.py`, installed by `browser.start()`). Fits now take 1.5–5 times as
+   long as on CPython, not 20–500 times or forever. Also fixed: PATCH-4 (`expand` and `stsplit`). Details, evidence and what
+   remains: [Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide) and [Known gaps](#known-gaps-in-the-browser-engine).
+4c. ~~**Memory snapshot**~~ done 2026-11-07 (opt-in): [pyodide-snapshot.md](pyodide-snapshot.md). Patched Pyodide loader,
+   42.3 MB at brotli 11, restore in 1.2 s; `web/scripts/make-snapshot.mjs`, `web/src/engine/snapshot.js`. Whether it
+   becomes the default is open.
+4d. ~~**Check the engine in Pyodide against CPython**~~ done 2026-11-07, by hand, not in CI: `check-snapshot` (conformance
+   corpus and the 97 Stata 14 cases), `check-pytest` (OpenDTA's unit suite, test by test against CPython) and
+   `check-numeric` (e() and r() at full precision, 109,265 numbers). Results in [Known gaps](#known-gaps-in-the-browser-engine).
+4e. ~~**Browsers**~~ done 2026-11-07: the e2e passes in Chromium, Firefox, WebKit and an iPhone profile, with and without the
+   snapshot. Found and fixed on the way: iOS (Pyodide creates no wasm trampoline there, so a snapshot made in Node failed at
+   start; [The trampoline](pyodide-snapshot.md#the-trampoline)), and cache failures that were swallowed. A real phone was not tried.
 5. **UI/UX design** (section above): flows, wireframes, mockups, design tokens.
 6. **Editor page** built to the design: files, editor, run, log, graphs, data view, results.
 7. **Publish to PyPI** (moved from Phase 1): the landing page tells people to `pip install dofile`, so the
@@ -299,6 +324,9 @@ that steps 6 and 8 build.
 8. **Landing page**, sample project, clean-room check of all text.
 9. **CI:** run the corpus in Pyodide under Node on each push. Build `web/` and deploy `main` to the host.
    A browser smoke test (Playwright, one browser): load, upload a .dta, run a regression, check the coefficient.
+   The checks exist and are run by hand (`check-snapshot` about 4 minutes, `check-pytest` about 2, `check-numeric` about 4,
+   `npm test` and `npm run e2e` about 1 each); no CI job runs them yet. `check-snapshot` needs a built snapshot only for its
+   default mode; `--normal` does not.
 10. **Launch:** domain, test in Chrome, Firefox and Safari (desktop and phone), link from the README.
 
 ## Known gaps in the browser engine
@@ -307,6 +335,22 @@ Found 2026-11-07 by running the engine's checks inside Pyodide (`web/scripts/che
 check-snapshot`; details in [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)): the conformance corpus
 (63 value checks against `ref.json`, 12 probes including graphs), 13 calls into the native libraries, and the 98
 Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compare.py` and its known-difference rules.
+
+**Where things stand (2026-11-07), what is open.** The details are in the paragraphs and tables below.
+- **Packages Pyodide lacks:** `pyreadstat` (SAS transport files, Stata 12 and older `.dta`, SPSS; no WebAssembly build: a limit
+  of the web demo to document) and `xlwt` and `xlrd` (`.xls` output and input; both pure Python, so micropip could install
+  them: add them to the page's install, or document `.xls` as unsupported; decision open).
+- **numpy.linalg corners not covered by the shim:** the SVD family (`svd`, `pinv`, `matrix_rank`, `lstsq`) on NaN or inf
+  input returns NaN or raises `ValueError` where CPython raises `LinAlgError`; `matrix_power(singular, -1)`, `tensorsolve` and
+  `tensorinv` return NaN. None was shown to matter (missing values are dropped before a design matrix is built).
+- **ODT-30 (OpenDTA, not a browser problem):** the optimizer's Newton step from a nearly singular numerical Hessian makes a few
+  fits (`gnbreg`, 1901 `streg`, 1907 `tnbreg` and `zinb`, 1905 `xtfrontier`, 1908 `asmprobit`) end in different places on
+  different platforms. Recorded, no fix.
+- **Numbers differ in the last bits** (libm functions: `rnormal`, `invnormal`, `lngamma`, `chi2`; `runiform` and the integer
+  generators are bit-identical), so simulated data is not bit-identical across platforms.
+- **Speed:** cases take 1.5–5 times as long as on CPython (1908_models2: 139 s against 66 s, the CPython time taken while the machine was busy).
+- **Not covered by any check:** Break on a long model fit in the browser; `1920_models4` (no Stata log); the dofile tests that
+  need subprocesses or the `mcp` package, which do not apply in a page.
 
 **Update, 2026-11-07, after PATCH-4 and the `numpy.linalg` shim:** the whole comparison was run again in Pyodide on a
 normal boot (`check-snapshot --normal`, one process per case, 600 s limit, four at a time): **95 of 97 cases pass in 200 s,
@@ -527,8 +571,12 @@ command's fit makes the extra calls; that was not isolated.
 
 ## Experiment: loading matplotlib lazily
 
-Status: **to do**. Findings and conjectures recorded 2026-11-07, while working on the snapshot
-([pyodide-snapshot.md](pyodide-snapshot.md)). Nothing in the repo implements any variant of this yet.
+Status: **not done** (still to do as of 2026-11-07). Findings and conjectures recorded 2026-11-07, while working on the
+snapshot ([pyodide-snapshot.md](pyodide-snapshot.md)). Nothing in the repo implements any variant of this: the snapshot
+build still imports matplotlib and draws one graph, and its bundle includes matplotlib's files. Measured again on
+2026-11-07 in Node (a normal boot, nothing from a snapshot): `browser.start()` imports numpy and scipy and takes 1.8 s;
+matplotlib and PIL are imported by the first graph, which takes 0.82 s, so the regular flow's matplotlib import is already
+lazy, as this section says below.
 
 **The question.** Matplotlib is about 28% of the site-packages files and about 23 MB of the snapshot's heap, and it is
 needed only when a program draws a graph. Should it be loaded on demand: in the snapshot flow (leave it out of the
@@ -648,19 +696,28 @@ sync with the manifest. `.pyc` files tie the graphics part to this exact Python 
 forces a snapshot rebuild). Core code that quietly imports a graphics package would fail only on the lazy path.
 
 ## Verification (end of Phase 2)
-- [ ] The conformance corpus gives the same numbers in Pyodide as in CPython (CI).
-- [ ] Upload a replication package's .do and .dta files. A do-file that uses absolute Windows paths and starts
-      with `cd` runs without edits, and the log notes each mapped path.
-- [ ] Reload the page: files are still there. Data in memory is not (the page says so).
-- [ ] Break stops `while 1 {}` with rc 1 and keeps the data. A long single command is ended by restarting the
-      worker, and the page says the data is gone.
-- [ ] Works in current Chrome, Firefox and Safari. Cold load size and time are written down here.
+`[x]` done, `[~]` partly, `[ ]` not done. Status of 2026-11-07.
+- [~] The conformance corpus gives the same numbers in Pyodide as in CPython. Checked by hand, not in CI: the 63 corpus values
+      match the reference to 1e-6 in Pyodide (normal boot and snapshot start), 95 of 97 Stata cases pass, and e() and r() of
+      all 98 programs agree with CPython to 1e-9 for 95% of estimation results. CI is step 9.
+- [~] Upload a replication package's .do and .dta files. A do-file that uses absolute Windows paths and starts
+      with `cd` runs without edits, and the log notes each mapped path. The e2e does this for one file
+      (`use C:\Users\me\proj\cps`, the note, a regression checked to 1e-6) in four browsers; a real replication package
+      has not been tried.
+- [x] Reload the page: files are still there. Data in memory is not (the page says so). In the e2e: Save, reload, files and
+      the editor's text come back; Reset gives a new engine with no data and the files kept.
+- [~] Break stops `while 1 {}` with rc 1 and keeps the data (in the e2e, four browsers). A long single command is ended by
+      restarting the worker, and the page says the data is gone: tested in Node (`web/test/engine.test.mjs`), not in a browser;
+      Break on a long model fit was not tried.
+- [~] Works in current Chrome, Firefox and Safari. Chromium, Firefox and WebKit pass the e2e (with and without the snapshot,
+      and an iPhone 15 profile); real Safari and a real phone were not tried. Cold load size and time are written down in
+      [pyodide-snapshot.md](pyodide-snapshot.md#results).
 - [ ] No request leaves the page after load except for the static assets (checked in the browser's network tab).
 - [ ] `pip install dofile` works from PyPI.
 
 ## Risks
 - **Load size and time.** Pyodide plus scipy and matplotlib is tens of MB on the first visit. Measure in step 1.
-  If it is too slow, load matplotlib only on the first `graph` command.
+  If it is too slow, load matplotlib only on the first `graph` command (the regular flow already does; the snapshot flow does not: step 4a).
 - **Memory.** WebAssembly has at most 4 GB, and less on phones. A large .dta can fail where the CLI works. The page
   must report an out-of-memory error clearly and not freeze.
 - **Browser storage can be cleared**, even though IndexedDB is on disk (from the browsers' docs; check in step 4):
