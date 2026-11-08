@@ -1,10 +1,17 @@
 name: web
 
 # The web demo (web/): the engine in Pyodide, the page, the memory snapshot. The Python suite is ci.yml.
+# Pull requests run all jobs. A push to main runs only the fast one (`unit`); e2e and snapshot are not repeated after the
+# merge (branch protection: require up-to-date branches).
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -34,6 +41,7 @@ jobs:
 
   e2e:
     name: browsers (Playwright)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -54,6 +62,7 @@ jobs:
 
   snapshot:
     name: memory snapshot
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
