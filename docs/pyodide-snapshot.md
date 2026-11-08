@@ -323,8 +323,8 @@ on desktop never. It took long because several unrelated things looked alike. Wh
 - **The snapshot can crash the tab.** Safari reloaded the page ("a problem repeatedly occurred") on `?snapshot=1`, never on a normal
   boot. Peak memory in Node (`/usr/bin/time -l`, includes Node's own overhead): normal boot 0.7 GB, snapshot 1.25 GB, and a second
   Python loaded on top (what a duplicated worker costs) well beyond that. The compressed files and the 93 MB site-packages bytes are
-  now let go as soon as they are unpacked and written; that did not change Node's peak (Node does not collect on demand), and
-  whether it helps on the phone was not measured. After the single-file fix the snapshot worked on the phone.
+  let go as soon as they are unpacked and written was tried and removed: it did not change Node's peak (Node does not collect on
+  demand), and it was never measured on the phone. After the single-file fix the snapshot worked on the phone.
 - **`cProfile` is not a speed measurement.** A profiled scatter took 2.8–3 s on the phone, in normal boot as well as in the
   snapshot, against 0.1 s unprofiled, and the first graph of a normal boot took 64 s profiled, 39 s of it in `compile` (matplotlib
   ships without `.pyc` files). The profiler's per-call hook is far more expensive on the phone than in Node (0.17 s profiled, 0.04 s
@@ -335,7 +335,7 @@ on desktop never. It took long because several unrelated things looked alike. Wh
 - **`save` of 1 s on some runs.** The worker wrote `/work` to IndexedDB after every run, changed or not, and Safari's IndexedDB
   took about 1 s on some of those writes (a run does not change `/work`; checked in Node). After a run the write is now skipped when
   the folder's paths, sizes and times are as at the last write; the page's file operations always write. Not checked on the phone
-  after the change.
+  after the change. Removed from the worker for now, so the rest of the branch can be retested on the phone without it.
 - **Ruled out:** a 304 reply without COEP (Wrangler's carry both headers), a stale snapshot (its wheel hash matched), the iOS
   user agent (Node with an iPhone user agent: 0.05 s per graph), Pyodide's trampoline.
 - **Method that worked:** a log line in the worker with a random id at the top of the script and in each `onmessage`, and one in the
