@@ -3,7 +3,7 @@
 // case, and writes DIR/<case>.json. The CPython side is the same file:
 //   uv run python web/scripts/numeric_probe.py CASE tests_opendta/tools OUT.json
 // and `uv run python web/scripts/compare_numeric.py CPY_DIR WASM_DIR` diffs them number by number.
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -41,6 +41,7 @@ mkdirSync(out, { recursive: true });
 const t0 = performance.now(), timeouts = [], missing = [], queue = [...cases];
 const runOne = c => new Promise(done => {
   const started = performance.now();
+  rmSync(`${out}/${c}.json`, { force: true });   // a result left by an earlier run would hide a crash
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", c, "--out", out, ...(args.includes("--no-shim") ? ["--no-shim"] : [])], { stdio: "ignore" });
   const timer = setTimeout(() => { timeouts.push(c); child.kill("SIGKILL"); }, timeoutS * 1000);
   child.on("exit", () => {

@@ -9,7 +9,7 @@
 // that make sense without subprocesses (WEB_TESTS). The baseline is the same plugin on CPython:
 //   uv run python web/scripts/pytest_report.py OUT.json FILE -q -p no:cacheprovider
 // and `node scripts/compare-pytest.mjs BASELINE_DIR DIR` lists the differences.
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve, basename } from "node:path";
@@ -68,6 +68,7 @@ const t0 = performance.now(), timeouts = [], crashed = [];
 const queue = [...files];
 const runOne = file => new Promise(done => {
   const started = performance.now();
+  rmSync(`${out}/${basename(file)}.json`, { force: true });   // a result left by an earlier run would hide a crash
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", file, "--out", out,
     ...(args.includes("--no-shim") ? ["--no-shim"] : []), ...(args.includes("--ios") ? ["--ios"] : [])], { stdio: ["ignore", "ignore", "ignore"] });
   const timer = setTimeout(() => { timeouts.push(file); child.kill("SIGKILL"); }, timeoutS * 1000);

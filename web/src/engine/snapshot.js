@@ -49,7 +49,7 @@ const NO_TRAMPOLINE = ["let isIOS=globalThis.navigator&&(", "let isIOS=true||glo
 
 // The errors that mean the browser will not give us storage: full, blocked, private mode, or no Cache API at all. The
 // engine can start without the cache, and says so. Any other error from the Cache API is a bug and is not swallowed.
-const STORAGE_REFUSALS = new Set(["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI"]);
+const STORAGE_REFUSALS = new Set(["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI", "UnknownError"]);   // UnknownError: Chrome's damaged cache storage
 export const isStorageRefusal = e => STORAGE_REFUSALS.has(e?.name);
 
 // loadPyodide options that go with a snapshot being made: two JS objects are still held (a fetch Response and its
