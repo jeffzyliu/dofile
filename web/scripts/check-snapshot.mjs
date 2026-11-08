@@ -156,7 +156,10 @@ const cases = (wanted ?? allCases).sort((a, b) => {
   return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
 });
 
-const problems = [], timeouts = [], crashed = [];
+// Cases that differ because Pyodide lacks a package (phase2-plan.md, "Known gaps in the browser engine"): 1701 needs xlwt,
+// 1911 needs pyreadstat. Expected like a strict xfail: a difference is accepted, and one that now passes is reported.
+const EXPECTED_DIFFER = ["1701_datamgmt_options", "1911_datamgmt"];
+const problems = [], timeouts = [], crashed = [], passed = [];
 let ran = 0;
 const conformance = only === "conformance" || (!only && !wanted)
   ? runChild(["conformance"], 0).then(r => {
@@ -173,11 +176,17 @@ const worker = async () => {
     if (r.timedOut) { timeouts.push(c); console.log(`[${c}] TIMEOUT after ${timeoutS} s (killed)`); }
     else if (r.code !== 0 || !r.result) { crashed.push(c); console.log(`[${c}] crashed (exit ${r.code}) after ${((performance.now() - started) / 1000).toFixed(0)} s`); }
     else if (r.result.failed) problems.push(c);
+    else passed.push(c);
   }
 };
 await Promise.all([conformance, ...Array.from({ length: shards }, worker)]);
+const expectedDiffer = problems.filter(c => EXPECTED_DIFFER.includes(c));
+problems.splice(0, problems.length, ...problems.filter(c => !EXPECTED_DIFFER.includes(c)));
+const nowPass = passed.filter(c => EXPECTED_DIFFER.includes(c));   // the package arrived: take it off the list
 console.log(`\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${ran} compat cases run (limit ${timeoutS} s each), ` +
   `${problems.length} differ, ${timeouts.length} timed out, ${crashed.length} crashed`);
+if (expectedDiffer.length) console.log(`  differ as expected (missing package): ${expectedDiffer.join(", ")}`);
+if (nowPass.length) { console.log(`  expected to differ but pass: ${nowPass.join(", ")} (remove from EXPECTED_DIFFER)`); problems.push(...nowPass); }
 if (problems.length) console.log(`  differ: ${problems.join(", ")}`);
 if (timeouts.length) console.log(`  timed out: ${timeouts.join(", ")}`);
 if (crashed.length) console.log(`  crashed: ${crashed.join(", ")}`);
