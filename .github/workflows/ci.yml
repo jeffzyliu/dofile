@@ -12,7 +12,29 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# A docs-only pull request skips the test jobs but still starts the workflow, so the required check `ci ok` reports. (A
+# workflow-level `paths-ignore` starts nothing, and a required check that never reports blocks the merge forever.)
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes nothing but *.md and docs/
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          code=true
+          if [ "$EVENT" = pull_request ]; then
+            other=$(git diff --name-only "origin/$BASE...HEAD" | grep -vE '\.md$|^docs/' || true)   # files that are not docs
+            [ -n "$other" ] || code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   quick:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -25,7 +47,8 @@ jobs:
       - run: uv run poe test   # ~35 s; skips the slow Stata comparison
 
   test:
-    if: github.event_name != 'push'
+    needs: changes
+    if: github.event_name != 'push' && needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -41,3 +64,13 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3
       - run: uv sync --extra mcp
       - run: uv run poe ci   # everything, including the slow Stata comparison
+
+  # The one check to require in branch protection: it fails if any job failed or was cancelled; skipped jobs are fine.
+  ok:
+    name: ci ok
+    if: always()
+    needs: [changes, quick, test]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
