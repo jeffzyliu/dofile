@@ -14,6 +14,7 @@ uv run poe                                            # list tasks (poethepoet; 
 uv run poe test                                       # default suite in parallel, ~35 s; skips the slow Stata comparison
 uv run poe test tests/test_mcp.py::test_stdio_mode_tools   # one test (extra args go to pytest)
 uv run poe test tests                                 # dofile's own tests only (not OpenDTA's vendored suite)
+uv run poe opendta                                    # OpenDTA's vendored unit tests only (~22 s)
 uv run poe slow                                       # Stata 14 log comparison only (~75 s)
 uv run poe ci                                         # everything, as CI does
 uv run dofile run path/to/file.do --json out.json     # batch run (sandboxed; --unsafe to lift it)

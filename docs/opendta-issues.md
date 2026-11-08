@@ -12,7 +12,7 @@ suggests Stata does the same), `confirmed` (checked against Stata),
 `reported` (issue opened upstream), `fixed upstream` (fixed in a commit we have not vendored yet), `vendored`
 (the fix is in our copy), `patched` (fixed by a dofile patch in `scripts/patches/`, to report upstream), `partly patched` (the patch covers part
 of the entry; the rest is listed in its details), `known`
-(a missing feature, not a bug). PATCH-1's status describes its own progress.
+(a missing feature, not a bug), `left as is` (a real but harmless difference that we chose not to patch; the reason is in the entry). PATCH-1's status describes its own progress.
 The repros were run in dofile (`dofile run` or the MCP server) on 2026-11-04 and 05; the patched ones have tests. The cps and panel data are
 in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (Card 1995), not in the repo.
 
@@ -45,6 +45,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`mkdir C:\proj\out` makes `C:projout`), unlike `use`/`save` and unlike the same path in quotes: their arguments are split with `shlex` in POSIX mode, where `\` is an escape | found 2026-11-06 (path shim tests) | unverified |
 | ODT-27 | `save using name, replace` is accepted and writes a file called `using name.dta`; `save a b, replace` writes `a b.dta`. `save` has no documented `using` clause, so Stata should refuse the first form with a syntax error (assumed; the closed-source Rust reimplementation at stats.camp accepts it and writes `name.dta`, which is no evidence about Stata) | found 2026-11-06 (web demo); not checked against Stata | unverified |
 | ODT-28 | Python errors that escape a command are not turned into Stata errors: rc 9999 `internal engine error` with a traceback, the whole program ends, and `capture` does not catch it. A missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...): `OSError`, Stata r(603) `file ... could not be opened`. Out of memory (numpy cannot allocate): `MemoryError`, Stata r(909). A command that fails partway leaves the data partly changed | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected codes assumed, not checked against Stata | patched (the partly changed data is not) |
+| ODT-29 | numpy `RuntimeWarning: overflow encountered in exp` when a delta-method interval is computed from a huge standard error: `estimation/mleq.py:157` (`transformed_row`, the `exp` of `b ± c·se`) and `estimation/models2.py:739` (`nbreg`/`gnbreg`, the interval of alpha). The value becomes `inf`, which is what the Stata 14 logs show. The warning goes to Python's warnings, not the Stata log | `poe slow`: `test_matches_stata14_reference_log[1907_models]` and `[1918_models3]`; `tests_opendta/tests/test_models_block_c.py::test_nb1_nbreg_and_tnbreg` (`mleq.py:157` only); no test of our own | left as is |
 | ODT-30 | the ML optimizer takes Newton steps from a nearly singular numerical Hessian, so where the likelihood is flat its path (and sometimes where it stops) depends on the last digits of the likelihood's derivatives. `gnbreg cnt x1 x2, lnalpha(x3)` in compat 1907 stops at the boundary alpha = 0 (ll equal to the Poisson log likelihood), a false convergence: a relative 1e-13 change in the derivatives gives a run that does not converge, 1e-11 one that converges to a log likelihood 0.17 higher. Its constant-only model is stuck (ll -959.397, Stata -952.7455) | found 2026-11-07 comparing CPython with Pyodide (`web/scripts/compare_numeric.py`); perturbation experiment in `phase2-plan.md`, "`gnbreg` in 1907_models"; no test | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
@@ -668,6 +669,22 @@ boundary alpha = 0.
   line by line (with known-difference rules for 1907), so it needs the comparison run again. Cross-platform note: the
   differences between platforms here are of the size of ordinary libm differences, so the same would be expected from
   CPython on Linux against macOS; not tested (no Linux machine; the Docker daemon was not running).
+
+### ODT-31: overflow warnings in delta-method intervals (left as is)
+`poe slow` prints three `RuntimeWarning: overflow encountered in exp` in pytest's warnings summary:
+`mleq.py:157` in `1907_models` and `1918_models3`, `models2.py:739` in `1918_models3`.
+- Both lines compute `exp(b - c * se)` and `exp(b + c * se)` for an interval; where `se` is large the upper end overflows
+  to `inf`. Neither site is wrapped in `np.errstate`, unlike the engine's other numpy-heavy modules (`core/ordination.py`,
+  `core/survival.py`, `core/rng.py`).
+- Not caused by dofile: both files are unmodified upstream code at the pinned commit (`opendta-odt12-nbreg-boundary.patch`
+  edits the branch above `models2.py:739`, not the `exp` line). OpenDTA's own suite (`tests_opendta/`, run 2026-11-07:
+  1021 passed, 13 skipped) prints the `mleq.py:157` warning too, in `test_nb1_nbreg_and_tnbreg`. The `models2.py:739` one
+  was not checked upstream, because 1918_models3 runs only through `compare.py`. The same run printed `slogdet` and
+  `normalden` overflow warnings that are also not ours.
+- Not patched on purpose: the output is right (both Stata 14 comparison cases pass, `inf` included) and the warning only
+  goes to Python's warnings (stderr), not into the Stata log (checked only in pytest, not in the CLI or MCP server). A patch would add two `np.errstate(over="ignore")` wrappers (as in
+  `core/ordination.py`) in a new `scripts/patches/` file, plus a re-vendor, for no change in results.
+- Revisit if the warnings ever reach a user (a caller that turns warnings into errors) or if a result stops matching.
 
 ### GAP-3: other `estat` subcommands after `ivregress`
 `estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).

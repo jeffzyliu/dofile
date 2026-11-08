@@ -60,6 +60,7 @@ executor = { type = "uv", extra = "mcp" }
 
 [tool.poe.tasks]
 test = { cmd = "pytest -q -n auto", help = "default suite in parallel (skips the slow Stata comparison)" }
+opendta = { cmd = "pytest -q -n auto tests_opendta/tests", help = "OpenDTA's vendored unit tests only (~22 s)" }
 slow = { cmd = "pytest -q -m slow -n auto", help = "Stata 14 log comparison only" }
 ci = { cmd = "pytest -q -m '' -n auto", help = "everything, as CI runs it" }
 vendor = { cmd = "python scripts/vendor_opendta.py", help = "re-vendor OpenDTA and re-apply patches (pass a COMMIT)" }
