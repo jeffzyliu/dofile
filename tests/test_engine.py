@@ -480,6 +480,22 @@ def test_odt28_commands_with_their_own_error_codes_keep_them(eng):
     assert eng.run("save nodir/a, replace").rc == 603 and eng.run("use nodir/a, clear").rc == 601
 
 
+def test_odt28_out_of_memory_is_rc_909_and_capture_catches_it(eng, monkeypatch):
+    """ODT-28: a MemoryError (numpy could not allocate; the web demo has a 4 GB WebAssembly heap) was rc 9999 and ended the
+    whole program, `capture` or not. Stata: r(909)."""
+    from dofile._vendor.opendta.core.dataset import Dataset
+
+    def no_memory(*args, **kwargs):
+        raise MemoryError("Unable to allocate 763. MiB")
+
+    eng.run("clear\nset obs 3\ngen x = _n")
+    monkeypatch.setattr(Dataset, "set_numeric", no_memory)
+    r = eng.run("replace x = 2")
+    assert (r.rc, r.error) == (909, "op. sys. refuses to provide memory"), (r.rc, r.error)
+    r = eng.run('capture replace x = 2\ndisplay "rc " _rc')
+    assert r.rc == 0 and r.log.strip().splitlines()[-1] == "rc 909", r.log
+
+
 def test_odt22_matrix_pseudofunction(eng):
     """ODT-22: matrix(name) is the matrix name in an expression."""
     eng.run("matrix xx = (1, 2 \\ 3, 4)")
