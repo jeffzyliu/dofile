@@ -97,6 +97,18 @@ test("a worker that fails to load is replaced, and start() still finishes", { ti
   eng.worker.terminate();
 });
 
+test("a worker that always fails to load ends start() with an error instead of restarting forever", { timeout: 20_000 }, async () => {
+  let made = 0;
+  const createWorker = () => {
+    made++;
+    const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
+    return port;
+  };
+  const eng = new EngineClient({ createWorker, wheel });
+  await assert.rejects(eng.start(), /failed twice/);
+  assert.equal(made, 2);
+});
+
 test("files can be listed, written and read while the engine is still loading, and a run sees them", { timeout: 180_000 }, async () => {
   const eng = new EngineClient({ createWorker: nodeWorker, wheel });
   const starting = eng.start();   // not awaited: the page shows the files without waiting for this

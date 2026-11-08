@@ -22,7 +22,7 @@ uv run poe mcp [--http --port 8000]                   # MCP server, stdio by def
 uv run poe vendor [COMMIT]                            # re-vendor OpenDTA, re-apply patches
 uv build                                              # sdist + wheel (the wheel is built from the sdist)
 cd web && npm install && npm test                     # web demo engine in Pyodide under Node (rebuilds the wheel)
-cd web && npm run dev                                 # web demo page on localhost (rebuilds the wheel)
+cd web && npm run dev                                 # web demo page, on the LAN too (rebuilds the wheel)
 cd web && npm run e2e                                 # the page in Chromium, Firefox, WebKit (Playwright; `npx playwright install` once)
 cd web && npm run snapshot                            # build the Pyodide memory snapshot for the page's ?snapshot=1 (docs/pyodide-snapshot.md)
 cd web && npm run check-snapshot [-- --normal]        # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide, one process per case with a time limit; ~4 min with the shim (--normal: no snapshot, the baseline; --cases a,b to pick cases)
@@ -42,6 +42,9 @@ file, and read the file while it runs: `uv run poe test > .dofile/test.log 2>&1`
 pipe it through `tail` or `head`: they print nothing until the command ends, so a run in progress looks like an
 empty one. pytest prints dots as tests finish and a summary line at the end; wait for the completion notice, then
 read the last lines of the log. A single test or file is quick enough to run in the foreground.
+
+All dev HTTP servers in `web/` (`dev`, `preview`, `cf:dev`) are expected to listen on all interfaces so LAN devices (a phone) can
+connect, for now: keep `--host` / `--ip 0.0.0.0` in their scripts and give any new dev server the same.
 
 ## Architecture
 
