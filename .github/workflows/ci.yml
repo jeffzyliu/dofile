@@ -1,12 +1,31 @@
 name: ci
 
+# Pull requests run the full matrix. A push to main runs only `quick`; the matrix is not repeated after the merge
+# (branch protection: require up-to-date branches).
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  quick:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.14"   # pinned here, not left to .python-version; also reaches poe's nested `uv run`
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv sync --extra mcp
+      - run: uv run poe test   # ~35 s; skips the slow Stata comparison
+
   test:
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:

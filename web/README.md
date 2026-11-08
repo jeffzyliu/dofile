@@ -83,7 +83,7 @@ the engine. Pyodide's runtime and packages are loaded from the jsDelivr CDN, at 
 
 ## CI
 
-`.github/workflows/web.yml` runs three jobs on every push to `main` and every pull request:
+`.github/workflows/web.yml` runs three jobs on every pull request. A push to `main` runs only the first (the fast one), and it can be started by hand:
 
 - **types, unit tests, build:** `npm run check`, a check that `commands.json` is up to date, `npm test`, `npm run build`.
 - **browsers:** `npm run e2e` (Chromium, Firefox, WebKit, iPhone profile) on Ubuntu; Playwright's results are kept as an
