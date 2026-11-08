@@ -3,7 +3,7 @@
 // Protocol: the page posts {id, op, args}; the worker answers {id, result} or {id, error}, one op at a time, and
 // posts {status} lines while it starts. client.js is the page's side. Python's side: src/dofile/browser.py.
 import { loadPyodide } from "pyodide";
-import { isStorageRefusal, restoreOptions, unpack } from "./snapshot.js";
+import { hasNativeBrotli, isStorageRefusal, restoreOptions, unpackAsync } from "./snapshot.js";
 
 const ROOT = "/work";
 let py, browser, interrupt = null, fromSnapshot = false;
@@ -87,10 +87,10 @@ async function loadBrotli() {
   return (await import("brotli-wasm")).default;
 }
 
-async function loadFromSnapshot(base, indexURL, wheelName, io) {
+async function loadFromSnapshot(base, indexURL, wheelName, wheelHash, io, brotliMode) {
   const t0 = performance.now();
   let last = t0;
-  const laps = [];
+  const laps = [], secs = [];   // laps: text for the console; secs: [name, seconds] for the page's summary
   const notCached = [];   // why the browser kept nothing, if it would not (reported with the timings, and in the console)
   const isFile = base.startsWith("file:");   // Node, the tests: no Cache API by design
   const refused = (e, url) => {
@@ -98,7 +98,10 @@ async function loadFromSnapshot(base, indexURL, wheelName, io) {
     const why = `${e.name + ": "}${e.message}${url ? ` (${url.split("/").pop()})` : ""}`;
     if (!isFile) { notCached.push(why); console.warn(`[dofile] snapshot not cached: ${why}`); }
   };
-  const lap = what => { const t = performance.now(); laps.push(`${what} ${((t - last) / 1000).toFixed(2)}s`); last = t; };
+  const lap = what => {
+    const t = performance.now(), s = (t - last) / 1000;
+    laps.push(`${what} ${s.toFixed(2)}s`); secs.push([what, s]); last = t;
+  };
   // the manifest is the one file that must be fresh: it says which build the cached files belong to
   const manifest = await (base.startsWith("file:") ? fetchJSON(`${base}manifest.json`)
     : fetch(`${base}manifest.json`, { cache: "no-cache" }).then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -109,6 +112,11 @@ async function loadFromSnapshot(base, indexURL, wheelName, io) {
     throw new Error(`the snapshot is for ${manifest.wheel} but the page has ${wheelName}: run \`npm run snapshot\` again`);
   }
   if (!manifest.files) throw new Error("the snapshot is in an older format: run `npm run snapshot` again");
+  // The wheel's name stays the same while its code changes, so the name alone cannot tell a stale snapshot (it holds the old
+  // dofile code). A page without a hash (the Node tests) skips this.
+  if (wheelHash && manifest.wheelHash !== wheelHash) {
+    throw new Error(`the snapshot was built from a different build of ${wheelName} than this page has: run \`npm run snapshot\` again`);
+  }
   const { snapshot: snapFile, bundle: bundleFile } = manifest.files;
   const cache = isFile ? undefined : await snapshotCache(manifest.built, refused);
   const store = cache && { cache, refused };
@@ -120,32 +128,66 @@ async function loadFromSnapshot(base, indexURL, wheelName, io) {
     loadBrotli(),
   ]);
   lap(hadCache ? "read from cache" : "download");
-  const snapshot = unpack(brotli, snapPacked, snapFile);
-  const blob = unpack(brotli, bundlePacked, bundleFile);
+  // The browser's own brotli decoder when it has one (brotli-wasm took 25 s for the 229 MB on an iPhone); `?brotli=wasm` in
+  // the page's URL forces brotli-wasm, to compare. In Node (the tests) the wasm decoder stays, so they run what the build checks.
+  const native = !isFile && brotliMode !== "wasm" && hasNativeBrotli();
+  const timed = async (file, packed) => {
+    const t = performance.now();
+    const [out, decoder] = await unpackAsync(brotli, packed, file, native);
+    return [out, since(t), decoder];
+  };
+  const [snapshot, heapS, decoder] = await timed(snapFile, snapPacked);
+  const [blob, sitePackagesS] = await timed(bundleFile, bundlePacked);
   lap("decompress");
+  console.info(`[dofile] unpack with ${decoder}: heap ${heapS.toFixed(2)}s (${(snapFile.raw / 1e6 / heapS).toFixed(0)} MB/s out), ` +
+    `site-packages ${sitePackagesS.toFixed(2)}s (${(bundleFile.raw / 1e6 / sitePackagesS).toFixed(0)} MB/s out), ` +
+    `native brotli available ${hasNativeBrotli()}, hardwareConcurrency ${navigator.hardwareConcurrency}, deviceMemory ${navigator.deviceMemory ?? "n/a"}`);
   const options = restoreOptions(create, { snapshot, dso, index, blob }, lap);
   const loaded = await loadPyodide({ indexURL, ...options, ...io });
   lap("copy the heap");
   console.info(`[dofile] snapshot start: ${laps.join(", ")}, total ${((performance.now() - t0) / 1000).toFixed(2)}s` +
     (notCached.length ? `, NOT CACHED: ${[...new Set(notCached)].join("; ")}` : ""));
-  return loaded;
+  // For the page's status line: the first lap is the download (or the read from the cache), "decompress" is the unpack,
+  // every lap after it (the wasm module, site-packages, re-linking the libraries, the heap) is the restore.
+  const [[fetched, fetchS], [, unpackS], ...rest] = secs;
+  const summary = { fetched, fetchS, unpackS, heapS, sitePackagesS, decoder, restoreS: rest.reduce((a, [, s]) => a + s, 0),
+    notCached: [...new Set(notCached)] };
+  return { loaded, summary };
 }
 
+// Where the start's time went, in seconds, for the page's status line (the "startup" op). From a snapshot: fetched (the
+// name of the first step: download, or read from cache), fetchS, unpackS, restoreS, filesS, engineS, notCached. A normal
+// boot: runtimeS (Pyodide itself), filesS, packagesS (micropip and the wheel with numpy, scipy, matplotlib), engineS.
+const startup = {};
+const since = t => (performance.now() - t) / 1000;
+
 const ops = {
-  async mount({ indexURL, snapshot, wheelName }) {
+  async mount({ indexURL, snapshot, wheelName, wheelHash, brotli: brotliMode }) {
     status("loading Python");
     const io = { stdout: l => console.log(l), stderr: l => console.warn(l) };
     fromSnapshot = Boolean(snapshot);
-    py = snapshot ? await loadFromSnapshot(snapshot, indexURL, wheelName, io) : await loadPyodide({ indexURL, ...io });
+    const tRuntime = performance.now();
+    if (snapshot) {
+      const { loaded, summary } = await loadFromSnapshot(snapshot, indexURL, wheelName, wheelHash, io, brotliMode);
+      py = loaded;
+      Object.assign(startup, { mode: "snapshot", ...summary });
+    } else {
+      py = await loadPyodide({ indexURL, ...io });
+      Object.assign(startup, { mode: "normal", runtimeS: since(tRuntime) });
+    }
     py.FS.mkdirTree(ROOT);
+    const tFiles = performance.now();
     if (persistent()) {
       status("loading your files");
       py.FS.mount(py.FS.filesystems.IDBFS, {}, ROOT);
       await syncfs(true);
     }
+    startup.filesS = since(tFiles);
   },
+  startup: () => startup,
   // wheel: the dofile wheel's URL, or {name, bytes}; interruptBuffer: an Int32Array on a SharedArrayBuffer, or null
   async boot({ wheel, interruptBuffer }) {
+    const tPackages = performance.now();
     if (!fromSnapshot) {   // a snapshot has the packages and the wheel in it already
       status("loading packages");
       await py.loadPackage("micropip", { messageCallback: () => {} });
@@ -156,15 +198,25 @@ const ops = {
     }
     interrupt = interruptBuffer ?? null;
     if (interrupt) py.setInterruptBuffer(interrupt);
+    if (!fromSnapshot) startup.packagesS = since(tPackages);
     status("starting the engine");
+    const tEngine = performance.now();
     browser = py.pyimport("dofile.browser");
-    return JSON.parse(browser.start(ROOT));
+    const about = JSON.parse(browser.start(ROOT));
+    startup.engineS = since(tEngine);
+    return about;
   },
   async run({ code }) {
     await booted;
     if (interrupt) interrupt[0] = 0;   // a Break pressed while idle must not stop this run
+    const t0 = performance.now();
     const result = JSON.parse(browser.run(code));
+    const t1 = performance.now();
     await save();
+    // where the run's time went, for the page's status line (the Python side gave engine and encode; a snapshot built from an
+    // older wheel gives none, and then there is no breakdown)
+    const k = result.timing;
+    if (k) result.timing = { ...k, parse: (t1 - t0) / 1000 - k.engine - k.encode, save: (performance.now() - t1) / 1000 };
     return result;
   },
   // undefined becomes Python's None (null would become JsNull)

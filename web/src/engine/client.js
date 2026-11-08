@@ -10,8 +10,10 @@ export class EngineClient {
   // createWorker: () => a Worker (in the page: new Worker(new URL("./worker.js", import.meta.url), {type: "module"}))
   // snapshot: the URL (ending in "/") of a snapshot built by scripts/make-snapshot.mjs, to start from instead of
   // installing the packages; the worker refuses one that was built for another wheel.
-  constructor({ createWorker, wheel, indexURL, snapshot, graceMs = 5000, onStatus = (_status) => {} }) {
-    Object.assign(this, { createWorker, wheel, indexURL, snapshot, graceMs, onStatus });
+  // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.js), to compare them
+  // wheelHash: SHA-256 of the wheel; a snapshot whose manifest has another one was built from other code and is refused
+  constructor({ createWorker, wheel, wheelHash, indexURL, snapshot, brotli, graceMs = 5000, onStatus = (_status) => {} }) {
+    Object.assign(this, { createWorker, wheel, wheelHash, indexURL, snapshot, brotli, graceMs, onStatus });
     this.nextId = 0;
     this.pending = new Map();
     this.running = null;
@@ -33,10 +35,12 @@ export class EngineClient {
     // If a restart happens during a step, that step's answer is the new start()'s result and this one ends with it.
     const gen = this.gen = (this.gen ?? 0) + 1;
     const wheelName = typeof this.wheel === "string" ? this.wheel.split("/").at(-1) : this.wheel.name;
-    const mounted = await this.call("mount", { indexURL: this.indexURL, snapshot: this.snapshot, wheelName });
+    const mounted = await this.call("mount", { indexURL: this.indexURL, snapshot: this.snapshot, wheelName, wheelHash: this.wheelHash, brotli: this.brotli });
     if (gen !== this.gen) return mounted;
     const about = await this.call("boot", { wheel: this.wheel, interruptBuffer: this.interrupt });
-    if (gen === this.gen) this.about = about;
+    if (gen !== this.gen) return about;
+    this.about = about;
+    this.startup = await this.call("startup");   // where the start's time went (worker.js); the page shows it in its status line
     return about;
   }
 

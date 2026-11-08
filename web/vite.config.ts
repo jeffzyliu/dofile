@@ -1,5 +1,6 @@
 import { defineConfig, type Connect } from "vite";
 import { copyFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 // the dofile wheel the page installs: the newest in ../dist (`npm run wheel`), served from public/
 const dist = new URL("../dist/", import.meta.url);
@@ -22,6 +23,7 @@ const isolate: Connect.NextHandleFunction = (_req, res, next) => {
 export default defineConfig({
   define: {
     __WHEEL__: JSON.stringify(wheel),
+    __WHEEL_HASH__: JSON.stringify(createHash("sha256").update(readFileSync(new URL(wheel, dist))).digest("hex")),   // a snapshot must be of this wheel
     __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
   },
   plugins: [{
