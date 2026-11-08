@@ -1,0 +1,59 @@
+name: deploy
+
+# Builds the web demo (wheel, memory snapshot, page) and deploys web/dist to Cloudflare Workers as static assets.
+# Needs the repo secrets CLOUDFLARE_API_TOKEN (template "Edit Cloudflare Workers") and CLOUDFLARE_ACCOUNT_ID.
+# Pull requests are tested by web.yml; this runs only after a merge to main, or by hand.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false   # let a running deploy finish; the next one queues
+
+defaults:
+  run:
+    working-directory: web
+
+env:
+  UV_PYTHON: "3.14"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run wheel
+
+      # The snapshot depends on the wheel (engine source, dependencies), the pyodide version (package-lock) and the
+      # scripts that build it. The key hashes those inputs, so it is rebuilt only when one changes.
+      - id: cache
+        uses: actions/cache@v5
+        with:
+          path: web/public/snapshot
+          key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.mjs', 'web/src/engine/snapshot.js') }}
+
+      # Safety net: a restored snapshot must be of the wheel just built (the page refuses any other), else rebuild it.
+      - id: fresh
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          want=$(sha256sum dist/*.whl | cut -d' ' -f1)
+          if grep -q "\"wheelHash\":\"$want\"" public/snapshot/manifest.json; then echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.fresh.outputs.ok != 'true'
+        run: npm run snapshot   # needs the network once: micropip fetches openpyxl from PyPI
+
+      - run: npm run build   # vite build copies public/ (wheel, snapshot, _headers) into dist/
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: deploy

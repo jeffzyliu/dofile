@@ -15,7 +15,9 @@
     "check": "tsc --noEmit",
     "pretest": "npm run wheel",
     "test": "node --test test/",
-    "e2e": "npm run build && playwright test"
+    "e2e": "npm run build && playwright test",
+    "cf:dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@codemirror/language": "^6.13.1",
@@ -29,6 +31,7 @@
     "@playwright/test": "^1.65.0",
     "fake-indexeddb": "^6.2.7",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "wrangler": "^4.158.0"
   }
 }

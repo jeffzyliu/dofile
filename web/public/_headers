@@ -1,0 +1,4 @@
+# Cross-origin isolation (SharedArrayBuffer for the Break button); same two headers as vite.config.ts.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp

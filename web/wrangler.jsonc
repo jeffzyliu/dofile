@@ -1,0 +1,7 @@
+{
+  // Static-assets-only Worker: Cloudflare serves dist/ (npm run build) with the headers from dist/_headers.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dofile",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./dist" }
+}
