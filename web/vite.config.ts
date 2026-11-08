@@ -32,5 +32,8 @@ export default defineConfig({
     configurePreviewServer: server => { server.middlewares.use(isolate); },
   }],
   optimizeDeps: { exclude: ["pyodide", "brotli-wasm"] },   // both load a wasm file by URL, which pre-bundling breaks
-  worker: { format: "es" },
+  // One file for the worker: no chunks. A chunk (brotli-wasm's, loaded only for a snapshot) imports the bundler's helpers from the
+  // worker's entry file, and iOS Safari then runs the entry a second time as another module; the second copy sets onmessage
+  // again, so every later message reaches a copy that never got "mount" ("undefined is not an object (evaluating 'V.loadPackage')").
+  worker: { format: "es", rollupOptions: { output: { inlineDynamicImports: true } } },
 });

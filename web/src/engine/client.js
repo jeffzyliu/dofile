@@ -21,7 +21,7 @@ export class EngineClient {
 
   async start() {
     this.interrupt = typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4));
-    this.worker = this.createWorker();
+    const worker = this.worker = this.createWorker();
     this.worker.onmessage = ({ data }) => {
       if (data.status) return this.onStatus(data.status);
       const p = this.pending.get(data.id);
@@ -29,7 +29,24 @@ export class EngineClient {
       this.pending.delete(data.id);
       "error" in data ? p.reject(new Error(data.error)) : p.resolve(data.result);
     };
-    this.worker.onerror = e => this.restart(`the engine crashed (${e?.message ?? e})`);
+    let alive = false;   // the worker has sent something, so its script loaded
+    const onmessage = worker.onmessage;
+    worker.onmessage = e => { alive = true; this.loadFailures = 0; onmessage(e); };
+    worker.onerror = e => {
+      if (worker !== this.worker) return;   // a late error from a replaced worker must not kill its successor
+      // A script that never ran: WebKit sometimes refuses one once, and a new worker works; but a 404 (a stale cached page asking
+      // for a worker file that is gone) or a syntax error fails every time, so the second failure in a row ends the start.
+      this.loadFailures = alive ? 0 : (this.loadFailures ?? 0) + 1;
+      if (this.loadFailures > 1) {
+        this.loadFailures = 0;
+        const error = new Error(`the engine's worker did not load (${e?.message || "no message"}); reload the page`);
+        const pending = [...this.pending.values()];
+        this.pending.clear();
+        for (const p of pending) p.reject(error);
+        return;
+      }
+      this.restart(`the engine crashed (${e?.message ?? e})`);
+    };
     // Two steps (see worker.js). Calls the page makes after start() begins, such as files and read, queue behind
     // "mount" in the worker, so they can be made at once: they are answered before the engine has loaded.
     // If a restart happens during a step, that step's answer is the new start()'s result and this one ends with it.
@@ -72,6 +89,7 @@ export class EngineClient {
 
   // a new worker; a run in progress ends with rc 9998, other calls fail. Files in IndexedDB come back.
   async restart(reason) {
+    console.warn(`[dofile] restart: ${reason}`);
     this.worker.terminate();
     const pending = [...this.pending.values()];
     this.pending.clear();

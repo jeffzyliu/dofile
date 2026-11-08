@@ -114,6 +114,7 @@ export function restoreOptions(create, { snapshot, dso, index, blob }, lap = () 
       m.FS.writeFile(path, blob.subarray(at, at + size));
       at += size;
     }
+    blob = null;   // the file system holds its own copy; this one (93 MB) is not needed for the re-linking and the heap copy
     lap("write site-packages");
     // The recorded addresses come from the original heap's malloc; here malloc doesn't know them, so a library's
     // start-up allocations could land on another library's range. Reserve the whole span first.
