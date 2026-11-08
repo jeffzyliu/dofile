@@ -20,9 +20,33 @@ defaults:
 env:
   UV_PYTHON: "3.14"   # Pyodide 314's Python; `npm run wheel` builds the dofile wheel with uv
 
+# A docs-only pull request skips the test jobs but still starts the workflow, so the required check `web ok` reports. (A
+# workflow-level `paths-ignore` starts nothing, and a required check that never reports blocks the merge forever.)
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes nothing but *.md and docs/
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          code=true
+          if [ "$EVENT" = pull_request ]; then
+            other=$(git diff --name-only "origin/$BASE...HEAD" | grep -vE '\.md$|^docs/' || true)   # files that are not docs
+            [ -n "$other" ] || code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   unit:
     name: types, unit tests, build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,7 +65,8 @@ jobs:
 
   e2e:
     name: browsers (Playwright)
-    if: github.event_name != 'push'
+    needs: changes
+    if: github.event_name != 'push' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -62,7 +87,8 @@ jobs:
 
   snapshot:
     name: memory snapshot
-    if: github.event_name != 'push'
+    needs: changes
+    if: github.event_name != 'push' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -78,3 +104,13 @@ jobs:
       # the corpus, probes and the Stata 14 cases from the restored engine (~4 min locally; the runner is slower, so a
       # longer limit per case: 1908 and 1909 took over 300 s)
       - run: npm run check-snapshot -- --timeout 900
+
+  # The one check to require in branch protection: it fails if any job failed or was cancelled; skipped jobs are fine.
+  ok:
+    name: web ok
+    if: always()
+    needs: [changes, unit, e2e, snapshot]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

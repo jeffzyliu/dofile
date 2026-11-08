@@ -413,6 +413,25 @@ its stripped docstrings): 16 of the 91 cases then run failed.
 | SAS transport files and Stata 12 `.dta` | 1 (1911_datamgmt) | `export sasxport`, `import sasxport` and old `.dta` files need `pyreadstat`, a C extension with no WebAssembly build | document as a limit of the web demo |
 | Numeric known differences | 3: 0408_mata_moptimize, 1907_models, 1918_models3 | in Pyodide they left a difference beyond their known-difference rule, with more log lines than Stata's (the extra line in 0408 was `convergence not achieved`), and ran 20–500 times slower than on CPython: one shared cause | **fixed 2026-11-07** by the `numpy.linalg` shim ([Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide)): all three pass, in 2.1 s (0408, was 204–220 s), 7.5 s (1907, was 25 s) and 4.2 s (1918, was 17 s), under the same rules as CPython |
 
+**Next steps for the two package-gap cases (1701_datamgmt_options, 1911_datamgmt), added 2026-11-08; none done.**
+`web/scripts/check-snapshot.mjs` lists both in `EXPECTED_DIFFER`, so CI accepts any difference in them (a strict xfail: it
+fails only if one starts to pass). That also hides a new difference in the rest of each case, so first:
+1. **Review both cases.** Read the diff of each against its Stata 14 log (`tests_opendta/compat/expected/`). List every
+   command whose output differs and say whether the missing package explains it. The log shows only the first 40 diff lines,
+   so run the case alone (`node scripts/check-snapshot.mjs --cases 1701_datamgmt_options,1911_datamgmt`) and read all of it.
+   Then replace `EXPECTED_DIFFER` with a known-difference rule that accepts only the package-message lines (the form of
+   `tests_opendta/compat/known_differences.txt`), so any other difference fails again.
+2. **`xlwt` and `xlrd` (1701).** Try `micropip.install("xlwt")` and `("xlrd")` in Pyodide; both are believed to be pure
+   Python (check the wheel tags on PyPI). If they import, run 1701 with them. Then decide: add them to the page's install and
+   to `make-snapshot.mjs` (rebuild the snapshot; measure the size and start-up cost), or document `.xls` as unsupported in
+   the browser. dofile's own `pyproject.toml` lists `xlwt` only as a dev dependency, so a `pip install dofile` user sees the
+   same message; an optional extra is a separate question.
+3. **`pyreadstat` (1911).** It is a C extension and Pyodide has no build of it. Find out which commands of 1911 need it
+   (`export sasxport`, `import sasxport`, pre-Stata-13 `.dta`) and whether pure-Python readers cover them (pandas has its own
+   SAS-transport and old-`.dta` readers). Check the newest Pyodide's package list; building it with `pyodide-build` (it needs
+   the ReadStat C library and Cython) is the heavy option. If none is worth it, document these as limits of the web demo in
+   `web/README.md` and in the page.
+
 The snapshot check found one bug of the snapshot's own, fixed: after a restore, `scipy.linalg.solve` crashed with `cannot
 resolve symbol dsytrf_` (see [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)).
 
