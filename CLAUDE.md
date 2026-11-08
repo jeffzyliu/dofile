@@ -79,8 +79,10 @@ Layers, bottom up (`src/dofile/`):
   buffer). `web/src/engine/client.js` is the page's side (Break, restart = rc 9998).
 - `web/src/engine/snapshot.js` + `web/scripts/make-snapshot.mjs`: web demo only, opt-in (`?snapshot=1`). Start from a
   Pyodide memory snapshot with a patched copy of Pyodide's loader that re-links the native libraries; the patch throws
-  if Pyodide's loader text changes, and the snapshot must be rebuilt after a wheel or Pyodide change. See
-  `docs/pyodide-snapshot.md`.
+  if Pyodide's loader text changes, and the snapshot must be rebuilt after a wheel or Pyodide change (the manifest holds
+  the wheel's SHA-256 and the page refuses a snapshot of another build). The two big files are unpacked with the browser's
+  own brotli decoder when it has one, else brotli-wasm. See `docs/pyodide-snapshot.md`. `web/README.md` lists the web
+  scripts and folders.
 - `pathshim.py`: web demo only (the CLI and MCP server never install it). Through PATCH-3's hook
   (`core/userpath.py`) it maps file names written for someone's computer into one working folder and replaces `cd`.
 - `linalgshim.py`: web demo only. numpy's `inv`, `solve` and `cholesky` return NaN instead of raising `LinAlgError` in

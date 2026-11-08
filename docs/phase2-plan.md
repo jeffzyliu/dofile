@@ -18,12 +18,17 @@ are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since,
   fits whose answer the data does not pin down (ODT-30, an OpenDTA optimizer issue). Nothing of this is in CI yet.
 - **The memory snapshot** (opt-in, `?snapshot=1`; [pyodide-snapshot.md](pyodide-snapshot.md)): a return visit starts in 1.2 s
   against 4.5–9.2 s, a first visit in 1.7 s unthrottled and 5.1 s at 100 Mbps, level with the normal boot at 30 Mbps. It
-  is 39.9 MB (brotli 11, docstrings stripped). It works in Chromium, Firefox, WebKit and an iPhone profile; a real phone
-  was not tried. Which size optimizations are done and which are not: [File size](pyodide-snapshot.md#file-size-what-is-done-and-what-is-not).
+  is 39.9 MB (brotli 11, docstrings stripped). It works in Chromium, Firefox, WebKit and an iPhone profile. **One real iPhone
+  (2026-11-08, over the LAN): the snapshot start took 28–30 s, 25–28 s of it unpacking with brotli-wasm; with the browser's own
+  brotli decoder the unpack is about 3 s. The normal boot took 9.2 s.** The status line now says where a start's and a run's
+  time goes. A snapshot older than the code is refused (the manifest holds the wheel's hash). Details:
+  [On a real iPhone](pyodide-snapshot.md#on-a-real-iphone-2026-11-08). Which size optimizations are done and which are not: [File size](pyodide-snapshot.md#file-size-what-is-done-and-what-is-not).
 - **Tools:** `npm run check-snapshot`, `check-pytest`, `check-numeric` and `web/scripts/measure-startup.mjs`.
 
-**Still open in Phase 2:** the lazy-matplotlib experiment (4a, not started), whether the snapshot becomes the default, a real
-phone, the `.xls` packages (`xlwt`, `xlrd`) and `pyreadstat`, wiring the checks into CI (step 9), and steps 5 to 10.
+**Still open in Phase 2:** the lazy-matplotlib experiment (4a, not started), whether the snapshot becomes the default (the
+real-phone numbers above are one input; a phone over HTTPS with the cache working, and a first visit over a real network,
+were not measured), the `.xls` packages (`xlwt`, `xlrd`) and `pyreadstat` (next steps for 1701 and 1911 are in
+[Known gaps](#known-gaps-in-the-browser-engine)), the CI workflows' first results (step 9), and steps 5 to 10.
 
 ## Facts this plan rests on
 - **OpenDTA ran unmodified in Pyodide 314** (Python 3.14) under Node during the engine evaluation
@@ -315,7 +320,11 @@ that steps 6 and 8 build.
    `check-numeric` (e() and r() at full precision, 109,265 numbers). Results in [Known gaps](#known-gaps-in-the-browser-engine).
 4e. ~~**Browsers**~~ done 2026-11-07: the e2e passes in Chromium, Firefox, WebKit and an iPhone profile, with and without the
    snapshot. Found and fixed on the way: iOS (Pyodide creates no wasm trampoline there, so a snapshot made in Node failed at
-   start; [The trampoline](pyodide-snapshot.md#the-trampoline)), and cache failures that were swallowed. A real phone was not tried.
+   start; [The trampoline](pyodide-snapshot.md#the-trampoline)), and cache failures that were swallowed. A real phone was tried
+   by hand on 2026-11-08 ([On a real iPhone](pyodide-snapshot.md#on-a-real-iphone-2026-11-08)). The first CI run found that the
+   e2e helper's Ctrl+A then `insertText` left the editor's last line behind in WebKit on Linux (the iPhone profile): it ran
+   `display "EDITED"scatter y x` and got rc 111. The tests now replace the editor's text through `window.__editor`, a view
+   that `main.ts` exposes for them; whether a real iOS keyboard's select-all does the same was not checked.
 5. **UI/UX design** (section above): flows, wireframes, mockups, design tokens.
 6. **Editor page** built to the design: files, editor, run, log, graphs, data view, results.
 7. **Publish to PyPI** (moved from Phase 1): the landing page tells people to `pip install dofile`, so the
@@ -325,9 +334,16 @@ that steps 6 and 8 build.
 9. **CI:** run the corpus in Pyodide under Node on each push. Build `web/` and deploy `main` to the host.
    A browser smoke test (Playwright, one browser): load, upload a .dta, run a regression, check the coefficient.
    The checks exist and are run by hand (`check-snapshot` about 4 minutes, `check-pytest` about 2, `check-numeric` about 4,
-   `npm test` and `npm run e2e` about 1 each); `.github/workflows/web.yml` runs `npm test`, `e2e`, `snapshot` and
-   `check-snapshot` (written 2026-11-07, not yet run on GitHub); `check-pytest` and `check-numeric` stay by hand. `check-snapshot` needs a built snapshot only for its
-   default mode; `--normal` does not.
+   `npm test` and `npm run e2e` about 1 each); `.github/workflows/web.yml` (2026-11-08) runs on pull requests: `npm run check`,
+   a check that `commands.json` is current, `npm test`, `build`, `e2e` in four browser profiles, and `npm run snapshot` with
+   `npm test` and `check-snapshot` (a push to `main` runs only the first job; a docs-only pull request skips the test jobs
+   but still reports through the `web ok` job, which is the one to require in branch protection; `ci.yml` has the same
+   `ci ok`). `check-pytest` and `check-numeric` stay by hand. `check-snapshot` needs a built snapshot only for its default
+   mode; `--normal` does not. First runs on GitHub found: the runner is slower than a laptop (1908_models2 took over 300 s
+   with four cases at a time, so the per-case limit is 900 s in CI); the two package-gap cases (1701, 1911) now count as
+   expected differences, a strict xfail (`EXPECTED_DIFFER` in `check-snapshot.mjs`); and iPhone-profile WebKit on Linux needs
+   the editor hook above. The iPhone-profile run took about 200 s to become ready once, so the e2e waits for the engine
+   up to 300 s and a test may take 600 s.
 10. **Launch:** domain, test in Chrome, Firefox and Safari (desktop and phone), link from the README.
 
 ## Known gaps in the browser engine
@@ -587,7 +603,8 @@ package would fail only on the lazy path.
       restarting the worker, and the page says the data is gone: tested in Node (`web/test/engine.test.mjs`), not in a browser;
       Break on a long model fit was not tried.
 - [~] Works in current Chrome, Firefox and Safari. Chromium, Firefox and WebKit pass the e2e (with and without the snapshot,
-      and an iPhone 15 profile); real Safari and a real phone were not tried. Cold load size and time are written down in
+      and an iPhone 15 profile); one real iPhone was tried by hand (Safari, over the LAN); Chrome and Edge as shipped, Android and
+      Safari on a Mac were not. Cold load size and time are written down in
       [pyodide-snapshot.md](pyodide-snapshot.md#results).
 - [ ] No request leaves the page after load except for the static assets (checked in the browser's network tab).
 - [ ] `pip install dofile` works from PyPI.
