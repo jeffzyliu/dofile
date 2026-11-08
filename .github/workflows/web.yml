@@ -75,4 +75,6 @@ jobs:
       - run: npm ci
       - run: npm run snapshot   # needs the network once: micropip fetches openpyxl from PyPI
       - run: npm test   # with a snapshot built, snapshot-native.test.mjs runs too instead of skipping
-      - run: npm run check-snapshot   # the corpus, probes and the Stata 14 cases from the restored engine (~4 min)
+      # the corpus, probes and the Stata 14 cases from the restored engine (~4 min locally; the runner is slower, so a
+      # longer limit per case: 1908 and 1909 took over 300 s)
+      - run: npm run check-snapshot -- --timeout 900
