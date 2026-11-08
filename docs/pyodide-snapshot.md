@@ -4,7 +4,8 @@ Status (2026-11-07): built, measured and checked; opt-in in the demo with `?snap
 (brotli 11, docstrings and asserts stripped). A return visit starts in 1.2 s against 4.5–9.2 s for the normal boot; a first
 visit takes 1.7 s unthrottled, 5.1 s at 100 Mbps and 13.9 s at 30 Mbps (normal boot: 5.8, 6.9, 13.9 s). It passes the conformance corpus, 95 of 97 Stata 14
 cases (the other two need packages Pyodide lacks) and the browser tests in Chromium, Firefox, WebKit and an iPhone profile.
-Not tried: a real phone. **Which size optimizations are done and which are not: [File size](#file-size-what-is-done-and-what-is-not).**
+Tried by hand on one real iPhone (Safari, over the LAN, 2026-11-08): see [On a real iPhone](#on-a-real-iphone-2026-11-08);
+unpacking was the slow part there (brotli-wasm, 25 s) and the browser's own brotli decoder fixed it. **Which size optimizations are done and which are not: [File size](#file-size-what-is-done-and-what-is-not).**
 Part of Phase 2 (`phase2-plan.md`); the engine itself is unchanged.
 
 ## The question
@@ -85,9 +86,9 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 | File | Role |
 |---|---|
 | `web/scripts/make-snapshot.mjs` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes, almost all of it brotli quality 11, or seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
-| `web/src/engine/snapshot.js` | the loader patch, the library log, the restore options, and `inflate`/`unpack` (brotli decoding); used by the script and the worker |
-| `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, decompress, restore); `boot` then skips the install |
-| `web/src/engine/client.js`, `main.ts` | pass the URL; `?snapshot=1` turns it on and the status says `(snapshot)` |
+| `web/src/engine/snapshot.js` | the loader patch, the library log, the restore options, and the brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's own decoder, with brotli-wasm as the fallback); used by the script and the worker |
+| `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went |
+| `web/src/engine/client.js`, `main.ts` | pass the URL, the wheel's hash and `?brotli=`; `?snapshot=1` turns it on and the status says `(snapshot)` with the start's breakdown |
 | `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison |
 | `docs/img/make-startup-times.mjs` | draws the chart below |
 
@@ -96,20 +97,26 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
   it holds memory and not the filesystem). They are written **brotli-compressed at quality 11**, as
   `heap.brotli.bin` (19.8 MB) and `site-packages.brotli.bin` (20.0 MB), so 39.9 MB in all (the heap was 26.5 MB, 46.5 MB in all,
   before the library copies were zeroed and the docstrings stripped; see "Making the files smaller"). The small files are
-  `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` with the wheel's name, the
-  Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
+  `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` with the wheel's name and
+  SHA-256, the Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
   both files again with the decoder the page uses and fails if they are not identical.
 - **Only the compressed files are kept in the browser** (the Cache API, under a name with the build time; older builds
-  are deleted): 39.9 MB of storage, not 229 MB. Every start reads them and decompresses them with brotli-wasm
-  (a 1 MB wasm decoder, about 0.7 s for both files), in steps into one buffer per file so the memory peak stays near
-  the decompressed size. The browser's own HTTP cache did not keep files this big across visits in the tests; the
+  are deleted): 39.9 MB of storage, not 229 MB. Every start reads them and decompresses them, with the browser's own
+  brotli decoder (`DecompressionStream("brotli")`) when it has one, else with brotli-wasm (a 1 MB wasm decoder, about 0.7 s
+  for both files on a laptop), into one buffer per file so the memory peak stays near the decompressed size (brotli-wasm
+  works in steps; the native path holds a copy of the compressed input as a Blob as well). The browser's own HTTP cache did not keep files this big across visits in the tests; the
   Cache API did.
 - **The files end in `.bin`, not `.br`.** `vite preview` (and many hosts) send any `.br` file with
   `Content-Encoding: br`, so the browser decodes it before the page can store it, and the cache held the full 229 MB;
   the browser test that checks the stored size caught this. If a host decodes the files anyway, `unpack` notices the
   decompressed length and uses the bytes as they are: it still works, but the storage is larger.
 - **A stale snapshot is refused with a message** (built for another wheel: "run `npm run snapshot` again"). It must
-  be rebuilt after changing the dofile wheel or the Pyodide version.
+  be rebuilt after changing the dofile wheel or the Pyodide version. The wheel's file name does not change with its
+  code, so the manifest also holds the wheel's SHA-256 and the page (Vite's `__WHEEL_HASH__`) compares it; a missing or
+  different hash is refused (the Node tests, which pass none, skip the check). Found 2026-11-08: a snapshot older than
+  `browser.py` kept running the old code and broke the page's new run-timing display until it was rebuilt. `uv build
+  --wheel` is reproducible (the same hash after a rebuild and after touching a source file), so a rebuild without a code
+  change does not make a snapshot stale. Test: "a snapshot from a different build of the wheel is refused" in `web/e2e/poc.spec.ts`.
 - The snapshot is taken after one program has run in a throwaway engine, so the lazily imported modules (graphs,
   commands) are already loaded. The page's real `Engine` is created after the restore, as before.
 
@@ -254,32 +261,77 @@ snapshot or to stripping docstrings.
 - The matplotlib font descriptors bug (above) was found the same way: by comparing a graph drawn after a restore with a
   normal one.
 
+## On a real iPhone (2026-11-08)
+
+One iPhone, Safari, the page served by `npm run dev` from a Mac over the LAN (plain HTTP, so **not a secure context**: no
+Cache API, so the snapshot is downloaded and unpacked on every visit, and the page is not cross-origin isolated, so Break
+restarts the engine). Numbers were read by hand from the page's status line, which now splits the start up. One phone, a few
+runs each, no repeats under controlled conditions: an indication, not a benchmark.
+
+| Start | Total | Breakdown |
+|---|---|---|
+| Snapshot, brotli-wasm | 28–30 s | download 0.2 s, **unpack 25–28 s** (heap 13.9 s, site-packages 11.5 s), restore 2.1 s, files 0.1 s, engine 0 s |
+| Snapshot, the browser's native brotli | not read; unpack about 3 s (as reported) | the rest was not changed |
+| Normal boot | 9.2 s | runtime 2.3 s, files 0.1 s, packages 2.6 s, engine 3.9 s |
+
+- **Unpacking was the problem, not the network or the restore.** brotli-wasm decoded at about 9 MB/s of output on the phone
+  against about 330 MB/s on a laptop (Node) in the same code. Why is unknown (a slow WebAssembly tier or memory pressure on
+  iOS are guesses). The phone's Safari has `DecompressionStream("brotli")`; using it brought the unpack to about 3 s. The page
+  uses the native decoder whenever the browser has one and falls back to brotli-wasm if it is missing or fails;
+  `?snapshot=1&brotli=wasm` forces the wasm decoder, to compare.
+- **Desktop, same page** (this Mac, Playwright's browser builds, local server, unpack time of the two files, three loads each):
+
+  | Browser | native | brotli-wasm |
+  |---|---|---|
+  | Firefox | 0.4–0.5 s | 0.8 s |
+  | WebKit | 0.5 s | 0.7 s |
+  | Chromium | fell back to wasm: 0.7 s | 0.7 s |
+
+  Playwright's Chromium has no native brotli in `DecompressionStream`; a current Chrome or Edge was not tried.
+- **A run of the sample program** (regress and a scatter plot), desktop, first run then second, in seconds: normal boot
+  0.8–1.1 then 0.04–0.06; snapshot 0.09–0.13 then 0.05–0.06 (the normal boot imports matplotlib at the first graph; the
+  snapshot has it loaded). On the phone a run took 2–3 s in snapshot mode every time and 0.1–1 s on the normal boot, until
+  the snapshot was rebuilt: then 0.1–0.2 s. The slow runs came with a snapshot older than the code, but the cause was not
+  established (the run breakdown, below, had not shipped when it happened).
+- **The status line says where the time went.** A snapshot start: `[download|read from cache X s, unpack X s (heap, site-packages,
+  decoder native|wasm), restore X s, files X s, engine X s; not cached]`. A normal boot: `[runtime, files, packages, engine]`.
+  A run: `rc 0 in X s (engine, encode, json, save, other)`, where engine includes drawing the graphs and `save` is the write
+  of `/work` to IndexedDB. The start's numbers are collected in the worker (`startup`); the run's come from `browser.run`
+  (`timing`) and the worker. The same facts go to the console (`[dofile] unpack with ...`).
+- **Not measured on a phone:** a first visit over a real network, a return visit with the cache working (needs HTTPS: a
+  tunnel such as `cloudflared`, or a host), memory use, Low Power Mode.
+
 ## Tests
 
 - `web/test/engine.test.mjs` (Node, `npm test`): the snapshot start runs a regression, a scipy computation, a graph,
   file writes and Break (rc 1, data kept), and a snapshot built for another wheel is refused with its message. They
   skip themselves if `public/snapshot/` has not been built.
 - `web/test/snapshot.test.mjs`: `inflate` and `unpack` with the page's decoder: a round trip in steps of any size, a
-  file already decoded by a host, and truncated, damaged, wrongly sized and mismatched-manifest files all refused.
-  14 of 14 Node tests pass (3 of them these).
+  file already decoded by a host, and truncated, damaged, wrongly sized and mismatched-manifest files all refused; and
+  `inflateNative`/`unpackAsync` (the browser's decoder: the same bytes as brotli-wasm, and a truncated file that falls back
+  and gives the wasm error; skipped where the runtime has no native brotli). 34 Node tests pass in all (`npm test`).
 - `web/e2e/poc.spec.ts`: `?snapshot=1` starts, runs the sample program with a graph, a reload reads from the cache and
   decompresses, and **everything in the browser's caches adds up to between 10 and 80 MB** (about 40 MB; this is the
-  check that found the `.br` problem). Skipped without a snapshot. 5 of 5 pass in each of the four browser profiles.
+  check that found the `.br` problem); the status line shows the start's breakdown and, after a Run, the run's; a manifest
+  with another wheel hash is refused. Skipped without a snapshot. All 6 e2e tests pass in each of the four browser profiles
+  (24 in all, 2026-11-08).
 - The test file now ends every worker it starts in an `after` hook. Before, a failing assertion skipped the
   `terminate()` at the end of its test and `npm test` hung with the worker alive.
 
 
 ## Not done, and risks
 
-- **Browsers** (`npm run e2e`: Chromium, Firefox, WebKit and an iPhone 15 profile, 5 tests each, 20 of 20 pass). Not checked: a
-  real phone or real Safari; Break in the browser with a snapshot (tested in Node); files restored from IndexedDB with a
+- **Browsers** (`npm run e2e`: Chromium, Firefox, WebKit and an iPhone 15 profile, 6 tests each, 24 of 24 pass). One real iPhone
+  was tried by hand (see [On a real iPhone](#on-a-real-iphone-2026-11-08)). Not checked: other phones, Android, Chrome or
+  Edge as shipped, a real phone over HTTPS with the cache working; Break in the browser with a snapshot (tested in Node); files restored from IndexedDB with a
   snapshot start. The first run found two problems in WebKit, both settled:
   - **Desktop WebKit: the cache was empty after a reload.** Not the page. Playwright's default context keeps storage in
     memory, and WebKit drops the whole Cache API on reload there; a persistent profile on disk keeps entries. The snapshot
     test now runs in one, as a real browser does.
   - **iPhone profile: "call_indirect to a signature that does not match".** See [The trampoline](#the-trampoline).
 - **Browser memory** is higher: the heap image is 136 MB before anything runs, and during the start the compressed files
-  (39.9 MB) and the decompressed ones (229 MB) are in memory together for a moment. Not measured on a phone.
+  (39.9 MB) and the decompressed ones (229 MB) are in memory together for a moment. The iPhone tried ran it without a crash;
+  its memory use was not measured.
 - **Cache errors.** The worker used to swallow every error of `cache.put`. Now only the browser refusing storage
   (`QuotaExceededError`, `SecurityError`, `NotAllowedError`, or no Cache API) lets the engine start uncached, reported as
   `NOT CACHED: ...` with the start's timings; any other error is thrown.
