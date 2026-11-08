@@ -30,7 +30,8 @@ jobs:
         run: |
           code=true
           if [ "$EVENT" = pull_request ]; then
-            other=$(git diff --name-only "origin/$BASE...HEAD" | grep -vE '\.md$|^docs/' || true)   # files that are not docs
+            files=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
+            other=$(printf '%s\n' "$files" | grep -vE '\.md$|^docs/' || true)   # files that are not docs
             [ -n "$other" ] || code=false
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"

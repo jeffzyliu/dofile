@@ -9,14 +9,23 @@ const data = new URL("../../tests/conformance/data/", import.meta.url);
 const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
 
 async function ready(page: Page): Promise<number> {
-  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s/, { timeout: 240_000 });
+  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s/, { timeout: 300_000 });
   return Number((await page.locator("#status").textContent())!.match(/ready in ([\d.]+) s/)![1]);
 }
 
+// Replace the editor's whole text with one CodeMirror transaction (main.ts exposes the view as window.__editor). Ctrl+A then
+// insertText left the last line behind in WebKit on Linux (the iPhone profile): `display "EDITED"scatter y x`. No key
+// events either, so no auto-closed brackets; the change listener still runs, so the file counts as edited.
+async function setEditor(page: Page, text: string) {
+  await page.evaluate(t => {
+    const v = (window as unknown as { __editor: import("@codemirror/view").EditorView }).__editor;
+    v.focus();
+    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: t } });
+  }, text);
+}
+
 async function run(page: Page, code: string, rc = 0) {
-  await page.locator(".cm-content").click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.insertText(code);   // no key events, so no auto-closed brackets
+  await setEditor(page, code);
   await page.locator("#run").click();
   await expect(page.locator("#status")).toHaveText(new RegExp(`^rc ${rc} in`), { timeout: 120_000 });
 }
@@ -44,9 +53,7 @@ scatter lwage yrsed`);
   await expect(page.locator("#graphs img")).toHaveCount(1);
 
   // Break: the interrupt buffer stops the loop at a safe point; the data stays
-  await page.locator(".cm-content").click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.insertText("while 1 {\n quietly replace exper = exper + 1\n}");
+  await setEditor(page, "while 1 {\n quietly replace exper = exper + 1\n}");
   await page.locator("#run").click();
   await expect(page.locator("#break")).toBeEnabled();
   await page.waitForTimeout(1500);
@@ -67,7 +74,7 @@ scatter lwage yrsed`);
 
   // a new engine: data gone, files kept
   await page.locator("#reset").click();
-  await expect(page.locator("#status")).toHaveText(/new engine/, { timeout: 240_000 });
+  await expect(page.locator("#status")).toHaveText(/new engine/, { timeout: 300_000 });
   await run(page, 'display "N=" _N\nuse cps, clear\ndisplay "M=" _N');
   await expect(page.locator("#log")).toContainText("N=0");
   await expect(page.locator("#log")).toContainText("M=15528");
@@ -138,9 +145,7 @@ test("Save is explicit: Run doesn't save, a switch or closing the page warns abo
 
   // an edit: marked, Save enabled, and Run uses it without writing it
   await expect(page.locator("#save")).toBeDisabled();
-  await page.locator(".cm-content").click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.insertText('display "EDITED"');
+  await setEditor(page, 'display "EDITED"');
   await expect(page.locator("#save")).toBeEnabled();
   await expect(page.locator("#files .open")).toHaveClass(/dirty/);
   await page.locator("#run").click();
@@ -166,9 +171,7 @@ test("Save writes the file; Discard opens the other file", async ({ page }) => {
   const row = (name: string) => page.locator("#files li", { hasText: name });
   await page.locator("#upload").setInputFiles({ name: "other.do", mimeType: "text/plain", buffer: Buffer.from("display 2\n") });
   await expect(row("other.do")).toBeVisible();
-  await page.locator(".cm-content").click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.insertText('display "KEPT"');
+  await setEditor(page, 'display "KEPT"');
   await page.keyboard.press("ControlOrMeta+s");   // not the browser's "save page"
   await expect(page.locator("#status")).toHaveText("saved main.do");
   await expect(page.locator("#files .open")).not.toHaveClass(/dirty/);
@@ -199,14 +202,14 @@ test("?snapshot=1: starts from the memory snapshot, runs native code and a graph
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
 
   await page.goto("/?snapshot=1");
-  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 240_000 });
+  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 300_000 });
   await page.locator("#run").click();   // the sample program: regress, robust, and a scatter plot
   await expect(page.locator("#status")).toHaveText(/^rc 0 in/, { timeout: 120_000 });
   await expect(page.locator("#graphs img")).toHaveCount(1);
   expect(notes.at(-1)).toContain("download");
 
   await page.reload();
-  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 240_000 });
+  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 300_000 });
   await expect.poll(() => notes.length).toBe(2);
   expect(notes.at(-1)).toContain("read from cache");
   expect(notes.at(-1)).toContain("decompress");

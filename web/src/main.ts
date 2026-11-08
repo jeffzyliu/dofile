@@ -46,6 +46,9 @@ const editor = new EditorView({
     EditorView.updateListener.of(u => { if (u.docChanged) setDirty(true); })],
 });
 
+(window as unknown as { __editor: EditorView }).__editor = editor;   // for e2e/poc.spec.ts: replaces the text without Ctrl+A, which
+                                                                     // WebKit on Linux (iPhone profile) leaves a last line out of
+
 // Files are written only by Save (and by New file and uploads), never by Run: like Stata's do-file editor, Run executes the
 // editor's text and leaves the file alone. `dirty` shows next to the file's name and on the Save button, and the page
 // warns before a switch to another file or closing the page would lose the edits.
