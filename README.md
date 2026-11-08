@@ -92,7 +92,14 @@ uv run poe ci            # everything, as CI does
 - `tests/conformance/`: dofile's corpus with reference values from statsmodels/linearmodels, plus breadth probes.
   Known engine gaps are strict xfails, so a fix in OpenDTA shows up as a failure to remove.
 - `scripts/vendor_opendta.py [COMMIT]`: re-vendor OpenDTA, then run the full suite.
-- CI: Ubuntu and macOS, Python 3.12–3.14 (`.github/workflows/ci.yml`). Dev default is 3.14 (`.python-version`).
+- CI: Ubuntu and macOS, Python 3.12–3.14 (`.github/workflows/ci.yml`); the web demo has its own workflow
+  (`.github/workflows/web.yml`). Dev default is 3.14 (`.python-version`).
+
+## Web demo
+
+[`web/`](web/README.md) runs the same engine in the browser (Pyodide in a Web Worker, no server): an editor, files kept
+in the browser, Run and Break, the log and graphs. Its README lists the scripts (dev server, build, tests, the memory
+snapshot) and what each folder holds. CI for it is `.github/workflows/web.yml`.
 
 ## Engine
 

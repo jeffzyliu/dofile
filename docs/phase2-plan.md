@@ -325,7 +325,8 @@ that steps 6 and 8 build.
 9. **CI:** run the corpus in Pyodide under Node on each push. Build `web/` and deploy `main` to the host.
    A browser smoke test (Playwright, one browser): load, upload a .dta, run a regression, check the coefficient.
    The checks exist and are run by hand (`check-snapshot` about 4 minutes, `check-pytest` about 2, `check-numeric` about 4,
-   `npm test` and `npm run e2e` about 1 each); no CI job runs them yet. `check-snapshot` needs a built snapshot only for its
+   `npm test` and `npm run e2e` about 1 each); `.github/workflows/web.yml` runs `npm test`, `e2e`, `snapshot` and
+   `check-snapshot` (written 2026-11-07, not yet run on GitHub); `check-pytest` and `check-numeric` stay by hand. `check-snapshot` needs a built snapshot only for its
    default mode; `--normal` does not.
 10. **Launch:** domain, test in Chrome, Firefox and Safari (desktop and phone), link from the README.
 
