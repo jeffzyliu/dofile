@@ -10,6 +10,7 @@ const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
 
 async function ready(page: Page): Promise<number> {
   await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s/, { timeout: 300_000 });
+  await expect(page.locator("#status")).toContainText(/\[runtime [\d.]+ s, files [\d.]+ s, packages [\d.]+ s, engine [\d.]+ s\]/);   // the normal boot's breakdown
   return Number((await page.locator("#status").textContent())!.match(/ready in ([\d.]+) s/)![1]);
 }
 
@@ -203,8 +204,9 @@ test("?snapshot=1: starts from the memory snapshot, runs native code and a graph
 
   await page.goto("/?snapshot=1");
   await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 300_000 });
+  await expect(page.locator("#status")).toContainText(/\[(download|read from cache) [\d.]+ s, unpack [\d.]+ s \(heap [\d.]+ s, site-packages [\d.]+ s, decoder (native|wasm)\), restore [\d.]+ s, files [\d.]+ s, engine [\d.]+ s/);   // see ready() for the normal boot's
   await page.locator("#run").click();   // the sample program: regress, robust, and a scatter plot
-  await expect(page.locator("#status")).toHaveText(/^rc 0 in/, { timeout: 120_000 });
+  await expect(page.locator("#status")).toHaveText(/^rc 0 in [\d.]+ s \(engine [\d.]+, encode [\d.]+, json [\d.]+, save [\d.]+, other -?[\d.]+\)$/, { timeout: 120_000 });   // the run's breakdown (a snapshot built from an older wheel has none: rebuild it)
   await expect(page.locator("#graphs img")).toHaveCount(1);
   expect(notes.at(-1)).toContain("download");
 
@@ -230,4 +232,15 @@ test("?snapshot=1: starts from the memory snapshot, runs native code and a graph
     await context.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// A snapshot built from other code than the page's wheel is refused with a message, not run: the wheel's file name stays the
+// same while its code changes, so the manifest carries a hash of the wheel.
+test("?snapshot=1: a snapshot from a different build of the wheel is refused", async ({ page, request }) => {
+  const res = await request.get("/snapshot/manifest.json");
+  test.skip(!(res.ok() && (res.headers()["content-type"] ?? "").includes("json")), "no snapshot: run npm run snapshot, then npm run build");
+  const manifest = await res.json();
+  await page.route("**/snapshot/manifest.json", route => route.fulfill({ json: { ...manifest, wheelHash: "0".repeat(64) } }));
+  await page.goto("/?snapshot=1");
+  await expect(page.locator("#status")).toContainText(/the engine did not start: the snapshot was built from a different build.*npm run snapshot/, { timeout: 120_000 });
 });

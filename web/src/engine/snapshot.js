@@ -163,10 +163,40 @@ export function inflate(brotli, input, rawSize, { inStep = 2 << 20, outStep = 4 
   return out;
 }
 
+// The browser's own brotli decoder (DecompressionStream("brotli")), where there is one. brotli-wasm decoded at about 9 MB/s
+// on an iPhone (the 229 MB took 25 s); `inflateNative` is the same result with the native decoder.
+export function hasNativeBrotli() {
+  try { new DecompressionStream("brotli"); return true; } catch { return false; }
+}
+
+// Like `inflate`: `input` (brotli) into a new Uint8Array of exactly `rawSize` bytes, read from the stream into one buffer.
+export async function inflateNative(input, rawSize) {
+  const out = new Uint8Array(rawSize);
+  const reader = new Blob([input]).stream().pipeThrough(new DecompressionStream("brotli")).getReader();
+  let at = 0;
+  for (let r; !(r = await reader.read()).done;) {
+    if (at + r.value.length > rawSize) throw new Error(`snapshot: the decompressed data is larger than the ${rawSize} bytes expected`);
+    out.set(r.value, at);
+    at += r.value.length;
+  }
+  if (at !== rawSize) throw new Error(`snapshot: decompressed ${at} bytes of ${rawSize} expected (a truncated or damaged file)`);
+  return out;
+}
+
 // `file` is a manifest entry {raw, size}. A host that applied its own Content-Encoding hands over the bytes already
 // decoded (length === raw): use them as they are.
 export function unpack(brotli, bytes, file) {
   if (bytes.length === file.raw) return bytes;
   if (bytes.length !== file.size) throw new Error(`snapshot: a file is ${bytes.length} bytes, the manifest says ${file.size}; run \`npm run snapshot\` again`);
   return inflate(brotli, bytes, file.raw);
+}
+
+// `unpack`, with the native decoder when `native` is set and it works; any failure of it falls back to brotli-wasm, which
+// then gives the error if the file really is damaged. Returns [bytes, "native" | "wasm" | "none" (already decoded)].
+export async function unpackAsync(brotli, bytes, file, native) {
+  if (native && bytes.length === file.size && bytes.length !== file.raw) {
+    try { return [await inflateNative(bytes, file.raw), "native"]; }
+    catch (e) { console.warn(`[dofile] native brotli failed (${e?.message ?? e}); using brotli-wasm`); }
+  }
+  return [unpack(brotli, bytes, file), bytes.length === file.raw ? "none" : "wasm"];
 }

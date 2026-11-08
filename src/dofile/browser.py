@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import signal
+import time
 
 from . import linalgshim, pathshim, sandbox
 from .engine import Engine, about, clear_break, matrix_sizes, request_break
@@ -41,17 +42,22 @@ def start(root: str = "/work") -> str:
 def run(code: str, images: bool = True) -> str:
     """Run Stata code like a do-file. JSON: rc, error, error_command, log, results (e() and r(), matrices by size: values
     come from matrix()), nobs, nvars,
-    new_graphs, images (PNG, base64). The page lists the working folder itself after each run."""
+    new_graphs, images (PNG, base64), timing (seconds: engine, which includes drawing the graphs, and encode, the base64 of
+    the images; the page shows them to say where a slow run went). The page lists the working folder itself after each run."""
     global _busy
     clear_break()
     _busy = True
+    t0 = time.perf_counter()
     try:
         r = _eng.run(code, images=images)
     finally:
         _busy = False
+    t1 = time.perf_counter()
+    encoded = [base64.b64encode(p).decode() for p in r.images]
     return json.dumps({"rc": r.rc, "error": r.error, "error_command": r.error_command, "log": r.log,
                        "results": matrix_sizes(r.results), "nobs": r.nobs, "nvars": r.nvars,
-                       "new_graphs": r.new_graphs, "images": [base64.b64encode(p).decode() for p in r.images]})
+                       "new_graphs": r.new_graphs, "images": encoded,
+                       "timing": {"engine": t1 - t0, "encode": time.perf_counter() - t1}})
 
 
 def describe(vars: str | None = None, offset: int = 0, limit: int | None = None) -> str:

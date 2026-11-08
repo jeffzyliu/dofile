@@ -7,7 +7,8 @@ import { stata } from "./stata/language";
 import { EngineClient, RC_RESET } from "./engine/client.js";
 
 type FileInfo = { path: string; dir: boolean; size: number };
-type RunResult = { rc: number; error: string | null; log: string; images: string[] };
+type RunResult = { rc: number; error: string | null; log: string; images: string[];
+  timing?: { engine: number; encode: number; parse: number; save: number } };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const [runBtn, breakBtn, resetBtn, saveBtn] = ["run", "break", "reset", "save"].map(id => $<HTMLButtonElement>(id));
@@ -33,9 +34,11 @@ const useSnapshot = new URLSearchParams(location.search).has("snapshot");
 const engine = new EngineClient({
   createWorker: () => new Worker(new URL("./engine/worker.js", import.meta.url), { type: "module" }),
   wheel: new URL(`${import.meta.env.BASE_URL}${__WHEEL__}`, location.href).href,
+  wheelHash: __WHEEL_HASH__,
   indexURL: __PYODIDE__,
   // ?snapshot=1: start from the Pyodide memory snapshot `npm run snapshot` builds (faster to start, a bigger download)
   snapshot: useSnapshot ? new URL(`${import.meta.env.BASE_URL}snapshot/`, location.href).href : undefined,
+  brotli: new URLSearchParams(location.search).get("brotli") ?? undefined,   // ?snapshot=1&brotli=wasm: brotli-wasm, not the browser's decoder
   onStatus: (s: string) => { status.textContent = `${s}…`; },
 });
 
@@ -165,7 +168,12 @@ async function run(selection = false) {
   const t = performance.now();
   const r: RunResult = await engine.run(code);
   setRunning(false);
-  status.textContent = `rc ${r.rc} in ${((performance.now() - t) / 1000).toFixed(2)} s`;
+  const total = (performance.now() - t) / 1000, k = r.timing;
+  // where the run's time went: the engine (drawing the graphs is in it), base64 of the images, JSON, saving /work to
+  // IndexedDB, and what is left (messages between the worker and the page); absent for a reset (rc 9998)
+  status.textContent = `rc ${r.rc} in ${total.toFixed(2)} s` + (k?.engine !== undefined
+    ?` (engine ${k.engine.toFixed(2)}, encode ${k.encode.toFixed(2)}, json ${k.parse.toFixed(2)}, save ${k.save.toFixed(2)}, ` +
+      `other ${(total - k.engine - k.encode - k.parse - k.save).toFixed(2)})` : "");
   log.textContent += r.log + (r.rc === RC_RESET ? `\n${r.error}\n` : "") + "\n";
   // Like Stata's Graph window: only the latest graph is shown; a run that draws nothing keeps the previous one.
   const latest = r.images.at(-1);
@@ -190,7 +198,7 @@ $("new").onclick = async () => {
   if (!name) return;
   if ((await engine.call("files") as FileInfo[]).some(f => f.path === name)) return alert(`${name} already exists`);
   if (!leave()) return;   // the new file replaces the editor's text
-  await engine.call("write", { path: name, data: new Uint8Array() });
+  await engine.call("write", { path: name, data: new TextEncoder().encode(SAMPLE) });
   await open(name);
 };
 for (const id of ["upload", "upload-dir"]) {
@@ -207,7 +215,18 @@ const isolation = crossOriginIsolated ? "" : " (not cross-origin isolated: Break
 engine.start().then(() => {
   ready = true;
   setRunning(false);
-  status.textContent = `ready in ${((performance.now() - started) / 1000).toFixed(1)} s${useSnapshot ? " (snapshot)" : ""}${isolation}`;
+  // Where the time went (worker.js, `startup`). From a snapshot: download (or read from the browser's cache), unpack (brotli),
+  // restore (the heap and the native libraries), your files, the engine's start; "not cached" is the browser refusing the
+  // cache (plain http on a LAN). A normal boot: Pyodide's runtime, your files, packages (micropip, the wheel, numpy, scipy,
+  // matplotlib), the engine's start.
+  const t = engine.startup as { mode: "snapshot" | "normal"; fetched: string; fetchS: number; unpackS: number; heapS: number; sitePackagesS: number; decoder: string; restoreS: number;
+    runtimeS: number; packagesS: number; filesS: number; engineS: number; notCached: string[] } | null;
+  const s = (x: number) => `${x.toFixed(1)} s`;
+  const parts = !t ? [] : t.mode === "snapshot"
+    ? [`${t.fetched} ${s(t.fetchS)}`, `unpack ${s(t.unpackS)} (heap ${s(t.heapS)}, site-packages ${s(t.sitePackagesS)}, decoder ${t.decoder})`, `restore ${s(t.restoreS)}`, `files ${s(t.filesS)}`, `engine ${s(t.engineS)}`]
+    : [`runtime ${s(t.runtimeS)}`, `files ${s(t.filesS)}`, `packages ${s(t.packagesS)}`, `engine ${s(t.engineS)}`];
+  const where = parts.length ? ` [${parts.join(", ")}${t?.notCached?.length ? "; not cached" : ""}]` : "";
+  status.textContent = `ready in ${((performance.now() - started) / 1000).toFixed(1)} s${useSnapshot ? " (snapshot)" : ""}${where}${isolation}`;
 }, (e: Error) => {
   status.textContent = `the engine did not start: ${e.message}. You can still edit and download your files.`;
 });

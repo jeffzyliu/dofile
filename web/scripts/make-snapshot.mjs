@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
@@ -98,7 +99,8 @@ writeFileSync(`${OUT}site-packages.brotli.bin`, bundleBr);
 writeFileSync(`${OUT}dso.json`, JSON.stringify(saved.dso));
 writeFileSync(`${OUT}files.json`, JSON.stringify(saved.index));
 writeFileSync(`${OUT}manifest.json`, JSON.stringify({
-  wheel, pyodide: version, built: Date.now(), optimize: stripDocs ? 2 : 0,
+  wheel, wheelHash: createHash("sha256").update(readFileSync(new URL(wheel, dist))).digest("hex"),   // the page compares it with its own wheel's
+  pyodide: version, built: Date.now(), optimize: stripDocs ? 2 : 0,
   files: { snapshot: { name: "heap.brotli.bin", raw: snapshot.length, size: snapshotBr.length },
     bundle: { name: "site-packages.brotli.bin", raw: saved.blob.length, size: bundleBr.length } },
 }));
