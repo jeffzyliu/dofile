@@ -81,6 +81,16 @@ writes `../docs/img/startup-times.json`.
 `SharedArrayBuffer`, which Break needs; **a static host must send the same two headers**. Without them Break can only restart
 the engine. Pyodide's runtime and packages are loaded from the jsDelivr CDN, at the same version as the `pyodide` npm package.
 
+## Cloudflare Workers (static assets)
+
+`wrangler.jsonc` serves `dist/` as static assets; `public/_headers` (copied into `dist/`) sends the two isolation headers.
+`npx wrangler login` once, then `npm run cf:dev` (local, workerd) or `npm run deploy`. Run `npm run snapshot` first if the
+deployed page should offer `?snapshot=1`: `public/snapshot/` is gitignored, so a fresh checkout deploys without it. Each asset must
+be under 25 MiB; the two snapshot files are about 20 MB, so they fit with little room to spare.
+
+`.github/workflows/deploy.yml` deploys on every push to `main` (and by hand). It builds the snapshot too, cached on a hash of its
+inputs, and needs the repo secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`.
+
 ## CI
 
 `.github/workflows/web.yml` runs three jobs on every pull request. A push to `main` runs only the first (the fast one), and it can be started by hand:
