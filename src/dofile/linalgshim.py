@@ -7,7 +7,7 @@ which WebAssembly cannot set or read. `scipy.linalg` raises correctly. The engin
 non-concave Hessian in the browser and crawled to its 16,000-iteration limit (docs/phase2-plan.md, "Open investigation").
 
 `install()` runs each function on a matrix that must fail and wraps only the ones that do not raise, so it does
-nothing on CPython and switches itself off if numpy is fixed. The wrapper raises when the inputs have no NaN and the
+nothing on CPython and switches itself off if numpy is fixed. The wrapper raises when the inputs are all finite and the
 result has one. The engine calls `np.linalg.X` through the module at call time (no `from numpy.linalg import`), so
 replacing the attribute reaches all of it; a test checks that this stays true.
 """
@@ -39,13 +39,9 @@ def _probe(name: str) -> bool:
 def _wrap(name: str, f):
     def wrapped(a, *args, **kwargs):
         r = f(a, *args, **kwargs)
-        if name == "cholesky" and np.isnan(r).any():
-            raise np.linalg.LinAlgError(_MESSAGES[name])   # CPython raises for a NaN matrix too: it is not positive definite
-        if np.isnan(r).any():
-            inputs = (a, *args)
-            if not any(np.isnan(x).any() for x in inputs if isinstance(x, (np.ndarray, list, tuple))
-                       or np.isscalar(x)):
-                raise np.linalg.LinAlgError(_MESSAGES[name])
+        # cholesky raises for a NaN matrix on CPython too; inv and solve pass on a NaN or inf that was in the input
+        if np.isnan(r).any() and (name == "cholesky" or all(np.isfinite(x).all() for x in (a, *args))):
+            raise np.linalg.LinAlgError(_MESSAGES[name])
         return r
     wrapped.__name__ = name
     wrapped.__doc__ = f.__doc__

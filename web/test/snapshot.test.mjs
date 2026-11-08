@@ -39,7 +39,7 @@ test("unpack decodes a file, passes through one a host already decoded, and chec
 
 test("only the browser refusing storage is carried on from; every other cache error is a bug and is not swallowed", () => {
   const named = (name, msg = "x") => Object.assign(new Error(msg), { name });
-  for (const name of ["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI"]) assert.equal(isStorageRefusal(named(name)), true, name);
+  for (const name of ["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI", "UnknownError"]) assert.equal(isStorageRefusal(named(name)), true, name);
   for (const e of [new TypeError("Request scheme 'blob' is unsupported"), named("InvalidStateError"), named("AbortError"), new Error("boom"), undefined, null, "QuotaExceededError"])
     assert.equal(isStorageRefusal(e), false, String(e?.name ?? e));
 });

@@ -64,6 +64,10 @@ def test_good_matrices_and_nan_input_are_left_alone(wasm_like):
     nan_matrix = np.array([[np.nan, 0.0], [0.0, 1.0]])
     assert np.isnan(np.linalg.inv(nan_matrix)).any()
     assert np.isnan(np.linalg.solve(nan_matrix, np.ones(2))).any()
+    # the same for an inf in the input: CPython returns NaN for this one without raising
+    inf_matrix = np.array([[np.inf, np.inf], [1.0, 1.0]])
+    assert np.isnan(np.linalg.inv(inf_matrix)).all()
+    assert np.isnan(np.linalg.solve(inf_matrix, np.ones(2))).all()
     # ... but numpy's cholesky raises for a NaN matrix (it is not positive definite), so the shim does too
     with pytest.raises(np.linalg.LinAlgError):
         np.linalg.cholesky(nan_matrix)
