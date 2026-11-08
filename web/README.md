@@ -26,9 +26,9 @@ Run them from `web/` with `npm run <name>`. Those that need the dofile wheel bui
 
 | Script | What it does |
 |---|---|
-| `dev` | Builds the wheel, then starts the Vite dev server on localhost. The server sends the cross-origin isolation headers the Break button needs. |
+| `dev` | Builds the wheel, then starts the Vite dev server (`--host`: on every network interface, so a phone on your LAN can open it at `http://<your computer's address>:5173`). The server sends the cross-origin isolation headers the Break button needs, but a plain-HTTP address on the LAN is not a secure context: the page is then not cross-origin isolated (Break restarts the engine) and the browser keeps no snapshot cache (every visit downloads it again). |
 | `build` | Builds the wheel, then `vite build` into `web/dist/`. |
-| `preview` | Serves `web/dist/` (what the e2e tests use). Run `build` first. |
+| `preview` | Serves `web/dist/` (what the e2e tests use), also with `--host`, on port 4173. Run `build` first. |
 | `wheel` | Builds the dofile wheel into `../dist/`. `vite.config.ts` copies the newest one into `public/`. |
 | `commands` | Regenerates `src/stata/commands.json` (the command names and abbreviations the highlighter knows) from the engine's registry. Run it after the engine's command set changes; CI fails if the committed file is stale. |
 | `check` | Type-checks the TypeScript (`tsc --noEmit`). |
@@ -48,7 +48,7 @@ it is built and what it costs: [`../docs/pyodide-snapshot.md`](../docs/pyodide-s
 
 | Script | What it does | Time |
 |---|---|---|
-| `snapshot` | Builds the wheel, then `scripts/make-snapshot.mjs` writes `public/snapshot/` (gitignored): the heap image and the site-packages bundle, both brotli-compressed (about 40 MB; 229 MB uncompressed), plus a manifest. Needs the network once (micropip fetches openpyxl). **Rebuild it after any change to the dofile code or the Pyodide version**: the page checks the manifest and refuses a stale snapshot. `SNAPSHOT_OUT=dir` writes elsewhere; `SNAPSHOT_STRIP_DOCS=0` keeps docstrings and asserts. | |
+| `snapshot` | Builds the wheel, then `scripts/make-snapshot.mjs` writes `public/snapshot/` (gitignored): the heap image and the site-packages bundle, both brotli-compressed (about 40 MB; 229 MB uncompressed), plus a manifest. Needs the network once (micropip fetches openpyxl). **Rebuild it after any change to the dofile code or the Pyodide version**: the manifest holds a SHA-256 of the wheel, and the page refuses a snapshot built from a different build ("run `npm run snapshot` again"). The snapshot is unpacked with the browser's own brotli decoder when it has one (much faster on an iPhone), else with brotli-wasm; `?snapshot=1&brotli=wasm` forces the wasm decoder, to compare. The status line shows where the start and each run spent their time. `SNAPSHOT_OUT=dir` writes elsewhere; `SNAPSHOT_STRIP_DOCS=0` keeps docstrings and asserts. | |
 | `check-snapshot` | Starts the engine from the snapshot, with the page's own restore code, and runs the conformance corpus, the probes, native-library calls and the Stata 14 reference cases, one process per case. `-- --normal` skips the snapshot (the baseline); `-- --cases a,b` picks cases. | ~4 min |
 
 ### Checks against CPython (by hand)
