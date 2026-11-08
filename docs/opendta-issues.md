@@ -44,7 +44,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-25 | `describe` prints a long wrong `Sorted by:` list (48 names with repeats) for a Stata-written file whose own sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`mkdir C:\proj\out` makes `C:projout`), unlike `use`/`save` and unlike the same path in quotes: their arguments are split with `shlex` in POSIX mode, where `\` is an escape | found 2026-11-06 (path shim tests) | unverified |
 | ODT-27 | `save using name, replace` is accepted and writes a file called `using name.dta`; `save a b, replace` writes `a b.dta`. `save` has no documented `using` clause, so Stata should refuse the first form with a syntax error (assumed; the closed-source Rust reimplementation at stats.camp accepts it and writes `name.dta`, which is no evidence about Stata) | found 2026-11-06 (web demo); not checked against Stata | unverified |
-| ODT-28 | a missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...) gives rc 9999 `internal engine error: FileNotFoundError` with a traceback; `capture` does not catch it. Stata: r(603) `file ... could not be opened` | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected code assumed, not checked against Stata | patched |
+| ODT-28 | Python errors that escape a command are not turned into Stata errors: rc 9999 `internal engine error` with a traceback, the whole program ends, and `capture` does not catch it. A missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...): `OSError`, Stata r(603) `file ... could not be opened`. Out of memory (numpy cannot allocate): `MemoryError`, Stata r(909). A command that fails partway leaves the data partly changed | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected codes assumed, not checked against Stata | patched (the partly changed data is not) |
 | ODT-30 | the ML optimizer takes Newton steps from a nearly singular numerical Hessian, so where the likelihood is flat its path (and sometimes where it stops) depends on the last digits of the likelihood's derivatives. `gnbreg cnt x1 x2, lnalpha(x3)` in compat 1907 stops at the boundary alpha = 0 (ll equal to the Poisson log likelihood), a false convergence: a relative 1e-13 change in the derivatives gives a run that does not converge, 1e-11 one that converges to a log likelihood 0.17 higher. Its constant-only model is stuck (ll -959.397, Stata -952.7455) | found 2026-11-07 comparing CPython with Pyodide (`web/scripts/compare_numeric.py`); perturbation experiment in `phase2-plan.md`, "`gnbreg` in 1907_models"; no test | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
@@ -573,7 +573,12 @@ comma as the file name.
   turns out to accept it, drop a leading `using` word so `save using x` writes `x.dta`. Likewise decide what to do
   with unquoted names that have spaces (`save a b`). A patch in `scripts/patches/`, not an edit of the vendored engine.
 
-### ODT-28: a missing folder or a directory in place of a file gives rc 9999
+### ODT-28: Python errors that escape a command give rc 9999, not a Stata error
+A command that lets a Python exception out ends the whole program with rc 9999 `internal engine error` and a traceback,
+and `capture` does not catch it (it catches only `StataError`, `lang/interpreter.py`). Two kinds are known and patched:
+an `OSError` from a file command and a `MemoryError` when memory runs out.
+
+**A missing folder or a directory in place of a file:**
 ```stata
 log using hi/hi, replace      // no folder hi/
 ```
@@ -590,12 +595,32 @@ traceback in the log, rc 9999. `capture log using hi/hi, replace` does not catch
 - Expected in Stata: **assumed, not checked.** r(603), `file hi/hi.smcl could not be opened`, as `save` already does
   here (the existing handlers in this engine raise 603 with `(strerror)`). For a directory in place of a file we
   assume 603 too.
-- Patched (`opendta-odt28-oserror-to-603.patch`): `commands/registry.py` wraps every registered command, so an
-  `OSError` that escapes it becomes `StataError(603, "file <name> could not be opened (<strerror>)")`; `capture` then
-  catches it. A command's own `StataError` (erase 693, cd 170, ...) is untouched. `PermissionError` is left alone: the
+
+**Out of memory:** when numpy cannot allocate an array, `MemoryError` (numpy's `Unable to allocate 763. MiB ...`)
+escapes the command the same way. Found 2026-11-07 in the web demo, whose WebAssembly heap stops at 4 GB: with 100
+million observations, `gen double x = 1` and `gen double y = x` worked (heap 3.6 GB) and `gen double z = x + y` gave
+rc 9999. The Pyodide runtime survived and the next command ran. It happens on CPython too, when the machine runs out.
+- Expected in Stata: **assumed, not checked.** r(909), `op. sys. refuses to provide memory`, which `capture` catches.
+
+**The data is not rolled back.** A command that fails partway leaves what it already changed. With a `MemoryError`
+injected at the second variable, `recode a b (1=9)` leaves `a` recoded to 9 and `b` unchanged, and `mvdecode a b, mv(1)`
+leaves `a` set to missing; both then fail. Any error raised inside a command (a `StataError` too) can do this, since
+OpenDTA's commands change the data as they go and nothing restores it. The patch below changes only the error code, so
+r(603) or r(909) does not mean the data is as it was.
+- Expected in Stata: **not checked.** Built-in commands are thought to leave the data unchanged when they fail, but
+  that has not been tested, and ado-file commands may differ.
+- Not patched: a fix needs each command to work on a copy, or a snapshot of the data before every command, and the
+  snapshot would double memory use at the point where memory is short.
+
+**The patch** (`opendta-odt28-python-errors-as-stata.patch`): `commands/registry.py` wraps every registered command, so an
+  `OSError` that escapes it becomes `StataError(603, "file <name> could not be opened (<strerror>)")` and a
+  `MemoryError` becomes `StataError(909, "op. sys. refuses to provide memory")`; `capture` then catches them. A
+  command's own `StataError` (erase 693, cd 170, ...) is untouched. `PermissionError` is left alone: the
   dofile sandbox's refusals use it (ODT-23: `capture` converts it; `Engine.run` turns an uncaught one into 603). The
-  patch goes in the registry, not in the dispatcher, because PATCH-2 edits the dispatcher's `spec.fn` lines.
-- Tests: `tests/test_engine.py::test_odt28_*` (13 commands, `capture`, and the commands that keep their own codes).
+  patch goes in the registry, not in the dispatcher, because PATCH-2 edits the dispatcher's `spec.fn` lines. An error
+  outside a command (macro expansion, the interpreter itself) still gives rc 9999.
+- Tests: `tests/test_engine.py::test_odt28_*` (13 commands, `capture`, the commands that keep their own codes, and a
+  `MemoryError` injected into `replace`, with and without `capture`).
 - Related: ODT-23 is the same family (an `OSError` escaping a command) for the sandbox's `PermissionError`. It stays
   separate: it only exists because of the sandbox and is not for upstream, while this one is an OpenDTA bug.
 - Side finds: `estimates save` and `estimates use` are a missing feature (GAP-5). `export excel` to a bad path prints a
