@@ -33,6 +33,8 @@ Run them from `web/` with `npm run <name>`. Those that need the dofile wheel bui
 | `commands` | Regenerates `src/stata/commands.json` (the command names and abbreviations the highlighter knows) from the engine's registry. Run it after the engine's command set changes; CI fails if the committed file is stale. |
 | `check` | Type-checks the TypeScript (`tsc --noEmit`). |
 
+**All dev HTTP servers (`dev`, `preview`, `cf:dev`) listen on every network interface, for now**, so a phone on the LAN can test the page. Anyone on the same network can reach them; keep that in mind on a shared network, and keep any new dev server's script the same way (`--host` for Vite, `--ip 0.0.0.0` for Wrangler).
+
 ### Test
 
 | Script | What it does | Time |

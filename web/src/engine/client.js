@@ -17,11 +17,12 @@ export class EngineClient {
     this.nextId = 0;
     this.pending = new Map();
     this.running = null;
+    this.errorRestarts = 0;
   }
 
   async start() {
     this.interrupt = typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4));
-    const worker = this.worker = this.createWorker();
+    this.worker = this.createWorker();
     this.worker.onmessage = ({ data }) => {
       if (data.status) return this.onStatus(data.status);
       const p = this.pending.get(data.id);
@@ -29,23 +30,20 @@ export class EngineClient {
       this.pending.delete(data.id);
       "error" in data ? p.reject(new Error(data.error)) : p.resolve(data.result);
     };
-    let alive = false;   // the worker has sent something, so its script loaded
-    const onmessage = worker.onmessage;
-    worker.onmessage = e => { alive = true; this.loadFailures = 0; onmessage(e); };
+    // An error restarts the worker once; a second one before a start() has finished (a script that never loads, a crash while
+    // starting) ends the start instead of looping, since each new worker can cost a phone a GB.
+    const worker = this.worker;
     worker.onerror = e => {
-      if (worker !== this.worker) return;   // a late error from a replaced worker must not kill its successor
-      // A script that never ran: WebKit sometimes refuses one once, and a new worker works; but a 404 (a stale cached page asking
-      // for a worker file that is gone) or a syntax error fails every time, so the second failure in a row ends the start.
-      this.loadFailures = alive ? 0 : (this.loadFailures ?? 0) + 1;
-      if (this.loadFailures > 1) {
-        this.loadFailures = 0;
-        const error = new Error(`the engine's worker did not load (${e?.message || "no message"}); reload the page`);
-        const pending = [...this.pending.values()];
-        this.pending.clear();
-        for (const p of pending) p.reject(error);
+      if (this.errorRestarts++ < 1) {   // a failed start reaches the caller through its own start(); the catch only keeps it from being unhandled
+        this.restart(`the engine crashed (${e?.message ?? e})`).catch(() => {});
         return;
       }
-      this.restart(`the engine crashed (${e?.message ?? e})`);
+      this.errorRestarts = 0;
+      worker.terminate();
+      const error = new Error(`the engine's worker failed twice (${e?.message ?? e}); reload the page`);
+      const pending = [...this.pending.values()];
+      this.pending.clear();
+      for (const p of pending) p.reject(error);
     };
     // Two steps (see worker.js). Calls the page makes after start() begins, such as files and read, queue behind
     // "mount" in the worker, so they can be made at once: they are answered before the engine has loaded.
@@ -58,6 +56,7 @@ export class EngineClient {
     if (gen !== this.gen) return about;
     this.about = about;
     this.startup = await this.call("startup");   // where the start's time went (worker.js); the page shows it in its status line
+    this.errorRestarts = 0;
     return about;
   }
 
@@ -89,7 +88,6 @@ export class EngineClient {
 
   // a new worker; a run in progress ends with rc 9998, other calls fail. Files in IndexedDB come back.
   async restart(reason) {
-    console.warn(`[dofile] restart: ${reason}`);
     this.worker.terminate();
     const pending = [...this.pending.values()];
     this.pending.clear();
