@@ -301,6 +301,47 @@ runs each, no repeats under controlled conditions: an indication, not a benchmar
 - **Not measured on a phone:** a first visit over a real network, a return visit with the cache working (needs HTTPS: a
   tunnel such as `cloudflared`, or a host), memory use, Low Power Mode.
 
+### Debugging an iPhone 13 (2026-11-08): the worker ran twice, and what was only the phone
+
+The page on a real iPhone 13 (Safari; served from `wrangler dev --ip 0.0.0.0` over the LAN and from a Cloudflare https tunnel)
+failed with `the engine did not start: undefined is not an object (evaluating 'V.loadPackage')`, every time with `?snapshot=1`,
+on desktop never. It took long because several unrelated things looked alike. What was found, in the order it mattered:
+
+- **The cause: a chunk imported the worker's own entry file.** `boot` ran in a worker that had never received `mount`
+  (`py` was undefined, and `fromSnapshot` false, so it took the non-snapshot branch, which is where `V.loadPackage` is).
+  Logging a random id when the worker script ran showed **two evaluations of `worker.js` for one `new Worker`**: `mount` and the
+  first `files` reached the first, everything after reached the second, which sets `self.onmessage` again. The second
+  evaluation came right after the first began to mount, when `loadBrotli()` did `import("brotli-wasm")`. Vite had put that package
+  in its own chunk (`index.web-*.js`), and the chunk began `import { n } from "./worker-<hash>.js"` for the bundler's helpers,
+  that is, it imported the worker's entry file. iOS Safari then ran the entry a second time as a separate module (desktop
+  Chromium, Firefox and WebKit, and Playwright's iPhone profile, do not). Only a snapshot imports that chunk, hence "only
+  `?snapshot=1`". **Fix:** `worker: { rollupOptions: { output: { inlineDynamicImports: true } } }` in `vite.config.ts`: the worker
+  is one file. If a built `worker-*.js` is ever imported from another `assets/*.js`, this is back.
+- **Web Inspector made it worse and misled the debugging.** With the inspector attached the page was very slow and the console
+  filled with the duplicated worker's output. Look at the console after a load, not during it, and do not time anything with the
+  inspector on.
+- **The snapshot can crash the tab.** Safari reloaded the page ("a problem repeatedly occurred") on `?snapshot=1`, never on a normal
+  boot. Peak memory in Node (`/usr/bin/time -l`, includes Node's own overhead): normal boot 0.7 GB, snapshot 1.25 GB, and a second
+  Python loaded on top (what a duplicated worker costs) well beyond that. The compressed files and the 93 MB site-packages bytes are
+  now let go as soon as they are unpacked and written; that did not change Node's peak (Node does not collect on demand), and
+  whether it helps on the phone was not measured. After the single-file fix the snapshot worked on the phone.
+- **`cProfile` is not a speed measurement.** A profiled scatter took 2.8–3 s on the phone, in normal boot as well as in the
+  snapshot, against 0.1 s unprofiled, and the first graph of a normal boot took 64 s profiled, 39 s of it in `compile` (matplotlib
+  ships without `.pyc` files). The profiler's per-call hook is far more expensive on the phone than in Node (0.17 s profiled, 0.04 s
+  not). Use it for the shape of the time, never for the time. A check that the phone itself is fine: Pyodide's console
+  (`pyodide.org/en/stable/console.html`), `sum(range(10**7))` took 0.4 s.
+- **The slow earlier numbers were the phone's state.** The "2–3 s per graph in snapshot mode" and "normal boot too slow to start" were
+  measured with the inspector on, and did not come back after the fixes (the second graph 0.1 s or less, in both modes).
+- **`save` of 1 s on some runs.** The worker wrote `/work` to IndexedDB after every run, changed or not, and Safari's IndexedDB
+  took about 1 s on some of those writes (a run does not change `/work`; checked in Node). After a run the write is now skipped when
+  the folder's paths, sizes and times are as at the last write; the page's file operations always write. Not checked on the phone
+  after the change.
+- **Ruled out:** a 304 reply without COEP (Wrangler's carry both headers), a stale snapshot (its wheel hash matched), the iOS
+  user agent (Node with an iPhone user agent: 0.05 s per graph), Pyodide's trampoline.
+- **Method that worked:** a log line in the worker with a random id at the top of the script and in each `onmessage`, and one in the
+  client's `call`, then reading which worker got which message. A `BroadcastChannel` between copies of the worker (named after the
+  Worker's `name`) showed in one load whether another copy was alive. Both were removed again.
+
 ## Tests
 
 - `web/test/engine.test.mjs` (Node, `npm test`): the snapshot start runs a regression, a scipy computation, a graph,

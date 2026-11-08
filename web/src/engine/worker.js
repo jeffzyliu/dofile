@@ -11,7 +11,17 @@ let queue = Promise.resolve();
 
 const persistent = () => typeof indexedDB !== "undefined";
 const syncfs = load => new Promise((ok, err) => py.FS.syncfs(load, e => (e ? err(e) : ok())));
-const save = () => (persistent() ? syncfs(false) : undefined);
+// Writing /work to IndexedDB took 1 s on an iPhone even when nothing had changed. After a run the write is skipped when the
+// folder looks as it did at the last write (paths, sizes, times); file operations from the page always write.
+let saved = null;
+const folder = () => walk(ROOT).map(f => `${f.path}\0${f.size}\0${f.mtime}`).join("\n");
+async function save(onlyIfChanged = false) {
+  if (!persistent()) return;
+  const now = onlyIfChanged ? folder() : null;
+  if (onlyIfChanged && now === saved) return;
+  await syncfs(false);
+  saved = now ?? folder();
+}
 const status = text => self.postMessage({ status: text });
 
 // a path from the page, relative to /work; it may not leave it
@@ -122,7 +132,7 @@ async function loadFromSnapshot(base, indexURL, wheelName, wheelHash, io, brotli
   const store = cache && { cache, refused };
   const hadCache = Boolean(cache) && Boolean(await cache.match(`${base}${snapFile.name}`));
   // The two big files are kept in the cache as they were sent, compressed (46 MB, not 229), and decompressed here.
-  const [snapPacked, dso, index, bundlePacked, { default: create }, brotli] = await Promise.all([
+  let [snapPacked, dso, index, bundlePacked, { default: create }, brotli] = await Promise.all([
     fetchBytes(`${base}${snapFile.name}`, store), fetchJSON(`${base}dso.json`, store), fetchJSON(`${base}files.json`, store),
     fetchBytes(`${base}${bundleFile.name}`, store), import(/* @vite-ignore */ `${base}pyodide.asm.patched.mjs?v=${manifest.built}`),
     loadBrotli(),
@@ -136,13 +146,18 @@ async function loadFromSnapshot(base, indexURL, wheelName, wheelHash, io, brotli
     const [out, decoder] = await unpackAsync(brotli, packed, file, native);
     return [out, since(t), decoder];
   };
+  // Peak memory is what kills a phone's tab (an iPhone 13 reloaded the page on the snapshot), so each packed file is let go as
+  // soon as it is unpacked, and the site-packages bytes as soon as they are in the file system (restoreOptions).
   const [snapshot, heapS, decoder] = await timed(snapFile, snapPacked);
-  const [blob, sitePackagesS] = await timed(bundleFile, bundlePacked);
+  snapPacked = null;
+  let [blob, sitePackagesS] = await timed(bundleFile, bundlePacked);
+  bundlePacked = null;
   lap("decompress");
   console.info(`[dofile] unpack with ${decoder}: heap ${heapS.toFixed(2)}s (${(snapFile.raw / 1e6 / heapS).toFixed(0)} MB/s out), ` +
     `site-packages ${sitePackagesS.toFixed(2)}s (${(bundleFile.raw / 1e6 / sitePackagesS).toFixed(0)} MB/s out), ` +
     `native brotli available ${hasNativeBrotli()}, hardwareConcurrency ${navigator.hardwareConcurrency}, deviceMemory ${navigator.deviceMemory ?? "n/a"}`);
   const options = restoreOptions(create, { snapshot, dso, index, blob }, lap);
+  blob = null;   // restoreOptions holds it until it has written the files
   const loaded = await loadPyodide({ indexURL, ...options, ...io });
   lap("copy the heap");
   console.info(`[dofile] snapshot start: ${laps.join(", ")}, total ${((performance.now() - t0) / 1000).toFixed(2)}s` +
@@ -181,6 +196,7 @@ const ops = {
       status("loading your files");
       py.FS.mount(py.FS.filesystems.IDBFS, {}, ROOT);
       await syncfs(true);
+      saved = folder();
     }
     startup.filesS = since(tFiles);
   },
@@ -212,7 +228,7 @@ const ops = {
     const t0 = performance.now();
     const result = JSON.parse(browser.run(code));
     const t1 = performance.now();
-    await save();
+    await save(true);
     // where the run's time went, for the page's status line (the Python side gave engine and encode; a snapshot built from an
     // older wheel gives none, and then there is no breakdown)
     const k = result.timing;

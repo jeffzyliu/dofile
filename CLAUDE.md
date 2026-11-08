@@ -77,6 +77,8 @@ Layers, bottom up (`src/dofile/`):
 - `browser.py`: web demo only. What `web/src/engine/worker.js` (the Web Worker) calls through Pyodide: one Engine
   in `/work`, JSON text in and out, only `shell`/`webuse` denied, Break through a SIGINT handler (Pyodide's interrupt
   buffer). `web/src/engine/client.js` is the page's side (Break, restart = rc 9998).
+- `web/vite.config.ts` builds the Web Worker as **one file** (`inlineDynamicImports`). A chunk that imports the worker's entry made iOS
+  Safari run the entry twice (`V.loadPackage` error with `?snapshot=1`); see `docs/pyodide-snapshot.md`, "Debugging an iPhone 13".
 - `web/src/engine/snapshot.js` + `web/scripts/make-snapshot.mjs`: web demo only, opt-in (`?snapshot=1`). Start from a
   Pyodide memory snapshot with a patched copy of Pyodide's loader that re-links the native libraries; the patch throws
   if Pyodide's loader text changes, and the snapshot must be rebuilt after a wheel or Pyodide change (the manifest holds

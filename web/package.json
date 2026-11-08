@@ -16,7 +16,7 @@
     "pretest": "npm run wheel",
     "test": "node --test test/",
     "e2e": "npm run build && playwright test",
-    "cf:dev": "npm run build && wrangler dev",
+    "cf:dev": "npm run build && wrangler dev --ip 0.0.0.0",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
