@@ -29,12 +29,13 @@ the last release until the next bump, so tagging an unbumped `main` fails at upl
    otherwise raise the patch. Until the first real release use a pre-release (`0.1.0.dev1`, `0.1.0a1`, `0.1.0rc1`);
    PEP 440 orders `.devN` < `aN` < `bN` < `rcN` < the final `0.1.0`, so go in that order and never backwards (a lower
    number than one already on PyPI uploads fine but pip prefers the higher one).
-3. Merge the pull request and let `ci` go green, then tag that merge commit (next section).
+3. Merge the pull request (merge commit, squash or rebase: all work) and let `ci` go green, then tag the release commit
+   as it is on `main` (next section).
 
 ## Releasing with CI (`.github/workflows/release.yml`)
 A push of a tag `vX.Y.Z` (PEP 440: `v0.1.0a1`, `v0.1.0.dev1`, `v0.1.0`) builds, tests and publishes that commit.
 1. On `main`: bump the version (previous section), merge it, and let `ci` go green.
-2. Tag the merge commit from git (see "Tagging" below): the tag is the version with a `v`.
+2. Tag the release commit on `main` from git (see "Tagging" below): the tag is the version with a `v`.
 3. The `build` job refuses a tag that is not on `main` or does not match `pyproject.toml`, runs `poe test`, builds, runs
    `twine check`, installs the wheel alone in a clean environment and runs `dofile run` and `dofile-mcp --help`. The
    `publish` job then uploads with Trusted Publishing (OIDC): no token is stored anywhere. It is a separate job so the
@@ -46,11 +47,13 @@ A push of a tag `vX.Y.Z` (PEP 440: `v0.1.0a1`, `v0.1.0.dev1`, `v0.1.0`) builds, 
 Tag from git, with an annotated tag, on the exact commit you looked at:
 ```bash
 git switch main && git pull
-git log -1                          # confirm it is the "Release 0.1.0a1" merge commit
+git log -1                          # confirm it is the "Release 0.1.0a1" commit, as it landed on main
 git tag -a v0.1.0a1 -m "dofile 0.1.0a1"   # -s instead of -a to sign, if signing is set up
 git push origin v0.1.0a1
 ```
-Why git and not the GitHub Releases form: you tag the commit you checked (the form defaults to the tip of `main`, which
+A rebase or squash merge gives the commit a new SHA on `main`, so always pull first and tag what `main` has, never the
+commit on the pull request's branch (the workflow refuses a tag that is not on `main`). Why git and not the GitHub
+Releases form: you tag the commit you checked (the form defaults to the tip of `main`, which
 may have moved), and an annotated tag records who tagged and when. The push starts the workflow; watch it under the
 repository's Actions tab. Optionally, after the upload succeeds, create a GitHub Release from the existing tag for the
 notes (tick "pre-release" for `dev`, `a`, `b` and `rc` versions); PyPI does not depend on it.
