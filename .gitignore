@@ -8,3 +8,11 @@ dist/
 .dofile/
 tests_opendta/compat/out/
 .claude/
+# screenshots of other people's sites, for the moodboard only (links in docs/design/moodboard/README.md)
+docs/design/moodboard/refs/
+# candidate fonts for the specimen; fetched by the command in docs/design/specimen/README.md
+docs/design/specimen/fonts/
+# renders of the design pages: rebuild them with docs/design/shot.mjs (each folder's README has the command);
+# the source images the pages use stay, in img/ folders
+docs/design/**/*.png
+!docs/design/**/img/*.png

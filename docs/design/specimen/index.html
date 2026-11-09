@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dofile web demo: font specimen</title>
+<style>
+  @font-face { font-family: "Plex Mono";  src: url(fonts/ibm-plex-mono-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Plex Mono";  src: url(fonts/ibm-plex-mono-700.woff2) format("woff2"); font-weight: 700; }
+  @font-face { font-family: "Plex Sans";  src: url(fonts/ibm-plex-sans-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Plex Sans";  src: url(fonts/ibm-plex-sans-600.woff2) format("woff2"); font-weight: 600; }
+  @font-face { font-family: "Source Code Pro"; src: url(fonts/source-code-pro-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Source Code Pro"; src: url(fonts/source-code-pro-700.woff2) format("woff2"); font-weight: 700; }
+  @font-face { font-family: "Source Sans 3";   src: url(fonts/source-sans-3-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Source Sans 3";   src: url(fonts/source-sans-3-600.woff2) format("woff2"); font-weight: 600; }
+  @font-face { font-family: "JetBrains Mono";  src: url(fonts/jetbrains-mono-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "JetBrains Mono";  src: url(fonts/jetbrains-mono-700.woff2) format("woff2"); font-weight: 700; }
+  @font-face { font-family: "Inter"; src: url(fonts/inter-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Inter"; src: url(fonts/inter-600.woff2) format("woff2"); font-weight: 600; }
+
+  /* the candidate palette from the moodboard */
+  .light { --bg: #f7f7f5; --surface: #ffffff; --ink: #1e2128; --muted: #5a606b; --accent: #3a4485;
+           --on-accent: #ffffff; --border: #d9dbe0; --error: #b3261e; --ok: #1f6f3f; --sel: #e6e8f3; }
+  .dark  { --bg: #14161b; --surface: #1c1f26; --ink: #e4e6ea; --muted: #9aa1ad; --accent: #a3acec;
+           --on-accent: #14161b; --border: #30343d; --error: #f2867c; --ok: #7fcf9a; --sel: #2a2f45; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #eceae6; color: #1e2128;
+         font: 15px/1.45 "Plex Sans", system-ui, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 24px; }
+  .intro { margin: 0 0 20px; color: #4a4f59; max-width: 120ch; }
+  .option { margin-bottom: 28px; }
+  .option h2 { margin: 0 0 8px; font-size: 18px; }
+  .option h2 small { font-weight: 400; color: #4a4f59; font-size: 14px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .app { background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+         font-family: var(--ui); font-size: 14px; }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface);
+         border-bottom: 1px solid var(--border); }
+  .mark { font-family: var(--mono); font-weight: 700; font-size: 16px; margin-right: 10px; }
+  .btn { font: inherit; font-size: 13.5px; padding: 4px 11px; border-radius: 4px; border: 1px solid var(--border);
+         background: var(--surface); color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .btn.stop { color: var(--error); border-color: var(--error); font-weight: 600; }
+  .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .status b { color: var(--ink); font-weight: 600; }
+  .body { display: grid; grid-template-columns: 150px 1fr; }
+  .files { padding: 10px 0; border-right: 1px solid var(--border); font-size: 13.5px; }
+  .files h3 { margin: 0 12px 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+              color: var(--muted); }
+  .files div { padding: 3px 12px; }
+  .files .on { background: var(--sel); font-weight: 600; }
+  .files .hint { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+  .panes { display: grid; grid-template-rows: auto auto; }
+  pre { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; padding: 8px 10px; overflow: hidden; }
+  .code { background: var(--surface); border-bottom: 1px solid var(--border); }
+  .code .n { color: var(--muted); display: inline-block; width: 2.5ch; text-align: right; margin-right: 1.5ch; }
+  .code .c { color: var(--muted); font-style: italic; }
+  .code .k { color: var(--accent); font-weight: 700; }
+  .code .s { color: var(--ok); }
+  .log .e { font-weight: 700; }
+  .log .err { color: var(--error); font-weight: 700; }
+  .glyphs { padding: 8px 12px; border-top: 1px solid var(--border); background: var(--surface);
+            font-family: var(--mono); font-size: 14px; display: flex; gap: 28px; }
+  .glyphs span:last-child { font-family: var(--ui); }
+</style>
+</head>
+<body>
+<h1>dofile web demo: font specimen</h1>
+<p class="intro">One monospace font (editor, log, wordmark) and one UI font (buttons, file list, status) per option, in the
+moodboard's light and dark palette. The log is dofile's own output on synthetic data. Fonts are the Latin subsets from
+Fontsource (SIL Open Font License), loaded from this folder; D uses whatever the system has.</p>
+
+<div id="options"></div>
+
+<template id="app">
+  <div class="app">
+    <div class="bar">
+      <span class="mark">dofile</span>
+      <button class="btn primary">Run</button>
+      <button class="btn">Run selection</button>
+      <button class="btn stop">Break</button>
+      <span class="status"><b>running</b> line 8 · 2.1 s</span>
+    </div>
+    <div class="body">
+      <div class="files">
+        <h3>Files</h3>
+        <div class="on">analysis.do</div>
+        <div>wages.csv</div>
+        <div>results.log</div>
+        <div class="hint">Drop files here or Upload</div>
+      </div>
+      <div class="panes">
+<pre class="code"><span class="n">1</span><span class="c">* wages by age and schooling (synthetic data)</span>
+<span class="n">2</span><span class="k">set</span> obs 500
+<span class="n">3</span><span class="k">gen</span> age = 22 + floor(40*runiform())
+<span class="n">4</span><span class="k">gen</span> educ = 10 + floor(9*runiform())
+<span class="n">5</span><span class="k">gen</span> wage = 4 + .12*age + .9*educ + 3*rnormal()
+<span class="n">6</span><span class="k">label variable</span> wage <span class="s">"Hourly wage"</span>
+<span class="n">7</span><span class="k">regress</span> wage age educ
+<span class="n">8</span><span class="k">summarize</span> wage <span class="k">if</span> sex == 1</pre>
+<pre class="log"><span class="e">. regress wage age educ</span>
+
+      Source |       SS           df       MS      Number of obs   =       500
+-------------+----------------------------------   F(2, 497)       =    172.07
+       Model |  3046.98519         2  1523.49259   Prob > F        =    0.0000
+    Residual |  4400.35521       497  8.85383342   R-squared       =    0.4091
+-------------+----------------------------------   Adj R-squared   =    0.4068
+       Total |  7447.34039       499  14.9245298   Root MSE        =    2.9755
+
+------------------------------------------------------------------------------
+        wage |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+         age |   .1111234   .0115734     9.60   0.000     .0883846    .1338622
+        educ |   .8594138   .0515739    16.66   0.000     .7580842    .9607435
+       _cons |   4.857541   .9089541     5.34   0.000     3.071675    6.643408
+------------------------------------------------------------------------------
+
+<span class="e">. summarize wage if sex == 1</span>
+<span class="err">sex not found
+r(111);</span></pre>
+      </div>
+    </div>
+    <div class="glyphs"><span>0O o 1lI| rn m {}[]() `' "" -- == ~</span><span>Upload · Download all · 3 files · Session reset</span></div>
+  </div>
+</template>
+
+<script>
+  const options = [
+    ['A', 'IBM Plex Mono + IBM Plex Sans', 'recommended: a matched pair; technical and academic', '"Plex Mono"', '"Plex Sans"'],
+    ['B', 'Source Code Pro + Source Sans 3', 'a matched pair; more neutral', '"Source Code Pro"', '"Source Sans 3"'],
+    ['C', 'JetBrains Mono + Inter', 'code-editor feel; not a pair', '"JetBrains Mono"', '"Inter"'],
+    ['D', 'System fonts (ui-monospace + system-ui)', 'no download; looks different on each platform (here: macOS)', 'ui-monospace, monospace', 'system-ui, sans-serif'],
+  ];
+  const tpl = document.getElementById('app');
+  const root = document.getElementById('options');
+  for (const [id, name, note, mono, ui] of options) {
+    const sec = document.createElement('section');
+    sec.className = 'option';
+    sec.innerHTML = `<h2>${id}. ${name} <small>${note}</small></h2><div class="pair"></div>`;
+    for (const mode of ['light', 'dark']) {
+      const app = tpl.content.firstElementChild.cloneNode(true);
+      app.classList.add(mode);
+      app.style.setProperty('--mono', `${mono}, ui-monospace, monospace`);
+      app.style.setProperty('--ui', `${ui}, system-ui, sans-serif`);
+      sec.querySelector('.pair').append(app);
+    }
+    root.append(sec);
+  }
+</script>
+</body>
+</html>

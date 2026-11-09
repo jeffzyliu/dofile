@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe A: everything visible</title>
+<link rel="stylesheet" href="wf.css">
+<style>
+  .frame { width: 1440px; height: 900px; display: grid; grid-template-rows: auto 1fr auto; border-bottom: 3px solid #222; }
+  .main { display: grid; grid-template-columns: 210px 1fr 680px; gap: 8px; padding: 8px; min-height: 0; background: #f7f7f7; }
+  .col { display: grid; gap: 8px; min-height: 0; }
+  .center { grid-template-rows: 3fr 2fr; }
+  .right { grid-template-rows: 3fr 2fr; }
+  .wrap { position: relative; padding: 0 0 0 0; }
+  .below { padding: 18px 24px; max-width: 1440px; }
+  .below h1 { font-size: 18px; margin: 0 0 6px; }
+  .below .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="bar" style="position:relative" data-fill="toolbar"><span class="n inline">1</span></div>
+  <div class="main">
+    <div class="pane" aria-label="Files"><span class="n">2</span>
+      <div class="head"><span class="title">Files</span></div>
+      <div class="body" data-fill="files"></div></div>
+    <div class="col center">
+      <div class="pane" aria-label="Editor"><span class="n">3</span>
+        <div class="head" data-fill="editortabs"></div>
+        <div class="body" data-fill="editor"></div></div>
+      <div class="pane" aria-label="Data, results and help"><span class="n">6</span>
+        <div class="head"><span class="tab on">Data</span><span class="tab">Results</span><span class="tab">Help</span></div>
+        <div class="body" data-fill="data"></div></div>
+    </div>
+    <div class="col right">
+      <div class="pane" aria-label="Log"><span class="n">4</span>
+        <div class="head" data-fill="loghead"></div>
+        <div class="body" data-fill="log"></div>
+        <div class="cmdline" data-fill="cmdline"></div></div>
+      <div class="pane" aria-label="Graph"><span class="n">5</span>
+        <div class="head"><span class="title">Graph</span></div>
+        <div class="body" data-fill="graph"></div></div>
+    </div>
+  </div>
+  <div class="statusbar" role="status" data-fill="statusbar"></div>
+</div>
+<div class="below">
+  <h1>A. Everything visible: files | editor over data | log over graph</h1>
+  <div class="cols">
+    <ul class="notes">
+      <li><b>For:</b> after <code>scatter</code> you see the log and the graph at once; the data's variables stay in view
+        while you type, and a click inserts a name.</li>
+      <li><b>Against:</b> six regions at 1440 px; the editor is about 55 columns wide and the log just fits its 78. Below about
+        1280 px the graph has to fold into the data tabs (that is layout B).</li>
+      <li>Each pane can be collapsed to its header and the dividers dragged; the layout is kept in the browser.</li>
+      <li>Results and Help share the tabbed pane with Data; <code>help regress</code> switches it to Help.</li>
+    </ul>
+    <ul class="notes">
+      <li><b>Focus order</b> (red numbers): toolbar 1, files 2, editor 3, log 4 (then its command line), graph 5, data
+        tabs 6. F6 / Shift+F6 moves between panes; each pane is a labeled region.</li>
+      <li>The status bar is a live region: start-up stages, running, Break, reset and rc are read out.</li>
+      <li>The log is text (not an image), so a screen reader reads tables line by line; errors are links to the line.</li>
+      <li>Shortcuts: Ctrl/Cmd+Enter run (selection or file), Ctrl/Cmd+S save, Ctrl/Cmd+. Break, Ctrl/Cmd+L command line.</li>
+    </ul>
+  </div>
+</div>
+<script src="content.js"></script>
+</body>
+</html>

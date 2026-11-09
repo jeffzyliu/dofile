@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>dofile web demo: moodboard</title>
+<style>
+  /* The board follows the system light/dark setting, with the candidate palette from section 5. */
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --ink: #1e2128; --muted: #5a606b; --accent: #3a4485;
+    --border: #d9dbe0; --error: #b3261e; --ok: #1f6f3f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b; --surface: #1c1f26; --ink: #e4e6ea; --muted: #9aa1ad; --accent: #a3acec;
+      --border: #30343d; --error: #f2867c; --ok: #7fcf9a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px; width: 1600px; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  h1, h2 { font-weight: 600; margin: 0 0 12px; }
+  h1 { font-size: 26px; }
+  h1 small { font-size: 14px; font-weight: 400; color: var(--muted); }
+  h2 { font-size: 17px; margin-top: 36px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); }
+  h2 small { font-weight: 400; color: var(--muted); }
+  .grid { display: grid; gap: 20px; }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  .g3 { grid-template-columns: 1fr 1fr 1fr; }
+  figure, .note { margin: 0; background: var(--surface); padding: 12px; border: 1px solid var(--border); border-radius: 4px; }
+  figure img { display: block; width: 100%; border: 1px solid var(--border); }
+  figcaption { padding: 8px 2px 0; font-size: 13.5px; }
+  figcaption b, .note > b { display: block; margin-bottom: 4px; }
+  .take::before { content: "take  "; color: var(--ok); font-weight: 700; }
+  .fix::before  { content: "fix   "; color: var(--error); font-weight: 700; }
+  .skip::before { content: "skip  "; color: var(--muted); font-weight: 700; }
+  .take, .fix, .skip { display: block; white-space: pre-wrap; padding-left: 6ch; text-indent: -6ch; }
+  .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .mode { padding: 16px; border: 1px solid #888; border-radius: 4px; }
+  .mode h3 { margin: 0 0 10px; font-size: 14px; }
+  .sw { display: grid; grid-template-columns: 44px 11ch 9ch 1fr; gap: 10px; align-items: center; font-size: 13px; margin: 4px 0; }
+  .sw i { height: 26px; border: 1px solid #888; }
+  .sample { margin-top: 12px; padding: 10px 12px; border-radius: 4px; font-size: 13px; white-space: pre; }
+  /* ?norefs: the committed PNGs show the notes for third-party pages, not their screenshots */
+  .norefs .ref img { display: none; }
+</style>
+</head>
+<body>
+<h1>dofile web demo: moodboard <small>(deliverable 1 of the UI/UX design step, docs/phase2-plan.md)</small></h1>
+
+<h2>1. Legacy OpenStata <small>(our own work: reusable, except the "OpenStata" wordmark)</small></h2>
+<div class="grid g2">
+  <figure><img src="img/legacy-landing.png" alt="Legacy landing page: an editor with an ASCII banner and plain-text intro, next to a navy graph-paper grid">
+    <figcaption><b>Landing: the editor is the page</b>
+      <span class="take">the landing text as a file in the editor, with line numbers; the ASCII banner; plain-text "what is this"</span>
+      <span class="skip">the graph paper (noisy, dated) and the saturated navy (#1b1464 is too strong as a page color)</span>
+      <span class="fix">the right half is empty; use it for "try it", the install lines and a sample of the log</span>
+      <span class="skip">sign up / sign in (no accounts: everything runs in the browser)</span></figcaption></figure>
+  <figure><img src="img/legacy-editor.png" alt="Legacy editor: gray drawer, log pane, editor pane, bottom action bar">
+    <figcaption><b>Editor: files | log | code</b>
+      <span class="take">three columns; the log reads like a terminal; the actions together in one bar</span>
+      <span class="fix">gray-on-gray drawer (#cbc9cb on #dcdadd, low contrast); no Break and no busy state; no syntax highlighting;
+the log is pandas output, not a Stata-style log</span></figcaption></figure>
+  <figure><img src="img/legacy-upload.png" alt="Legacy editor after uploading a CSV and running describe and summarize">
+    <figcaption><b>Upload, then use the data</b>
+      <span class="take">"Your Data" in the file list, with the uploaded file listed at once</span>
+      <span class="fix">the upload form (Choose File + Alias + Upload) takes a third of the drawer; use a button + drag and drop;
+the bottom of the drawer is dead space</span></figcaption></figure>
+  <figure><img src="img/legacy-tutorial.png" alt="Legacy tutorial: commented do-file and its log">
+    <figcaption><b>Tutorials as commented do-files</b>
+      <span class="take">a tutorial is just a .do file with comments: the sample project can be the same</span>
+      <span class="fix">long comment lines run off the editor (no wrap); light-blue keywords in the log are hard to read</span></figcaption></figure>
+</div>
+
+<h2>2. Stata and OpenDTA desktop GUIs <small>(layout and workflow may inform ours; no colors, fonts, icons or text copied)</small></h2>
+<div class="grid g2">
+  <figure><img src="img/opendta.png" alt="OpenDTA desktop GUI with a regression table and an explained error">
+    <figcaption><b>OpenDTA (MIT; screenshot from its README)</b>
+      <span class="take">the explained error under a failed command: what went wrong, how to fix it, where to learn more;
+the error line and its return code stand out from the log; command history with each rc;
+a variables list with labels, filterable; a properties panel for the data (obs, vars, size)</span>
+      <span class="skip">its colors, fonts and icons, and five panels at once: a web demo starts with fewer</span></figcaption></figure>
+  <figure class="ref"><img src="refs/stata-gui.png" alt="">
+    <figcaption><b>Stata's GUI (our own 2020 recording; the screenshot stays out of git)</b>
+      <span class="take">the do-file editor and the results as separate views; "run selection" is the everyday action,
+and the selection shows what ran; the log echoes each command (". cmd") before its output;
+a command line for one-off commands next to the do-file</span>
+      <span class="skip">its colors, syntax-highlight scheme, fonts, icons, toolbar, menus and wording</span></figcaption></figure>
+</div>
+<div class="note" style="margin-top:20px">
+  <b>What we need that none of them has</b>
+  <span class="take">Break and a busy state that are always visible while code runs</span>
+  <span class="take">a crashed or reset worker (rc 9998) shown as a status, with "data is gone, files stay"</span>
+  <span class="take">graphs inline in the log; Ctrl+Enter runs</span>
+  <span class="take">a phone layout: editor and log as tabs</span>
+  <span class="take">"download everything" for the working folder; light and dark mode that follow the system</span>
+</div>
+
+<h2>3. Other references <small>(links in README.md; the screenshots stay out of git)</small></h2>
+<div class="grid g3">
+  <figure class="ref"><img src="refs/webr-light.png" alt="">
+    <figcaption><b>webR REPL</b> (R in WebAssembly)
+      <span class="take">the closest product: editor, console and files on one page; a plain toolbar of text buttons</span>
+      <span class="fix">four panes at once is busy for a demo; ours starts with two</span></figcaption></figure>
+  <figure class="ref"><img src="refs/webr-dark.png" alt="">
+    <figcaption><b>webR, dark</b>
+      <span class="take">dark mode as the same layout with the tones swapped; comments still readable</span>
+      <span class="fix">pure black panes are harsh; use a dark gray with lighter panels</span></figcaption></figure>
+  <figure class="ref"><img src="refs/duckdb-shell-dark.png" alt="">
+    <figcaption><b>DuckDB Web Shell, dark</b>
+      <span class="take">a terminal-first page; a thin top bar (New, Share, Import, Datasets); the startup line with the version</span></figcaption></figure>
+  <figure class="ref"><img src="refs/pyodide-console-light.png" alt="">
+    <figcaption><b>Pyodide console</b>
+      <span class="take">the banner as the first lines of output (version, how to get help)</span></figcaption></figure>
+  <figure class="ref"><img src="refs/marimo-light.png" alt="">
+    <figcaption><b>marimo playground</b>
+      <span class="take">a quiet empty state with a few starting actions; small icon rail on the left; one muted accent</span>
+      <span class="skip">the notebook model (cells): a do-file runs top to bottom</span></figcaption></figure>
+  <figure class="ref"><img src="refs/arxiv-light.png" alt="">
+    <figcaption><b>arXiv abstract page</b>
+      <span class="take">the academic register: dense small type, plain links, a side column of facts; it reads as a tool</span></figcaption></figure>
+</div>
+
+<h2>4. Candidate palette <small>(a starting point for the design system; contrast against the page and panel colors)</small></h2>
+<div class="palette">
+  <div class="mode" style="background:#f7f7f5;color:#1e2128">
+    <h3>light</h3>
+    <div class="sw"><i style="background:#f7f7f5"></i>page<span>#f7f7f5</span></div>
+    <div class="sw"><i style="background:#ffffff"></i>panel<span>#ffffff</span></div>
+    <div class="sw"><i style="background:#d9dbe0"></i>border<span>#d9dbe0</span></div>
+    <div class="sw"><i style="background:#1e2128"></i>text<span>#1e2128</span><span>15.0 / 16.1</span></div>
+    <div class="sw"><i style="background:#5a606b"></i>muted<span>#5a606b</span><span>5.9 / 6.3</span></div>
+    <div class="sw"><i style="background:#3a4485"></i>accent<span>#3a4485</span><span>8.4 / 9.0 (softened navy)</span></div>
+    <div class="sw"><i style="background:#b3261e"></i>error<span>#b3261e</span><span>6.1 / 6.5</span></div>
+    <div class="sw"><i style="background:#1f6f3f"></i>ok<span>#1f6f3f</span><span>5.8 / 6.2</span></div>
+    <div class="sample" style="background:#ffffff;border:1px solid #d9dbe0">. regress wage age
+<span style="color:#5a606b">  (output)</span>
+<span style="color:#b3261e">variable foo not found
+r(111);</span>
+<span style="color:#3a4485;font-weight:700">[ Run ]</span>  <span style="color:#5a606b">running… 2.1 s</span>  <span style="color:#b3261e;font-weight:700">[ Break ]</span></div>
+  </div>
+  <div class="mode" style="background:#14161b;color:#e4e6ea">
+    <h3>dark</h3>
+    <div class="sw"><i style="background:#14161b"></i>page<span>#14161b</span></div>
+    <div class="sw"><i style="background:#1c1f26"></i>panel<span>#1c1f26</span></div>
+    <div class="sw"><i style="background:#30343d"></i>border<span>#30343d</span></div>
+    <div class="sw"><i style="background:#e4e6ea"></i>text<span>#e4e6ea</span><span>14.5 / 13.2</span></div>
+    <div class="sw"><i style="background:#9aa1ad"></i>muted<span>#9aa1ad</span><span>7.0 / 6.3</span></div>
+    <div class="sw"><i style="background:#a3acec"></i>accent<span>#a3acec</span><span>8.3 / 7.6</span></div>
+    <div class="sw"><i style="background:#f2867c"></i>error<span>#f2867c</span><span>7.3 / 6.7</span></div>
+    <div class="sw"><i style="background:#7fcf9a"></i>ok<span>#7fcf9a</span><span>9.7 / 8.9</span></div>
+    <div class="sample" style="background:#1c1f26;border:1px solid #30343d">. regress wage age
+<span style="color:#9aa1ad">  (output)</span>
+<span style="color:#f2867c">variable foo not found
+r(111);</span>
+<span style="color:#a3acec;font-weight:700">[ Run ]</span>  <span style="color:#9aa1ad">running… 2.1 s</span>  <span style="color:#f2867c;font-weight:700">[ Break ]</span></div>
+  </div>
+</div>
+
+<h2>5. Direction in one line</h2>
+<div class="note">A quiet, editor-first tool in the academic register: plain text first, one monospace font and one UI font, neutral
+light and dark surfaces with one softened navy accent, and every state (running, Break, error, reset) shown in words.</div>
+
+<script>
+  if (new URLSearchParams(location.search).has('norefs')) document.body.classList.add('norefs');
+</script>
+</body>
+</html>

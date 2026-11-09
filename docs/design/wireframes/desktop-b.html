@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe B: editor and one output pane with tabs</title>
+<link rel="stylesheet" href="wf.css">
+<style>
+  .frame { width: 1440px; height: 900px; display: grid; grid-template-rows: auto 1fr auto; border-bottom: 3px solid #222; }
+  .main { display: grid; grid-template-columns: 210px 1fr 1fr; gap: 8px; padding: 8px; min-height: 0; background: #f7f7f7; }
+  .dot::after { content: " ●"; font-size: 9px; vertical-align: top; }
+  .below { padding: 18px 24px; max-width: 1440px; }
+  .below h1 { font-size: 18px; margin: 0 0 6px; }
+  .below .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .splitcol { display: grid; grid-template-rows: 3fr 2fr; gap: 8px; min-height: 0; }
+  .peek { position: absolute; right: 12px; bottom: 54px; width: 220px; height: 150px; border: 1.5px solid #555;
+          background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); padding: 6px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="bar" style="position:relative" data-fill="toolbar"><span class="n inline">1</span></div>
+  <div class="main">
+    <div class="pane" aria-label="Files"><span class="n">2</span>
+      <div class="head"><span class="title">Files</span></div>
+      <div class="body" data-fill="files"></div></div>
+    <div class="pane" aria-label="Editor"><span class="n">3</span>
+      <div class="head" data-fill="editortabs"></div>
+      <div class="body" data-fill="editor"></div></div>
+    <div class="pane single" aria-label="Output"><span class="n">4</span>
+      <div class="head"><span class="tab on">Log</span><span class="tab dot">Graph</span><span class="tab">Data</span>
+        <span class="tab">Results</span><span class="tab">Help</span><span class="spacer"></span>
+        <span class="status">⌕ Find · Download log · <u>⬓ Split</u></span></div>
+      <div class="body" data-fill="log"></div>
+      <div class="peek"><div class="graph" style="height:100px">graph 2</div>
+        new graph · <u>open in Graph tab</u> · <u>dismiss</u></div>
+      <div class="cmdline" data-fill="cmdline"></div><span class="n" style="top:auto;bottom:6px;right:-10px">5</span></div>
+    <div class="splitcol" style="display:none">
+      <div class="pane" aria-label="Log"><span class="n">4</span>
+        <div class="head"><span class="title">Log</span><span class="spacer"></span>
+          <span class="status">⌕ Find · Download log · <u>⬒ Unsplit</u></span></div>
+        <div class="body" data-fill="log"></div>
+        <div class="cmdline" data-fill="cmdline"></div><span class="n" style="top:auto;bottom:6px;right:-10px">5</span></div>
+      <div class="pane" aria-label="Graph, data, results and help"><span class="n">6</span>
+        <div class="head"><span class="tab on">Graph</span><span class="tab">Data</span><span class="tab">Results</span>
+          <span class="tab">Help</span></div>
+        <div class="body" data-fill="graph"></div></div>
+    </div>
+  </div>
+  <div class="statusbar" role="status" data-fill="statusbar"></div>
+</div>
+<div class="below">
+  <h1>B. Editor and one output pane: files | editor | Log · Graph · Data · Results · Help</h1>
+  <div class="cols">
+    <ul class="notes">
+      <li><b>For:</b> two big panes; the editor is about 80 columns and the log has room to spare; it scales down to a
+        laptop, and it is the same model as the phone's tabs.</li>
+      <li><b>Against:</b> after <code>scatter</code> the graph is one click away, not in view. A new graph shows as a small
+        preview over the log's corner (dismissable) and a dot on the Graph tab; the tab does not switch by itself, so the
+        log stays where you were reading.</li>
+      <li>The command line sits under the output pane on every tab, so you can type <code>describe</code> while looking at
+        Data.</li>
+      <li><b>Split</b> (chosen 2026-11-09, <code>desktop-b-split.png</code>): "Split" in the output header puts the Log on top
+        and the other tabs below, Graph first; then a new graph shows below at once, with no preview. The choice is kept
+        in the browser.</li>
+    </ul>
+    <ul class="notes">
+      <li><b>Focus order:</b> toolbar 1, files 2, editor 3, output tabs 4, command line 5 (split: then the lower pane 6).
+        F6 / Shift+F6 between panes; arrow keys move between tabs (ARIA tablist).</li>
+      <li>Status lives only in the bottom bar (a live region): engine state, last rc and time, memory. The toolbar holds
+        actions only. The wordmark links to the landing page; ⋯ holds Reset, Clear log, Download all, Keyboard
+        shortcuts and About dofile.</li>
+    </ul>
+  </div>
+</div>
+<script>
+  if (new URLSearchParams(location.search).has('split')) {
+    document.querySelector('.single').style.display = 'none';
+    document.querySelector('.splitcol').style.display = 'grid';
+  }
+</script>
+<script src="content.js"></script>
+</body>
+</html>
