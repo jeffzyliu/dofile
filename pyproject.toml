@@ -1,6 +1,6 @@
 [project]
 name = "dofile"
-version = "0.1.0.dev0"
+version = "0.1.0.dev1"
 description = "Run Stata-syntax .do files without a Stata license; MCP server for agents"
 readme = "README.md"
 license = "MIT"
