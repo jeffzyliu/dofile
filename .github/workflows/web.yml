@@ -105,7 +105,11 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: npm run snapshot   # needs the network once: micropip fetches openpyxl from PyPI
+      # needs the network once: micropip fetches openpyxl from PyPI. Quality 5: seconds instead of ~3 min, about 25% bigger. The
+      # tests below read the decompressed bytes, which are the same at any quality; deploy.yml builds the shipped one at 11.
+      - run: npm run snapshot
+        env:
+          SNAPSHOT_QUALITY: "5"
       - run: npm test   # with a snapshot built, snapshot-native.test.mjs runs too instead of skipping
       # the corpus, probes and the Stata 14 cases from the restored engine (~4 min locally; the runner is slower, so a
       # longer limit per case: 1908 and 1909 took over 300 s)
