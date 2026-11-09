@@ -34,13 +34,46 @@ the last release until the next bump, so tagging an unbumped `main` fails at upl
 ## Releasing with CI (`.github/workflows/release.yml`)
 A push of a tag `vX.Y.Z` (PEP 440: `v0.1.0a1`, `v0.1.0.dev1`, `v0.1.0`) builds, tests and publishes that commit.
 1. On `main`: bump the version (previous section), merge it, and let `ci` go green.
-2. `git tag v0.1.0a1 && git push origin v0.1.0a1` (the tag is the version with a `v`).
+2. Tag the merge commit from git (see "Tagging" below): the tag is the version with a `v`.
 3. The `build` job refuses a tag that is not on `main` or does not match `pyproject.toml`, runs `poe test`, builds, runs
    `twine check`, installs the wheel alone in a clean environment and runs `dofile run` and `dofile-mcp --help`. The
    `publish` job then uploads with Trusted Publishing (OIDC): no token is stored anywhere. It is a separate job so the
    OIDC permission is never available to the steps that run the project's code.
 4. Check the project page and `uvx --prerelease=allow --from dofile==<version> dofile --help`.
 5. When the first non-pre-release is out, drop the "with the first release" label from the web demo's landing page.
+
+### Tagging
+Tag from git, with an annotated tag, on the exact commit you looked at:
+```bash
+git switch main && git pull
+git log -1                          # confirm it is the "Release 0.1.0a1" merge commit
+git tag -a v0.1.0a1 -m "dofile 0.1.0a1"   # -s instead of -a to sign, if signing is set up
+git push origin v0.1.0a1
+```
+Why git and not the GitHub Releases form: you tag the commit you checked (the form defaults to the tip of `main`, which
+may have moved), and an annotated tag records who tagged and when. The push starts the workflow; watch it under the
+repository's Actions tab. Optionally, after the upload succeeds, create a GitHub Release from the existing tag for the
+notes (tick "pre-release" for `dev`, `a`, `b` and `rc` versions); PyPI does not depend on it.
+
+Consider a tag ruleset for `v*` (Settings → Rules → Rulesets → tags) so only the maintainer can create or delete
+release tags; it goes with the `pypi` environment's required reviewer.
+
+### Deleting a tag
+Only when the release did **not** reach PyPI: the `build` job failed (the tag was not on `main`, did not match
+`pyproject.toml`, a test or the smoke test failed), the reviewer rejected the `publish` job, or `publish` failed before
+the upload. Check first at https://pypi.org/project/dofile/#history that the version is not there.
+```bash
+git push origin --delete v0.1.0a1   # remove the remote tag (the same as git push origin :refs/tags/v0.1.0a1)
+git tag -d v0.1.0a1                 # remove the local tag
+```
+Then fix the cause on `main` through a pull request (if the fix changes the version, bump again) and tag the new
+commit. Re-tagging the same number is fine only because nothing was published.
+
+If any file of that version reached PyPI, never move or reuse the tag: the number cannot be uploaded again. Leave the
+tag, yank the release if it is bad (Manage project → the release → Yank), bump to the next number and release that. A
+partial upload (the wheel but not the sdist) counts as published.
+
+Deleting a tag does not delete a GitHub Release made from it; delete the Release too.
 
 **One-time setup (not done yet; the workflow fails at `publish` until it is):**
 - PyPI: project `dofile` → Manage → Publishing → add a GitHub publisher: owner `jeffzyliu`, repository `dofile`,
