@@ -783,7 +783,7 @@ def _read_legacy(path: Path) -> Dataset:
     try:
         import pyreadstat
     except ImportError:
-        raise StataError(610, "file format not supported: install pyreadstat to read older .dta files")
+        raise StataError(199, "very old .dta files (Stata 7 and earlier) are not available: they need the pyreadstat package, which is not installed")
     try:
         # output as a dict of lists: no need for pandas
         cols, meta = pyreadstat.read_dta(str(path), user_missing=True, output_format="dict")

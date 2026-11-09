@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { loadPyodide } from "pyodide";
+import { installEngine } from "./install-engine.mjs";
 
 const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
@@ -18,10 +19,7 @@ if (args.includes("--child")) {
   const caseName = arg("--child");
   const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });
   await py.loadPackage(["numpy", "scipy", "matplotlib"], { messageCallback: () => {} });
-  await py.loadPackage("micropip", { messageCallback: () => {} });
-  const dist = `${repo}/dist`, wheel = readdirSync(dist).filter(f => f.endsWith(".whl")).sort().at(-1);
-  py.FS.writeFile(`/tmp/${wheel}`, readFileSync(`${dist}/${wheel}`));
-  await py.runPythonAsync(`import micropip; await micropip.install("emfs:/tmp/${wheel}")`);
+  await installEngine(py);
   py.FS.mkdirTree("/od");
   py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests_opendta` }, "/od");
   py.FS.writeFile("/tmp/numeric_probe.py", readFileSync(`${repo}/web/scripts/numeric_probe.py`));

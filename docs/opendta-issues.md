@@ -47,6 +47,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-28 | Python errors that escape a command are not turned into Stata errors: rc 9999 `internal engine error` with a traceback, the whole program ends, and `capture` does not catch it. A missing folder (`log using hi/hi`, `cmdlog`, `outfile`, `file open ... write`, `copy`, `bcal create`) or a directory where a file is expected (`use`, `append`, `type`, `infile`, ...): `OSError`, Stata r(603) `file ... could not be opened`. Out of memory (numpy cannot allocate): `MemoryError`, Stata r(909). A command that fails partway leaves the data partly changed | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected codes assumed, not checked against Stata | patched (the partly changed data is not) |
 | ODT-29 | numpy `RuntimeWarning: overflow encountered in exp` when a delta-method interval is computed from a huge standard error: `estimation/mleq.py:157` (`transformed_row`, the `exp` of `b ± c·se`) and `estimation/models2.py:739` (`nbreg`/`gnbreg`, the interval of alpha). The value becomes `inf`, which is what the Stata 14 logs show. The warning goes to Python's warnings, not the Stata log | `poe slow`: `test_matches_stata14_reference_log[1907_models]` and `[1918_models3]`; `tests_opendta/tests/test_models_block_c.py::test_nb1_nbreg_and_tnbreg` (`mleq.py:157` only); no test of our own | left as is |
 | ODT-30 | the ML optimizer takes Newton steps from a nearly singular numerical Hessian, so where the likelihood is flat its path (and sometimes where it stops) depends on the last digits of the likelihood's derivatives. `gnbreg cnt x1 x2, lnalpha(x3)` in compat 1907 stops at the boundary alpha = 0 (ll equal to the Poisson log likelihood), a false convergence: a relative 1e-13 change in the derivatives gives a run that does not converge, 1e-11 one that converges to a log likelihood 0.17 higher. Its constant-only model is stuck (ll -959.397, Stata -952.7455) | found 2026-11-07 comparing CPython with Pyodide (`web/scripts/compare_numeric.py`); perturbation experiment in `phase2-plan.md`, "`gnbreg` in 1907_models"; no test | unverified |
+| ODT-32 | a missing optional package (pyreadstat, pandas) is reported as rc 610, which in Stata means "file not Stata format", with advice to `pip install` it: `import sasxport`, `import spss`, `import sas`, `use` of a Stata 7 or older `.dta` (pyreadstat), `export sasxport` (pandas). A script that tests `_rc == 610` to detect a bad file misreads it, and the advice is useless in the web demo | found 2026-11-09 (the web demo ships without pandas); `tests/test_engine.py::test_odt32_*`, `web/e2e/poc.spec.ts` | patched |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
@@ -687,6 +688,29 @@ boundary alpha = 0.
   `core/ordination.py`) in a new `scripts/patches/` file, plus a re-vendor, for no change in results.
 - Revisit if the warnings ever reach a user (a caller that turns warnings into errors) or if a result stops matching.
 
+### ODT-32: a missing optional package is rc 610 "file not Stata format", with `pip install` advice
+`io/statpkg.py` and `io/dta.py` raise `StataError(610, ...)` when `pyreadstat` or `pandas` cannot be imported, with
+messages such as `export sasxport requires the pandas package (pip install pandas)`. 610 is the code Stata gives for a
+file that is not in its format, and OpenDTA uses it for that too (`file not SAS XPORT format`, `file not Stata format`),
+so one number means "the file is bad" and "this build lacks a package". The web demo ships `pyreadstat` without pandas
+(`docs/pyodide-snapshot.md`, "Packages added"), so `export sasxport` there ends with rc 610 and tells a browser user to
+`pip install pandas`.
+- Expected in Stata: **no equivalent; a design choice.** Stata always has all of its commands. The closest thing in dofile is
+  the sandbox's refusal of a command (`shell`, `cd`, ...): rc 199 `command ... is disabled in the dofile sandbox`
+  (`sandbox.py`). The patch uses 199 for "not available in this build" and a message without install advice.
+- Patched (`scripts/patches/opendta-odt32-missing-package-errors.patch`): three sites become
+  `StataError(199, "... is not available: it needs the <package> package, which is not installed")`:
+  `statpkg.pyreadstat()` (`import sasxport`/`sas`/`spss`), `statpkg.write_xport` (pandas), `dta._read_legacy`.
+- Not patched: the `xlrd` and `xlwt` errors in `io/excel.py` (rc 603, `... requires the xlrd package (pip install xlrd)`;
+  603 is "file could not be opened", also a stretch) because both are core dependencies of dofile since 2026-11-09, so
+  they cannot occur; and the `pyodbc` one in `commands/datasets.py` (rc 198, ODBC needs a driver as well, not only a package).
+  `write_formats_xpf` imports pandas without a guard, but `write_xport` runs first and refuses.
+- A side finding: `_read_legacy`'s docstring says formats up to 115 (Stata 12 and earlier) go through ReadStat, but
+  `read_dta` sends 113 to 115 to its own reader (`_read_old`); ReadStat gets only what is older than 113 (Stata 7 and
+  earlier) or a release it does not know. `pyproject.toml`'s `legacy-dta` comment had the same mistake, corrected.
+- Tests: `tests/test_engine.py::test_odt32_missing_optional_package_is_rc_199_without_pip_advice` (hides each package with
+  `sys.modules[name] = None`), and the web demo's e2e test (`export sasxport` without pandas, in four browsers).
+
 ### GAP-3: other `estat` subcommands after `ivregress`
 `estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).
 A student running Card (1995) or any IV paper reaches for all three. (`estat overid` is an error in Stata for an
@@ -847,6 +871,6 @@ kept as a dofile patch for the browser demo, not sent upstream.
   problem, `numpy.linalg` returning NaN instead of raising `LinAlgError` in Pyodide; with `src/dofile/linalgshim.py` they
   pass (`phase2-plan.md`, "Open investigation"). The "nothing else is affected" finding above was about the int64 problem
   only; it did not cover this one.
-- Related: the web demo's other gaps found in the same run are the optional packages `xlwt` (legacy `.xls` output; `.xlsx` works, through openpyxl) and
-  `pyreadstat` (SAS transport files, pre-Stata-13 `.dta`), which are not OpenDTA bugs; see `phase2-plan.md`, "Known gaps
-  in the browser engine".
+- Related: the web demo's other gaps found in the same run were the optional packages `xlwt` (`.xls` output) and
+  `pyreadstat` (SAS transport files, pre-Stata-13 `.dta`), which are not OpenDTA bugs. Both are installed in the page since
+  2026-11-09; see `phase2-plan.md`, "Known gaps in the browser engine".

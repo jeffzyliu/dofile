@@ -5,13 +5,14 @@
 //                known differences, as tests/test_stata_compat.py does under CPython
 // Each compat case runs in its own process (a fresh engine), N at a time (--shards N, default 4), and is killed after
 // --timeout seconds (default 300), reported as a failure "timeout". The cases that are slow in Pyodide start first.
-// Options: --cases a,b,c (only those compat cases; no conformance), --only conformance|compat, --dir, --normal.
+// Options: --cases a,b,c (only those compat cases; no conformance), --only conformance|compat, --dir, --normal, --pandas (with --normal: load pandas, as the page does not).
 // Exit code 1 if anything differs, times out or crashes. Over 30 minutes for everything. Needs a built snapshot.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { loadPyodide } from "pyodide";
+import { installEngine } from "./install-engine.mjs";
 import { bootFromSnapshot, NATIVE_CHECKS, defaultDir } from "./snapshot-node.mjs";
 
 const args = process.argv.slice(2);
@@ -26,10 +27,7 @@ const PYODIDE_SLOW = ["0408_mata_moptimize", "1907_models", "1918_models3", "190
 async function boot() {
   if (args.includes("--normal")) {   // the baseline: Pyodide booted and the wheel installed the way the page does without a snapshot
     const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });
-    await py.loadPackage("micropip", { messageCallback: () => {} });
-    const dist = `${repo}/dist`, wheel = readdirSync(dist).filter(f => f.endsWith(".whl")).sort().at(-1);
-    py.FS.writeFile(`/tmp/${wheel}`, readFileSync(`${dist}/${wheel}`));
-    await py.runPythonAsync(`import micropip; await micropip.install("emfs:/tmp/${wheel}")`);
+    const wheel = await installEngine(py, { pandas: args.includes("--pandas") });
     return { py, manifest: { wheel: `${wheel} (normal boot, no snapshot)` } };
   }
   return bootFromSnapshot(dir);
@@ -128,7 +126,7 @@ def run_case(case):
 // ---- the parent: start the children, collect their results -------------------------------------------------------------
 const shards = Number(arg("--shards", 4)), timeoutS = Number(arg("--timeout", 300));
 const only = arg("--only", null), wanted = arg("--cases", null)?.split(",");
-const passArgs = ["--dir", dir, ...(args.includes("--normal") ? ["--normal"] : []), ...(args.includes("--no-shim") ? ["--no-shim"] : [])];
+const passArgs = ["--dir", dir, ...(args.includes("--normal") ? ["--normal"] : []), ...(args.includes("--pandas") ? ["--pandas"] : []), ...(args.includes("--no-shim") ? ["--no-shim"] : [])];
 const t0 = performance.now();
 
 // Runs one child; stdout lines are echoed, the RESULT line is parsed. A child over `limitS` seconds is killed.
@@ -156,9 +154,11 @@ const cases = (wanted ?? allCases).sort((a, b) => {
   return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
 });
 
-// Cases that differ because Pyodide lacks a package (phase2-plan.md, "Known gaps in the browser engine"): 1701 needs xlwt (legacy .xls only; .xlsx works),
-// 1911 needs pyreadstat. Expected like a strict xfail: a difference is accepted, and one that now passes is reported.
-const EXPECTED_DIFFER = ["1701_datamgmt_options", "1911_datamgmt"];
+// Cases that differ because the page has no pandas (phase2-plan.md, "Known gaps in the browser engine"): 1701 and 1911 call
+// `export sasxport`, which needs it, and what follows (import sasxport, describe, list) cascades. The page leaves pandas out on
+// purpose (5 MB, docs/pyodide-snapshot.md). Expected like a strict xfail: a difference is accepted, and one that now passes is
+// reported. `--normal --pandas` loads pandas and expects no difference at all: run it for these two cases after an engine change.
+const EXPECTED_DIFFER = args.includes("--pandas") ? [] : ["1701_datamgmt_options", "1911_datamgmt"];
 const problems = [], timeouts = [], crashed = [], passed = [];
 let ran = 0;
 const conformance = only === "conformance" || (!only && !wanted)

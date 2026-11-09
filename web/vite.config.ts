@@ -9,6 +9,11 @@ if (!wheel) throw new Error("no wheel in ../dist: run `npm run wheel`");
 mkdirSync(new URL("./public/", import.meta.url), { recursive: true });
 copyFileSync(new URL(wheel, dist), new URL(`./public/${wheel}`, import.meta.url));
 
+// the extra wheels (web/wheels/: pyreadstat built for Pyodide), served next to it; the page installs them after the dofile wheel
+const wheelsDir = new URL("./wheels/", import.meta.url);
+const extraWheels = readdirSync(wheelsDir).filter(f => f.endsWith(".whl")).sort();
+for (const f of extraWheels) copyFileSync(new URL(f, wheelsDir), new URL(`./public/${f}`, import.meta.url));
+
 // Pyodide's runtime and packages come from its CDN, the same version as the npm package (decision 7: measure first)
 const pyodide = JSON.parse(readFileSync(new URL("./node_modules/pyodide/package.json", import.meta.url), "utf8")).version;
 
@@ -23,6 +28,7 @@ const isolate: Connect.NextHandleFunction = (_req, res, next) => {
 export default defineConfig({
   define: {
     __WHEEL__: JSON.stringify(wheel),
+    __EXTRA_WHEELS__: JSON.stringify(extraWheels),
     __WHEEL_HASH__: JSON.stringify(createHash("sha256").update(readFileSync(new URL(wheel, dist))).digest("hex")),   // a snapshot must be of this wheel
     __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
   },

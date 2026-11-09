@@ -164,6 +164,39 @@ of 3 runs of the page's own "ready in X s" (a new browser context is a cold cach
 - Against plain `vite preview` (no compression, files not cached) the snapshot took 2.8 s cold and 2.4 s warm: not comparable,
   so not in the table or chart.
 
+## Packages added: `xlwt`, `xlrd` and `pyreadstat`, not pandas (2026-11-09)
+
+The page used to lack the packages for legacy `.xls` and for SAS transport, SPSS and Stata 7 and older `.dta` files
+([phase2-plan.md](phase2-plan.md#known-gaps-in-the-browser-engine)). The normal boot now installs `xlwt` and `xlrd` (pure Python,
+from PyPI, as dependencies of the dofile wheel) and `pyreadstat`, which has no Pyodide build, so `web/wheels/` holds one we
+compiled (`web/wheels/README.md`). The snapshot holds all of them. Pandas is **not** installed: only `export sasxport` needs it.
+
+Four builds, measured the same day on one machine (`measure-startup.mjs`, 2 reps, Chromium; the 2026-11-07 column is the table
+above, 3 reps). "Snapshot" is the compressed download on a first visit; times are cold / warm. The unthrottled normal-boot
+times swing by seconds from rep to rep (the CDN), so compare the 30 Mbps rows.
+
+| | 11-07 (before) | A: `xlwt`+`xlrd` | C: A + `pyreadstat`, no pandas | D: C + pandas |
+|---|---|---|---|---|
+| What works | no `.xls`, no ReadStat | `.xls` | `.xls`; read SAS transport and SPSS (**shipped**) | all of C; also `export sasxport` |
+| Snapshot, compressed | 39.9 MB | 40.5 MB | 41.7 MB | 48.6 MB |
+| Normal boot, host / CDN extra | 3.0 MB | 3.0 MB | 3.6 MB | 3.6 MB host, plus 4.2 MB pandas from the CDN |
+| Normal boot, 30 Mbps | 13.9 / 9.2 s | 14.4 / 9.5 s | 15.1 / 9.6 s | 15.7 / 9.8 s |
+| Snapshot start, 30 Mbps | 13.9 / 1.2 s | 14.1 / 1.3 s | 14.6 / 1.4 s | 16.5 / 1.5 s |
+| Snapshot start, unthrottled | 1.7 / 1.2 s | 1.9 / 1.3 s | 2.0 / 1.3 s | 2.0 / 1.5 s |
+
+So `xlwt` and `xlrd` cost 0.6 MB and about 0.2 s: negligible. `pyreadstat` itself (the 0.6 MB wheel, narwhals, its native code in the
+heap) costs another 1.2 MB and 0.5 to 0.7 s on a cold 30 Mbps start. Pandas is most of the rest: 6.9 MB in the snapshot, 4.2 MB
+more on a normal boot, and on a cold 30 Mbps start 0.6 s more for a normal boot and 1.9 s more for a snapshot start. Pandas is only needed for `export sasxport`; without it
+`pyreadstat` reads all three formats, and that command stops with `export sasxport is not available: it needs the pandas package` (rc 199, ODT-32; checked in
+Pyodide under Node with no pandas loaded and in all four e2e browsers). The snapshots of A and D were built by hand (temporary edits, since reverted); C is the committed build; the numbers are
+not in CI.
+
+C is what is committed: 41.6 MB. With it, a snapshot start passes 95 of 97 Stata cases directly, the 63 corpus checks, the 12 probes and the
+13 native-library calls; 1701 and 1911 differ only because of `export sasxport` and match with `check-snapshot.mjs --normal --pandas`.
+`npm run e2e` passes in Chromium, Firefox, WebKit and the iPhone profile, including a test that writes and reads `.xls`, reads a
+`.xpt` and a `.sav`, and checks the `export sasxport` refusal. To add pandas later (D): load it in `worker.js` and
+`install-engine.mjs`, import it in `make-snapshot.mjs`, and empty `EXPECTED_DIFFER`.
+
 ## File size: what is done and what is not
 
 A first visit downloads two compressed files: the **heap image** (the Python process's memory after the imports; 136 MB raw,
@@ -244,7 +277,7 @@ of `npm test`.
 
 **Results, 2026-11-07.** On every snapshot start checked (brotli 5 and 11, with and without the trampoline, with and without
 stripping; the last on the current 39.9 MB build, 150 s): 63 corpus checks, 12 probes and 13 native-library calls clean, and
-**95 of 97 Stata cases pass**, the same two failures as a normal boot (`xlwt`, for legacy `.xls` only; `pyreadstat`); the count is 97, not 98, because
+**95 of 97 Stata cases pass**, the same two failures as a normal boot (`xlwt`, `pyreadstat`; both packages were added on 2026-11-09 and all 97 pass, see "Packages added" below); the count is 97, not 98, because
 `1920_models4` has no Stata log. Before PATCH-4 and the `numpy.linalg` shim (`src/dofile/linalgshim.py`) 16 cases failed on
 the snapshot and the normal boot alike: 11 from one 32-bit numpy bug in `expand` and `stsplit`, 2 package gaps, and 3 numeric
 cases (which also ran 20–500 times slower). See [Known gaps](phase2-plan.md#known-gaps-in-the-browser-engine) and the

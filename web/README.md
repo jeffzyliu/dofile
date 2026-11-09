@@ -52,7 +52,7 @@ status line says so and names `?snapshot=0`. Why it works, how it is built and w
 
 | Script | What it does | Time |
 |---|---|---|
-| `snapshot` | Builds the wheel, then `scripts/make-snapshot.mjs` writes `public/snapshot/` (gitignored): the heap image and the site-packages bundle, both brotli-compressed (about 40 MB; 229 MB uncompressed), plus a manifest. Needs the network once (micropip fetches openpyxl). **Rebuild it after any change to the dofile code or the Pyodide version**: the manifest holds a SHA-256 of the wheel, and the page refuses a snapshot built from a different build ("run `npm run snapshot` again"). The snapshot is unpacked with the browser's own brotli decoder when it has one (much faster on an iPhone), else with brotli-wasm; `?brotli=wasm` forces the wasm decoder, to compare. The status line shows where the start and each run spent their time. `SNAPSHOT_OUT=dir` writes elsewhere; `SNAPSHOT_STRIP_DOCS=0` keeps docstrings and asserts. | |
+| `snapshot` | Builds the wheel, then `scripts/make-snapshot.mjs` writes `public/snapshot/` (gitignored): the heap image and the site-packages bundle, both brotli-compressed (about 42 MB; 229 MB uncompressed), plus a manifest. Needs the network once (micropip fetches openpyxl). **Rebuild it after any change to the dofile code or the Pyodide version**: the manifest holds a SHA-256 of the wheel, and the page refuses a snapshot built from a different build ("run `npm run snapshot` again"). The snapshot is unpacked with the browser's own brotli decoder when it has one (much faster on an iPhone), else with brotli-wasm; `?brotli=wasm` forces the wasm decoder, to compare. The status line shows where the start and each run spent their time. `SNAPSHOT_OUT=dir` writes elsewhere; `SNAPSHOT_STRIP_DOCS=0` keeps docstrings and asserts. | |
 | `check-snapshot` | Starts the engine from the snapshot, with the page's own restore code, and runs the conformance corpus, the probes, native-library calls and the Stata 14 reference cases, one process per case. `-- --normal` skips the snapshot (the baseline); `-- --cases a,b` picks cases. | ~4 min |
 
 ### Checks against CPython (by hand)
@@ -82,7 +82,8 @@ writes `../docs/img/startup-times.json`.
 | `scripts/` | The snapshot builder and the checks above (`make-snapshot.mjs`, `check-*.mjs`, `snapshot-node.mjs`, `measure-startup.mjs`), and the Python files the checks run (`numeric_probe.py`, `pytest_report.py`, `compare_numeric.py`). |
 | `test/` | The Node tests behind `npm test`. `node-worker.mjs` runs `worker.js` in a worker thread with an in-memory IndexedDB. |
 | `e2e/` | The Playwright test (`poc.spec.ts`): cross-origin isolation, Break through the real interrupt buffer, files kept across a reload. |
-| `public/` | Static files Vite serves. `snapshot/` and the copied wheel are generated and gitignored. |
+| `wheels/` | Wheels the page and the scripts install after the dofile wheel: `pyreadstat` built for Pyodide (committed; the recipe and how to rebuild it are in its README). `scripts/install-engine.mjs` installs them in Node, as `worker.js` does in the page. |
+| `public/` | Static files Vite serves. `snapshot/` and the copied wheels are generated and gitignored. |
 | `spike/` | The Phase 2 spikes (Pyodide loading, the snapshot) with their own `package.json`, kept for the numbers. Not used by the page. |
 | `dist/` | Build output (gitignored). |
 

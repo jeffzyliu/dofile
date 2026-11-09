@@ -1,0 +1,33 @@
+diff --git a/src/dofile/_vendor/opendta/io/dta.py b/src/dofile/_vendor/opendta/io/dta.py
+--- a/src/dofile/_vendor/opendta/io/dta.py
++++ b/src/dofile/_vendor/opendta/io/dta.py
+@@ -783,7 +783,7 @@ def _read_legacy(path: Path) -> Dataset:
+     try:
+         import pyreadstat
+     except ImportError:
+-        raise StataError(610, "file format not supported: install pyreadstat to read older .dta files")
++        raise StataError(199, "very old .dta files (Stata 7 and earlier) are not available: they need the pyreadstat package, which is not installed")
+     try:
+         # output as a dict of lists: no need for pandas
+         cols, meta = pyreadstat.read_dta(str(path), user_missing=True, output_format="dict")
+diff --git a/src/dofile/_vendor/opendta/io/statpkg.py b/src/dofile/_vendor/opendta/io/statpkg.py
+--- a/src/dofile/_vendor/opendta/io/statpkg.py
++++ b/src/dofile/_vendor/opendta/io/statpkg.py
+@@ -25,7 +25,7 @@ def pyreadstat():
+     try:
+         import pyreadstat as mod
+     except ImportError:
+-        raise StataError(610, "this file format requires the pyreadstat package (pip install pyreadstat)")
++        raise StataError(199, "this file format is not available: it needs the pyreadstat package, which is not installed")
+     return mod
+
+
+@@ -163,7 +163,7 @@ def write_xport(ds: Dataset, path: Path, names: list[str], rows: np.ndarray, *,
+     try:
+         import pandas as pd
+     except ImportError:
+-        raise StataError(610, "export sasxport requires the pandas package (pip install pandas)")
++        raise StataError(199, "export sasxport is not available: it needs the pandas package, which is not installed")
+     frame = {}
+     for n in names:
+         v = ds.get(n)

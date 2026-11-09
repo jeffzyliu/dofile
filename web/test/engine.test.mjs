@@ -11,6 +11,7 @@ const root = fileURLToPath(new URL("../..", import.meta.url));
 const wheels = readdirSync(`${root}/dist`).filter(f => f.endsWith(".whl")).sort();
 assert.ok(wheels.length, "no wheel in dist/: run `uv build --wheel` first");
 const wheel = { name: wheels.at(-1), bytes: readFileSync(`${root}/dist/${wheels.at(-1)}`) };
+const extraWheels = readdirSync(`${root}/web/wheels`).filter(f => f.endsWith(".whl")).map(f => ({ name: f, bytes: readFileSync(`${root}/web/wheels/${f}`) }));
 
 // Every worker started here is ended when the file's tests are done, passed or failed: a failing assertion skips the
 // `eng.worker.terminate()` at the end of its test, and a live worker keeps the process (and so `npm test`) from exiting.
@@ -29,7 +30,7 @@ function nodeWorker() {
 
 test("engine worker: files, run, describe, matrix, Break, restart", { timeout: 180_000 }, async t => {
   const statuses = [];
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, onStatus: s => statuses.push(s) });
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, onStatus: s => statuses.push(s) });
   const about = await eng.start();
   assert.match(JSON.stringify(about), /opendta/i);
   assert.deepEqual(statuses, ["loading Python", "loading your files", "loading packages", "starting the engine"]);
@@ -91,7 +92,7 @@ test("a worker that fails to load is replaced, and start() still finishes", { ti
     const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
     return port;
   };
-  const eng = new EngineClient({ createWorker: () => (first ? ((first = false), blocked()) : nodeWorker()), wheel });
+  const eng = new EngineClient({ createWorker: () => (first ? ((first = false), blocked()) : nodeWorker()), wheel, extraWheels });
   assert.match(JSON.stringify(await eng.start()), /opendta/i);
   assert.equal((await eng.run("display 1")).rc, 0);
   eng.worker.terminate();
@@ -104,13 +105,13 @@ test("a worker that always fails to load ends start() with an error instead of r
     const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
     return port;
   };
-  const eng = new EngineClient({ createWorker, wheel });
+  const eng = new EngineClient({ createWorker, wheel, extraWheels });
   await assert.rejects(eng.start(), /failed twice/);
   assert.equal(made, 2);
 });
 
 test("files can be listed, written and read while the engine is still loading, and a run sees them", { timeout: 180_000 }, async () => {
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel });
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels });
   const starting = eng.start();   // not awaited: the page shows the files without waiting for this
   let booted = false;
   starting.then(() => { booted = true; });
@@ -138,7 +139,7 @@ const haveSnapshot = existsSync(`${snapshotDir}manifest.json`) &&
 
 test("engine from a memory snapshot: native code, graphs, files, Break", { timeout: 180_000, skip: !haveSnapshot && "no current snapshot: npm run snapshot" }, async t => {
   const statuses = [];
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, snapshot, onStatus: s => statuses.push(s) });
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, snapshot, onStatus: s => statuses.push(s) });
   const t0 = performance.now();
   const about = await eng.start();
   console.log(`snapshot start: ${((performance.now() - t0) / 1000).toFixed(2)} s`);

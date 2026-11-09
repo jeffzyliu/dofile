@@ -25,7 +25,7 @@ def pyreadstat():
     try:
         import pyreadstat as mod
     except ImportError:
-        raise StataError(610, "this file format requires the pyreadstat package (pip install pyreadstat)")
+        raise StataError(199, "this file format is not available: it needs the pyreadstat package, which is not installed")
     return mod
 
 
@@ -163,7 +163,7 @@ def write_xport(ds: Dataset, path: Path, names: list[str], rows: np.ndarray, *,
     try:
         import pandas as pd
     except ImportError:
-        raise StataError(610, "export sasxport requires the pandas package (pip install pandas)")
+        raise StataError(199, "export sasxport is not available: it needs the pandas package, which is not installed")
     frame = {}
     for n in names:
         v = ds.get(n)

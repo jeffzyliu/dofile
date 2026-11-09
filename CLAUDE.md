@@ -82,6 +82,7 @@ Layers, bottom up (`src/dofile/`):
   buffer). `web/src/engine/client.js` is the page's side (Break, restart = rc 9998).
 - `web/vite.config.ts` builds the Web Worker as **one file** (`inlineDynamicImports`). A chunk that imports the worker's entry made iOS
   Safari run the entry twice (`V.loadPackage` error with a snapshot start); see `docs/pyodide-snapshot.md`, "Debugging an iPhone 13".
+- `web/wheels/`: wheels the page and the web scripts install after the dofile wheel: `pyreadstat` built for Pyodide (no upstream build; committed so CI and a fresh checkout need no Emscripten build, a choice rather than a limit; rebuild with `sh web/wheels/pyreadstat/build.sh`, see its README). `web/scripts/install-engine.mjs` installs them in Node as `worker.js` does in the page. The page has no pandas, so `export sasxport` is refused there (rc 610); 1701 and 1911 are `EXPECTED_DIFFER` in `check-snapshot.mjs` for that, and `--normal --pandas` runs them with pandas to prove they match otherwise. `xlwt` and `xlrd` are core dependencies of dofile, so the CLI, MCP server and page all do `.xls`.
 - `web/src/engine/snapshot.js` + `web/scripts/make-snapshot.mjs`: web demo only, **the page's default start** (`?snapshot=0`
   is the normal boot; there is no fallback: a missing or stale snapshot is an error that names `?snapshot=0`; the e2e tests and
   `npm run deploy` build the snapshot first, and the deploy workflow builds it before `vite build`). Start from a
