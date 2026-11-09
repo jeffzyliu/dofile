@@ -1,0 +1,61 @@
+name: lint
+
+# Lints the workflows with actionlint (shellcheck included), so a mistake in release.yml is found in the pull request and
+# not when a tag is pushed. A separate file, so that changing it never reruns the test workflows (ci.yml and web.yml
+# treat lint.yml and release.yml as non-code).
+#
+# Same pattern as ci.yml: the workflow starts for every pull request, `changes` looks at the files, and the lint job is
+# skipped unless a workflow changed, so the check `lint ok` always reports and can be required in branch protection. (A
+# workflow-level `paths` filter would start nothing, and a required check that never reports blocks the merge forever.)
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      workflows: ${{ steps.diff.outputs.workflows }}   # "false" only for a pull request that changes no file in .github/workflows/
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          workflows=true
+          if [ "$EVENT" = pull_request ]; then
+            files=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
+            wf=$(printf '%s\n' "$files" | grep -E '^\.github/workflows/' || true)
+            [ -n "$wf" ] || workflows=false
+          fi
+          echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
+
+  actionlint:
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      # pinned, so a new rule cannot fail an unrelated pull request; bump it on purpose
+      - run: uvx --from actionlint-py==1.7.12.25 actionlint
+
+  # The check to require in branch protection: it fails if any job failed or was cancelled; skipped jobs are fine.
+  ok:
+    name: lint ok
+    if: always()
+    needs: [changes, actionlint]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
