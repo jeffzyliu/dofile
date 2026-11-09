@@ -18,9 +18,22 @@ is used up for good: PyPI never accepts a number twice, even after a file is del
   called `start_session`, `run_do` (rc 0, `e(N)` right) and `shell` (refused, rc 199). `sysuse auto` fails by design:
   OpenDTA does not include Stata's example datasets.
 
+## Bumping the version
+Bump before the release, in a small pull request of its own (`Release 0.1.0a1`), never after: the tag must equal the
+version in `pyproject.toml` at the tagged commit, and PyPI never accepts a number twice. `main` carries the version of
+the last release until the next bump, so tagging an unbumped `main` fails at upload ("file already exists").
+1. `uv version 0.1.0a1` (or `uv version --bump dev` / `--bump alpha` / `--bump patch` / `--bump minor`; add
+   `--dry-run` to preview). It edits `version` in `pyproject.toml` and the dofile entry in `uv.lock` together; commit
+   both files and nothing else.
+2. Which number: while dofile is 0.x, a breaking change to the result format raises the minor version (`CLAUDE.md`);
+   otherwise raise the patch. Until the first real release use a pre-release (`0.1.0.dev1`, `0.1.0a1`, `0.1.0rc1`);
+   PEP 440 orders `.devN` < `aN` < `bN` < `rcN` < the final `0.1.0`, so go in that order and never backwards (a lower
+   number than one already on PyPI uploads fine but pip prefers the higher one).
+3. Merge the pull request and let `ci` go green, then tag that merge commit (next section).
+
 ## Releasing with CI (`.github/workflows/release.yml`)
 A push of a tag `vX.Y.Z` (PEP 440: `v0.1.0a1`, `v0.1.0.dev1`, `v0.1.0`) builds, tests and publishes that commit.
-1. On `main`: bump `version` in `pyproject.toml` (rules under "by hand", step 2), merge it, and let `ci` go green.
+1. On `main`: bump the version (previous section), merge it, and let `ci` go green.
 2. `git tag v0.1.0a1 && git push origin v0.1.0a1` (the tag is the version with a `v`).
 3. The `build` job refuses a tag that is not on `main` or does not match `pyproject.toml`, runs `poe test`, builds, runs
    `twine check`, installs the wheel alone in a clean environment and runs `dofile run` and `dofile-mcp --help`. The
@@ -43,8 +56,7 @@ real test: use a pre-release number.
 ## Releasing by hand
 1. Two-factor authentication on, and a token scoped to the `dofile` project (PyPI → Account settings → API tokens; the
    first upload needed an account-wide token, because a project-scoped one cannot exist before the project).
-2. Version: bump `version` in `pyproject.toml` (while dofile is 0.x, a breaking change to the result format raises the
-   minor version, per `CLAUDE.md`). Run `uv run poe ci` first. Use a pre-release (`0.1.0a1`, `0.1.0.dev1`) until the
+2. Version: bump it as under "Bumping the version" and merge. Run `uv run poe ci` first. Use a pre-release until the
    first real release.
 3. Build from a clean checkout of the commit: `rm -rf dist && uv build`, then `uvx twine check dist/*`, and look inside
    the wheel (`unzip -l dist/*.whl`) for the license files above.
