@@ -1,36 +1,37 @@
 # Releasing to PyPI
 
-Status (2026-11-09): the name `dofile` is not taken on PyPI (no project). The maintainer has a PyPI account; nothing
-has been uploaded yet. PyPI does not reserve names: only a first upload creates the project, so until then anyone can
-take it. The web demo's landing page labels `pip install dofile` "with the first release".
+Status (2026-11-09): `0.1.0.dev0` is on PyPI (https://pypi.org/project/dofile/), uploaded by hand from `origin/main` at
+`818f4ed`. It is a pre-release: `pip install dofile` skips it, `pip install --pre dofile` installs it. The version number
+is used up for good: PyPI never accepts a number twice, even after a file is deleted. The web demo's landing page labels
+`pip install dofile` "with the first release"; keep that label until a non-pre-release is on PyPI.
 
-## What was checked (2026-11-09, `uv build` of 0.1.0.dev0)
+## What was checked in the first upload (`uv build` of 0.1.0.dev0)
 - The wheel holds dofile's MIT `LICENSE` and OpenDTA's `LICENSE` and `THIRD_PARTY_NOTICES.md` (both in
   `dist-info/licenses/`, from `license-files` in `pyproject.toml`, and in `dofile/_vendor/opendta/`).
 - The sdist leaves out the Stata 14 reference logs (`tests_opendta/compat/expected`, required by `LICENSE-POLICY.md`),
   `docs/` and `web/`.
-- `uvx twine check dist/*` passes for both files.
-- Done since: `[project.urls]`, keywords and classifiers are in `pyproject.toml` (no License classifier: it conflicts
-  with the PEP 639 `license = "MIT"`), and the README's links are absolute GitHub URLs (they point at `main`, so they
-  work once this branch is merged). `twine check` still passes.
+- `uvx twine check dist/*` passes for both files; `pyproject.toml` has keywords, classifiers and `[project.urls]` (no
+  License classifier: it conflicts with the PEP 639 `license = "MIT"`); the README's links are absolute GitHub URLs, so
+  they work on PyPI's page (they point at `main`).
+- Smoke test of the uploaded package, from a clean environment: `dofile run` on a do-file with synthetic data (a
+  regression; exit code 0, and 1 for a do-file with an error), and `dofile-mcp --http` booted with an MCP client that
+  called `start_session`, `run_do` (rc 0, `e(N)` right) and `shell` (refused, rc 199). `sysuse auto` fails by design:
+  OpenDTA does not include Stata's example datasets.
 
-## The first upload (creates the project)
-1. Turn on two-factor authentication on the PyPI account; uploads require it.
-2. Build from a clean checkout of a commit: `rm -rf dist && uv build`, then `uvx twine check dist/*`. Look inside the
-   wheel (`unzip -l dist/*.whl`) for the license files above.
-3. Version: a version number can never be uploaded twice, even after it is deleted. Upload a dev or pre-release
-   (`0.1.0.dev0`, `0.1.0a1`), not `0.1.0`: pip skips pre-releases unless asked (`pip install --pre dofile`), so a plain
-   `pip install dofile` does not install a preview by accident, and `0.1.0` stays free for the real first release.
+## Releasing by hand
+1. Two-factor authentication on, and a token scoped to the `dofile` project (PyPI → Account settings → API tokens; the
+   first upload needed an account-wide token, because a project-scoped one cannot exist before the project).
+2. Version: bump `version` in `pyproject.toml` (while dofile is 0.x, a breaking change to the result format raises the
+   minor version, per `CLAUDE.md`). Run `uv run poe ci` first. Use a pre-release (`0.1.0a1`, `0.1.0.dev1`) until the
+   first real release.
+3. Build from a clean checkout of the commit: `rm -rf dist && uv build`, then `uvx twine check dist/*`, and look inside
+   the wheel (`unzip -l dist/*.whl`) for the license files above.
 4. Optional dry run on TestPyPI (a separate account and token):
    `uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-...`
-5. Create an account-wide API token on PyPI (a project-scoped token cannot exist before the project does), then
-   `uv publish --token pypi-...`. Check https://pypi.org/project/dofile/.
-6. Delete that account-wide token.
+5. `uv publish --token pypi-...`. Never paste the token into a chat or a file: export `UV_PUBLISH_TOKEN` in your own
+   shell, or pass it on the command line yourself. The account-wide token used for the first upload was pasted into a
+   chat transcript: it must be revoked (PyPI → Account settings → API tokens) if that has not happened yet.
+6. Check the project page and `uvx --prerelease=allow --from dofile==<version> dofile --help`.
 
-## Later releases
-- Set up Trusted Publishing on PyPI (Manage project → Publishing) for the repository's GitHub Actions workflow, and
-  publish from CI with `uv publish` (no stored token; the workflow needs `permissions: id-token: write`). Until then,
-  use a token scoped to the `dofile` project only.
-- Each release: bump `version` in `pyproject.toml`; while dofile is 0.x, a breaking change to the result format raises
-  the minor version (`CLAUDE.md`). Run `uv run poe ci` first. The web demo's landing page drops its "with the first
-  release" label once a non-pre-release is on PyPI.
+A bad release cannot be fixed in place: yank it on PyPI (Manage project → the release → Yank) and publish the next
+number.
