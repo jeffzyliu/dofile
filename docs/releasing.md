@@ -10,9 +10,9 @@ take it. The web demo's landing page labels `pip install dofile` "with the first
 - The sdist leaves out the Stata 14 reference logs (`tests_opendta/compat/expected`, required by `LICENSE-POLICY.md`),
   `docs/` and `web/`.
 - `uvx twine check dist/*` passes for both files.
-- Not done: `[project.urls]` (homepage, source, issues) and classifiers are missing from `pyproject.toml`; the
-  README's relative links (`MCP-SCHEMA.md`, `docs/...`, `plugins/...`) will not work on PyPI's page. Fix before the
-  first real release, or accept them for a preview upload.
+- Done since: `[project.urls]`, keywords and classifiers are in `pyproject.toml` (no License classifier: it conflicts
+  with the PEP 639 `license = "MIT"`), and the README's links are absolute GitHub URLs (they point at `main`, so they
+  work once this branch is merged). `twine check` still passes.
 
 ## The first upload (creates the project)
 1. Turn on two-factor authentication on the PyPI account; uploads require it.

@@ -2,36 +2,46 @@
 
 Run Stata-syntax `.do` files without a Stata license, and expose them to AI agents over MCP.
 
-Status: Phase 1 is complete; work since then is in `docs/phase1-plan.md` ("After Phase 1" and "Next steps").
+Status: early preview (0.1.x, alpha). Emulates Stata 14.
+
+## Install
+
+Pre-releases only so far, so pip needs `--pre`:
+
+```bash
+pip install --pre dofile            # the dofile command
+pip install --pre "dofile[mcp]"     # adds the dofile-mcp server
+```
+
+Python 3.12 or newer. From a source checkout, use `uv sync --extra mcp` and `uv run` instead.
 
 ## Command line
 
 ```bash
-uv run dofile run analysis.do --json results.json
+dofile run analysis.do --json results.json
 ```
 
 Prints the log like `stata -b` and exits 1 if the do-file stops on an error. `--json` also writes
 `{rc, error, error_command, results, versions}`, where `results` holds `e()` and `r()` in the same form as the MCP
-server's (see [MCP-SCHEMA.md](MCP-SCHEMA.md)). It runs with the sandbox on (see below): code writes only to the
+server's (see [MCP-SCHEMA.md](https://github.com/jeffzyliu/dofile/blob/main/MCP-SCHEMA.md)). It runs with the sandbox on (see below): code writes only to the
 working folder (the current one, or `--workdir`), and reads from it, from the do-file's own folder (so nested
 `do` files work) and from any `--read-dir` folders. `--unsafe` turns the sandbox off for trusted code that needs
 `shell`, `cd` or `erase`.
 
 ## MCP server
 
-```bash
-uv sync --extra mcp
-```
-
-Add it to Claude Code (stdio; the session works in the folder you launch it from):
+Install with `pip install --pre "dofile[mcp]"`, then add it to Claude Code (stdio; the session works in the folder you
+launch it from):
 
 ```bash
-claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"
+claude mcp add dofile -- dofile-mcp --workdir "$PWD"
 ```
+
+From a source checkout: `claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"`.
 
 Tools: `run_do` (run Stata code; returns log, rc, error, e()/r() as JSON and new files), `describe_data`,
 `get_file` (exported graphs as images, logs and CSVs as text in pages), `get_matrix` (one matrix, or part of it, at full precision), `upload_file`, `start_session`, `request_upload` and `request_download` (HTTP), `reset`. Resources: `dofile://commands` lists the
-supported commands, `dofile://about` the versions. Data stays in memory between `run_do` calls. Full inputs, outputs and return codes: [MCP-SCHEMA.md](MCP-SCHEMA.md).
+supported commands, `dofile://about` the versions. Data stays in memory between `run_do` calls. Full inputs, outputs and return codes: [MCP-SCHEMA.md](https://github.com/jeffzyliu/dofile/blob/main/MCP-SCHEMA.md).
 
 **Readable logs in Claude Code** (optional): Claude Code shows an MCP result as JSON, so a log is one string full of
 `\n`. The `dofile-log` plugin prints each `run_do` log in the terminal under the call, colored and between two
@@ -43,7 +53,7 @@ the result (cut for long runs; the bar names the file with the full log):
 /plugin install dofile-log@dofile
 ```
 
-Source: [plugins/dofile-log](plugins/dofile-log). The same text is always in the `log_file` the result names.
+Source: [plugins/dofile-log](https://github.com/jeffzyliu/dofile/tree/main/plugins/dofile-log). The same text is always in the `log_file` the result names.
 
 HTTP: `dofile-mcp --http --port 8000` (localhost only by default). Call `start_session` first and pass its
 token as `session`; each session gets its own temporary folder, deleted when the session ends.
@@ -97,7 +107,7 @@ uv run poe ci            # everything, as CI does
 
 ## Web demo
 
-[`web/`](web/README.md) runs the same engine in the browser (Pyodide in a Web Worker, no server): an editor, files kept
+[`web/`](https://github.com/jeffzyliu/dofile/blob/main/web/README.md) runs the same engine in the browser (Pyodide in a Web Worker, no server): an editor, files kept
 in the browser, Run and Break, the log and graphs. Its README lists the scripts (dev server, build, tests, the memory
 snapshot) and what each folder holds. CI for it is `.github/workflows/web.yml`.
 
@@ -106,9 +116,9 @@ snapshot) and what each folder holds. CI for it is `.github/workflows/web.yml`.
 A vendored copy of [OpenDTA](https://github.com/yaskepalhares/opendta) (MIT), pinned in
 `src/dofile/_vendor/opendta/VENDORED`. dofile's own changes to it are patches in `scripts/patches/`
 (`r(table)` after estimation, and fixes for engine bugs listed in
-[docs/opendta-issues.md](docs/opendta-issues.md)), re-applied by the vendor script. Not affiliated with StataCorp; Stata is a registered trademark of StataCorp LLC.
+[docs/opendta-issues.md](https://github.com/jeffzyliu/dofile/blob/main/docs/opendta-issues.md)), re-applied by the vendor script. Not affiliated with StataCorp; Stata is a registered trademark of StataCorp LLC.
 
 ## License
 
-MIT ([LICENSE](LICENSE)). Contributions follow the clean-room and license rules in
-[LICENSE-POLICY.md](LICENSE-POLICY.md): no StataCorp files or text, no GPL code.
+MIT ([LICENSE](https://github.com/jeffzyliu/dofile/blob/main/LICENSE)). Contributions follow the clean-room and license rules in
+[LICENSE-POLICY.md](https://github.com/jeffzyliu/dofile/blob/main/LICENSE-POLICY.md): no StataCorp files or text, no GPL code.
