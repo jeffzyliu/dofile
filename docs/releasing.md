@@ -105,3 +105,5 @@ real test: use a pre-release number.
 
 A bad release cannot be fixed in place: yank it on PyPI (Manage project → the release → Yank) and publish the next
 number.
+
+<!-- throwaway: verify that CI skips -->

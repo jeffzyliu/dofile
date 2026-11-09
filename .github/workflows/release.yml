@@ -1,4 +1,5 @@
 name: release
+# throwaway comment (verify that CI skips)
 
 # Publishes to PyPI when a version tag is pushed (`git tag v0.1.0a1 && git push origin v0.1.0a1`). The tag must be on
 # main and match `version` in pyproject.toml. Steps and one-time setup (the PyPI publisher, the `pypi` environment):
