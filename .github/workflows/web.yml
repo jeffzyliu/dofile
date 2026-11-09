@@ -20,13 +20,15 @@ defaults:
 env:
   UV_PYTHON: "3.14"   # Pyodide 314's Python; `npm run wheel` builds the dofile wheel with uv
 
-# A docs-only pull request skips the test jobs but still starts the workflow, so the required check `web ok` reports. (A
-# workflow-level `paths-ignore` starts nothing, and a required check that never reports blocks the merge forever.)
+# A pull request that changes none of the files these tests cover (web/, src/ (the engine the wheel is built from),
+# pyproject.toml, uv.lock, this workflow) skips the test
+# jobs but still starts the workflow, so the required check `web ok` reports. (A workflow-level `paths` filter starts
+# nothing, and a required check that never reports blocks the merge forever.)
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes nothing but *.md, docs/, release.yml and lint.yml
+      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes none of: web/, src/ (the engine the wheel is built from), pyproject.toml, uv.lock, this workflow
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,8 +41,8 @@ jobs:
           code=true
           if [ "$EVENT" = pull_request ]; then
             files=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
-            other=$(printf '%s\n' "$files" | grep -vE '\.md$|^docs/|^\.github/workflows/(release|lint)\.yml$' || true)   # files that are not docs (release.yml runs only on a tag push and lint.yml is a linter: no test covers them)
-            [ -n "$other" ] || code=false
+            hit=$(printf '%s\n' "$files" | grep -vE '\.md$' | grep -E '^(web|src)/|^(pyproject\.toml|uv\.lock|\.github/workflows/web\.yml)$' || true)   # a markdown file never counts; files outside the pattern are not covered by these tests
+            [ -n "$hit" ] || code=false
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
