@@ -8,9 +8,14 @@ import { join } from "node:path";
 const data = new URL("../../tests/conformance/data/", import.meta.url);
 const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
 
-async function ready(page: Page): Promise<number> {
-  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s/, { timeout: 300_000 });
-  await expect(page.locator("#status")).toContainText(/\[runtime [\d.]+ s, files [\d.]+ s, packages [\d.]+ s, engine [\d.]+ s\]/);   // the normal boot's breakdown
+// The page starts from the memory snapshot by default (`npm run snapshot`, then the build copies public/snapshot/); ?snapshot=0
+// is the normal boot. Both helpers check the status line's breakdown, so a page that silently started the other way fails.
+const SNAPSHOT_BOOT = /\[(download|read from cache) [\d.]+ s, unpack [\d.]+ s \(heap [\d.]+ s, site-packages [\d.]+ s, decoder (native|wasm)\), restore [\d.]+ s, files [\d.]+ s, engine [\d.]+ s/;
+const NORMAL_BOOT = /\[runtime [\d.]+ s, files [\d.]+ s, packages [\d.]+ s, engine [\d.]+ s\]/;
+
+async function ready(page: Page, { normal = false } = {}): Promise<number> {
+  await expect(page.locator("#status")).toHaveText(normal ? /ready in [\d.]+ s \[/ : /ready in [\d.]+ s \(snapshot\)/, { timeout: 300_000 });
+  await expect(page.locator("#status")).toContainText(normal ? NORMAL_BOOT : SNAPSHOT_BOOT);
   return Number((await page.locator("#status").textContent())!.match(/ready in ([\d.]+) s/)![1]);
 }
 
@@ -184,11 +189,10 @@ test("Save writes the file; Discard opens the other file", async ({ page }) => {
   await expect(page.locator(".cm-content")).toContainText('display "KEPT"');
 });
 
-// ?snapshot=1 starts from the Pyodide memory snapshot `npm run snapshot` builds (public/snapshot/, copied by the build).
-// Skipped when there is none. A second visit reads it from the Cache API instead of downloading it again.
-test("?snapshot=1: starts from the memory snapshot, runs native code and a graph, and caches it", async ({ playwright, browserName, request }, testInfo) => {
-  const manifest = await request.get("/snapshot/manifest.json");
-  test.skip(!(manifest.ok() && (manifest.headers()["content-type"] ?? "").includes("json")), "no snapshot: run npm run snapshot, then npm run build");
+// The page starts from the Pyodide memory snapshot `npm run snapshot` builds (public/snapshot/, copied by the build). No
+// skip when there is none: a missing snapshot fails every test here, as it does for a visitor. A second visit reads it from
+// the Cache API instead of downloading it again.
+test("the default start: from the memory snapshot, runs native code and a graph, and caches it", async ({ playwright, browserName }, testInfo) => {
   // A persistent profile on disk, as a real browser has. Playwright's default context keeps storage in memory, and WebKit
   // drops the whole Cache API when such a page is reloaded (a 1 KB entry too; entries survive a reload in a persistent
   // profile), so "read from cache" below could never hold there.
@@ -202,16 +206,15 @@ test("?snapshot=1: starts from the memory snapshot, runs native code and a graph
   page.on("console", m => { if (m.text().includes("[dofile] snapshot start")) notes.push(m.text()); });
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
 
-  await page.goto("/?snapshot=1");
-  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 300_000 });
-  await expect(page.locator("#status")).toContainText(/\[(download|read from cache) [\d.]+ s, unpack [\d.]+ s \(heap [\d.]+ s, site-packages [\d.]+ s, decoder (native|wasm)\), restore [\d.]+ s, files [\d.]+ s, engine [\d.]+ s/);   // see ready() for the normal boot's
+  await page.goto("/");
+  await ready(page);
   await page.locator("#run").click();   // the sample program: regress, robust, and a scatter plot
   await expect(page.locator("#status")).toHaveText(/^rc 0 in [\d.]+ s \(engine [\d.]+, encode [\d.]+, json [\d.]+, save [\d.]+, other -?[\d.]+\)$/, { timeout: 120_000 });   // the run's breakdown (a snapshot built from an older wheel has none: rebuild it)
   await expect(page.locator("#graphs img")).toHaveCount(1);
   expect(notes.at(-1)).toContain("download");
 
   await page.reload();
-  await expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 300_000 });
+  await ready(page);
   await expect.poll(() => notes.length).toBe(2);
   expect(notes.at(-1)).toContain("read from cache");
   expect(notes.at(-1)).toContain("decompress");
@@ -236,11 +239,23 @@ test("?snapshot=1: starts from the memory snapshot, runs native code and a graph
 
 // A snapshot built from other code than the page's wheel is refused with a message, not run: the wheel's file name stays the
 // same while its code changes, so the manifest carries a hash of the wheel.
-test("?snapshot=1: a snapshot from a different build of the wheel is refused", async ({ page, request }) => {
+test("a snapshot from a different build of the wheel is refused, and the message names ?snapshot=0", async ({ page, request }) => {
   const res = await request.get("/snapshot/manifest.json");
-  test.skip(!(res.ok() && (res.headers()["content-type"] ?? "").includes("json")), "no snapshot: run npm run snapshot, then npm run build");
+  expect(res.ok(), "no snapshot: run npm run snapshot, then npm run build").toBe(true);
   const manifest = await res.json();
   await page.route("**/snapshot/manifest.json", route => route.fulfill({ json: { ...manifest, wheelHash: "0".repeat(64) } }));
-  await page.goto("/?snapshot=1");
-  await expect(page.locator("#status")).toContainText(/the engine did not start: the snapshot was built from a different build.*npm run snapshot/, { timeout: 120_000 });
+  await page.goto("/");
+  await expect(page.locator("#status")).toContainText(/the engine did not start: the snapshot was built from a different build.*npm run snapshot.*\?snapshot=0/, { timeout: 120_000 });
+});
+
+// ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN): the way the page started before the
+// snapshot became the default, and what a visitor gets when the snapshot is unwanted. One run of the sample is enough here;
+// the other tests cover the page through the snapshot.
+test("?snapshot=0: the normal boot still starts and runs the sample", async ({ page }) => {
+  page.on("pageerror", e => console.log(`page error: ${e.message}`));
+  await page.goto("/?snapshot=0");
+  await ready(page, { normal: true });
+  await page.locator("#run").click();
+  await expect(page.locator("#status")).toHaveText(/^rc 0 in/, { timeout: 120_000 });
+  await expect(page.locator("#graphs img")).toHaveCount(1);
 });

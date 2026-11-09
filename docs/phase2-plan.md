@@ -16,7 +16,7 @@ are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since,
   (the other two need `pyreadstat` and `xlwt`), 1048 of 1080 unit tests (the others skip for those packages and `xlrd`, or
   are `shell`), 99.5% of estimation results agree with CPython to 1e-3 and 95% to 1e-9. The differences that remain are in
   fits whose answer the data does not pin down (ODT-30, an OpenDTA optimizer issue). Nothing of this is in CI yet.
-- **The memory snapshot** (opt-in, `?snapshot=1`; [pyodide-snapshot.md](pyodide-snapshot.md)): a return visit starts in 1.2 s
+- **The memory snapshot** (the page's default start since 2026-11-09, `?snapshot=0` is the normal boot, no fallback; [pyodide-snapshot.md](pyodide-snapshot.md)): a return visit starts in 1.2 s
   against 4.5–9.2 s, a first visit in 1.7 s unthrottled and 5.1 s at 100 Mbps, level with the normal boot at 30 Mbps. It
   is 39.9 MB (brotli 11, docstrings stripped). It works in Chromium, Firefox, WebKit and an iPhone profile. **One real iPhone
   (2026-11-08, over the LAN): the snapshot start took 28–30 s, 25–28 s of it unpacking with brotli-wasm; with the browser's own

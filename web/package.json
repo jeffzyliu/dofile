@@ -15,9 +15,9 @@
     "check": "tsc --noEmit",
     "pretest": "npm run wheel",
     "test": "node --test test/",
-    "e2e": "npm run build && playwright test",
-    "cf:dev": "npm run build && wrangler dev --ip 0.0.0.0",
-    "deploy": "npm run build && wrangler deploy"
+    "e2e": "npm run snapshot && npm run build && playwright test",
+    "cf:dev": "npm run snapshot && npm run build && wrangler dev --ip 0.0.0.0",
+    "deploy": "npm run snapshot && npm run build && wrangler deploy"
   },
   "dependencies": {
     "@codemirror/language": "^6.13.1",

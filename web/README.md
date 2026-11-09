@@ -40,17 +40,19 @@ Run them from `web/` with `npm run <name>`. Those that need the dofile wheel bui
 | Script | What it does | Time |
 |---|---|---|
 | `test` | `node --test test/`: the real `worker.js` in a Node worker thread with the built wheel, the client (Break, restart), the linalg shim in the real WebAssembly numpy, and the snapshot's `inflate`/`unpack`. Builds the wheel first. `snapshot-native.test.mjs` is skipped unless a snapshot has been built. | ~30 s |
-| `e2e` | Builds the page, then runs `e2e/` with Playwright in Chromium, Firefox, WebKit and an iPhone 15 profile (emulation). Run `npx playwright install` once. | ~1 min |
+| `e2e` | Builds the snapshot and the page, then runs `e2e/` with Playwright in Chromium, Firefox, WebKit and an iPhone 15 profile (emulation). The tests start the page the default way, from the snapshot; one starts it with `?snapshot=0`. A missing snapshot fails them, it does not skip them. `SNAPSHOT_QUALITY=5` builds the snapshot in seconds instead of ~3 min (CI does). Run `npx playwright install` once. | ~1 min + the snapshot |
 
 ### Memory snapshot
 
 The normal start installs the wheel and imports numpy, scipy and matplotlib: about 5 s on a fast machine. A snapshot is a
-saved Pyodide heap with all that already done, so the page restores it instead (opt-in with `?snapshot=1`). Why it works, how
-it is built and what it costs: [`../docs/pyodide-snapshot.md`](../docs/pyodide-snapshot.md).
+saved Pyodide heap with all that already done, so the page restores it instead. **That is the page's default start**;
+`?snapshot=0` is the normal start. There is no fallback: with no snapshot (a fresh checkout under `npm run dev`) or a stale one, the
+status line says so and names `?snapshot=0`. Why it works, how it is built and what it costs:
+[`../docs/pyodide-snapshot.md`](../docs/pyodide-snapshot.md).
 
 | Script | What it does | Time |
 |---|---|---|
-| `snapshot` | Builds the wheel, then `scripts/make-snapshot.mjs` writes `public/snapshot/` (gitignored): the heap image and the site-packages bundle, both brotli-compressed (about 40 MB; 229 MB uncompressed), plus a manifest. Needs the network once (micropip fetches openpyxl). **Rebuild it after any change to the dofile code or the Pyodide version**: the manifest holds a SHA-256 of the wheel, and the page refuses a snapshot built from a different build ("run `npm run snapshot` again"). The snapshot is unpacked with the browser's own brotli decoder when it has one (much faster on an iPhone), else with brotli-wasm; `?snapshot=1&brotli=wasm` forces the wasm decoder, to compare. The status line shows where the start and each run spent their time. `SNAPSHOT_OUT=dir` writes elsewhere; `SNAPSHOT_STRIP_DOCS=0` keeps docstrings and asserts. | |
+| `snapshot` | Builds the wheel, then `scripts/make-snapshot.mjs` writes `public/snapshot/` (gitignored): the heap image and the site-packages bundle, both brotli-compressed (about 40 MB; 229 MB uncompressed), plus a manifest. Needs the network once (micropip fetches openpyxl). **Rebuild it after any change to the dofile code or the Pyodide version**: the manifest holds a SHA-256 of the wheel, and the page refuses a snapshot built from a different build ("run `npm run snapshot` again"). The snapshot is unpacked with the browser's own brotli decoder when it has one (much faster on an iPhone), else with brotli-wasm; `?brotli=wasm` forces the wasm decoder, to compare. The status line shows where the start and each run spent their time. `SNAPSHOT_OUT=dir` writes elsewhere; `SNAPSHOT_STRIP_DOCS=0` keeps docstrings and asserts. | |
 | `check-snapshot` | Starts the engine from the snapshot, with the page's own restore code, and runs the conformance corpus, the probes, native-library calls and the Stata 14 reference cases, one process per case. `-- --normal` skips the snapshot (the baseline); `-- --cases a,b` picks cases. | ~4 min |
 
 ### Checks against CPython (by hand)
@@ -86,8 +88,8 @@ the engine. Pyodide's runtime and packages are loaded from the jsDelivr CDN, at 
 ## Cloudflare Workers (static assets)
 
 `wrangler.jsonc` serves `dist/` as static assets; `public/_headers` (copied into `dist/`) sends the two isolation headers.
-`npx wrangler login` once, then `npm run cf:dev` (local, workerd) or `npm run deploy`. Run `npm run snapshot` first if the
-deployed page should offer `?snapshot=1`: `public/snapshot/` is gitignored, so a fresh checkout deploys without it. Each asset must
+`npx wrangler login` once, then `npm run cf:dev` (local, workerd) or `npm run deploy`. Both build the snapshot first (the page
+starts from it by default, and `public/snapshot/` is gitignored, so a page built without one would not start). Each asset must
 be under 25 MiB; the two snapshot files are about 20 MB, so they fit with little room to spare.
 
 `.github/workflows/deploy.yml` deploys on every push to `main` (and by hand). It builds the snapshot too, cached on a hash of its

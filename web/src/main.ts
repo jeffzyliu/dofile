@@ -29,16 +29,19 @@ let current = "main.do";   // the file in the editor
 let dirty = false;   // edited since it was loaded or saved: only then can it be written back (never rewrite a file just opened)
 let ready = false;
 const started = performance.now();
-const useSnapshot = new URLSearchParams(location.search).has("snapshot");
+// The page starts from the memory snapshot unless the URL says ?snapshot=0 (the normal boot: Pyodide's runtime and packages
+// from the CDN). Any other value, a bare ?snapshot and an old ?snapshot=1 link included, is the snapshot.
+const useSnapshot = new URLSearchParams(location.search).get("snapshot") !== "0";
 
 const engine = new EngineClient({
   createWorker: () => new Worker(new URL("./engine/worker.js", import.meta.url), { type: "module" }),
   wheel: new URL(`${import.meta.env.BASE_URL}${__WHEEL__}`, location.href).href,
   wheelHash: __WHEEL_HASH__,
   indexURL: __PYODIDE__,
-  // ?snapshot=1: start from the Pyodide memory snapshot `npm run snapshot` builds (faster to start, a bigger download)
+  // the Pyodide memory snapshot `npm run snapshot` builds (faster to start, a bigger download); no fallback if it is
+  // missing or stale: the page says so, and ?snapshot=0 is the normal boot
   snapshot: useSnapshot ? new URL(`${import.meta.env.BASE_URL}snapshot/`, location.href).href : undefined,
-  brotli: new URLSearchParams(location.search).get("brotli") ?? undefined,   // ?snapshot=1&brotli=wasm: brotli-wasm, not the browser's decoder
+  brotli: new URLSearchParams(location.search).get("brotli") ?? undefined,   // ?brotli=wasm: brotli-wasm, not the browser's decoder
   onStatus: (s: string) => { status.textContent = `${s}…`; },
 });
 
@@ -228,7 +231,8 @@ engine.start().then(() => {
   const where = parts.length ? ` [${parts.join(", ")}${t?.notCached?.length ? "; not cached" : ""}]` : "";
   status.textContent = `ready in ${((performance.now() - started) / 1000).toFixed(1)} s${useSnapshot ? " (snapshot)" : ""}${where}${isolation}`;
 }, (e: Error) => {
-  status.textContent = `the engine did not start: ${e.message}. You can still edit and download your files.`;
+  const hint = useSnapshot ? " (or open the page with ?snapshot=0 for the normal start, without the snapshot)" : "";
+  status.textContent = `the engine did not start: ${e.message}${hint}. You can still edit and download your files.`;
 });
 if (!(await engine.call("files") as FileInfo[]).length) {
   await engine.call("write", { path: current, data: new TextEncoder().encode(SAMPLE) });   // first visit
