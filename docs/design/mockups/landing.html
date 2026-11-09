@@ -24,8 +24,14 @@
   .small { color: var(--muted); font-size: var(--text-sm); margin: var(--s2) 0 0; }
   .cmd { display: flex; align-items: center; gap: var(--s2); font: var(--text-sm)/1.4 var(--font-mono); background: var(--surface-2);
          border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin: 6px 0; overflow: hidden; }
-  .cmd code { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cmd .copy { font: 600 11.5px/1 var(--font-ui); color: var(--muted); }
+  .cmd { align-items: flex-start; }
+  /* long commands wrap (at spaces, or anywhere if a part is too long) rather than being cut off */
+  .cmd code { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .cmd .nb { white-space: nowrap; }   /* an option stays whole: browsers break after a hyphen */
+  .cmd .ph { color: var(--tok-macro); font-weight: 700; }
+  .cmd .copy { font: 600 11.5px/1 var(--font-ui); padding: 4px 8px; flex: none; color: var(--ink); }
+  /* after Copy: "Copied" beside the button for 2 s (the button keeps its name; the live region speaks) */
+  .cmd .copied { flex: none; display: inline-flex; align-items: center; gap: 4px; padding-top: 4px; font: 600 11.5px/1 var(--font-ui); color: var(--ok); }
   .label { font-size: var(--text-sm); margin-top: var(--s3); }
   .label:first-of-type { margin-top: 0; }
   .label .soon { font: 600 10.5px/1 var(--font-ui); color: var(--warn); background: var(--warn-soft); border-radius: 3px;
@@ -33,6 +39,8 @@
   .sample-card { flex: 1; display: flex; flex-direction: column; }
   .sample { font: 11px/1.45 var(--font-mono); margin: 0; white-space: pre; overflow: hidden; }
   .sample .echo { font-weight: 700; }
+  /* the pitch's first lines in ink: the page's message, not a comment */
+  .code .lead { color: var(--ink); }
   .hero { display: none; }
   .phone-only { display: none; }
   footer { padding: var(--s4) var(--s5); border-top: 1px solid var(--border); font-size: var(--text-sm); color: var(--muted);
@@ -62,45 +70,72 @@
 <header class="top">
   <a class="wordmark" href="#">do<span>file</span></a>
   <span class="spacer"></span>
-  <nav><a href="#">Commands</a><a href="#">GitHub</a>
-    <span class="theme" title="Theme: follows the system. Press for light, then dark."><span class="ico i-theme"></span><span class="label-text">System</span></span></nav>
+  <nav aria-label="Site"><a href="#">Commands</a><a href="#">GitHub</a>
+    <button class="theme" aria-label="Theme: follows the system. Press for light, then dark."><span class="ico i-theme"></span><span class="label-text">System</span></button></nav>
 </header>
 
 <main>
+  <h1 class="visually-hidden">dofile: run Stata-syntax do-files in your browser</h1>
   <!-- phone only: the pitch, the button and pip install on the first screen -->
-  <section class="hero" aria-label="dofile">
+  <section class="hero" aria-label="Introduction">
     <pre class="art" data-art="book+drop+skew"></pre>
     <div class="ver">0.1 preview</div>
     <p>Run Stata-syntax do-files in your browser. No license, no account: the engine runs inside this page, on your own computer.</p>
-    <span class="btn primary try">Open the editor →</span>
-    <p class="small">With a sample project, or bring your own files. Your files stay in this browser.</p>
+    <a class="btn primary try" href="editor.html">Open the editor →</a>
+    <p class="small">With a sample project, or bring your own files. Your files stay in this browser. The first visit downloads
+      the engine, about 36 MB: on a phone, Wi-Fi is best.</p>
   </section>
 
-  <section class="pane file desktop-only" aria-label="About dofile, as a do-file">
-    <div class="pane-head"><span class="tab on">welcome.do</span></div>
-    <div class="pane-body"><pre class="code"><span data-art="book+drop+skew" data-ln="1" data-tail="0.1 preview"></span><span class="ln"><span class="n">6</span></span><span class="ln"><span class="n">7</span><span class="c">* Run Stata-syntax do-files in your browser. No license, no account:</span></span><span class="ln"><span class="n">8</span><span class="c">* the engine runs inside this page, on your own computer.</span></span><span class="ln"><span class="n">9</span></span><span class="ln"><span class="n">10</span><span class="k">// What it is</span></span><span class="ln"><span class="n">11</span><span class="c">* An open-source interpreter for Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">12</span><span class="c">* (MIT). It reads and writes .dta files, fits the common estimators</span></span><span class="ln"><span class="n">13</span><span class="c">* and draws graphs. Not every command exists yet: see <a href="#">the list</a>.</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Your files</span></span><span class="ln"><span class="n">16</span><span class="c">* Files you open stay in this browser; they are not sent anywhere.</span></span><span class="ln"><span class="n">17</span><span class="c">* The first visit downloads the engine (Python compiled to</span></span><span class="ln"><span class="n">18</span><span class="c">* WebAssembly) from a public CDN.</span></span><span class="ln"><span class="n">19</span></span><span class="ln"><span class="n">20</span><span class="k">// Also on your computer, and for AI agents</span></span><span class="ln"><span class="n">21</span><span class="c">* The same engine as a command line (dofile run) and as an MCP</span></span><span class="ln"><span class="n">22</span><span class="c">* server, so an AI agent can run do-files for you.</span></span><span class="ln"><span class="n">23</span></span><span class="ln"><span class="n">24</span><span class="k">// Where it comes from</span></span><span class="ln"><span class="n">25</span><span class="c">* The interpreter is OpenDTA, by its own authors. dofile adds the</span></span><span class="ln"><span class="n">26</span><span class="c">* sandbox, this page, the command line and the MCP server.</span></span></pre></div>
+  <section class="pane file desktop-only" aria-labelledby="about-h">
+    <h2 id="about-h" class="visually-hidden">About dofile</h2>
+    <!-- screen readers get this plain copy; the do-file drawing below (line numbers, asterisks, banner) is hidden from them -->
+    <div class="visually-hidden">
+      <p>Run Stata-syntax do-files in your browser. No license, no account: the engine runs inside this page, on your own computer.</p>
+      <p>What it is: an open-source interpreter for Stata-syntax code, built on OpenDTA (MIT). It reads and writes .dta files,
+        fits the common estimators and draws graphs. Not every command exists yet: the list is under Commands, at the top of the page.</p>
+      <p>Your files: files you open stay in this browser; they are not sent anywhere. The first visit downloads the engine
+        (Python compiled to WebAssembly, about 36 MB) from a public CDN.</p>
+      <p>Also on your computer, and for AI agents: the same engine as a command line (dofile run) and as an MCP server, so an
+        AI agent can run do-files for you.</p>
+      <p>Where it comes from: the interpreter is OpenDTA, by its own authors. dofile adds the sandbox, this page, the command
+        line and the MCP server.</p>
+    </div>
+    <div class="pane-head" aria-hidden="true"><span class="tab on">welcome.do</span></div>
+    <div class="pane-body" aria-hidden="true"><pre class="code"><span data-art="book+drop+skew" data-ln="1" data-tail="0.1 preview"></span><span class="ln"><span class="n">6</span></span><span class="ln"><span class="n">7</span><span class="c lead">* Run Stata-syntax do-files in your browser. No license, no account:</span></span><span class="ln"><span class="n">8</span><span class="c lead">* the engine runs inside this page, on your own computer.</span></span><span class="ln"><span class="n">9</span></span><span class="ln"><span class="n">10</span><span class="k">// What it is</span></span><span class="ln"><span class="n">11</span><span class="c">* An open-source interpreter for Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">12</span><span class="c">* (MIT). It reads and writes .dta files, fits the common estimators</span></span><span class="ln"><span class="n">13</span><span class="c">* and draws graphs. Not every command exists yet: see <a href="#" tabindex="-1">the list</a>.</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Your files</span></span><span class="ln"><span class="n">16</span><span class="c">* Files you open stay in this browser; they are not sent anywhere.</span></span><span class="ln"><span class="n">17</span><span class="c">* The first visit downloads the engine (Python compiled to</span></span><span class="ln"><span class="n">18</span><span class="c">* WebAssembly, about 36 MB) from a public CDN.</span></span><span class="ln"><span class="n">19</span></span><span class="ln"><span class="n">20</span><span class="k">// Also on your computer, and for AI agents</span></span><span class="ln"><span class="n">21</span><span class="c">* The same engine as a command line (dofile run) and as an MCP</span></span><span class="ln"><span class="n">22</span><span class="c">* server, so an AI agent can run do-files for you.</span></span><span class="ln"><span class="n">23</span></span><span class="ln"><span class="n">24</span><span class="k">// Where it comes from</span></span><span class="ln"><span class="n">25</span><span class="c">* The interpreter is OpenDTA, by its own authors. dofile adds the</span></span><span class="ln"><span class="n">26</span><span class="c">* sandbox, this page, the command line and the MCP server.</span></span></pre></div>
   </section>
 
   <div class="side">
     <section class="card cta-card">
       <p class="lede">Open the editor with a sample project, or bring your own do-files and data.</p>
-      <span class="btn primary try">Open the editor →</span>
-      <p class="small">It takes a few seconds to start. Your files are kept in this browser between visits.</p>
+      <a class="btn primary try" href="editor.html">Open the editor →</a>
+      <p class="small">The first visit downloads the engine, about 36 MB, and asks before it starts; later visits start in a few
+        seconds. Your files are kept in this browser between visits.</p>
     </section>
 
     <section class="card">
       <h2>On your computer</h2>
       <div class="label">Command line and MCP server <span class="soon">with the first release</span></div>
-      <div class="cmd"><code>pip install dofile</code><span class="copy">Copy</span></div>
+      <div class="cmd"><code>pip install dofile</code><button class="btn copy" aria-label="Copy pip install dofile">Copy</button></div>
       <div class="label">Today, from the source</div>
-      <div class="cmd"><code>claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"</code><span class="copy">Copy</span></div>
+      <div class="cmd"><code>claude mcp add dofile -- uv run <span class="nb">--directory</span> <span class="ph">/path/to/dofile</span> <span class="nb">--extra mcp</span> dofile-mcp <span class="nb">--workdir "$PWD"</span></code><span class="copied" aria-hidden="true"><span class="ico i-check"></span>Copied</span><button class="btn copy" aria-label="Copy the MCP command">Copy</button></div>
+      <p class="small" style="margin-top:0">Replace <span class="mono" style="color:var(--tok-macro);font-weight:700">/path/to/dofile</span> with the folder you cloned dofile into.</p>
       <p class="small">Setup and the MCP tools: <a href="#">README on GitHub</a></p>
+      <!-- Copy: "Copied" shows beside the button for 2 s; the button's name stays "Copy …", and only this region speaks, once -->
+      <div class="visually-hidden" role="status" aria-live="polite">Copied to the clipboard</div>
     </section>
 
     <!-- phone only: the rest of welcome.do, wrapped for a narrow screen -->
-    <section class="pane file phone-only" aria-label="About dofile, as a do-file">
-      <div class="pane-head"><span class="tab on">welcome.do</span></div>
-      <div class="pane-body"><pre class="code"><span class="ln"><span class="n">1</span><span class="k">// What it is</span></span><span class="ln"><span class="n">2</span><span class="c">* An open-source interpreter for</span></span><span class="ln"><span class="n">3</span><span class="c">* Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">4</span><span class="c">* (MIT). It reads and writes .dta files,</span></span><span class="ln"><span class="n">5</span><span class="c">* fits the common estimators and draws</span></span><span class="ln"><span class="n">6</span><span class="c">* graphs. Not every command exists yet:</span></span><span class="ln"><span class="n">7</span><span class="c">* see <a href="#">the list</a>.</span></span><span class="ln"><span class="n">8</span></span><span class="ln"><span class="n">9</span><span class="k">// Your files</span></span><span class="ln"><span class="n">10</span><span class="c">* Files you open stay in this browser;</span></span><span class="ln"><span class="n">11</span><span class="c">* they are not sent anywhere. The first</span></span><span class="ln"><span class="n">12</span><span class="c">* visit downloads the engine (Python</span></span><span class="ln"><span class="n">13</span><span class="c">* compiled to WebAssembly) from a CDN.</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Also for AI agents</span></span><span class="ln"><span class="n">16</span><span class="c">* The same engine as a command line</span></span><span class="ln"><span class="n">17</span><span class="c">* (dofile run) and as an MCP server, so</span></span><span class="ln"><span class="n">18</span><span class="c">* an AI agent can run do-files for you.</span></span></pre></div>
+    <section class="pane file phone-only" aria-label="About dofile">
+      <div class="visually-hidden">
+        <p>What it is: an open-source interpreter for Stata-syntax code, built on OpenDTA (MIT). It reads and writes .dta files,
+          fits the common estimators and draws graphs. Not every command exists yet: the list is under Commands, at the top of the page.</p>
+        <p>Your files: files you open stay in this browser; they are not sent anywhere. The first visit downloads the engine
+          (Python compiled to WebAssembly, about 36 MB) from a CDN.</p>
+        <p>Also for AI agents: the same engine as a command line (dofile run) and as an MCP server, so an AI agent can run
+          do-files for you.</p>
+      </div>
+      <div class="pane-head" aria-hidden="true"><span class="tab on">welcome.do</span></div>
+      <div class="pane-body" aria-hidden="true"><pre class="code"><span class="ln"><span class="n">1</span><span class="k">// What it is</span></span><span class="ln"><span class="n">2</span><span class="c">* An open-source interpreter for</span></span><span class="ln"><span class="n">3</span><span class="c">* Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">4</span><span class="c">* (MIT). It reads and writes .dta files,</span></span><span class="ln"><span class="n">5</span><span class="c">* fits the common estimators and draws</span></span><span class="ln"><span class="n">6</span><span class="c">* graphs. Not every command exists yet:</span></span><span class="ln"><span class="n">7</span><span class="c">* see <a href="#" tabindex="-1">the list</a>.</span></span><span class="ln"><span class="n">8</span></span><span class="ln"><span class="n">9</span><span class="k">// Your files</span></span><span class="ln"><span class="n">10</span><span class="c">* Files you open stay in this browser;</span></span><span class="ln"><span class="n">11</span><span class="c">* they are not sent anywhere. The first</span></span><span class="ln"><span class="n">12</span><span class="c">* visit downloads the engine (Python</span></span><span class="ln"><span class="n">13</span><span class="c">* compiled to WebAssembly, ~36 MB).</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Also for AI agents</span></span><span class="ln"><span class="n">16</span><span class="c">* The same engine as a command line</span></span><span class="ln"><span class="n">17</span><span class="c">* (dofile run) and as an MCP server, so</span></span><span class="ln"><span class="n">18</span><span class="c">* an AI agent can run do-files for you.</span></span></pre></div>
     </section>
 
     <section class="card sample-card">

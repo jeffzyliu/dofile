@@ -1,8 +1,11 @@
 /* dofile web demo: design tokens (deliverable 5 starts here; copied into web/ when the page is styled).
    Light by default; dark follows the system (prefers-color-scheme), or [data-theme] forces one.
-   Contrast (WCAG 2.1), checked 2026-11-09 for every text/background pair used: all text >= 4.5:1, the lowest being
-   muted on accent-soft (5.2 light, 5.1 dark) and string on accent-soft (5.1 light); the focus ring and control
-   borders >= 3:1 (border-strong on bg: 3.3 light, 3.7 dark). Re-check after any change. */
+   Contrast (WCAG 2.1), rechecked 2026-11-09 (iteration 2) for every text/background pair used, at full opacity (text
+   never gets an opacity below 1, except disabled controls, which WCAG exempts): all text >= 4.5:1, the lowest being
+   muted on accent-soft (5.2 light, 5.1 dark: line numbers on a selected line; running lines have no tint) and string on accent-soft
+   (5.1 light); the focus ring, control and input borders and the progress bar >= 3:1 (border-strong on surface-2:
+   3.1 light and dark; the accent fill on its track: 7.8 light, 7.0 dark). --border (1.4:1) is for dividers only,
+   never the only edge of a control. Re-check after any change. */
 
 @font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-700.woff2) format("woff2"); font-weight: 700; font-display: swap; }

@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>dofile: start-up, Break, menus and empty states (mockup)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { padding: var(--s5); }
+  h1 { font-size: var(--text-xl); margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 var(--s4); max-width: 120ch; }
+  h2.sec { font-size: var(--text-lg); margin: var(--s5) 0 var(--s3); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s5) var(--s4); }
+  .sheet.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  figure { margin: 0; }
+  figcaption { font-size: var(--text-sm); color: var(--muted); margin-top: var(--s2); max-width: 90ch; }
+  figcaption b { color: var(--ink); }
+  /* a small copy of the editor: toolbar, three panes, status bar */
+  .mini { position: relative; height: 400px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border);
+          background: var(--bg); display: grid; grid-template-rows: auto 1fr auto; }
+  .mini.short { height: 300px; }
+  .mini .toolbar .wordmark { font-size: 15px; }
+  .mini .panes { display: grid; grid-template-columns: 140px 1fr 1fr; gap: 6px; padding: 6px; min-height: 0; }
+  .mini .panes > div { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); min-height: 0; overflow: hidden; }
+  .mini .files { font-size: 12.5px; padding: 6px 0; }
+  .mini .files li { padding: 3px 8px; }
+  .mini .code { font-size: 12px; }
+  .mini .scrim + .dialog, .mini .dialog.center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 480px; }
+  .mini .menu { position: absolute; }
+  .muted { color: var(--muted); }
+  .dialog .meta { font-size: var(--text-sm); color: var(--muted); }
+  .dialog .row { display: flex; align-items: baseline; gap: var(--s2); font-size: var(--text-sm); margin: 0 0 6px; }
+  .dialog .row b { font-weight: 600; }
+  .dialog .row .spacer + span { font-variant-numeric: tabular-nums; color: var(--muted); }
+  /* the phone */
+  .phone { position: relative; width: 390px; height: 700px; border-radius: 18px; overflow: hidden; border: 1px solid var(--border);
+           background: var(--bg); display: grid; grid-template-rows: 44px auto 1fr; }
+  .phone .sys { display: flex; justify-content: space-between; align-items: end; padding: 0 24px 6px; font: 600 14px/1 var(--font-ui);
+                background: var(--surface); }
+  .phone .ptop { display: flex; align-items: center; gap: var(--s2); padding: 6px var(--s3); background: var(--surface);
+                 border-bottom: 1px solid var(--border); font-weight: 600; }
+  .phone .sheetup { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border);
+                    border-radius: 14px 14px 0 0; padding: var(--s4) var(--s4) 30px; box-shadow: 0 -8px 24px rgb(0 0 0 / .14); }
+  .phone .sheetup h2 { font: 600 var(--text-lg)/1.3 var(--font-ui); margin: 0 0 var(--s2); }
+  .phone .sheetup p { margin: 0 0 var(--s3); font-size: var(--text-md); }
+  .phone .sheetup .btn { font-size: 15px; padding: 12px 16px; justify-content: center; }
+  .phone .sheetup .stack { display: grid; gap: var(--s2); margin-top: var(--s3); }
+  .logbox { padding: 0; }
+  .logbox .log { overflow: hidden; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); align-items: start; }
+</style>
+</head>
+<body>
+<main>
+<h1>Start-up, Break, menus and empty states</h1>
+<p class="lede">Iteration 2: the states the first round of hi-fi didn't draw (UX crit, <code>ux-analysis.md</code>). The engine's
+  download and start-up, what the page does when you say "Not now" or the engine fails, Break, the ⋯ menus and Reset's confirm,
+  the empty output tabs, and the log's note when a nested <code>do</code> runs a file that has unsaved edits. Sizes and times are
+  measured (<code>docs/phase2-plan.md</code>, "Facts"); the page will take the size from the build, not from this text.</p>
+
+<h2 class="sec">Starting the engine: first visit</h2>
+<div class="sheet">
+  <figure>
+    <div class="mini">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run</button><span class="spacer"></span></div>
+      <div class="panes"><div></div><div></div><div></div></div>
+      <div class="statusbar"><span>No engine yet</span></div>
+      <div class="scrim"></div>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dl-h" aria-describedby="dl-p">
+        <h2 id="dl-h">Download the engine?</h2>
+        <p id="dl-p">dofile runs your code inside this page, so the first time your browser downloads the engine: <b>about 36 MB</b>
+          from a public CDN. Later visits use the copy your browser keeps and start in a few seconds.</p>
+        <p class="meta">On a phone, Wi-Fi is best. Your files stay in this browser; they are never sent anywhere.</p>
+        <div class="actions"><button class="btn">Not now</button><button class="btn primary focus">Download 36 MB</button></div>
+      </div>
+    </div>
+    <figcaption><b>1. The prompt.</b> First visit only: shown when the page has no record of a finished download (a flag in
+      the browser's storage, set when the engine first starts). It blocks the page, on desktop and phone alike, because the
+      download is the one thing a visitor must agree to. Download is the default (Enter): a deliberate exception to the rule that the costly choice isn't pre-focused (UX-001),
+      decided in iteration 3, because downloading is the main path, it costs no work, and drawing 2 can stop it. Not now: drawing 5. The size comes
+      from the build (it changes with the snapshot or lazy matplotlib). Caveat: the flag can be wrong if the browser later
+      clears its cache (iOS can); then a "later visit" (drawing 4) downloads again without asking, so drawing 4 says
+      "downloading" when its first stage takes more than a moment.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run · starting…</button><span class="spacer"></span></div>
+      <div class="panes"><div></div><div></div><div></div></div>
+      <div class="statusbar"><span><b>Starting</b> · downloading</span></div>
+      <div class="scrim"></div>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="st-h">
+        <h2 id="st-h">Getting the engine ready</h2>
+        <div class="row"><b>Downloading</b><span class="spacer"></span><span>14.2 of 36 MB · 6 s</span></div>
+        <div class="progress" role="progressbar" aria-label="Download" aria-valuemin="0" aria-valuemax="36" aria-valuenow="14.2"
+             aria-valuetext="14 of 36 MB"><i style="width:39%"></i></div>
+        <ol class="stages">
+          <li class="now"><span class="spin"></span>Download the engine<span class="when">14.2 of 36 MB</span></li>
+          <li class="todo"><span class="spin"></span>Start Python</li>
+          <li class="todo"><span class="spin"></span>Load your files</li>
+          <li class="todo"><span class="spin"></span>Load packages</li>
+          <li class="todo"><span class="spin"></span>Start the engine</li>
+        </ol>
+        <div class="actions"><button class="btn quiet">Stop download</button><span class="spacer"></span><button class="btn focus">Edit files while it loads</button></div>
+      </div>
+    </div>
+    <figcaption><b>2. Downloading.</b> "Stop download" (only while bytes are coming in) aborts the fetch and leads to drawing 5;
+      what arrived stays in the cache, so a later download resumes. The same dialog: a bar for the download (the one stage measured in bytes), then the stages
+      in words, with no percentage (the stages aren't equal). "Edit files while it loads" closes the dialog; start-up goes on in
+      the status bar and on Run (drawing 4). Screen readers hear each stage once (a hidden live region), not the megabytes.
+      To build: today the downloads are spread over the stages (Pyodide's core inside "Start Python", the packages inside
+      "Load packages", <code>worker.js</code> <code>mount</code>/<code>boot</code>; the snapshot is one other file), and
+      <code>loadPackage</code> reports no bytes. To match this drawing the page fetches every engine file into the cache
+      first, counting bytes itself, then starts Python from the cache; otherwise the bar spans the first stages. The spinner
+      stands still with reduced motion.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run · starting…</button><span class="spacer"></span></div>
+      <div class="panes"><div></div><div></div><div></div></div>
+      <div class="statusbar"><span><b>Starting</b> · loading packages</span></div>
+      <div class="scrim"></div>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="st2-h">
+        <h2 id="st2-h">Getting the engine ready</h2>
+        <div class="row"><b>Loading packages</b><span class="spacer"></span><span>step 4 of 5 · 9 s</span></div>
+        <ol class="stages">
+          <li class="done"><span class="ico i-check"></span>Download the engine<span class="when">36 MB · 7.1 s</span></li>
+          <li class="done"><span class="ico i-check"></span>Start Python<span class="when">0.9 s</span></li>
+          <li class="done"><span class="ico i-check"></span>Load your files<span class="when">0.1 s</span></li>
+          <li class="now"><span class="spin"></span>Load packages</li>
+          <li class="todo"><span class="spin"></span>Start the engine</li>
+        </ol>
+        <div class="actions"><button class="btn focus">Edit files while it loads</button></div>
+      </div>
+    </div>
+    <figcaption><b>3. Loading.</b> The bar is gone once the download is done (a full bar would read as finished); the stage list
+      carries the progress. Done stages keep their time, so a slow one is visible (and reportable). When the last
+      stage ends the dialog closes by itself, focus goes to the editor, and the hidden live region says "Engine ready".</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run · starting…</button>
+        <button class="btn off" disabled>Run selection</button><span class="spacer"></span></div>
+      <div class="panes"><div><ul class="files"><li class="open">analysis.do</li><li>clean.do</li><li class="folder">data/</li></ul></div>
+        <div><pre class="code"><span class="ln"><span class="n">1</span><span class="c">* wages by age and schooling</span></span><span class="ln"><span class="n">2</span><span class="k">clear</span></span><span class="ln"><span class="n">3</span><span class="k">set</span> seed 2026</span></pre></div><div></div></div>
+      <div class="statusbar"><span><span class="pulse busy"></span><b>Starting</b> · loading packages (step 4 of 5) · 2.1 s</span>
+        <span class="spacer"></span><span>You can edit and upload while it starts</span></div>
+    </div>
+    <figcaption><b>4. Later visits, or after "Edit files while it loads".</b> No dialog: files and the editor work at once, Run
+      says why it waits, the status bar has the stage. About 1 s with the snapshot on desktop, 5–10 s without; a phone takes
+      longer (9 s measured on an iPhone).</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">"Not now", and when the engine can't start</h2>
+<div class="sheet">
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary"><span class="ico i-play"></span>Run</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:140px 1fr"><div><ul class="files"><li class="open">analysis.do</li><li>clean.do</li><li class="folder">data/</li></ul></div>
+        <div><div class="banner" style="margin:8px"><div><b>The engine isn't downloaded.</b> You can open, edit, upload and download
+          files; running code needs the engine (about 36 MB).
+          <div class="actions"><button class="btn primary">Download the engine</button></div></div></div>
+          <pre class="code"><span class="ln"><span class="n">1</span><span class="c">* wages by age and schooling</span></span></pre></div></div>
+      <div class="statusbar"><span><b>No engine</b> · Run downloads it first</span></div>
+    </div>
+    <figcaption><b>5. Not now.</b> The page is an editor and a file manager; the banner (above the editor, and on a phone above
+      the Editor tab) brings back drawing 2. Run and the command line stay enabled: pressing either opens drawing 1 again,
+      titled "Download the engine to run code", and the run starts when the engine is ready. To build: today the files live in
+      Pyodide's file system (IDBFS, <code>worker.js</code>), which needs Python. Without the download, the page must read and
+      write the same IndexedDB store itself, and bundle the sample project as plain files for a first visit.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run · engine stopped</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:140px 1fr"><div><ul class="files"><li class="open">analysis.do</li><li>clean.do</li><li class="folder">data/</li></ul></div>
+        <div><div class="banner error" role="alert" style="margin:8px"><div><b>The engine didn't start:</b> this browser has no
+          WebAssembly support. Your files are safe: you can still edit and download them.
+          <div class="actions"><a class="btn primary" href="#">Browsers that work</a><button class="btn">Download all (.zip)</button></div></div></div></div></div>
+      <div class="statusbar"><span><b>Stopped</b> · the engine didn't start</span></div>
+    </div>
+    <figcaption><b>6. Did not start.</b> The reason in plain words when known (no WebAssembly, the download failed, not enough
+      memory), then what still works, and an action that fits the reason. No WebAssembly: "Browsers that work" (no Try again, which
+      can't help). The download failed: "Try again", which resumes from the browser's cache. Not enough memory: "Close other
+      tabs, then try again".</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run · engine stopped</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:140px 1fr"><div><ul class="files"><li class="open">analysis.do</li><li>clean.do</li><li class="folder">data/</li></ul></div>
+        <div><div class="banner error" role="alert" style="margin:8px"><div><b>The engine stopped after failing twice</b> (it ran
+          out of memory). It won't restart by itself, since each try can use a lot of a phone's memory. Your files are safe.
+          <div class="actions"><button class="btn primary">Reload the page</button><button class="btn">Download all (.zip)</button></div></div></div></div></div>
+      <div class="statusbar"><span><b>Stopped</b> · failed twice</span></div>
+    </div>
+    <figcaption><b>7. Failed twice.</b> No loop of restarts. The data in memory is gone; the files are kept.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="phone">
+      <div class="sys"><span>9:41</span><span>●●● ◔</span></div>
+      <div class="ptop"><span style="flex:1">Editor</span><button class="btn primary off" disabled style="font-size:15px;padding:10px 16px"><span class="ico i-play"></span>Run</button></div>
+      <div style="background:var(--surface)"><pre class="code"><span class="ln"><span class="n">1</span><span class="c">* wages by age and schooling</span></span><span class="ln"><span class="n">2</span><span class="k">clear</span></span></pre></div>
+      <div class="scrim"></div>
+      <div class="sheetup" role="dialog" aria-modal="true" aria-labelledby="pdl-h">
+        <h2 id="pdl-h">Download the engine?</h2>
+        <p>dofile runs your code on this phone, so it first downloads the engine: <b>about 36 MB</b>. Later visits start without
+          downloading.</p>
+        <p class="muted" style="font-size:var(--text-sm)">On mobile data, you may want to wait for Wi-Fi. Your files stay on
+          this phone; they are never sent anywhere.</p>
+        <div class="stack"><button class="btn primary">Download 36 MB</button><button class="btn">Not now</button></div>
+      </div>
+    </div>
+    <figcaption><b>8. The prompt on a phone.</b> A sheet from the bottom, with the buttons in thumb reach and full width.
+      Downloading and loading use the same sheet (drawings 2 and 3, at phone width).</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">Break</h2>
+<div class="sheet three">
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run</button>
+        <button class="btn stop live off" disabled><span class="ico i-stop"></span>Stopping…</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:1fr"><div class="logbox"><pre class="log"><span class="echo">. merge 1:m id using data/big</span>
+</pre><div class="banner warn" style="margin-top:0"><div><b>Stopping…</b> This command can't stop until it ends.
+          <b>In 4 s the engine is reset:</b> the data in memory is lost; your files are kept.
+          <div class="actions"><button class="btn focus">Don't reset: wait for it</button></div></div></div></div></div>
+      <div class="statusbar"><span><b>Stopping</b> · resets in 4 s</span><span>41 s</span></div>
+    </div>
+    <figcaption><b>9. Break pressed, the command doesn't stop.</b> A countdown that says what happens at zero, in the same words
+      as the running notice, and a way back: "Don't reset: wait for it" (focused) cancels the page's 5 s timer (drawing
+      9b). The Break is
+      still pending, so the engine stops at the next safe point, after this command: rc 1, data kept (drawing 10). To build:
+      the page side is the timer in <code>client.js</code>. Most runs stop at once (between commands) and never show this.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run</button>
+        <button class="btn stop live"><span class="ico i-stop"></span>Reset now</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:1fr"><div class="logbox"><pre class="log"><span class="echo">. merge 1:m id using data/big</span>
+</pre><div class="banner" style="margin-top:0" tabindex="-1"><div><b>Waiting for this command to end.</b> The Break is still pending: the run
+          stops after this command, with the data kept. If it never ends, <b>Reset now</b> resets the engine: the data in
+          memory is lost; your files are kept.</div></div></div></div>
+      <div class="statusbar"><span><span class="pulse busy"></span><b>Waiting</b> · Break after this command</span><span>58 s</span></div>
+    </div>
+    <figcaption><b>9b. After "Don't reset".</b> Break becomes "Reset now", the way out if the command never ends; it asks
+      nothing more, since the banner already says what it does. Focus moves to the banner (<code>tabindex=-1</code>), not to
+      Reset now, so pressing Enter again after "Don't reset" can't reset by accident.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary"><span class="ico i-play"></span>Run</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:1fr"><div class="logbox"><pre class="log"><span class="echo">. forvalues i = 1/500 {</span>
+<span class="echo">  2.     quietly regress wage age educ if id != `i'</span>
+<span class="echo">  3. }</span>
+<span class="err">--Break--</span>
+<span class="err">r(1);</span>
+<span class="note">Stopped by Break after pass 212 of the loop. The data is as the last
+complete command left it.</span></pre></div></div>
+      <div class="statusbar"><span><span class="pulse"></span><b>Ready</b></span><span>Last run: stopped by Break · r(1) · 18.4 s</span></div>
+    </div>
+    <figcaption><b>10. Stopped by Break</b> (rc 1). The data, e() and r() stay; the note says so in plain words.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary off" disabled><span class="ico i-play"></span>Run</button>
+        <button class="btn stop live"><span class="ico i-stop"></span>Break · resets</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:1fr"><div class="logbox"><div class="banner warn" style="margin:8px"><div>
+        <b>Break resets the engine on this page</b>, because the page isn't cross-origin isolated (some hosts, or plain HTTP on a
+        local network). The data in memory is lost; your files are kept.</div></div></div></div>
+      <div class="statusbar"><span><b>Running</b> · 12 s</span></div>
+    </div>
+    <figcaption><b>11. Not cross-origin isolated.</b> Break says what it will do before it is pressed; the notice shows with
+      the first run.</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">Menus, and Reset's confirm</h2>
+<div class="sheet">
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary"><span class="ico i-play"></span>Run</button><span class="spacer"></span>
+        <button class="theme"><span class="ico i-theme"></span>System</button>
+        <button class="btn quiet icon hover" aria-label="More actions" aria-haspopup="menu" aria-expanded="true"><span class="ico i-more"></span></button></div>
+      <div class="panes"><div></div><div></div><div></div></div>
+      <div class="statusbar"><span><span class="pulse"></span><b>Ready</b></span></div>
+      <div class="menu" role="menu" aria-label="More actions" style="right:10px;top:46px">
+        <button role="menuitem" class="hover">Download all (.zip)</button>
+        <button role="menuitem">Clear log</button>
+        <button role="menuitem">Reset the engine…</button>
+        <hr>
+        <button role="menuitem">About dofile<span class="aside">0.1.0</span></button>
+      </div>
+    </div>
+    <figcaption><b>12. The toolbar's ⋯</b> ("More actions" to a screen reader). Download all is also a link under the file list,
+      so nobody has to find it here.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary"><span class="ico i-play"></span>Run</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:230px 1fr"><section class="pane" aria-label="Files" style="border-radius:var(--radius)">
+        <div class="pane-head"><span class="pane-title">Files</span><span class="spacer"></span><button class="head-link icon" aria-label="File actions"><span class="ico i-more"></span></button></div>
+        <ul class="files" role="tree" aria-label="Files"><li class="open" role="treeitem" aria-level="1" aria-selected="true" tabindex="-1">analysis.do</li><li class="hover" role="treeitem" aria-level="1" aria-selected="false" aria-haspopup="menu" tabindex="0">clean.do<span class="row-more" style="opacity:1" aria-hidden="true"><span class="ico i-more"></span></span></li>
+          <li class="folder" role="treeitem" aria-level="1" aria-expanded="true" tabindex="-1"><span class="ico i-down"></span>data/</li><li style="--d:1" role="treeitem" aria-level="2" aria-selected="false" tabindex="-1">wages.dta <span class="size">8 KB</span></li></ul></section>
+        <div></div></div>
+      <div class="statusbar"><span><span class="pulse"></span><b>Ready</b></span></div>
+      <div class="menu" role="menu" aria-label="Actions for clean.do" style="left:206px;top:118px;min-width:170px">
+        <button role="menuitem">Open</button>
+        <button role="menuitem" class="hover">Rename<span class="aside">F2</span></button>
+        <button role="menuitem">Download</button>
+        <hr>
+        <button role="menuitem" class="danger">Delete…</button>
+      </div>
+    </div>
+    <figcaption><b>13. A file's ⋯.</b> On the hovered, focused or open row (always shown on touch screens, where it replaces the
+      long press); right click, Shift+F10 or the menu key on the focused row opens the same menu. Rename edits the name in place. The Files head's ⋯ holds New .do file, New
+      folder, Upload a folder, Download all (.zip) and Delete all files….</figcaption>
+  </figure>
+
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary"><span class="ico i-play"></span>Run</button><span class="spacer"></span></div>
+      <div class="panes"><div></div><div></div><div></div></div>
+      <div class="statusbar"><span><span class="pulse"></span><b>Ready</b></span></div>
+      <div class="scrim"></div>
+      <div class="dialog" role="alertdialog" aria-labelledby="rs-h" aria-describedby="rs-p" style="width:420px">
+        <h2 id="rs-h">Reset the engine?</h2>
+        <p id="rs-p">The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are
+          kept.</p>
+        <div class="actions"><button class="btn focus">Cancel</button><button class="btn stop live">Reset</button></div>
+      </div>
+    </div>
+    <figcaption><b>14. Reset's confirm.</b> Like Delete's: Cancel has the focus, Reset is red and never the default. No
+      confirm when there is nothing to lose (no data in memory and no results).</figcaption>
+  </figure>
+
+  <figure>
+    <div class="two">
+      <section class="pane" style="height:300px"><div class="pane-head"><span class="pane-title">Log</span></div>
+        <div class="pane-body"><pre class="log" role="log" aria-label="Log"><span class="runhead"><b>Run</b>: master.do, whole file · starts with no locals</span><span class="echo">. do clean.do</span>
+<span class="warn">Note: clean.do has unsaved edits in the
+editor; do runs the saved file. Save it
+(⌘ S) to run your edits.</span>
+
+<span class="echo">. use data/raw/survey, clear</span>
+(1,204 observations read)</pre></div></section>
+      <div style="font-size:var(--text-sm);color:var(--muted)"><p style="margin-top:0"><b style="color:var(--ink)">What Run runs</b>
+        (decided in iteration 2):</p>
+        <ul style="padding-left:18px;margin:0">
+          <li>Run and Run selection send a copy of the editor's text, saved or not. Editing during a run doesn't change it.</li>
+          <li><code>do</code> and <code>include</code> read the saved file, as on a computer.</li>
+          <li>So the note appears when a nested <code>do</code> reads a file that is open with unsaved edits.</li>
+          <li>The line above each run's output says what ran and whether it started with no locals. It, and this note, are the
+            page's own lines: shown only, not in Download log or a log file.</li>
+          <li>Run sends a copy, but the copy is never named: the log, error messages, "Go to line" and the run-head say
+            <code>analysis.do</code>, never a temporary path.</li></ul></div>
+    </div>
+    <figcaption><b>15. A nested do-file with unsaved edits.</b></figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">Storage the browser may clear</h2>
+<div class="sheet">
+  <figure>
+    <div class="mini short">
+      <div class="toolbar"><a class="wordmark" href="#">do<span>file</span></a>
+        <button class="btn primary"><span class="ico i-play"></span>Run</button><span class="spacer"></span></div>
+      <div class="panes" style="grid-template-columns:140px 1fr"><div><ul class="files"><li class="open">analysis.do</li><li>clean.do</li><li class="folder">data/</li></ul></div>
+        <div><div class="banner warn" style="margin:8px"><div><b>This browser may clear your files</b> when it needs space. Download all to keep a copy.
+          <div class="actions"><button class="btn">Download all (.zip)</button><button class="btn quiet">Dismiss</button></div></div></div></div></div>
+      <div class="statusbar"><span><span class="pulse"></span><b>Ready</b></span><span class="spacer"></span><span>Files may be cleared by this browser</span></div>
+    </div>
+    <figcaption><b>19. Storage not kept</b> (OQ2). Shown when <code>navigator.storage.persisted()</code> is false after the page
+      asked with <code>persist()</code>; otherwise the status bar says "Files are kept in this browser" as today. The notice sits
+      above the editor, once per visit after files change, until dismissed. Which browsers grant persistence is still to
+      be tested (Chromium, Firefox, Safari, iOS).</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">Empty output tabs</h2>
+<div class="sheet three">
+  <figure><section class="pane" style="height:260px">
+    <div class="pane-head"><div role="tablist" aria-label="Output" class="tabstrip"><button class="tab on" role="tab" aria-selected="true">Graph</button><button class="tab" role="tab" aria-selected="false" tabindex="-1">Data</button><button class="tab" role="tab" aria-selected="false" tabindex="-1">Results</button><button class="tab" role="tab" aria-selected="false" tabindex="-1">Help</button></div></div>
+    <div class="pane-body" role="tabpanel"><div class="empty"><b>No graphs yet</b>Graphs drawn by a run appear here, for example
+      <code>scatter wage educ</code>. A .png from the file list opens here too.</div></div></section>
+    <figcaption><b>16. Graph, empty.</b></figcaption></figure>
+  <figure><section class="pane" style="height:260px">
+    <div class="pane-head"><div role="tablist" aria-label="Output" class="tabstrip"><button class="tab" role="tab" aria-selected="false" tabindex="-1">Graph</button><button class="tab on" role="tab" aria-selected="true">Data</button><button class="tab" role="tab" aria-selected="false" tabindex="-1">Results</button><button class="tab" role="tab" aria-selected="false" tabindex="-1">Help</button></div></div>
+    <div class="pane-body" role="tabpanel"><div class="empty"><b>No data in memory</b>Load a .dta from the file list, or run
+      <code>use</code> or <code>import delimited</code>, or a do-file that builds the data.</div></div></section>
+    <figcaption><b>17. Data, empty.</b> After a reset it says "The engine was reset, so no data is in memory".</figcaption></figure>
+  <figure><section class="pane" style="height:260px">
+    <div class="pane-head"><div role="tablist" aria-label="Output" class="tabstrip"><button class="tab" role="tab" aria-selected="false" tabindex="-1">Graph</button><button class="tab" role="tab" aria-selected="false" tabindex="-1">Data</button><button class="tab on" role="tab" aria-selected="true">Results</button><button class="tab" role="tab" aria-selected="false" tabindex="-1">Help</button></div></div>
+    <div class="pane-body" role="tabpanel"><div class="empty"><b>No results yet</b>e() and r() appear after an estimation or a
+      command such as <code>summarize</code>, with the locals and globals your runs set.</div></div></section>
+    <figcaption><b>18. Results, empty.</b></figcaption></figure>
+</div>
+
+</main>
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.dataset.theme = t;
+</script>
+</body>
+</html>

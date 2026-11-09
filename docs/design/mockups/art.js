@@ -54,6 +54,7 @@ function artRuns(line, shade, drop, esc) {
 }
 
 // Fill [data-art]: as plain lines, or, inside a .code block with data-ln, as numbered editor lines from data-ln.
+// The banner is a drawing in block characters: hidden from screen readers (the page names dofile in text elsewhere).
 window.fillArt = function () {
   for (const el of document.querySelectorAll("[data-art]")) {
     const lines = artLines(el.dataset.art);
@@ -61,9 +62,10 @@ window.fillArt = function () {
     if (el.dataset.ln) {
       const n0 = Number(el.dataset.ln);
       el.outerHTML = lines.map((l, i) =>
-        `<span class="ln art-ln"><span class="n">${n0 + i}</span>${l}${i === lines.length - 1 ? tail : ""}</span>`).join("");
+        `<span class="ln art-ln" aria-hidden="true"><span class="n">${n0 + i}</span>${l}${i === lines.length - 1 ? tail : ""}</span>`).join("");
     } else {
       el.innerHTML = lines.join("\n") + tail;
+      el.setAttribute("aria-hidden", "true");
     }
   }
 };

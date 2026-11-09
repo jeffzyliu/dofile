@@ -7,11 +7,13 @@
 <title>dofile: phone, Log tab (mockup)</title>
 <link rel="stylesheet" href="ui.css">
 <style>
-  .phone { width: 390px; height: 844px; display: grid; grid-template-rows: 47px auto auto 1fr auto auto; background: var(--bg); }
+  .phone { width: 390px; height: 844px; display: grid; grid-template-rows: 47px auto 1fr auto auto; background: var(--bg); }
   .sys { display: flex; justify-content: space-between; align-items: end; padding: 0 28px 6px; font: 600 14px/1 var(--font-ui);
          background: var(--surface); }
   .top { display: flex; align-items: center; gap: var(--s2); padding: 6px var(--s3); background: var(--surface);
          border-bottom: 1px solid var(--border); }
+  /* main holds the strip and the log; a real grid item (not display: contents, which older WebKit strips of its role) */
+  main { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
   .top .title { flex: 1; font-weight: 600; font-size: 15px; }
   .top .btn.primary { font-size: 15px; padding: 10px 18px; }
   .strip { display: flex; gap: var(--s3); padding: 5px var(--s3); font-size: var(--text-sm); color: var(--muted);
@@ -19,7 +21,7 @@
   .strip .rc-err { color: var(--error); font-weight: 600; }
   .scroll { overflow: hidden; background: var(--surface); display: flex; flex-direction: column; justify-content: flex-end; }
   .scroll > * { flex-shrink: 0; }
-  .log { font-size: 11px; padding: var(--s2) var(--s3); }
+  .log { font-size: 12px; padding: var(--s2) var(--s3); }
   .wide { position: relative; }
   .wide::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 28px;
                  background: linear-gradient(to right, transparent, var(--surface)); }
@@ -33,15 +35,28 @@
   .tabs .on { color: var(--accent); font-weight: 600; }
   .tabs i { display: block; width: 22px; height: 3px; border-radius: 2px; margin: 0 auto 6px; background: transparent; }
   .tabs .on i { background: var(--accent); }
+  .tabs [role=tab] { font: inherit; color: inherit; padding: 0; }
+  .tabs [role=tab].on { color: var(--accent); }
+  /* Break on a phone: Run's place, but another shape (a pill, wider, with the time) and color, so it can't be mistaken
+     for Run; taps in its first 600 ms are ignored (a double tap on Run doesn't break) */
+  .top .btn.stop.live { font-size: 15px; padding: 10px 16px; border-radius: 999px; }
+  .top .btn.stop.live .t { font: 400 12.5px/1 var(--font-ui); padding-left: 8px; border-left: 1px solid color-mix(in srgb, var(--surface) 50%, transparent); }
+  body:not(.running) .running-only { display: none !important; }
+  .running .idle-only { display: none !important; }
 </style>
 </head>
 <body>
 <div class="phone">
-  <div class="sys"><span>9:41</span><span>●●● ◔</span></div>
-  <div class="top"><span class="title">Log</span><span class="btn quiet icon"><span class="ico i-more"></span></span><span class="btn primary"><span class="ico i-play"></span>Run</span></div>
-  <div class="strip"><span class="rc-err">r(111)</span><span>line 17 · 0.38 s</span><span>612 MB</span>
-    <span class="spacer"></span><a href="#">Go to line</a></div>
+  <div class="sys" aria-hidden="true"><span>9:41</span><span>●●● ◔</span></div>
+  <header class="top"><h1 class="title" style="margin:0">Log</h1><button class="btn quiet icon" aria-label="More actions" aria-haspopup="menu"><span class="ico i-more"></span></button>
+    <button class="btn primary idle-only"><span class="ico i-play"></span>Run</button>
+    <button class="btn stop live running-only"><span class="ico i-stop"></span>Break <span class="t">3.4 s</span></button></header>
+  <main>
+  <div class="strip idle-only"><span class="rc-err">r(111)</span><span>line 17 · 0.38 s</span><span>Mem 612 MB</span>
+    <span class="spacer"></span><a href="#">Go to line 17</a></div>
+  <div class="strip running-only"><span><b style="color:var(--ink)">Running</b> lines 14–15</span><span>Mem 612 MB</span></div>
   <div class="scroll" role="log" aria-label="Log">
+    <pre class="log running-only"><span class="runhead"><b>Run selection</b>: lines 14–15 · keeps the locals of earlier runs</span></pre>
     <pre class="log wide"><span class="echo">. regress wage `controls'</span>
 
         wage |      Coef.   Std. Err.      t    P&gt;|t|
@@ -51,21 +66,24 @@
        _cons |   4.857541   .9089541     5.34   0.000</pre>
     <div class="hscroll">← wide table: swipe sideways →</div>
     <pre class="log"><span class="echo">. scatter wage educ</span></pre>
-    <div class="graph-card inline-graph"><img src="img/scatter.png" alt="Scatter plot of hourly wage against years of schooling"></div>
-    <pre class="log"><span class="echo">. summarize wage if sex == 1</span>
+    <div class="banner running-only" style="margin-top:0;font-size:13px"><span>Break stops between commands. If one long command
+      doesn't stop within 5 s, the engine is reset: <b>the data in memory is lost</b>; your files are kept.</span></div>
+    <div class="graph-card inline-graph idle-only"><img src="img/scatter.png" alt="Scatter plot of hourly wage against years of schooling"></div>
+    <pre class="log idle-only"><span class="echo">. summarize wage if sex == 1</span>
 <span class="err">sex not found</span></pre>
-    <div class="explain">"sex" is not a variable, scalar or other known name. A word without quotes inside an expression is
+    <div class="explain idle-only">"sex" is not a variable, scalar or other known name. A word without quotes inside an expression is
       read as a name; text values must be in double quotes.<br><b>How to fix:</b> if it is a text value, write "sex" with
       the quotes. <a href="#">help summarize</a></div>
-    <pre class="log" style="padding-top:0"><span class="err">r(111);</span></pre>
+    <pre class="log idle-only" style="padding-top:0"><span class="err">r(111);</span></pre>
   </div>
-  <div class="cmdline"><span class="prompt">.</span><span class="field">Type a command</span></div>
-  <nav class="tabs" role="tablist"><span><i></i>Files</span><span><i></i>Editor</span><span class="on"><i></i>Log</span>
-    <span><i></i>Data</span><span><i></i>Results</span></nav>
+  </main>
+  <section class="cmdline" aria-label="Command line"><span class="prompt" aria-hidden="true">.</span><input class="field" aria-label="Command" placeholder="Type a command"></section>
+  <nav aria-label="Views"><div class="tabs" role="tablist" aria-label="Views"><button role="tab" aria-selected="false" tabindex="-1"><i></i>Files</button><button role="tab" aria-selected="false" tabindex="-1"><i></i>Editor</button><button role="tab" class="on" aria-selected="true"><i></i>Log</button><button role="tab" aria-selected="false" tabindex="-1"><i></i>Data</button><button role="tab" aria-selected="false" tabindex="-1"><i></i>Results</button></div></nav>
 </div>
 <script>
-  const t = new URLSearchParams(location.search).get('theme');
-  if (t) document.documentElement.dataset.theme = t;
+  const q = new URLSearchParams(location.search);
+  if (q.has('running')) document.body.classList.add('running');
+  if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
 </script>
 </body>
 </html>

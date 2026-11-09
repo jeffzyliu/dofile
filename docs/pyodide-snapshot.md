@@ -244,7 +244,7 @@ of `npm test`.
 
 **Results, 2026-11-07.** On every snapshot start checked (brotli 5 and 11, with and without the trampoline, with and without
 stripping; the last on the current 39.9 MB build, 150 s): 63 corpus checks, 12 probes and 13 native-library calls clean, and
-**95 of 97 Stata cases pass**, the same two failures as a normal boot (`xlwt`, `pyreadstat`); the count is 97, not 98, because
+**95 of 97 Stata cases pass**, the same two failures as a normal boot (`xlwt`, for legacy `.xls` only; `pyreadstat`); the count is 97, not 98, because
 `1920_models4` has no Stata log. Before PATCH-4 and the `numpy.linalg` shim (`src/dofile/linalgshim.py`) 16 cases failed on
 the snapshot and the normal boot alike: 11 from one 32-bit numpy bug in `expand` and `stsplit`, 2 package gaps, and 3 numeric
 cases (which also ran 20–500 times slower). See [Known gaps](phase2-plan.md#known-gaps-in-the-browser-engine) and the
