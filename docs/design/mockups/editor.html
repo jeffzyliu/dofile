@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>dofile: editor (mockup)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  .app { width: 1440px; height: 900px; display: grid; grid-template-rows: auto 1fr auto; }
+  .main { display: grid; grid-template-columns: 230px 1fr 660px; gap: var(--s2); padding: var(--s2); min-height: 0; }
+  /* the log stays scrolled to its end, as the page does after a run */
+  .out .pane-body { display: flex; flex-direction: column; justify-content: flex-end; }
+  .out .pane-body.top { justify-content: flex-start; }
+  .out .pane-body > * { flex-shrink: 0; }
+  .out { display: grid; grid-template-rows: 1.35fr 1fr; gap: var(--s2); min-height: 0; }
+  body:not(.running) .running-only { display: none !important; }
+  .running .idle-only { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <a class="wordmark" href="landing.html">do<span>file</span></a>
+    <span class="btn primary idle-only"><span class="ico i-play"></span>Run <span class="key">⌘ ↩</span></span>
+    <span class="btn primary off running-only"><span class="ico i-play"></span>Run</span>
+    <span class="btn">Run selection</span>
+    <span class="btn stop off idle-only"><span class="ico i-stop"></span>Break</span>
+    <span class="btn stop live running-only focus"><span class="ico i-stop"></span>Break <span class="key">⌘ .</span></span>
+    <span class="btn">Save <span class="dot" title="unsaved changes"></span><span class="key">⌘ S</span></span>
+    <span class="spacer"></span>
+    <span class="theme" title="Theme: follows the system. Press for light, then dark."><span class="ico i-theme"></span>System</span>
+    <span class="btn quiet icon" title="More: Reset, Clear log, Download all, About dofile"><span class="ico i-more"></span></span>
+  </header>
+
+  <div class="main">
+    <section class="pane" aria-label="Files">
+      <div class="pane-head"><span class="pane-title">Files</span><span class="spacer"></span><span class="head-link"><span class="ico i-more"></span></span></div>
+      <div class="pane-body">
+        <ul class="files">
+          <li class="open">analysis.do <span class="dot" title="unsaved changes"></span></li>
+          <li>clean.do</li>
+          <li class="folder"><span class="ico i-down"></span>data/</li>
+          <li style="--d:1" class="folder"><span class="ico i-down"></span>raw/</li>
+          <li style="--d:2">survey.csv <span class="size">41 KB</span></li>
+          <li style="--d:2">codebook.txt <span class="size">2 KB</span></li>
+          <li style="--d:1">wages.dta <span class="size">8 KB</span></li>
+          <li class="folder"><span class="ico i-down"></span>output/</li>
+          <li style="--d:1">analysis.log <span class="badge">new</span></li>
+          <li style="--d:1">scatter.png <span class="badge">new</span></li>
+          <li class="folder"><span class="ico i-right"></span>old/</li>
+        </ul>
+        <div class="dropzone">Drop files, folders or a .zip<br><a href="#">Upload</a> · <a href="#">New .do file</a></div>
+      </div>
+    </section>
+
+    <section class="pane" aria-label="Editor">
+      <div class="pane-head"><span class="tab on">analysis.do<span class="dot" title="unsaved changes (Run doesn't save)"></span><span class="x" title="Close (asks first: unsaved changes)">×</span></span><span class="tab">clean.do<span class="x">×</span></span>
+        <span class="spacer"></span></div>
+      <div class="pane-body"><pre class="code"><span class="ln"><span class="n">1</span><span class="c">* wages by age and schooling (synthetic data)</span></span><span class="ln"><span class="n">2</span><span class="k">clear</span></span><span class="ln"><span class="n">3</span><span class="k">set</span> seed 2026</span><span class="ln"><span class="n">4</span><span class="k">set</span> obs 500</span><span class="ln"><span class="n">5</span><span class="k">gen</span> age = 22 + floor(40*runiform())</span><span class="ln"><span class="n">6</span><span class="k">gen</span> educ = 10 + floor(9*runiform())</span><span class="ln"><span class="n">7</span><span class="k">gen</span> wage = 4 + .12*age + .9*educ + 3*rnormal()</span><span class="ln"><span class="n">8</span><span class="k">label variable</span> wage <span class="s">"Hourly wage"</span></span><span class="ln"><span class="n">9</span><span class="k">label variable</span> educ <span class="s">"Years of schooling"</span></span><span class="ln"><span class="n">10</span><span class="k">save</span> data/wages, replace</span><span class="ln"><span class="n">11</span><span class="k">foreach</span> v <span class="k">in</span> age educ {</span><span class="ln"><span class="n">12</span>    <span class="k">local</span> controls <span class="m">`controls'</span> <span class="m">`v'</span></span><span class="ln"><span class="n">13</span>}</span><span class="ln running-sel"><span class="n">14</span><span class="k">regress</span> wage <span class="m">`controls'</span></span><span class="ln running-sel"><span class="n">15</span><span class="k">scatter</span> wage educ</span><span class="ln"><span class="n">16</span><span class="k">graph export</span> output/scatter.png, replace width(1200)</span><span class="ln err idle-err"><span class="n">17</span><span class="k">summarize</span> wage <span class="k">if</span> sex == 1</span><span class="ln"><span class="n">18</span><span class="warnword" title="reghdfe is a community command; dofile does not have it">reghdfe</span> wage <span class="m">`controls'</span>, absorb(educ)</span></pre></div>
+    </section>
+
+    <div class="out">
+      <section class="pane" aria-label="Log">
+        <div class="pane-head"><span class="pane-title">Log</span><span class="spacer"></span>
+          <span class="head-link">Find</span><span class="head-link">Download log</span><span class="head-link">Unsplit</span></div>
+        <div class="pane-body idle-only"><pre class="log"><span class="echo">. regress wage `controls'</span>
+
+      Source |       SS           df       MS      Number of obs   =       500
+-------------+----------------------------------   F(2, 497)       =    172.07
+       Model |  3046.98519         2  1523.49259   Prob &gt; F        =    0.0000
+    Residual |  4400.35521       497  8.85383342   R-squared       =    0.4091
+-------------+----------------------------------   Adj R-squared   =    0.4068
+       Total |  7447.34039       499  14.9245298   Root MSE        =    2.9755
+
+------------------------------------------------------------------------------
+        wage |      Coef.   Std. Err.      t    P&gt;|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+         age |   .1111234   .0115734     9.60   0.000     .0883846    .1338622
+        educ |   .8594138   .0515739    16.66   0.000     .7580842    .9607435
+       _cons |   4.857541   .9089541     5.34   0.000     3.071675    6.643408
+------------------------------------------------------------------------------
+
+<span class="echo">. scatter wage educ</span>
+<span class="glink"><span class="ico i-graph"></span>graph 1</span>
+
+<span class="echo">. graph export output/scatter.png, replace width(1200)</span>
+<span class="note">(file output/scatter.png written in PNG format)</span>
+
+<span class="echo">. summarize wage if sex == 1</span>
+<span class="err">sex not found</span>
+<span class="hint">  → "sex" is not a variable, scalar or other known name.
+    A word without quotes inside an expression is read as a name (of a
+    variable, scalar or matrix); text values must be in double quotes.
+    <b>How to fix:</b> if it is a text value, write "sex" with the quotes.
+    <b>Learn more:</b> <a href="#">help summarize</a></span>
+<span class="err">r(111);</span>  <a class="jump" href="#">Go to line 17</a></pre></div>
+        <!-- the first run of a session: the page's startup lines head the log (shown only; not in Download log) -->
+        <div class="pane-body top running-only"><pre class="log"><span class="head"><span class="art" data-art="book+drop+skew"></span>dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax
+Files stay in this browser. Try: help regress</span><span class="echo">. regress wage `controls'</span>
+</pre><div class="banner" style="margin-top:0"><span>Running lines 14–15 · <b>3.4 s</b>. Break stops between commands;
+          one long command that doesn't stop within 5 s resets the engine (files are kept).</span></div></div>
+        <div class="cmdline"><span class="prompt">.</span><span class="field">Type a command · ↑ ↓ for earlier ones</span>
+          <span class="btn">Run</span></div>
+      </section>
+      <section class="pane" aria-label="Graph, data, results and help">
+        <div class="pane-head" role="tablist"><span class="tab on">Graph</span><span class="tab">Data</span><span class="tab">Results</span>
+          <span class="tab">Help</span></div>
+        <div class="pane-body"><div class="graph-wrap">
+          <div class="graph-card"><img src="img/scatter.png" alt="Scatter plot of hourly wage against years of schooling"></div>
+          <div class="graph-foot"><span class="thumb on" style="background-image:url(img/scatter.png)"></span>
+            graph 1 of 1 · scatter wage educ<span class="spacer"></span><a href="#">Open full size</a><a href="#">Export PNG</a></div>
+        </div></div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="statusbar" role="status" aria-live="polite">
+    <span class="idle-only"><span class="pulse"></span><b>Ready</b></span>
+    <span class="idle-only">Last run: <span class="rc-err">r(111)</span> at line 17 · 0.38 s</span>
+    <span class="running-only"><span class="pulse busy"></span><b>Running</b> lines 14–15 · 3.4 s</span>
+    <span>Memory 612 MB</span>
+    <span class="spacer"></span>
+    <span>Files are kept in this browser</span>
+  </footer>
+</div>
+<script src="art.js"></script>
+<script>
+  fillArt();
+  const q = new URLSearchParams(location.search);
+  if (q.has('running')) {
+    document.body.classList.add('running');
+    document.querySelectorAll('.running-sel').forEach(e => e.classList.add('sel'));
+    document.querySelectorAll('.idle-err').forEach(e => e.classList.remove('err'));
+  }
+  if (q.get('theme')) document.documentElement.dataset.theme = q.get('theme');
+</script>
+</body>
+</html>

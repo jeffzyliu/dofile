@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>dofile: tabs, opened files and dialogs (mockup)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { padding: var(--s5); }
+  h1 { font-size: var(--text-xl); margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 var(--s4); max-width: 120ch; }
+  h2.sec { font-size: var(--text-lg); margin: var(--s5) 0 var(--s3); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s5) var(--s4); }
+  .sheet.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  figure { margin: 0; }
+  figcaption { font-size: var(--text-sm); color: var(--muted); margin-top: var(--s2); max-width: 90ch; }
+  figcaption b { color: var(--ink); }
+  .frame { height: 430px; display: flex; flex-direction: column; }
+  .frame.tall { height: 520px; }
+  .frame .pane { flex: 1; }
+  .frame .pane-body { overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border);
+         font-size: var(--text-sm); color: var(--muted); }
+  .bar b { color: var(--ink); }
+  .ro { font: 600 10.5px/1 var(--font-ui); color: var(--muted); border: 1px solid var(--border-strong); border-radius: 3px; padding: 2px 4px; }
+  /* csv: each column its own color, the delimiters muted */
+  .csv .c0 { color: var(--ink); } .csv .c1 { color: var(--accent); } .csv .c2 { color: var(--tok-string); }
+  .csv .c3 { color: var(--tok-macro); } .csv .c4 { color: var(--warn); } .csv .d { color: var(--muted); }
+  .csv .hd { font-weight: 700; }
+  .stage { position: relative; height: 330px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border);
+           background: var(--bg); }
+  .stage .ghost { position: absolute; inset: 0; padding: var(--s3); display: grid; grid-template-columns: 140px 1fr 1fr; gap: 6px; }
+  .stage .ghost div { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .stage .dialog { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 470px; }
+  .viewer { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 96%, transparent); display: flex; flex-direction: column; }
+  .viewer .vhead { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border);
+                   font-size: var(--text-sm); color: var(--muted); background: var(--surface); }
+  .viewer .vhead b { color: var(--ink); }
+  .viewer .vbody { flex: 1; display: flex; gap: var(--s3); padding: var(--s3); min-height: 0; }
+  .viewer .graph-card { flex: 1; }
+  .viewer .strip { width: 70px; display: flex; flex-direction: column; gap: var(--s2); }
+  .viewer .strip .thumb { width: 66px; height: 48px; }
+  .list { margin: 0 0 var(--s3); padding-left: 18px; font-size: var(--text-sm); }
+  .list code { font-size: 12.5px; }
+</style>
+</head>
+<body>
+<h1>Tabs, opened files and dialogs</h1>
+<p class="lede">One compact sheet for what the editor mockups don't show: the Data, Results and Help tabs (the lower pane of the split,
+  660 wide; shown 520 tall here), what opening each kind of file does, the full-size graph, and the dialogs. Content is dofile's own output for
+  <code>sample.do</code> (<code>describe</code>, <code>list</code>, <code>ereturn list</code>, <code>macro list</code>,
+  <code>help regress</code>); the CSV and the text file are made up.</p>
+
+<h2 class="sec">The output tabs</h2>
+<div class="sheet">
+  <figure>
+    <div class="frame tall"><section class="pane">
+      <div class="pane-head"><span class="tab">Graph</span><span class="tab on">Data</span><span class="tab">Results</span><span class="tab">Help</span></div>
+      <div class="pane-body">
+        <div class="facts"><span><b>500</b> obs</span><span><b>3</b> vars</span><span>from <b>data/wages.dta</b></span><span>6 KB in memory</span></div>
+        <div class="filter">Filter variables</div>
+        <table class="t">
+          <tr><th>Name</th><th>Label</th><th>Type</th><th>Format</th></tr>
+          <tr><td class="mono">age</td><td class="muted">no label</td><td class="mono">float</td><td class="mono">%9.0g</td></tr>
+          <tr class="hl"><td class="mono">educ</td><td>Years of schooling</td><td class="mono">float</td><td class="mono">%9.0g</td></tr>
+          <tr><td class="mono">wage</td><td>Hourly wage</td><td class="mono">float</td><td class="mono">%9.0g</td></tr>
+        </table>
+        <div class="subhead">Browse <span class="aside">first 6 of 500 rows · read only</span></div>
+        <div style="padding: 0 var(--s3)"><table class="grid">
+          <tr><th class="obs"></th><th>age</th><th>educ</th><th>wage</th></tr>
+          <tr><td class="obs">1</td><td>34</td><td>18</td><td>31.62293</td></tr>
+          <tr><td class="obs">2</td><td>48</td><td>10</td><td>15.00039</td></tr>
+          <tr><td class="obs">3</td><td>41</td><td>17</td><td>24.79993</td></tr>
+          <tr><td class="obs">4</td><td>52</td><td>10</td><td>18.19247</td></tr>
+          <tr><td class="obs">5</td><td>32</td><td>17</td><td>19.49432</td></tr>
+          <tr><td class="obs">6</td><td>49</td><td>17</td><td>23.58866</td></tr>
+        </table></div>
+      </div></section></div>
+    <figcaption><b>Data.</b> The header, the variables (a click puts the name in the editor or the command line; the highlighted row
+      is the hover), then Browse: the first rows, read only. More rows: <code>list in</code> in the command line.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame tall"><section class="pane">
+      <div class="pane-head"><span class="tab">Graph</span><span class="tab">Data</span><span class="tab">Results</span><span class="tab on">Help</span>
+        <span class="spacer"></span><span class="head-link">help</span><span class="field mono" style="font-size:12px;border:1px solid var(--border);border-radius:var(--radius);padding:3px 8px;color:var(--ink);background:var(--surface)">regress</span></div>
+      <div class="pane-body"><div class="help">
+        <h2><code>regress</code> · Linear regression</h2>
+        <h3>Syntax</h3>
+        <pre>regress depvar [indepvars] [if] [in] [weight] [, options]
+areg depvar [indepvars] [if] [in] [weight] , absorb(varname)
+ivregress 2sls depvar [varlist1] (varlist2 = instruments) ...</pre>
+        <h3>Description</h3>
+        <p>regress fits a linear model by ordinary least squares. Factor variables (i., c., #, ##) and time-series operators
+          are allowed. aweights, fweights, iweights and pweights are accepted.</p>
+        <h3>Options</h3>
+        <dl><dt>noconstant</dt><dd>suppress the constant term.</dd><dt>vce(vcetype)</dt><dd>oim, robust, cluster clustvar or bootstrap.</dd>
+          <dt>level(#)</dt><dd>confidence level; default is level(95).</dd></dl>
+      </div></div></section></div>
+    <figcaption><b>Help.</b> OpenDTA's help text (MIT, in its own words) laid out as a page: its section names become headings,
+      syntax and examples stay monospace. <code>help regress</code>, the field in the tab, or a long press on a command opens it.
+      No topic: "no help for <code>foreach</code> yet" (GAP-6).</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame tall"><section class="pane">
+      <div class="pane-head"><span class="tab">Graph</span><span class="tab">Data</span><span class="tab on">Results</span><span class="tab">Help</span></div>
+      <div class="pane-body"><table class="rs"><colgroup><col class="name"><col><col class="act"></colgroup>
+        <tr class="sect"><td colspan="3">e() · regress <span class="aside">changed by the last run</span></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-down"></span>Scalars<span class="count">12</span></td></tr>
+        <tr class="row"><td>e(N)</td><td>500</td><td class="act"></td></tr>
+        <tr class="row"><td>e(df_m)</td><td>2</td><td class="act"></td></tr>
+        <tr class="row"><td>e(df_r)</td><td>497</td><td class="act"></td></tr>
+        <tr class="row"><td>e(F)</td><td>172.07152</td><td class="act"></td></tr>
+        <tr class="row"><td>e(r2)</td><td>.40913736</td><td class="act"></td></tr>
+        <tr class="row"><td>e(rmse)</td><td>2.9755392</td><td class="act"></td></tr>
+        <tr class="row"><td>e(mss)</td><td>3046.9852</td><td class="act"></td></tr>
+        <tr class="row"><td>e(rss)</td><td>4400.3552</td><td class="act"></td></tr>
+        <tr class="row"><td>e(r2_a)</td><td>.40675964</td><td class="act"></td></tr>
+        <tr class="row"><td>e(ll)</td><td>-1253.1774</td><td class="act"></td></tr>
+        <tr class="row"><td>e(ll_0)</td><td>-1384.7203</td><td class="act"></td></tr>
+        <tr class="row"><td>e(rank)</td><td>3</td><td class="act"></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Macros<span class="count">10</span></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Matrices<span class="count">2</span></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Functions<span class="count">1</span></td></tr>
+      </table></div></section></div>
+    <figcaption><b>Results, top.</b> One list in three fixed columns: name, value, action. Sections (e(), r(), macros) hold groups
+      that fold, each with its count; e() scalars start open. Values to 8 significant digits (all digits on hover and when
+      copied). The real pane is 430 px tall and scrolls.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame tall"><section class="pane">
+      <div class="pane-head"><span class="tab">Graph</span><span class="tab">Data</span><span class="tab on">Results</span><span class="tab">Help</span></div>
+      <div class="pane-body"><table class="rs"><colgroup><col class="name"><col><col class="act"></colgroup>
+        <tr class="sect"><td colspan="3">e() · regress <span class="aside">changed by the last run</span></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Scalars<span class="count">12</span></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Macros<span class="count">10</span></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-down"></span>Matrices<span class="count">2</span></td></tr>
+        <tr class="row"><td>e(b)</td><td>1 x 3</td><td class="act"><a href="#">Hide</a></td></tr>
+        <tr class="mat"><td colspan="3"><table class="grid"><tr><th class="obs"></th><th>age</th><th>educ</th><th>_cons</th></tr>
+          <tr><td class="obs">y1</td><td>.1111234</td><td>.85941383</td><td>4.8575414</td></tr></table></td></tr>
+        <tr class="row"><td>e(V)</td><td>3 x 3</td><td class="act"><a href="#">View</a></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Functions<span class="count">1</span></td></tr>
+        <tr class="sect"><td colspan="3">r() · summarize</td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Scalars<span class="count">8</span></td></tr>
+        <tr class="sect"><td colspan="3">Locals and globals</td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-down"></span>Locals<span class="count">2</span></td></tr>
+        <tr class="row"><td>`controls'</td><td>age educ</td><td class="act"></td></tr>
+        <tr class="row"><td>`v'</td><td>educ</td><td class="act"></td></tr>
+        <tr class="grp"><td colspan="3"><span class="ico i-right"></span>Globals<span class="count">6, all set by the system</span></td></tr>
+      </table></div></section></div>
+    <figcaption><b>Results, scrolled, a matrix open.</b> View opens the matrix in place, here: it runs no command and adds nothing
+      to the log or the command history (the values come from the engine as <code>get_matrix</code> does over MCP). Hide folds it
+      again. Copying a row copies its value; copying a matrix copies it as tab-separated text.</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">Opening a file from the list</h2>
+<div class="sheet">
+  <figure>
+    <div class="frame"><section class="pane">
+      <div class="pane-head"><span class="tab">analysis.do<span class="x">×</span></span><span class="tab on">wages.dta<span class="x">×</span></span></div>
+      <div class="bar"><span class="ico i-file"></span><b>data/wages.dta</b> · 500 obs · 3 vars · 8 KB</div>
+      <div class="bar"><code style="color:var(--ink)">use "data/wages.dta", clear</code><span class="spacer"></span><span class="btn primary">Load</span><a href="#">Copy</a></div>
+      <div class="pane-body">
+        <table class="t">
+          <tr><th>Name</th><th>Label</th><th>Type</th><th>Format</th></tr>
+          <tr><td class="mono">age</td><td class="muted">no label</td><td class="mono">float</td><td class="mono">%9.0g</td></tr>
+          <tr><td class="mono">educ</td><td>Years of schooling</td><td class="mono">float</td><td class="mono">%9.0g</td></tr>
+          <tr><td class="mono">wage</td><td>Hourly wage</td><td class="mono">float</td><td class="mono">%9.0g</td></tr>
+        </table>
+        <p style="font-size:var(--text-sm);color:var(--muted);padding:var(--s2) var(--s3);margin:0">Read with <code>describe using</code>;
+          the data in memory is untouched until you press Load.</p>
+      </div></section></div>
+    <figcaption><b>.dta:</b> a tab with its variables, not the editor. The command is shown next to the button. Load runs it as if
+      typed in the command line: echoed in the log, added to the command history (↑ brings it back), asks first if the data in
+      memory has changed. It is not written into any do-file; Copy puts it on the clipboard to paste into one.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame"><section class="pane">
+      <div class="pane-head"><span class="tab on">survey.csv<span class="dot"></span><span class="x">×</span></span><span class="tab">analysis.do<span class="x">×</span></span></div>
+      <div class="bar"><b>data/raw/survey.csv</b> · 1,204 rows</div>
+      <div class="bar"><code style="color:var(--ink)">import delimited "data/raw/survey.csv", clear</code><span class="spacer"></span><span class="btn">Import</span><a href="#">Copy</a></div>
+      <div class="pane-body"><pre class="code csv"><span class="ln"><span class="n">1</span><span class="hd"><span class="c0">id</span><span class="d">,</span><span class="c1">region</span><span class="d">,</span><span class="c2">age</span><span class="d">,</span><span class="c3">educ</span><span class="d">,</span><span class="c4">wage</span></span></span><span class="ln"><span class="n">2</span><span class="c0">1001</span><span class="d">,</span><span class="c1">"North"</span><span class="d">,</span><span class="c2">34</span><span class="d">,</span><span class="c3">18</span><span class="d">,</span><span class="c4">31.62</span></span><span class="ln"><span class="n">3</span><span class="c0">1002</span><span class="d">,</span><span class="c1">"South"</span><span class="d">,</span><span class="c2">48</span><span class="d">,</span><span class="c3">10</span><span class="d">,</span><span class="c4">15.00</span></span><span class="ln"><span class="n">4</span><span class="c0">1003</span><span class="d">,</span><span class="c1">"North, coast"</span><span class="d">,</span><span class="c2">41</span><span class="d">,</span><span class="c3">17</span><span class="d">,</span><span class="c4">24.80</span></span><span class="ln"><span class="n">5</span><span class="c0">1004</span><span class="d">,</span><span class="c1">"East"</span><span class="d">,</span><span class="c2">52</span><span class="d">,</span><span class="c3"></span><span class="d">,</span><span class="c4">18.19</span></span><span class="ln"><span class="n">6</span><span class="c0">1005</span><span class="d">,</span><span class="c1">"West"</span><span class="d">,</span><span class="c2">32</span><span class="d">,</span><span class="c3">17</span><span class="d">,</span><span class="c4">19.49</span></span><span class="ln sel"><span class="n">7</span><span class="c0">1006</span><span class="d">,</span><span class="c1">"South"</span><span class="d">,</span><span class="c2">49</span><span class="d">,</span><span class="c3">17</span><span class="d">,</span><span class="c4">23.59</span></span><span class="ln"><span class="n">8</span><span class="c0">1007</span><span class="d">,</span><span class="c1">"North"</span><span class="d">,</span><span class="c2">27</span><span class="d">,</span><span class="c3">12</span><span class="d">,</span><span class="c4">14.73</span></span></pre></div></section></div>
+    <figcaption><b>.csv, .tsv:</b> editable text in the editor, each column its own color (a small tokenizer: commas outside quotes);
+      line 7 is the cursor's. Saved with Save, like a do-file. Import works as Load does for a .dta: it runs through the command
+      line and history, not into a do-file.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame"><section class="pane">
+      <div class="pane-head"><span class="tab on">analysis.log<span class="x">×</span></span><span class="tab">analysis.do<span class="x">×</span></span></div>
+      <div class="bar"><b>output/analysis.log</b> · written by the last run<span class="spacer"></span><a href="#">Download</a></div>
+      <div class="pane-body"><pre class="code"><span class="ln"><span class="n">1</span><span class="c">--------------------------------------------------</span></span><span class="ln"><span class="n">2</span><span class="c">      name:  &lt;unnamed&gt;</span></span><span class="ln"><span class="n">3</span><span class="c">       log:  /work/output/analysis.log</span></span><span class="ln"><span class="n">4</span><span class="c">  log type:  text</span></span><span class="ln"><span class="n">5</span><span class="c"> opened on:   9 Nov 2026, 01:14:25</span></span><span class="ln"><span class="n">6</span></span><span class="ln"><span class="n">7</span><b>. regress wage `controls'</b></span><span class="ln"><span class="n">8</span></span><span class="ln"><span class="n">9</span>      Source |       SS           df       MS</span><span class="ln"><span class="n">10</span>-------------+----------------------------------</span><span class="ln"><span class="n">11</span>       Model |  3046.98519         2  1523.49259</span><span class="ln"><span class="n">12</span></span><span class="ln"><span class="n">13</span><b>. summarize wage if sex == 1</b></span><span class="ln"><span class="n">14</span><span style="color:var(--error);font-weight:700">sex not found</span></span><span class="ln"><span class="n">15</span><span style="color:var(--error);font-weight:700">r(111);</span></span></pre></div></section></div>
+    <figcaption><b>.log, .txt, .md:</b> editable text. A .log gets the log's own highlighting (commands bold, errors red); .md, .json,
+      .py, .R, .tex get CodeMirror's packages; anything else plain.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="frame"><section class="pane">
+      <div class="pane-head"><span class="pane-title">Files</span></div>
+      <div class="pane-body"><ul class="files">
+        <li class="folder"><span class="ico i-down"></span>data/</li>
+        <li style="--d:1" class="folder"><span class="ico i-down"></span>raw/</li>
+        <li style="--d:2">survey.csv <span class="size">41 KB</span></li>
+        <li style="--d:2" class="open">survey.xlsx <span class="size">12 KB</span></li>
+      </ul>
+      <div class="banner warn" style="margin-top:0"><div><b>survey.xlsx can't be opened in the editor.</b> It isn't UTF-8 text, so
+        the editor would change it. Download it to edit it elsewhere.
+        <div class="actions"><span class="btn">Download</span><span class="btn quiet">Dismiss</span></div></div></div>
+      </div></section></div>
+    <figcaption><b>.xlsx and other files that aren't text</b> (.dta excepted): stay in the list and download, but no tab opens and there is no
+      import button for now. The same notice as any file that isn't UTF-8.</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">The full-size graph, and dialogs</h2>
+<div class="sheet">
+  <figure>
+    <div class="stage"><div class="viewer">
+      <div class="vhead"><b>graph 1 of 2</b> · scatter wage educ<span class="spacer"></span><a href="#">Export PNG</a><a href="#">Copy</a>
+        <span class="btn quiet">Close <span class="key">Esc</span></span></div>
+      <div class="vbody"><div class="graph-card"><img src="img/scatter.png" alt="Scatter plot of hourly wage against years of schooling"></div>
+        <div class="strip"><span class="thumb on" style="background-image:url(img/scatter.png)"></span><span class="thumb" style="background-image:url(img/scatter.png)"></span></div></div>
+    </div></div>
+    <figcaption><b>Full size.</b> Over the whole editor: the graph as large as the window allows, the session's graphs on the right
+      (← → move between them), Export PNG and Copy. A .png opened from the files shows in the Graph tab, and opens here the same way.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="stage"><div class="ghost"><div></div><div></div><div></div></div><div class="scrim"></div>
+      <div class="dialog" role="dialog" aria-label="A file with this name exists">
+        <h2>data/wages.dta is already here</h2>
+        <p>The upload has a file with the same name. Keep the one here, or replace it with the uploaded one?</p>
+        <p style="font-size:var(--text-sm);color:var(--muted)">2 of 5 clashes · the other 37 files are uploaded.</p>
+        <div class="actions"><span class="btn">Keep all</span><span class="btn">Overwrite all</span><span class="spacer"></span>
+          <span class="btn">Keep existing</span><span class="btn primary focus">Overwrite</span></div>
+      </div></div>
+    <figcaption><b>Name clash</b> (upload or .zip). One question per clash, with "all" for the rest. When the clash is the open file with
+      unsaved edits, the question says so: "analysis.do is open with unsaved edits".</figcaption>
+  </figure>
+
+  <figure>
+    <div class="stage"><div class="ghost"><div></div><div></div><div></div></div><div class="scrim"></div>
+      <div class="dialog" role="dialog" aria-label="Upload finished">
+        <h2>Uploaded 42 files</h2>
+        <p>Some commands in these do-files aren't in dofile, so those files stop with an error when they reach them:</p>
+        <ul class="list"><li><code>reghdfe</code> in <a href="#">master.do</a>, <a href="#">tables.do</a></li>
+          <li><code>esttab</code> in <a href="#">tables.do</a></li></ul>
+        <p style="font-size:var(--text-sm);color:var(--muted)">They are community commands, not part of Stata itself. Their names are underlined in the editor.</p>
+        <div class="actions"><span class="btn primary focus">Open master.do</span><span class="btn">Close</span></div>
+      </div></div>
+    <figcaption><b>Upload report.</b> Shown only when something needs saying: missing commands, refused .zip entries (<code>../</code>,
+      absolute paths), files that aren't UTF-8 text.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="stage" style="padding:var(--s3)"><div class="banner error" style="margin:0">
+      <div><b>The engine was reset: it ran out of memory.</b> The data in memory is gone; your files are kept.
+        <div class="actions"><span class="btn primary">Run the file again</span><span class="btn quiet">Dismiss</span></div></div></div>
+      <div class="banner warn" style="margin:var(--s3) 0 0"><div><b>Memory 1.6 GB of about 2 GB.</b> A bigger dataset may reset the engine.
+        <code>compress</code> or <code>keep</code> fewer variables to save memory.</div></div>
+      <div class="dialog" style="margin:var(--s3) 0 0 auto;position:static;transform:none;width:360px"><h2>Delete clean.do?</h2><p>It's kept only in this browser; there is no undo.</p>
+        <div class="actions"><span class="btn">Cancel</span><span class="btn stop live">Delete</span></div></div>
+    </div>
+    <figcaption><b>Notices.</b> Above the log, not in the status bar only: a reset (rc 9998) with "Run the file again", the memory
+      warning (limit is a guess until measured), and a confirm before deleting.</figcaption>
+  </figure>
+</div>
+
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.dataset.theme = t;
+</script>
+</body>
+</html>

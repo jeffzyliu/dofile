@@ -283,9 +283,55 @@ screenshots any page with Playwright from `web/node_modules`).
   `LICENSE-POLICY.md`), the user flows (`flows/`, with the decisions of 2026-11-08 in their "Decisions" section) and
   the wireframes (`wireframes/`: desktop A and B, B chosen with the split; phone; the states sheet). GAP-6 (help pages
   for `if`, `foreach`, ...) went into `docs/opendta-issues.md`.
-- **Drafted, not committed, waiting for feedback:** the high-fidelity mockups (`mockups/`: editor light/dark and
-  running, landing desktop/phone, phone Log tab) on `tokens.css` and `mockups/ui.css` (the start of deliverable 5).
-  Their content is a sample do-file run with `dofile run` on synthetic data (`mockups/sample.do`, `img/scatter.png`).
+- **Drafted, not committed, round 1 of feedback applied (2026-11-09):** the high-fidelity mockups (`mockups/`: editor
+  light/dark and running, landing desktop/phone, phone Log tab, `panels.html` for the Data/Results/Help tabs, opened
+  files, the full-size graph and the dialogs, `ascii.html` for the banner candidates) on `tokens.css` and
+  `mockups/ui.css` (the start of deliverable 5). Their content is a sample do-file run with `dofile run` on synthetic
+  data (`mockups/sample.do`, `img/scatter.png`).
+- **Round 1 of hi-fi feedback (2026-11-09), applied:**
+  - Landing: welcome.do rewrapped to 72 columns (the phone gets its own 40-column text); the right column reaches the
+    bottom of welcome.do and shows a whole `regress` output; on a phone the first screen holds the banner, the pitch,
+    Open the editor and `pip install` (the from-source MCP line stays on phones for now). Nav: Commands, GitHub, the
+    theme button. "Command line" and "For AI agents" are gone. A "For agents" page may come with a public HTTP demo
+    MCP server (phase 3).
+  - **Commands page:** a static list made from the engine's registry (`commands.json`); no links to help pages, since
+    OpenDTA's help is Python strings, not pages. (A build step could render them; not planned.)
+  - **Banner:** candidates in `ascii.html`; the mockups use A (ANSI Shadow, 44 x 6), pending the maintainer's pick. It is
+    also the head of the page's Log pane, with the version line. The head is shown only: not in Download log, saved
+    logs, the engine, the CLI or MCP (it would cost agents tokens and change the Stata 14 log comparison).
+  - **Fonts:** the Latin subsets lacked ⌘ ▶ ■ ● ▾ ⋯, arrows and box/block characters, which fell back to system
+    fonts (the tiny key labels). Now: the complete, unmodified Plex files load only for arrows and box/block
+    (`unicode-range`; the OFL reserves the name "Plex", so no subsets of our own); UI symbols are SVG icons; key labels
+    are chips in the UI font (⌘ on a Mac, Ctrl elsewhere).
+  - Editor: the file tree indents 16 px per level with faint guide lines, folders as `data/` in ink; the error bar has a
+    gap before the line number; the unsaved dot is on the tab, the file and the Save button; the theme button.
+  - **Opening files:** .png in the Graph tab; .dta as its variables (`describe using`) with Load it (`use`); plain
+    text is editable. Highlighting: .do/.ado with ours; .log with a small log tokenizer (echo lines, errors);
+    .csv/.tsv with a small column tokenizer (CodeMirror has no CSV mode); .md and .json with CodeMirror's packages;
+    .py, .R, .tex, .sql, .yaml with `@codemirror/legacy-modes`; anything else plain. (Approved in round 2.)
+- **Round 2 (2026-11-09), applied:**
+  - Banner: the maintainer liked A (legible) and D (lowercase charm). New A1, A2: lowercase letters drawn by hand in
+    A's style (`mockups/art.js`); the mockups use A1 (45 x 8), pending the final pick.
+  - The active editor tab has its ×, next to the unsaved dot.
+  - Results: one list in three fixed columns (name, value, action), sections (e(), r(), locals and globals) holding
+    groups that fold, with counts. View opens a matrix in place: no command, nothing in the log or the command
+    history. 8 significant digits approved (all digits on hover and when copied).
+  - Load (.dta, `use`) and Import (.csv, `import delimited`) show their command and run it as if typed in the
+    command line: echoed in the log and added to the command history, never written into a do-file; Copy puts the
+    command on the clipboard.
+  - .xlsx: not openable in the editor (the not-UTF-8 notice) and no import button for now. Note: the engine has
+    `import excel` (openpyxl, which the page already installs), and it works in the CLI.
+- **Round 3 (2026-11-09), applied:**
+  - `import excel` works in the browser engine: checked in Pyodide under Node with the page's own worker and wheel
+    (`EngineClient` as in `web/test/engine.test.mjs`): a workbook written by the CLI imports (500 obs, same means),
+    `import excel ..., describe` lists its sheets, and `export excel` then `import excel` round-trips inside Pyodide,
+    all rc 0. Not yet checked: a real browser, and a workbook saved by Excel itself. Whether .xlsx gets an Import button
+    is the maintainer's call.
+  - Banner: A1 was a touch too tall and thick. The B series is lowercase on half-line pixels (stems two characters
+    wide, horizontals half a line): 5 lines instead of 8. The mockups use B2: B1 slanted 12 degrees and given a
+    one-pixel drop shadow, both in CSS, for D's lean. Slanting the characters themselves (B5) comes out jagged. WebKit
+    and Firefox draw hairline seams between skewed block characters; a 0.04em same-color text shadow covers them.
+    Pending the maintainer's pick.
 - **Answers given on 2026-11-09, not yet applied:**
   1. **Dark-mode graphs:** add a dark plotting style to the engine, and pass the page's current light/dark mode to the
      engine call, so graphs match the page (today the PNGs are light, shown on a white card in dark mode). Engine work:
@@ -304,8 +350,8 @@ screenshots any page with Playwright from `web/node_modules`).
   "Scope" below); list locals and globals for the Results panel; report memory use; unpack and make .zip files in the
   worker; return the first rows of the data (Browse); the dark plotting style (answer 1); the editor's tokenizer
   underlines commands the engine lacks and lists them per uploaded do-file.
-- **Next session:** read these answers, then wait for the maintainer's feedback on the high-fidelity mockups before
-  changing them. Then: add the theme toggle to the wireframes and mockups, plan the dark plotting style, and finish
+- **Next session:** the maintainer picks a banner and reviews round 1 (and `panels.html`). Then: add the theme toggle
+  to the wireframes (done in the mockups), plan the dark plotting style, and finish
   the design system (deliverable 5: tokens into `web/`, the component list, `@axe-core/playwright` checks).
 
 ## What the page does

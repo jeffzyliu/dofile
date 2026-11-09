@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>dofile: phone, Log tab (mockup)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  .phone { width: 390px; height: 844px; display: grid; grid-template-rows: 47px auto auto 1fr auto auto; background: var(--bg); }
+  .sys { display: flex; justify-content: space-between; align-items: end; padding: 0 28px 6px; font: 600 14px/1 var(--font-ui);
+         background: var(--surface); }
+  .top { display: flex; align-items: center; gap: var(--s2); padding: 6px var(--s3); background: var(--surface);
+         border-bottom: 1px solid var(--border); }
+  .top .title { flex: 1; font-weight: 600; font-size: 15px; }
+  .top .btn.primary { font-size: 15px; padding: 10px 18px; }
+  .strip { display: flex; gap: var(--s3); padding: 5px var(--s3); font-size: var(--text-sm); color: var(--muted);
+           background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .strip .rc-err { color: var(--error); font-weight: 600; }
+  .scroll { overflow: hidden; background: var(--surface); display: flex; flex-direction: column; justify-content: flex-end; }
+  .scroll > * { flex-shrink: 0; }
+  .log { font-size: 11px; padding: var(--s2) var(--s3); }
+  .wide { position: relative; }
+  .wide::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 28px;
+                 background: linear-gradient(to right, transparent, var(--surface)); }
+  .hscroll { font: var(--text-xs)/1 var(--font-ui); color: var(--muted); padding: 0 var(--s3) var(--s2); }
+  .inline-graph { margin: 0 var(--s3) var(--s2); height: 150px; }
+  .explain { margin: 0 var(--s3) var(--s2); padding: var(--s2) var(--s3); border-left: 3px solid var(--error);
+             background: var(--error-soft); border-radius: var(--radius); font-size: 13px; line-height: 1.45; }
+  .explain b { font-weight: 600; }
+  .tabs { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--surface); border-top: 1px solid var(--border);
+          padding: 8px 0 26px; font-size: 11.5px; text-align: center; color: var(--muted); }
+  .tabs .on { color: var(--accent); font-weight: 600; }
+  .tabs i { display: block; width: 22px; height: 3px; border-radius: 2px; margin: 0 auto 6px; background: transparent; }
+  .tabs .on i { background: var(--accent); }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="sys"><span>9:41</span><span>●●● ◔</span></div>
+  <div class="top"><span class="title">Log</span><span class="btn quiet icon"><span class="ico i-more"></span></span><span class="btn primary"><span class="ico i-play"></span>Run</span></div>
+  <div class="strip"><span class="rc-err">r(111)</span><span>line 17 · 0.38 s</span><span>612 MB</span>
+    <span class="spacer"></span><a href="#">Go to line</a></div>
+  <div class="scroll" role="log" aria-label="Log">
+    <pre class="log wide"><span class="echo">. regress wage `controls'</span>
+
+        wage |      Coef.   Std. Err.      t    P&gt;|t|
+-------------+--------------------------------------
+         age |   .1111234   .0115734     9.60   0.000
+        educ |   .8594138   .0515739    16.66   0.000
+       _cons |   4.857541   .9089541     5.34   0.000</pre>
+    <div class="hscroll">← wide table: swipe sideways →</div>
+    <pre class="log"><span class="echo">. scatter wage educ</span></pre>
+    <div class="graph-card inline-graph"><img src="img/scatter.png" alt="Scatter plot of hourly wage against years of schooling"></div>
+    <pre class="log"><span class="echo">. summarize wage if sex == 1</span>
+<span class="err">sex not found</span></pre>
+    <div class="explain">"sex" is not a variable, scalar or other known name. A word without quotes inside an expression is
+      read as a name; text values must be in double quotes.<br><b>How to fix:</b> if it is a text value, write "sex" with
+      the quotes. <a href="#">help summarize</a></div>
+    <pre class="log" style="padding-top:0"><span class="err">r(111);</span></pre>
+  </div>
+  <div class="cmdline"><span class="prompt">.</span><span class="field">Type a command</span></div>
+  <nav class="tabs" role="tablist"><span><i></i>Files</span><span><i></i>Editor</span><span class="on"><i></i>Log</span>
+    <span><i></i>Data</span><span><i></i>Results</span></nav>
+</div>
+<script>
+  const t = new URLSearchParams(location.search).get('theme');
+  if (t) document.documentElement.dataset.theme = t;
+</script>
+</body>
+</html>

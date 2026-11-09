@@ -48,8 +48,9 @@ dofile reimplements Stata's documented *behavior*. It contains no StataCorp code
 - **Allowed** in shipped code and as dependencies: permissive licenses (MIT, BSD, Apache-2.0,
   PSF, ISC) and the Python and Pyodide runtimes.
 - **Allowed for fonts:** the SIL Open Font License 1.1, with the license file next to the font files. The web demo
-  uses IBM Plex Mono and IBM Plex Sans (`docs/design/fonts/`, later `web/`), as published by Fontsource and
-  unchanged: IBM's license reserves the name "Plex", so a font we subset or edit ourselves must be renamed.
+  uses IBM Plex Mono and IBM Plex Sans (`docs/design/fonts/`, later `web/`), unchanged: Fontsource's Latin subsets,
+  plus IBM's complete files (`*-complete.woff2`, from the `@ibm/plex-mono` and `@ibm/plex-sans` npm packages 2.5.0 and
+  1.1.0; fetch command in `docs/design/mockups/README.md`) for the arrows, box-drawing and block characters. IBM's license reserves the name "Plex", so a font we subset or edit ourselves must be renamed.
 - **Allowed only as a separate dependency**, never copied into the source: LGPL libraries.
 - **Not allowed** in `src/`, as a runtime dependency or in the web demo: GPL, AGPL and other strong
   copyleft code. This includes the GPLv3 tree-sitter-stata grammar (jbearak); use an MIT grammar
