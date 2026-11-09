@@ -1,0 +1,83 @@
+name: release
+
+# Publishes to PyPI when a version tag is pushed (`git tag v0.1.0a1 && git push origin v0.1.0a1`). The tag must be on
+# main and match `version` in pyproject.toml. Steps and one-time setup (the PyPI publisher, the `pypi` environment):
+# docs/releasing.md. No token is stored: the publish job uses PyPI Trusted Publishing (OIDC).
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false   # never cancel an upload that has started
+
+permissions:
+  contents: read
+
+env:
+  UV_PYTHON: "3.14"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the tag-is-on-main check needs history
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: The tag is on main and matches pyproject.toml
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main"; exit 1; }
+          uv run --no-project --with packaging python - <<'EOF'
+          import os, tomllib
+          from packaging.version import Version
+          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          with open("pyproject.toml", "rb") as f:
+              version = tomllib.load(f)["project"]["version"]
+          if Version(tag) != Version(version):
+              raise SystemExit(f"::error::tag {tag} does not match pyproject.toml version {version}")
+          print(f"releasing {version}")
+          EOF
+
+      - run: uv sync --extra mcp
+      - run: uv run poe test   # ~35 s; the slow Stata comparison ran in the pull request's `ci`
+
+      - run: uv build
+      - run: uvx twine check dist/*
+
+      # The built wheel, installed alone in a clean environment away from the checkout (so `src/` cannot be imported):
+      # the CLI runs a do-file, and the MCP server's entry point loads (needs the `mcp` extra).
+      - name: Smoke test the wheel
+        run: |
+          wheel="$PWD/$(ls dist/*.whl)"
+          cd "$RUNNER_TEMP"
+          uv venv smoke
+          uv pip install --python smoke/bin/python "${wheel}[mcp]"
+          printf 'clear\nset obs 50\ngen x = _n\nsummarize x\nassert r(N) == 50\n' > smoke.do
+          smoke/bin/dofile run smoke.do
+          smoke/bin/dofile-mcp --help > /dev/null
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # A separate job, so the OIDC token (id-token: write) is never available to the steps that run the project's code.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi   # the name the PyPI publisher is set up with; add required reviewers to this environment to gate it
+      url: https://pypi.org/project/dofile/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv publish --trusted-publishing always dist/*
