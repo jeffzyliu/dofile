@@ -36,6 +36,7 @@ const useSnapshot = new URLSearchParams(location.search).get("snapshot") !== "0"
 const engine = new EngineClient({
   createWorker: () => new Worker(new URL("./engine/worker.js", import.meta.url), { type: "module" }),
   wheel: new URL(`${import.meta.env.BASE_URL}${__WHEEL__}`, location.href).href,
+  extraWheels: __EXTRA_WHEELS__.map(f => new URL(`${import.meta.env.BASE_URL}${f}`, location.href).href),
   wheelHash: __WHEEL_HASH__,
   indexURL: __PYODIDE__,
   // the Pyodide memory snapshot `npm run snapshot` builds (faster to start, a bigger download); no fallback if it is

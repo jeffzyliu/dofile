@@ -24,6 +24,33 @@ def test_run_returns_log_rc_and_results(eng):
     json.dumps(r.results)  # must be JSON-serializable
 
 
+def test_legacy_xls_round_trip_needs_no_extra_install(eng):
+    """xlwt and xlrd are core dependencies (the CLI, the MCP server and the web demo all read and write .xls)."""
+    r = eng.run("clear\nset obs 3\ngen x = _n * 1.5\nexport excel using t.xls, firstrow(variables) replace\n"
+                "clear\nimport excel using t.xls, firstrow clear\nsummarize x\nputexcel set p.xls, replace\nputexcel A1 = 42")
+    assert r.rc == 0, r.error
+    assert r.results["r"]["scalars"]["N"] == 3 and abs(r.results["r"]["scalars"]["mean"] - 3) < 1e-12
+
+
+@pytest.mark.parametrize("missing, code, words", [
+    ("pandas", "clear\nset obs 2\ngen x = _n\nexport sasxport out, replace", "export sasxport is not available"),
+    ("pyreadstat", "import sasxport small", "this file format is not available"),
+    ("pyreadstat", "use old7, clear", "very old .dta files"),
+])
+def test_odt32_missing_optional_package_is_rc_199_without_pip_advice(eng, monkeypatch, missing, code, words):
+    """ODT-32: a missing pyreadstat or pandas is rc 199 (like a disabled command), not 610 "file not Stata format", and the
+    message does not tell the user to pip install (useless in the browser). small.xpt is a valid file; old7.dta only has the
+    first bytes of a format 110 (Stata 7) file, which is all the engine looks at before it needs ReadStat."""
+    import shutil
+    import sys
+    shutil.copy(Path(__file__).parent / "conformance" / "data" / "small.xpt", Path.cwd() / "small.xpt")
+    (Path.cwd() / "old7.dta").write_bytes(bytes([110, 2, 1, 0]) + bytes(60))
+    monkeypatch.setitem(sys.modules, missing, None)   # `import <missing>` raises ImportError
+    r = eng.run(code)
+    assert r.rc == 199, r.error
+    assert words in r.error and "pip install" not in r.error and missing in r.error
+
+
 def test_stata_error_gives_rc_and_message(eng):
     r = eng.run("clear\nset obs 1\nsummarize nosuchvar")
     assert r.rc == 111

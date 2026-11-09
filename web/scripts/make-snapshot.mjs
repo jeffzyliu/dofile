@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
+import { installEngine } from "./install-engine.mjs";
 import { patchAsm, makeOptions, makeSnapshot, bundle, inflate, zeroLibraryCopies } from "../src/engine/snapshot.js";
 
 const here = new URL("..", import.meta.url);
@@ -36,15 +37,13 @@ const create = (await import(patched)).default;
 
 const py = await loadPyodide({ ...makeOptions(create), ...(stripDocs ? { env: { PYTHONOPTIMIZE: "2" } } : {}) });
 lap(`Pyodide started${stripDocs ? ` (docstrings and asserts stripped: sys.flags.optimize = ${py.runPython("import sys; sys.flags.optimize")})` : ""}`);
-await py.loadPackage("micropip", { messageCallback: () => {} });
-py.FS.writeFile(`/tmp/${wheel}`, readFileSync(new URL(wheel, dist)));
-await py.runPythonAsync(`import micropip; await micropip.install("emfs:/tmp/${wheel}")`);
+await installEngine(py);   // the dofile wheel and the wheels of web/wheels/ (pyreadstat)
 lap("dofile and its dependencies installed");
 
 // import what a first run needs, and run a program in a throwaway engine so the lazily imported modules are loaded too
 // (the filesystem is saved, but a module imported later has to be linked again; this keeps that to the rare ones)
 await py.runPythonAsync(`
-import numpy, scipy.stats, scipy.optimize, scipy.linalg, openpyxl
+import numpy, scipy.stats, scipy.optimize, scipy.linalg, openpyxl, xlrd, xlwt, pyreadstat
 import matplotlib; matplotlib.use("agg"); import matplotlib.pyplot
 import os
 os.makedirs("/work", exist_ok=True)

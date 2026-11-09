@@ -11,10 +11,10 @@ are no accounts and no hosting cost beyond static files.
 **Status (2026-11-07):** steps 1 (the Pyodide spike), 2 (the path shim), 3 (the browser entry point) and 4 (the
 proof-of-concept page) were done on 2026-11-06, see [Spike results](#spike-results-2026-11-06); storage and the path shim
 are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since, on 2026-11-07 (steps 4b to 4e below):
-- **The engine matches CPython in Pyodide, apart from missing packages.** Two browser-only bugs were found and fixed
-  (PATCH-4: `np.repeat` counts as `intp`; a shim for `numpy.linalg` raising `LinAlgError`). 95 of 97 Stata 14 cases pass
-  (the other two need `pyreadstat` and `xlwt`), 1048 of 1080 unit tests (the others skip for those packages and `xlrd`, or
-  are `shell`), 99.5% of estimation results agree with CPython to 1e-3 and 95% to 1e-9. The differences that remain are in
+- **The engine matches CPython in Pyodide.** Two browser-only bugs were found and fixed
+  (PATCH-4: `np.repeat` counts as `intp`; a shim for `numpy.linalg` raising `LinAlgError`), and the two packages Pyodide lacked
+  are installed (pandas is not, see below) (2026-11-09: `xlwt` and `xlrd` for `.xls`, `pyreadstat` built for Pyodide, without pandas; see [Known gaps](#known-gaps-in-the-browser-engine)).
+  95 of 97 Stata 14 cases pass (1701 and 1911 call `export sasxport`; with pandas loaded they match too), 1060 of 1085 unit tests (the rest skip for pandas, statsmodels, Qt and certifi, or are `shell`), 99.5% of estimation results agree with CPython to 1e-3 and 95% to 1e-9. The differences that remain are in
   fits whose answer the data does not pin down (ODT-30, an OpenDTA optimizer issue). Nothing of this is in CI yet.
 - **The memory snapshot** (the page's default start since 2026-11-09, `?snapshot=0` is the normal boot, no fallback; [pyodide-snapshot.md](pyodide-snapshot.md)): a return visit starts in 1.2 s
   against 4.5–9.2 s, a first visit in 1.7 s unthrottled and 5.1 s at 100 Mbps, level with the normal boot at 30 Mbps. It
@@ -27,8 +27,7 @@ are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since,
 
 **Still open in Phase 2:** the lazy-matplotlib experiment (4a, not started), whether the snapshot becomes the default (the
 real-phone numbers above are one input; a phone over HTTPS with the cache working, and a first visit over a real network,
-were not measured), the legacy `.xls` packages (`xlwt`, `xlrd`; `.xlsx` works, through openpyxl) and `pyreadstat` (next steps for 1701 and 1911 are in
-[Known gaps](#known-gaps-in-the-browser-engine)), the CI workflows' first results (step 9), and steps 5 to 10.
+were not measured), the `pyreadstat` wheel in a real browser (it passes under Node; iOS Safari not tried), the CI workflows' first results (step 9), and steps 5 to 10.
 
 ## Facts this plan rests on
 - **OpenDTA ran unmodified in Pyodide 314** (Python 3.14) under Node during the engine evaluation
@@ -371,9 +370,13 @@ check-snapshot`; details in [pyodide-snapshot.md](pyodide-snapshot.md#correctnes
 Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compare.py` and its known-difference rules.
 
 **Where things stand (2026-11-07), what is open.** The details are in the paragraphs and tables below.
-- **Packages Pyodide lacks:** `pyreadstat` (SAS transport files, Stata 12 and older `.dta`, SPSS; no WebAssembly build: a limit
-  of the web demo to document) and `xlwt` and `xlrd` (legacy `.xls` output and input only: `.xlsx`, `import excel`, `export excel` and `putexcel` on `.xlsx` work, through openpyxl, which the page installs; both pure Python, so micropip could install
-  them: add them to the page's install, or document `.xls` as unsupported; decision open).
+- **Packages Pyodide lacks: none that matter, since 2026-11-09.** `xlwt` and `xlrd` (legacy `.xls`; `.xlsx` always worked through
+  openpyxl) are now core dependencies of dofile, pure Python, so micropip installs them with the wheel. `pyreadstat` (SAS
+  transport, Stata 7 and older `.dta`, SPSS) has no Pyodide build, so `web/wheels/` holds one we compiled (pyreadstat 1.3.6 with
+  Emscripten; recipe `web/wheels/pyreadstat/`), installed after the dofile wheel. Pandas is left out on purpose (7 MB in the
+  snapshot, 1.9 s on a cold 30 Mbps start): every read works, and `export sasxport`, the one command that needs it, stops with
+  rc 199 (ODT-32). Still missing, and not needed: statsmodels (5 of OpenDTA's tests compare against it), Qt and
+  certifi (OpenDTA's GUI and updater).
 - **numpy.linalg corners not covered by the shim:** the SVD family (`svd`, `pinv`, `matrix_rank`, `lstsq`) on NaN or inf
   input returns NaN or raises `ValueError` where CPython raises `LinAlgError`; `matrix_power(singular, -1)`, `tensorsolve` and
   `tensorinv` return NaN. None was shown to matter (missing values are dropped before a design matrix is built).
@@ -388,14 +391,16 @@ Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compa
 
 **Results after PATCH-4 and the `numpy.linalg` shim (2026-11-07).** `check-snapshot --normal` (one process per case, four at a
 time): **95 of 97 cases pass in 200 s**, none timed out or crashed, and the corpus (63 checks), the 12 probes and the 13
-native-library calls are clean. The two that differ are the package gaps in the table below (1701: `xlwt`; 1911:
-`pyreadstat`). The count is 97, not 98, because `1920_models4` has no Stata reference log. The snapshot start gives the same
+native-library calls are clean. The two that differed were the package gaps in the table below (1701: `xlwt`; 1911:
+`pyreadstat`; since 2026-11-09 **95 of 97 pass directly in 157 s** and the other two differ only at `export sasxport`, see below). The count is 97, not 98, because `1920_models4` has no Stata reference log. The snapshot start gives the same
 result (95 of 97 in about 150 s; [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)).
 
 **The unit tests in Pyodide** (`npm run check-pytest`; one process per file, 72 files, 128 s; compared with CPython test by test
 by `compare-pytest.mjs`): OpenDTA's suite and `tests/test_engine.py`, 1080 tests. CPython: 1067 passed, 13 skipped. Pyodide:
 1048 passed, 31 skipped, 1 failed. **Of the 19 that differ, none is an engine problem:** 18 skip for lack of `pyreadstat`,
-`xlwt` or `xlrd` (the `.xls` format only), and 1 fails because `shell` cannot start a process in the browser. The other 1,061 have the same outcome.
+`xlwt` or `xlrd`, and 1 fails because `shell` cannot start a process in the browser. The other 1,061 have the same outcome.
+With the packages installed and no pandas (2026-11-09): 1060 passed, 24 skipped, 1 failed (`shell`); with pandas, 1067 / 13 / 1,
+the same as CPython.
 Not run in Pyodide because they need subprocesses, the `mcp` package or the source tree: `test_mcp`, `test_worker`,
 `test_sandbox`, `test_break`, `test_dofile_cli`, `test_vendor`, `test_log_cut`, `test_browser`, and the two replaced by other
 checks (`test_conformance` and `test_stata_compat` by `check-snapshot`; `test_pathshim` and `test_linalgshim` by
@@ -442,28 +447,28 @@ its stripped docstrings): 16 of the 91 cases then run failed.
 | Gap | Cases | Cause | What to do |
 |---|---|---|---|
 | **`expand` and `stsplit` fail** | 11: 0304_collapse, 1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology, 1801_programming, 1901_survival, 1902_multilevel, 1908_models2, 1909_other_suites, 1916_multilevel | `np.repeat` gets an int64 counts array and numpy's index type is int32 in WebAssembly (PATCH-4 in [opendta-issues.md](opendta-issues.md)) | **fixed 2026-11-07** by PATCH-4 (two call sites; no other int64 site fails). All 11 pass; 6 of them (1001, 1601, 1901, 1902, 1908, 1916) needed the `numpy.linalg` shim as well, since with PATCH-4 alone they passed `expand` and then hit the 600 s limit |
-| legacy `.xls` output (`.xlsx` is not affected) | 1 (1701_datamgmt_options) | `putexcel` and `export excel` to `.xls` need `xlwt` (to `.xlsx` they use openpyxl, a core dependency, and work in Pyodide: `import excel` and `export excel` round-trip, see `design/README.md`, round 3), which Pyodide does not have (`writing .xls files requires the xlwt package`). It is pure Python, so micropip could install it; it is only a dev dependency of dofile, so a `pip install dofile` user hits the same message | decide: add `xlwt` to the page's install, or document `.xls` as unsupported in the browser |
-| SAS transport files and Stata 12 `.dta` | 1 (1911_datamgmt) | `export sasxport`, `import sasxport` and old `.dta` files need `pyreadstat`, a C extension with no WebAssembly build | document as a limit of the web demo |
+| legacy `.xls` input and output (`.xlsx` was never affected) | 1 (1701_datamgmt_options) | `putexcel` and `export excel` to `.xls` need `xlwt`, `import excel` of `.xls` needs `xlrd`; neither was in the page | **fixed 2026-11-09**: both are core dependencies of dofile now (pure Python; micropip installs them with the wheel, about 0.1 s). 1701's `.xls` lines match Stata 14 |
+| SAS transport files, SPSS and Stata 7 `.dta` | 1 (1911_datamgmt) | `export sasxport`, `import sasxport`, `import spss` and old `.dta` files need `pyreadstat`, a C extension with no Pyodide build | **fixed 2026-11-09**: built with `pyodide-build` (pyreadstat 1.3.6: 1.3.7 returns empty strL values, on CPython too), `web/wheels/pyreadstat-*.whl`, committed. All reads work; `export sasxport` needs pandas, which the page leaves out (7 MB), so it stops with rc 199 and 1701 and 1911 stay in `EXPECTED_DIFFER` (they match with `--pandas`) |
 | Numeric known differences | 3: 0408_mata_moptimize, 1907_models, 1918_models3 | in Pyodide they left a difference beyond their known-difference rule, with more log lines than Stata's (the extra line in 0408 was `convergence not achieved`), and ran 20–500 times slower than on CPython: one shared cause | **fixed 2026-11-07** by the `numpy.linalg` shim ([Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide)): all three pass, in 2.1 s (0408, was 204–220 s), 7.5 s (1907, was 25 s) and 4.2 s (1918, was 17 s), under the same rules as CPython |
 
-**Next steps for the two package-gap cases (1701_datamgmt_options, 1911_datamgmt), added 2026-11-08; none done.**
-`web/scripts/check-snapshot.mjs` lists both in `EXPECTED_DIFFER`, so CI accepts any difference in them (a strict xfail: it
-fails only if one starts to pass). That also hides a new difference in the rest of each case, so first:
-1. **Review both cases.** Read the diff of each against its Stata 14 log (`tests_opendta/compat/expected/`). List every
-   command whose output differs and say whether the missing package explains it. The log shows only the first 40 diff lines,
-   so run the case alone (`node scripts/check-snapshot.mjs --cases 1701_datamgmt_options,1911_datamgmt`) and read all of it.
-   Then replace `EXPECTED_DIFFER` with a known-difference rule that accepts only the package-message lines (the form of
-   `tests_opendta/compat/known_differences.txt`), so any other difference fails again.
-2. **`xlwt` and `xlrd` (1701).** Try `micropip.install("xlwt")` and `("xlrd")` in Pyodide; both are believed to be pure
-   Python (check the wheel tags on PyPI). If they import, run 1701 with them. Then decide: add them to the page's install and
-   to `make-snapshot.mjs` (rebuild the snapshot; measure the size and start-up cost), or document legacy `.xls` as unsupported in
-   the browser (`.xlsx` already works). dofile's own `pyproject.toml` lists `xlwt` only as a dev dependency, so a `pip install dofile` user sees the
-   same message; an optional extra is a separate question.
-3. **`pyreadstat` (1911).** It is a C extension and Pyodide has no build of it. Find out which commands of 1911 need it
-   (`export sasxport`, `import sasxport`, pre-Stata-13 `.dta`) and whether pure-Python readers cover them (pandas has its own
-   SAS-transport and old-`.dta` readers). Check the newest Pyodide's package list; building it with `pyodide-build` (it needs
-   the ReadStat C library and Cython) is the heavy option. If none is worth it, document these as limits of the web demo in
-   `web/README.md` and in the page.
+**The two package-gap cases (1701_datamgmt_options, 1911_datamgmt), 2026-11-09.** With pandas loaded both match their Stata 14 logs
+line for line (`node scripts/check-snapshot.mjs --normal --pandas --cases 1701_datamgmt_options,1911_datamgmt`). The page does
+not load pandas (see below), so `export sasxport` stops with rc 199 (ODT-32) and what follows in these two cases differs; they are in
+`EXPECTED_DIFFER` in `web/scripts/check-snapshot.mjs`, a strict xfail (it fails if one starts to pass), with `--pandas` as the
+exact check. The rest of what they cover, `.xls` and the ReadStat reads, is checked by the unit tests and the e2e test. What was done:
+1. **`xlwt` and `xlrd`:** pure Python wheels on PyPI; they install in Pyodide through micropip in about 0.1 s. They became core
+   dependencies of dofile (`pyproject.toml`), so the CLI and the MCP server get `.xls` too, and the page needs no code for them.
+2. **`pyreadstat`:** no Pyodide build exists, so `web/wheels/pyreadstat/build.sh` compiles one (a 614 KB wheel; Cython plus
+   ReadStat C, zlib from Emscripten's port, a two-line `setup.py` patch for the link flags). The page, `make-snapshot.mjs` and the
+   Node checks install it after the dofile wheel through `web/scripts/install-engine.mjs`. The version is 1.3.6, the cap in the dev
+   group: 1.3.7 gives empty values for long strings (strL) in `read_dta`, on CPython as well (`test_readstat_reads_ours[119]`).
+3. **No pandas, on purpose.** `pyreadstat` reads SAS transport and SPSS without it; only `export sasxport` needs
+   it. Pandas is 6.9 MB of the 48.6 MB snapshot and 1.9 s of a cold 30 Mbps snapshot start
+   ([pyodide-snapshot.md](pyodide-snapshot.md#packages-added-xlwt-xlrd-and-pyreadstat-2026-11-09)). The snapshot is 41.6 MB.
+4. **Checked** (Node, and Chromium, Firefox, WebKit and the iPhone profile for the e2e test): 95 of 97 Stata 14 cases directly
+   plus the two expected differences, on a normal boot and on a snapshot start; 1060 passed / 24 skipped / 1 failed (`shell`) of the
+   unit tests (11 skip for pandas); an e2e test that writes and reads `.xls`, reads a `.xpt` and a `.sav`, and checks the
+   `export sasxport` refusal. Not done: a real iPhone.
 
 The snapshot check found one bug of the snapshot's own, fixed: after a restore, `scipy.linalg.solve` crashed with `cannot
 resolve symbol dsytrf_` (see [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)).

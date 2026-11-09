@@ -1,0 +1,16 @@
+--- a/setup.py	2026-08-11 06:37:24
++++ b/setup.py	2026-11-09 11:45:06
+@@ -86,11 +86,11 @@
+         library_dirs.append(os.path.join(python_dir, "Library", "bin"))
+         library_dirs.append(os.path.join(python_dir, "Library", "lib"))
+ else:
+-    libraries.extend(["m", "z"])
++    libraries.extend(["m"])  # zlib from --use-port=zlib
+     _platform = sys.platform
+     PYREADSTAT_LINK_ICONV = os.environ.get('PYREADSTAT_LINK_ICONV', '').lower() not in ('', '0', 'false', 'no')
+     # Mac and conda/miniforge: iconv needs to be linked
+-    if PYREADSTAT_LINK_ICONV or  _platform.lower().startswith("darwin") or is_conda():
++    if PYREADSTAT_LINK_ICONV:  # musl has iconv
+         libraries.append("iconv")
+ 
+ # Extensions

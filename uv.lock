@@ -305,6 +305,8 @@ dependencies = [
     { name = "numpy" },
     { name = "openpyxl" },
     { name = "scipy" },
+    { name = "xlrd" },
+    { name = "xlwt" },
 ]
 
 [package.optional-dependencies]
@@ -322,8 +324,6 @@ dev = [
     { name = "pyreadstat" },
     { name = "pytest" },
     { name = "pytest-xdist" },
-    { name = "xlrd" },
-    { name = "xlwt" },
 ]
 
 [package.metadata]
@@ -334,6 +334,8 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pyreadstat", marker = "extra == 'legacy-dta'", specifier = ">=1.3" },
     { name = "scipy", specifier = ">=1.11" },
+    { name = "xlrd", specifier = ">=2.0" },
+    { name = "xlwt", specifier = ">=1.3" },
 ]
 provides-extras = ["legacy-dta", "mcp"]
 
@@ -344,8 +346,6 @@ dev = [
     { name = "pyreadstat", specifier = ">=1.3,<1.3.7" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
-    { name = "xlrd", specifier = ">=2.0" },
-    { name = "xlwt", specifier = ">=1.3" },
 ]
 
 [[package]]

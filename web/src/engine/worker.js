@@ -185,16 +185,23 @@ const ops = {
     startup.filesS = since(tFiles);
   },
   startup: () => startup,
-  // wheel: the dofile wheel's URL, or {name, bytes}; interruptBuffer: an Int32Array on a SharedArrayBuffer, or null
-  async boot({ wheel, interruptBuffer }) {
+  // wheel: the dofile wheel's URL, or {name, bytes}; extraWheels: more of the same, installed with it; interruptBuffer: an
+  // Int32Array on a SharedArrayBuffer, or null
+  async boot({ wheel, extraWheels = [], interruptBuffer }) {
     const tPackages = performance.now();
     if (!fromSnapshot) {   // a snapshot has the packages and the wheel in it already
       status("loading packages");
+      // no pandas: pyreadstat reads SAS transport and SPSS without it; only export sasxport needs it (about 5 MB more
+      // to download and 2 s on a cold start, docs/pyodide-snapshot.md, "Packages added"), so that command is not available here
       await py.loadPackage("micropip", { messageCallback: () => {} });
-      const name = typeof wheel === "string" ? wheel.split("/").at(-1) : wheel.name;
-      const bytes = typeof wheel === "string" ? new Uint8Array(await (await fetch(wheel)).arrayBuffer()) : wheel.bytes;
-      py.FS.writeFile(`/tmp/${name}`, bytes);
-      await py.runPythonAsync(`import micropip; await micropip.install("emfs:/tmp/${name}")`);
+      const names = await Promise.all([wheel, ...extraWheels].map(async w => {
+        const name = typeof w === "string" ? w.split("/").at(-1) : w.name;
+        const bytes = typeof w === "string" ? new Uint8Array(await (await fetch(w)).arrayBuffer()) : w.bytes;
+        py.FS.writeFile(`/tmp/${name}`, bytes);
+        return `emfs:/tmp/${name}`;
+      }));
+      py.globals.set("wheel_urls", py.toPy(names));
+      await py.runPythonAsync(`import micropip; await micropip.install(list(wheel_urls))`);
     }
     interrupt = interruptBuffer ?? null;
     if (interrupt) py.setInterruptBuffer(interrupt);

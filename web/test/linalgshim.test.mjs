@@ -8,15 +8,13 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
+import { installEngine } from "../scripts/install-engine.mjs";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 
 async function boot() {
   const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });
-  await py.loadPackage("micropip", { messageCallback: () => {} });
-  const wheel = readdirSync(`${root}/dist`).filter(f => f.endsWith(".whl")).sort().at(-1);
-  py.FS.writeFile(`/tmp/${wheel}`, readFileSync(`${root}/dist/${wheel}`));
-  await py.runPythonAsync(`import micropip; await micropip.install("emfs:/tmp/${wheel}")`);
+  await installEngine(py);
   return py;
 }
 

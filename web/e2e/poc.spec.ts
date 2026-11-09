@@ -189,6 +189,36 @@ test("Save writes the file; Discard opens the other file", async ({ page }) => {
   await expect(page.locator(".cm-content")).toContainText('display "KEPT"');
 });
 
+// The two package gaps of 2026-11-09, in every browser: xlwt/xlrd (legacy .xls, from PyPI by micropip) and pyreadstat (built for
+// Pyodide, web/wheels/), which reads SAS transport and SPSS files here without pandas. The two fixtures were written by
+// `pyreadstat.write_xport` / `write_sav` from x = 1.5, 3, 4.5, 6 and s = a1..a4. `export sasxport` needs pandas, which the page
+// leaves out (docs/pyodide-snapshot.md): it must say so with rc 199 (ODT-32), not crash.
+test("legacy .xls and the ReadStat formats work: xlwt, xlrd and pyreadstat are installed", async ({ page }) => {
+  page.on("pageerror", e => console.log(`page error: ${e.message}`));
+  await page.goto("/");
+  await ready(page);
+  await page.locator("#upload").setInputFiles([new URL("small.xpt", data).pathname, new URL("small.sav", data).pathname]);
+  await expect(page.locator("#files")).toContainText("small.sav");
+  await run(page, `clear
+set obs 4
+generate x = _n * 1.5
+export excel using t.xls, firstrow(variables) replace
+clear
+import excel using t.xls, firstrow clear
+display "XLS=" _N " " x[4]
+clear
+import sasxport small
+display "XPT=" _N " " x[4] " " s[2]
+import spss using small.sav, clear
+display "SAV=" _N " " x[4] " " s[2]`);
+  const log = (await page.locator("#log").textContent())!;
+  expect(log).toContain("XLS=4 6");
+  expect(log).toContain("XPT=4 6 a2");
+  expect(log).toContain("SAV=4 6 a2");
+  await run(page, "export sasxport out, replace", 199);
+  expect(await page.locator("#log").textContent()).toContain("it needs the pandas package");
+});
+
 // The page starts from the Pyodide memory snapshot `npm run snapshot` builds (public/snapshot/, copied by the build). No
 // skip when there is none: a missing snapshot fails every test here, as it does for a visitor. A second visit reads it from
 // the Cache API instead of downloading it again.

@@ -11,9 +11,10 @@ export class EngineClient {
   // snapshot: the URL (ending in "/") of a snapshot built by scripts/make-snapshot.mjs, to start from instead of
   // installing the packages; the worker refuses one that was built for another wheel.
   // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.js), to compare them
+  // extraWheels: more wheels installed after the dofile one (web/wheels/: pyreadstat), each a URL or {name, bytes} like `wheel`
   // wheelHash: SHA-256 of the wheel; a snapshot whose manifest has another one was built from other code and is refused
-  constructor({ createWorker, wheel, wheelHash, indexURL, snapshot, brotli, graceMs = 5000, onStatus = (_status) => {} }) {
-    Object.assign(this, { createWorker, wheel, wheelHash, indexURL, snapshot, brotli, graceMs, onStatus });
+  constructor({ createWorker, wheel, extraWheels = /** @type {any[]} */ ([]), wheelHash, indexURL, snapshot, brotli, graceMs = 5000, onStatus = (_status) => {} }) {
+    Object.assign(this, { createWorker, wheel, extraWheels, wheelHash, indexURL, snapshot, brotli, graceMs, onStatus });
     this.nextId = 0;
     this.pending = new Map();
     this.running = null;
@@ -52,7 +53,7 @@ export class EngineClient {
     const wheelName = typeof this.wheel === "string" ? this.wheel.split("/").at(-1) : this.wheel.name;
     const mounted = await this.call("mount", { indexURL: this.indexURL, snapshot: this.snapshot, wheelName, wheelHash: this.wheelHash, brotli: this.brotli });
     if (gen !== this.gen) return mounted;
-    const about = await this.call("boot", { wheel: this.wheel, interruptBuffer: this.interrupt });
+    const about = await this.call("boot", { wheel: this.wheel, extraWheels: this.extraWheels, interruptBuffer: this.interrupt });
     if (gen !== this.gen) return about;
     this.about = about;
     this.startup = await this.call("startup");   // where the start's time went (worker.js); the page shows it in its status line

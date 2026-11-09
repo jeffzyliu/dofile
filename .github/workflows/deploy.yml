@@ -39,7 +39,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: web/public/snapshot
-          key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.mjs', 'web/src/engine/snapshot.js') }}
+          key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.mjs', 'web/scripts/install-engine.mjs', 'web/wheels/*.whl', 'web/src/engine/snapshot.js') }}
 
       # Safety net: a restored snapshot must be of the wheel just built (the page refuses any other), else rebuild it.
       - id: fresh
