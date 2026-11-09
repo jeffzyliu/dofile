@@ -18,6 +18,28 @@ is used up for good: PyPI never accepts a number twice, even after a file is del
   called `start_session`, `run_do` (rc 0, `e(N)` right) and `shell` (refused, rc 199). `sysuse auto` fails by design:
   OpenDTA does not include Stata's example datasets.
 
+## Releasing with CI (`.github/workflows/release.yml`)
+A push of a tag `vX.Y.Z` (PEP 440: `v0.1.0a1`, `v0.1.0.dev1`, `v0.1.0`) builds, tests and publishes that commit.
+1. On `main`: bump `version` in `pyproject.toml` (rules under "by hand", step 2), merge it, and let `ci` go green.
+2. `git tag v0.1.0a1 && git push origin v0.1.0a1` (the tag is the version with a `v`).
+3. The `build` job refuses a tag that is not on `main` or does not match `pyproject.toml`, runs `poe test`, builds, runs
+   `twine check`, installs the wheel alone in a clean environment and runs `dofile run` and `dofile-mcp --help`. The
+   `publish` job then uploads with Trusted Publishing (OIDC): no token is stored anywhere. It is a separate job so the
+   OIDC permission is never available to the steps that run the project's code.
+4. Check the project page and `uvx --prerelease=allow --from dofile==<version> dofile --help`.
+5. When the first non-pre-release is out, drop the "with the first release" label from the web demo's landing page.
+
+**One-time setup (not done yet; the workflow fails at `publish` until it is):**
+- PyPI: project `dofile` → Manage → Publishing → add a GitHub publisher: owner `jeffzyliu`, repository `dofile`,
+  workflow `release.yml`, environment `pypi`.
+- GitHub: Settings → Environments → create `pypi`. Recommended: add yourself as a required reviewer, so a pushed tag
+  waits for a click before anything is published, and limit deployment to tags `v*`.
+- Revoke the account-wide token from the first upload.
+
+The workflow's shell steps were run locally (version check, on-main check, build, wheel smoke test) and `actionlint`
+passes; the workflow itself has not run on GitHub yet. A tag push is the only way to run it, so the first one is the
+real test: use a pre-release number.
+
 ## Releasing by hand
 1. Two-factor authentication on, and a token scoped to the `dofile` project (PyPI → Account settings → API tokens; the
    first upload needed an account-wide token, because a project-scoped one cannot exist before the project).
