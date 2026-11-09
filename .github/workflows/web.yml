@@ -79,7 +79,12 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
-      - run: npm run e2e   # builds, then Chromium, Firefox, WebKit and an iPhone profile against `vite preview`
+      # builds the snapshot (the page's default start; needs the network once: micropip fetches openpyxl from PyPI) and the page,
+      # then Chromium, Firefox, WebKit and an iPhone profile against `vite preview`. Quality 5: a build in seconds instead of
+      # minutes, about 25% bigger; the tests don't depend on the size. One test starts the page with ?snapshot=0 (the normal boot).
+      - run: npm run e2e
+        env:
+          SNAPSHOT_QUALITY: "5"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

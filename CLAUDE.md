@@ -23,8 +23,8 @@ uv run poe vendor [COMMIT]                            # re-vendor OpenDTA, re-ap
 uv build                                              # sdist + wheel (the wheel is built from the sdist)
 cd web && npm install && npm test                     # web demo engine in Pyodide under Node (rebuilds the wheel)
 cd web && npm run dev                                 # web demo page, on the LAN too (rebuilds the wheel)
-cd web && npm run e2e                                 # the page in Chromium, Firefox, WebKit (Playwright; `npx playwright install` once)
-cd web && npm run snapshot                            # build the Pyodide memory snapshot for the page's ?snapshot=1 (docs/pyodide-snapshot.md)
+cd web && npm run e2e                                 # builds the snapshot and the page, then Chromium, Firefox, WebKit (Playwright; `npx playwright install` once; SNAPSHOT_QUALITY=5 makes the snapshot in seconds instead of ~3 min)
+cd web && npm run snapshot                            # build the Pyodide memory snapshot the page starts from by default (?snapshot=0 = normal boot; docs/pyodide-snapshot.md); `npm run dev` needs it once, and again after a change to the engine
 cd web && npm run check-snapshot [-- --normal]        # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide, one process per case with a time limit; ~4 min with the shim (--normal: no snapshot, the baseline; --cases a,b to pick cases)
 cd web && npm run check-numeric                       # e()/r() of all 98 Stata 14 programs at full precision inside Pyodide, ~4 min; CPython baseline and the diff: header of web/scripts/compare_numeric.py
 cd web && npm run check-pytest [-- --ios]               # OpenDTA's unit tests (+ tests/test_engine.py) inside Pyodide, one process per file, ~2 min (--ios: an iPhone user agent, so Pyodide creates no trampoline); compare with CPython: web/scripts/compare-pytest.mjs (see phase2-plan.md)
@@ -81,8 +81,10 @@ Layers, bottom up (`src/dofile/`):
   in `/work`, JSON text in and out, only `shell`/`webuse` denied, Break through a SIGINT handler (Pyodide's interrupt
   buffer). `web/src/engine/client.js` is the page's side (Break, restart = rc 9998).
 - `web/vite.config.ts` builds the Web Worker as **one file** (`inlineDynamicImports`). A chunk that imports the worker's entry made iOS
-  Safari run the entry twice (`V.loadPackage` error with `?snapshot=1`); see `docs/pyodide-snapshot.md`, "Debugging an iPhone 13".
-- `web/src/engine/snapshot.js` + `web/scripts/make-snapshot.mjs`: web demo only, opt-in (`?snapshot=1`). Start from a
+  Safari run the entry twice (`V.loadPackage` error with a snapshot start); see `docs/pyodide-snapshot.md`, "Debugging an iPhone 13".
+- `web/src/engine/snapshot.js` + `web/scripts/make-snapshot.mjs`: web demo only, **the page's default start** (`?snapshot=0`
+  is the normal boot; there is no fallback: a missing or stale snapshot is an error that names `?snapshot=0`; the e2e tests and
+  `npm run deploy` build the snapshot first, and the deploy workflow builds it before `vite build`). Start from a
   Pyodide memory snapshot with a patched copy of Pyodide's loader that re-links the native libraries; the patch throws
   if Pyodide's loader text changes, and the snapshot must be rebuilt after a wheel or Pyodide change (the manifest holds
   the wheel's SHA-256 and the page refuses a snapshot of another build). The two big files are unpacked with the browser's

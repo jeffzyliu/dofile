@@ -1,6 +1,8 @@
 # Starting the web demo from a Pyodide memory snapshot
 
-Status (2026-11-07): built, measured and checked; opt-in in the demo with `?snapshot=1`. The default build is 39.9 MB
+Status (2026-11-09): built, measured and checked; **the demo's default start** (`?snapshot=0` is the normal boot; a missing
+or stale snapshot is an error that names `?snapshot=0`, not a silent fallback). It was opt-in with `?snapshot=1` until then,
+and an old `?snapshot=1` link still starts from the snapshot. The default build is 39.9 MB
 (brotli 11, docstrings and asserts stripped). A return visit starts in 1.2 s against 4.5–9.2 s for the normal boot; a first
 visit takes 1.7 s unthrottled, 5.1 s at 100 Mbps and 13.9 s at 30 Mbps (normal boot: 5.8, 6.9, 13.9 s). It passes the conformance corpus, 95 of 97 Stata 14
 cases (the other two need packages Pyodide lacks) and the browser tests in Chromium, Firefox, WebKit and an iPhone profile.
@@ -88,7 +90,7 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 | `web/scripts/make-snapshot.mjs` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes, almost all of it brotli quality 11, or seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
 | `web/src/engine/snapshot.js` | the loader patch, the library log, the restore options, and the brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's own decoder, with brotli-wasm as the fallback); used by the script and the worker |
 | `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went |
-| `web/src/engine/client.js`, `main.ts` | pass the URL, the wheel's hash and `?brotli=`; `?snapshot=1` turns it on and the status says `(snapshot)` with the start's breakdown |
+| `web/src/engine/client.js`, `main.ts` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`, and the status says `(snapshot)` with the start's breakdown |
 | `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison |
 | `docs/img/make-startup-times.mjs` | draws the chart below |
 
@@ -194,7 +196,7 @@ decompresses it (0.6 s). Sizes below are compressed MB, measured unless marked; 
 | The engine starts at page load, in the background | **Done** | `engine.start()` in `main.ts`; only Run and Reset wait |
 | Decompress in steps into one buffer per file | **Done** | the memory peak stays near the decompressed size; not a speed gain |
 | One snapshot that starts on iOS | **Done** | built without Pyodide's trampoline, [below](#the-trampoline) |
-| Starting from the snapshot at all | **Done, opt-in** (`?snapshot=1`) | making it the default, with a fallback to the normal boot, is not done |
+| Starting from the snapshot at all | **Done, the default** (`?snapshot=0` = normal boot) | no fallback to the normal boot when the snapshot is missing, stale or fails: the page says why and names `?snapshot=0`, so CI cannot pass by quietly booting the old way. A crash on a low-memory phone (peak about 1.25 GB against 0.7 GB for the normal boot) is only checked on one iPhone 13 |
 | Keep the files decompressed in the browser's storage | **Rejected** | 0.3–0.7 s faster per start, 229 MB stored instead of 40 |
 | Normal boot: import matplotlib only at the first graph | **Done already** | `browser.start()` imports numpy and scipy (1.8 s in Node); matplotlib and PIL come with the first graph (0.82 s) |
 | Normal boot: import scipy lazily | **Not done** | it is imported in `browser.start()` |
@@ -278,7 +280,7 @@ runs each, no repeats under controlled conditions: an indication, not a benchmar
   against about 330 MB/s on a laptop (Node) in the same code. Why is unknown (a slow WebAssembly tier or memory pressure on
   iOS are guesses). The phone's Safari has `DecompressionStream("brotli")`; using it brought the unpack to about 3 s. The page
   uses the native decoder whenever the browser has one and falls back to brotli-wasm if it is missing or fails;
-  `?snapshot=1&brotli=wasm` forces the wasm decoder, to compare.
+  `?brotli=wasm` forces the wasm decoder, to compare.
 - **Desktop, same page** (this Mac, Playwright's browser builds, local server, unpack time of the two files, three loads each):
 
   | Browser | native | brotli-wasm |
@@ -351,7 +353,8 @@ on desktop never. It took long because several unrelated things looked alike. Wh
   file already decoded by a host, and truncated, damaged, wrongly sized and mismatched-manifest files all refused; and
   `inflateNative`/`unpackAsync` (the browser's decoder: the same bytes as brotli-wasm, and a truncated file that falls back
   and gives the wasm error; skipped where the runtime has no native brotli). 34 Node tests pass in all (`npm test`).
-- `web/e2e/poc.spec.ts`: `?snapshot=1` starts, runs the sample program with a graph, a reload reads from the cache and
+- `web/e2e/poc.spec.ts`: every test starts the page from the snapshot (the default; `npm run e2e` builds it, a missing one fails
+  the tests), one starts it with `?snapshot=0`; the snapshot test runs the sample program with a graph, a reload reads from the cache and
   decompresses, and **everything in the browser's caches adds up to between 10 and 80 MB** (about 40 MB; this is the
   check that found the `.br` problem); the status line shows the start's breakdown and, after a Run, the run's; a manifest
   with another wheel hash is refused. Skipped without a snapshot. All 6 e2e tests pass in each of the four browser profiles

@@ -1,4 +1,4 @@
-// Builds the Pyodide memory snapshot the page uses with ?snapshot=1 (`npm run snapshot`): Python started, the dofile wheel
+// Builds the Pyodide memory snapshot the page starts from by default, unless ?snapshot=0 (`npm run snapshot`): Python started, the dofile wheel
 // installed, numpy, scipy, matplotlib, openpyxl and the engine's modules imported and one program run, so the page doesn't
 // repeat that. Writes public/snapshot/ (gitignored): the heap image and the site-packages bundle, brotli-compressed
 // (about 40 MB at brotli 11 with docstrings stripped; 229 MB uncompressed), plus small JSON files and a manifest. Rebuild after changing the dofile

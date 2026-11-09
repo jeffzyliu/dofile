@@ -1,5 +1,5 @@
 // Start the engine from a Pyodide memory snapshot instead of installing and importing numpy, scipy, matplotlib and dofile
-// (opt-in: the page's ?snapshot=1; built by `npm run snapshot`, scripts/make-snapshot.mjs). Used by the build script
+// (the page's default start, ?snapshot=0 opts out; built by `npm run snapshot`, scripts/make-snapshot.mjs). Used by the build script
 // (Node) and by worker.js (browser and Node). web/spike/snapshot.mjs is where it was worked out, with the numbers.
 //
 // What stock Pyodide 314 leaves out of a snapshot, and what is done about it:

@@ -86,7 +86,7 @@ async function visit(mode, net) {
   if (net.mbps) await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: net.latency, downloadThroughput: net.mbps * 125_000, uploadThroughput: net.mbps * 125_000 });
   const notes = [];   // the snapshot start's own breakdown ("download 12.0s, decompress 0.6s, ..."), from the worker's console
   page.on("console", m => { if (m.text().includes("[dofile] snapshot start")) notes.push(m.text().replace("[dofile] snapshot start: ", "")); });
-  const url = `${base}/${mode === "snapshot" ? "?snapshot=1" : ""}`;
+  const url = `${base}/${mode === "snapshot" ? "" : "?snapshot=0"}`;   // the snapshot is the page's default
   served.bytes = 0;
   await page.goto(url);
   const cold = await readyIn(page);
