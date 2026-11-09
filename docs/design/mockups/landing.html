@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>dofile: run Stata-syntax code in your browser (mockup)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { min-height: 100%; display: flex; flex-direction: column; }
+  .top { display: flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--s5); border-bottom: 1px solid var(--border);
+         background: var(--surface); }
+  .top nav { display: flex; align-items: center; gap: var(--s4); font-size: var(--text-sm); }
+  .top nav a { color: var(--muted); text-decoration: none; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--s5); align-items: stretch;
+         padding: var(--s5); max-width: 1360px; width: 100%; margin: 0 auto; }
+  .file .pane-body { padding-bottom: var(--s2); }
+  .side { display: flex; flex-direction: column; gap: var(--s4); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--s4) var(--s5); }
+  .card h2 { font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+             margin: 0 0 var(--s3); }
+  .try { font-size: var(--text-lg); padding: 12px 20px; }
+  .lede { font-size: var(--text-lg); margin: 0 0 var(--s3); line-height: 1.45; }
+  .small { color: var(--muted); font-size: var(--text-sm); margin: var(--s2) 0 0; }
+  .cmd { display: flex; align-items: center; gap: var(--s2); font: var(--text-sm)/1.4 var(--font-mono); background: var(--surface-2);
+         border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin: 6px 0; overflow: hidden; }
+  .cmd code { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cmd .copy { font: 600 11.5px/1 var(--font-ui); color: var(--muted); }
+  .label { font-size: var(--text-sm); margin-top: var(--s3); }
+  .label:first-of-type { margin-top: 0; }
+  .label .soon { font: 600 10.5px/1 var(--font-ui); color: var(--warn); background: var(--warn-soft); border-radius: 3px;
+                 padding: 3px 5px; margin-left: 6px; }
+  .sample-card { flex: 1; display: flex; flex-direction: column; }
+  .sample { font: 11px/1.45 var(--font-mono); margin: 0; white-space: pre; overflow: hidden; }
+  .sample .echo { font-weight: 700; }
+  .hero { display: none; }
+  .phone-only { display: none; }
+  footer { padding: var(--s4) var(--s5); border-top: 1px solid var(--border); font-size: var(--text-sm); color: var(--muted);
+           display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
+  footer a { color: var(--muted); }
+  @media (max-width: 700px) {
+    .top { padding: var(--s3) var(--s4); }
+    .top nav { gap: var(--s3); }
+    .theme .label-text { display: none; }
+    main { grid-template-columns: minmax(0, 1fr); padding: var(--s3); gap: var(--s3); }
+    /* the phone's first screen: what dofile is, the button, pip install */
+    .hero { display: block; padding: var(--s2) var(--s1) 0; }
+    .hero .art { font-size: 13px; }
+    .hero .ver { font: var(--text-sm)/1 var(--font-mono); color: var(--muted); margin: var(--s3) 0 var(--s3); }
+    .hero p { font-size: var(--text-lg); line-height: 1.45; margin: 0 0 var(--s3); }
+    .hero p.small { font-size: var(--text-sm); margin: var(--s2) 0 0; }
+    .side { display: contents; }
+    .cta-card, .sample-card, .desktop-only { display: none; }
+    .phone-only { display: block; }
+    .card { padding: var(--s3) var(--s4); }
+    .code { font-size: 12px; }
+    footer { padding: var(--s3) var(--s4); }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="wordmark" href="#">do<span>file</span></a>
+  <span class="spacer"></span>
+  <nav><a href="#">Commands</a><a href="#">GitHub</a>
+    <span class="theme" title="Theme: follows the system. Press for light, then dark."><span class="ico i-theme"></span><span class="label-text">System</span></span></nav>
+</header>
+
+<main>
+  <!-- phone only: the pitch, the button and pip install on the first screen -->
+  <section class="hero" aria-label="dofile">
+    <pre class="art" data-art="book+drop+skew"></pre>
+    <div class="ver">0.1 preview</div>
+    <p>Run Stata-syntax do-files in your browser. No license, no account: the engine runs inside this page, on your own computer.</p>
+    <span class="btn primary try">Open the editor →</span>
+    <p class="small">With a sample project, or bring your own files. Your files stay in this browser.</p>
+  </section>
+
+  <section class="pane file desktop-only" aria-label="About dofile, as a do-file">
+    <div class="pane-head"><span class="tab on">welcome.do</span></div>
+    <div class="pane-body"><pre class="code"><span data-art="book+drop+skew" data-ln="1" data-tail="0.1 preview"></span><span class="ln"><span class="n">6</span></span><span class="ln"><span class="n">7</span><span class="c">* Run Stata-syntax do-files in your browser. No license, no account:</span></span><span class="ln"><span class="n">8</span><span class="c">* the engine runs inside this page, on your own computer.</span></span><span class="ln"><span class="n">9</span></span><span class="ln"><span class="n">10</span><span class="k">// What it is</span></span><span class="ln"><span class="n">11</span><span class="c">* An open-source interpreter for Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">12</span><span class="c">* (MIT). It reads and writes .dta files, fits the common estimators</span></span><span class="ln"><span class="n">13</span><span class="c">* and draws graphs. Not every command exists yet: see <a href="#">the list</a>.</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Your files</span></span><span class="ln"><span class="n">16</span><span class="c">* Files you open stay in this browser; they are not sent anywhere.</span></span><span class="ln"><span class="n">17</span><span class="c">* The first visit downloads the engine (Python compiled to</span></span><span class="ln"><span class="n">18</span><span class="c">* WebAssembly) from a public CDN.</span></span><span class="ln"><span class="n">19</span></span><span class="ln"><span class="n">20</span><span class="k">// Also on your computer, and for AI agents</span></span><span class="ln"><span class="n">21</span><span class="c">* The same engine as a command line (dofile run) and as an MCP</span></span><span class="ln"><span class="n">22</span><span class="c">* server, so an AI agent can run do-files for you.</span></span><span class="ln"><span class="n">23</span></span><span class="ln"><span class="n">24</span><span class="k">// Where it comes from</span></span><span class="ln"><span class="n">25</span><span class="c">* The interpreter is OpenDTA, by its own authors. dofile adds the</span></span><span class="ln"><span class="n">26</span><span class="c">* sandbox, this page, the command line and the MCP server.</span></span></pre></div>
+  </section>
+
+  <div class="side">
+    <section class="card cta-card">
+      <p class="lede">Open the editor with a sample project, or bring your own do-files and data.</p>
+      <span class="btn primary try">Open the editor →</span>
+      <p class="small">It takes a few seconds to start. Your files are kept in this browser between visits.</p>
+    </section>
+
+    <section class="card">
+      <h2>On your computer</h2>
+      <div class="label">Command line and MCP server <span class="soon">with the first release</span></div>
+      <div class="cmd"><code>pip install dofile</code><span class="copy">Copy</span></div>
+      <div class="label">Today, from the source</div>
+      <div class="cmd"><code>claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"</code><span class="copy">Copy</span></div>
+      <p class="small">Setup and the MCP tools: <a href="#">README on GitHub</a></p>
+    </section>
+
+    <!-- phone only: the rest of welcome.do, wrapped for a narrow screen -->
+    <section class="pane file phone-only" aria-label="About dofile, as a do-file">
+      <div class="pane-head"><span class="tab on">welcome.do</span></div>
+      <div class="pane-body"><pre class="code"><span class="ln"><span class="n">1</span><span class="k">// What it is</span></span><span class="ln"><span class="n">2</span><span class="c">* An open-source interpreter for</span></span><span class="ln"><span class="n">3</span><span class="c">* Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">4</span><span class="c">* (MIT). It reads and writes .dta files,</span></span><span class="ln"><span class="n">5</span><span class="c">* fits the common estimators and draws</span></span><span class="ln"><span class="n">6</span><span class="c">* graphs. Not every command exists yet:</span></span><span class="ln"><span class="n">7</span><span class="c">* see <a href="#">the list</a>.</span></span><span class="ln"><span class="n">8</span></span><span class="ln"><span class="n">9</span><span class="k">// Your files</span></span><span class="ln"><span class="n">10</span><span class="c">* Files you open stay in this browser;</span></span><span class="ln"><span class="n">11</span><span class="c">* they are not sent anywhere. The first</span></span><span class="ln"><span class="n">12</span><span class="c">* visit downloads the engine (Python</span></span><span class="ln"><span class="n">13</span><span class="c">* compiled to WebAssembly) from a CDN.</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Also for AI agents</span></span><span class="ln"><span class="n">16</span><span class="c">* The same engine as a command line</span></span><span class="ln"><span class="n">17</span><span class="c">* (dofile run) and as an MCP server, so</span></span><span class="ln"><span class="n">18</span><span class="c">* an AI agent can run do-files for you.</span></span></pre></div>
+    </section>
+
+    <section class="card sample-card">
+      <h2>What a run looks like</h2>
+<pre class="sample"><span class="echo">. use data/wages, clear</span>
+<span class="echo">. regress wage age educ</span>
+
+      Source |       SS           df       MS      Number of obs   =       500
+-------------+----------------------------------   F(2, 497)       =    172.07
+       Model |  3046.98519         2  1523.49259   Prob &gt; F        =    0.0000
+    Residual |  4400.35521       497  8.85383342   R-squared       =    0.4091
+-------------+----------------------------------   Adj R-squared   =    0.4068
+       Total |  7447.34039       499  14.9245298   Root MSE        =    2.9755
+
+------------------------------------------------------------------------------
+        wage |      Coef.   Std. Err.      t    P&gt;|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+         age |   .1111234   .0115734     9.60   0.000     .0883846    .1338622
+        educ |   .8594138   .0515739    16.66   0.000     .7580842    .9607435
+       _cons |   4.857541   .9089541     5.34   0.000     3.071675    6.643408
+------------------------------------------------------------------------------</pre>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <span>dofile is open source (MIT). The interpreter is <a href="#">OpenDTA</a> (MIT).</span>
+  <span>Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.</span>
+</footer>
+<script src="art.js"></script>
+<script>
+  fillArt();
+  const t = new URLSearchParams(location.search).get('theme');
+  if (t) document.documentElement.dataset.theme = t;
+</script>
+</body>
+</html>

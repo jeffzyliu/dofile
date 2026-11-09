@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>dofile: banner candidates (mockup)</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { padding: var(--s5); }
+  h1 { font-size: var(--text-xl); margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 var(--s5); max-width: 110ch; }
+  .row { display: grid; grid-template-columns: 220px minmax(0, 1fr) 470px; gap: var(--s4); align-items: start;
+         padding: var(--s4) 0; border-top: 1px solid var(--border); }
+  .row h2 { font-size: var(--text-lg); margin: 0 0 4px; }
+  .row h2 b { font-family: var(--font-mono); color: var(--accent); margin-right: 6px; }
+  .row p { margin: 0 0 4px; font-size: var(--text-sm); color: var(--muted); }
+  .row .pick { color: var(--ok); font-weight: 600; }
+  .pane .code { padding-bottom: var(--s3); }
+  .tight .code .ln { line-height: 1.25; }
+  .cap { font-size: var(--text-xs); color: var(--muted); margin: 6px 2px 0; }
+</style>
+</head>
+<body>
+<h1>The dofile banner: candidates</h1>
+<p class="lede">Each one as the first lines of welcome.do on the landing page (13 px, the editor's line height) and as the head of the
+  Log pane (10 px, tight). All but D use box-drawing or block characters, which need the complete IBM Plex Mono
+  (now loaded for those ranges only); D is plain ASCII. D is pyfiglet output; A1 and B1 to B5 are drawn by hand (B: on half-line pixels, by a script). Two tones: strokes
+  in the accent color, shading muted.</p>
+
+<div id="rows"></div>
+
+<script src="art.js"></script>
+<script>
+  // round 3 (2026-11-09): A1 liked but a touch too tall and thick; B1 to B5 are shorter and lighter, some slanted as D.
+  // Round 2's A, A2, A3 and round 1's B, C, E were dropped (round 3's B is a new series).
+  const C = [
+    ["A1", "lower", "Lowercase, box shadow (round 2)", "45 × 8. For comparison: too tall and thick.", false],
+    ["B1", "book+drop", "Book", "41 × 5. Half-line pixels: stems two characters wide, horizontals half a line. A soft one-pixel drop shadow (CSS), no box drawing.", false],
+    ["B2", "book+drop+skew", "Book italic", "41 × 5. B1 slanted 12 degrees by CSS, for D's lean; the letters stay crisp. Recommended.", true],
+    ["B3", "book+skew", "Book italic, no shadow", "41 × 5. B2 without the shadow.", false],
+    ["B4", "thin+drop+skew", "Thin italic", "32 × 4. One-character stems and a smaller x-height: the lightest, closest to D's line drawing.", false],
+    ["B5", "book_slant+drop", "Book, stepped slant", "45 × 5. Slanted in the characters themselves, one character per line: no CSS needed (a terminal could print it), but jagged.", false],
+    ["D", "slant", "Slant", "26 × 5. Plain ASCII; italic feel.", false],
+  ];
+  const ver = "0.1 preview";
+  document.getElementById("rows").innerHTML = C.map(([id, name, title, note, pick]) => `
+    <section class="row">
+      <div><h2><b>${id}</b>${title}</h2><p>${note}</p>${pick ? '<p class="pick">Used in the mockups.</p>' : ""}</div>
+      <div><div class="pane"><div class="pane-head"><span class="tab on">welcome.do</span></div>
+        <pre class="code"><span data-art="${name}" data-ln="1" data-tail="${ver}"></span><span class="ln"><span class="n">${ART[artName(name)].length + 1}</span></span><span class="ln"><span class="n">${ART[artName(name)].length + 2}</span><span class="c">* Run Stata-syntax do-files in your browser. No license, no account.</span></span></pre></div>
+        <div class="cap">landing page, 13 px</div></div>
+      <div><div class="pane"><div class="pane-head"><span class="pane-title">Log</span></div>
+        <pre class="log"><span class="head"><span class="art" data-art="${name}"></span>dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax
+Files stay in this browser. Try: help regress</span><span class="echo">. use data/wages, clear</span></pre></div>
+        <div class="cap">Log pane head, 10 px (shown only, not in a saved log)</div></div>
+    </section>`).join("");
+  fillArt();
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.dataset.theme = t;
+</script>
+</body>
+</html>
