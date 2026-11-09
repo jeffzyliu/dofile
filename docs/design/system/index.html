@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>dofile: design system (tokens and components)</title>
+<link rel="stylesheet" href="../mockups/ui.css">
+<style>
+  body { padding: var(--s5); max-width: 1440px; }
+  h1 { font-size: var(--text-xl); margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 var(--s4); max-width: 110ch; }
+  h2.sec { font-size: var(--text-lg); margin: var(--s6) 0 var(--s3); padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: var(--text-md); margin: 0 0 var(--s2); }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s5) var(--s5); }
+  .cols.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .spec { font-size: var(--text-sm); color: var(--muted); margin: var(--s2) 0 0; max-width: 80ch; }
+  .spec b { color: var(--ink); }
+  .spec code { color: var(--ink); }
+  .line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--s2) var(--s4); list-style: none;
+              margin: 0; padding: 0; font-size: var(--text-sm); }
+  .swatches li { display: flex; align-items: center; gap: var(--s2); }
+  .chip { width: 36px; height: 24px; border-radius: var(--radius); border: 1px solid var(--border-strong); flex: none; }
+  .swatches code { color: var(--ink); }
+  .swatches .v { color: var(--muted); margin-left: auto; font-family: var(--font-mono); font-size: var(--text-xs); }
+  .scale { display: grid; grid-template-columns: 140px 70px 1fr; gap: 6px var(--s3); align-items: baseline; font-size: var(--text-sm); }
+  .scale code { color: var(--ink); }
+  .scale .px { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); }
+  .space { display: flex; align-items: flex-end; gap: var(--s3); font-size: var(--text-xs); color: var(--muted); }
+  .space i { display: block; background: var(--accent); height: 12px; margin-bottom: 4px; }
+  .stage { position: relative; height: 140px; align-self: start; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border);
+           background: var(--bg); }
+  .stage .dialog { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 420px; }
+  .stage .toasts { position: absolute; }
+  .demo-pane { height: 300px; }
+  .demo-pane .pane-body { overflow: hidden; }
+</style>
+</head>
+<body>
+<main>
+<h1>dofile design system</h1>
+<p class="lede">Deliverable 5 of the design step (<code>docs/design/README.md</code>). The tokens are
+  <code>web/src/styles/tokens.css</code>, the one source for the page and the design pages; the components are
+  <code>docs/design/mockups/ui.css</code>, which the page takes over in steps 6 and 8. This sheet shows each component in
+  its states; the mockups show them in place. It follows the system's light or dark setting; <code>?theme=light</code> or
+  <code>?theme=dark</code> forces one. Checks: <code>npm run contrast</code>, <code>npm run fonts</code>, <code>npm run axe</code>,
+  <code>npm run tabwalk</code> (from <code>web/</code>).</p>
+
+<h2 class="sec">Color</h2>
+<ul class="swatches" id="swatches"></ul>
+<p class="spec"><b>Rules.</b> Text is at least 4.5:1 on its background, and control edges, the focus ring and bars at least
+  3:1, in both themes (<code>contrast.mjs</code> lists every pair in use). <code>--border</code> is for dividers only, never a
+  control's only edge. Meaning is never color alone: errors also say <code>r(111)</code> and carry a bar; warnings an icon or a
+  wavy underline. Graphs are PNGs with their own light colors, so they sit on <code>--graph-card</code> in both themes
+  (a dark plotting style is planned). Syntax colors are the accent (commands), green (strings), purple (macros), muted
+  (comments); no italics are loaded, so comments differ by color only. <b>Forced colors</b> (Windows High Contrast)
+  replace every color and drop backgrounds and shadows: the end of <code>ui.css</code> redraws icons, dots, marker bars,
+  the progress fill and the focus ring in system colors, and the error line in the highlight pair. Check with
+  <code>shot.mjs --forced</code>.</p>
+
+<h2 class="sec">Type, spacing, shape</h2>
+<div class="cols">
+  <div>
+    <h3>Type scale</h3>
+    <div class="scale">
+      <code>--text-2xl</code><span class="px">30px</span><span style="font-size:var(--text-2xl)">Landing headline</span>
+      <code>--text-xl</code><span class="px">22px</span><span style="font-size:var(--text-xl)">Page title</span>
+      <code>--text-lg</code><span class="px">16px</span><span style="font-size:var(--text-lg);font-weight:var(--w-bold-ui)">Dialog title</span>
+      <code>--text-md</code><span class="px">14px</span><span>Body text, help pages</span>
+      <code>--text-row</code><span class="px">13px</span><span style="font-size:var(--text-row)">Buttons, file rows, menus, banners</span>
+      <code>--code</code><span class="px">13px</span><span class="mono" style="font-size:var(--code)">regress wage age educ</span>
+      <code>--log</code><span class="px">12.5px</span><span class="mono" style="font-size:var(--log)">Number of obs = 500</span>
+      <code>--text-sm</code><span class="px">12.5px</span><span style="font-size:var(--text-sm)">Captions, status bar, tables</span>
+      <code>--text-xs</code><span class="px">11.5px</span><span style="font-size:var(--text-xs)">Key chips, pane titles, sizes</span>
+    </div>
+    <p class="spec"><b>Fonts.</b> IBM Plex Sans for the interface, IBM Plex Mono for code, the log and the wordmark. Only
+      Sans 400/600 and Mono 400/700 are loaded, so bold is <code>--w-bold-ui</code> (600) in Sans and
+      <code>--w-bold-mono</code> (700) in Mono; <code>font-synthesis: none</code> stops the browser faking others
+      (<code>fonts.mjs</code> checks every text node). Line height <code>--leading</code> 1.5; the log fits 80 columns in
+      about 600 px. Plex lacks ⌘ ▶ ■ ▾ ● ⋯: those are SVG icons.</p>
+  </div>
+  <div>
+    <h3>Spacing (4 px steps)</h3>
+    <div class="space">
+      <span><i style="width:var(--s1)"></i>s1 4</span><span><i style="width:var(--s2)"></i>s2 8</span>
+      <span><i style="width:var(--s3)"></i>s3 12</span><span><i style="width:var(--s4)"></i>s4 16</span>
+      <span><i style="width:var(--s5)"></i>s5 24</span><span><i style="width:var(--s6)"></i>s6 32</span>
+      <span><i style="width:var(--s7)"></i>s7 48</span>
+    </div>
+    <h3 style="margin-top:var(--s4)">Shape and depth</h3>
+    <p class="spec" style="margin-top:0"><code>--radius-sm</code> 3 px (chips, badges, small buttons inside rows),
+      <code>--radius</code> 4 px (buttons, inputs, banners), <code>--radius-lg</code> 8 px (panes, dialogs, menus, toasts).
+      <code>--bar</code> 3 px: the marker on a row's left edge (the open file, a running line, an error line, a picked
+      variable). Only floating things have a shadow (<code>--shadow-menu</code>, <code>--shadow-dialog</code>); panes are
+      flat with a 1 px <code>--border</code>. <code>--scrim</code> is black at .32 (light) or .55 (dark).
+      <code>--focus</code>: a 2 px accent ring with a 2 px gap; inside panes that clip, a 2 px inset ring.</p>
+    <h3>Icons</h3>
+    <div class="line" style="font-size:18px" aria-label="Icons" role="img">
+      <span class="ico i-play"></span><span class="ico i-stop"></span><span class="ico i-down"></span><span class="ico i-right"></span>
+      <span class="ico i-more"></span><span class="ico i-theme"></span><span class="ico i-graph"></span><span class="ico i-file"></span>
+      <span class="ico i-check"></span><span class="ico i-warn"></span>
+    </div>
+    <p class="spec">Our own 16 px SVG shapes, drawn as masks so they take the text color: play, stop, fold open, fold
+      closed, more, theme, graph, file, check, warning. An icon alone always has an <code>aria-label</code> on its button.</p>
+  </div>
+</div>
+
+<h2 class="sec">Toolbar buttons</h2>
+<div class="line">
+  <button class="btn primary"><span class="ico i-play"></span>Run <span class="key">⌘ ↩</span></button>
+  <button class="btn">Run selection</button>
+  <button class="btn">Save <span class="dot" role="img" aria-label="unsaved changes"></span><span class="key">⌘ S</span></button>
+  <button class="btn stop off" disabled><span class="ico i-stop"></span>Break</button>
+  <button class="btn stop live"><span class="ico i-stop"></span>Break <span class="key">⌘ .</span></button>
+  <button class="btn quiet">Not now</button>
+  <button class="btn quiet hover">Not now (hover)</button>
+  <button class="btn hover">Hover</button>
+  <button class="btn primary hover">Primary, hover</button>
+  <button class="btn focus">Focused</button>
+  <button class="btn off" disabled>Disabled</button>
+  <button class="btn quiet icon" aria-label="More actions" aria-haspopup="menu"><span class="ico i-more"></span></button>
+  <button class="theme" aria-label="Theme: follows the system. Press for light, then dark."><span class="ico i-theme"></span>System</button>
+</div>
+<p class="spec"><b>Kinds.</b> One <b>primary</b> per view (Run, or a dialog's default). <b>Default</b> for the rest.
+  <b>Quiet</b> for secondary dialog actions and icon buttons. <b>Stop</b> is Break: outlined and disabled when idle, filled
+  red while running; on a phone it takes Run's place and ignores taps in its first 600 ms. <b>Hover</b> is a step darker (lighter in dark
+  mode: <code>--surface-2</code>, <code>--accent-hover</code>, <code>--error-hover</code>) and a press moves the button down
+  1 px; disabled buttons have neither. <b>Disabled</b> is <code>--disabled-opacity</code>; a button that is busy (Run while running) is <code>aria-disabled</code>, not
+  <code>disabled</code>, so focus stays on it. The <b>key chip</b> sits on the button its keys trigger, ⌘ on a Mac and
+  Ctrl elsewhere; disabled buttons show none. The <b>theme</b> button cycles System, Light, Dark. The unsaved <b>dot</b>
+  has a label for screen readers.</p>
+
+<h2 class="sec">Pane, tabs, file list</h2>
+<div class="cols">
+  <figure style="margin:0">
+    <section class="pane demo-pane" aria-label="Files (example)">
+      <div class="pane-head"><span class="pane-title">Files</span><span class="spacer"></span><button class="head-link icon" aria-label="File actions" aria-haspopup="menu"><span class="ico i-more"></span></button></div>
+      <div class="pane-body">
+        <ul class="files" role="tree" aria-label="Files (example)">
+          <li class="open" role="treeitem" aria-level="1" aria-selected="true" aria-haspopup="menu" tabindex="0">analysis.do <span class="dot" role="img" aria-label="unsaved changes"></span><span class="row-more" aria-hidden="true"><span class="ico i-more"></span></span></li>
+          <li class="hover" role="treeitem" aria-level="1" aria-selected="false" aria-haspopup="menu" tabindex="-1">clean.do<span class="row-more" aria-hidden="true" style="opacity:1"><span class="ico i-more"></span></span></li>
+          <li class="folder" role="treeitem" aria-level="1" aria-expanded="true" tabindex="-1"><span class="ico i-down"></span>data/<span class="row-more" aria-hidden="true"><span class="ico i-more"></span></span></li>
+          <li style="--d:1" role="treeitem" aria-level="2" aria-selected="false" aria-haspopup="menu" tabindex="-1">wages.dta <span class="size">8 KB</span><span class="row-more" aria-hidden="true"><span class="ico i-more"></span></span></li>
+          <li style="--d:1" role="treeitem" aria-level="2" aria-selected="false" aria-haspopup="menu" tabindex="-1">survey.csv <span class="size">41 KB</span><span class="row-more" aria-hidden="true"><span class="ico i-more"></span></span></li>
+          <li class="folder" role="treeitem" aria-level="1" aria-expanded="true" tabindex="-1"><span class="ico i-down"></span>output/<span class="row-more" aria-hidden="true"><span class="ico i-more"></span></span></li>
+          <li style="--d:1" role="treeitem" aria-level="2" aria-selected="false" aria-haspopup="menu" tabindex="-1">scatter.png <span class="badge">new</span><span class="row-more" aria-hidden="true"><span class="ico i-more"></span></span></li>
+          <li class="folder" role="treeitem" aria-level="1" aria-expanded="false" tabindex="-1"><span class="ico i-right"></span>old/<span class="row-more" aria-hidden="true"><span class="ico i-more"></span></span></li>
+        </ul>
+        <div class="dropzone">Drop files, folders or a .zip<br><a href="#">Upload</a> · <a href="#">New .do file</a></div>
+      </div>
+    </section>
+    <p class="spec"><b>Touch.</b> With a coarse pointer, file rows and menu items are 44 px tall, the row ⋯ is 44 px square and
+      the tab × 32 px. <b>File list.</b> An ARIA tree with roving focus: one row in the tab order, arrows move, Enter opens,
+      F2 renames, Shift+F10 or the menu key opens the row menu. 16 px per level with guide lines; folders end in
+      <code>/</code>. The <b>open</b> file has the soft accent and the bar; <b>hover</b> is <code>--surface-2</code>. The
+      ⋯ shows on the hovered, focused or open row (always on touch) and is hidden from screen readers. Sizes are muted;
+      a <b>new</b> badge marks files the last run wrote.</p>
+  </figure>
+  <figure style="margin:0">
+    <section class="pane demo-pane" aria-label="Editor (example)">
+      <div class="pane-head"><div role="tablist" aria-label="Open files (example)" class="tabstrip"><span class="tab on" role="tab" aria-selected="true" tabindex="0" aria-keyshortcuts="Delete">analysis.do<span class="dot" role="img" aria-label="unsaved changes"></span><span class="x" aria-hidden="true">×</span></span><span class="tab" role="tab" aria-selected="false" tabindex="-1" aria-keyshortcuts="Delete">clean.do<span class="x" aria-hidden="true">×</span></span></div><span class="spacer"></span><a class="head-link" href="#">Help for regress</a></div>
+      <div class="pane-body"><pre class="code"><span class="ln"><span class="n">1</span><span class="c">* wages by schooling</span></span><span class="ln"><span class="n">2</span><span class="k">use</span> data/wages, <span class="k">clear</span></span><span class="ln sel"><span class="n">3</span><span class="k">local</span> controls <span class="s">"age educ"</span></span><span class="ln run"><span class="n">4</span><span class="k">regress</span> wage <span class="m">`controls'</span></span><span class="ln err"><span class="n">5</span><span class="k">summarize</span> wage <span class="k">if</span> sex == 1</span><span class="ln warn"><span class="n">6</span><span class="warnword">reghdfe</span> wage, absorb(educ)</span><span class="lint" role="status"><b>reghdfe</b> is a community command; dofile doesn't have it, so the run stops here with r(199).</span></pre></div>
+    </section>
+    <p class="spec"><b>Pane.</b> <code>--surface</code> with a 1 px border and <code>--radius-lg</code>; its head is
+      <code>--surface-2</code>, 36 px, holding a title in small caps or a <b>tablist</b> (the selected tab bold with the
+      accent underline; the × is for the mouse, Delete closes) and links in the accent. <b>Editor lines:</b> selected
+      (soft accent), running (accent bar, bold number; it moves with its text), error (red bar and tint, bold number),
+      warning (bold number in <code>--warn</code>, a wavy underline, and the lint message under the line).</p>
+  </figure>
+</div>
+
+<h2 class="sec">Log</h2>
+<div class="cols">
+  <figure style="margin:0">
+    <section class="pane" aria-label="Log (example)">
+      <div class="pane-head"><span class="pane-title">Log</span><span class="spacer"></span><a class="head-link" href="#">Download log</a></div>
+      <pre class="log" role="log" aria-label="Log (example)"><span class="head">dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax
+Files stay in this browser. Try: help regress</span><span class="runhead"><b>Run selection</b>: lines 4–5 of analysis.do · keeps the locals of earlier runs<span class="runwarn"><span class="ico i-warn"></span><span><code>`controls'</code> is not set in this session, so it expands to nothing.</span></span></span><span class="echo">. regress wage educ</span>
+      Source |       SS           df       MS
+-------------+----------------------------------
+<span class="note">(file output/scatter.png written in PNG format)</span>
+<span class="echo">. summarize wage if sex == 1</span>
+<span class="err">sex not found</span>
+<span class="hint">  → "sex" is not a variable, scalar or other known name.
+    <b>How to fix:</b> if it is a text value, write "sex" with the quotes.</span>
+<span class="err">r(111);</span>  <a class="jump" href="#">Go to line 5</a></pre>
+      <div class="cmdline"><span class="prompt" aria-hidden="true">.</span><input class="field" aria-label="Command (example)" placeholder="Type a command · ↑ ↓ for earlier ones"><button class="btn">Run command</button></div>
+    </section>
+  </figure>
+  <div>
+    <p class="spec" style="margin-top:0"><b>Log lines</b>, top to bottom: the <b>head</b> (banner and version; shown only,
+      never in a saved log), the <b>run-head</b> (UI font, what ran and what it starts from, with a <b>run warning</b> when a
+      selection uses a local nothing has set), the <b>echo</b> of each command (bold), plain output, a <b>note</b> (muted),
+      the <b>error line</b> (red, bold, never color alone: it says the message and <code>r(111)</code>), the <b>hint</b>
+      under it (muted, its labels in ink), and <b>Go to line</b>, which moves the editor. The log is
+      <code>role="log"</code>; Mono at <code>--log</code>, 80 columns, no wrapping. The <b>command line</b> runs one
+      command as if typed, with ↑ ↓ history.</p>
+  </div>
+</div>
+
+<h2 class="sec">Results, data, Browse</h2>
+<div class="cols three">
+  <figure style="margin:0">
+    <section class="pane" aria-label="Results (example)">
+      <table class="rs"><colgroup><col class="name"><col><col class="act"></colgroup>
+        <tr class="sect"><td colspan="3">e() · regress <span class="aside">changed by the last run</span></td></tr>
+        <tr class="grp"><td colspan="3"><button class="fold" aria-expanded="true"><span class="ico i-down"></span>Scalars<span class="count">3</span></button></td></tr>
+        <tr class="row"><td>e(N)</td><td><button class="val" tabindex="0">500</button></td><td class="act"></td></tr>
+        <tr class="row focusrow"><td>e(F)</td><td><button class="val focus" tabindex="-1">172.07152221761643</button></td><td class="act"><span class="hint">↵ Copy</span></td></tr>
+        <tr class="row"><td>e(r2)</td><td><button class="val" tabindex="-1">.40913736</button></td><td class="act"></td></tr>
+        <tr class="grp"><td colspan="3"><button class="fold" aria-expanded="true"><span class="ico i-down"></span>Matrices<span class="count">1</span></button></td></tr>
+        <tr class="row"><td>e(b)</td><td>1 x 3</td><td class="act"><a href="#">View</a></td></tr>
+      </table>
+    </section>
+    <p class="spec"><b>Results table.</b> Three fixed columns (name, value, action); sections hold groups that fold, with
+      counts. Values to 8 significant digits, all digits on focus or hover and when copied. One value in the tab order.</p>
+  </figure>
+  <figure style="margin:0">
+    <section class="pane" aria-label="Variables (example)">
+      <table class="t"><tr><th>Name</th><th>Label</th><th>Type</th></tr>
+        <tr><td class="mono"><button class="var" tabindex="0">wage</button></td><td>Hourly wage</td><td class="mono">float</td></tr>
+        <tr class="picked"><td class="mono"><button class="var" aria-current="true" tabindex="-1">educ</button></td><td>Years of schooling</td><td class="mono">float</td></tr>
+        <tr><td class="mono"><button class="var" tabindex="-1">age</button></td><td><span class="muted">no label</span></td><td class="mono">float</td></tr>
+      </table>
+    </section>
+    <p class="spec"><b>Variables table</b> (Data tab, opened .dta). A name is a button that picks the variable; the
+      picked row has the bar and its column is marked in Browse. Nothing is typed into the editor.</p>
+  </figure>
+  <figure style="margin:0">
+    <section class="pane" aria-label="Browse (example)" style="padding:var(--s2)">
+      <table class="grid"><tr><th class="obs"><span class="visually-hidden">Obs</span></th><th>age</th><th class="picked">educ</th><th>wage</th></tr>
+        <tr><td class="obs">1</td><td>34</td><td class="picked">18</td><td>31.62293</td></tr>
+        <tr><td class="obs">2</td><td>51</td><td class="picked">12</td><td>20.11873</td></tr>
+        <tr><td class="obs">3</td><td>27</td><td class="picked">14</td><td>17.90412</td></tr>
+      </table>
+    </section>
+    <p class="spec"><b>Browse grid.</b> Mono, right-aligned, observation numbers muted on <code>--surface-2</code>; the
+      picked column in the soft accent with an accent underline on its header.</p>
+  </figure>
+</div>
+
+<h2 class="sec">Status bar, banners, toast</h2>
+<div class="cols">
+  <div>
+    <footer class="statusbar" style="border:1px solid var(--border);border-radius:var(--radius)"><span><span class="pulse"></span><b>Ready</b></span><span>Last run: whole file · <span class="rc-err">r(111)</span> at line 17 · 0.38 s</span><span class="spacer"></span><span>Memory 612 MB</span></footer>
+    <div style="height:var(--s2)"></div>
+    <footer class="statusbar" style="border:1px solid var(--border);border-radius:var(--radius)"><span><span class="pulse busy"></span><b>Running</b> lines 14–15 · 3.4 s</span><span class="spacer"></span><span>Files are kept in this browser</span></footer>
+    <p class="spec"><b>Status bar.</b> Idle (green dot, Ready, the last run's result) and running (accent dot, what runs, a
+      timer). It is not a live region: state changes are said once by a hidden <code>role="status"</code> region.</p>
+  </div>
+  <div>
+    <div class="banner" style="margin:0 0 var(--s2)"><span>Running lines 14–15 · <b>3.4 s</b>. Break stops between commands.</span></div>
+    <div class="banner warn" style="margin:0 0 var(--s2)"><span class="ico i-warn" style="margin-top:3px"></span><div>Files may be cleared by the browser after a while.
+      <div class="actions"><button class="btn">Keep files</button><button class="btn quiet">Not now</button></div></div></div>
+    <div class="banner error" style="margin:0"><span class="ico i-warn" style="margin-top:3px"></span><span>The engine stopped and was reset: <b>the data in memory is lost</b>; your files are kept.</span></div>
+    <p class="spec"><b>Banner.</b> Inside a pane, above its content: info (accent), warning and error (each with the warning
+      icon, so they differ from info without color, as in Windows High Contrast). It stays until its cause goes away or it
+      is dismissed, and may hold buttons.</p>
+  </div>
+</div>
+<div class="cols" style="margin-top:var(--s4)">
+  <div class="stage" aria-label="Toast (example)" role="group">
+    <div class="toasts" style="bottom:var(--s5)"><div class="toast"><span class="ico i-check"></span>Saved analysis.do</div></div>
+  </div>
+  <p class="spec" style="margin-top:0"><b>Toast</b>: a short confirmation
+    that asks nothing: "Saved analysis.do", "Copied", "3 files uploaded". Inverted colors (<code>--surface</code> on
+    <code>--ink</code>), bottom center above the status bar, one at a time, 4 s (longer while hovered), no motion with
+    reduced motion. <b>No buttons</b>: anything to act on, or to read twice (the upload report, a reset), is a banner or a
+    dialog. It never takes focus, and the hidden live region says the same words. Approved 2026-11-09; no mockup draws it yet.</p>
+</div>
+
+<h2 class="sec">Dialog, menu, progress, empty state</h2>
+<div class="cols">
+  <div class="stage" style="height:270px">
+    <div class="scrim"></div>
+    <div class="dialog" role="dialog" aria-modal="false" aria-labelledby="dlg-h">
+      <h2 id="dlg-h">Delete clean.do?</h2>
+      <p>It is removed from this browser. This can't be undone.</p>
+      <div class="actions"><button class="btn focus">Cancel</button><button class="btn stop">Delete</button></div>
+    </div>
+  </div>
+  <p class="spec" style="margin-top:0"><b>Dialog.</b> Centered over the scrim (a bottom sheet on a phone),
+    <code>--shadow-dialog</code>, a title, plain sentences, actions on the right. Focus starts on the safe choice (Cancel for
+    Delete and Reset; the default otherwise); Esc cancels; focus returns to what opened it.</p>
+</div>
+<div class="cols" style="margin-top:var(--s4)">
+  <div class="line" style="align-items:flex-start">
+    <div class="menu" role="menu" aria-label="Actions for clean.do (example)">
+      <button role="menuitem">Open</button>
+      <button role="menuitem" class="hover">Rename<span class="aside">F2</span></button>
+      <button role="menuitem">Download</button>
+      <hr>
+      <button role="menuitem" class="danger">Delete…</button>
+    </div>
+    <p class="spec" style="margin:0;flex:1"><b>Menu.</b> From a ⋯ or a right click; items are buttons with
+      <code>role="menuitem"</code>, arrows move, Esc closes. Hover is the soft accent, a key hint on the right, a
+      destructive item in the error color with an ellipsis when it asks first.</p>
+  </div>
+  <div>
+    <div class="progress" role="progressbar" aria-label="Download (example)" aria-valuemin="0" aria-valuemax="36" aria-valuenow="14.2" aria-valuetext="14 of 36 MB"><i style="width:39%"></i></div>
+    <ol class="stages">
+      <li class="done"><span class="ico i-check"></span>Download the engine<span class="when">8.1 s</span></li>
+      <li class="now"><span class="spin"></span>Start Python</li>
+      <li class="todo"><span class="spin"></span>Load your files</li>
+    </ol>
+    <p class="spec"><b>Progress and stages.</b> A determinate bar (<code>role="progressbar"</code>, its value in words) and
+      the start-up stages as a list: done (check in <code>--ok</code>), now (bold, a ring that turns; still with reduced
+      motion), to do (muted).</p>
+  </div>
+</div>
+<div class="cols" style="margin-top:var(--s4)">
+  <section class="pane" aria-label="Graph tab, empty (example)"><div class="empty"><b>No graphs yet</b>Graphs drawn by a run appear here,
+    for example <code>scatter wage educ</code>.</div></section>
+  <p class="spec" style="margin-top:0"><b>Empty state.</b> Inside a tab with nothing to show: what goes here and one way to get
+    it, centered, muted with the first line in ink.</p>
+</div>
+</main>
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.dataset.theme = t;
+  // the color tokens as the browser resolves them in the current theme
+  const names = ["bg", "surface", "surface-2", "ink", "muted", "border", "border-strong", "accent", "on-accent", "accent-soft",
+    "error", "error-soft", "ok", "warn", "warn-soft", "tok-keyword", "tok-string", "tok-comment", "tok-macro", "tok-number", "graph-card"];
+  const cs = getComputedStyle(document.documentElement);
+  document.getElementById("swatches").innerHTML = names.map(n =>
+    `<li><span class="chip" style="background:var(--${n})"></span><code>--${n}</code><span class="v">${cs.getPropertyValue("--" + n).trim()}</span></li>`).join("");
+</script>
+</body>
+</html>

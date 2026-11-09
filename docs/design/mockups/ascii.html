@@ -12,7 +12,7 @@
   .row { display: grid; grid-template-columns: 220px minmax(0, 1fr) 470px; gap: var(--s4); align-items: start;
          padding: var(--s4) 0; border-top: 1px solid var(--border); }
   .row h2 { font-size: var(--text-lg); margin: 0 0 4px; }
-  .row h2 b { font-family: var(--font-mono); color: var(--accent); margin-right: 6px; }
+  .row h2 b { font-family: var(--font-mono); font-weight: var(--w-bold-mono); color: var(--accent); margin-right: 6px; }
   .row p { margin: 0 0 4px; font-size: var(--text-sm); color: var(--muted); }
   .row .pick { color: var(--ok); font-weight: 600; }
   .pane .code { padding-bottom: var(--s3); }
@@ -37,7 +37,7 @@
   const C = [
     ["A1", "lower", "Lowercase, box shadow (round 2)", "45 × 8. For comparison: too tall and thick.", false],
     ["B1", "book+drop", "Book", "41 × 5. Half-line pixels: stems two characters wide, horizontals half a line. A soft one-pixel drop shadow (CSS), no box drawing.", false],
-    ["B2", "book+drop+skew", "Book italic", "41 × 5. B1 slanted 12 degrees by CSS, for D's lean; the letters stay crisp. Recommended.", true],
+    ["B2", "book+drop+skew", "Book italic", "41 × 5. B1 slanted 12 degrees by CSS, for D's lean; the letters stay crisp. Picked (2026-11-09): the banner from now on.", true],
     ["B3", "book+skew", "Book italic, no shadow", "41 × 5. B2 without the shadow.", false],
     ["B4", "thin+drop+skew", "Thin italic", "32 × 4. One-character stems and a smaller x-height: the lightest, closest to D's line drawing.", false],
     ["B5", "book_slant+drop", "Book, stepped slant", "45 × 5. Slanted in the characters themselves, one character per line: no CSS needed (a terminal could print it), but jagged.", false],

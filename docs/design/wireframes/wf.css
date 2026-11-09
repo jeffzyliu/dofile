@@ -1,8 +1,8 @@
 /* Low-fidelity wireframes: grayscale, light only. Real fonts so the log's columns and line lengths are true. */
-@font-face { font-family: "Plex Mono"; src: url(../fonts/ibm-plex-mono-400.woff2) format("woff2"); font-weight: 400; }
-@font-face { font-family: "Plex Mono"; src: url(../fonts/ibm-plex-mono-700.woff2) format("woff2"); font-weight: 700; }
-@font-face { font-family: "Plex Sans"; src: url(../fonts/ibm-plex-sans-400.woff2) format("woff2"); font-weight: 400; }
-@font-face { font-family: "Plex Sans"; src: url(../fonts/ibm-plex-sans-600.woff2) format("woff2"); font-weight: 600; }
+@font-face { font-family: "Plex Mono"; src: url(../../../web/src/styles/fonts/ibm-plex-mono-400.woff2) format("woff2"); font-weight: 400; }
+@font-face { font-family: "Plex Mono"; src: url(../../../web/src/styles/fonts/ibm-plex-mono-700.woff2) format("woff2"); font-weight: 700; }
+@font-face { font-family: "Plex Sans"; src: url(../../../web/src/styles/fonts/ibm-plex-sans-400.woff2) format("woff2"); font-weight: 400; }
+@font-face { font-family: "Plex Sans"; src: url(../../../web/src/styles/fonts/ibm-plex-sans-600.woff2) format("woff2"); font-weight: 600; }
 
 :root { --line: #8a8a8a; --soft: #d4d4d4; --fill: #f1f1f1; --ink: #222; --muted: #6b6b6b; --hi: #dedede; }
 * { box-sizing: border-box; }

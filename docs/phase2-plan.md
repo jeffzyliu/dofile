@@ -233,7 +233,9 @@ is shared. The web demo adds a JavaScript project, so `web/src/` would sit besid
 
 ## UI/UX design (after the proof of concept, before the full editor)
 In progress: deliverables 1–3 (moodboard, user flows, wireframes) done, 4 (high-fidelity mockups) done (iteration 3 is the final one), 5 (the
-design system) started. The brief, the deliverables, the rules (WCAG AA, keyboard, screen-reader log; clean room;
+design system) done: tokens in `web/src/styles/tokens.css`, components in `docs/design/mockups/ui.css`, the component
+sheet and its crit in `docs/design/system/`, contrast and font checks. The banner is B2. Open for steps 6 and 8: text
+sizes in rem, text field states, the phone's bottom sheet and toast placement (`docs/design/system/critique.md`). The brief, the deliverables, the rules (WCAG AA, keyboard, screen-reader log; clean room;
 naming), every round of feedback and the status are in `docs/design/README.md`; the flows, wireframes and mockups are in
 `docs/design/`.
 
