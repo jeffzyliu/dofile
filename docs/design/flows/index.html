@@ -56,7 +56,7 @@
 </head>
 <body>
 <h1>dofile web demo: user flows</h1>
-<p class="lede">Deliverable 2 of the UI/UX design step (<code>docs/phase2-plan.md</code>). Seven flows, each a trigger, the steps
+<p class="lede">Deliverable 2 of the UI/UX design step (<code>docs/design/README.md</code>). Seven flows, each a trigger, the steps
 (what you do, what the page shows, what the engine's Web Worker does), the branches, and where it ends. Every step is tagged
 with what the proof-of-concept page does today, with the line that does it, or what is still to build. The wireframes and
 components come from these steps and from the list of states and messages at the end.</p>
@@ -78,7 +78,10 @@ computer or a phone.</p>
     <td>Not started (or starts in the background, so "Try it" is faster: <span class="tag unknown">unknown</span>).</td>
     <td><span class="tag build">to build</span><span class="cite">plan step 8</span></td></tr>
   <tr><td>2</td><td>Press "Try it".</td>
-    <td>The editor page. The file list and the editor work at once; Run says why it waits (<span class="msg">Run · starting…</span>).</td>
+    <td>The editor page. First visit: a dialog asks before downloading the engine (about 36 MB; Download or Not now), then
+      shows the download and the stages; "Edit files while it loads" closes it (iteration 2, <code>mockups/states.html</code>
+      1–3, 8). Later visits: no dialog; the file list and the editor work at once; Run says why it waits
+      (<span class="msg">Run · starting…</span>).</td>
     <td>Starts in a Web Worker and reports each stage: <span class="msg">loading Python</span>, <span class="msg">loading your files</span>,
       <span class="msg">loading packages</span>, <span class="msg">starting the engine</span>.</td>
     <td><span class="tag now">now</span> stages <span class="cite">worker.js:166–202</span>
@@ -326,7 +329,7 @@ browser, and clearing the site's data deletes them.</p>
     <li><b>Graph</b>: one panel showing the latest graph, the session's earlier graphs as thumbnails; the log links
       "graph 2" where each was drawn. A .png opened from the files shows there too.</li>
     <li><b>Data</b>: a header (observations, variables, file name, size, memory), the variables (name, label, type;
-      filter; a click inserts the name), and Browse (the first rows: needs the engine addition).</li>
+      filter; a click marks the variable's column in Browse, and inserts nothing: iteration 2), and Browse (the first rows: needs the engine addition).</li>
     <li><b>Results</b>: e() and r(), in the MCP server's format, then the locals and globals (internal temporary names
       hidden).</li>
     <li><b>Scope</b>: a whole-file run starts with no locals, as a do-file in Stata, so running a file twice gives the
@@ -343,12 +346,42 @@ browser, and clearing the site's data deletes them.</p>
     <li>The last log is kept across a reload; "Download log".</li>
     <li>A second browser tab says dofile is open in another tab and offers to take over.</li>
     <li>Opening a file: .png in the graph panel, .csv as text, .dta shows its variables and offers "Load it" (<code>use</code>).</li>
-    <li>Name clashes: Overwrite, Keep existing, Overwrite all, Keep all.</li>
+    <li>Name clashes: Keep mine (the default; Enter keeps this one, Esc keeps yours for all the rest) or Replace with uploaded, plus "Do the same for the other N
+      clashes" (iteration 2).</li>
     <li>A zip with one top folder keeps it.</li>
     <li>Landing page wording: your files and data never leave the browser (the runtime itself comes from a CDN).</li>
     <li>"Delete all files" in the file panel's menu, with a confirmation.</li>
     <li>Memory in the status bar, a warning near a per-device limit (a guess until measured).</li>
     <li>Sharing a do-file by link: later.</li></ul></div>
+</div>
+
+<h2>Decisions (2026-11-09, iteration 2 of the hi-fi mockups)</h2>
+<div class="cols">
+  <div class="box"><h3>Running</h3><ul>
+    <li>Run and Run selection send a copy of the editor's text, saved or not; editing during a run doesn't change it.</li>
+    <li><code>do</code> and <code>include</code> read the saved file; the log notes when it is open with unsaved edits.</li>
+    <li>Each run's output starts with a line saying what ran and whether it started with no locals (shown only).</li>
+    <li>The ⌘ ↩ chip is on the button it triggers. Phone: Break takes Run's place, looks different, ignores taps for 600 ms.</li></ul></div>
+  <div class="box"><h3>Start-up</h3><ul>
+    <li>First visit: ask before downloading the engine; the same dialog shows the download bar and the stages.</li>
+    <li>Not now: an editor and file manager, with a banner to download later (needs the page to read IndexedDB itself).</li></ul></div>
+  <div class="box"><h3>Files and panels</h3><ul>
+    <li>Per-file ⋯ (and right click): Open, Rename, Download, Delete. "Download all (.zip)" under the file list.</li>
+    <li>Reset asks first. Help from the editor's context menu.</li>
+    <li>Data: a click marks the column in Browse; nothing is inserted.</li></ul></div>
+</div>
+
+<h2>Decisions (2026-11-09, iteration 3)</h2>
+<div class="cols">
+  <div class="box"><h3>Break and start-up</h3><ul>
+    <li>Break's countdown: "Don't reset: wait for it" cancels the 5 s timer; the Break lands at the next safe point; while it waits, Break becomes "Reset now".</li>
+    <li>The download can be stopped; after Not now, Run opens the download prompt.</li></ul></div>
+  <div class="box"><h3>Files</h3><ul>
+    <li>Name clash: Enter keeps this one; Esc keeps yours for all the rest.</li>
+    <li>Storage not kept: a notice with Download all when <code>persisted()</code> is false.</li></ul></div>
+  <div class="box"><h3>Running</h3><ul>
+    <li>A selection run warns about a local it uses that isn't set yet.</li>
+    <li>The temporary copy Run sends is never named in the log.</li></ul></div>
 </div>
 
 <h2>States and messages the design must show</h2>

@@ -156,7 +156,7 @@ const cases = (wanted ?? allCases).sort((a, b) => {
   return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
 });
 
-// Cases that differ because Pyodide lacks a package (phase2-plan.md, "Known gaps in the browser engine"): 1701 needs xlwt,
+// Cases that differ because Pyodide lacks a package (phase2-plan.md, "Known gaps in the browser engine"): 1701 needs xlwt (legacy .xls only; .xlsx works),
 // 1911 needs pyreadstat. Expected like a strict xfail: a difference is accepted, and one that now passes is reported.
 const EXPECTED_DIFFER = ["1701_datamgmt_options", "1911_datamgmt"];
 const problems = [], timeouts = [], crashed = [], passed = [];

@@ -6,6 +6,15 @@ html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--ink); font: var(--text-md)/var(--leading) var(--font-ui); }
 pre, code, .mono { font-family: var(--font-mono); }
 a { color: var(--accent); text-underline-offset: 2px; }
+/* buttons are real <button>s in the page; this reset makes one look like the text it replaces */
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
+/* keyboard focus: the --focus ring on everything focusable; inside panes that clip (overflow: hidden) an inset ring */
+:where(a, button, input, select, textarea, [tabindex], [role=tab], [role=menuitem]):focus-visible { outline: none; box-shadow: var(--focus); }
+:where(.pane, .files, .rs, .t, .menu) :where(a, button, input, [tabindex], [role=tab], [role=menuitem]):focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent); }
+/* text for screen readers only */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+                   clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* icons: our own SVG shapes as masks, so they take the text color (Plex has no ▶ ■ ▾ ● ⋯) */
 .ico { display: inline-block; width: 1em; height: 1em; flex: none; background: currentColor; vertical-align: -0.125em;
@@ -18,6 +27,8 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .i-theme { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1zm0 1.6a5.4 5.4 0 0 0 0 10.8z'/%3E%3C/svg%3E"); }
 .i-graph { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 2h1.4v10.6H14V14H2z'/%3E%3Crect x='5' y='8' width='2' height='3.5'/%3E%3Crect x='8.2' y='5' width='2' height='6.5'/%3E%3Crect x='11.4' y='7' width='2' height='4.5'/%3E%3C/svg%3E"); }
 .i-file  { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M3 1.5h6.5L13 5v9.5H3zm1.4 1.4v10.2h7.2V5.6H8.9V2.9z'/%3E%3C/svg%3E"); }
+.i-check { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6.4 11.6 2.8 8l1.1-1.1 2.5 2.5 5.7-5.7 1.1 1.1z'/%3E%3C/svg%3E"); }
+.i-warn  { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 1.5 15 14H1zm-.8 4.3v4.4h1.6V5.8zm0 5.6v1.5h1.6v-1.5z'/%3E%3C/svg%3E"); }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 
 /* toolbar */
@@ -27,13 +38,15 @@ a { color: var(--accent); text-underline-offset: 2px; }
             margin-right: var(--s3); }
 .wordmark span { color: var(--accent); }
 .btn { font: 600 13px/1 var(--font-ui); padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--border-strong);
-       background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+       background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+       text-decoration: none; }
 .btn .ico { font-size: 12px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.stop { color: var(--error); border-color: var(--error); }
 .btn.stop.live { background: var(--error); color: var(--surface); }
 .btn[disabled], .btn.off { opacity: .45; }
 .btn.quiet { border-color: transparent; background: transparent; font-weight: 400; color: var(--muted); }
+.btn.quiet:hover, .btn.quiet.hover { border-color: var(--border-strong); color: var(--ink); }
 .btn.icon { padding: 6px; }
 .btn.icon .ico { font-size: 15px; }
 .btn .dot { width: 6px; height: 6px; color: var(--accent); }
@@ -47,8 +60,9 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .btn.stop.live .key { color: inherit; background: transparent; border-color: color-mix(in srgb, var(--surface) 60%, transparent); }
 
 /* the light/dark toggle: follows the system until pressed; three states, one button (System → Light → Dark) */
-.theme { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font: 400 var(--text-sm)/1 var(--font-ui);
-         padding: 5px 8px; border-radius: var(--radius); border: 1px solid transparent; }
+.theme { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font: 400 var(--text-sm)/1 var(--font-ui);
+         padding: 5px 8px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--surface); }
+.theme:hover { background: var(--surface-2); }
 .theme .ico { font-size: 15px; }
 
 /* panes */
@@ -62,9 +76,18 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .tab { padding: 9px 10px 8px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap;
        display: inline-flex; align-items: center; gap: 7px; }
 .tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+/* a tablist inside a pane head: a real flex box (not display: contents, which older WebKit strips of its role) */
+.tabstrip { display: flex; align-self: stretch; min-width: 0; }
 .tab .dot { width: 7px; height: 7px; color: var(--accent); }
-.tab .x { color: var(--muted); font-weight: 400; width: 10px; text-align: center; }
-.head-link { color: var(--muted); font-size: var(--text-sm); padding: 0 var(--s1); white-space: nowrap; }
+/* close: a 22 px square (24 px with the tab's padding around it), for the mouse; the keyboard uses Delete */
+.tab .x { color: var(--muted); font-weight: 400; width: 22px; height: 22px; margin: -4px -6px -4px -3px; border-radius: var(--radius);
+          display: inline-grid; place-items: center; }
+.tab .x:hover, .tab .x.hover { background: var(--border); color: var(--ink); }
+/* links in a pane head: the accent color, so they don't read as captions */
+.head-link { color: var(--accent); font-size: var(--text-sm); padding: 3px var(--s1); white-space: nowrap; border-radius: var(--radius); }
+.head-link:hover { text-decoration: underline; }
+.head-link.icon { color: var(--muted); padding: 3px 5px; }
+.head-link.icon:hover { color: var(--ink); background: var(--border); text-decoration: none; }
 
 /* files: one row per file or folder; --d is the depth. Each level indents 16 px and draws a faint guide line. */
 .files { list-style: none; margin: 0; padding: var(--s2) 0; font-size: 13.5px; }
@@ -78,19 +101,39 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .files .file-ico { color: var(--muted); font-size: 13px; }
 .files .size { margin-left: auto; color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
 .files .dot { color: var(--accent); }
+/* a row's ⋯ (24 px square): seen on the hovered, focused or open row, always on touch. It is the mouse's and the
+   finger's way to the row menu; the keyboard opens the same menu with Shift+F10 or the menu key on the focused row. */
+.files .row-more { margin: -3px -6px -3px auto; color: var(--muted); width: 24px; height: 24px; border-radius: var(--radius);
+                   display: inline-grid; place-items: center; opacity: 0; cursor: pointer; }
+.files .size + .row-more, .files .badge + .row-more { margin-left: 4px; }
+.files li:hover .row-more, .files li:focus-visible .row-more, .files li.open .row-more { opacity: 1; }
+.files li.hover { background: var(--surface-2); }
+.files .row-more:hover { background: var(--border); color: var(--ink); }
+@media (hover: none) { .files .row-more { opacity: 1; } }
 .badge { font: 600 10.5px/1 var(--font-ui); color: var(--accent); border: 1px solid var(--accent); border-radius: 3px;
          padding: 2px 4px; }
 .dropzone { margin: var(--s2) var(--s3); padding: var(--s3); border: 1.5px dashed var(--border-strong); border-radius: var(--radius-lg);
             text-align: center; color: var(--muted); font-size: var(--text-sm); }
+.files-foot { margin: 0 var(--s3) var(--s2); font-size: var(--text-sm); }
 
 /* editor: the gutter keeps a gap between the error bar and the line number */
 .code { font: var(--code)/1.6 var(--font-mono); padding: var(--s2) 0; margin: 0; white-space: pre; }
 .code .ln { display: block; padding-right: var(--s3); }
 .code .n { display: inline-block; width: 4ch; padding: 0 1.5ch 0 10px; box-sizing: content-box; text-align: right;
-           color: var(--muted); opacity: .8; user-select: none; }
+           color: var(--muted); user-select: none; }
 .code .ln.sel { background: var(--accent-soft); }
+/* lines being run: a bar in the gutter (the error bar's shape, in the accent), not the selection's tint. It marks the
+   text that was sent (a copy), so it moves with that text if lines are added above it while the run goes on. */
+.code .ln.run { box-shadow: inset 3px 0 0 var(--accent); }
+.code .ln.run .n { color: var(--accent); font-weight: 700; }
 .code .ln.err { box-shadow: inset 3px 0 0 var(--error); background: var(--error-soft); }
-.code .ln.err .n { color: var(--error); opacity: 1; font-weight: 700; }
+.code .ln.err .n { color: var(--error); font-weight: 700; }
+.code .ln.warn .n { color: var(--warn); font-weight: 700; }
+/* a lint message under its line, as CodeMirror's lint shows it when the cursor is on the word (and announced) */
+.code .lint { display: block; margin: 2px var(--s3) 4px calc(4ch + 1.5ch + 10px + var(--s2)); padding: 5px 9px; white-space: normal;
+              font: var(--text-sm)/1.4 var(--font-ui); color: var(--ink); background: var(--warn-soft); border-left: 3px solid var(--warn);
+              border-radius: var(--radius); max-width: 60ch; }
+.code .caret { border-left: 2px solid var(--ink); margin-left: -1px; }
 .k { color: var(--tok-keyword); font-weight: 700; }
 .s { color: var(--tok-string); }
 .c { color: var(--tok-comment); }
@@ -126,13 +169,24 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .log .glink { font-family: var(--font-ui); font-size: var(--text-sm); color: var(--accent); border: 1px solid var(--border);
               border-radius: var(--radius); padding: 1px 6px; display: inline-flex; align-items: center; gap: 5px; }
 .log .jump { font-family: var(--font-ui); font-size: var(--text-sm); }
+/* the page's own line before each run's output: what ran and what it starts from (shown only, never in a saved log) */
+.log .runhead { display: block; white-space: normal; font-family: var(--font-ui); font-size: var(--text-sm); color: var(--muted);
+                border-top: 1px dashed var(--border); padding-top: 4px; margin-top: 4px; }
+.log .runhead b { color: var(--ink); font-weight: 600; }
+.log .warn { color: var(--warn); }
+/* a warning inside the run-head: a local the selection uses that no earlier run has set */
+.log .runwarn { display: flex; gap: 6px; align-items: baseline; margin-top: 3px; color: var(--warn); font-weight: 600;
+               white-space: normal; max-width: 80ch; }
+.log .runwarn .ico { flex: none; vertical-align: -0.1em; }
+.log .runwarn code { font-family: var(--font-mono); font-size: 12px; }
 /* the page's own startup lines at the top of the Log pane: shown only, never in a saved or downloaded log */
 .log .head { display: block; color: var(--muted); padding-bottom: var(--s2); margin-bottom: var(--s2); border-bottom: 1px dashed var(--border); }
 .log .head .art { font-size: 10px; display: block; margin-bottom: 6px; }
 .cmdline { display: flex; align-items: center; gap: var(--s2); padding: 6px var(--s2) 6px var(--s3); border-top: 1px solid var(--border);
            font: var(--log)/1 var(--font-mono); background: var(--surface); }
 .cmdline .prompt { color: var(--muted); }
-.cmdline .field { flex: 1; color: var(--muted); padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); }
+.cmdline .field { flex: 1; color: var(--muted); padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius);
+                  background: var(--surface); font: inherit; }
 
 /* graph */
 .graph-wrap { padding: var(--s3); display: flex; flex-direction: column; gap: var(--s2); height: 100%; flex: 1; min-height: 0; }
@@ -163,7 +217,7 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .facts { display: flex; flex-wrap: wrap; gap: 2px var(--s4); padding: var(--s2) var(--s3); font-size: var(--text-sm); color: var(--muted);
          border-bottom: 1px solid var(--border); }
 .facts b { color: var(--ink); font-weight: 600; }
-.filter { margin: var(--s2) var(--s3); padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+.filter { margin: var(--s2) var(--s3); padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius);
           color: var(--muted); font-size: var(--text-sm); }
 .subhead { font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
            padding: var(--s3) var(--s3) var(--s2); display: flex; gap: var(--s2); align-items: baseline; }
@@ -175,11 +229,20 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .t td.mono, .t .num { font: var(--log)/1.4 var(--font-mono); }
 .t .num { text-align: right; }
 .t tr.hl td { background: var(--accent-soft); }
+.t tr.picked td { background: var(--accent-soft); }
+.t tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weight: 700; }
 .t .muted { color: var(--muted); }
+/* a variable's name: a button that picks it (marks its column in Browse) */
+.t .var { font: inherit; color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+          text-underline-offset: 2px; border-radius: 3px; }
+.t tr.picked .var { color: var(--ink); text-decoration: none; }
 .grid { font: var(--log)/1.4 var(--font-mono); border-collapse: collapse; }
 .grid th, .grid td { border: 1px solid var(--border); padding: 3px 8px; text-align: right; white-space: nowrap; }
 .grid th { background: var(--surface-2); font-weight: 700; color: var(--ink); }
 .grid td.obs, .grid th.obs { color: var(--muted); background: var(--surface-2); font-weight: 400; }
+/* the variable picked in the list: its column in Browse */
+.grid .picked { background: var(--accent-soft); }
+.grid th.picked { box-shadow: inset 0 -2px 0 var(--accent); color: var(--ink); }
 
 /* results: one list, three fixed columns (name | value | action); sections (e(), r(), macros) hold groups that fold */
 .rs { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--text-sm); }
@@ -196,6 +259,13 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .rs .row td:first-child { padding-left: calc(var(--s3) + 17px); }
 .rs .row td.act, .rs .grp td.act { text-align: right; font: 400 var(--text-sm)/1.5 var(--font-ui); }
 .rs .row .muted { color: var(--muted); font-family: var(--font-ui); }
+/* a value is a button (one in the tab order, arrows move): focus or hover shows all digits; Enter or ⌘ C copies them */
+.rs .val { font: inherit; width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; border-radius: 3px; padding: 0 2px; margin: 0 -2px; }
+.rs .focusrow td { background: var(--accent-soft); }
+.rs .val.focus { box-shadow: inset 0 0 0 2px var(--accent); }
+.rs .act .hint { color: var(--muted); font-size: var(--text-xs); }
+/* a group's header folds and unfolds (aria-expanded) */
+.rs .fold { font: inherit; color: inherit; display: inline-flex; align-items: center; }
 .rs .mat td { padding: 2px var(--s3) var(--s2) calc(var(--s3) + 17px); }
 
 /* help: OpenDTA's help text as a page (its sections become headings) */
@@ -212,7 +282,10 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .help dd { margin: 0; }
 
 /* dialog and sheet */
-.scrim { position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 30%, transparent); }
+/* the scrim dims in both themes (black, not the ink color, which is light in dark mode) */
+.scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .32); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .scrim { background: rgb(0 0 0 / .55); } }
+:root[data-theme="dark"] .scrim { background: rgb(0 0 0 / .55); }
 .dialog { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 10px 30px rgb(0 0 0 / .18);
           padding: var(--s4) var(--s5); font-size: var(--text-md); }
 .dialog h2 { font: 600 var(--text-lg)/1.3 var(--font-ui); margin: 0 0 var(--s2); }
@@ -220,4 +293,38 @@ a { color: var(--accent); text-underline-offset: 2px; }
 .dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; margin-top: var(--s4); flex-wrap: wrap; }
 .dialog code { font-size: 13px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
 .check { display: flex; align-items: center; gap: var(--s2); font-size: var(--text-sm); color: var(--muted); }
+.check input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
 .check .box { width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: 3px; }
+.check .box.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 11px; }
+.check { color: var(--ink); }
+
+/* menu: from a ⋯ button; items are buttons with role=menuitem, a destructive one in the error color */
+.menu { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+        box-shadow: 0 8px 24px rgb(0 0 0 / .16); padding: 4px; min-width: 210px; font-size: 13.5px; }
+.menu [role=menuitem] { display: flex; align-items: center; gap: var(--s2); width: 100%; padding: 6px 10px; border-radius: var(--radius); }
+.menu [role=menuitem]:hover, .menu [role=menuitem].hover { background: var(--accent-soft); }
+.menu [role=menuitem] .aside { margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
+.menu .danger { color: var(--error); }
+.menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 2px; }
+
+/* progress: a determinate bar (role=progressbar) and the start-up stages as a list */
+.progress { height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-strong); overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--accent); }
+.stages { list-style: none; margin: var(--s3) 0 0; padding: 0; font-size: var(--text-sm); display: grid; gap: 5px; }
+.stages li { display: flex; align-items: center; gap: var(--s2); color: var(--muted); }
+.stages li .ico { font-size: 13px; }
+.stages li.done { color: var(--ink); }
+.stages li.done .ico { color: var(--ok); }
+.stages li.now { color: var(--ink); font-weight: 600; }
+.stages li .when { margin-left: auto; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* the stage in progress: a ring that turns; with reduced motion it stays still (the words carry the state) */
+.spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent);
+        flex: none; animation: spin 1s linear infinite; }
+.stages li.todo .spin { animation: none; border-color: var(--border-strong); border-style: dotted; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* empty states inside a tab */
+.empty { padding: var(--s6) var(--s5); text-align: center; color: var(--muted); font-size: var(--text-md); }
+.empty b { display: block; color: var(--ink); font-weight: 600; margin-bottom: var(--s1); }
+.empty code { font-size: 13px; color: var(--ink); }

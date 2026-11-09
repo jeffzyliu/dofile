@@ -1,6 +1,6 @@
 # Moodboard
 
-Deliverable 1 of the UI/UX design step in `docs/phase2-plan.md`. Open `index.html` in a browser (it follows the
+Deliverable 1 of the UI/UX design step (`docs/design/README.md`). Open `index.html` in a browser (it follows the
 system's light or dark mode), or render `moodboard-light.png` and `moodboard-dark.png` (below; renders are not
 committed).
 

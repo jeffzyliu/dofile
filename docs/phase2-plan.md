@@ -27,7 +27,7 @@ are decided. Phase 1 is complete ([phase1-plan.md](phase1-plan.md)). Done since,
 
 **Still open in Phase 2:** the lazy-matplotlib experiment (4a, not started), whether the snapshot becomes the default (the
 real-phone numbers above are one input; a phone over HTTPS with the cache working, and a first visit over a real network,
-were not measured), the `.xls` packages (`xlwt`, `xlrd`) and `pyreadstat` (next steps for 1701 and 1911 are in
+were not measured), the legacy `.xls` packages (`xlwt`, `xlrd`; `.xlsx` works, through openpyxl) and `pyreadstat` (next steps for 1701 and 1911 are in
 [Known gaps](#known-gaps-in-the-browser-engine)), the CI workflows' first results (step 9), and steps 5 to 10.
 
 ## Facts this plan rests on
@@ -232,127 +232,42 @@ is shared. The web demo adds a JavaScript project, so `web/src/` would sit besid
   gains little with two apps.
 
 ## UI/UX design (after the proof of concept, before the full editor)
-In progress (2026-11-08 and 09): deliverables 1–3 done, 4 drafted and waiting for feedback, 5 started; see "Status and
-where we left off" below. The PoC page is deliberately unstyled. This step produces the design that steps 6 and 8 build.
-- **Inspiration: legacy OpenStata** (`legacy/openstata/`, screenshots and GIFs in `legacy/openstata/docs/img/`). It is rough, with a
-  bare-bones, academic, scrappy feel that we want to keep:
-  - Material UI (v4): a navy top bar (`#1b1464`) with a pixel-style wordmark;
-  - a gray left drawer with collapsible sections (Do Files, Log Files, Sample Data, Your Data) and upload below;
-  - a monospace log pane with line numbers on the left, and the editor on the right;
-  - a bottom action bar (Delete, Clear, Save, Run);
-  - the landing page as an editor showing an ASCII-art banner and plain-text "what is this", next to a navy
-    graph-paper grid.
+In progress: deliverables 1–3 (moodboard, user flows, wireframes) done, 4 (high-fidelity mockups) done (iteration 3 is the final one), 5 (the
+design system) started. The brief, the deliverables, the rules (WCAG AA, keyboard, screen-reader log; clean room;
+naming), every round of feedback and the status are in `docs/design/README.md`; the flows, wireframes and mockups are in
+`docs/design/`.
 
-  Keep the plain-text, editor-first character. Drop the graph paper (noisy, dated) and soften the navy, which is too
-  strong as a page color. Fix what was rough: dead space, the low contrast of the gray-on-gray drawer, no Break or
-  busy state, and no highlighting. Light and dark mode, following the system setting.
-- **Other UI to note:**
-  - OpenDTA GUI: screenshots exist in upstream readme.
-  - Real Stata GUI: as in OpenDTA's clean-room policy, its layout and workflow may inform ours (they are not 1:1
-    what we need anyway); its colors, fonts, icons, graphics and text are not copied.
-- **Deliverables, in order:**
-  1. a moodboard: legacy screenshots plus a few references (terminal and notebook UIs, academic sites)
-     (draft: `docs/design/moodboard/`);
-  2. user flows: first visit, open the sample, upload a replication package, run, Break, a crashed worker, download
-     everything (draft: `docs/design/flows/`, each step tagged done in the PoC or to build);
-  3. low-fidelity wireframes for desktop and phone (the phone layout stacks the editor and the log with tabs)
-     (draft: `docs/design/wireframes/`; chosen 2026-11-09: desktop B, one output pane with tabs that can split, Log
-     above and the other tabs below);
-  4. high-fidelity mockups of the landing page and the editor, light and dark (draft: `docs/design/mockups/`, on
-     `docs/design/tokens.css`);
-  5. a small design system: color and type tokens (one monospace font, one UI font), spacing, and the components
-     (file list, pane, toolbar button, log line, error line, results table, toast). Fonts chosen 2026-11-08: IBM Plex
-     Mono + IBM Plex Sans (`docs/design/specimen/`, files and license in `docs/design/fonts/`).
-- **Tools:** HTML and CSS for wireframes and mockups, screenshotted with Playwright (Chromium, Firefox, WebKit;
-  desktop and phone; light and dark), so the mockups become the start of steps 6 and 8. Excalidraw (a `.excalidraw`
-  file opened at excalidraw.com) only for hand sketches. `@axe-core/playwright` for the accessibility checks. Keep
-  the HTML sources and exported images in `docs/design/` and the tokens as CSS variables in `web/`.
-- **Rules:**
-  - Accessibility: contrast at least WCAG AA, everything usable by keyboard, the log readable by screen readers.
-  - Clean room (`LICENSE-POLICY.md`, following OpenDTA's): Stata's and OpenDTA's layout and workflow may be
-    referenced; no colors, fonts, icons, graphics or text copied, and no Stata screenshots committed. The legacy
-    app is our own and can be reused.
-  - Names: the product is "dofile", described as running "Stata-syntax" code. "Stata" is not used as our name, and
-    the old "OpenStata" wordmark is not reused.
+Decisions of iteration 2 (2026-11-09, after the UX crit `docs/design/mockups/ux-analysis.md`) that affect the build:
+- Run and Run selection run a copy of the editor's text, saved or not; `do` and `include` read the saved file, and the
+  log notes when that file is open with unsaved edits. Editing during a run is allowed and doesn't change it.
+- A first visit asks before downloading the engine (about 36 MB, from the build), then shows a download bar and the
+  start-up stages in the same dialog; later visits show the stage on Run and in the status bar. "Not now" leaves a
+  working editor and file manager. To build: the page reads the IDBFS IndexedDB store itself when Python isn't loaded,
+  and counts the download's bytes with its own fetch wrapper.
+- Data tab: a click on a variable marks its column in Browse; it inserts nothing.
+- Reset asks first. Name clash: "Keep mine" (default) or "Replace with uploaded", plus "do the same for the rest".
+- Per-file ⋯ menu (Open, Rename, Download, Delete); "Download all (.zip)" under the file list.
+- The phone's Break replaces Run with another shape and color and ignores taps in its first 600 ms.
+- Deferred: storage persistence per browser, the iOS long press, a real-phone test of the Break guard.
 
-### Status and where we left off (2026-11-09)
-Everything lives in `docs/design/` (each folder has a README with the rebuild commands; `docs/design/shot.mjs`
-screenshots any page with Playwright from `web/node_modules`).
-- **Done and committed:** the moodboard (`moodboard/`; third-party screenshots gitignored in `moodboard/refs/`), the
-  font specimen (`specimen/`; IBM Plex Mono + IBM Plex Sans chosen, files and OFL in `fonts/`, the OFL line in
-  `LICENSE-POLICY.md`), the user flows (`flows/`, with the decisions of 2026-11-08 in their "Decisions" section) and
-  the wireframes (`wireframes/`: desktop A and B, B chosen with the split; phone; the states sheet). GAP-6 (help pages
-  for `if`, `foreach`, ...) went into `docs/opendta-issues.md`.
-- **Drafted, not committed, round 1 of feedback applied (2026-11-09):** the high-fidelity mockups (`mockups/`: editor
-  light/dark and running, landing desktop/phone, phone Log tab, `panels.html` for the Data/Results/Help tabs, opened
-  files, the full-size graph and the dialogs, `ascii.html` for the banner candidates) on `tokens.css` and
-  `mockups/ui.css` (the start of deliverable 5). Their content is a sample do-file run with `dofile run` on synthetic
-  data (`mockups/sample.do`, `img/scatter.png`).
-- **Round 1 of hi-fi feedback (2026-11-09), applied:**
-  - Landing: welcome.do rewrapped to 72 columns (the phone gets its own 40-column text); the right column reaches the
-    bottom of welcome.do and shows a whole `regress` output; on a phone the first screen holds the banner, the pitch,
-    Open the editor and `pip install` (the from-source MCP line stays on phones for now). Nav: Commands, GitHub, the
-    theme button. "Command line" and "For AI agents" are gone. A "For agents" page may come with a public HTTP demo
-    MCP server (phase 3).
-  - **Commands page:** a static list made from the engine's registry (`commands.json`); no links to help pages, since
-    OpenDTA's help is Python strings, not pages. (A build step could render them; not planned.)
-  - **Banner:** candidates in `ascii.html`; the mockups use A (ANSI Shadow, 44 x 6), pending the maintainer's pick. It is
-    also the head of the page's Log pane, with the version line. The head is shown only: not in Download log, saved
-    logs, the engine, the CLI or MCP (it would cost agents tokens and change the Stata 14 log comparison).
-  - **Fonts:** the Latin subsets lacked ⌘ ▶ ■ ● ▾ ⋯, arrows and box/block characters, which fell back to system
-    fonts (the tiny key labels). Now: the complete, unmodified Plex files load only for arrows and box/block
-    (`unicode-range`; the OFL reserves the name "Plex", so no subsets of our own); UI symbols are SVG icons; key labels
-    are chips in the UI font (⌘ on a Mac, Ctrl elsewhere).
-  - Editor: the file tree indents 16 px per level with faint guide lines, folders as `data/` in ink; the error bar has a
-    gap before the line number; the unsaved dot is on the tab, the file and the Save button; the theme button.
-  - **Opening files:** .png in the Graph tab; .dta as its variables (`describe using`) with Load it (`use`); plain
-    text is editable. Highlighting: .do/.ado with ours; .log with a small log tokenizer (echo lines, errors);
-    .csv/.tsv with a small column tokenizer (CodeMirror has no CSV mode); .md and .json with CodeMirror's packages;
-    .py, .R, .tex, .sql, .yaml with `@codemirror/legacy-modes`; anything else plain. (Approved in round 2.)
-- **Round 2 (2026-11-09), applied:**
-  - Banner: the maintainer liked A (legible) and D (lowercase charm). New A1, A2: lowercase letters drawn by hand in
-    A's style (`mockups/art.js`); the mockups use A1 (45 x 8), pending the final pick.
-  - The active editor tab has its ×, next to the unsaved dot.
-  - Results: one list in three fixed columns (name, value, action), sections (e(), r(), locals and globals) holding
-    groups that fold, with counts. View opens a matrix in place: no command, nothing in the log or the command
-    history. 8 significant digits approved (all digits on hover and when copied).
-  - Load (.dta, `use`) and Import (.csv, `import delimited`) show their command and run it as if typed in the
-    command line: echoed in the log and added to the command history, never written into a do-file; Copy puts the
-    command on the clipboard.
-  - .xlsx: not openable in the editor (the not-UTF-8 notice) and no import button for now. Note: the engine has
-    `import excel` (openpyxl, which the page already installs), and it works in the CLI.
-- **Round 3 (2026-11-09), applied:**
-  - `import excel` works in the browser engine: checked in Pyodide under Node with the page's own worker and wheel
-    (`EngineClient` as in `web/test/engine.test.mjs`): a workbook written by the CLI imports (500 obs, same means),
-    `import excel ..., describe` lists its sheets, and `export excel` then `import excel` round-trips inside Pyodide,
-    all rc 0. Not yet checked: a real browser, and a workbook saved by Excel itself. Whether .xlsx gets an Import button
-    is the maintainer's call.
-  - Banner: A1 was a touch too tall and thick. The B series is lowercase on half-line pixels (stems two characters
-    wide, horizontals half a line): 5 lines instead of 8. The mockups use B2: B1 slanted 12 degrees and given a
-    one-pixel drop shadow, both in CSS, for D's lean. Slanting the characters themselves (B5) comes out jagged. WebKit
-    and Firefox draw hairline seams between skewed block characters; a 0.04em same-color text shadow covers them.
-    Pending the maintainer's pick.
-- **Answers given on 2026-11-09, not yet applied:**
-  1. **Dark-mode graphs:** add a dark plotting style to the engine, and pass the page's current light/dark mode to the
-     engine call, so graphs match the page (today the PNGs are light, shown on a white card in dark mode). Engine work:
-     an option on the run call (`Engine.run` / `browser.run`) that picks the style; check that `graph export` files
-     and the CLI/MCP defaults stay as they are unless asked.
-  2. **A light/dark toggle** is needed in the wireframes and the mockups (it was missing): the page follows the system
-     by default, and the toggle overrides it (`[data-theme]` in `tokens.css` already supports this).
-  3. **Keyboard shortcuts are tabled** for later. Open questions: Break on Cmd/Ctrl+. (Safari's Stop is Cmd+.),
-     the command line on Cmd/Ctrl+L (the address bar in every browser), F6 between panes, Esc in dialogs; a test that
-     sends keys from Playwright reaches the page but does not prove a real browser lets them through. The mockups
-     show them only as placeholders.
-  4. **PyPI:** the name `dofile` was free on 2026-11-09 (no project); the maintainer now has a PyPI account and will
-     register it (only a first upload creates a project; PyPI does not reserve names). The landing page labels
-     `pip install dofile` "with the first release". Steps and what was checked: `docs/releasing.md`.
-- **Engine and page work decided along the way (to build, steps 6–8):** a whole-file run starts with no locals (see
-  "Scope" below); list locals and globals for the Results panel; report memory use; unpack and make .zip files in the
-  worker; return the first rows of the data (Browse); the dark plotting style (answer 1); the editor's tokenizer
-  underlines commands the engine lacks and lists them per uploaded do-file.
-- **Next session:** the maintainer picks a banner and reviews round 1 (and `panels.html`). Then: add the theme toggle
-  to the wireframes (done in the mockups), plan the dark plotting style, and finish
-  the design system (deliverable 5: tokens into `web/`, the component list, `@axe-core/playwright` checks).
+Decisions of iteration 3 (2026-11-09, after the second crit `docs/design/mockups/ux-analysis-2.md`) that affect the build:
+- Break's countdown offers "Don't reset: wait for it": the page cancels its 5 s kill timer (`client.js`) and the engine
+  takes the Break at the next safe point (rc 1, data kept); while it waits, Break becomes "Reset now".
+- The download can be stopped (abort the fetch; resume from the cache later); after "Not now", Run opens the prompt.
+- A selection run warns, in the page's run-head line, about a local it uses that no earlier run has set (the page
+  compares the tokenizer's macro references with the session's locals, ignoring names the selection itself assigns).
+- The file list is an ARIA tree with roving focus; editor tabs are a tablist, Delete closes (Cmd/Ctrl+W
+  belong to the browser); Results
+  values and Data names take focus. Name clash: Esc keeps yours for every remaining clash.
+- Storage: ask `navigator.storage.persist()`; when `persisted()` is false, show "This browser may clear your files".
+- Checks over the mockups: `cd web && npm run axe` and `npm run tabwalk`.
+
+Engine and page work the design needs (steps 6–8): a whole-file run starts with no locals (see "Scope" below); list
+locals and globals for the Results panel; report memory use; unpack and make .zip files in the worker; return the first
+rows of the data (Browse); a dark plotting style, picked by an option on the run call (`Engine.run` / `browser.run`)
+from the page's light/dark mode, leaving `graph export` files and the CLI/MCP defaults as they are unless asked; the
+editor's tokenizer underlines commands the engine lacks and lists them per uploaded do-file. Keyboard shortcuts are
+tabled (Cmd+. is Safari's Stop, Cmd+L the address bar). PyPI: `docs/releasing.md`.
 
 ## What the page does
 - **Landing page:** what dofile is, a "try it" button, the CLI and MCP install lines (`pip install dofile`), the
@@ -455,7 +370,7 @@ Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compa
 
 **Where things stand (2026-11-07), what is open.** The details are in the paragraphs and tables below.
 - **Packages Pyodide lacks:** `pyreadstat` (SAS transport files, Stata 12 and older `.dta`, SPSS; no WebAssembly build: a limit
-  of the web demo to document) and `xlwt` and `xlrd` (`.xls` output and input; both pure Python, so micropip could install
+  of the web demo to document) and `xlwt` and `xlrd` (legacy `.xls` output and input only: `.xlsx`, `import excel`, `export excel` and `putexcel` on `.xlsx` work, through openpyxl, which the page installs; both pure Python, so micropip could install
   them: add them to the page's install, or document `.xls` as unsupported; decision open).
 - **numpy.linalg corners not covered by the shim:** the SVD family (`svd`, `pinv`, `matrix_rank`, `lstsq`) on NaN or inf
   input returns NaN or raises `ValueError` where CPython raises `LinAlgError`; `matrix_power(singular, -1)`, `tensorsolve` and
@@ -478,7 +393,7 @@ result (95 of 97 in about 150 s; [pyodide-snapshot.md](pyodide-snapshot.md#corre
 **The unit tests in Pyodide** (`npm run check-pytest`; one process per file, 72 files, 128 s; compared with CPython test by test
 by `compare-pytest.mjs`): OpenDTA's suite and `tests/test_engine.py`, 1080 tests. CPython: 1067 passed, 13 skipped. Pyodide:
 1048 passed, 31 skipped, 1 failed. **Of the 19 that differ, none is an engine problem:** 18 skip for lack of `pyreadstat`,
-`xlwt` or `xlrd`, and 1 fails because `shell` cannot start a process in the browser. The other 1,061 have the same outcome.
+`xlwt` or `xlrd` (the `.xls` format only), and 1 fails because `shell` cannot start a process in the browser. The other 1,061 have the same outcome.
 Not run in Pyodide because they need subprocesses, the `mcp` package or the source tree: `test_mcp`, `test_worker`,
 `test_sandbox`, `test_break`, `test_dofile_cli`, `test_vendor`, `test_log_cut`, `test_browser`, and the two replaced by other
 checks (`test_conformance` and `test_stata_compat` by `check-snapshot`; `test_pathshim` and `test_linalgshim` by
@@ -525,7 +440,7 @@ its stripped docstrings): 16 of the 91 cases then run failed.
 | Gap | Cases | Cause | What to do |
 |---|---|---|---|
 | **`expand` and `stsplit` fail** | 11: 0304_collapse, 1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology, 1801_programming, 1901_survival, 1902_multilevel, 1908_models2, 1909_other_suites, 1916_multilevel | `np.repeat` gets an int64 counts array and numpy's index type is int32 in WebAssembly (PATCH-4 in [opendta-issues.md](opendta-issues.md)) | **fixed 2026-11-07** by PATCH-4 (two call sites; no other int64 site fails). All 11 pass; 6 of them (1001, 1601, 1901, 1902, 1908, 1916) needed the `numpy.linalg` shim as well, since with PATCH-4 alone they passed `expand` and then hit the 600 s limit |
-| `.xls` output | 1 (1701_datamgmt_options) | `putexcel` and `export excel` to `.xls` need `xlwt`, which Pyodide does not have (`writing .xls files requires the xlwt package`). It is pure Python, so micropip could install it; it is only a dev dependency of dofile, so a `pip install dofile` user hits the same message | decide: add `xlwt` to the page's install, or document `.xls` as unsupported in the browser |
+| legacy `.xls` output (`.xlsx` is not affected) | 1 (1701_datamgmt_options) | `putexcel` and `export excel` to `.xls` need `xlwt` (to `.xlsx` they use openpyxl, a core dependency, and work in Pyodide: `import excel` and `export excel` round-trip, see `design/README.md`, round 3), which Pyodide does not have (`writing .xls files requires the xlwt package`). It is pure Python, so micropip could install it; it is only a dev dependency of dofile, so a `pip install dofile` user hits the same message | decide: add `xlwt` to the page's install, or document `.xls` as unsupported in the browser |
 | SAS transport files and Stata 12 `.dta` | 1 (1911_datamgmt) | `export sasxport`, `import sasxport` and old `.dta` files need `pyreadstat`, a C extension with no WebAssembly build | document as a limit of the web demo |
 | Numeric known differences | 3: 0408_mata_moptimize, 1907_models, 1918_models3 | in Pyodide they left a difference beyond their known-difference rule, with more log lines than Stata's (the extra line in 0408 was `convergence not achieved`), and ran 20–500 times slower than on CPython: one shared cause | **fixed 2026-11-07** by the `numpy.linalg` shim ([Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide)): all three pass, in 2.1 s (0408, was 204–220 s), 7.5 s (1907, was 25 s) and 4.2 s (1918, was 17 s), under the same rules as CPython |
 
@@ -539,8 +454,8 @@ fails only if one starts to pass). That also hides a new difference in the rest 
    `tests_opendta/compat/known_differences.txt`), so any other difference fails again.
 2. **`xlwt` and `xlrd` (1701).** Try `micropip.install("xlwt")` and `("xlrd")` in Pyodide; both are believed to be pure
    Python (check the wheel tags on PyPI). If they import, run 1701 with them. Then decide: add them to the page's install and
-   to `make-snapshot.mjs` (rebuild the snapshot; measure the size and start-up cost), or document `.xls` as unsupported in
-   the browser. dofile's own `pyproject.toml` lists `xlwt` only as a dev dependency, so a `pip install dofile` user sees the
+   to `make-snapshot.mjs` (rebuild the snapshot; measure the size and start-up cost), or document legacy `.xls` as unsupported in
+   the browser (`.xlsx` already works). dofile's own `pyproject.toml` lists `xlwt` only as a dev dependency, so a `pip install dofile` user sees the
    same message; an optional extra is a separate question.
 3. **`pyreadstat` (1911).** It is a C extension and Pyodide has no build of it. Find out which commands of 1911 need it
    (`export sasxport`, `import sasxport`, pre-Stata-13 `.dta`) and whether pure-Python readers cover them (pandas has its own

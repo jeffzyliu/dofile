@@ -14,7 +14,10 @@
 - **Not used:** the `.png` renders (as asked). No automated checker (axe, Lighthouse) was run: every accessibility
   finding is from reading markup and CSS, plus contrast ratios computed from the token hex values (WCAG 2.x relative
   luminance, opacity blended over the stated background).
-- Branch: `main`, working tree; the whole `mockups/` folder and `tokens.css` are untracked (new).
+- Branch: `main`, working tree; the whole `mockups/` folder and `tokens.css` were untracked (new) at the time. They
+  were later committed on `design/hifi-mockups` (c0cab10).
+- Line numbers in `phase2-plan.md:NNN` citations refer to the plan before iteration 2, which moved its design
+  sections to `docs/design/README.md`. Mockup line numbers refer to iteration 1 (c0cab10).
 
 ## User Context
 
@@ -146,6 +149,8 @@
   `do` calls read the saved file, a user who edits clean.do and runs master.do gets old results with no warning.
 - **Findings affected:** UX-007, UX-002
 - **How to resolve:** product decision, written into the flows (F4), then a short line in the UI.
+- Dev Answer: Run runs a current editor's text, whether or not it is saved. It runs a temp copy of the text in the opened file, not the file in the virtual disk.
+    But `do` and `include` pull only saved versions of the file, like a normal computer.
 
 **OQ2: Is storage persistence granted on each target browser, and what does the page say when it isn't?**
 - **Why it matters:** the status bar and landing page say files "are kept" unconditionally (`editor.html:123`,
@@ -153,12 +158,15 @@
 - **Findings affected:** UX-009, UX-008
 - **How to resolve:** test `navigator.storage.persist()` and `persisted()` in Chromium, Firefox and Safari (desktop and
   iOS, installed and not), then draw the "not kept" state.
+- Dev does not know.
 
 **OQ3: What share of first visits are phones on cellular data?**
 - **Why it matters:** decides whether the start screen and the download-size disclosure are first-screen content, and
   how much weight the phone findings get.
 - **Findings affected:** UX-005, UX-024, UX-026
 - **How to resolve:** privacy-respecting analytics after launch, or a decision to design for the worst case now.
+- Dev: we need to design a flow for the process of downloading and loading the engine. There should be something like a popup,
+  with a proposal to download xx mB, a progress bar for that download, and then engine loading steps.
 
 **OQ4: Where do rename, download and delete for one file live on desktop?**
 - **Why it matters:** the Files pane shows no per-file control; only a ⋯ in its header (`editor.html:37`). The phone
@@ -170,11 +178,14 @@
 - **Why it matters:** decides whether the running highlight (UX-003) also needs a read-only signifier.
 - **Findings affected:** UX-003
 - **How to resolve:** product decision; add to the running mockup.
+- dev: presumably yes, editing a file that is running should be valid and should not change the results.
+  running should send a temporary copy of the active .do buffer to the engine, unaffected by edits
 
 **OQ6: Does a click on a variable in the Data tab insert the name into the editor or the command line, and which wins?**
 - **Findings affected:** UX-015
 - **How to resolve:** product decision (recommendation: command line only, unless the editor has focus and the user
   chose it).
+  - dev: no, neither, it just opens the table below to preview variable
 
 **OQ7: Does a long press inside CodeMirror on iOS Safari reach the page, or does the native selection callout take it?**
 - **Findings affected:** UX-013
@@ -187,6 +198,7 @@
 **OQ9: Does Reset ask for confirmation?**
 - **Findings affected:** UX-008
 - **How to resolve:** design decision; draw it next to the Delete confirm.
+    - dev: it probably should
 
 ## Summary
 
@@ -334,6 +346,7 @@ Done above (Question Log, Assumptions, Open Questions). No findings of its own.
   bar where the stage is a download), and the failed-twice and did-not-start states. On the landing page, write "about
   5–10 seconds the first time; it downloads about 36 MB" (use measured numbers), so phone users can choose to wait for
   Wi-Fi.
+  - dev: discussed in OQ3 section--perhaps a blocking popup is better than just text notifications on a top or bottom navbar
 
 **UX-006: The running notice says Break "resets the engine (files are kept)" but not that the data in memory is lost**
 - **Principle:** Nielsen 5 (Error prevention); Nielsen 2 (Match with the real world)
@@ -495,6 +508,7 @@ Done above (Question Log, Assumptions, Open Questions). No findings of its own.
 - **Severity:** Friction
 - **Remediation:** Insert into the command line only (never the do-file) unless the user picks "Insert into editor"
   from a row action. Add a visible row affordance (an "insert" icon on focus and hover; always visible on touch).
+  - dev: stated before, either get rid of this behavior entirely (preferred) or only do it into command line if absolutely critical
 
 **UX-016: On desktop, the landing page's pitch is drawn as a static editor, in the comment color**
 - **Principle:** Affordance mismatch (looks editable, isn't); visual hierarchy (Protocol 6)
@@ -762,3 +776,45 @@ UX-005, UX-017, UX-018**, plus the one-line copy fix UX-006 and the token fixes 
 important: a user can get a wrong answer with no warning. Decide OQ1, OQ2 and OQ4 in the next design round, because
 UX-007, UX-009 and UX-013 depend on them. The rest (signifiers, ARIA completion, phone polish) can go into the step 6
 build checklist and be verified there by the axe run and a real-phone pass, rather than redrawn now.
+
+## Resolution (iteration 2, 2026-11-09)
+
+The maintainer's answers are the `dev:` lines above. What iteration 2 did with each finding (files in `mockups/` unless
+noted; the full list of decisions is in `../README.md`, "Iteration 2"):
+
+| ID | Outcome | Where |
+|---|---|---|
+| UX-001 | Fixed: "Keep mine" is primary and focused; Enter and Esc keep | `panels.html` name clash |
+| UX-002 | Fixed: the `reghdfe` reason is a lint message under its line (announced, shown on cursor); full digits on focus and copy; the other two via UX-007 and UX-008 | `editor.html` line 18, `panels.html` Results caption |
+| UX-003 | Fixed: running lines get an accent gutter bar and number, not the selection tint; the mark follows the copied text (OQ5: editing during a run is allowed) | `ui.css` `.ln.run`, `editor.html?running` |
+| UX-004 | Fixed: the ⌘ ↩ chip is on the button it triggers; a line before each run's output and the status bar say what ran and whether it started with no locals | `editor.html` (both states), `phone-log.html?running` |
+| UX-005 | Fixed: a download prompt (OQ3: blocking, first visit only), download bar and stages, later visits, did not start, failed twice; the landing page states the size | `states.html` 1–8, `landing.html` |
+| UX-006 | Fixed: "the engine is reset: the data in memory is lost; your files are kept", here and in the countdown | `editor.html?running`, `phone-log.html?running`, `states.html` 9 |
+| UX-007 | Fixed per OQ1 (Run runs the editor's text; `do` reads the saved file): a log note when a nested `do` reads a file with unsaved edits | `states.html` 15 |
+| UX-008 | Fixed: "Download all (.zip)" link under the file list; ⋯ buttons named; the menu and Reset's confirm drawn (OQ9) | `editor.html`, `states.html` 12, 14 |
+| UX-009 | Deferred (OQ2 unknown): "Files are kept" unchanged until persistence is tested per browser | — |
+| UX-010 | Fixed: "Run command" | `editor.html` |
+| UX-011 | Fixed: "Show 50 more" in Browse, runs nothing | `panels.html` Data |
+| UX-012 | Fixed: pane-head links in the accent; the theme button (`--border-strong` edge) and every Copy have button chrome | `ui.css`, `landing.html` |
+| UX-013 | Fixed (OQ4): a ⋯ on file rows (seen on hover, focus and the open row, always on touch; transparent rather than removed, so it stays in the tab order) and right click; Help from the editor's context menu. Long press on iOS deferred (OQ7) | `editor.html`, `states.html` 13, `panels.html` Help caption |
+| UX-014 | Fixed: the command wraps, the placeholder is marked and explained, "Copied" state with a live region | `landing.html` |
+| UX-015 | Dropped by decision (OQ6): a click inserts nothing; it marks the variable's column in Browse | `panels.html` Data |
+| UX-016 | Fixed: the pitch's first lines in ink; the drawing is hidden from screen readers (UX-017). Still not runnable: a "Run this" is left for step 8 | `landing.html` |
+| UX-017 | Fixed: hidden `<h1>`; banners `aria-hidden` (`art.js`); the do-file drawings hidden, with plain-text copies (desktop and phone); the link inside them out of the tab order | `landing.html`, `art.js` |
+| UX-018 | Fixed: `:focus-visible` ring, inset inside panes; controls are `<button>`s | `ui.css`, all pages |
+| UX-019 | Fixed: no opacity on line numbers (6.3:1); contrast note rechecked | `ui.css`, `../tokens.css` |
+| UX-020 | Fixed: inputs use `--border-strong` (3.6 / 3.4:1) | `ui.css`, `panels.html` Help field |
+| UX-021 | Fixed: the status bar isn't live; a hidden region announces state changes only | `editor.html` |
+| UX-022 | Fixed: output tabs are `role=tab` buttons with `aria-selected`; the editor's file tabs are tabs with their close button beside them, not inside; the desktop log is `role=log`; the command line is labelled. Arrow-key movement is for the build |  `editor.html`, `panels.html`, `phone-log.html`, `states.html` |
+| UX-023 | Fixed: a 22 px close button, named "Close analysis.do" | `ui.css`, `editor.html` |
+| UX-024 | Fixed: "Mem 612 MB"; phone log at 12 px | `phone-log.html` |
+| UX-025 | Fixed with UX-001: two choices in the question's words plus "Do the same for the other N clashes" | `panels.html` |
+| UX-026 | Fixed in design: Break has another shape and color and ignores taps in its first 600 ms; the real-phone test is deferred (OQ8) | `phone-log.html?running` |
+
+Contrast of the new color pairs (WCAG 2.x, as above): text ≥ 5.1:1 in both themes (lowest: line numbers on a running
+line, 5.2 / 5.1); the progress bar 7.8 / 7.0 against its track, its border 3.1; input borders 3.6 / 3.4.
+
+Still not drawn (from UX-005's table): another tab is open; the drop target and upload count; could not save; storage
+not kept (OQ2). No automated checker was run at the time. Since then `cd web && npm run axe` (0 violations) and `npm run tabwalk` exist;
+the iteration 2 crit (`ux-analysis-2.md`) found UX-002, UX-004, UX-013, UX-017, UX-022, UX-023 and UX-026 only partly
+fixed, and iteration 3 finished them (see its resolution table).

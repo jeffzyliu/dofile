@@ -1,6 +1,6 @@
 # Wireframes
 
-Deliverable 3 of the UI/UX design step in `docs/phase2-plan.md`: low fidelity, grayscale, light only, built from the
+Deliverable 3 of the UI/UX design step (`docs/design/README.md`): low fidelity, grayscale, light only, built from the
 user flows (`../flows/`). Content (the log, the variables) is dofile's own output on synthetic data.
 
 | File | What |

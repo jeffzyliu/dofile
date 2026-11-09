@@ -124,4 +124,5 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   `docs/phase3-plan.md` (hosted multi-user MCP server). Known OpenDTA problems to verify against Stata:
   `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
   `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`. Web demo design (moodboard, flows,
-  wireframes, mockups): `docs/design/`; renders are not committed, each folder's README has the command.
+  wireframes, mockups): `docs/design/`, whose README holds the brief, the rules, every round of feedback and the
+  status (the plan keeps only a summary of the decisions); renders are not committed, each folder's README has the command.

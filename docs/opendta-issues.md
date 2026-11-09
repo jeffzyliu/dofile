@@ -847,6 +847,6 @@ kept as a dofile patch for the browser demo, not sent upstream.
   problem, `numpy.linalg` returning NaN instead of raising `LinAlgError` in Pyodide; with `src/dofile/linalgshim.py` they
   pass (`phase2-plan.md`, "Open investigation"). The "nothing else is affected" finding above was about the int64 problem
   only; it did not cover this one.
-- Related: the web demo's other gaps found in the same run are the optional packages `xlwt` (`.xls` output) and
+- Related: the web demo's other gaps found in the same run are the optional packages `xlwt` (legacy `.xls` output; `.xlsx` works, through openpyxl) and
   `pyreadstat` (SAS transport files, pre-Stata-13 `.dta`), which are not OpenDTA bugs; see `phase2-plan.md`, "Known gaps
   in the browser engine".

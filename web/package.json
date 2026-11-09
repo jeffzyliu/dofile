@@ -13,6 +13,8 @@
     "build": "npm run wheel && vite build",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
+    "axe": "node ../docs/design/axe.mjs",
+    "tabwalk": "node ../docs/design/tabwalk.mjs",
     "pretest": "npm run wheel",
     "test": "node --test test/",
     "e2e": "npm run snapshot && npm run build && playwright test",
@@ -28,6 +30,7 @@
     "pyodide": "314.0.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.0",
     "fake-indexeddb": "^6.2.7",
     "typescript": "^7.0.2",
