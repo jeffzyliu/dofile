@@ -11,8 +11,9 @@ plan on 2026-11-09 (iteration 2); the plan keeps a short summary of the decision
 | `flows/` | deliverable 2: user flows, decisions, and the states the design must show |
 | `wireframes/` | deliverable 3: low fidelity, desktop A and B, phone, states |
 | `mockups/` | deliverable 4: high fidelity, light and dark; `ux-analysis.md` is the UX crit of iteration 1 with its resolution |
-| `tokens.css`, `mockups/ui.css` | deliverable 5 (started): tokens and components |
-| `specimen/`, `fonts/` | the font specimen; IBM Plex files and their license |
+| `system/` | deliverable 5: the component sheet and its README; the tokens are `web/src/styles/tokens.css`, the components `mockups/ui.css` |
+| `specimen/` | the font specimen; the chosen IBM Plex files and their license are in `web/src/styles/fonts/` |
+| `axe.mjs`, `tabwalk.mjs`, `contrast.mjs`, `fonts.mjs` | the checks (`cd web && npm run axe`, `tabwalk`, `contrast`, `fonts`) |
 | `shot.mjs` | screenshots any page with Playwright from `web/node_modules` |
 
 Each folder's README has the commands that rebuild its renders; renders are not committed.
@@ -44,10 +45,10 @@ Each folder's README has the commands that rebuild its renders; renders are not 
      (draft: `docs/design/wireframes/`; chosen 2026-11-09: desktop B, one output pane with tabs that can split, Log
      above and the other tabs below);
   4. high-fidelity mockups of the landing page and the editor, light and dark (draft: `docs/design/mockups/`, on
-     `docs/design/tokens.css`);
+     `docs/design/tokens.css`, now `web/src/styles/tokens.css`);
   5. a small design system: color and type tokens (one monospace font, one UI font), spacing, and the components
      (file list, pane, toolbar button, log line, error line, results table, toast). Fonts chosen 2026-11-08: IBM Plex
-     Mono + IBM Plex Sans (`docs/design/specimen/`, files and license in `docs/design/fonts/`).
+     Mono + IBM Plex Sans (`docs/design/specimen/`, files and license in `web/src/styles/fonts/`).
 - **Tools:** HTML and CSS for wireframes and mockups, screenshotted with Playwright (Chromium, Firefox, WebKit;
   desktop and phone; light and dark), so the mockups become the start of steps 6 and 8. Excalidraw (a `.excalidraw`
   file opened at excalidraw.com) only for hand sketches. `@axe-core/playwright` for the accessibility checks. Keep
@@ -116,7 +117,7 @@ screenshots any page with Playwright from `web/node_modules`).
     wide, horizontals half a line): 5 lines instead of 8. The mockups use B2: B1 slanted 12 degrees and given a
     one-pixel drop shadow, both in CSS, for D's lean. Slanting the characters themselves (B5) comes out jagged. WebKit
     and Firefox draw hairline seams between skewed block characters; a 0.04em same-color text shadow covers them.
-    Pending the maintainer's pick.
+    Pending the maintainer's pick. **Picked on 2026-11-09: B2 (`book+drop+skew`) is the banner from now on.**
 - **Answers given on 2026-11-09, not yet applied:**
   1. **Dark-mode graphs:** add a dark plotting style to the engine, and pass the page's current light/dark mode to the
      engine call, so graphs match the page (today the PNGs are light, shown on a white card in dark mode). Engine work:
@@ -205,5 +206,42 @@ UX-037). All are fixed in the mockups; its resolution table lists where.
 - **Storage not kept:** the notice is written (`states.html` 19); which browsers persist is still to test (OQ2).
 - **Checks:** `npm run axe` and the new `npm run tabwalk` (`tabwalk.mjs`) both pass.
 
-**Status:** iteration 3 is the final hi-fi iteration; deliverable 4 is done. **Next:** deliverable 5 (tokens into `web/`, the component list,
-`@axe-core/playwright` over the mockups, a contrast script over every token pair).
+**Status:** iteration 3 is the final hi-fi iteration; deliverable 4 is done. Deliverable 5: below.
+
+## Deliverable 5: the design system (2026-11-09)
+
+The component sheet is `system/index.html` (its README has the render command and what each check does).
+- **Tokens moved into `web/`:** `web/src/styles/tokens.css` and `web/src/styles/fonts/` (with `OFL.txt`) are the one
+  source; `mockups/ui.css`, the wireframes and the flows load them from there. The page doesn't import them yet (steps
+  6 and 8).
+- **Weights:** text asked for weights we don't ship (Sans 700 and 500, Mono 600 and 900), which the browser faked. Now
+  `--w-bold-ui` (600) and `--w-bold-mono` (700), base rules for `b`, `strong`, headings and `th`, and
+  `font-synthesis: none`. The key chip is 400 (was 500).
+- **New tokens** for literals repeated in `ui.css`: `--radius-sm` (3 px, 21 uses), `--bar` (the 3 px marker),
+  `--text-row` (13 px: buttons, file rows, menus, banners; file rows and menus were 13.5 px), `--disabled-opacity`,
+  `--shadow-menu`, `--shadow-dialog`, `--scrim` (its dark value moved from `ui.css` into the tokens). Icon sizes and
+  one-off sizes (the wordmark, the badge) stay in their components.
+- **Checks:** `contrast.mjs` reads the tokens as the browser resolves them in four modes (system light and dark, and
+  `[data-theme]` forcing each), fails if a forced theme differs from the system one, and checks 37 pairs in use (4.5:1 for
+  text, 3:1 for edges and bars); the lowest text pair is 5.05:1 (string on accent-soft, light). `fonts.mjs` checks that
+  every face loads and that no text node is in an unshipped weight. `axe.mjs` now covers `system/` too. All four checks
+  pass (axe: 0 violations in 36 runs; tabwalk: every focus stop visible), and the fonts in Chromium, Firefox and WebKit.
+- **New component: the toast**, approved by the maintainer on 2026-11-09: a short confirmation with no buttons ("Saved analysis.do",
+  "Copied", "3 files uploaded"), inverted colors, bottom center, 4 s, announced by the existing hidden live region, never
+  focused. Anything to act on stays a banner or a dialog. No mockup draws it yet.
+
+**Maintainer's answers (2026-11-09):** the sheet and the toast are approved; B2 is the final banner.
+
+**Crit of the design system** (`system/critique.md`), each finding checked in a browser. Fixed: forced colors (Windows
+High Contrast) hid every icon, the focus ring and the marker bars, so the error line looked like any other (DS-1; now
+redrawn in system colors, and error banners carry the warning icon); default and primary buttons, tabs and file rows had
+no hover and nothing showed a press (DS-2; new tokens `--accent-hover`, `--error-hover`); touch targets were 22 to 32 px
+on a phone (DS-3; 44 px under `pointer: coarse`); `shot.mjs --forced` renders forced colors (DS-4). Open
+recommendations: text sizes in `rem` when the page is built (DS-5), `light-dark()` later (DS-6), components not drawn
+yet: text field states and the inline rename, the phone's bottom sheet and tab bar, the toast's place on a phone (DS-7),
+motion and z-index tokens (DS-8).
+
+**Status:** deliverable 5 is done, and with it the design step. Steps 6 and 8 build the page on `tokens.css` and `ui.css`;
+the items still open for them are DS-5 to DS-8 above, the dark plotting style (answer 1 of round 3), and the states not
+drawn (another tab is open, the drop target and upload count, could not save).
+

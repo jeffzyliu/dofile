@@ -1,11 +1,10 @@
-/* dofile web demo: design tokens (deliverable 5 starts here; copied into web/ when the page is styled).
-   Light by default; dark follows the system (prefers-color-scheme), or [data-theme] forces one.
-   Contrast (WCAG 2.1), rechecked 2026-11-09 (iteration 2) for every text/background pair used, at full opacity (text
-   never gets an opacity below 1, except disabled controls, which WCAG exempts): all text >= 4.5:1, the lowest being
-   muted on accent-soft (5.2 light, 5.1 dark: line numbers on a selected line; running lines have no tint) and string on accent-soft
-   (5.1 light); the focus ring, control and input borders and the progress bar >= 3:1 (border-strong on surface-2:
-   3.1 light and dark; the accent fill on its track: 7.8 light, 7.0 dark). --border (1.4:1) is for dividers only,
-   never the only edge of a control. Re-check after any change. */
+/* dofile web demo: design tokens, the one source for the page (web/) and the design pages (docs/design/ imports it).
+   Light by default; dark follows the system (prefers-color-scheme), or [data-theme] forces one. The dark values are
+   written twice (the media query and [data-theme="dark"]): docs/design/contrast.mjs fails if the two differ.
+   Contrast (WCAG 2.1): docs/design/contrast.mjs (cd web && npm run contrast) checks every text/background pair the
+   components use, at full opacity (text never gets an opacity below 1, except disabled controls, which WCAG exempts):
+   text >= 4.5:1; the focus ring, control and input borders and the progress bar >= 3:1. --border is for dividers
+   only, never the only edge of a control. Components: docs/design/system/. */
 
 @font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-700.woff2) format("woff2"); font-weight: 700; font-display: swap; }
@@ -29,15 +28,24 @@
      comments are told apart by color. */
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --text-xs: 11.5px;  --text-sm: 12.5px;  --text-md: 14px;  --text-lg: 16px;  --text-xl: 22px;  --text-2xl: 30px;
+  --text-xs: 11.5px;  --text-sm: 12.5px;  --text-row: 13px;  --text-md: 14px;  --text-lg: 16px;  --text-xl: 22px;  --text-2xl: 30px;
+  /* --text-row: file rows, menus, banners, buttons, group rows */
   --code: 13px;       /* editor */
   --log: 12.5px;      /* log: 80 columns fit in about 600 px */
   --leading: 1.5;
+  /* the only weights loaded: Sans 400/600, Mono 400/700; bold is a different number in each font */
+  --w-bold-ui: 600;  --w-bold-mono: 700;
+  font-synthesis: none;   /* never fake a weight or an italic; docs/design/fonts.mjs checks the pages */
 
   /* spacing (4 px steps), radius, borders */
   --s1: 4px;  --s2: 8px;  --s3: 12px;  --s4: 16px;  --s5: 24px;  --s6: 32px;  --s7: 48px;
-  --radius: 4px;  --radius-lg: 8px;
+  --radius-sm: 3px;  --radius: 4px;  --radius-lg: 8px;
+  --bar: 3px;          /* the marker bar on a line or row's left edge: open file, running line, error line, picked row */
   --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --disabled-opacity: .45;
+  --shadow-menu: 0 8px 24px rgb(0 0 0 / .16);
+  --shadow-dialog: 0 10px 30px rgb(0 0 0 / .18);
+  --scrim: rgb(0 0 0 / .32);   /* black in both themes (ink is light in dark mode) */
 
   /* light */
   --bg: #f7f7f5;           /* page */
@@ -50,7 +58,8 @@
   --accent: #3a4485;       /* softened navy: primary button, keywords, links, focus ring */
   --on-accent: #ffffff;
   --accent-soft: #e6e8f3;  /* selection, the open file, run lines */
-  --error: #b3261e;  --error-soft: #fbeceb;
+  --accent-hover: #2f3870; /* a primary button under the pointer */
+  --error: #b3261e;  --error-soft: #fbeceb;  --error-hover: #96201a;
   --ok: #1f6f3f;
   --warn: #7a4f00;   --warn-soft: #fdf3e1;
   /* editor tokens */
@@ -63,17 +72,17 @@
   :root:not([data-theme="light"]) {
     --bg: #14161b;  --surface: #1c1f26;  --surface-2: #22262e;
     --ink: #e4e6ea;  --muted: #9aa1ad;  --border: #30343d;  --border-strong: #6b7280;
-    --accent: #a3acec;  --on-accent: #14161b;  --accent-soft: #2a2f45;
-    --error: #f2867c;  --error-soft: #3a2224;  --ok: #7fcf9a;  --warn: #e6b450;  --warn-soft: #33291a;
+    --accent: #a3acec;  --on-accent: #14161b;  --accent-soft: #2a2f45;  --accent-hover: #bac1f2;
+    --error: #f2867c;  --error-soft: #3a2224;  --error-hover: #f6a198;  --ok: #7fcf9a;  --warn: #e6b450;  --warn-soft: #33291a;
     --tok-string: #7fcf9a;  --tok-macro: #d4a8f0;
-    --graph-card: #ffffff;
+    --graph-card: #ffffff;  --scrim: rgb(0 0 0 / .55);
   }
 }
 :root[data-theme="dark"] {
   --bg: #14161b;  --surface: #1c1f26;  --surface-2: #22262e;
   --ink: #e4e6ea;  --muted: #9aa1ad;  --border: #30343d;  --border-strong: #6b7280;
-  --accent: #a3acec;  --on-accent: #14161b;  --accent-soft: #2a2f45;
-  --error: #f2867c;  --error-soft: #3a2224;  --ok: #7fcf9a;  --warn: #e6b450;  --warn-soft: #33291a;
+  --accent: #a3acec;  --on-accent: #14161b;  --accent-soft: #2a2f45;  --accent-hover: #bac1f2;
+  --error: #f2867c;  --error-soft: #3a2224;  --error-hover: #f6a198;  --ok: #7fcf9a;  --warn: #e6b450;  --warn-soft: #33291a;
   --tok-string: #7fcf9a;  --tok-macro: #d4a8f0;
-  --graph-card: #ffffff;
+  --graph-card: #ffffff;  --scrim: rgb(0 0 0 / .55);
 }

@@ -1,17 +1,23 @@
 /* Components for the high-fidelity mockups, on the tokens. These become the page's CSS in steps 6 and 8. */
-@import url(../tokens.css);
+@import url(../../../web/src/styles/tokens.css);
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--ink); font: var(--text-md)/var(--leading) var(--font-ui); }
 pre, code, .mono { font-family: var(--font-mono); }
+/* only the shipped weights (tokens.css: --w-bold-ui, --w-bold-mono); the browser's default bold (700, "bolder") would be
+   faked in Sans. docs/design/fonts.mjs checks every text node. */
+h1, h2, h3, h4, b, strong, th { font-weight: var(--w-bold-ui); }
+:is(pre, code, .mono) :is(b, strong), :is(pre, code, .mono):is(b, strong) { font-weight: var(--w-bold-mono); }
 a { color: var(--accent); text-underline-offset: 2px; }
 /* buttons are real <button>s in the page; this reset makes one look like the text it replaces */
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
 /* keyboard focus: the --focus ring on everything focusable; inside panes that clip (overflow: hidden) an inset ring */
-:where(a, button, input, select, textarea, [tabindex], [role=tab], [role=menuitem]):focus-visible { outline: none; box-shadow: var(--focus); }
+/* the transparent outline is drawn only in forced colors (Windows High Contrast), which removes box shadows */
+:where(a, button, input, select, textarea, [tabindex], [role=tab], [role=menuitem]):focus-visible { outline: 2px solid transparent;
+  outline-offset: 2px; box-shadow: var(--focus); }
 :where(.pane, .files, .rs, .t, .menu) :where(a, button, input, [tabindex], [role=tab], [role=menuitem]):focus-visible {
-  box-shadow: inset 0 0 0 2px var(--accent); }
+  box-shadow: inset 0 0 0 2px var(--accent); outline-offset: -2px; }
 /* text for screen readers only */
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
                    clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -34,17 +40,30 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* toolbar */
 .toolbar { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); background: var(--surface);
            border-bottom: 1px solid var(--border); }
-.wordmark { font: 700 17px/1 var(--font-mono); color: var(--ink); text-decoration: none; letter-spacing: -.01em;
+.wordmark { font: var(--w-bold-mono) 17px/1 var(--font-mono); color: var(--ink); text-decoration: none; letter-spacing: -.01em;
             margin-right: var(--s3); }
 .wordmark span { color: var(--accent); }
-.btn { font: 600 13px/1 var(--font-ui); padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--border-strong);
+.btn { font: var(--w-bold-ui) var(--text-row)/1 var(--font-ui); padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--border-strong);
        background: var(--surface); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
        text-decoration: none; }
 .btn .ico { font-size: 12px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.stop { color: var(--error); border-color: var(--error); }
 .btn.stop.live { background: var(--error); color: var(--surface); }
-.btn[disabled], .btn.off { opacity: .45; }
+.btn[disabled], .btn.off { opacity: var(--disabled-opacity); cursor: default; }
+/* hover and pressed: a step darker (lighter in dark mode); none on disabled buttons */
+/* :hover only with a real pointer (a tap on iOS leaves :hover on); .hover draws the state in the mockups */
+.btn:where(:not([disabled], .off)).hover { background: var(--surface-2); }
+.btn.primary:where(:not([disabled], .off)).hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.stop.live:where(:not([disabled], .off)).hover { background: var(--error-hover); border-color: var(--error-hover); }
+@media (hover: hover) {
+  .btn:where(:not([disabled], .off)):hover { background: var(--surface-2); }
+  .btn.primary:where(:not([disabled], .off)):hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.stop.live:where(:not([disabled], .off)):hover { background: var(--error-hover); border-color: var(--error-hover); }
+  .tab:hover { color: var(--ink); }
+  .files li:not(.open):hover { background: var(--surface-2); }
+}
+.btn:where(:not([disabled], .off)):active { transform: translateY(1px); }
 .btn.quiet { border-color: transparent; background: transparent; font-weight: 400; color: var(--muted); }
 .btn.quiet:hover, .btn.quiet.hover { border-color: var(--border-strong); color: var(--ink); }
 .btn.icon { padding: 6px; }
@@ -54,7 +73,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .focus { box-shadow: var(--focus); }
 .spacer { flex: 1; }
 /* a key label: UI font (its ⌘ comes from the system font; other systems show Ctrl), a chip that reads at a glance */
-.key { font: 500 11.5px/1 var(--font-ui); padding: 3px 5px 2px; border-radius: 3px; border: 1px solid var(--border-strong);
+.key { font: 400 var(--text-xs)/1 var(--font-ui); padding: 3px 5px 2px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
        color: var(--muted); background: var(--surface-2); letter-spacing: .02em; margin-left: 2px; }
 .btn.primary .key { color: var(--on-accent); background: transparent; border-color: color-mix(in srgb, var(--on-accent) 55%, transparent); }
 .btn.stop.live .key { color: inherit; background: transparent; border-color: color-mix(in srgb, var(--surface) 60%, transparent); }
@@ -70,12 +89,12 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
         flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .pane-head { display: flex; align-items: center; gap: 2px; padding: 0 var(--s2); min-height: 36px; background: var(--surface-2);
              border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
-.pane-title { font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+.pane-title { font: var(--w-bold-ui) var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
               padding: 0 var(--s1); }
 .pane-body { flex: 1; min-height: 0; overflow: hidden; }
 .tab { padding: 9px 10px 8px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap;
        display: inline-flex; align-items: center; gap: 7px; }
-.tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+.tab.on { color: var(--ink); font-weight: var(--w-bold-ui); border-bottom-color: var(--accent); }
 /* a tablist inside a pane head: a real flex box (not display: contents, which older WebKit strips of its role) */
 .tabstrip { display: flex; align-self: stretch; min-width: 0; }
 .tab .dot { width: 7px; height: 7px; color: var(--accent); }
@@ -90,13 +109,13 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .head-link.icon:hover { color: var(--ink); background: var(--border); text-decoration: none; }
 
 /* files: one row per file or folder; --d is the depth. Each level indents 16 px and draws a faint guide line. */
-.files { list-style: none; margin: 0; padding: var(--s2) 0; font-size: 13.5px; }
+.files { list-style: none; margin: 0; padding: var(--s2) 0; font-size: var(--text-row); }
 .files li { --d: 0; padding: 4px var(--s3) 4px calc(var(--s3) + var(--d) * 16px); display: flex; align-items: center; gap: 6px;
             white-space: nowrap; position: relative; }
 .files li::before { content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--s3) + 6px); width: calc(var(--d) * 16px);
                     background: repeating-linear-gradient(to right, var(--guide, var(--border)) 0 1px, transparent 1px 16px); }
-.files li.open { background: var(--accent-soft); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
-.files .folder { color: var(--ink); font-weight: 600; }
+.files li.open { background: var(--accent-soft); font-weight: var(--w-bold-ui); box-shadow: inset var(--bar) 0 0 var(--accent); }
+.files .folder { color: var(--ink); font-weight: var(--w-bold-ui); }
 .files .folder .ico { color: var(--muted); font-size: 12px; margin-left: -2px; }
 .files .file-ico { color: var(--muted); font-size: 13px; }
 .files .size { margin-left: auto; color: var(--muted); font-size: var(--text-xs); font-weight: 400; }
@@ -107,10 +126,16 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
                    display: inline-grid; place-items: center; opacity: 0; cursor: pointer; }
 .files .size + .row-more, .files .badge + .row-more { margin-left: 4px; }
 .files li:hover .row-more, .files li:focus-visible .row-more, .files li.open .row-more { opacity: 1; }
-.files li.hover { background: var(--surface-2); }
+.files li:not(.open).hover { background: var(--surface-2); }
 .files .row-more:hover { background: var(--border); color: var(--ink); }
 @media (hover: none) { .files .row-more { opacity: 1; } }
-.badge { font: 600 10.5px/1 var(--font-ui); color: var(--accent); border: 1px solid var(--accent); border-radius: 3px;
+/* touch: rows, menu items and small icon buttons get a finger-sized (44 px) target */
+@media (pointer: coarse) {
+  .files li, .menu [role=menuitem] { min-height: 44px; }
+  .files .row-more { width: 44px; height: 44px; margin-top: -10px; margin-bottom: -10px; }
+  .tab .x { width: 32px; height: 32px; margin: -9px -8px -9px -4px; }
+}
+.badge { font: var(--w-bold-ui) 10.5px/1 var(--font-ui); color: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-sm);
          padding: 2px 4px; }
 .dropzone { margin: var(--s2) var(--s3); padding: var(--s3); border: 1.5px dashed var(--border-strong); border-radius: var(--radius-lg);
             text-align: center; color: var(--muted); font-size: var(--text-sm); }
@@ -124,17 +149,18 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .code .ln.sel { background: var(--accent-soft); }
 /* lines being run: a bar in the gutter (the error bar's shape, in the accent), not the selection's tint. It marks the
    text that was sent (a copy), so it moves with that text if lines are added above it while the run goes on. */
-.code .ln.run { box-shadow: inset 3px 0 0 var(--accent); }
-.code .ln.run .n { color: var(--accent); font-weight: 700; }
-.code .ln.err { box-shadow: inset 3px 0 0 var(--error); background: var(--error-soft); }
-.code .ln.err .n { color: var(--error); font-weight: 700; }
-.code .ln.warn .n { color: var(--warn); font-weight: 700; }
+.code .ln.run { box-shadow: inset var(--bar) 0 0 var(--accent); }
+.code .ln.run .n { color: var(--accent); font-weight: var(--w-bold-mono); }
+.code .ln.err { box-shadow: inset var(--bar) 0 0 var(--error); background: var(--error-soft); }
+.code .ln.err .n { color: var(--error); font-weight: var(--w-bold-mono); }
+.code .ln.warn .n { color: var(--warn); font-weight: var(--w-bold-mono); }
 /* a lint message under its line, as CodeMirror's lint shows it when the cursor is on the word (and announced) */
 .code .lint { display: block; margin: 2px var(--s3) 4px calc(4ch + 1.5ch + 10px + var(--s2)); padding: 5px 9px; white-space: normal;
-              font: var(--text-sm)/1.4 var(--font-ui); color: var(--ink); background: var(--warn-soft); border-left: 3px solid var(--warn);
+              font: var(--text-sm)/1.4 var(--font-ui); color: var(--ink); background: var(--warn-soft); border-left: var(--bar) solid var(--warn);
               border-radius: var(--radius); max-width: 60ch; }
+.code .lint b { font-weight: var(--w-bold-ui); }   /* UI text inside the mono <pre> */
 .code .caret { border-left: 2px solid var(--ink); margin-left: -1px; }
-.k { color: var(--tok-keyword); font-weight: 700; }
+.k { color: var(--tok-keyword); font-weight: var(--w-bold-mono); }
 .s { color: var(--tok-string); }
 .c { color: var(--tok-comment); }
 .m { color: var(--tok-macro); }
@@ -142,7 +168,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .warnword { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
 /* the banner (art.js): solid strokes in the accent color, the shading muted */
-.art-ink { color: var(--accent); font-weight: 700; }
+.art-ink { color: var(--accent); font-weight: var(--w-bold-mono); }
 .art-shade { color: var(--border-strong); font-weight: 400; }
 .art { font-family: var(--font-mono); white-space: pre; line-height: 1.2; margin: 0; }
 /* one pixel down and right: a pixel is one character (0.6em in Plex Mono) by half a line (0.6em at line-height 1.2) */
@@ -161,10 +187,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* log */
 .log { font: var(--log)/1.5 var(--font-mono); padding: var(--s2) var(--s3); margin: 0; white-space: pre; overflow: hidden; }
-.log .echo { font-weight: 700; }
-.log .err { color: var(--error); font-weight: 700; }
+.log .echo { font-weight: var(--w-bold-mono); }
+.log .err { color: var(--error); font-weight: var(--w-bold-mono); }
 .log .hint { color: var(--muted); }
-.log .hint b { color: var(--ink); font-weight: 600; }
+.log .hint b { color: var(--ink); font-weight: var(--w-bold-mono); }
 .log .note { color: var(--muted); }
 .log .glink { font-family: var(--font-ui); font-size: var(--text-sm); color: var(--accent); border: 1px solid var(--border);
               border-radius: var(--radius); padding: 1px 6px; display: inline-flex; align-items: center; gap: 5px; }
@@ -172,13 +198,13 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* the page's own line before each run's output: what ran and what it starts from (shown only, never in a saved log) */
 .log .runhead { display: block; white-space: normal; font-family: var(--font-ui); font-size: var(--text-sm); color: var(--muted);
                 border-top: 1px dashed var(--border); padding-top: 4px; margin-top: 4px; }
-.log .runhead b { color: var(--ink); font-weight: 600; }
+.log .runhead b { color: var(--ink); font-weight: var(--w-bold-ui); }
 .log .warn { color: var(--warn); }
 /* a warning inside the run-head: a local the selection uses that no earlier run has set */
-.log .runwarn { display: flex; gap: 6px; align-items: baseline; margin-top: 3px; color: var(--warn); font-weight: 600;
+.log .runwarn { display: flex; gap: 6px; align-items: baseline; margin-top: 3px; color: var(--warn); font-weight: var(--w-bold-ui);
                white-space: normal; max-width: 80ch; }
 .log .runwarn .ico { flex: none; vertical-align: -0.1em; }
-.log .runwarn code { font-family: var(--font-mono); font-size: 12px; }
+.log .runwarn code { font-family: var(--font-mono); font-size: 12px; font-weight: var(--w-bold-mono); }
 /* the page's own startup lines at the top of the Log pane: shown only, never in a saved or downloaded log */
 .log .head { display: block; color: var(--muted); padding-bottom: var(--s2); margin-bottom: var(--s2); border-bottom: 1px dashed var(--border); }
 .log .head .art { font-size: 10px; display: block; margin-bottom: 6px; }
@@ -194,21 +220,21 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .graph-card img { position: absolute; inset: var(--s2); width: calc(100% - 2 * var(--s2)); height: calc(100% - 2 * var(--s2));
                   object-fit: contain; }
 .graph-foot { display: flex; align-items: center; gap: var(--s2); font-size: var(--text-sm); color: var(--muted); }
-.thumb { width: 44px; height: 32px; border-radius: 3px; border: 1px solid var(--border); background: var(--graph-card) center/cover; }
+.thumb { width: 44px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--graph-card) center/cover; }
 .thumb.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* status bar */
 .statusbar { display: flex; align-items: center; gap: var(--s4); padding: 5px var(--s3); background: var(--surface-2);
              border-top: 1px solid var(--border); font-size: var(--text-sm); color: var(--muted); }
-.statusbar b { color: var(--ink); font-weight: 600; }
-.statusbar .rc-err { color: var(--error); font-weight: 600; }
+.statusbar b { color: var(--ink); font-weight: var(--w-bold-ui); }
+.statusbar .rc-err { color: var(--error); font-weight: var(--w-bold-ui); }
 .statusbar .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
 .statusbar .pulse.busy { background: var(--accent); }
 
 /* banner */
 .banner { display: flex; gap: var(--s3); align-items: flex-start; margin: var(--s2) var(--s3); padding: var(--s2) var(--s3);
           border-radius: var(--radius); border: 1px solid var(--border); border-left: 4px solid var(--accent);
-          background: var(--accent-soft); font-size: 13px; }
+          background: var(--accent-soft); font-size: var(--text-row); }
 .banner.error { border-left-color: var(--error); background: var(--error-soft); }
 .banner.warn { border-left-color: var(--warn); background: var(--warn-soft); }
 .banner .actions { display: flex; gap: var(--s2); margin-top: var(--s2); }
@@ -216,29 +242,29 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* data: the header facts, the variables, Browse */
 .facts { display: flex; flex-wrap: wrap; gap: 2px var(--s4); padding: var(--s2) var(--s3); font-size: var(--text-sm); color: var(--muted);
          border-bottom: 1px solid var(--border); }
-.facts b { color: var(--ink); font-weight: 600; }
+.facts b { color: var(--ink); font-weight: var(--w-bold-ui); }
 .filter { margin: var(--s2) var(--s3); padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius);
           color: var(--muted); font-size: var(--text-sm); }
-.subhead { font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+.subhead { font: var(--w-bold-ui) var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
            padding: var(--s3) var(--s3) var(--s2); display: flex; gap: var(--s2); align-items: baseline; }
 .subhead .aside { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: auto; }
 .t { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-.t th { text-align: left; font-weight: 600; color: var(--muted); font-size: var(--text-xs); padding: 4px var(--s3);
+.t th { text-align: left; font-weight: var(--w-bold-ui); color: var(--muted); font-size: var(--text-xs); padding: 4px var(--s3);
         border-bottom: 1px solid var(--border); white-space: nowrap; }
 .t td { padding: 4px var(--s3); border-bottom: 1px solid var(--border); white-space: nowrap; }
 .t td.mono, .t .num { font: var(--log)/1.4 var(--font-mono); }
 .t .num { text-align: right; }
 .t tr.hl td { background: var(--accent-soft); }
 .t tr.picked td { background: var(--accent-soft); }
-.t tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weight: 700; }
+.t tr.picked td:first-child { box-shadow: inset var(--bar) 0 0 var(--accent); font-weight: var(--w-bold-mono); }   /* a variable name, mono */
 .t .muted { color: var(--muted); }
 /* a variable's name: a button that picks it (marks its column in Browse) */
 .t .var { font: inherit; color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
-          text-underline-offset: 2px; border-radius: 3px; }
+          text-underline-offset: 2px; border-radius: var(--radius-sm); }
 .t tr.picked .var { color: var(--ink); text-decoration: none; }
 .grid { font: var(--log)/1.4 var(--font-mono); border-collapse: collapse; }
 .grid th, .grid td { border: 1px solid var(--border); padding: 3px 8px; text-align: right; white-space: nowrap; }
-.grid th { background: var(--surface-2); font-weight: 700; color: var(--ink); }
+.grid th { background: var(--surface-2); font-weight: var(--w-bold-mono); color: var(--ink); }
 .grid td.obs, .grid th.obs { color: var(--muted); background: var(--surface-2); font-weight: 400; }
 /* the variable picked in the list: its column in Browse */
 .grid .picked { background: var(--accent-soft); }
@@ -249,10 +275,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .rs col.name { width: 30%; }
 .rs col.act { width: 64px; }
 .rs td { padding: 4px var(--s3); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rs .sect td { background: var(--surface-2); font: 600 var(--text-xs)/1.6 var(--font-ui); letter-spacing: .06em; text-transform: uppercase;
+.rs .sect td { background: var(--surface-2); font: var(--w-bold-ui) var(--text-xs)/1.6 var(--font-ui); letter-spacing: .06em; text-transform: uppercase;
                color: var(--muted); padding: 5px var(--s3); }
 .rs .sect .aside { float: right; text-transform: none; letter-spacing: 0; font-weight: 400; }
-.rs .grp td { font: 600 13px/1.5 var(--font-ui); color: var(--ink); }
+.rs .grp td { font: var(--w-bold-ui) var(--text-row)/1.5 var(--font-ui); color: var(--ink); }
 .rs .grp .ico { color: var(--muted); font-size: 11px; margin-right: 6px; }
 .rs .grp .count { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .rs .row td { font: var(--log)/1.5 var(--font-mono); }
@@ -260,7 +286,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .rs .row td.act, .rs .grp td.act { text-align: right; font: 400 var(--text-sm)/1.5 var(--font-ui); }
 .rs .row .muted { color: var(--muted); font-family: var(--font-ui); }
 /* a value is a button (one in the tab order, arrows move): focus or hover shows all digits; Enter or ⌘ C copies them */
-.rs .val { font: inherit; width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; border-radius: 3px; padding: 0 2px; margin: 0 -2px; }
+.rs .val { font: inherit; width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; border-radius: var(--radius-sm); padding: 0 2px; margin: 0 -2px; }
 .rs .focusrow td { background: var(--accent-soft); }
 .rs .val.focus { box-shadow: inset 0 0 0 2px var(--accent); }
 .rs .act .hint { color: var(--muted); font-size: var(--text-xs); }
@@ -270,37 +296,35 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* help: OpenDTA's help text as a page (its sections become headings) */
 .help { padding: var(--s3) var(--s4); font-size: var(--text-md); max-width: 72ch; }
-.help h3 { font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+.help h3 { font: var(--w-bold-ui) var(--text-xs)/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
            margin: var(--s4) 0 var(--s2); }
-.help h2 { font: 600 var(--text-lg)/1.3 var(--font-ui); margin: 0; }
-.help h2 code { font-weight: 700; }
+.help h2 { font: var(--w-bold-ui) var(--text-lg)/1.3 var(--font-ui); margin: 0; }
+.help h2 code { font-weight: var(--w-bold-mono); }
 .help p { margin: 0 0 var(--s2); }
 .help pre { font: var(--log)/1.6 var(--font-mono); margin: 0 0 var(--s2); padding: var(--s2) var(--s3); background: var(--surface-2);
             border-radius: var(--radius); white-space: pre; overflow: hidden; }
 .help dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--s3); }
-.help dt { font: 700 var(--log)/1.6 var(--font-mono); }
+.help dt { font: var(--w-bold-mono) var(--log)/1.6 var(--font-mono); }
 .help dd { margin: 0; }
 
 /* dialog and sheet */
 /* the scrim dims in both themes (black, not the ink color, which is light in dark mode) */
-.scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .32); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .scrim { background: rgb(0 0 0 / .55); } }
-:root[data-theme="dark"] .scrim { background: rgb(0 0 0 / .55); }
-.dialog { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 10px 30px rgb(0 0 0 / .18);
+.scrim { position: absolute; inset: 0; background: var(--scrim); }
+.dialog { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-dialog);
           padding: var(--s4) var(--s5); font-size: var(--text-md); }
-.dialog h2 { font: 600 var(--text-lg)/1.3 var(--font-ui); margin: 0 0 var(--s2); }
+.dialog h2 { font: var(--w-bold-ui) var(--text-lg)/1.3 var(--font-ui); margin: 0 0 var(--s2); }
 .dialog p { margin: 0 0 var(--s3); color: var(--ink); }
 .dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; margin-top: var(--s4); flex-wrap: wrap; }
-.dialog code { font-size: 13px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+.dialog code { font-size: var(--code); background: var(--surface-2); padding: 1px 4px; border-radius: var(--radius-sm); }
 .check { display: flex; align-items: center; gap: var(--s2); font-size: var(--text-sm); color: var(--muted); }
 .check input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
-.check .box { width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: 3px; }
+.check .box { width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .check .box.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 11px; }
 .check { color: var(--ink); }
 
 /* menu: from a ⋯ button; items are buttons with role=menuitem, a destructive one in the error color */
 .menu { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
-        box-shadow: 0 8px 24px rgb(0 0 0 / .16); padding: 4px; min-width: 210px; font-size: 13.5px; }
+        box-shadow: var(--shadow-menu); padding: 4px; min-width: 210px; font-size: var(--text-row); }
 .menu [role=menuitem] { display: flex; align-items: center; gap: var(--s2); width: 100%; padding: 6px 10px; border-radius: var(--radius); }
 .menu [role=menuitem]:hover, .menu [role=menuitem].hover { background: var(--accent-soft); }
 .menu [role=menuitem] .aside { margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
@@ -315,7 +339,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .stages li .ico { font-size: 13px; }
 .stages li.done { color: var(--ink); }
 .stages li.done .ico { color: var(--ok); }
-.stages li.now { color: var(--ink); font-weight: 600; }
+.stages li.now { color: var(--ink); font-weight: var(--w-bold-ui); }
 .stages li .when { margin-left: auto; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* the stage in progress: a ring that turns; with reduced motion it stays still (the words carry the state) */
 .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent);
@@ -324,7 +348,37 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
+/* toast: a short confirmation that asks nothing of the user ("Saved analysis.do", "Copied", "3 files uploaded").
+   No buttons: anything to act on or to read twice is a banner. It never takes focus; the page's hidden live region says
+   the same words. One at a time (a new one replaces it), bottom center above the status bar, 4 s, longer while hovered. */
+.toasts { position: fixed; left: 50%; bottom: calc(var(--s6) + var(--s2)); transform: translateX(-50%); z-index: 10;
+          pointer-events: none; }
+.toast { display: inline-flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--radius-lg);
+         background: var(--ink); color: var(--surface); font-size: var(--text-row); box-shadow: var(--shadow-menu);
+         pointer-events: auto; white-space: nowrap; }
+.toast .ico { font-size: 14px; }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: toast-in .16s ease-out; } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
+
 /* empty states inside a tab */
 .empty { padding: var(--s6) var(--s5); text-align: center; color: var(--muted); font-size: var(--text-md); }
-.empty b { display: block; color: var(--ink); font-weight: 600; margin-bottom: var(--s1); }
-.empty code { font-size: 13px; color: var(--ink); }
+.empty b { display: block; color: var(--ink); font-weight: var(--w-bold-ui); margin-bottom: var(--s1); }
+.empty code { font-size: var(--code); color: var(--ink); }
+
+/* forced colors (Windows High Contrast): the system replaces every color and drops backgrounds and box shadows, which
+   would hide the icons (masks over a background), the dots, the progress fill and the marker bars. Draw them in
+   system colors instead. The focus ring is handled by the transparent outline at the top. */
+@media (forced-colors: active) {
+  .ico, .dot, .pulse { forced-color-adjust: none; background: CanvasText; }
+  :is(.btn, button, a) .ico { background: ButtonText; }
+  a .ico { background: LinkText; }
+  :is(:disabled, .off) .ico { background: GrayText; }
+  .progress > i { forced-color-adjust: none; background: Highlight; }
+  .files li.open, .code .ln.run, .t tr.picked td:first-child { border-left: var(--bar) solid Highlight; }
+  /* the error line: the whole line in the system's highlight pair, so it differs from the open file's bar */
+  .code .ln.err, .code .ln.err :is(*, .n) { forced-color-adjust: none; background: Mark; color: MarkText; }
+  .rs .val.focus, .focus { outline: 2px solid Highlight; }
+  .toast { border: 1px solid CanvasText; }
+  .grid th.picked { border-bottom: var(--bar) solid Highlight; }
+  .menu [role=menuitem]:is(:hover, .hover) { outline: 2px solid Highlight; outline-offset: -2px; }
+}

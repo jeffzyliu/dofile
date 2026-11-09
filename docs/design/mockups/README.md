@@ -1,7 +1,7 @@
 # High-fidelity mockups
 
 Deliverable 4 of the UI/UX design step (`docs/design/README.md`): the landing page and the editor, light and dark, on
-the tokens in `../tokens.css` and the components in `ui.css` (the start of deliverable 5). Each page follows the
+the tokens in `web/src/styles/tokens.css` and the components in `ui.css` (deliverable 5; the component sheet is `../system/`). Each page follows the
 system's light or dark setting; `?theme=light` or `?theme=dark` forces one. Iteration 2 (2026-11-09) applied the UX crit in
 `ux-analysis.md`; what changed is listed in `../README.md`. The toolbar's theme button (System, then
 Light, then Dark) is drawn but not wired up.
@@ -20,18 +20,18 @@ Light, then Dark) is drawn but not wired up.
 `art.js` holds the banner candidates and fills `[data-art]`. D is pyfiglet output; A1 ("lower") is drawn by hand in
 ANSI Shadow's style; the B series ("book", "thin") is lowercase on half-line pixels (▀ ▄ █), so a horizontal stroke is
 half a line thick. Flags after the name: `+drop` adds a one-pixel drop shadow and `+skew` a 12 degree slant, both
-CSS (`.art-drop`, `.art-skew` in `ui.css`). The mockups use B2, `book+drop+skew` (round 3).
+CSS (`.art-drop`, `.art-skew` in `ui.css`). The mockups use B2, `book+drop+skew` (round 3), the final pick (2026-11-09).
 
 The `.png` renders are not committed (only `img/`); open the HTML, or rebuild them. Content is dofile's own output: `sample.do` run with `dofile run` (CLI, sandboxed) on synthetic data; `img/scatter.png`
 is its `graph export`. Every command and claim on the landing page is true today, or labeled ("with the first release").
 
-Glyphs: the fonts in `../fonts/` are Latin subsets plus the complete, unmodified IBM Plex files, which are loaded only for
-arrows, box drawing and block elements (`unicode-range` in `../tokens.css`; the banner needs them). Plex has no
+Glyphs: the fonts in `web/src/styles/fonts/` are Latin subsets plus the complete, unmodified IBM Plex files, which are loaded only for
+arrows, box drawing and block elements (`unicode-range` in `tokens.css`; the banner needs them). Plex has no
 ⌘ ▶ ■ ● ▾ ⋯, so the UI draws those as SVG icons (`.ico` in `ui.css`). Don't type them as text.
 The complete files came from IBM's npm packages (`@ibm/plex-mono` 2.5.0, `@ibm/plex-sans` 1.1.0, on 2026-11-09):
 
 ```bash
-cd docs/design/fonts
+cd web/src/styles/fonts
 b=https://cdn.jsdelivr.net/npm
 curl -sfL -o ibm-plex-mono-400-complete.woff2 $b/@ibm/plex-mono@2.5.0/fonts/complete/woff2/IBMPlexMono-Regular.woff2
 curl -sfL -o ibm-plex-mono-700-complete.woff2 $b/@ibm/plex-mono@2.5.0/fonts/complete/woff2/IBMPlexMono-Bold.woff2

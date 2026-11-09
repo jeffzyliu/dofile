@@ -1,6 +1,6 @@
 // Accessibility check of the design pages with axe-core (@axe-core/playwright, from web/node_modules).
 // node docs/design/axe.mjs [page.html ...] [--browser chromium|firefox|webkit] [--json out.json]
-// Default pages: the mockups. Each page runs light and dark, at 1440 x 900 and 390 x 844 (and with ?running where
+// Default pages: the mockups and the component sheet (system/). Each page runs light and dark, at 1440 x 900 and 390 x 844 (and with ?running where
 // the mockup has that state). Exit code 1 if any violation. Rules: WCAG 2.0/2.1/2.2 A and AA, plus axe best practices.
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -18,9 +18,9 @@ const opt = (name, fallback) => {
 };
 const flagValues = new Set(['--browser', '--json'].flatMap(f => (args.includes(f) ? [args[args.indexOf(f) + 1]] : [])));
 const pages = args.filter(a => a.endsWith('.html') && !flagValues.has(a));
-const dir = new URL('./mockups/', import.meta.url);
+const here = path.dirname(new URL(import.meta.url).pathname);
 const targets = pages.length ? pages.map(p => path.resolve(p))
-  : readdirSync(dir).filter(f => f.endsWith('.html')).map(f => path.resolve(dir.pathname, f));
+  : ['mockups', 'system'].flatMap(d => readdirSync(path.join(here, d)).filter(f => f.endsWith('.html')).map(f => path.join(here, d, f)));
 
 const sizes = [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phone', width: 390, height: 844 }];
 const schemes = ['light', 'dark'];
