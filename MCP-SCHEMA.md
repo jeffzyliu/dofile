@@ -1,6 +1,9 @@
 # dofile MCP server: schema
 
-For dofile `0.1.0.dev0`. Describes `dofile-mcp` (`src/dofile/mcp_server.py`, `mcp==2.3.0`).
+For dofile `0.1.x`. Describes `dofile-mcp` (`src/dofile/mcp_server.py`, `mcp==2.3.0`).
+<!-- Edit that version only when the minor version changes (patch releases never change this schema while dofile is 0.x);
+     tests/test_version.py checks it against pyproject.toml. -->
+
 The server advertises each tool's input and output in `tools/list` (`inputSchema`, `outputSchema`), generated
 from the type definitions in `mcp_server.py` (`RunResult`, `DataSummary`, ...). This document summarizes them;
 the advertised schemas are the reference. `get_file` has no output schema, since it returns content.
@@ -410,7 +413,7 @@ re-run the setup afterwards.
 | URI | MIME type | Content |
 |---|---|---|
 | `dofile://commands` | `text/plain` | The Stata commands the engine supports, one per line. Commands the sandbox disables are not listed |
-| `dofile://about` | `application/json` | `{"dofile": "0.1.0.dev0", "engine": "OpenDTA", "engine_commit": "0c3f3a2…", "engine_patches": ["opendta-patch1-r-table.patch", "…"], "stata_version": 14}` |
+| `dofile://about` | `application/json` | `{"dofile": "0.1.0", "engine": "OpenDTA", "engine_commit": "0c3f3a2…", "engine_patches": ["opendta-patch1-r-table.patch", "…"], "stata_version": 14}` |
 
 ## Versions
 

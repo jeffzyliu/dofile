@@ -97,7 +97,10 @@ Layers, bottom up (`src/dofile/`):
   macro so `$` and backquotes in it aren't expanded (a backslash escapes only `$`, since the ODT-8 patch, not backquotes). The log is not capped.
 
 **Changing the result format or a tool** means updating the TypedDicts in `mcp_server.py` and `MCP-SCHEMA.md`
-together. While dofile is 0.x, a breaking change to the result format raises the minor version.
+together. While dofile is 0.x, a breaking change to the result format raises the minor version; a patch release never
+changes the schema. So the "For dofile `0.1.x`" line of `MCP-SCHEMA.md` is edited by hand only with a minor bump (it is
+the one place a version bump does not reach by itself, and `tests/test_version.py` fails if it is stale). The package's
+`__version__` follows `pyproject.toml` by itself.
 
 ## Tests
 

@@ -23,8 +23,15 @@ Bump before the release, in a small pull request of its own (`Release 0.1.0a1`),
 version in `pyproject.toml` at the tagged commit, and PyPI never accepts a number twice. `main` carries the version of
 the last release until the next bump, so tagging an unbumped `main` fails at upload ("file already exists").
 1. `uv version 0.1.0a1` (or `uv version --bump dev` / `--bump alpha` / `--bump patch` / `--bump minor`; add
-   `--dry-run` to preview). It edits `version` in `pyproject.toml` and the dofile entry in `uv.lock` together; commit
-   both files and nothing else.
+   `--dry-run` to preview). It edits `version` in `pyproject.toml` and the dofile entry in `uv.lock` together.
+   `__version__` in `src/dofile/__init__.py` follows by itself: it reads the installed package's metadata, which the
+   build takes from `pyproject.toml` (an editable install updates when `uv sync` or `uv run` rebuilds it; a bare source
+   tree reads `pyproject.toml` itself and reports `X.Y.Z+src`). One place is by hand, and only for a **minor** bump
+   (`0.1` → `0.2`): the line "For dofile `0.1.x`" at the top of `MCP-SCHEMA.md`. A patch or pre-release bump never
+   touches it, because a patch release must not change the schema (while dofile is 0.x a breaking change raises the
+   minor version, per `CLAUDE.md`). `tests/test_version.py` fails if that line, or a stale install, disagrees with
+   `pyproject.toml`; it runs in `poe test`, so the release workflow's `build` job fails on a mismatch too. Commit
+   `pyproject.toml` and `uv.lock` (and `MCP-SCHEMA.md` for a minor bump) and nothing else.
 2. Which number: while dofile is 0.x, a breaking change to the result format raises the minor version (`CLAUDE.md`);
    otherwise raise the patch. Until the first real release use a pre-release (`0.1.0.dev1`, `0.1.0a1`, `0.1.0rc1`);
    PEP 440 orders `.devN` < `aN` < `bN` < `rcN` < the final `0.1.0`, so go in that order and never backwards (a lower
