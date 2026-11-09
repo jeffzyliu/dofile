@@ -39,8 +39,9 @@ build-backend = "hatchling.build"
 packages = ["src/dofile"]
 
 [tool.hatch.build.targets.sdist]
-# Stata 14 output stays in the git repo, never in a distribution (LICENSE-POLICY.md)
-exclude = ["tests_opendta/compat/expected"]
+# Stata 14 output stays in the git repo, never in a distribution (LICENSE-POLICY.md); docs and the web demo are not
+# needed there (the wheel is built from src/dofile; test_browser skips its web/ check without the folder)
+exclude = ["tests_opendta/compat/expected", "docs", "web"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "tests_opendta/tests"]

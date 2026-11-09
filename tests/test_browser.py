@@ -83,8 +83,12 @@ def test_the_web_highlighters_command_list_matches_the_engine():
     """web/src/stata/commands.json is generated from the registry (`cd web && npm run commands`); a re-vendor that
     adds or renames commands must regenerate it."""
     from pathlib import Path
+    import pytest
     from dofile._vendor.opendta.session import Session  # noqa: F401  (registers all commands)
     from dofile._vendor.opendta.commands.registry import REGISTRY
-    saved = json.loads((Path(__file__).parent.parent / "web" / "src" / "stata" / "commands.json").read_text())
+    path = Path(__file__).parent.parent / "web" / "src" / "stata" / "commands.json"
+    if not path.exists():   # not in an sdist: the web demo's folder is left out of it (pyproject.toml)
+        pytest.skip("web/src/stata/commands.json is not in this checkout")
+    saved = json.loads(path.read_text())
     assert saved["commands"] == {k: v.min_abbrev for k, v in REGISTRY.items()}
     assert saved["prefixes"] == sorted(k for k, v in REGISTRY.items() if v.prefix)
