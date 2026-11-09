@@ -26,7 +26,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes nothing but *.md and docs/
+      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes nothing but *.md, docs/ and release.yml
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,7 +39,7 @@ jobs:
           code=true
           if [ "$EVENT" = pull_request ]; then
             files=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
-            other=$(printf '%s\n' "$files" | grep -vE '\.md$|^docs/' || true)   # files that are not docs
+            other=$(printf '%s\n' "$files" | grep -vE '\.md$|^docs/|^\.github/workflows/release\.yml$' || true)   # files that are not docs (release.yml runs only on a tag push: no test covers it)
             [ -n "$other" ] || code=false
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
