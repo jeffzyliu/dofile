@@ -118,4 +118,4 @@ together. While dofile is 0.x, a breaking change to the result format raises the
 - Status and next steps: `docs/phase1-plan.md` (done), `docs/phase2-plan.md` (web demo),
   `docs/phase3-plan.md` (hosted multi-user MCP server). Known OpenDTA problems to verify against Stata:
   `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
-  `docs/agent-ergonomics.md`.
+  `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`.
