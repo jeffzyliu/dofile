@@ -299,7 +299,7 @@ screenshots any page with Playwright from `web/node_modules`).
      show them only as placeholders.
   4. **PyPI:** the name `dofile` was free on 2026-11-09 (no project); the maintainer now has a PyPI account and will
      register it (only a first upload creates a project; PyPI does not reserve names). The landing page labels
-     `pip install dofile` "with the first release".
+     `pip install dofile` "with the first release". Steps and what was checked: `docs/releasing.md`.
 - **Engine and page work decided along the way (to build, steps 6–8):** a whole-file run starts with no locals (see
   "Scope" below); list locals and globals for the Results panel; report memory use; unpack and make .zip files in the
   worker; return the first rows of the data (Browse); the dark plotting style (answer 1); the editor's tokenizer
