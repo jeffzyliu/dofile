@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframes: states that change the layout</title>
+<link rel="stylesheet" href="wf.css">
+<style>
+  body { background: #f4f4f4; padding: 24px; width: 1400px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .board { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 32px; margin-top: 16px; }
+  figure { margin: 0; }
+  figcaption { font-size: 12.5px; margin-top: 6px; color: #444; }
+  figcaption b { color: #222; }
+  .mini { border: 1.5px solid #222; background: #fff; height: 270px; display: grid; grid-template-rows: auto 1fr auto;
+          position: relative; overflow: hidden; }
+  .split { display: grid; grid-template-columns: 150px 1fr; min-height: 0; }
+  .split > div { padding: 6px 8px; min-height: 0; overflow: hidden; }
+  .split > div:first-child { border-right: 1px solid var(--soft); }
+  .banner { border: 1.5px solid #333; border-left-width: 5px; background: #fafafa; padding: 6px 10px; margin-bottom: 6px;
+            font-size: 12.5px; }
+  .banner .btn { font-size: 12px; margin-right: 4px; display: inline-block; margin-top: 4px; }
+  .dialog { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 470px; background: #fff;
+            border: 2px solid #222; box-shadow: 0 4px 20px rgba(0,0,0,.3); padding: 12px 14px; font-size: 13px; }
+  .dialog .row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.25); }
+  .count { color: #666; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>States that change the layout (everything else is a line in the status bar or the log)</h1>
+<div class="board">
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn off">Run · starting…</span><span class="btn off">Break</span>
+    <span class="spacer"></span><span class="status"><b>loading packages</b> (3 of 4) · 4.1 s</span></div>
+  <div class="split"><div><ul class="files"><li class="on">analysis.do</li><li>data/</li></ul></div>
+    <div><pre>1 * wages by age and schooling
+2 use data/wages, clear
+3 …</pre><div style="color:#666;margin-top:8px">You can edit and upload while the engine loads; Run waits for it.</div></div></div>
+  <div class="statusbar" role="status"><b>starting</b><span>loading packages</span></div>
+</div><figcaption><b>1. Starting.</b> Files and editor work at once; Run says why it waits. The stage, not a percentage
+  (the stages are not equal).</figcaption></figure>
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn off">Run</span>
+    <span class="btn" style="border-width:2px;font-weight:600">Break · stopping…</span>
+    <span class="spacer"></span><span class="status"><b>stopping</b> · resets in 4 s if it does not stop</span></div>
+  <div style="padding:6px 8px"><pre><span class="echo">. merge 1:m id using data/big</span>
+  (running 41 s)</pre>
+    <div style="color:#666;margin-top:8px">One long command stops only when it ends; after 5 s the engine is replaced instead
+      (data gone, files kept).</div></div>
+  <div class="statusbar" role="status"><b>stopping</b><span>41 s</span><span>memory 1.2 GB</span></div>
+</div><figcaption><b>2. Break pressed.</b> The countdown says what happens if the command doesn't stop. When the page is not
+  cross-origin isolated, Break reads "Break · resets the engine" before it is pressed.</figcaption></figure>
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn primary">Run</span><span class="btn off">Break</span>
+    <span class="spacer"></span><span class="status"><b>rc 9998</b> · new engine</span></div>
+  <div style="padding:6px 8px">
+    <div class="banner" role="alert"><b>Session reset:</b> the code did not stop at Break. Data in memory is gone; your files
+      are kept.<br><span class="btn primary">Run the file again</span><span class="btn">Dismiss</span></div>
+    <pre style="color:#888"><span class="echo">. merge 1:m id using data/big</span>
+(ended: the engine was replaced)</pre></div>
+  <div class="statusbar" role="status"><b>ready</b><span>new engine: no data</span></div>
+</div><figcaption><b>3. Reset notice</b> (Break did not stop it, the engine crashed, or you pressed Reset). Above the log,
+  not only in the status bar, because the next run needs the setup again.</figcaption></figure>
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn primary">Run</span><span class="spacer"></span>
+    <span class="status">uploading replication.zip</span></div>
+  <div></div><div class="statusbar">uploading 12 of 24</div>
+  <div class="dim"></div>
+  <div class="dialog" role="dialog" aria-modal="true"><b>data/wages.dta already exists</b>
+    <div class="count">from replication.zip · clash 3 of 7 · existing 12 KB, 2026-11-08 · new 15 KB</div>
+    <div class="row"><span class="btn primary">Overwrite</span><span class="btn">Keep existing</span>
+      <span class="btn">Overwrite all (5 left)</span><span class="btn">Keep all (5 left)</span></div>
+    <div class="count" style="margin-top:8px">analysis.do has unsaved edits: overwriting it discards them.</div></div>
+</div><figcaption><b>4. Name clash.</b> One question per clash, for plain uploads, folders and .zip files alike; the
+  buttons say how many are left. Esc = Keep existing.</figcaption></figure>
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn primary">Run</span><span class="spacer"></span>
+    <span class="status"><b>uploaded</b> 24 files</span></div>
+  <div style="padding:6px 8px">
+    <div class="banner" role="status"><b>Uploaded 24 files from replication.zip.</b> 2 commands in them are not available in
+      dofile (community commands):<br>
+      <span class="mono">reghdfe</span> in <u>main.do</u> (3), <u>03_tables.do</u> (1) ·
+      <span class="mono">esttab</span> in <u>03_tables.do</u> (4)<br>
+      <span class="btn">Show in the editor</span><span class="btn">What is available</span><span class="btn">Dismiss</span></div>
+    <div style="color:#666">2 entries outside the folder were refused: <span class="mono">../x.do</span>,
+      <span class="mono">/etc/y</span></div></div>
+  <div class="statusbar"><b>ready</b></div>
+</div><figcaption><b>5. Upload report.</b> The editor's own tokenizer checks every uploaded .do file; the same words are
+  underlined in the editor. Refused .zip entries are listed here too.</figcaption></figure>
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn off">Run</span><span class="spacer"></span></div>
+  <div></div><div class="statusbar"><b>paused</b></div>
+  <div class="dim"></div>
+  <div class="dialog" role="alertdialog"><b>dofile is open in another tab</b>
+    <div style="margin-top:6px">Only one tab can use your files at a time, so they are not overwritten. The other tab
+      keeps its data until you take over here.</div>
+    <div class="row"><span class="btn primary">Use dofile in this tab</span><span class="btn">Close this tab</span></div></div>
+</div><figcaption><b>6. Another tab.</b> Taking over pauses the other tab (it shows the same notice). Found with a
+  browser lock, so a closed tab frees it.</figcaption></figure>
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn primary">Run</span><span class="spacer"></span>
+    <span class="status"><b>ready</b></span></div>
+  <div style="padding:6px 8px">
+    <div class="banner" role="alert"><b>Memory is nearly full</b> (1.7 GB of about 2 GB on this device). The engine may reset
+      and lose the data in memory. Save it with <span class="mono">save</span>, or drop what you don't need.
+      <br><span class="btn">Dismiss</span></div></div>
+  <div class="statusbar" role="status"><b>ready</b><span><b>memory 1.7 GB of ~2 GB</b></span></div>
+</div><figcaption><b>7. Memory warning.</b> Memory is always in the status bar; the banner shows once near the limit. The
+  limit per device is a guess until measured.</figcaption></figure>
+
+<figure><div class="mini">
+  <div class="bar"><span class="mark">dofile</span><span class="btn off">Run · engine stopped</span><span class="spacer"></span>
+    <span class="status"><b>stopped</b></span></div>
+  <div class="split"><div><ul class="files"><li class="on">analysis.do</li><li>data/</li></ul></div>
+    <div><div class="banner" role="alert"><b>The engine failed twice and stopped</b> (out of memory). Your files are safe:
+      you can still edit and download them.<br><span class="btn primary">Reload the page</span><span class="btn">Download all</span></div>
+      <pre>1 * wages by age and schooling</pre></div></div>
+  <div class="statusbar" role="status"><b>stopped</b></div>
+</div><figcaption><b>8. Failed twice / did not start.</b> No loop of restarts (each can cost a phone a GB); the page stays a
+  working editor and file manager.</figcaption></figure>
+
+</div>
+<script src="content.js"></script>
+</body>
+</html>

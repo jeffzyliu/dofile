@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>dofile web demo: user flows</title>
+<style>
+  @font-face { font-family: "Plex Mono"; src: url(../fonts/ibm-plex-mono-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Plex Mono"; src: url(../fonts/ibm-plex-mono-700.woff2) format("woff2"); font-weight: 700; }
+  @font-face { font-family: "Plex Sans"; src: url(../fonts/ibm-plex-sans-400.woff2) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Plex Sans"; src: url(../fonts/ibm-plex-sans-600.woff2) format("woff2"); font-weight: 600; }
+  :root { --bg: #f7f7f5; --surface: #ffffff; --ink: #1e2128; --muted: #5a606b; --accent: #3a4485;
+          --border: #d9dbe0; --error: #b3261e; --ok: #1f6f3f; --sel: #e6e8f3; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161b; --surface: #1c1f26; --ink: #e4e6ea; --muted: #9aa1ad; --accent: #a3acec;
+            --border: #30343d; --error: #f2867c; --ok: #7fcf9a; --sel: #2a2f45; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; padding: 32px; max-width: 1500px; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 "Plex Sans", system-ui, sans-serif; }
+  code, .mono { font-family: "Plex Mono", ui-monospace, monospace; font-size: 13.5px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 19px; margin: 40px 0 6px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); }
+  h2 .id { font-family: "Plex Mono", monospace; color: var(--accent); margin-right: 8px; }
+  p { margin: 6px 0; max-width: 130ch; }
+  .lede { color: var(--muted); }
+  .trigger { color: var(--muted); }
+  .trigger b { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border);
+          margin: 10px 0; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  th { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  td:first-child { width: 2.5em; font-family: "Plex Mono", monospace; color: var(--muted); }
+  col.you { width: 22%; } col.page { width: 33%; } col.engine { width: 25%; } col.tag { width: 17%; }
+  .tag { display: inline-block; font-family: "Plex Mono", monospace; font-size: 12px; padding: 1px 6px; border-radius: 3px;
+         border: 1px solid; white-space: nowrap; }
+  .now { color: var(--ok); }
+  .build { color: var(--accent); }
+  .unknown { color: var(--error); }
+  .cite { display: block; font-family: "Plex Mono", monospace; font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .msg { font-family: "Plex Mono", monospace; font-size: 13px; background: var(--sel); padding: 0 4px; border-radius: 3px; }
+  .branches { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+              padding: 8px 14px; margin: 10px 0; }
+  .branches h3, .ends h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+                           color: var(--muted); }
+  .branches ul { margin: 0; padding-left: 18px; }
+  .branches li { margin: 3px 0; }
+  .ends { padding: 4px 0; }
+  .legend { display: flex; gap: 22px; margin: 14px 0; font-size: 14px; flex-wrap: wrap; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .box { background: var(--surface); border: 1px solid var(--border); padding: 10px 14px; }
+  .box h3 { margin: 0 0 6px; font-size: 15px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  .box li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<h1>dofile web demo: user flows</h1>
+<p class="lede">Deliverable 2 of the UI/UX design step (<code>docs/phase2-plan.md</code>). Seven flows, each a trigger, the steps
+(what you do, what the page shows, what the engine's Web Worker does), the branches, and where it ends. Every step is tagged
+with what the proof-of-concept page does today, with the line that does it, or what is still to build. The wireframes and
+components come from these steps and from the list of states and messages at the end.</p>
+<div class="legend">
+  <span><span class="tag now">now</span> the PoC page does this today (file:line)</span>
+  <span><span class="tag build">to build</span> designed here, not in the page yet</span>
+  <span><span class="tag unknown">unknown</span> not measured or not decided</span>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="id">F1</span>First visit</h2>
+<p class="trigger"><b>Trigger:</b> someone opens the site for the first time (from a link, a course page or a search), on a
+computer or a phone.</p>
+<table>
+  <colgroup><col><col class="you"><col class="page"><col class="engine"><col class="tag"></colgroup>
+  <tr><th>#</th><th>You</th><th>The page shows</th><th>The engine</th><th>State</th></tr>
+  <tr><td>1</td><td>Open the site.</td>
+    <td>The landing page: what dofile is, "Try it", the CLI and MCP install lines, the OpenDTA credit. Static HTML, so it shows at once.</td>
+    <td>Not started (or starts in the background, so "Try it" is faster: <span class="tag unknown">unknown</span>).</td>
+    <td><span class="tag build">to build</span><span class="cite">plan step 8</span></td></tr>
+  <tr><td>2</td><td>Press "Try it".</td>
+    <td>The editor page. The file list and the editor work at once; Run says why it waits (<span class="msg">Run · starting…</span>).</td>
+    <td>Starts in a Web Worker and reports each stage: <span class="msg">loading Python</span>, <span class="msg">loading your files</span>,
+      <span class="msg">loading packages</span>, <span class="msg">starting the engine</span>.</td>
+    <td><span class="tag now">now</span> stages <span class="cite">worker.js:166–202</span>
+      <span class="tag build">to build</span> say why Run waits</td></tr>
+  <tr><td>3</td><td>Read the sample while it loads.</td>
+    <td>The sample project is in the file list and its main do-file is open: comments explain what it does.</td>
+    <td>On a first visit (the working folder is empty), copies the sample in and saves it to the browser's storage.</td>
+    <td><span class="tag now">now</span> one sample file <span class="cite">main.ts:233</span>
+      <span class="tag build">to build</span> a sample project with our own data</td></tr>
+  <tr><td>4</td><td>Wait: about 6 s on a fast line, 14 s at 30 Mbps (first visit); about 1 s on later visits with the snapshot.</td>
+    <td>The stage in words, then <span class="msg">ready</span>. No percentage: the stages are not equal in length.</td>
+    <td>Ready; Run and Reset are enabled.</td>
+    <td><span class="tag now">now</span><span class="cite">startup-times.json (2026-11-07, Chromium)</span></td></tr>
+</table>
+<div class="branches"><h3>Branches</h3><ul>
+  <li><b>The engine does not start</b> (old browser, no memory): <span class="msg">the engine did not start: …. You can still edit
+    and download your files.</span> <span class="tag now">now</span><span class="cite">main.ts:231</span></li>
+  <li><b>The page is not cross-origin isolated</b> (some hosts, plain HTTP on a LAN): Break can only restart the engine. Today this is
+    a note in the status line; it should be on the Break button itself, before it is pressed.
+    <span class="tag now">now</span><span class="cite">main.ts:214</span> <span class="tag build">to build</span> on the button</li>
+  <li><b>Keeping files:</b> the page should ask the browser to keep its storage (<code>navigator.storage.persist()</code>, in the
+    plan's decision 1); the code does not call it yet. Whether a browser shows a prompt for it (Firefox has in the past) is
+    <span class="tag unknown">unknown</span>. If it does, that prompt is part of the first visit.</li>
+  <li><b>A phone:</b> the same steps; the editor and the log are tabs (wireframes, deliverable 3).</li>
+</ul></div>
+<p class="ends"><b>Ends with:</b> the editor open on the sample, the engine ready, nothing run yet.</p>
+
+<!-- ============================================================ -->
+<h2><span class="id">F2</span>Open the sample</h2>
+<p class="trigger"><b>Trigger:</b> a new visitor wants to see it work before bringing their own files.</p>
+<table>
+  <colgroup><col><col class="you"><col class="page"><col class="engine"><col class="tag"></colgroup>
+  <tr><th>#</th><th>You</th><th>The page shows</th><th>The engine</th><th>State</th></tr>
+  <tr><td>1</td><td>Look at the file list.</td>
+    <td>The sample's files: a main do-file, a small dataset of our own (synthetic or openly licensed: <code>sysuse</code> gives
+      rc 601, by design), maybe a second do-file it calls.</td><td>—</td>
+    <td><span class="tag build">to build</span><span class="cite">plan step 8; clean room</span></td></tr>
+  <tr><td>2</td><td>Open another file.</td>
+    <td>It replaces the editor's text. With unsaved edits, the page asks first.</td><td>Reads the file.</td>
+    <td><span class="tag now">now</span> a browser confirm() <span class="cite">main.ts:65–70</span>
+      <span class="tag build">to build</span> our own dialog</td></tr>
+  <tr><td>3</td><td>Press Run.</td><td>See F4.</td><td>See F4.</td><td></td></tr>
+  <tr><td>4</td><td>Get the sample back after changing or deleting it.</td>
+    <td>"Restore the sample" in the file list's menu; it does not touch other files.</td>
+    <td>Copies the sample in again.</td>
+    <td><span class="tag build">to build</span> (today it comes back only when the folder is empty)</td></tr>
+</table>
+<p class="ends"><b>Ends with:</b> a log with a table and a graph from the sample, and the visitor knows where to put their files.</p>
+
+<!-- ============================================================ -->
+<h2><span class="id">F3</span>Upload a replication package</h2>
+<p class="trigger"><b>Trigger:</b> a student or researcher has a package (do-files and data, often written for someone else's
+computer, often a .zip from a journal archive) and wants to run it.</p>
+<table>
+  <colgroup><col><col class="you"><col class="page"><col class="engine"><col class="tag"></colgroup>
+  <tr><th>#</th><th>You</th><th>The page shows</th><th>The engine</th><th>State</th></tr>
+  <tr><td>1</td><td>Drag the folder onto the page, or Upload files / Upload folder.</td>
+    <td>A drop target over the file list while dragging; then the files, with their folders.</td>
+    <td>Writes each file under the working folder with its folder path, and saves to the browser's storage.</td>
+    <td><span class="tag now">now</span> upload, folder upload, drop anywhere <span class="cite">main.ts:148–160, 204–209</span>
+      <span class="tag build">to build</span> drop target; folders shown as a tree</td></tr>
+  <tr><td>2</td><td>Drop a .zip instead.</td>
+    <td>Unpacked into the working folder with its folders. Entries that would land outside it (<code>../</code>, absolute
+      paths) are refused and listed.</td>
+    <td>Unpacks with Python's <code>zipfile</code>: no new dependency.</td>
+    <td><span class="tag build">to build</span> decided 2026-11-08 (today the .zip is stored as one file)</td></tr>
+  <tr><td>2a</td><td>An uploaded file (plain, folder or from a .zip) has the name of one already there.</td>
+    <td>Asked for each clash: <span class="msg">Overwrite</span> <span class="msg">Keep existing</span>
+      <span class="msg">Overwrite all</span>. The open file with unsaved edits is named as such in the question.</td>
+    <td>Writes only what you chose.</td>
+    <td><span class="tag build">to build</span> decided (today an upload silently overwrites)</td></tr>
+  <tr><td>3</td><td>Choose Overwrite for the file open with unsaved edits.</td>
+    <td>The upload wins, and the editor shows the new file.</td><td>—</td>
+    <td><span class="tag now">now</span><span class="cite">main.ts:155–158</span></td></tr>
+  <tr><td>3a</td><td>Look at the uploaded do-files.</td>
+    <td>A list of the commands the do-files use that dofile does not have (<code>reghdfe</code> in 2 files, ...), each file
+      linked; in the editor, those command words are underlined.</td>
+    <td>Not needed: the editor's language code already knows the engine's commands, and checks every .do file with the same
+      tokenizer.</td>
+    <td><span class="tag build">to build</span><span class="cite">web/src/stata/language.ts, commands.json</span></td></tr>
+  <tr><td>4</td><td>Open the master do-file; Run.</td>
+    <td>The log. Absolute paths (<code>use "C:\Users\me\proj\data\x.dta"</code>) and <code>cd</code> work: each mapped path prints a
+      note line, styled as a note, not as output.</td>
+    <td>The path shim maps each path to the longest tail that exists in the working folder; <code>cd</code> stays inside it.</td>
+    <td><span class="tag now">now</span> mapping and note <span class="cite">pathshim.py</span>
+      <span class="tag build">to build</span> note style</td></tr>
+  <tr><td>5</td><td>Hit a community command.</td>
+    <td>Today: <span class="msg">command reghdfe is unrecognized</span> <span class="msg">r(199);</span>. Proposed: under it, say that
+      community commands (reghdfe, esttab, outreg2, …) are not available here, in our own words.</td>
+    <td>Stops at the first error (rc 199), like a do-file.</td>
+    <td><span class="tag now">now</span> message <span class="tag build">to build</span> explanation</td></tr>
+</table>
+<div class="branches"><h3>Branches</h3><ul>
+  <li><b>Large data:</b> each file is in memory twice (Python's copy and the browser's storage). How big a package fits, on a
+    computer or a phone, is <span class="tag unknown">unknown</span>. The page needs a "too big" message (upload refused, or the
+    engine out of memory: see F6).</li>
+  <li><b>A file the editor cannot show</b> (not UTF-8 text): <span class="msg">… is not UTF-8 text, so the editor would change it.
+    Download it to edit it elsewhere.</span> <span class="tag now">now</span><span class="cite">main.ts:112</span></li>
+  <li><b>Later, Chromium only:</b> "open a folder" in place, no upload (plan decision 1). Not in the first version.</li>
+</ul></div>
+<p class="ends"><b>Ends with:</b> the package's files in the list, and the master do-file run to the end or to its first error
+with the error explained.</p>
+
+<!-- ============================================================ -->
+<h2><span class="id">F4</span>Run</h2>
+<p class="trigger"><b>Trigger:</b> you have code in the editor and want its output.</p>
+<table>
+  <colgroup><col><col class="you"><col class="page"><col class="engine"><col class="tag"></colgroup>
+  <tr><th>#</th><th>You</th><th>The page shows</th><th>The engine</th><th>State</th></tr>
+  <tr><td>1</td><td>Edit.</td><td>An unsaved mark on the file's name and on Save. Run uses the editor's text and does not save it
+      (as in a desktop do-file editor); leaving with unsaved edits warns.</td><td>—</td>
+    <td><span class="tag now">now</span><span class="cite">main.ts:55–71</span></td></tr>
+  <tr><td>1a</td><td>Type a command.</td><td>Highlighting from the engine's own command list (abbreviations included), so a
+      highlighted command is one dofile runs. A command it lacks is underlined, with a note on hover; a warning only, since a
+      <code>program define</code> in the file or a macro (<code>`cmd' x</code>) can make it valid.</td><td>—</td>
+    <td><span class="tag now">now</span> highlighting <span class="cite">language.ts</span>
+      <span class="tag build">to build</span> underline</td></tr>
+  <tr><td>2</td><td>Run (the file), Run selection, or Ctrl/Cmd+Enter (the selection, or the file when nothing is selected).</td>
+    <td>Run off and Break on: one run at a time. <span class="msg">running · 3.4 s</span>, counting. The lines that run are marked
+      in the editor while it runs.</td>
+    <td>Runs the text as one do-file (preserve restored, temp names dropped at the end), then saves the working folder.
+      A whole-file run (Run, or the shortcut with nothing selected) starts with no locals; a selection keeps those of the
+      runs before it.</td>
+    <td><span class="tag now">now</span> Run, shortcut, one at a time <span class="cite">main.ts:48, 76–80, 162–169</span>
+      <span class="tag build">to build</span> Run selection button, timer, marked lines</td></tr>
+  <tr><td>3</td><td>Watch.</td>
+    <td>Elapsed time and memory use (<span class="msg">running · 3.4 s · 610 MB</span>). There is no current line or progress: the
+      engine does not report any during a run.</td>
+    <td>Reports its memory use.</td><td><span class="tag build">to build</span> memory, decided
+      <span class="tag unknown">unknown</span> current line</td></tr>
+  <tr><td>4</td><td>Read the log.</td>
+    <td>Each command echoed (<code>. regress wage age educ</code>), its output, and the error in the error color with its rc
+      (<code>r(111);</code>). The status line: rc and time. The log scrolls to the end.</td><td>Returns the log and the rc.</td>
+    <td><span class="tag now">now</span> plain text <span class="cite">main.ts:170–181</span>
+      <span class="tag build">to build</span> error marked, jump to the line</td></tr>
+  <tr><td>5</td><td>Look at graphs.</td>
+    <td>Each graph inline in the log, after the command that drew it.</td><td>Returns the PNGs the run drew.</td>
+    <td><span class="tag now">now</span> only the latest, beside the log <span class="cite">main.ts:178–180</span>
+      <span class="tag build">to build</span> inline</td></tr>
+  <tr><td>6</td><td>Look at the data and the results.</td>
+    <td>A data view (variables with labels and types, then the first rows) and the e()/r() results, in panes or tabs next to the log.</td>
+    <td><code>describe()</code> and <code>matrix()</code> in <code>browser.py</code>, in the MCP server's format.</td>
+    <td><span class="tag build">to build</span><span class="cite">browser.py:63–67</span></td></tr>
+  <tr><td>7</td><td>See files the run wrote.</td><td>New and changed files appear in the list (a log, a .dta, a graph export).</td>
+    <td>Saved to the browser's storage after the run.</td>
+    <td><span class="tag now">now</span><span class="cite">main.ts:182</span> <span class="tag build">to build</span> mark new files</td></tr>
+</table>
+<div class="branches"><h3>Branches</h3><ul>
+  <li><b>Run before the engine is ready:</b> Run is off and says why (F1 step 2).</li>
+  <li><b>An error:</b> the run stops at it; data stays as the last complete command left it.</li>
+  <li><b>Clear the log:</b> a button; it clears the log and the graphs, not the data. <span class="tag now">now</span><span class="cite">main.ts:195</span></li>
+</ul></div>
+<p class="ends"><b>Ends with:</b> rc 0 or the error and its rc, the data in memory, and the log, graphs and results on screen.</p>
+
+<!-- ============================================================ -->
+<h2><span class="id">F5</span>Break</h2>
+<p class="trigger"><b>Trigger:</b> a run takes too long, loops, or was started by mistake.</p>
+<table>
+  <colgroup><col><col class="you"><col class="page"><col class="engine"><col class="tag"></colgroup>
+  <tr><th>#</th><th>You</th><th>The page shows</th><th>The engine</th><th>State</th></tr>
+  <tr><td>1</td><td>Press Break (a keyboard shortcut too).</td>
+    <td><span class="msg">breaking…</span>, then, if it takes a moment, how long until a reset (<span class="msg">stopping · resets in 4 s</span>).</td>
+    <td>Asks the engine to stop at the next safe point (between commands, or between passes of a loop).</td>
+    <td><span class="tag now">now</span> button, status <span class="cite">main.ts:186; client.js:80–87</span>
+      <span class="tag build">to build</span> shortcut, countdown</td></tr>
+</table>
+<div class="cols">
+  <div class="box"><h3>A. It stops (the usual case)</h3><ul>
+    <li>rc 1, <code>--Break--</code> in the log.</li>
+    <li>Data kept, as the last complete command left it.</li>
+    <li><span class="tag now">now</span><span class="cite">client.js:83–85</span></li></ul></div>
+  <div class="box"><h3>B. One long command does not stop in 5 s</h3><ul>
+    <li>The engine is replaced: rc 9998,
+      <span class="msg">session reset: the code did not stop at Break. Data in memory is gone; your files are kept.</span></li>
+    <li>Then F6's reset state.</li>
+    <li><span class="tag now">now</span><span class="cite">client.js:15, 86, 95</span></li></ul></div>
+  <div class="box"><h3>C. The page is not cross-origin isolated</h3><ul>
+    <li>Break can only replace the engine, at once: same rc 9998 message as B.</li>
+    <li>The Break button says so beforehand (<span class="msg">Break · resets the engine</span>).</li>
+    <li><span class="tag now">now</span><span class="cite">client.js:24, 84</span> <span class="tag build">to build</span> label</li></ul></div>
+  <div class="box"><h3>D. Break with nothing running</h3><ul>
+    <li>Break is off when nothing runs.</li>
+    <li><span class="tag now">now</span><span class="cite">main.ts:78</span></li></ul></div>
+</div>
+<p class="ends"><b>Ends with:</b> no run in progress; with the data (A) or a fresh engine and the files (B, C).</p>
+
+<!-- ============================================================ -->
+<h2><span class="id">F6</span>A crashed engine, and Reset</h2>
+<p class="trigger"><b>Trigger:</b> the engine's worker dies (out of memory, often on a phone), or you press Reset to start clean.</p>
+<table>
+  <colgroup><col><col class="you"><col class="page"><col class="engine"><col class="tag"></colgroup>
+  <tr><th>#</th><th>You</th><th>The page shows</th><th>The engine</th><th>State</th></tr>
+  <tr><td>1</td><td>(nothing: it happens during a run)</td>
+    <td>The run ends with rc 9998: <span class="msg">session reset: the engine crashed (…). Data in memory is gone; your files are kept.</span>
+      Shown as a notice above the log, not only in the status line, since it changes what the next run needs.</td>
+    <td>A new worker starts once by itself and loads the files from the browser's storage.</td>
+    <td><span class="tag now">now</span> restart, message <span class="cite">client.js:33–39, 95–98</span>
+      <span class="tag build">to build</span> notice</td></tr>
+  <tr><td>2</td><td>Re-run your setup.</td>
+    <td>The notice offers "Run the file again" (the whole open file).</td><td>Starts F4.</td>
+    <td><span class="tag build">to build</span></td></tr>
+  <tr><td>3</td><td>Press Reset (by choice).</td>
+    <td><span class="msg">new engine: data cleared, files kept</span></td><td>Same restart; no data.</td>
+    <td><span class="tag now">now</span><span class="cite">main.ts:187–194</span></td></tr>
+</table>
+<div class="branches"><h3>Branches</h3><ul>
+  <li><b>It fails again while restarting:</b> it stops, rather than looping (each new worker can cost a phone a GB):
+    <span class="msg">the engine's worker failed twice (…); reload the page</span>. Editing and downloading still work.
+    <span class="tag now">now</span><span class="cite">client.js:41–46</span></li>
+  <li><b>Reload the page:</b> files come back from the browser's storage; data does not, and the page says so.
+    <span class="tag now">now</span><span class="cite">plan, Verification</span></li>
+</ul></div>
+<p class="ends"><b>Ends with:</b> a new engine with the files and no data, or a clear "reload" state.</p>
+
+<!-- ============================================================ -->
+<h2><span class="id">F7</span>Download everything</h2>
+<p class="trigger"><b>Trigger:</b> you are done, want to keep the work, or move to another computer. Files live only in this
+browser, and clearing the site's data deletes them.</p>
+<table>
+  <colgroup><col><col class="you"><col class="page"><col class="engine"><col class="tag"></colgroup>
+  <tr><th>#</th><th>You</th><th>The page shows</th><th>The engine</th><th>State</th></tr>
+  <tr><td>1</td><td>Download one file.</td><td>A download button on each file.</td><td>Reads it.</td>
+    <td><span class="tag now">now</span><span class="cite">main.ts:128–136</span></td></tr>
+  <tr><td>2</td><td>Download all.</td>
+    <td>One .zip of the working folder (do-files, data, logs and graph files the runs wrote), named with the date; the
+      engine's hidden temp folder left out.</td>
+    <td>Python's <code>zipfile</code> in the worker: no new dependency.</td>
+    <td><span class="tag build">to build</span> decided 2026-11-08</td></tr>
+  <tr><td>3</td><td>Save the log.</td><td>"Download log" next to the log: the log as text, the same as a log file.</td><td>—</td>
+    <td><span class="tag build">to build</span></td></tr>
+</table>
+<div class="branches"><h3>Branches</h3><ul>
+  <li><b>The engine did not start or failed twice:</b> downloads must still work. Per-file reads work once Python and the files are
+    loaded (the worker's first step); a .zip made in Python needs the same. If Python itself never loads, nothing can be read:
+    <span class="tag unknown">unknown</span> whether a JavaScript fallback is worth it.</li>
+</ul></div>
+<p class="ends"><b>Ends with:</b> a .zip on your computer with everything the page had.</p>
+
+<!-- ============================================================ -->
+<h2>Decisions (2026-11-08)</h2>
+<div class="cols">
+  <div class="box"><h3>Panels</h3><ul>
+    <li><b>Files</b>, <b>editor</b> (tabs for several open files), <b>log</b> with a one-line <b>command line</b> under it
+      (up and down arrows recall earlier commands; output goes to the same log).</li>
+    <li><b>Graph</b>: one panel showing the latest graph, the session's earlier graphs as thumbnails; the log links
+      "graph 2" where each was drawn. A .png opened from the files shows there too.</li>
+    <li><b>Data</b>: a header (observations, variables, file name, size, memory), the variables (name, label, type;
+      filter; a click inserts the name), and Browse (the first rows: needs the engine addition).</li>
+    <li><b>Results</b>: e() and r(), in the MCP server's format, then the locals and globals (internal temporary names
+      hidden).</li>
+    <li><b>Scope</b>: a whole-file run starts with no locals, as a do-file in Stata, so running a file twice gives the
+      same answer; a selection and the command line keep the locals of the runs before them. Globals, data and e()/r()
+      carry over. The log explains, in our words, a <code>restore</code> with nothing preserved (preserve ends with each
+      run) and a temporary name whose variable or file is gone.</li>
+    <li><b>Help</b>: OpenDTA's own help pages (MIT, written in its own words; every one of the 515 commands has a
+      topic). <code>help regress</code> opens the page here, not in the log; "Also see" links work. No links to Stata's
+      manuals.</li>
+    <li>No history panel in the first version: the log has "next error", the editor marks error lines.</li>
+    <li>Phone: tabs (Files, Editor, Log, Data, Results); the wireframes try two desktop arrangements.</li></ul></div>
+  <div class="box"><h3>Behavior</h3><ul>
+    <li>Explicit Save, as now, plus an unsaved draft kept in the browser's storage.</li>
+    <li>The last log is kept across a reload; "Download log".</li>
+    <li>A second browser tab says dofile is open in another tab and offers to take over.</li>
+    <li>Opening a file: .png in the graph panel, .csv as text, .dta shows its variables and offers "Load it" (<code>use</code>).</li>
+    <li>Name clashes: Overwrite, Keep existing, Overwrite all, Keep all.</li>
+    <li>A zip with one top folder keeps it.</li>
+    <li>Landing page wording: your files and data never leave the browser (the runtime itself comes from a CDN).</li>
+    <li>"Delete all files" in the file panel's menu, with a confirmation.</li>
+    <li>Memory in the status bar, a warning near a per-device limit (a guess until measured).</li>
+    <li>Sharing a do-file by link: later.</li></ul></div>
+</div>
+
+<h2>States and messages the design must show</h2>
+<div class="cols">
+  <div class="box"><h3>Engine</h3><ul>
+    <li>starting, with the stage (4 stages)</li>
+    <li>ready</li>
+    <li>running, with elapsed time</li>
+    <li>memory use, and a warning near the limit</li>
+    <li>breaking, with the reset countdown</li>
+    <li>stopped by Break (rc 1, data kept)</li>
+    <li>reset (rc 9998) with its reason: Break did not stop it, it crashed, you pressed Reset</li>
+    <li>failed twice: reload the page</li>
+    <li>did not start: files still available</li>
+    <li>not cross-origin isolated: Break resets</li></ul></div>
+  <div class="box"><h3>Files</h3><ul>
+    <li>open, unsaved, saved, could not save</li>
+    <li>uploading (count), uploaded, replaced the open file</li>
+    <li>name clash: Overwrite / Keep existing / Overwrite all; zip entries refused</li>
+    <li>commands the uploaded do-files use that dofile lacks</li>
+    <li>a drop target while dragging</li>
+    <li>new or changed by the last run</li>
+    <li>not UTF-8: cannot open in the editor</li>
+    <li>confirm delete; name already exists; restore the sample</li>
+    <li>storage: kept or not kept by the browser; too big (unknown limit)</li></ul></div>
+  <div class="box"><h3>Log</h3><ul>
+    <li>command echo, output, table</li>
+    <li>error line with rc, linked to its line in the editor</li>
+    <li>path-mapping note</li>
+    <li>unknown (community) command, explained</li>
+    <li>graph, inline</li>
+    <li>Break line; reset notice with "Run the file again"</li>
+    <li>a help page (in the Help panel); no topic found (<code>if</code>, <code>foreach</code>, <code>forvalues</code> today)</li></ul></div>
+  <div class="box"><h3>Possible engine additions (not decided)</h3><ul>
+    <li>report the current line during a run (for progress)</li>
+    <li>return the first rows of the data (for a data view; today only the variables: <code>data_summary()</code>)</li>
+    <li>decided: report memory use, to warn before a phone runs out (the worker's memory and the dataset's size)</li>
+    <li>decided: unpack a .zip and make one of the folder (F3, F7), in the worker</li>
+    <li>decided: a whole-file run starts with no locals (an option on <code>Engine.run</code>; MCP unchanged)</li>
+    <li>decided: list the locals and globals for the Results panel</li>
+    <li>not the engine: commands the engine lacks are found by the editor's own tokenizer (F3 3a, F4 1a)</li></ul></div>
+</div>
+</body>
+</html>

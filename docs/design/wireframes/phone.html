@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframes: phone</title>
+<link rel="stylesheet" href="wf.css">
+<style>
+  body { background: #f4f4f4; padding: 24px; width: 1360px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .board { display: grid; grid-template-columns: repeat(3, 390px); gap: 36px 40px; margin-top: 16px; }
+  figure { margin: 0; }
+  figcaption { font-size: 12.5px; margin-top: 8px; }
+  figcaption b { display: block; font-size: 13.5px; }
+  .phone { width: 390px; height: 844px; border: 2px solid #222; border-radius: 28px; overflow: hidden; background: #fff;
+           display: grid; grid-template-rows: 44px auto auto 1fr auto auto; position: relative; }
+  .notch { background: #fff; display: flex; justify-content: center; align-items: center; color: #999; font-size: 11px; }
+  .top { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1.5px solid var(--line); }
+  .top .file { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; }
+  .strip { padding: 3px 10px; font-size: 11.5px; color: var(--muted); background: var(--fill); border-bottom: 1px solid var(--soft); }
+  .content { overflow: hidden; padding: 6px 8px; min-height: 0; }
+  .content pre { font-size: 9.6px; }
+  .tabs { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1.5px solid var(--line); text-align: center;
+          font-size: 11px; padding: 6px 0 22px; }
+  .tabs span { color: var(--muted); }
+  .tabs .on { color: var(--ink); font-weight: 600; text-decoration: underline; }
+  .tabs .dot::after { content: " ●"; font-size: 8px; }
+  .big { padding: 6px 16px; font-size: 14px; }
+  .kbd { height: 290px; background: #d9d9d9; border-top: 1.5px solid var(--line); display: grid; place-items: center;
+         color: #666; font-size: 13px; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-top: 2px solid #222;
+           border-radius: 16px 16px 0 0; box-shadow: 0 -4px 16px rgba(0,0,0,.25); padding: 10px 14px; }
+  .grip { width: 40px; height: 4px; background: #bbb; border-radius: 2px; margin: 0 auto 8px; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.25); }
+  .notes { max-width: 1300px; margin-top: 28px; columns: 2; column-gap: 40px; }
+</style>
+</head>
+<body>
+<h1>Phone (390 × 844): tabs Files · Editor · Log · Data · Results; Graph and Help as sheets</h1>
+<div style="color:#555">Run is the one big button, top right, where the thumb reaches from the editor; while a run is on it
+  becomes Break, in the same place, so the button you just pressed is the one that stops it.</div>
+<div class="board">
+
+<figure><div class="phone">
+  <div class="notch">9:41</div>
+  <div class="top"><span class="file">analysis.do • ▾</span><span class="btn">⋯</span><span class="btn primary big">Run lines 6–7</span></div>
+  <div class="strip"><b>ready</b> · 610 MB</div>
+  <div class="content" data-fill="editor"></div>
+  <div></div>
+  <div class="tabs"><span>Files</span><span class="on">Editor</span><span>Log</span><span>Data</span><span>Results</span></div>
+</div><figcaption><b>1. Editor</b>No wordmark: the title is the file switcher (▾). Lines 6–7 are selected, so the one
+  Run button runs them; with no selection it reads "Run" and runs the file. ⋯ holds Save, Reset, Download all and About
+  dofile (to the landing page).</figcaption></figure>
+
+<figure><div class="phone">
+  <div class="notch">9:41</div>
+  <div class="top"><span class="file">Log</span><span class="btn">⋯</span><span class="btn big" style="border-width:2px;font-weight:600">■ Break</span></div>
+  <div class="strip"><b>running</b> · 3.4 s · 640 MB</div>
+  <div class="content"><pre><span class="echo">. use data/wages, clear</span>
+
+<span class="echo">. regress wage `controls'</span>
+  (running…)</pre></div>
+  <div class="cmdline"><span class="prompt">.</span><span class="field">waiting for the run…</span></div>
+  <div class="tabs"><span>Files</span><span>Editor</span><span class="on">Log</span><span>Data</span><span>Results</span></div>
+</div><figcaption><b>2. Running</b>Run opens the Log tab and turns into Break. After Break: "stopping · resets in 4 s"
+  in the strip. The command line waits (one run at a time).</figcaption></figure>
+
+<figure><div class="phone">
+  <div class="notch">9:41</div>
+  <div class="top"><span class="file">Log</span><span class="btn">⋯</span><span class="btn primary big">Run</span></div>
+  <div class="strip"><b>rc 111</b> · 0.42 s · <u>line 8 ↗</u></div>
+  <div class="content"><pre><span class="echo">. regress wage `controls'</span>
+      Source |       SS           df
+-------------+----------------------
+       Model |  3046.98519         2
+    Residual |  4400.35521       497
+  ⇠ wide table: scroll sideways ⇢
+
+<span class="echo">. scatter wage educ</span></pre>
+    <div class="graph" style="height:120px;margin:4px 0">graph 2 · tap: full screen</div>
+    <pre><span class="echo">. summarize wage if sex == 1</span>
+<span class="errline">sex not found
+r(111);</span></pre></div>
+  <div class="cmdline"><span class="prompt">.</span><span class="field">type a command</span></div>
+  <div class="tabs"><span>Files</span><span>Editor</span><span class="on">Log</span><span>Data</span><span>Results</span></div>
+</div><figcaption><b>3. Log</b>Graphs show inline here (small screens have no room for a graph pane); tap opens 6.
+  Tables keep their columns and scroll sideways, never wrap. The command line sits above the tabs.</figcaption></figure>
+
+<figure><div class="phone" style="grid-template-rows: 44px auto auto 1fr auto auto">
+  <div class="notch">9:41</div>
+  <div class="top"><span class="file">Log</span><span class="btn">⋯</span><span class="btn primary big">Run</span></div>
+  <div class="strip"><b>ready</b></div>
+  <div class="content"><pre><span class="errline">sex not found
+r(111);</span>
+
+<span class="echo">. describe</span>
+  obs: 500   vars: 3</pre></div>
+  <div class="cmdline" style="border-top-width:2px"><span class="prompt">.</span><span class="field" style="color:#222">list in 1/5|</span><span class="btn primary">Run</span></div>
+  <div class="kbd">phone keyboard (return = Run)</div>
+</div><figcaption><b>4. Typing a command</b>The keyboard hides the tabs; the command line rides on top of it
+  (visualViewport), and return runs it. Not tested on a real phone yet: the riskiest screen here.</figcaption></figure>
+
+<figure><div class="phone">
+  <div class="notch">9:41</div>
+  <div class="top"><span class="file">Log</span><span class="btn">⋯</span><span class="btn primary big">Run</span></div>
+  <div class="strip"><b>ready</b></div>
+  <div class="content" data-fill="log"></div>
+  <div></div>
+  <div class="tabs"><span>Files</span><span>Editor</span><span class="on">Log</span><span>Data</span><span>Results</span></div>
+  <div class="dim"></div>
+  <div class="sheet" style="height:430px"><div class="grip"></div>
+    <b>Help · regress</b> <span style="float:right">✕</span>
+    <div style="margin-top:6px" data-fill="help"></div>
+    <div style="margin-top:8px;color:#666">Description… Options… Examples…<br>Also see: <u>areg</u> · <u>predict</u></div>
+  </div>
+</div><figcaption><b>5. Help as a sheet</b><code>help regress</code> (or a long press on a command in the editor)
+  opens a sheet over the current tab: drag up for full height, down to close.</figcaption></figure>
+
+<figure><div class="phone" style="grid-template-rows: 44px auto 1fr auto">
+  <div class="notch">9:41</div>
+  <div class="top"><span class="btn">✕</span><span class="file" style="text-align:center">graph 2 of 2</span><span class="btn">Share</span></div>
+  <div class="content" style="display:grid;grid-template-rows:1fr auto;gap:10px;padding:12px">
+    <div class="graph">scatter wage educ<br>(pinch to zoom; turn the phone for landscape)</div>
+    <div class="thumbs" style="justify-content:center"><span>1</span><span class="on">2</span></div></div>
+  <div class="tabs" style="grid-template-columns:1fr 1fr"><span>‹ previous</span><span>next ›</span></div>
+</div><figcaption><b>6. Graph, full screen</b>The phone's graph "panel": the latest graph and the session's
+  others; Share saves the PNG (the system share sheet).</figcaption></figure>
+
+</div>
+<ul class="notes">
+  <li><b>Files tab</b>: a small "dofile" header (to the landing page), then the same list as desktop with Upload and a
+    .zip; folders open in place; a long press on a file: rename, download, delete.</li>
+  <li>Decided 2026-11-09: no wordmark in the phone's top bar; running a selection is the Run button's label, not a
+    separate button.</li>
+  <li><b>Data tab</b>: the header (obs, vars, memory), the filter and the variables; Browse rows below. <b>Results tab</b>:
+    e(), r(), then locals and globals.</li>
+  <li>Accessibility: the tab bar is a tablist; Run/Break keeps one accessible name per state ("Run", "Break the run");
+    the strip is the live region.</li>
+  <li>Landscape on a phone or a tablet in portrait (≥ 700 px): the desktop's B layout with the file list folded away.</li>
+</ul>
+<script src="content.js"></script>
+</body>
+</html>

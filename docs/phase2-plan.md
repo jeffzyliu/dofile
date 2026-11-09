@@ -232,9 +232,9 @@ is shared. The web demo adds a JavaScript project, so `web/src/` would sit besid
   gains little with two apps.
 
 ## UI/UX design (after the proof of concept, before the full editor)
-Not started; the proof of concept comes first. The PoC page is deliberately unstyled. This step produces the design
-that steps 6 and 8 build.
-- **Inspiration: legacy OpenStata** (`legacy/openstata/`, screenshots and GIFs in `docs/img/`). It is rough, with a
+In progress (2026-11-08 and 09): deliverables 1–3 done, 4 drafted and waiting for feedback, 5 started; see "Status and
+where we left off" below. The PoC page is deliberately unstyled. This step produces the design that steps 6 and 8 build.
+- **Inspiration: legacy OpenStata** (`legacy/openstata/`, screenshots and GIFs in `legacy/openstata/docs/img/`). It is rough, with a
   bare-bones, academic, scrappy feel that we want to keep:
   - Material UI (v4): a navy top bar (`#1b1464`) with a pixel-style wordmark;
   - a gray left drawer with collapsible sections (Do Files, Log Files, Sample Data, Your Data) and upload below;
@@ -243,31 +243,85 @@ that steps 6 and 8 build.
   - the landing page as an editor showing an ASCII-art banner and plain-text "what is this", next to a navy
     graph-paper grid.
 
-  Keep the plain-text, editor-first, graph-paper character. Fix what was rough: dead space, the low contrast of the
-  gray-on-gray drawer, no Break or busy state, and no highlighting.
+  Keep the plain-text, editor-first character. Drop the graph paper (noisy, dated) and soften the navy, which is too
+  strong as a page color. Fix what was rough: dead space, the low contrast of the gray-on-gray drawer, no Break or
+  busy state, and no highlighting. Light and dark mode, following the system setting.
+- **Other UI to note:**
+  - OpenDTA GUI: screenshots exist in upstream readme.
+  - Real Stata GUI: as in OpenDTA's clean-room policy, its layout and workflow may inform ours (they are not 1:1
+    what we need anyway); its colors, fonts, icons, graphics and text are not copied.
 - **Deliverables, in order:**
-  1. a moodboard: legacy screenshots plus a few references (terminal and notebook UIs, academic sites);
+  1. a moodboard: legacy screenshots plus a few references (terminal and notebook UIs, academic sites)
+     (draft: `docs/design/moodboard/`);
   2. user flows: first visit, open the sample, upload a replication package, run, Break, a crashed worker, download
-     everything;
-  3. low-fidelity wireframes for desktop and phone (the phone layout stacks the editor and the log with tabs);
-  4. high-fidelity mockups of the landing page and the editor, light and dark;
+     everything (draft: `docs/design/flows/`, each step tagged done in the PoC or to build);
+  3. low-fidelity wireframes for desktop and phone (the phone layout stacks the editor and the log with tabs)
+     (draft: `docs/design/wireframes/`; chosen 2026-11-09: desktop B, one output pane with tabs that can split, Log
+     above and the other tabs below);
+  4. high-fidelity mockups of the landing page and the editor, light and dark (draft: `docs/design/mockups/`, on
+     `docs/design/tokens.css`);
   5. a small design system: color and type tokens (one monospace font, one UI font), spacing, and the components
-     (file list, pane, toolbar button, log line, error line, results table, toast).
-- **Tools:** Excalidraw for wireframes. For mockups, Figma or Penpot (open source, can self-host); choose at this
-  step. Keep exported images and the token file in `docs/design/` and the tokens as CSS variables in `web/`.
+     (file list, pane, toolbar button, log line, error line, results table, toast). Fonts chosen 2026-11-08: IBM Plex
+     Mono + IBM Plex Sans (`docs/design/specimen/`, files and license in `docs/design/fonts/`).
+- **Tools:** HTML and CSS for wireframes and mockups, screenshotted with Playwright (Chromium, Firefox, WebKit;
+  desktop and phone; light and dark), so the mockups become the start of steps 6 and 8. Excalidraw (a `.excalidraw`
+  file opened at excalidraw.com) only for hand sketches. `@axe-core/playwright` for the accessibility checks. Keep
+  the HTML sources and exported images in `docs/design/` and the tokens as CSS variables in `web/`.
 - **Rules:**
   - Accessibility: contrast at least WCAG AA, everything usable by keyboard, the log readable by screen readers.
-  - Clean room: no Stata screenshots, icons or layout copied. The legacy app is our own and can be reused.
+  - Clean room (`LICENSE-POLICY.md`, following OpenDTA's): Stata's and OpenDTA's layout and workflow may be
+    referenced; no colors, fonts, icons, graphics or text copied, and no Stata screenshots committed. The legacy
+    app is our own and can be reused.
   - Names: the product is "dofile", described as running "Stata-syntax" code. "Stata" is not used as our name, and
     the old "OpenStata" wordmark is not reused.
+
+### Status and where we left off (2026-11-09)
+Everything lives in `docs/design/` (each folder has a README with the rebuild commands; `docs/design/shot.mjs`
+screenshots any page with Playwright from `web/node_modules`).
+- **Done and committed:** the moodboard (`moodboard/`; third-party screenshots gitignored in `moodboard/refs/`), the
+  font specimen (`specimen/`; IBM Plex Mono + IBM Plex Sans chosen, files and OFL in `fonts/`, the OFL line in
+  `LICENSE-POLICY.md`), the user flows (`flows/`, with the decisions of 2026-11-08 in their "Decisions" section) and
+  the wireframes (`wireframes/`: desktop A and B, B chosen with the split; phone; the states sheet). GAP-6 (help pages
+  for `if`, `foreach`, ...) went into `docs/opendta-issues.md`.
+- **Drafted, not committed, waiting for feedback:** the high-fidelity mockups (`mockups/`: editor light/dark and
+  running, landing desktop/phone, phone Log tab) on `tokens.css` and `mockups/ui.css` (the start of deliverable 5).
+  Their content is a sample do-file run with `dofile run` on synthetic data (`mockups/sample.do`, `img/scatter.png`).
+- **Answers given on 2026-11-09, not yet applied:**
+  1. **Dark-mode graphs:** add a dark plotting style to the engine, and pass the page's current light/dark mode to the
+     engine call, so graphs match the page (today the PNGs are light, shown on a white card in dark mode). Engine work:
+     an option on the run call (`Engine.run` / `browser.run`) that picks the style; check that `graph export` files
+     and the CLI/MCP defaults stay as they are unless asked.
+  2. **A light/dark toggle** is needed in the wireframes and the mockups (it was missing): the page follows the system
+     by default, and the toggle overrides it (`[data-theme]` in `tokens.css` already supports this).
+  3. **Keyboard shortcuts are tabled** for later. Open questions: Break on Cmd/Ctrl+. (Safari's Stop is Cmd+.),
+     the command line on Cmd/Ctrl+L (the address bar in every browser), F6 between panes, Esc in dialogs; a test that
+     sends keys from Playwright reaches the page but does not prove a real browser lets them through. The mockups
+     show them only as placeholders.
+  4. **PyPI:** the name `dofile` was free on 2026-11-09 (no project); the maintainer now has a PyPI account and will
+     register it (only a first upload creates a project; PyPI does not reserve names). The landing page labels
+     `pip install dofile` "with the first release".
+- **Engine and page work decided along the way (to build, steps 6–8):** a whole-file run starts with no locals (see
+  "Scope" below); list locals and globals for the Results panel; report memory use; unpack and make .zip files in the
+  worker; return the first rows of the data (Browse); the dark plotting style (answer 1); the editor's tokenizer
+  underlines commands the engine lacks and lists them per uploaded do-file.
+- **Next session:** read these answers, then wait for the maintainer's feedback on the high-fidelity mockups before
+  changing them. Then: add the theme toggle to the wireframes and mockups, plan the dark plotting style, and finish
+  the design system (deliverable 5: tokens into `web/`, the component list, `@axe-core/playwright` checks).
 
 ## What the page does
 - **Landing page:** what dofile is, a "try it" button, the CLI and MCP install lines (`pip install dofile`), the
   OpenDTA credit and links. Static HTML.
 - **Editor:** a file panel (upload by button or drag and drop, download, rename, delete, new .do file), the editor,
-  Run (whole file) and Run selection (a do-file scope per run, as in MCP), Break, a log pane with errors marked,
-  graphs inline, a data view (variables like `describe_data`, plus the first rows), and the e()/r() results.
+  Run (whole file) and Run selection, Break, a log pane with errors marked,
+  graphs (a Graph tab with the session's graphs; inline in the log on a phone), a data view (variables like `describe_data`, plus the first rows), and the e()/r() results.
   Ctrl+Enter runs. One sample project loads on first visit.
+- **Scope (decided 2026-11-08):** every run is a do-file call (preserve restored, temporaries dropped at its end). A
+  whole-file run (Run, or Ctrl/Cmd+Enter with nothing selected) starts with no locals, as a do-file does in Stata, so
+  running a file twice gives the same answer. A selection and the command line keep the locals from the runs before
+  them. Globals, data and e()/r() carry over. To build: an option on `Engine.run` that clears the top-level locals
+  (`session.macros`, in `engine.py`, no OpenDTA patch), passed by `browser.run`, with a test in `tests/test_engine.py`;
+  the MCP server keeps today's behavior. The Results panel lists the locals and globals (a new adapter call; internal
+  temporary names hidden). Full user flows: `docs/design/flows/`.
 - Output that MCP already formats (`Result`, `results()` with `matrix_sizes`, `data_summary()`, `matrix()`) is
   reused as is, sent from the Web Worker as JSON (`dofile/browser.py`).
 

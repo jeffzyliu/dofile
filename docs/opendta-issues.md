@@ -52,6 +52,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
 | GAP-4 | `twoway lpoly` and `twoway lpolyci` are not plot types (rc 198 `lpoly is not a twoway plot type`); standalone `lpoly` works | found 2026-11-05 (Lee 2008 RD replication), no test | known |
 | GAP-5 | `estimates` has only `store`, `restore`, `dir`, `drop`, `clear`, `replay` and `table`; `save`, `use`, `describe`, `stats`, `for`, `notes`, `title` and `query` give rc 198 `<sub>: unknown subcommand` | found 2026-11-07 (checking ODT-28's side find), no test | known |
+| GAP-6 | `help` has no page for the language topics `if`, `in`, `foreach`, `forvalues`, `while`, `weights`, `varlist` (rc 111 `help for foreach not found`); every command has one | found 2026-11-08 (web demo design: the Help panel), no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table (and `mean`/`proportion`/`total`/`ratio`), with e(b)'s columns, replacing r(); new estimates drop a stale one. Open: Stata check | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 | PATCH-2 | dofile patch: Break is taken only at safe points (between commands and loop passes, outside `by`; in the ML optimizer, `bootstrap`/`permute`/`jackknife` replications, Mata loops and `sleep`). An interrupt mid-command could leave the data half changed (an interrupted `append` left columns of different lengths) | `tests/test_break.py` | patched |
 | PATCH-3 | dofile patch: every file name the user writes goes through one hook (`core/userpath.user_path`), after its default extension is added. Unset, nothing changes; dofile's web demo sets it to map paths into its working folder (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
@@ -714,6 +715,16 @@ Any other word falls to the last line, `raise StataError(198, f"{sub}: unknown s
   snapshots in `_stored_estimates`, with no file format.
 - A cheap step: make the unknown-subcommand message say it is not implemented for the subcommands Stata has.
 - Not covered by any test, and no xfail.
+
+### GAP-6: help pages for language topics
+OpenDTA's `help` (`commands/helpcmd.py`, 173 pages in `help/`, written in its own words) has a page for all 515
+commands in the registry, but not for the language around them: `help foreach` stops with rc 111 `help for foreach not
+found`, and so do `if`, `in`, `forvalues`, `while`, `weights` and `varlist`. (`local`, `global`, `program`, `by`,
+`quietly`, `capture`, `missing` and `functions` have pages.) Checked 2026-11-08 with `find_help()` on each topic.
+- Impact: these are what a new user looks up first. The web demo's Help panel will show "no help page for this yet"
+  instead of an error; the MCP server and CLI print the rc 111 line.
+- A side note, not a bug: the pages' examples use variable names from Stata's example datasets
+  (`regress price mpg weight`), which dofile does not ship, so they don't run as written.
 
 ### GAP-1: community commands
 `reghdfe`, `esttab` and `outreg2` are SSC packages, not part of Stata, and OpenDTA doesn't implement them. Not
