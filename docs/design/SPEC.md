@@ -134,7 +134,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   engine sends plain text, so the page tells the line kinds apart with the .log tokenizer (OQ-4). The pane follows the end of
   the log unless the user has scrolled up.
 - **Graphs:** desktop puts a link "graph 1" (`.glink`) after the command that drew it; it selects that graph in the Graph tab.
-  The phone shows the graph inline. `RunResult.graph_commands` names the command that drew each image (OQ-3).
+  The phone shows the graph inline. `RunResult.graph_commands` names the command that drew each image, and `graph_lines` gives its line, where the link goes (OQ-3).
 - **Head links:** "Download log" saves the log as text. "Find", and the flows' "next error", have no drawn behavior: OQ-16.
 - **Command line** (`.cmdline`; at the foot of the Log pane, above the tab bar on a phone): prompt ".", an input
   `aria-label="Command"` with placeholder "Type a command · ↑ ↓ for earlier ones" (phone: "Type a command"), and "Run
@@ -359,13 +359,15 @@ interface RunResult {
   error_line: number | null;                     // new (OQ-2): 1-based line of the failed command in the text sent; null if
                                                  // the error is inside a nested do-file, or rc 0
   graph_commands: string[];                      // new (OQ-3): the command that drew each entry of `images`, same order
+  graph_lines: (number | null)[];                // new (OQ-3): 1-based line of that command in the text sent (the calling
+                                                 // line for a program, the `do` line for a nested file); same order
   files?: FileChange[];                          // new: what the after-run difference wrote to the store
   store_error?: string;                          // new: the store refused that write
 }
 interface FileChange { name: string; status: "created" | "modified" | "removed"; bytes: number }   // as MCP's `files`
 // A run cut by a restart resolves in the client as { rc: 9998, error: "session reset: <reason>. Data in memory is gone;
 // your files are kept.", error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [],
-// error_line: null, graph_commands: [] } (step 2 adds the fields today's client leaves out).
+// error_line: null, graph_commands: [], graph_lines: [] } (step 2 adds the fields today's client leaves out).
 interface Variable { name: string; type: string; format: string; label: string | null; value_label: string | null }
 type DataSummary = { nobs: number; nvars: number; matched: number; offset: number; variables: Variable[]; more: number;
                      filename: string | null } | { error: string };
@@ -373,12 +375,14 @@ type Matrix = { rows: string[]; cols: string[]; data: Value[][] } | { error: str
 
 // Step 1. Python: Engine.run(code, images=False, *, fresh_locals=False, plot_theme=None, on_output=None);
 // browser.run(code, images=True, fresh_locals=False, plot_theme=None, on_output=None).
-// on_output(text) is called with the log as it grows, batched: at most every 100 ms. A runaway loop prints about 5 MB/s, and
+// on_output(text) is called with the log as it grows, batched: at most every 100 ms within a command; what is pending is
+// sent before each top-level command starts (inside a loop, block, program or nested file: when the last send was 15 ms
+// ago or more), so a slow command never holds back the output before it. A runaway loop prints about 5 MB/s, and
 // browser.py's Engine has no log cap today (log_keep=None), so step 1 gives it one: browser.py passes a log_keep, and past the
 // cap on_output stops sending and Result.log drops the middle with a marker, as _BoundedCapture does for MCP. The worker
 // passes a JS function that posts {id, log}. Result.log stays the complete text, so the CLI, MCP and tests keep one source of truth.
 // Step 1 first checks that a postMessage made from Python during a run reaches the page; if not, on_output is not used.
-// The new fields (error_line, graph_commands, describe_file, macros, data_rows, memory, fresh_locals, plot_theme, on_output)
+// The new fields (error_line, graph_commands, graph_lines, describe_file, macros, data_rows, memory, fresh_locals, plot_theme, on_output)
 // are on engine.Result and browser.py's JSON only: mcp_server.py does not send them, so the MCP schema does not change.
 // Tempfile hint: Engine takes the text (default: today's MCP wording); browser.py passes the page's wording, a draft in step 1
 // that step 4d's word list replaces (OQ-10).
@@ -540,7 +544,7 @@ already say:
 |---|---|---|
 | OQ-1 | Log during a run. `E?r` and `WP 2` show an echo line while the run is on. `browser.run` returns the log once; `F 4.3`: "There is no current line or progress: the engine does not report any during a run." | Stream the log (`on_output`, section 6), in step 1. If a message from Python cannot reach the page during a run in Pyodide, fall back: the run-head and the running banner until the result arrives. |
 | OQ-2 | Error line. `E`, `PH`: "r(111) at line 17", "Go to line 17", the error line's mark. `RunResult` has `error_command` only. | Add `error_line` to step 1 (1-based, in the text sent; null inside a nested do-file). The page adds the selection's first line. |
-| OQ-3 | Which command drew a graph. `E`: the link "graph 1" under `. scatter wage educ`; "graph 1 of 1 · scatter wage educ"; images need alt text. The engine returns PNGs and a count. | Add `graph_commands: string[]`, one per image, to step 1. The page puts the link after that echo and uses the command as label and alt text. |
+| OQ-3 | Which command drew a graph. `E`: the link "graph 1" under `. scatter wage educ`; "graph 1 of 1 · scatter wage educ"; images need alt text. The engine returns PNGs and a count. | Add `graph_commands: string[]` and `graph_lines`, one per image, to step 1. The page puts the link after the echo of that line and uses the command as label and alt text. |
 | OQ-4 | Kinds of log line. `ui.css` styles echo, note, error and hint lines; `Result.log` is plain text. | The page classifies lines with the log tokenizer it needs for .log files (3.11). No engine change. |
 | OQ-5 | A .dta's variables without loading it. `P/.dta`: "Read with `describe using`; the data in memory is untouched". Running that command would echo in the log and replace r(). | Add `Engine.describe_file(path)` (a `DataSummary`) and a worker op `describe_file` to steps 1 and 2. With no engine: the two bars and no table. |
 | OQ-6 | `P/.dta`: Load "asks first if the data in memory has changed". The engine knows (`c(changed)`); no call returns it; the question is not drawn. | P2: no `changed` flag, and Load does not ask in P1. |

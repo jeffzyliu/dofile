@@ -57,8 +57,8 @@ Status values: `not started`, `running`, `to review`, `done`.
 |---|---|---|---|---|---|
 | 0a | `docs/design/SPEC.md`: the build spec, with the worker protocol and state model types | general-purpose | Fable, high | first | done |
 | 0b | Doc restructure (`CLAUDE.md` and plan splits), cleanup, `ui.css` into `web/`, the deploy size check | general-purpose | Sonnet, medium | with 0a | done |
-| 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, high | parallel with 2 | not started |
-| 2 | The file store with its `pending` journal, the self-hosted runtime, a build-written list of the start files with their sizes, download with byte counts and abort (resumed per file), Break as wait / reset now, the zip made in the page, the tab lock, `storage.persist()`, relaying the streamed log and the new ops; Node tests (spec section 7) | general-purpose, worktree | Fable, high | parallel with 1 | not started |
+| 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, medium | parallel with 2 | to review |
+| 2 | The file store with its `pending` journal, the self-hosted runtime, a build-written list of the start files with their sizes, download with byte counts and abort (resumed per file), Break as wait / reset now, the zip made in the page, the tab lock, `storage.persist()`, relaying the streamed log and the new ops; Node tests (spec section 7) | general-purpose, worktree | Fable, high | parallel with 1 | to review |
 | 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | not started |
 | 4a | File tree, editor tabs, upload and name clash, row menus | general-purpose, worktree | Opus, medium | after 3, with 4c | not started |
 | 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | not started |
@@ -93,3 +93,31 @@ Status values: `not started`, `running`, `to review`, `done`.
   `axe`, `tabwalk` and `contrast` check the mockups today, not the real page.
 - **Step 7:** the 48 MB figure, Break on a long model fit in a browser, `pyreadstat` on a real iPhone, a phone over HTTPS
   with the cache working, "no request leaves the page except for static assets", and that the host compresses the `.wasm`.
+
+## Known work found in steps 1 and 2 and the step 1 review
+
+- **Step 3:**
+  - Rebuild the snapshot after merging step 1 (`npm run snapshot`). Run `npm test`: the three tests in `files.test.mjs` that need
+    step 1 turn on by themselves.
+  - `engineBytes` is not a build constant: step 2's build writes `start-files.json` (each start file, its size on disk and its
+    compressed size). The page reads `compressed` from it.
+  - The engine controller builds the states of section 5 from `onStatus`, `onRestart(reason, started)`, `resetAt`, a
+    `download()` rejection (`AbortError` means declined) and `start()` rejecting with "failed twice". The `dofile.downloaded`
+    flag is the controller's, not the client's.
+  - Wire `main.ts` in this order: `tabLock`, then `keepFiles()`, then `store.*` (set `store.blocked` when the lock is lost),
+    then `client.download()` and `client.start()`. Leave out the proof-of-concept page's `?start=manual`, `window.__dofile`
+    and its `confirm()` take-over (or keep them for tests only).
+  - Show the streamed log with `run(code, {onLog})`, and at the end replace it with `RunResult.log`, never append: the stream
+    can stop short of the log with no marker (log cap, and the sandbox notes added after the run).
+  - Add `graph_lines: []` to the client's rc 9998 result (`graph_lines` was added after step 2 was built).
+  - Docs left stale by step 2: `web/CLAUDE.md` and `docs/pyodide-snapshot.md` (the loader from a `blob:` URL, the runtime
+    from the page's origin, the cache-first fetch during the start).
+- **Step 4b:** a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
+  and give it no error mark. Put each "graph n" link after the echo on line `graph_lines[i]`, not by matching the text.
+- **Step 4c:**
+  - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decide whether to
+    draw such a graph light, or accept it.
+  - Three graphs from one loop share one label and alt text (`graph_commands` is the unexpanded command). Add the graph
+    number to the alt text.
+  - `browse` returns string cells whole (a strL can be thousands of characters with newlines). Cut long cells in the grid.
+- **Step 6:** one Playwright test of a streamed run in a real browser (step 1 checked streaming in Node `worker_threads` only).
