@@ -46,8 +46,11 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
 - **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the
   `pyodide` npm package at build time and served from the page's own origin. `?snapshot=0` keeps the CDN: a diagnostic mode.
-- **From the build, never literals:** the version, and the download size: about 48 MB for the snapshot start today (41.6 MB
-  snapshot, about 1 MB page and small files, about 5.7 MB runtime), from the snapshot manifest and the runtime files (OQ-12).
+- **From the build, never literals:** the version, and the download size: 48.6 MB for the snapshot start today (42.1 MB
+  snapshot, 5.75 MB runtime, 0.68 MB page and small files). The build writes `start-files.json` (`{built, wheelHash, files:
+  [{path, size, compressed, download}], size, compressed}`; `compressed` is an estimate, brotli quality 5, never more than
+  `size`) and puts the total in the page as `<meta name="dofile-engine-bytes">`, so the prompt has it before any download
+  (OQ-12). The build fails if it cannot write either.
 
 ## 2. Pages and layout
 
@@ -295,7 +298,7 @@ cross-origin isolated (some hosts, or plain HTTP on a local network). The data i
 
 ## 6. Worker protocol (step 2; step 1 for the Python side of the new calls)
 
-The page posts `{id, op, args}`; the worker answers `{id, result}` or `{id, error}`, and posts `{status}` while it starts. Ops
+The page posts `{id, op, args}`; the worker answers `{id, result}` or `{id, error, name}`, and posts `{status}` while it starts. Ops
 run one at a time in a queue, except `boot`. A file's bytes are transferred, not copied.
 
 | Op | Args | Result | Errors | Needs | Owner after the file-store change |
@@ -303,8 +306,8 @@ run one at a time in a queue, except `boot`. A file's bytes are transferred, not
 | `mount` | `{indexURL, snapshot?, wheelName, wheelHash?, brotli?}` | none | no or stale snapshot (names `npm run snapshot`); a failed fetch | nothing | Worker. Loads Python, then copies the store into `/work` (no IDBFS). |
 | `boot` | `{wheel, extraWheels, interruptBuffer}` | `About` | install or import failure | `mount` | Worker, outside the queue. |
 | `startup` | none | `Startup` | | `mount` | Worker. |
-| `run` | `{code, fresh_locals?, plot_theme?}` | `RunResult`; while it runs, `{id, log}` chunks | never rejects (rc 9998 comes from the client on a restart) | engine | Worker. Then writes the run's difference to the store (section 7). |
-| `describe_file` (new) | `{path}` | `DataSummary` of a .dta in `/work`, without loading it | `{error}` as the result | engine | Worker. Step 1: `Engine.describe_file(path)`, `browser.describe_file(path)`. It leaves the data in memory, r() and the log as they were. |
+| `run` | `{code, fresh_locals?, plot_theme?}` | `RunResult`; while it runs, `{id, log}` chunks | never rejects, except `busy` (rc 9998 comes from the client on a restart, on `stop()`, after the worker failed twice, with no worker, and when the run op failed in the worker: `kind: "run-failed"`, the worker stays) | engine | Worker. Then writes the run's difference to the store (section 7). |
+| `describe_file` (new) | `{path}` | `DataSummary` of a .dta in `/work`, without loading it | a path outside the folder rejects; other errors are `{error}` as the result | engine | Worker. Step 1: `Engine.describe_file(path)`, `browser.describe_file(path)`. It leaves the data in memory, r() and the log as they were. |
 | `describe` | `{vars?, offset?, limit?}` | `DataSummary` | `{error}` as the result | engine | Worker. |
 | `matrix` | `{name}` | `Matrix` | `{error}` as the result | engine | Worker. |
 | `macros` (new) | none | `Macros` | | engine | Worker. Step 1: `Engine.macros()`, `browser.macros()`. |
@@ -313,6 +316,7 @@ run one at a time in a queue, except `boot`. A file's bytes are transferred, not
 | `write` | `{path, data, seq}` | none | "not in the working folder: …" | `mount` | Page first (`store.write`), then this op, which only mirrors into `/work`. `seq` is new (section 7). |
 | `remove` | `{path, seq}` | none | "cannot remove the working folder" | `mount` | Same. A missing path is not an error. |
 | `rename` | `{from, to, seq}` | none | as `write` | `mount` | Same. |
+| `mkdir` (new) | `{path, seq}` | none | as `write` | `mount` | Same (`store.mkdir`). |
 | `files`, `read` | none; `{path}` | `FileInfo[]`; bytes | | `mount` | Page: `store.list()`, `store.read()`. The worker keeps them as views of `/work` for the Node tests only. |
 
 Not worker ops: the zip (`store.zip()`, OQ-12), the engine download, the tab lock, `storage.persist()`.
@@ -321,18 +325,55 @@ Not worker ops: the zip (`store.zip()`, OQ-12), the engine download, the tab loc
 worker reads, counting bytes, before a worker exists; `start()`; `run(code, options)`; `breakRun()` sets the interrupt and
 starts the 5 s timer; `keepWaiting()` cancels the timer and leaves the interrupt set; `restart(reason)` is Reset and "Reset
 now". Today `breakRun` ties the interrupt to the timer: step 2 parts them. A `{id, log}` message goes to the run's `onLog`
-callback (`run(code, {onLog, ...})`) and never settles the pending call: today's `onmessage` resolves any message with an `id`,
-so step 2 must change it.
+callback (`run(code, {onLog, ...})`) and never settles the pending call.
+
+As built in step 2:
+- `download()` resolves `{cached: true, received, total}`, or `{cached: false, why}` (no Cache API, storage refused,
+  `?snapshot=0`). On abort it rejects with an `AbortError` (the signal's reason when that is one) and no `kind`; every other
+  failure is a client error with a `kind` (an unreachable list: `failed`/`download`). It checks `wheelHash` before fetching
+  anything, fetches with `cache: "no-cache"`, and never caches a file whose byte count is not the listed size.
+  `download()` is the Cache's only writer: the worker only reads it, so a `start()` without `download()` fetches uncached.
+  The page calls `download()` before every start the user triggers (and goes on to `start()` if it fails, so an offline start
+  reads what is cached); `restart()` reads what is cached. `engineBytes()` reads the page's meta tag; `startList()` fetches
+  the list.
+- `start()` ends any worker that exists first. A rejected `mount`, `boot` or `startup` ends the worker and detaches the store.
+  A crash restarts once; a second error before a start finishes rejects `start()` with `kind: "failed-twice"`. A restart
+  during `mount`, `boot` or `startup` hands the pending start to the new worker. When the browser closes the database (site
+  data cleared), the worker is restarted (`kind: "crash"`, "the browser closed the file storage"), under the same guard.
+- `stop(reason)` ends the worker for good (the tab lost the lock). `resetAt` is the time (epoch ms) the Break timer resets the
+  engine, else null. A second `breakRun()` keeps the first deadline. Without `SharedArrayBuffer`, `breakRun()` restarts at once.
+- One run at a time: `run()` while a run is pending rejects with `kind: "busy"` and never reaches the worker (a caller bug).
+  `run()` with no worker resolves with an rc 9998 result, `kind: "no-engine"`. A run whose op fails in the worker (no memory
+  for its result) resolves with rc 9998, `kind: "run-failed"`, the worker's message as `error`; the worker is not restarted.
+- **Order on a reset:** `onRestart(reason, started, kind)` is called synchronously inside `restart()`, before the cut run's
+  promise resolves with rc 9998. `kind` is `"break"`, `"crash"` or `"user"`.
+- `onFileError(error, op, path)`: a mirror op failed in the worker; `/work` took the store's version and the row was deleted.
+  `storeError` holds the reason the worker could not open the store at `mount`; the page's changes then still reach `/work`,
+  with no `pending` row.
+- **Errors** are `Error`s with `kind`: `"failed"` (`start()` could not start, or a file did not arrive as listed; with
+  `reason`: `"no-wasm" | "download" | "memory" | "unknown"`, and the worker's `name`), `"failed-twice"` (with `reason`),
+  `"updated"` ("dofile was updated: reload the page"), `"reset"` (a call cut by a restart; `reset` holds the restart kind),
+  `"stopped"` (cut by `stop()` or a second `start()`), `"no-engine"`, `"busy"`, `"op"` (the worker answered with an error;
+  `name`). The worker answers `{id, error, name}`. A snapshot of another build fails with `kind: "failed"`, `name:
+  "UpdatedError"`.
+- **Status texts:** the snapshot start posts "downloading the engine" (again after `download()`: then it is a cache read),
+  "unpacking the engine", "loading Python", "loading your files", "starting the engine". `?snapshot=0` posts "loading
+  Python", "loading your files", "loading packages", "starting the engine". A failed fetch during the start ends it with a
+  `DownloadError`.
+- **Test hook:** with `?test` in the URL the page sets `window.__dofile = {engine, store, start, persisted, engineBytes}`;
+  with `?test=manual` it also starts no engine until the test calls `start()`. Without the flag the object does not exist.
+  The real page (step 3) keeps this hook.
 
 Types. The new calls are *proposed*; the rest is what the code returns today. Step 3 puts them in one shared file. None of the
 new calls or options changes the MCP schema.
 
 ```ts
 type Op = "mount" | "boot" | "startup" | "run" | "describe" | "describe_file" | "matrix" | "macros" | "browse" | "memory"
-        | "write" | "remove" | "rename" | "files" | "read";
+        | "write" | "mkdir" | "remove" | "rename" | "files" | "read";
 type ToWorker = { id: number; op: Op; args?: object };
-type StatusText = "loading Python" | "loading your files" | "loading packages" | "starting the engine";
-type FromWorker = { id: number; result: unknown } | { id: number; error: string } | { status: StatusText }
+type StatusText = "downloading the engine" | "unpacking the engine" | "loading Python" | "loading your files"
+                | "loading packages" | "starting the engine";
+type FromWorker = { id: number; result: unknown } | { id: number; error: string; name?: string } | { status: StatusText }
                | { id: number; log: string };   // a chunk of a running run's log (OQ-1)
 interface About { dofile: string; engine: "OpenDTA"; engine_commit: string | null; engine_patches: string[]; stata_version: number }
 interface Startup {                              // seconds; the fields depend on mode
@@ -340,6 +381,7 @@ interface Startup {                              // seconds; the fields depend o
   fetched?: "download" | "read from cache"; fetchS?: number; unpackS?: number; heapS?: number; sitePackagesS?: number;
   decoder?: "native" | "wasm" | "none"; restoreS?: number; notCached?: string[];        // snapshot
   runtimeS?: number; packagesS?: number;                                                  // normal
+  storeError?: string;                           // the worker could not open the store; `/work` started empty
 }
 interface FileInfo { path: string; dir: boolean; size: number; mtime: number }           // path inside the working folder
 
@@ -363,11 +405,18 @@ interface RunResult {
                                                  // line for a program, the `do` line for a nested file); same order
   files?: FileChange[];                          // new: what the after-run difference wrote to the store
   store_error?: string;                          // new: the store refused that write
+  skipped?: string[];                            // new: files the run made or changed strictly under a folder the page
+                                                 // removed, or under the old name of a folder it renamed, during the run;
+                                                 // not saved, and the page's log says so. Not listed (dropped silently, the
+                                                 // page's version wins): a file the page itself changed, a run's file
+                                                 // under a path the page made a file, or under a rename's new name
+  kind?: string;                                 // only on the client's rc 9998 result: "break" | "crash" | "user" |
+                                                 // "stopped" | "failed" | "failed-twice" | "no-engine" | "run-failed"
 }
 interface FileChange { name: string; status: "created" | "modified" | "removed"; bytes: number }   // as MCP's `files`
 // A run cut by a restart resolves in the client as { rc: 9998, error: "session reset: <reason>. Data in memory is gone;
 // your files are kept.", error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [],
-// error_line: null, graph_commands: [], graph_lines: [] } (step 2 adds the fields today's client leaves out).
+// error_line: null, graph_commands: [], graph_lines: [], kind } (step 2 adds the fields today's client leaves out).
 interface Variable { name: string; type: string; format: string; label: string | null; value_label: string | null }
 type DataSummary = { nobs: number; nvars: number; matched: number; offset: number; variables: Variable[]; more: number;
                      filename: string | null } | { error: string };
@@ -402,13 +451,13 @@ interface Memory { heap_bytes: number; data_bytes: number }   // Engine.memory()
 
 **Database** `dofile`, version 1 (IndexedDB; store names *proposed*). The old IDBFS database (`/work`) is not read, changed
 or imported. A file's `info` and `data` records are written and deleted in one transaction. Paths are relative, use `/`, and
-never hold `..` or a leading `/`. A leading `.dofile/` is never listed, copied or zipped.
+never hold `..` or a leading `/`. A path whose first part is `.dofile` is refused by every store call.
 
 | Store | Key | Value |
 |---|---|---|
 | `info` | `path` | `FileInfo`: one record per file or folder |
 | `data` | `path` | the file's bytes (`ArrayBuffer`); none for a folder |
-| `pending` | `seq` (auto) | `{op: "write" \| "remove" \| "rename", path, to?}`: a page change the worker has not mirrored yet |
+| `pending` | `seq` (auto) | `{op: "write" \| "mkdir" \| "remove" \| "rename", path, to?}`: a page change the worker has not mirrored yet |
 
 ```ts
 interface FileStore {                                // the page's API: works with no worker, during a run, after a failed start
@@ -418,20 +467,25 @@ interface FileStore {                                // the page's API: works wi
   mkdir(path: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;   // a file, or a folder with everything under it
   remove(path: string): Promise<void>;               // the same
-  zip(): Promise<Blob>;                              // "Download all (.zip)", named with the date (F 7.2)
+  zip(): Promise<File>;                              // "Download all (.zip)": dofile-YYYY-MM-DD.zip (local date, F 7.2),
+                                                     // stored (no compression), at most 65,535 entries and 4 GB
+  onChange: (() => void) | null;                     // after each page change (not after a run's write); the tree re-lists
+  attach(post, opts: {onClosed, journal}): void;     // the client connects the store to its worker; journal false: no
+                                                     // pending rows (a worker with no store); onClosed: database closed
+  blocked: boolean;                                  // set by the page in a tab without the lock: every change rejects
 }
 ```
 
 | Rule | Contract |
 |---|---|
-| Page change while a worker exists | One transaction changes `info` and `data` and adds a `pending` row; then the page posts the op with that `seq`. The worker applies it to `/work` and deletes the row. Ops are safe to apply twice. |
+| Page change while a worker exists | One transaction changes `info` and `data` and adds a `pending` row; then the page posts the op with that `seq`. The worker applies it to `/work` and deletes the row. Whenever the worker copies from the store (`mount`, the after-run write), it reads the highest `pending` seq in the same transaction (`upTo`) and ignores mirror ops up to it. A mirror op that fails: `/work` takes the store's version, the row is deleted, `onFileError`. `rename` rejects when `to` exists or lies inside `from`; `write` rejects when the path is a folder or a parent is a file. |
 | Engine start | `mount` copies every record into `/work`, a plain in-memory folder, then clears `pending`. A restarted worker does the same: files come back, data in memory does not. |
-| After each run | Inside the `run` op, the worker lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone. `RunResult.files` lists what it wrote. |
-| A page change during a run wins | After the run the worker reads `pending` and leaves those paths (both names of a rename) out of the difference; the queued page op then puts the page's version into `/work`. So after a save during a run that writes the same file, the store and `/work` both hold the user's text. |
-| A run that is cut | A reset, a crash or a closed tab: nothing is written to the store. |
-| Tab lock | The tab that holds the Web Lock `dofile-engine` (*proposed*) owns the engine. A tab that cannot get it shows the take-over dialog (section 5), starts no worker and writes nothing to the store (OQ-16). "Use dofile in this tab" takes the lock with `steal`; the tab that loses it ends its worker and shows the same dialog. A closed tab frees the lock. |
+| After each run | Inside the `run` op, the worker lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone. `RunResult.files` lists what it wrote. Before the run it waits until the clock is past the newest mtime in the list that is not in the future (one clock step, up to 100 ms with a clamped clock), so a same-size rewrite is seen. A write the store refused is tried again by the next run. |
+| A page change during a run wins | After the run the worker reads `pending` and leaves those paths (both names of a rename) out of the difference: a changed path is left out when it is a pending path, under one, or above one (for a `mkdir` row: the path and the paths above it only). The store's records for those paths go into `/work`. A run's file under a folder the page removed, or under a folder's old name after a page rename, is not saved and is listed in `RunResult.skipped`; the other dropped cases are not listed (see `RunResult.skipped`). So after a save during a run that writes the same file, the store and `/work` both hold the user's text. |
+| A run that is cut | A reset, a crash or a closed tab while the run's code is still running: nothing is written to the store. A reset that lands during the after-run write may leave that run's files in the store although the client reports rc 9998. |
+| Tab lock | The tab that holds the Web Lock `dofile-engine` (*proposed*) owns the engine. A tab that cannot get it shows the take-over dialog (section 5), starts no worker and writes nothing to the store (OQ-16). "Use dofile in this tab" takes the lock with `steal`; the tab that loses it ends its worker and shows the same dialog. A closed tab frees the lock. Without Web Locks (not a secure context: plain HTTP on a LAN, the dev server only) every tab owns the engine; accepted. |
 | Persistence | The page calls `navigator.storage.persist()` once at start (a browser may show its own prompt, `F1` branches) and puts `persisted()` in the `persisted` signal. |
-| Failures | A failed write (quota exceeded) rejects with the browser's error and keeps the old record; the tab stays unsaved. A failed after-run write sets `RunResult.store_error`. A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. None of these states is drawn: OQ-16. |
+| Failures | A failed write (quota exceeded) rejects with the browser's error and keeps the old record; the tab stays unsaved. A failed after-run write sets `RunResult.store_error`. A worker that cannot open the store still mounts, with an empty `/work`, and sets the client's `storeError`. A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. None of these states is drawn: OQ-16. |
 
 **Tests step 2 must have** (Node with `fake-indexeddb` and the real `worker.js`, unless "e2e"):
 1. Store API: write, list, read, mkdir; rename and remove of a file and of a folder; a path that leaves the folder is refused;
@@ -449,7 +503,8 @@ interface FileStore {                                // the page's API: works wi
     makes no request to another origin (e2e).
 11. Break: `keepWaiting()` after `breakRun()` lets a long command end with rc 1 and its data; `restart` gives rc 9998.
 12. Zip: every file with its folders, no `.dofile/`, made with no engine loaded.
-13. `persist()` is called once; a false `persisted()` reaches the signal.
+13. `persist()` is called once (`keepFiles(storage, onAnswer)` answers at once with `persisted()` and again when `persist()` is
+    answered, since Firefox can leave it unanswered behind its prompt; a `persisted()` that rejects answers null); step 3 tests that a false value reaches the signal.
 
 ## 8. State model (step 3)
 
@@ -460,6 +515,8 @@ they are not in `banners`.
 ```ts
 type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";   // snapshot start: no "packages";
                                                                                    // ?snapshot=0: no "unpack" (OQ-11)
+// One status text per stage: downloading the engine = download, unpacking the engine = unpack, loading Python = python,
+// loading your files = files, loading packages = packages, starting the engine = engine.
 interface RunHead { kind: "file" | "selection" | "command"; path?: string; lines?: [number, number]; fresh_locals: boolean }
 type EngineState =
   | { s: "none" } | { s: "asking"; forRun: boolean } | { s: "declined" } | { s: "ready" } | { s: "other-tab" }
@@ -482,7 +539,7 @@ type Banner = { b: "reset"; reason: string } | { b: "memory" } | { b: "storage" 
 export const engine: Signal<EngineState>;        // the engine controller, the one wrapper around EngineClient
 export const isolated: Signal<boolean>;          // set once at load from crossOriginIsolated
 export const about: Signal<About | null>;        // engine controller, when boot answers
-export const engineBytes: number;                // a build constant: the download size (OQ-12)
+export const engineBytes: number;                // the download size, from the page's meta tag written at build (OQ-12)
 export const memory: Signal<Memory | null>;      // engine controller, after the start and after each run
 export const files: Signal<FileInfo[]>;          // file service, after every store change and every run
 export const fresh: Signal<Set<string>>;         // file service: paths the last run created or changed (the "new" badge)
@@ -558,7 +615,7 @@ already say:
 | # | What the sources say | Decision |
 |---|---|---|
 | OQ-11 | Start-up stages. `S 2`, `S 3`: five stages, "Load packages" fourth. The snapshot start (the default) loads no packages; it unpacks and restores instead (`worker.js`). | Snapshot start: "Download the engine", "Unpack the engine", "Start Python", "Load your files", "Start the engine". The drawn list for `?snapshot=0`. |
-| OQ-12 | (a) The size is to come from the snapshot manifest and the runtime files' sizes (decision of 2026-11-10), but the manifest lists two of the snapshot's files, and the runtime's 5.7 MB is a compressed transfer size (12.3 MB on disk; a fetch counts decoded bytes). (b) `F 7.2` makes the zip with Python's `zipfile` in the worker; `S 6` and `S 7` offer "Download all (.zip)" when Python cannot start. (c) `S 2` caption: "what arrived stays in the cache, so a later download resumes"; the Cache API keeps whole files. | (a) The build writes one list of every start file with its size on disk and its compressed size; the prompt shows the compressed total, and the bar counts decoded bytes scaled to it. (b) Make the zip in the page from the store, with no Python. (c) Resume by file: finished files are kept, an unfinished one starts again. |
+| OQ-12 | (a) The size is to come from the snapshot manifest and the runtime files' sizes (decision of 2026-11-10), but the manifest lists two of the snapshot's files, and the runtime's 5.7 MB is a compressed transfer size (12.3 MB on disk; a fetch counts decoded bytes). (b) `F 7.2` makes the zip with Python's `zipfile` in the worker; `S 6` and `S 7` offer "Download all (.zip)" when Python cannot start. (c) `S 2` caption: "what arrived stays in the cache, so a later download resumes"; the Cache API keeps whole files. | (a) The build writes one list of every start file with its size on disk and its compressed size (`start-files.json`, fetched by the download) and puts the total in the page; the prompt shows the compressed total, and the bar counts decoded bytes scaled to it. (b) Make the zip in the page from the store, with no Python. (c) Resume by file: finished files are kept, an unfinished one starts again. |
 | OQ-13 | "Restore the sample" (`F 2.4`: "in the file list's menu") is missing from the head menu listed in `S 13`. | Add it above "Delete all files…". |
 | OQ-14 | Phone. Only `PH` and `S 8` are high fidelity; Files, Editor, Data, Results, the full-screen graph, the tab bar and the folded file list at 700 px are wireframes (`WP`; DS-7). No phone drawing of the editor has the theme button. `WP 1`'s ⋯ (Save, Reset, Download all, About dofile) differs from `S 12`. | Build from `WP` with the `ui.css` components. Phone ⋯: Save, the theme button, then the four items of `S 12`. |
 | OQ-15 | Unsplit. Only `WB` draws it (with a corner preview of a new graph and a dot on the Graph tab). No source says which layout a first visit gets. | Split is the default; Unsplit as `WB` draws it. |

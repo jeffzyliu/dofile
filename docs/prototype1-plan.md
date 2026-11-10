@@ -96,6 +96,17 @@ Status values: `not started`, `running`, `to review`, `done`.
 
 ## Known work found in steps 1 and 2 and the step 1 review
 
+Decided in the step 2 review:
+- A run's new file inside a folder the page renamed or removed during the run is not saved; `RunResult.skipped` lists it, and
+  the log says so (step 4b). A file the page itself changed during the run is not listed: the page's version wins by design.
+  The engine cannot see page changes during a run (the worker is busy in one synchronous call), so such a `save` succeeds
+  where desktop Stata would give r(603). **P2 idea:** pass folder changes and deletes to the engine mid-run through a
+  `SharedArrayBuffer`, checked before each command, as Break is.
+- With no Web Locks (plain HTTP on a LAN, the dev server only), every tab owns the engine. Accepted and documented.
+- `engineBytes` is written into the page at build time, so the prompt has the size before any download, offline too.
+- The real page keeps a test hook, on only behind a flag, so step 2's tab-lock and download e2e tests keep running through
+  steps 3 to 5. Step 2 lists what the hook must expose.
+
 - **Step 3:**
   - Rebuild the snapshot after merging step 1 (`npm run snapshot`). Run `npm test`: the three tests in `files.test.mjs` that need
     step 1 turn on by themselves.
