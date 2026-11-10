@@ -1,6 +1,6 @@
 // Start the engine from a Pyodide memory snapshot instead of installing and importing numpy, scipy, matplotlib and dofile
 // (the page's default start, ?snapshot=0 opts out; built by `npm run snapshot`, scripts/make-snapshot.mjs). Used by the build script
-// (Node) and by worker.js (browser and Node). web/spike/snapshot.mjs is where it was worked out, with the numbers.
+// (Node) and by worker.js (browser and Node). web/spike/snapshot.mjs is where it was worked out, with the numbers (the folder was removed on 2026-11-10; it is in git history at commit 10e0f1c).
 //
 // What stock Pyodide 314 leaves out of a snapshot, and what is done about it:
 //  - Native extensions are linked into the wasm function table and heap when Python first imports them, and a snapshot

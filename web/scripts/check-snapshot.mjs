@@ -19,7 +19,7 @@ const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const dir = resolve(arg("--dir", defaultDir));
 const repo = fileURLToPath(new URL("../..", import.meta.url));
-// Slow in Pyodide (phase2-plan.md, "Open investigation"): started first, so a long tail does not hide the rest.
+// Slow in Pyodide (docs/browser-engine.md, "Open investigation"): started first, so a long tail does not hide the rest.
 const PYODIDE_SLOW = ["0408_mata_moptimize", "1907_models", "1918_models3", "1904_timeseries", "1910_programming", "1914_panel",
   "1915_timeseries", "1919_other_suites2", "1920_models4", "1921_graphics_look", "1908_models2", "1909_other_suites",
   "1916_multilevel", "1902_multilevel"];
@@ -154,7 +154,7 @@ const cases = (wanted ?? allCases).sort((a, b) => {
   return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
 });
 
-// Cases that differ because the page has no pandas (phase2-plan.md, "Known gaps in the browser engine"): 1701 and 1911 call
+// Cases that differ because the page has no pandas (docs/browser-engine.md, "Known gaps in the browser engine"): 1701 and 1911 call
 // `export sasxport`, which needs it, and what follows (import sasxport, describe, list) cascades. The page leaves pandas out on
 // purpose (5 MB, docs/pyodide-snapshot.md). Expected like a strict xfail: a difference is accepted, and one that now passes is
 // reported. `--normal --pandas` loads pandas and expects no difference at all: run it for these two cases after an engine change.

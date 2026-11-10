@@ -4,7 +4,7 @@ In Pyodide (numpy 2.4.6) these three return NaN arrays instead of raising `LinAl
 positive definite matrix, probably because numpy reports the failure through the floating-point "invalid" flag,
 which WebAssembly cannot set or read. `scipy.linalg` raises correctly. The engine relies on the exception in about
 100 places; the one that was found first is `ml.maximize` testing concavity with `cholesky(-H)`, which never saw a
-non-concave Hessian in the browser and crawled to its 16,000-iteration limit (docs/phase2-plan.md, "Open investigation").
+non-concave Hessian in the browser and crawled to its 16,000-iteration limit (docs/browser-engine.md, "Open investigation").
 
 `install()` runs each function on a matrix that must fail and wraps only the ones that do not raise, so it does
 nothing on CPython and switches itself off if numpy is fixed. The wrapper raises when the inputs are all finite and the

@@ -1,5 +1,5 @@
 /* Components for the high-fidelity mockups, on the tokens. These become the page's CSS in steps 6 and 8. */
-@import url(../../../web/src/styles/tokens.css);
+@import url(./tokens.css);
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }

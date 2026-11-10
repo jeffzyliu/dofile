@@ -1,7 +1,7 @@
 // numpy.linalg in Pyodide returns NaN instead of raising LinAlgError for a singular or not positive definite matrix, and
 // dofile's browser host fixes that (src/dofile/linalgshim.py). CPython cannot show the problem, so this runs in the real
 // WebAssembly numpy. Found with 1001_mixed: a fit that takes 0.2 s on CPython ran until the 16,000-iteration limit
-// because ml.maximize tests concavity with `except LinAlgError` (docs/phase2-plan.md, "Open investigation").
+// because ml.maximize tests concavity with `except LinAlgError` (docs/browser-engine.md, "Open investigation").
 // Run `uv build --wheel` in the repo first (npm test does).
 import { test } from "node:test";
 import assert from "node:assert/strict";

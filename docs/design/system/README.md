@@ -5,7 +5,7 @@ Deliverable 5 of the design step (`../README.md`). Three parts:
 | What | Where |
 |---|---|
 | Tokens: colors (light and dark), type, weights, spacing, radius, shadows | `web/src/styles/tokens.css` (fonts and their license in `web/src/styles/fonts/`) |
-| Components | `../mockups/ui.css` |
+| Components | `../../../web/src/styles/ui.css` |
 | The component sheet: every token and component in its states, with the rules for each | `index.html` |
 | The crit of the design system: what was fixed and what is open | `critique.md` |
 

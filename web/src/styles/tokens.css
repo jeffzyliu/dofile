@@ -13,7 +13,7 @@
 /* The files above are Latin subsets. Arrows (U+2190-21FF), box drawing and block elements (U+2500-259F: the banner)
    come from the complete, unmodified files (the OFL reserves the name "Plex", so we don't make subsets of our own).
    A browser downloads them only when the page uses one of these characters. Plex has no ⌘ ▶ ■ ● ▾ ⋯: the UI draws
-   those as SVG icons (.ico in mockups/ui.css), and ⌘ in a key label comes from the system font. */
+   those as SVG icons (.ico in ui.css), and ⌘ in a key label comes from the system font. */
 @font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-400-complete.woff2) format("woff2"); font-weight: 400;
              font-display: swap; unicode-range: U+2190-21FF, U+2500-259F; }
 @font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-700-complete.woff2) format("woff2"); font-weight: 700;

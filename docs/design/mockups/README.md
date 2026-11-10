@@ -1,7 +1,7 @@
 # High-fidelity mockups
 
 Deliverable 4 of the UI/UX design step (`docs/design/README.md`): the landing page and the editor, light and dark, on
-the tokens in `web/src/styles/tokens.css` and the components in `ui.css` (deliverable 5; the component sheet is `../system/`). Each page follows the
+the tokens in `web/src/styles/tokens.css` and the components in `web/src/styles/ui.css` (deliverable 5; the component sheet is `../system/`). Each page follows the
 system's light or dark setting; `?theme=light` or `?theme=dark` forces one. Iteration 2 (2026-11-09) applied the UX crit in
 `ux-analysis.md`; what changed is listed in `../README.md`. The toolbar's theme button (System, then
 Light, then Dark) is drawn but not wired up.

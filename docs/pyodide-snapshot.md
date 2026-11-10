@@ -45,7 +45,7 @@ memory snapshot saves.
 
 `pyodide.makeMemorySnapshot()` copies the wasm heap after the imports. `loadPyodide({_loadSnapshot})` copies it back,
 so Python resumes with numpy, scipy, matplotlib and dofile already imported. The API is experimental (underscore
-options). A straight try fails in a chain of ways, found one at a time (`web/spike/snapshot.mjs` has the working
+options). A straight try fails in a chain of ways, found one at a time (`web/spike/snapshot.mjs`, removed on 2026-11-10; in git history at commit `10e0f1c`, had the working
 version and a header with the result):
 
 1. **"Unexpected hiwire entry at index 6".** Any `loadPackage` call fills Pyodide's `loadedPackages` object, and the
@@ -91,7 +91,7 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 | `web/src/engine/snapshot.js` | the loader patch, the library log, the restore options, and the brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's own decoder, with brotli-wasm as the fallback); used by the script and the worker |
 | `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went |
 | `web/src/engine/client.js`, `main.ts` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`, and the status says `(snapshot)` with the start's breakdown |
-| `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison |
+| `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison (removed on 2026-11-10; in git history at commit `10e0f1c`) |
 | `docs/img/make-startup-times.mjs` | draws the chart below |
 
 - The snapshot is made in Node and runs in the browser. There are two big files: the **snapshot** (the Python heap,
@@ -126,7 +126,7 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 
 Node, local files (one run of each, same machine):
 
-| | Normal boot | From the snapshot, uncompressed (`web/spike/snapshot.mjs`) | From the compressed snapshot (the demo) |
+| | Normal boot | From the snapshot, uncompressed (`web/spike/snapshot.mjs`, removed 2026-11-10, commit `10e0f1c`) | From the compressed snapshot (the demo) |
 |---|---|---|---|
 | Time to a running engine and a first regression | 5.2 s | 0.64–0.80 s | 1.31 s |
 
@@ -167,7 +167,7 @@ of 3 runs of the page's own "ready in X s" (a new browser context is a cold cach
 ## Packages added: `xlwt`, `xlrd` and `pyreadstat`, not pandas (2026-11-09)
 
 The page used to lack the packages for legacy `.xls` and for SAS transport, SPSS and Stata 7 and older `.dta` files
-([phase2-plan.md](phase2-plan.md#known-gaps-in-the-browser-engine)). The normal boot now installs `xlwt` and `xlrd` (pure Python,
+([browser-engine.md](browser-engine.md#known-gaps-in-the-browser-engine)). The normal boot now installs `xlwt` and `xlrd` (pure Python,
 from PyPI, as dependencies of the dofile wheel) and `pyreadstat`, which has no Pyodide build, so `web/wheels/` holds one we
 compiled (`web/wheels/README.md`). The snapshot holds all of them. Pandas is **not** installed: only `export sasxport` needs it.
 
@@ -213,7 +213,7 @@ decompresses it (0.6 s). Sizes below are compressed MB, measured unless marked; 
 | Zero the copies of native libraries in the heap | **Done, the default** | heap 26.5 → 22.2; total 46.5 → 42.3 | Emscripten keeps each `.so`'s bytes after `dlopen`, and the bundle has them too: 135 of 136 buffers (30.5 MB raw) were identical to their files. `zeroLibraryCopies` |
 | Strip docstrings and asserts (`PYTHONOPTIMIZE=2`) | **Done, the default** (since 2026-11-07) | heap 22.2 → 19.8; total 42.3 → 39.9 | `SNAPSHOT_STRIP_DOCS=0` builds without it; the manifest records `optimize: 2`. It removes the `assert`s of every library, so it rests on the checks below (identical results to the unstripped build), not on a proof |
 | Files named `.bin`, kept compressed in the browser | **Done** | the Cache API holds 40 MB, not 229 | a `.br` name makes hosts send `Content-Encoding: br`, and the browser decodes before the cache sees it |
-| Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" | the first graph then pays about 0.9 s (0.3 s with `.pyc` files); needs the bundle in two parts and a fetch. [Experiment](phase2-plan.md#experiment-loading-matplotlib-lazily) |
+| Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" | the first graph then pays about 0.9 s (0.3 s with `.pyc` files); needs the bundle in two parts and a fetch. [Experiment](lazy-matplotlib.md#experiment-loading-matplotlib-lazily) |
 | Ship `.pyc` files for the lazily loaded part | **Not done** (part of the row above) | 0.6 s of the 0.87 s first graph is compiling | |
 | Leave out the bundle's tests (6.6 MB raw) and type stubs (1.5 MB raw) | **Not done** | too small to matter | `bundle()` takes every file under site-packages |
 | Leave out unused scipy subpackages (`io`, `signal`, `cluster`, `odr`: 4.1 of 40.8 MB raw) | **Not done** | little to gain | the corpus programs import 493 scipy modules |
@@ -280,8 +280,8 @@ stripping; the last on the current 39.9 MB build, 150 s): 63 corpus checks, 12 p
 **95 of 97 Stata cases pass**, the same two failures as a normal boot (`xlwt`, `pyreadstat`; both packages were added on 2026-11-09 and all 97 pass, see "Packages added" below); the count is 97, not 98, because
 `1920_models4` has no Stata log. Before PATCH-4 and the `numpy.linalg` shim (`src/dofile/linalgshim.py`) 16 cases failed on
 the snapshot and the normal boot alike: 11 from one 32-bit numpy bug in `expand` and `stsplit`, 2 package gaps, and 3 numeric
-cases (which also ran 20–500 times slower). See [Known gaps](phase2-plan.md#known-gaps-in-the-browser-engine) and the
-[open investigation](phase2-plan.md#open-investigation-model-fits-take-far-longer-in-pyodide). No failure is specific to the
+cases (which also ran 20–500 times slower). See [Known gaps](browser-engine.md#known-gaps-in-the-browser-engine) and the
+[open investigation](browser-engine.md#open-investigation-model-fits-take-far-longer-in-pyodide). No failure is specific to the
 snapshot or to stripping docstrings.
 
 **Bugs the checks found in the snapshot's own code**
@@ -444,17 +444,17 @@ a pure Python loop, `list.append`, `sorted` and tiny numpy and scipy calls the s
 
 ## Recommendation
 
-Keep it opt-in for now. It is a clear win for return visitors and for first visits faster than about 100 Mbps, and about
+It has been the default start since 2026-11-09 (with no fallback; item 1 below is decided). It is a clear win for return visitors and for first visits faster than about 100 Mbps, and about
 level on a 30 Mbps first visit (13.9 s against 13.9 s). What is left, in order of effort (what is already done is in
 [File size](#file-size-what-is-done-and-what-is-not)):
 
-1. **Decide whether to make it the default, with a fallback to the normal boot.** The four browser profiles pass; a real
-   phone has not been tried, and memory there (136 MB heap, 229 MB decompressed during the start) is the open question.
+1. ~~**Decide whether to make it the default**~~ decided 2026-11-09: the default, without a fallback. The four browser profiles
+   pass; one real iPhone was tried ([On a real iPhone](#on-a-real-iphone-2026-11-08)); memory on a phone (136 MB heap, 229 MB decompressed during the start) is the open question.
 2. ~~**Decide on stripping docstrings**~~ done 2026-11-07: the default (2.4 MB less). It removes the `assert`s of every
    library; the checks on the quality-11 build match the unstripped build.
 3. **Load matplotlib and its dependencies on the first graph instead of in the snapshot** (not done; about 9.7 MB less before
    "ready" at brotli 11, estimated). The first plot then pays about 0.9 s, mostly compiling, unless `.pyc` files are shipped.
-   Findings, conjectures and the plan to measure it: [Experiment: loading matplotlib lazily](phase2-plan.md#experiment-loading-matplotlib-lazily).
+   Findings, conjectures and the plan to measure it: [Experiment: loading matplotlib lazily](lazy-matplotlib.md#experiment-loading-matplotlib-lazily).
 4. **Normal boot: import scipy lazily and download the packages lazily** (not done). Its matplotlib import is already lazy
    (first graph 0.82 s); scipy is imported in `browser.start()` and every package is downloaded at boot. This helps first
    visits without a big download; combine with the snapshot for return visits.

@@ -1,6 +1,6 @@
 # Design system crit (2026-11-09)
 
-A review of the first draft of deliverable 5 (`index.html`, `web/src/styles/tokens.css`, `../mockups/ui.css`), after the
+A review of the first draft of deliverable 5 (`index.html`, `web/src/styles/tokens.css`, `web/src/styles/ui.css`), after the
 maintainer approved the sheet and the toast. Each finding was checked in a browser, not by reading the CSS alone.
 
 ## Fixed

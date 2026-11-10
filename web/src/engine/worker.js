@@ -121,7 +121,7 @@ async function loadFromSnapshot(base, indexURL, wheelName, wheelHash, io, brotli
   const cache = isFile ? undefined : await snapshotCache(manifest.built, refused);
   const store = cache && { cache, refused };
   const hadCache = Boolean(cache) && Boolean(await cache.match(`${base}${snapFile.name}`));
-  // The two big files are kept in the cache as they were sent, compressed (46 MB, not 229), and decompressed here.
+  // The two big files are kept in the cache as they were sent, compressed (about 42 MB, not 229), and decompressed here.
   const [snapPacked, dso, index, bundlePacked, { default: create }, brotli] = await Promise.all([
     fetchBytes(`${base}${snapFile.name}`, store), fetchJSON(`${base}dso.json`, store), fetchJSON(`${base}files.json`, store),
     fetchBytes(`${base}${bundleFile.name}`, store), import(/* @vite-ignore */ `${base}pyodide.asm.patched.mjs?v=${manifest.built}`),
