@@ -78,7 +78,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 ### 3.1 File panel and tree (P1, step 4a; calls `store.*` only, section 7)
 - **Behavior** (`E`): a tree of the store's files. 16 px per level with guide lines; folders end in `/` and fold; sizes muted;
   the open file has the soft accent and the bar; a "new" badge marks files the last run wrote. Under it: the dropzone ("Drop
-  files, folders or a .zip", links "Upload" and "New .do file"; OQ-19) and "Download all (.zip)".
+  files or folders" in P1; the mockup's "or a .zip" is P2, OQ-19; links "Upload" and "New .do file") and "Download all (.zip)".
 - **Upload:** the Upload link, "Upload a folder", or a drop anywhere; folder paths are kept. A name that exists asks (3.10).
   Replacing the open file reloads it in the editor (`F 3.3`). P1 stores a .zip as one file.
 - **Row menu** (`S 13`): "Open", "Rename" (hint F2; edits the name in place), "Download", rule, "Delete…" (asks, 3.10). From
@@ -268,7 +268,7 @@ One state at a time, in the `engine` signal (section 8). `**` marks `<b>` in the
 | `none`, `asking` | "No engine yet" | Blocking prompt `S 1` (phone `S 8`): "Download the engine?", its two paragraphs, "Not now", "Download 48 MB" (default) | disabled | disabled |
 | `declined` | "**No engine** · Run downloads it first" | `S 5`: "**The engine isn't downloaded.** You can open, edit, upload and download files; running code needs the engine (about 48 MB)." / "Download the engine" | enabled: it, and the command line, open the prompt titled "Download the engine to run code"; the run starts when the engine is ready | disabled |
 | `downloading` | "**Starting** · downloading" | `S 2`: "Getting the engine ready" / "**Downloading**" "14.2 of 48 MB · 6 s" / the bar / the stage list / "Stop download", "Edit files while it loads" (focused) | "Run · starting…", disabled | disabled |
-| `starting` | "**Starting** · loading packages (step 4 of 5) · 2.1 s"; at the right "You can edit and upload while it starts" (`S 4`) | While the dialog is open, `S 3`: "**Loading packages**" "step 4 of 5 · 9 s"; no bar; done stages keep their time | "Run · starting…", disabled | disabled |
+| `starting` | "**Starting** · loading packages (step 4 of 5) · 2.1 s" (the drawn text, for `?snapshot=0`; the snapshot start names its own stages, OQ-11); at the right "You can edit and upload while it starts" (`S 4`) | While the dialog is open, `S 3`: "**Loading packages**" "step 4 of 5 · 9 s"; no bar; done stages keep their time | "Run · starting…", disabled | disabled |
 | `ready` | "**Ready**", the last run, memory (`E`) | none | enabled | disabled |
 | `running` | "**Running** lines 14–15 · 3.4 s" (`E?r`); "**Running** · 12 s" (`S 11`) | Log banner (`E?r`): "Running lines 14–15 · **3.4 s**. Break stops between commands. If one long command doesn't stop within 5 s, the engine is reset: **the data in memory is lost**; your files are kept." | `aria-disabled` | "Break", live |
 | `breaking` | "**Stopping** · resets in 4 s", the run's time | `S 9`, once it takes a moment: "**Stopping…** This command can't stop until it ends. **In 4 s the engine is reset:** the data in memory is lost; your files are kept." / "Don't reset: wait for it" (focused) | disabled | "Stopping…", disabled |
@@ -320,7 +320,9 @@ Not worker ops: the zip (`store.zip()`, OQ-12), the engine download, the tab loc
 **Client** (`web/src/engine/client.js`): `download({onProgress, signal})` fetches every file the start needs into the Cache the
 worker reads, counting bytes, before a worker exists; `start()`; `run(code, options)`; `breakRun()` sets the interrupt and
 starts the 5 s timer; `keepWaiting()` cancels the timer and leaves the interrupt set; `restart(reason)` is Reset and "Reset
-now". Today `breakRun` ties the interrupt to the timer: step 2 parts them.
+now". Today `breakRun` ties the interrupt to the timer: step 2 parts them. A `{id, log}` message goes to the run's `onLog`
+callback (`run(code, {onLog, ...})`) and never settles the pending call: today's `onmessage` resolves any message with an `id`,
+so step 2 must change it.
 
 Types. The new calls are *proposed*; the rest is what the code returns today. Step 3 puts them in one shared file. None of the
 new calls or options changes the MCP schema.
@@ -362,7 +364,8 @@ interface RunResult {
 }
 interface FileChange { name: string; status: "created" | "modified" | "removed"; bytes: number }   // as MCP's `files`
 // A run cut by a restart resolves in the client as { rc: 9998, error: "session reset: <reason>. Data in memory is gone;
-// your files are kept.", log: "", results: null, images: [] }.
+// your files are kept.", error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [],
+// error_line: null, graph_commands: [] } (step 2 adds the fields today's client leaves out).
 interface Variable { name: string; type: string; format: string; label: string | null; value_label: string | null }
 type DataSummary = { nobs: number; nvars: number; matched: number; offset: number; variables: Variable[]; more: number;
                      filename: string | null } | { error: string };
@@ -370,9 +373,10 @@ type Matrix = { rows: string[]; cols: string[]; data: Value[][] } | { error: str
 
 // Step 1. Python: Engine.run(code, images=False, *, fresh_locals=False, plot_theme=None, on_output=None);
 // browser.run(code, images=True, fresh_locals=False, plot_theme=None, on_output=None).
-// on_output(text) is called with the log as it grows, batched: at most every 100 ms, and at most 64 KB a call (a runaway loop
-// prints about 5 MB/s; past the cap the chunks wait for the next call, and Result.log keeps its own cut). The worker passes a JS
-// function that posts {id, log}. Result.log stays the complete text, so the CLI, MCP and tests keep one source of truth.
+// on_output(text) is called with the log as it grows, batched: at most every 100 ms. A runaway loop prints about 5 MB/s, and
+// browser.py's Engine has no log cap today (log_keep=None), so step 1 gives it one: browser.py passes a log_keep, and past the
+// cap on_output stops sending and Result.log drops the middle with a marker, as _BoundedCapture does for MCP. The worker
+// passes a JS function that posts {id, log}. Result.log stays the complete text, so the CLI, MCP and tests keep one source of truth.
 // Step 1 first checks that a postMessage made from Python during a run reaches the page; if not, on_output is not used.
 // The new fields (error_line, graph_commands, describe_file, macros, data_rows, memory, fresh_locals, plot_theme, on_output)
 // are on engine.Result and browser.py's JSON only: mcp_server.py does not send them, so the MCP schema does not change.
@@ -450,7 +454,8 @@ engine, did not start, failed twice, running, stopping, waiting and "Break reset
 they are not in `banners`.
 
 ```ts
-type Stage = "download" | "python" | "files" | "packages" | "engine";
+type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";   // snapshot start: no "packages";
+                                                                                   // ?snapshot=0: no "unpack" (OQ-11)
 interface RunHead { kind: "file" | "selection" | "command"; path?: string; lines?: [number, number]; fresh_locals: boolean }
 type EngineState =
   | { s: "none" } | { s: "asking"; forRun: boolean } | { s: "declined" } | { s: "ready" } | { s: "other-tab" }
