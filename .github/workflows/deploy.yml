@@ -51,6 +51,17 @@ jobs:
         run: npm run snapshot   # needs the network once: micropip fetches openpyxl from PyPI
 
       - run: npm run build   # vite build copies public/ (wheel, snapshot, _headers) into dist/
+      # Cloudflare Workers static assets refuse a file over 25 MiB. The brotli-11 snapshot is built only in this workflow
+      # (CI builds it at quality 5), so this is the one place the real file sizes show up: fail here, before wrangler does.
+      - name: Check asset sizes
+        run: |
+          find dist -type f -size +26214400c | while read -r f; do
+            echo "::error::$f is $(wc -c < "$f") bytes; Cloudflare Workers static assets refuse files over 25 MiB (26214400 bytes)"
+          done
+          find dist -type f -size +24117248c ! -size +26214400c | while read -r f; do
+            echo "::warning::$f is $(wc -c < "$f") bytes, over 23 MiB (24117248 bytes); the limit is 25 MiB"
+          done
+          if [ -n "$(find dist -type f -size +26214400c)" ]; then exit 1; fi
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
