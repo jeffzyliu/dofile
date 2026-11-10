@@ -9,8 +9,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 
 ## Where things stand (2026-11-10)
 
-- **Step 0 is done and committed** on the branch `prototype1-step0` (not pushed, not merged). Worktree steps start from that
-  commit, or from `main` after it is merged.
+- **Steps 0 and 1 are merged into `main`** (not pushed). Step 2 is built and in review in its worktree. Worktree steps start from
+  `main`.
 - `docs/design/SPEC.md` is the build spec. Its open questions (section 10, OQ-1 to OQ-21, DS-5 to DS-8) were decided by the
   maintainer on 2026-11-10; the decisions are written in the spec.
 - **Next:** steps 1 and 2, in parallel worktrees, when the maintainer says go. The interface between them is fixed in the
@@ -57,7 +57,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 |---|---|---|---|---|---|
 | 0a | `docs/design/SPEC.md`: the build spec, with the worker protocol and state model types | general-purpose | Fable, high | first | done |
 | 0b | Doc restructure (`CLAUDE.md` and plan splits), cleanup, `ui.css` into `web/`, the deploy size check | general-purpose | Sonnet, medium | with 0a | done |
-| 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, medium | parallel with 2 | to review |
+| 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, medium | parallel with 2 | done |
 | 2 | The file store with its `pending` journal, the self-hosted runtime, a build-written list of the start files with their sizes, download with byte counts and abort (resumed per file), Break as wait / reset now, the zip made in the page, the tab lock, `storage.persist()`, relaying the streamed log and the new ops; Node tests (spec section 7) | general-purpose, worktree | Fable, high | parallel with 1 | to review |
 | 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | not started |
 | 4a | File tree, editor tabs, upload and name clash, row menus | general-purpose, worktree | Opus, medium | after 3, with 4c | not started |
