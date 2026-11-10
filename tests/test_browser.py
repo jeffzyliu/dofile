@@ -43,6 +43,66 @@ print(browser.run('regress nosuchvar x'))
     assert bad["rc"] == 111 and bad["error_command"] == "regress nosuchvar x"
 
 
+def test_run_options_and_new_fields(tmp_path):
+    _, first, again, kept, bad, graphs, chunks = browser(tmp_path, r"""
+code = 'display "x=[`x\']"\nlocal x 1\nclear\nset obs 3\ngen y = _n'
+print(browser.run(code, fresh_locals=True))
+print(browser.run(code, True, True))
+print(browser.run(code))
+print(browser.run('display 1\n\nsummarize nosuch'))
+print(browser.run('scatter y y\nline y y', plot_theme='dark'))
+got = []
+browser.run('display 1\ndisplay 2', True, False, None, got.append)
+print(json.dumps(got))
+""")
+    assert "x=[]" in first["log"] and "x=[]" in again["log"] and "x=[1]" in kept["log"]
+    assert first["error_line"] is None and first["graph_commands"] == []
+    assert bad["rc"] == 111 and bad["error_line"] == 3
+    assert graphs["graph_commands"] == ["scatter y y", "line y y"] and len(graphs["images"]) == 2
+    assert graphs["graph_lines"] == [1, 2]
+    assert "".join(chunks).startswith(". display 1")
+
+
+def test_run_ignores_js_null_options(tmp_path):
+    """From the worker, a JS null arrives as a non-callable, non-string object: it means the default."""
+    _, r = browser(tmp_path, """
+class JsNull:
+    def __bool__(self): return False
+print(browser.run('display 1', True, JsNull(), JsNull(), JsNull()))
+""")
+    assert r["rc"] == 0
+
+
+def test_describe_file_macros_browse_memory(tmp_path):
+    _, d, missing, m, rows, page, bad, mem = browser(tmp_path, r"""
+browser.run('clear\nset obs 3\ngen double w = _n\nsave other\nclear\nset obs 2\ngen x = _n\nglobal g 1\nlocal l 2')
+print(browser.describe_file('other.dta'))
+print(browser.describe_file('nosuch.dta'))
+print(browser.macros())
+print(browser.browse())
+print(browser.browse('x', 1, 5))
+print(browser.browse('nosuch'))
+print(browser.memory())
+""")
+    assert d["nobs"] == 3 and [v["name"] for v in d["variables"]] == ["w"]
+    assert "not found" in missing["error"]
+    assert m["locals"] == {"l": "2"} and m["globals"]["g"] == "1" and "S_ADO" in m["system_globals"]
+    assert rows == {"nobs": 2, "offset": 0, "vars": ["x"], "more": 0, "rows": [["1"], ["2"]]}
+    assert page["rows"] == [["2"]] and "error" in bad
+    assert mem == {"data_bytes": 8}
+
+
+def test_the_page_has_its_own_tempfile_note_and_a_log_cap(tmp_path):
+    from dofile.engine import LOG_KEEP
+    _, _, r, big = browser(tmp_path, r"""
+print(browser.run('clear\nset obs 1\ngen x = 1\ntempfile t\nsave `t\''))
+print(browser.run('use `t\', clear'))
+print(browser.run('forvalues i = 1/30000 {\n  display _dup(100) "x"\n}'))
+""")
+    assert r["rc"] == 601 and "run_do" not in r["log"] and "MCP" not in r["log"] and "tempfile lasts one run" in r["log"]
+    assert "characters of output omitted" in big["log"] and len(big["log"]) < 2 * LOG_KEEP + 200
+
+
 def test_only_shell_and_webuse_are_denied_and_paths_are_mapped(tmp_path):
     (tmp_path / "data").mkdir()
     _, shell, webuse, files = browser(tmp_path, r"""
