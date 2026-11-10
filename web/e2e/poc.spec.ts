@@ -220,8 +220,9 @@ display "SAV=" _N " " x[4] " " s[2]`);
 });
 
 // The page starts from the Pyodide memory snapshot `npm run snapshot` builds (public/snapshot/, copied by the build). No
-// skip when there is none: a missing snapshot fails every test here, as it does for a visitor. A second visit reads it from
-// the Cache API instead of downloading it again.
+// skip when there is none: a missing snapshot fails every test here, as it does for a visitor. The page's download() puts
+// the files into the Cache API before each start, so the start always reads them from there; a second visit downloads
+// nothing again.
 test("the default start: from the memory snapshot, runs native code and a graph, and caches it", async ({ playwright, browserName }, testInfo) => {
   // A persistent profile on disk, as a real browser has. Playwright's default context keeps storage in memory, and WebKit
   // drops the whole Cache API when such a page is reloaded (a 1 KB entry too; entries survive a reload in a persistent
@@ -241,7 +242,7 @@ test("the default start: from the memory snapshot, runs native code and a graph,
   await page.locator("#run").click();   // the sample program: regress, robust, and a scatter plot
   await expect(page.locator("#status")).toHaveText(/^rc 0 in [\d.]+ s \(engine [\d.]+, encode [\d.]+, json [\d.]+, save [\d.]+, other -?[\d.]+\)$/, { timeout: 120_000 });   // the run's breakdown (a snapshot built from an older wheel has none: rebuild it)
   await expect(page.locator("#graphs img")).toHaveCount(1);
-  expect(notes.at(-1)).toContain("download");
+  expect(notes.at(-1)).toContain("read from cache");   // download() filled the Cache just before
 
   await page.reload();
   await ready(page);

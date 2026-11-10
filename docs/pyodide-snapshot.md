@@ -89,7 +89,7 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 |---|---|
 | `web/scripts/make-snapshot.mjs` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes, almost all of it brotli quality 11, or seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
 | `web/src/engine/snapshot.js` | the loader patch, the library log, the restore options, and the brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's own decoder, with brotli-wasm as the fallback); used by the script and the worker |
-| `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went |
+| `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went. Since 2026-11-10 (prototype 1, step 2) the start reads everything through one Cache: see "The start since prototype 1" below |
 | `web/src/engine/client.js`, `main.ts` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`, and the status says `(snapshot)` with the start's breakdown |
 | `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison (removed on 2026-11-10; in git history at commit `10e0f1c`) |
 | `docs/img/make-startup-times.mjs` | draws the chart below |
@@ -121,6 +121,34 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
   change does not make a snapshot stale. Test: "a snapshot from a different build of the wheel is refused" in `web/e2e/poc.spec.ts`.
 - The snapshot is taken after one program has run in a throwaway engine, so the lazily imported modules (graphs,
   commands) are already loaded. The page's real `Engine` is created after the restore, as before.
+
+## The start since prototype 1 (2026-11-10)
+
+What changed in how the page starts from the snapshot (`web/src/engine/worker.js`, `client.js`; the contract is in
+`docs/design/SPEC.md`, sections 6 and 7). The sections below were written before it and describe the earlier start where
+they differ.
+
+- **The runtime comes from the page's own origin.** `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are
+  copied from the `pyodide` npm package into `web/public/pyodide/` by `vite.config.ts`. The snapshot start makes no request
+  to another origin (a browser test checks it). `?snapshot=0` keeps the CDN.
+- **The page can download first, counting bytes.** `client.download()` fetches every start file into the Cache
+  `dofile-snapshot-<built>` before a worker exists. The build writes the list of those files, with each one's size on disk
+  and compressed size, as `dist/start-files.json`, and the compressed total into `dist/index.html`
+  (`web/scripts/start-files.mjs`): 48.5 MB on 2026-11-10 (snapshot 42.1, runtime 5.75, page 0.68). A file whose byte count
+  is not the list's is not kept.
+- **The worker reads that Cache for everything.** `loadPyodide` has options for the lock file and the standard library but
+  none for the `.wasm`: it fetches `indexURL + "pyodide.asm.wasm"` itself. So while the engine starts, the worker replaces
+  `fetch` with one that looks in the Cache first (`watchFetch`); a miss goes to the network. The worker never writes the
+  Cache: `download()` is its one writer, and it keeps only a file with the byte count of the build's list (a host that
+  answers a missing file with its `index.html` and status 200 would otherwise poison the cache). The start works with or
+  without `download()`; without it nothing is cached. The proof-of-concept page calls `download()` before each start. A cached `.wasm` is given the type
+  `application/wasm`, because Pyodide compiles it with `instantiateStreaming` and has no fallback; a fetch that fails ends
+  the start with an error (Pyodide's loader would only log it and wait for ever).
+- **The patched loader is imported from a `blob:` URL** made from the cached bytes, so the start does not fetch it a second
+  time; if a browser refuses that import, the worker imports the loader's own URL. Checked in Chromium, Firefox and WebKit.
+- **A cached file that `unpack` refuses is deleted**, so the next start fetches it again.
+- **No IDBFS.** `/work` is a plain in-memory folder. The files live in dofile's own IndexedDB store, which the page reads
+  and writes directly; `mount` copies it into `/work`, and after each run the worker writes back what the run changed.
 
 ## Results
 
@@ -220,7 +248,7 @@ decompresses it (0.6 s). Sizes below are compressed MB, measured unless marked; 
 | Zero the heap's free memory | **Tried, no gain** | 34.0 against 34.3 at brotli 5 | no large free blocks are left |
 | zstd or gzip instead of brotli | **Tried, rejected** | zstd 22 decoded the heap wrongly without any error; gzip is half as good | the build compares the decoded files with the originals |
 | Explain the 12 MB the heap gains from installing the packages, before any import | **Not investigated** | the largest piece nothing here removes | |
-| A smaller Pyodide runtime, or self-hosting it | **Not touched** | | both flows download Pyodide's runtime (about 5.5 MB compressed) from jsDelivr |
+| A smaller Pyodide runtime, or self-hosting it | **Self-hosted** (2026-11-10), not smaller | the snapshot start asks nothing of another origin | `vite.config.ts` copies `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` from the npm package into `public/pyodide/` (5.75 MB as a host sends them, 12.3 MB on disk); `?snapshot=0` still loads the runtime and the packages from jsDelivr |
 
 **Start time and memory**
 
@@ -331,7 +359,7 @@ runs each, no repeats under controlled conditions: an indication, not a benchmar
 - **The status line says where the time went.** A snapshot start: `[download|read from cache X s, unpack X s (heap, site-packages,
   decoder native|wasm), restore X s, files X s, engine X s; not cached]`. A normal boot: `[runtime, files, packages, engine]`.
   A run: `rc 0 in X s (engine, encode, json, save, other)`, where engine includes drawing the graphs and `save` is the write
-  of `/work` to IndexedDB. The start's numbers are collected in the worker (`startup`); the run's come from `browser.run`
+  of the files the run changed to the file store in IndexedDB (until 2026-11-10: of `/work` through Emscripten's IDBFS). The start's numbers are collected in the worker (`startup`); the run's come from `browser.run`
   (`timing`) and the worker. The same facts go to the console (`[dofile] unpack with ...`).
 - **Not measured on a phone:** a first visit over a real network, a return visit with the cache working (needs HTTPS: a
   tunnel such as `cloudflared`, or a host), memory use, Low Power Mode.
@@ -371,6 +399,9 @@ on desktop never. It took long because several unrelated things looked alike. Wh
   took about 1 s on some of those writes (a run does not change `/work`; checked in Node). After a run the write is now skipped when
   the folder's paths, sizes and times are as at the last write; the page's file operations always write. Not checked on the phone
   after the change. Removed from the worker for now, so the rest of the branch can be retested on the phone without it.
+  Since 2026-11-10 there is no IDBFS at all: `/work` is a plain in-memory folder, the files live in dofile's own store
+  (`web/src/engine/store.js`), and after a run the worker writes only the files whose size or time changed, in one transaction.
+  Not timed on a phone yet.
 - **Ruled out:** a 304 reply without COEP (Wrangler's carry both headers), a stale snapshot (its wheel hash matched), the iOS
   user agent (Node with an iPhone user agent: 0.05 s per graph), Pyodide's trampoline.
 - **Method that worked:** a log line in the worker with a random id at the top of the script and in each `onmessage`, and one in the
@@ -409,9 +440,10 @@ on desktop never. It took long because several unrelated things looked alike. Wh
 - **Browser memory** is higher: the heap image is 136 MB before anything runs, and during the start the compressed files
   (39.9 MB) and the decompressed ones (229 MB) are in memory together for a moment. The iPhone tried ran it without a crash;
   its memory use was not measured.
-- **Cache errors.** The worker used to swallow every error of `cache.put`. Now only the browser refusing storage
-  (`QuotaExceededError`, `SecurityError`, `NotAllowedError`, or no Cache API) lets the engine start uncached, reported as
-  `NOT CACHED: ...` with the start's timings; any other error is thrown.
+- **Cache errors.** The worker used to swallow every error of `cache.put`. Since prototype 1 it writes nothing to the Cache
+  (`download()` does); only the browser refusing to open it (`QuotaExceededError`, `SecurityError`, `NotAllowedError`, or
+  no Cache API) lets the engine start uncached, reported as `NOT CACHED: ...` with the start's timings; any other error is
+  thrown.
 - **A patched copy of Pyodide's loader.** It is generated from the installed Pyodide file, fails loudly if the text changes,
   and needs a rebuilt snapshot on every Pyodide upgrade. It relies on internals (`loadWebAssemblyModule`, `LDSO`,
   `wasmTable`) that Pyodide may change. Check upstream for native-extension snapshot support before each upgrade.

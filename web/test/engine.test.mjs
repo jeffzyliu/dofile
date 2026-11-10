@@ -1,5 +1,6 @@
 // The engine worker and client, run in Node: worker.js in a worker thread (as a browser Web Worker), Pyodide, the
-// built dofile wheel. Run `uv build --wheel` in the repo first. In Node, /work is in memory (no IndexedDB).
+// built dofile wheel. Run `uv build --wheel` in the repo first. These tests use the worker's own file ops, which are
+// views of /work; the file store and the page's side of the files are in files.test.mjs and store.test.mjs.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
@@ -144,7 +145,7 @@ test("engine from a memory snapshot: native code, graphs, files, Break", { timeo
   const about = await eng.start();
   console.log(`snapshot start: ${((performance.now() - t0) / 1000).toFixed(2)} s`);
   assert.match(JSON.stringify(about), /opendta/i);
-  assert.deepEqual(statuses, ["loading Python", "loading your files", "starting the engine"]);
+  assert.deepEqual(statuses, ["downloading the engine", "unpacking the engine", "loading Python", "loading your files", "starting the engine"]);
 
   await t.test("regress, scipy, a graph and a file after the restore", async () => {
     const r = await eng.run("clear\nset obs 80\ngen x = _n\ngen y = 2*x + mod(_n, 5)\nregress y x\ndisplay \"B=\" %12.8f _b[x]\nscatter y x\ndisplay normal(1.96)");
@@ -169,6 +170,6 @@ test("engine from a memory snapshot: native code, graphs, files, Break", { timeo
 
 test("a snapshot built for another wheel is refused with a message", { timeout: 60_000, skip: !existsSync(`${snapshotDir}manifest.json`) && "no snapshot" }, async () => {
   const eng = new EngineClient({ createWorker: nodeWorker, wheel: { ...wheel, name: "dofile-0.0.0-py3-none-any.whl" }, snapshot });
-  await assert.rejects(eng.start(), /snapshot is for .* but the page has dofile-0\.0\.0.*npm run snapshot/);
-  eng.worker.terminate();
+  await assert.rejects(eng.start(), { kind: "failed", reason: "unknown", name: "UpdatedError", message: /snapshot is for .* but the page has dofile-0\.0\.0.*npm run snapshot/ });
+  assert.equal(eng.worker, null, "the worker that could not start is ended");
 });

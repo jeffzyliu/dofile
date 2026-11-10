@@ -52,6 +52,14 @@ const NO_TRAMPOLINE = ["let isIOS=globalThis.navigator&&(", "let isIOS=true||glo
 const STORAGE_REFUSALS = new Set(["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI", "UnknownError"]);   // UnknownError: Chrome's damaged cache storage
 export const isStorageRefusal = e => STORAGE_REFUSALS.has(e?.name);
 
+// The Cache that holds one build's start files: the snapshot, the runtime, and what else the build's list names. The page
+// fills it (client.js, download) and the worker reads it. A rebuild has a new `built`; the older builds are dropped.
+export async function openCache(caches, built) {
+  const name = `dofile-snapshot-${built}`;
+  for (const other of await caches.keys()) if (other.startsWith("dofile-snapshot-") && other !== name) await caches.delete(other);
+  return caches.open(name);
+}
+
 // loadPyodide options that go with a snapshot being made: two JS objects are still held (a fetch Response and its
 // arrayBuffer method, left by micropip's download of openpyxl), and nothing uses them again, so they are stored as null
 export const makeOptions = create => ({ _makeSnapshot: true, createPyodideModule: create });

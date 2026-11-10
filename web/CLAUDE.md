@@ -10,7 +10,7 @@ The build spec for the pages: `docs/design/SPEC.md`.
 Run from `web/` (`npm install` once). The wheel is rebuilt by the scripts that need it.
 
 ```bash
-npm test                  # the engine in Pyodide under Node (~30 s)
+npm test                  # the engine in Pyodide under Node, the file store, the client (~45 s)
 npm run dev               # the page, on the LAN too
 npm run e2e               # builds the snapshot and the page, then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min)
 npm run snapshot          # the Pyodide memory snapshot the page starts from; `npm run dev` needs it once, and again after a change to the engine
@@ -32,6 +32,26 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
 - **The snapshot's loader is a patched copy of Pyodide's** that re-links the native libraries. The patch throws if Pyodide's
   loader text changes: a Pyodide upgrade needs the patch updated. The two big files are unpacked with the browser's own brotli
   decoder when it has one, else brotli-wasm. See `docs/pyodide-snapshot.md`.
+- **The files live in dofile's own store, not in the worker.** `src/engine/store.js` (IndexedDB database `dofile`: `info`,
+  `data`, `pending`) is the one place a file is kept. The page reads and writes it directly (`FileStore`), with no engine,
+  during a run and after a failed start. `/work` in the worker is a plain in-memory copy: there is no IDBFS. A page change
+  goes **store first** (the records and a `pending` row in one transaction), then the op with that row's seq, which the
+  worker mirrors into `/work`. The worker copies from the store at `mount` and after each run (`applyRun`, which also writes
+  what the run changed); each copy returns the highest seq it covers (`upTo`), and the worker ignores the ops up to it, so
+  no change is applied twice. Never write a file through the worker alone: its `write`/`remove`/`rename`/`mkdir` ops only
+  mirror, and `files`/`read` are views of `/work` for the tests. Contract and tests: `docs/design/SPEC.md`, section 7.
+- **One tab owns the files and the engine**: the Web Lock `dofile-engine` (`src/engine/tab.js`). A tab without it starts no
+  worker and writes nothing (`store.blocked`). Without Web Locks (plain HTTP on a LAN) every tab owns them.
+- **The snapshot start takes Pyodide's runtime from the page's own origin.** `vite.config.ts` copies three files from the
+  `pyodide` npm package into `public/pyodide/` (gitignored). `?snapshot=0` keeps the CDN. The build writes
+  `dist/start-files.json` (every start file with its size on disk and its compressed size: `scripts/start-files.mjs`) and
+  the compressed total into `dist/index.html` (`<meta name="dofile-engine-bytes">`); it fails if it cannot. The page's
+  `download()` fills the Cache `dofile-snapshot-<built>` from that list, and the worker reads the same Cache for
+  everything while it starts (a cache-first `fetch`, the loader from a `blob:` URL): `docs/pyodide-snapshot.md`, "The start
+  since prototype 1". `download()` is the Cache's only writer (it checks each file's size against the list); the worker
+  never writes it.
+- **Errors from `client.js` carry a `kind`** (its header lists them); the worker answers `{id, error, name}`. Keep both when
+  adding a failure path: the page decides what to show from them, not from the text.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`). A chunk that imports the worker's entry made
   iOS Safari run the entry twice (a `V.loadPackage` error with a snapshot start); see `docs/pyodide-snapshot.md`, "Debugging an
   iPhone 13".
