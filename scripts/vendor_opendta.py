@@ -33,8 +33,8 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 REWRITES = [
     (re.compile(r"""(["'])opendta\."""), rf"\1{NEW}."),  # "opendta.x" strings
-    (re.compile(r"^(\s*)import opendta\s*$", re.M), rf"\1import {NEW} as opendta"),  # bare import
-    (re.compile(r"^(\s*)(from|import) opendta\b", re.M), rf"\1\2 {NEW}"),  # from opendta..., import opendta.x
+    (re.compile(r"^(\s*)import opendta\s*$", re.MULTILINE), rf"\1import {NEW} as opendta"),  # bare import
+    (re.compile(r"^(\s*)(from|import) opendta\b", re.MULTILINE), rf"\1\2 {NEW}"),  # from opendta..., import opendta.x
 ]
 
 
@@ -90,7 +90,7 @@ def main(commit: str = COMMIT) -> None:
     n_pkg, n_tests = rewrite(target), rewrite(TESTS)
     patches = sorted((ROOT / "scripts" / "patches").glob("*.patch"))  # dofile's own changes, kept small
     for patch in patches:  # before the import check, so a patch can't bring old imports back unnoticed
-        if subprocess.run(["git", "apply", str(patch)], cwd=ROOT).returncode:
+        if subprocess.run(["git", "apply", str(patch)], cwd=ROOT, check=False).returncode:
             sys.exit(
                 f"{patch.name} does not apply to opendta@{commit[:7]}. The vendored copy is now UNPATCHED: "
                 f"update the patch and re-run, or `git checkout -- {target.relative_to(ROOT)} "

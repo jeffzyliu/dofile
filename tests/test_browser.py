@@ -15,7 +15,11 @@ print(browser.start(sys.argv[1]))
 def browser(root, script: str) -> list:
     """Run `script` after browser.start(root); each line it prints is one JSON value."""
     p = subprocess.run(
-        [sys.executable, "-I", "-c", PRELUDE + script, str(root)], capture_output=True, text=True, timeout=60
+        [sys.executable, "-I", "-c", PRELUDE + script, str(root)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
     )
     assert p.returncode == 0, p.stderr
     return [json.loads(line) for line in p.stdout.splitlines()]
@@ -175,9 +179,11 @@ def test_the_web_highlighters_command_list_matches_the_engine():
     """web/src/stata/commands.json is generated from the registry (`cd web && npm run commands`); a re-vendor that
     adds or renames commands must regenerate it."""
     from pathlib import Path
+
     import pytest
-    from dofile._vendor.opendta.session import Session  # noqa: F401  (registers all commands)
+
     from dofile._vendor.opendta.commands.registry import REGISTRY
+    from dofile._vendor.opendta.session import Session  # noqa: F401  (registers all commands)
 
     path = Path(__file__).parent.parent / "web" / "src" / "stata" / "commands.json"
     if not path.exists():  # not in an sdist: the web demo's folder is left out of it (pyproject.toml)

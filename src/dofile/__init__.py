@@ -1,6 +1,7 @@
 """dofile: run Stata-syntax .do files without a Stata license."""
 
-from importlib.metadata import PackageNotFoundError, version as _version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
 
 
 def _source_tree_version() -> str:

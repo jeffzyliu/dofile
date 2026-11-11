@@ -296,7 +296,13 @@ test("a worker that fails to load says `crashed`; after end() the next start fin
     return port as unknown as globalThis.Worker;
   };
   const eng = new EngineClient({
-    createWorker: () => (first ? ((first = false), blocked()) : nodeWorker()),
+    createWorker: () => {
+      if (first) {
+        first = false;
+        return blocked();
+      }
+      return nodeWorker();
+    },
     wheel,
     extraWheels,
   });
@@ -412,7 +418,10 @@ test('a list of another build is refused with kind "updated" before any worker i
 }, async () => {
   let made = 0;
   const eng = new EngineClient({
-    createWorker: () => (made++, nodeWorker()),
+    createWorker: () => {
+      made++;
+      return nodeWorker();
+    },
     wheel,
     buildId: buildId("another build run", current),
     startFiles: startFiles!,

@@ -9,7 +9,7 @@
 // Exit code 1 if anything differs, times out or crashes. Over 30 minutes for everything. Needs a built snapshot.
 
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
@@ -61,7 +61,6 @@ if (args.includes("--child")) {
 
   if (kind === "conformance") {
     py.FS.mkdirTree("/work");
-    const data = `${repo}/tests/conformance/data`;
     py.FS.mkdirTree("/conf");
     py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests/conformance` }, "/conf");
     for (const f of py.FS.readdir("/conf/data"))
@@ -106,7 +105,9 @@ json.dumps({"checks": ok, "probes": probes, "problems": problems})`),
     say(
       `${NATIVE_CHECKS.length} native-library calls, ${result.problems.filter((p) => p.startsWith("native")).length} problems`,
     );
-    result.problems.forEach((p) => say("  PROBLEM", p));
+    result.problems.forEach((p) => {
+      say("  PROBLEM", p);
+    });
     result.failed = result.problems.length;
   } else {
     py.FS.mkdirTree("/od");
@@ -142,7 +143,7 @@ def run_case(case):
         say(
           r.why
             .split("\n")
-            .map((l) => "     " + l)
+            .map((l) => `     ${l}`)
             .join("\n"),
         );
     }
@@ -153,7 +154,7 @@ def run_case(case):
     };
     say(`${results.length - result.failed} of ${results.length} cases match Stata 14`);
   }
-  console.log("RESULT " + JSON.stringify({ kind, ...result }));
+  console.log(`RESULT ${JSON.stringify({ kind, ...result })}`);
   process.exit(0);
 }
 
@@ -188,8 +189,9 @@ const runChild = (childArgs, limitS) =>
       : null;
     child.stdout.on("data", (d) => {
       out += d;
-      let i;
-      while ((i = out.indexOf("\n")) >= 0) {
+      for (;;) {
+        const i = out.indexOf("\n");
+        if (i < 0) break;
         const line = out.slice(0, i);
         out = out.slice(i + 1);
         if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7));
@@ -237,7 +239,9 @@ const conformance =
     : Promise.resolve();
 const queue = only === "conformance" ? [] : [...cases];
 const worker = async () => {
-  for (let c; (c = queue.shift()); ) {
+  for (;;) {
+    const c = queue.shift();
+    if (!c) break;
     const started = performance.now();
     const r = await runChild(["compat", "--case", c], timeoutS);
     ran++;

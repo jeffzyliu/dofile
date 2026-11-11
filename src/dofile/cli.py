@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     if not dofile.is_file():
         ap.error(f"no such file: {a.dofile}")
     workdir = a.workdir.resolve()
-    json_out = open(a.json, "w") if a.json else None  # opened before the sandbox, which blocks writes outside workdir
+    json_out = open(a.json, "w") if a.json else None  # noqa: SIM115  (closed after the run; opened before the sandbox, which blocks writes outside workdir)
     if not a.unsafe:
         from . import sandbox
 

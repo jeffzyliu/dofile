@@ -76,7 +76,7 @@ const stage = (id: Stage) => self.postMessage({ stage: id });
 const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`); // `path` is `top` or under it
 
 // An error for the page: { message, name }. Emscripten's file system errors carry only a number.
-function describe(e: any): { message: string; name: string } {
+function errorForPage(e: any): { message: string; name: string } {
   if (e?.errno != null) {
     const code = Object.keys(py?.ERRNO_CODES ?? {}).find((k) => py.ERRNO_CODES[k] === e.errno);
     return { message: `file system error ${code ?? e.errno}`, name: "ErrnoError" };
@@ -109,7 +109,10 @@ function walk(dir: string, out: FileInfo[] = []): FileInfo[] {
 const exists = (full: string) => py.FS.analyzePath(full).exists;
 
 function removeTree(full: string): void {
-  if (!py.FS.isDir(py.FS.stat(full).mode)) return py.FS.unlink(full);
+  if (!py.FS.isDir(py.FS.stat(full).mode)) {
+    py.FS.unlink(full);
+    return;
+  }
   for (const name of py.FS.readdir(full)) if (name !== "." && name !== "..") removeTree(`${full}/${name}`);
   py.FS.rmdir(full);
 }
@@ -135,7 +138,7 @@ async function copyStore() {
     putRecords(await store.takeAll());
   } catch (e) {
     store = null;
-    storeError = `the files are not saved: ${describe(e).message}`;
+    storeError = `the files are not saved: ${errorForPage(e).message}`;
     console.warn(`[dofile] ${storeError}`);
   }
 }
@@ -209,7 +212,7 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
     saved = await store.applyRun(changes);
   } catch (e) {
     unsaved = new Map(changes.map((c) => [c.path, { status: c.status, dir: c.dir }]));
-    return { files: [], skipped: [], store_error: describe(e).message };
+    return { files: [], skipped: [], store_error: errorForPage(e).message };
   }
   unsaved = new Map();
   try {
@@ -218,7 +221,7 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
     return {
       files: saved.files,
       skipped: saved.skipped,
-      store_error: `the engine's folder could not take your changes: ${describe(e).message}`,
+      store_error: `the engine's folder could not take your changes: ${errorForPage(e).message}`,
     };
   }
   return { files: saved.files, skipped: saved.skipped };
@@ -296,7 +299,7 @@ function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>
     if ((init?.method ?? input?.method ?? "GET") !== "GET") return real(input, init);
     const hit = await cache?.match(url).catch(() => undefined);
     if (hit) return asWasm(hit, url);
-    let res;
+    let res: Response;
     try {
       res = await real(input, init);
     } catch (e: any) {
@@ -363,7 +366,7 @@ async function loadFromSnapshot(
   const isFile = base.startsWith("file:"); // Node, the tests: no Cache API by design
   const refused = (e: any, url?: string) => {
     if (!isStorageRefusal(e)) throw e; // not the browser saying no: a bug, shown as the start's error
-    const why = `${e.name + ": "}${e.message}${url ? ` (${url.split("/").pop()})` : ""}`;
+    const why = `${e.name}: ${e.message}${url ? ` (${url.split("/").pop()})` : ""}`;
     if (!isFile) {
       notCached.push(why);
       console.warn(`[dofile] snapshot not cached: ${why}`);
@@ -554,23 +557,34 @@ const lifecycle: Handlers<LifecycleOps> = {
 // The ops declared to change nothing (types.ts, ReadOps): anyone may send one.
 const read: Handlers<ReadOps> = {
   // undefined becomes Python's None (null would become JsNull)
-  describe: async ({ vars, offset = 0, limit }: DescribeArgs) => (
-    await booted, JSON.parse(browser.describe(vars, offset, limit))
-  ),
-  matrix: async ({ name }: { name: string }) => (await booted, JSON.parse(browser.matrix(name))),
+  describe: async ({ vars, offset = 0, limit }: DescribeArgs) => {
+    await booted;
+    return JSON.parse(browser.describe(vars, offset, limit));
+  },
+  matrix: async ({ name }: { name: string }) => {
+    await booted;
+    return JSON.parse(browser.matrix(name));
+  },
   // a .dta in /work, without loading it; `path` as the page names it, inside the working folder
   async describe_file({ path }: { path: string }) {
     await booted;
     inRoot(path);
     return JSON.parse(browser.describe_file(path));
   },
-  macros: async () => (await booted, JSON.parse(browser.macros())),
+  macros: async () => {
+    await booted;
+    return JSON.parse(browser.macros());
+  },
   // the first rows of the data: 50 from the top unless the page says otherwise
-  browse: async ({ vars, offset, limit }: DescribeArgs) => (
-    await booted, JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50))
-  ),
+  browse: async ({ vars, offset, limit }: DescribeArgs) => {
+    await booted;
+    return JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50));
+  },
   // data_bytes from the engine; heap_bytes is the size of this worker's WebAssembly memory
-  memory: async () => (await booted, { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length }),
+  memory: async () => {
+    await booted;
+    return { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length };
+  },
   // `files` and `read` are views of /work, for the tests: the page lists and reads the store
   files: () => walk(ROOT),
   read: ({ path }: { path: string }) => py.FS.readFile(inRoot(path)),
@@ -595,7 +609,7 @@ const answer = async ({ id, op, args }: ToWorker) => {
     const result = await (ops[op] as (args: unknown, id: number) => unknown)(args ?? {}, id);
     self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []); // a file: moved, not copied
   } catch (e) {
-    const { message, name } = describe(e);
+    const { message, name } = errorForPage(e);
     self.postMessage({ id, error: message, name });
   }
 };
@@ -612,7 +626,7 @@ self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
       },
       (e) => {
         bootDone.err(e);
-        const { message, name } = describe(e);
+        const { message, name } = errorForPage(e);
         self.postMessage({ id, error: message, name });
       },
     );

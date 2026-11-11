@@ -49,7 +49,9 @@ export function zipParts(
       [4, 0],
       [6, time],
       [8, date],
-    ].forEach(([at, v]) => shared.setUint16(at, v, true));
+    ].forEach(([at, v]) => {
+      shared.setUint16(at, v, true);
+    });
     shared.setUint32(10, crc, true);
     shared.setUint32(14, bytes.length, true);
     shared.setUint32(18, bytes.length, true);

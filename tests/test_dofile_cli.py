@@ -9,7 +9,12 @@ HERE = Path(__file__).parent / "conformance"
 
 def dofile(*args, cwd):
     return subprocess.run(
-        [sys.executable, "-m", "dofile.cli", *map(str, args)], cwd=cwd, capture_output=True, text=True, timeout=300
+        [sys.executable, "-m", "dofile.cli", *map(str, args)],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
     )
 
 

@@ -295,7 +295,10 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       const scaled = Math.round(Math.min(bytes / (f.size || 1), 1) * f.compressed);
       received += scaled - (got.get(f) ?? 0);
       got.set(f, scaled);
-      if (received !== last) onProgress({ received: (last = received), total });
+      if (received !== last) {
+        last = received;
+        onProgress({ received, total });
+      }
     };
     onProgress({ received, total });
     const stop = new AbortController(),
@@ -315,7 +318,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         stop.signal.throwIfAborted(); // a browser may still hand over what it had buffered: an aborted file is not kept
         if (done) break;
         chunks.push(value);
-        count(f, (n += value.length));
+        n += value.length;
+        count(f, n);
       }
       // a short answer, an error page sent with status 200, a file of another build: not what the list names
       if (n !== f.size)
@@ -354,13 +358,16 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // With a worker still live it throws: the machine always ends a worker before it starts another.
   start(n: number, build: Build | null, reply: Reply<"start-worker">): void {
     if (this.#live) throw new Error(`start(${n}): worker ${this.#live.n} is still live`);
-    if (!this.wasm)
-      return reply({ type: "start-failed", reason: "no-wasm", detail: "this browser has no WebAssembly support" });
+    if (!this.wasm) {
+      reply({ type: "start-failed", reason: "no-wasm", detail: "this browser has no WebAssembly support" });
+      return;
+    }
     let worker: Worker;
     try {
       worker = this.createWorker();
     } catch (e: any) {
-      return reply({ type: "start-failed", reason: "unknown", detail: String(e?.message ?? e) });
+      reply({ type: "start-failed", reason: "unknown", detail: String(e?.message ?? e) });
+      return;
     }
     const live: Live = {
       n,

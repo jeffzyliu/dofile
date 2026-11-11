@@ -36,14 +36,18 @@ CASES = {
     "merge": ("use data/d, clear\nmerge 1:1 x using {P}/data/d\ndisplay _N", None, "\n3\n"),
     "describe using": ("describe using {P}/data/d", None, "obs"),
     "export/import delimited": (
-        "use data/d, clear\nexport delimited using {P}/out/x.csv, replace\n"
-        "import delimited using {P}/out/x.csv, clear\ndisplay _N",
+        (
+            "use data/d, clear\nexport delimited using {P}/out/x.csv, replace\n"
+            "import delimited using {P}/out/x.csv, clear\ndisplay _N"
+        ),
         "out/x.csv",
         "\n3\n",
     ),
     "export/import excel": (
-        "use data/d, clear\nexport excel using {P}/out/x.xlsx, replace firstrow(variables)\n"
-        "import excel using {P}/out/x.xlsx, clear firstrow\ndisplay _N",
+        (
+            "use data/d, clear\nexport excel using {P}/out/x.xlsx, replace firstrow(variables)\n"
+            "import excel using {P}/out/x.xlsx, clear firstrow\ndisplay _N"
+        ),
         "out/x.xlsx",
         "\n3\n",
     ),
@@ -59,8 +63,10 @@ CASES = {
     "type": ("type {P}/code/sub.do", None, "display 40 + 2"),
     "mkdir": ('mkdir "{P}/made"', "made", None),  # quoted: unquoted, OpenDTA's shlex drops backslashes (ODT-26)
     "erase": (
-        "file open fh using out/del.txt, write replace\nfile close fh\nerase {P}/out/del.txt\n"
-        'capture confirm file out/del.txt\ndisplay "rc=" _rc',
+        (
+            "file open fh using out/del.txt, write replace\nfile close fh\nerase {P}/out/del.txt\n"
+            'capture confirm file out/del.txt\ndisplay "rc=" _rc'
+        ),
         None,
         "rc=601",
     ),

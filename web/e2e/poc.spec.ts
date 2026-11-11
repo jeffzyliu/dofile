@@ -97,7 +97,7 @@ test("the editor never rewrites a file it didn't change", async ({ page }) => {
 
 test("Save is explicit: Run doesn't save, a switch or closing the page warns about unsaved edits", async ({ page }) => {
   const dialogs: { type: string; message: string }[] = [];
-  let answer = "dismiss";
+  const answer: string = "dismiss";
   page.on("dialog", (d) => {
     dialogs.push({ type: d.type(), message: d.message() });
     answer === "accept" ? d.accept() : d.dismiss();

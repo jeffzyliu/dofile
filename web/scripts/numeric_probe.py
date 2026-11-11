@@ -27,8 +27,8 @@ def main(case, tools, out):
     compare = importlib.util.module_from_spec(spec)
     sys.modules["compat_compare"] = compare
     spec.loader.exec_module(compare)
-    from dofile.engine import _same, group_results
     from dofile._vendor.opendta.commands.registry import REGISTRY
+    from dofile.engine import _same, group_results
 
     records = []
     MAX_CELLS = 5000
@@ -69,7 +69,7 @@ def main(case, tools, out):
     try:
         logfile = compare.run_opendta(compare.COMPAT / "do" / f"{case}.do", outdir)
         log = Path(logfile).read_text(encoding="utf-8", errors="replace")
-    except BaseException as e:  # keep what was recorded
+    except BaseException as e:  # noqa: BLE001  (keep what was recorded, whatever stopped the probe)
         log = f"(probe stopped: {type(e).__name__}: {str(e)[:200]})"
     with open(out, "w") as f:
         json.dump({"case": case, "seconds": round(time.perf_counter() - t0, 2), "log": log, "records": records}, f)

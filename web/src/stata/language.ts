@@ -46,7 +46,8 @@ export function isCommand(word: string): boolean {
     hi = SORTED.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    SORTED[mid] < word ? (lo = mid + 1) : (hi = mid);
+    if (SORTED[mid] < word) lo = mid + 1;
+    else hi = mid;
   }
   for (let i = lo; i < SORTED.length && SORTED[i].startsWith(word); i++)
     if (word.length >= COMMANDS[SORTED[i]]) return true;

@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from test_conformance import HERE, KNOWN_GAPS, PROBE_GAPS, REF
 
 RUNNER = """
@@ -31,6 +30,7 @@ def sandboxed(work: Path, *scripts: str, read_dirs: tuple[str, ...] = (), prelud
         capture_output=True,
         text=True,
         timeout=600,
+        check=False,
     )
     assert p.returncode == 0, p.stderr[-3000:]
     return json.loads(p.stdout.splitlines()[-1])
@@ -51,7 +51,7 @@ def test_corpus_and_probes_still_work_under_sandbox(work):
     results = sandboxed(work, *(f.read_text() for f in corpus + probes))
     checks = {}
     for r in results[: len(corpus)]:
-        checks.update(re.findall(r"^CHECK (\w+)=\s*(\S+)", r["log"], re.M))
+        checks.update(re.findall(r"^CHECK (\w+)=\s*(\S+)", r["log"], re.MULTILINE))
     bad = [
         k
         for k, ref in REF.items()
@@ -184,7 +184,9 @@ print(json.dumps(out))
 
 
 def test_hook_blocks_network_and_subprocess(work):
-    p = subprocess.run([sys.executable, "-I", "-c", HOOK_PROBE, str(work)], capture_output=True, text=True, timeout=60)
+    p = subprocess.run(
+        [sys.executable, "-I", "-c", HOOK_PROBE, str(work)], capture_output=True, text=True, timeout=60, check=False
+    )
     out = json.loads(p.stdout)
     assert all("dofile sandbox" in v for v in out.values()), out
 

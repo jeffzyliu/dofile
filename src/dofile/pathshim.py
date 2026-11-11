@@ -14,8 +14,8 @@ import os
 import posixpath
 import re
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from ._vendor.opendta.core import userpath
 

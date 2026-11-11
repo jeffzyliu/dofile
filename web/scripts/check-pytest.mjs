@@ -42,7 +42,7 @@ if (args.includes("--child")) {
     });
   const py = await loadPyodide({ stdout: (s) => console.log(s), stderr: (s) => console.log(s) });
   await py.loadPackage(["pytest", "numpy", "scipy", "matplotlib"], { messageCallback: () => {} });
-  const wheel = await installEngine(py);
+  await installEngine(py);
   for (const d of ["tests_opendta", "tests"]) {
     py.FS.mkdirTree(`/repo/${d}`);
     py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/${d}` }, `/repo/${d}`);
@@ -113,13 +113,17 @@ const runOne = (file) =>
       clearTimeout(timer);
       const s = ((performance.now() - started) / 1000).toFixed(0);
       if (!timeouts.includes(file) && !existsSync(`${out}/${basename(file)}.json`)) crashed.push(file);
-      console.log(`${timeouts.includes(file) ? "TIMEOUT" : code === 0 ? "done   " : "exit " + code} ${file} (${s} s)`);
+      console.log(`${timeouts.includes(file) ? "TIMEOUT" : code === 0 ? "done   " : `exit ${code}`} ${file} (${s} s)`);
       done();
     });
   });
 await Promise.all(
   Array.from({ length: shards }, async () => {
-    for (let f; (f = queue.shift()); ) await runOne(f);
+    for (;;) {
+      const f = queue.shift();
+      if (!f) break;
+      await runOne(f);
+    }
   }),
 );
 console.log(

@@ -13,16 +13,17 @@ from __future__ import annotations
 import argparse
 import base64
 import heapq
-import json
 import inspect
+import json
 import os
 import secrets
 import sys
 import threading
 import time
 import weakref
+from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, Any, Callable, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 import anyio
 from mcp.server.mcpserver import MCPServer
@@ -278,7 +279,7 @@ class Sessions:
         self._uploads: dict[str, tuple[str, str, str, float]] = {}  # token -> (kind, session, name, expiry)
         self._uploads_lock = threading.Lock()
         self.timeout = timeout
-        kw = dict(read_dirs=read_dirs, sandbox=sandbox, timeout=timeout)
+        kw = {"read_dirs": read_dirs, "sandbox": sandbox, "timeout": timeout}
         self.single = None if http else Worker(workdir, **kw)
         self.pool = WorkerPool(max_workers=max_sessions, idle_seconds=idle_seconds, **kw) if http else None
         self._queues: weakref.WeakKeyDictionary[Worker, anyio.Lock] = weakref.WeakKeyDictionary()
@@ -730,7 +731,7 @@ def build_server(sessions: Sessions) -> MCPServer:
             tmp = scratch / f"upload-{secrets.token_hex(8)}.part"  # renamed into place only when complete
             size = 0
             try:
-                with open(tmp, "wb") as f:
+                with open(tmp, "wb") as f:  # noqa: ASYNC230  (a blocking write per chunk, to a local file, as it always was)
                     async for chunk in request.stream():
                         size += len(chunk)
                         if size > limit:
@@ -790,9 +791,9 @@ def build_server(sessions: Sessions) -> MCPServer:
 
     @mcp.resource("dofile://commands", mime_type="text/plain", description="Stata commands the engine knows")
     def commands() -> str:
-        from .sandbox import DENIED
         from ._vendor.opendta.commands import registry
         from ._vendor.opendta.session import Session  # noqa: F401  (registers the commands)
+        from .sandbox import DENIED
 
         return "\n".join(n for n in registry.all_commands() if n not in DENIED)
 

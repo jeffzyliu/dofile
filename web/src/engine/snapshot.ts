@@ -292,7 +292,9 @@ export async function inflateNative(input: Uint8Array<ArrayBuffer>, rawSize: num
     .pipeThrough(new DecompressionStream("brotli" as CompressionFormat))
     .getReader();
   let at = 0;
-  for (let r; !(r = await reader.read()).done; ) {
+  for (;;) {
+    const r = await reader.read();
+    if (r.done) break;
     if (at + r.value.length > rawSize)
       throw snapshotError(`snapshot: the decompressed data is larger than the ${rawSize} bytes expected`);
     out.set(r.value, at);

@@ -145,7 +145,7 @@ export class FileStore {
   // One transaction. It rejects with the browser's error if it fails, and then nothing of it is kept. A database the
   // browser closed is opened again by the next call.
   async tx<T>(stores: string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
-    const mine: Promise<IDBDatabase> = (this.opened ??= open(this.factory, () => {
+    this.opened ??= open(this.factory, () => {
       if (this.opened !== mine) return;
       this.opened = undefined;
       try {
@@ -156,7 +156,8 @@ export class FileStore {
     }).catch((e) => {
       this.opened = undefined;
       throw e;
-    }));
+    });
+    const mine: Promise<IDBDatabase> = this.opened;
     const t = (await mine).transaction(stores, mode);
     const done = new Promise<void>((ok, err) => {
       t.oncomplete = () => ok();

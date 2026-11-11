@@ -13,7 +13,7 @@ import sys
 
 sys.dont_write_bytecode = True  # the Pyodide runs mount the repo's test folders: leave no .pyc behind
 
-import pytest  # noqa: E402
+import pytest
 
 
 class Report:

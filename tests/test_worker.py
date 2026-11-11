@@ -204,6 +204,7 @@ def test_full_pool_evicts_only_idle_sessions_and_refuses_when_all_are_busy():
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has only spawn")
 def test_sessions_fork_from_a_preloaded_forkserver(tmp_path, monkeypatch):
     import subprocess
+
     from dofile import worker as wmod
 
     assert wmod._ctx.get_start_method() == "forkserver"
@@ -216,6 +217,7 @@ def test_sessions_fork_from_a_preloaded_forkserver(tmp_path, monkeypatch):
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert p.returncode == 0, p.stderr
     wmod.warm_up()

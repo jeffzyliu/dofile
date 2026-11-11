@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 
 mcp = pytest.importorskip("mcp")
-from mcp import Client, StdioServerParameters  # noqa: E402
+from mcp import Client, StdioServerParameters
 
-from dofile.mcp_server import LOG_LIMIT, Sessions, _instructions, build_server  # noqa: E402
+from dofile.mcp_server import LOG_LIMIT, Sessions, _instructions, build_server
 
 EMPTY = {"scalars": {}, "macros": {}, "matrices": {}}
 PANEL = Path(__file__).parent / "conformance" / "data" / "panel.dta"
@@ -399,7 +399,7 @@ def test_arguments_are_described_and_session_only_over_http(stdio_sessions):
 def test_code_description_names_read_dirs(tmp_path):
     s = Sessions(http=False, workdir=tmp_path, read_dirs=("/data/aea",), sandbox=True, timeout=30)
     try:
-        run_do = [t for t in asyncio.run(build_server(s).list_tools()) if t.name == "run_do"][0]
+        run_do = next(t for t in asyncio.run(build_server(s).list_tools()) if t.name == "run_do")
         assert "/data/aea" in run_do.input_schema["properties"]["code"]["description"]
     finally:
         s.close()
@@ -664,6 +664,7 @@ def test_cancels_at_random_moments_leave_the_queue_free(stdio_sessions):
     """Cancels land before the thread starts, while it starts, while the code runs and just after it ends. After
     each, the queue must be free and the session must answer."""
     import random
+
     import anyio
 
     s, w = stdio_sessions, stdio_sessions.get(None)
@@ -775,6 +776,7 @@ def test_unsafe_http_only_on_loopback(capsys):
 def test_schema_doc_names_every_output_field():
     """MCP-SCHEMA.md is written by hand: every field of a tool's output type must appear in it."""
     from pathlib import Path
+
     import dofile.mcp_server as m
 
     doc = (Path(__file__).parents[1] / "MCP-SCHEMA.md").read_text()

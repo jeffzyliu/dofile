@@ -2,7 +2,7 @@
 //   node scripts/compare-pytest.mjs BASELINE_DIR PYODIDE_DIR
 // Lists every test whose outcome differs, the files with no result on one side, and the slowest tests in Pyodide
 // against CPython. Exit code 1 if any outcome differs.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const [baseDir, wasmDir] = process.argv.slice(2);
 if (!baseDir || !wasmDir) {
@@ -44,7 +44,7 @@ console.log(
 console.log(`${diffs.length} tests with a different outcome in Pyodide`);
 for (const d of diffs)
   console.log(
-    `  ${d.id}\n      CPython ${d.base}, Pyodide ${d.wasm}${d.why ? ": " + d.why.replace(/\s+/g, " ").slice(0, 220) : ""}`,
+    `  ${d.id}\n      CPython ${d.base}, Pyodide ${d.wasm}${d.why ? `: ${d.why.replace(/\s+/g, " ").slice(0, 220)}` : ""}`,
   );
 if (missingWasm.length) console.log(`no Pyodide result for: ${missingWasm.join(", ")}`);
 if (missingBase.length) console.log(`no CPython result for: ${missingBase.join(", ")}`);

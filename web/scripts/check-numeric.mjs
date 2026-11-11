@@ -83,7 +83,11 @@ const runOne = (c) =>
   });
 await Promise.all(
   Array.from({ length: shards }, async () => {
-    for (let c; (c = queue.shift()); ) await runOne(c);
+    for (;;) {
+      const c = queue.shift();
+      if (!c) break;
+      await runOne(c);
+    }
   }),
 );
 console.log(

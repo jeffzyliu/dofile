@@ -5,13 +5,9 @@
 // Run `uv build --wheel` in the repo first (npm test does).
 
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import { installEngine } from "../scripts/install-engine.ts";
-
-const root = fileURLToPath(new URL("../..", import.meta.url));
 
 async function boot() {
   const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });

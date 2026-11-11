@@ -17,7 +17,7 @@ from dofile.engine import Engine
 
 HERE = Path(__file__).parent / "conformance"
 REF = json.loads((HERE / "data" / "ref.json").read_text())
-CHECK = re.compile(r"^CHECK (\w+)=\s*(\S+)", re.M)
+CHECK = re.compile(r"^CHECK (\w+)=\s*(\S+)", re.MULTILINE)
 KNOWN_GAPS = {
     "hdfe_b_x1": "GAP-1: reghdfe is a community command, not in OpenDTA",
 }

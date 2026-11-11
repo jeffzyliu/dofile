@@ -132,7 +132,10 @@ def main(cpy, wasm, top=10):
     by_kind = collections.defaultdict(lambda: [0, 0.0, None])
     models, controls, others, loglines, logtext = [], [], [], 0, []
     for name in names:
-        a, b = json.load(open(cpy / f"{name}.json")), json.load(open(wasm / f"{name}.json"))
+        with open(cpy / f"{name}.json") as f:
+            a = json.load(f)
+        with open(wasm / f"{name}.json") as f:
+            b = json.load(f)
         diffs, ms, other, control = compare_case(a, b)
         for d, kind, where, x, y in diffs:
             total += 1

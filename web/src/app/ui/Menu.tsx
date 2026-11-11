@@ -183,7 +183,7 @@ export function MenuHost() {
     >
       {items.map((item, i) =>
         item === "rule" ? (
-          <hr key={i} role="separator" />
+          <hr key={i} />
         ) : item.href ? (
           <a
             key={i}

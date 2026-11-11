@@ -5,8 +5,8 @@ shim's logic by making the three functions behave the way Pyodide's do (return N
 rests on. The behaviour of the real WebAssembly numpy is tested in Pyodide: web/test/linalgshim.test.mjs.
 """
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import numpy as np
 import pytest

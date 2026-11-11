@@ -6,6 +6,7 @@ changes the process working directory, so run one Engine per process (see worker
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import time
@@ -15,11 +16,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import sandbox
 from ._vendor.opendta.core import brk, missing
 from ._vendor.opendta.core.output import Capture
 from ._vendor.opendta.lang.programs import Scope
 from ._vendor.opendta.session import Session
-from . import sandbox
 
 RC_INTERNAL = 9999  # a Python exception escaped the interpreter (an engine bug, not a Stata error)
 RC_FILE = 603  # Stata: file could not be opened
@@ -67,9 +68,14 @@ def _same(before: dict[str, Any], after: dict[str, Any]) -> bool:
     if before.keys() != after.keys():
         return False
     return all(
-        v is after[k] or (isinstance(v, (int, float, str)) and (v == after[k] or v != v and after[k] != after[k]))
+        v is after[k]
+        or (
+            isinstance(v, (int, float, str))
+            # NaN counts as equal to NaN
+            and (v == after[k] or v != v and after[k] != after[k])  # noqa: PLR0124  (the NaN test: only a NaN differs from itself)
+        )
         for k, v in before.items()
-    )  # NaN counts as equal to NaN
+    )
 
 
 @dataclass
@@ -110,8 +116,8 @@ def to_json(v: Any) -> Any:
         return str(v)
     if x in (float("inf"), float("-inf")):  # Stata has no infinity, and JSON cannot carry it
         return None
-    if missing.is_missing(x) or x != x:
-        name = missing.missing_name(x) if x == x else "."
+    if missing.is_missing(x) or math.isnan(x):
+        name = missing.missing_name(x) if not math.isnan(x) else "."
         return None if name == "." else name
     return int(x) if x.is_integer() and abs(x) < 2**53 else x
 
@@ -311,6 +317,7 @@ def _png(g, theme: str | None = None) -> bytes | None:
     s2color or s1color named, or an unknown name) is drawn in OpenDTA's dark scheme (dark background, light text, axes
     and grid); the mono schemes and the dark one are drawn as they are."""
     import io
+
     from ._vendor.opendta.graphics import render, scheme
 
     get = scheme.get

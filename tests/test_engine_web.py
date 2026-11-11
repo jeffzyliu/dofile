@@ -465,7 +465,9 @@ def test_the_new_calls_under_the_sandbox(tmp_path):
     work = tmp_path / "work"
     work.mkdir()
     (tmp_path / "x.dta").write_bytes(b"")
-    p = subprocess.run([sys.executable, "-I", "-c", SANDBOXED, str(work)], capture_output=True, text=True, timeout=120)
+    p = subprocess.run(
+        [sys.executable, "-I", "-c", SANDBOXED, str(work)], capture_output=True, text=True, timeout=120, check=False
+    )
     assert p.returncode == 0, p.stderr[-3000:]
     r = json.loads(p.stdout.splitlines()[-1])
     assert r["rc"] == 0 and r["images"] == 1 and r["graph_commands"] == ["scatter x x"] and r["same"]

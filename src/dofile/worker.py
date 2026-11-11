@@ -20,8 +20,9 @@ import tempfile
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .engine import BREAK, LOG_KEEP, RC_BREAK, Result, clear_break, request_break
 

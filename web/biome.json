@@ -20,13 +20,18 @@
   },
   "linter": {
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
+      "complexity": {
+        "noImportantStyles": "off"
+      },
       "style": {
         "noNonNullAssertion": "off",
         "noDescendingSpecificity": "off"
       },
       "suspicious": {
-        "noExplicitAny": "off"
+        "noExplicitAny": "off",
+        "noTemplateCurlyInString": "off",
+        "noConfusingVoidType": "off"
       }
     }
   }

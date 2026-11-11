@@ -3,9 +3,9 @@
 import pytest
 
 pytest.importorskip("mcp")
-import dofile.mcp_server as srv  # noqa: E402
-from dofile.engine import Engine  # noqa: E402
-from dofile.mcp_server import _cut_log  # noqa: E402
+import dofile.mcp_server as srv
+from dofile.engine import Engine
+from dofile.mcp_server import _cut_log
 
 LOG_LIMIT = 8_000  # the cut is tested at a small limit so that these logs stay small; srv.LOG_LIMIT is what ships
 

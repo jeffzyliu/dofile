@@ -27,7 +27,6 @@ import type {
   Results,
   RunResult,
 } from "../src/engine/types.ts";
-import type { FakePort } from "./harness.ts";
 import { fakeWorker, sleep, starts } from "./harness.ts";
 
 // A log item and a banner with every member's fields, for reading in assertions: a test reads the fields of the member
@@ -175,7 +174,8 @@ class FakeTransport implements Reader, Lifecycle, Builds {
 
   start(n: number, build: Build | null, reply: Reply<"start-worker">) {
     if (this.live) throw new Error(`start(${n}): worker ${this.live.n} is still live`);
-    this.workers.push((this.live = { n, build, reply, ended: null, runs: [] }));
+    this.live = { n, build, reply, ended: null, runs: [] };
+    this.workers.push(this.live);
   }
   end(n: number, ending: Ending) {
     const worker = this.live;

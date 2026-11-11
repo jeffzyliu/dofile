@@ -485,7 +485,7 @@ test("phone: the toast is above the command line and the tab bar, and above the 
     page.evaluate(() => {
       const r = (sel: string) => {
         const b = document.querySelector(sel)?.getBoundingClientRect();
-        return b && b.width ? { top: b.top, bottom: b.bottom } : null;
+        return b?.width ? { top: b.top, bottom: b.bottom } : null;
       };
       return { toast: r(".toast"), cmdline: r(".cmdline"), views: r(".views") };
     });

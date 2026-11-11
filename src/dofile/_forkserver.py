@@ -20,11 +20,14 @@ if "MPLCONFIGDIR" not in os.environ:
     os.environ["MPLCONFIGDIR"] = os.path.join(base, "dofile", "matplotlib")
     os.makedirs(os.environ["MPLCONFIGDIR"], mode=0o700, exist_ok=True)
 
-import matplotlib.backends.backend_agg  # noqa: E402,F401  (the first graph would otherwise take ~0.2 s)
-import matplotlib.figure  # noqa: E402,F401
-import matplotlib.font_manager  # noqa: E402,F401
+import matplotlib.backends.backend_agg  # the first graph would otherwise take ~0.2 s
+import matplotlib.figure
+import matplotlib.font_manager  # noqa: F401
 
-from . import engine, sandbox  # noqa: E402,F401
-from ._vendor.opendta import session  # noqa: E402,F401
-from ._vendor.opendta import commands  # noqa: E402,F401  (registers every command; mostly scipy, ~0.65 s)
-from ._vendor.opendta.graphics import render  # noqa: E402,F401
+from . import engine, sandbox  # noqa: F401
+from ._vendor.opendta import session  # noqa: F401
+
+# isort: split
+# `commands` stays after `session`, as the preload has always imported them; the sorted order is the other way round
+from ._vendor.opendta import commands  # noqa: F401  (registers every command; mostly scipy, ~0.65 s)
+from ._vendor.opendta.graphics import render  # noqa: F401

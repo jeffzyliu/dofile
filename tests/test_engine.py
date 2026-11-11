@@ -145,6 +145,7 @@ def test_data_summary(eng):
 def test_r_table_after_estimation(eng):
     """r(table) (a dofile patch to OpenDTA): b, se, t, p and CI per coefficient, with e(b)'s columns."""
     import math
+
     from scipy import stats
 
     r = eng.run(
@@ -305,7 +306,9 @@ def test_odt16_color_specs():
 
 def test_odt16_color_opacity_is_drawn(eng):
     import io
-    from dofile._vendor.opendta.graphics import render, store as graph_store
+
+    from dofile._vendor.opendta.graphics import render
+    from dofile._vendor.opendta.graphics import store as graph_store
 
     r = eng.run("clear\nset obs 30\nset seed 1\ngen x = rnormal()\nhistogram x, color(maroon%50)")
     assert r.rc == 0, r.error
@@ -320,7 +323,9 @@ def test_odt16_color_opacity_is_drawn(eng):
 def test_odt17_legend_position(eng):
     """ODT-17: legend(position(#)) is a clock position outside the plot region; the default stays at the bottom."""
     import io
-    from dofile._vendor.opendta.graphics import render, store as graph_store
+
+    from dofile._vendor.opendta.graphics import render
+    from dofile._vendor.opendta.graphics import store as graph_store
 
     eng.run("clear\nset obs 20\ngen x = _n\ngen y = x\ngen z = x^.5")
     centers = {}
@@ -344,7 +349,9 @@ def test_odt17_legend_position(eng):
 def test_odt20_histogram_outline(eng):
     """ODT-20: lcolor()/lwidth() set a histogram's outline; with neither the edge stays the background color."""
     import io
-    from dofile._vendor.opendta.graphics import render, store as graph_store
+
+    from dofile._vendor.opendta.graphics import render
+    from dofile._vendor.opendta.graphics import store as graph_store
 
     def first_bar(opt):
         assert eng.run(f"clear\nset obs 200\nset seed 1\ngen x = rnormal()\nhistogram x, bin(10) {opt}").rc == 0
@@ -648,7 +655,9 @@ def test_odt8_backslash_dollar_is_a_literal_dollar(eng):
 def test_odt21_default_axis_ticks_are_nice_numbers(eng):
     """ODT-21: numeric axes get about five ticks in steps of 1, 2, 5, 10 and no `.0` labels, as Stata does."""
     import io
-    from dofile._vendor.opendta.graphics import render, store as graph_store
+
+    from dofile._vendor.opendta.graphics import render
+    from dofile._vendor.opendta.graphics import store as graph_store
 
     eng.run("clear\nset obs 18\ngen educ = _n\ngen w = educ / 3")
     assert eng.run("twoway line w educ").rc == 0
@@ -666,6 +675,7 @@ def test_safe_eval_allows_only_arithmetic():
     """Expression text from Stata code (arch's archmexp(), bayesstats {param} expressions) is evaluated without
     Python's eval(), whose empty __builtins__ still let ().__class__... reach Python's internals."""
     import math
+
     from dofile._vendor.opendta.core.safe_expr import safe_eval
 
     env = {"x": 2.0, "sqrt": math.sqrt, "exp": math.exp}

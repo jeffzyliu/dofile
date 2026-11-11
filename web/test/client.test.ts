@@ -110,7 +110,9 @@ function fakeFetch({
           });
         }
         await sleep(1);
-        controller.enqueue(data.subarray(at, (at += 1000)));
+        const from = at;
+        at += 1000;
+        controller.enqueue(data.subarray(from, at));
       },
     });
     signal?.addEventListener("abort", () => {

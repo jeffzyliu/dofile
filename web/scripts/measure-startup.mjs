@@ -13,7 +13,7 @@
 // script notes the moment the attribute changes. When the page asks first (the download prompt: nothing cached, and always with
 // ?snapshot=0), the same script presses Download at once through the test hook's start().
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
