@@ -6,6 +6,11 @@ everywhere, one state machine, one build identity, the journal as the only chann
 tables and race scenarios, is [prototype1-step3.5-c-design.md](prototype1-step3.5-c-design.md); the contract the page's
 parts are written against is `docs/design/SPEC.md`, sections 5 to 8.
 
+After step 3.5 the code was reformatted (Biome for `web/`, ruff for the Python) and its lint findings fixed, with no change
+in behavior: [formatting-proposal.md](formatting-proposal.md). Every name in this document was checked against the code
+after that (2026-11-11); none changed. The document names functions and files, not line numbers, so it does not depend
+on the layout.
+
 Written from a full read of the code. Paths are relative to `web/src/` unless they start with `src/dofile/`. Part 1 is
 the plain view. Part 2 is for senior developers new to the project. Part 3 lists what is still open.
 
