@@ -1,0 +1,8 @@
+# Commits that only reformat the code: git blame skips them. GitHub reads this file by itself; a clone needs, once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# A commit listed here must change layout only. If history is rewritten (a rebase), update the hashes.
+
+# Biome reformat of web/ (width 120, layout and import order)
+c94936eca891cac36cd75386e7e995acee5a7ee3
+# ruff reformat of dofile's own Python (width 120)
+f0e2d9ae7fa106605443f48c97b7b68dd4e64ce7
