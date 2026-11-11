@@ -10,6 +10,8 @@
 // the download 3, the worker 4), as plain data to compare with.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { RC_RESET, cutResult, initial, lost, ticketOf, transition } from "../src/engine/machine.ts";
 import type { Answered, Answers, AnswersOk, AnyAnswer, Effect, Env, Event, Expect, Machine, PlainEvent, QueuedRun, Reply, RowName, State,
   StateOf, Step, Ticket, TicketedEffect } from "../src/engine/machine.ts";
@@ -629,6 +631,63 @@ test("the matrix built from transition() has the grid's cells: not valid, stale,
   assert.equal(built.running.break, "breaking | starting-list");
   assert.equal(built.breaking["run-ended"], "ready");
   assert.equal(built["starting-worker"].started, "ready | running");
+});
+
+// ---- SPEC section 5's transition matrix (step E, rulings 10 and 12) ----
+// docs/design/SPEC.md section 5 holds the matrix as five Markdown tables under the heading "### Transition matrix": one
+// per group of events, a row for each state, a column for each event. A cell is `·` (the event is not valid in the state),
+// `STALE` (an event with a ticket, in a state that holds none: always dropped), or the states the event can lead to,
+// separated by ", ". The tables are generated from matrix() above: `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts`
+// prints them, and the test below compares what SPEC has, cell by cell, with matrix().
+const SPEC_GROUPS: [string, EventType[]][] = [
+  ["A. The visitor's engine actions", Object.keys(A.none) as EventType[]],
+  ["B. Tab lock and cache check", Object.keys(B.none) as EventType[]],
+  ["C. Download and the build's list", Object.keys(C.none) as EventType[]],
+  ["D. Worker start and crash", Object.keys(D.none) as EventType[]],
+  ["E. Runs", Object.keys(E.none) as EventType[]],
+];
+/** The five tables, as SPEC section 5 has them. */
+function specTables(): string {
+  const built = matrix();
+  return SPEC_GROUPS.map(([title, types]) => [`**${title}**`, "", `| State | ${types.map(t => `\`${t}\``).join(" | ")} |`, `|---|${types.map(() => "---").join("|")}|`,
+    ...ROWS.map(r => `| \`${r}\` | ${types.map(t => built[r][t].replaceAll(" | ", ", ")).join(" | ")} |`)].join("\n")).join("\n\n");
+}
+/** The cells of SPEC section 5's matrix, "state x event" -> the cell's text; a cell given twice is listed in `twice`. */
+function specMatrix(): { cells: Map<string, string>, twice: string[] } {
+  const text = readFileSync(fileURLToPath(new URL("../../docs/design/SPEC.md", import.meta.url)), "utf8");
+  const section = text.slice(text.indexOf("\n## 5. "), text.indexOf("\n## 6. "));
+  const at = section.indexOf("\n### Transition matrix");
+  assert.ok(at >= 0, 'SPEC section 5 has no "### Transition matrix"');
+  const cells = new Map<string, string>(), twice: string[] = [];
+  let events: string[] | null = null;
+  for (const line of section.slice(at + 1).split("\n").slice(1)) {
+    if (!line.startsWith("|")) { events = null; continue; }
+    const parts = line.split("|").slice(1, -1).map(c => c.trim().replaceAll("`", ""));
+    if (parts[0] === "State") { events = parts.slice(1); continue; }
+    if (!events || parts[0].startsWith("---")) continue;
+    assert.equal(parts.length, events.length + 1, `SPEC section 5, matrix row "${parts[0]}": ${parts.length - 1} cells for ${events.length} events`);
+    events.forEach((t, i) => { const key = `${parts[0]} x ${t}`; if (cells.has(key)) twice.push(key); cells.set(key, parts[i + 1]); });
+  }
+  return { cells, twice };
+}
+/** A cell as a set: the states in alphabetical order (matrix() joins them with " | ", SPEC with ", "). */
+const asSet = (cell: string) => cell.split(/[,|]/).map(s => s.trim()).sort().join(", ");
+
+test("SPEC section 5's transition matrix is the matrix built from transition(): every cell, none missing, none extra", () => {
+  if (process.env.PRINT_SPEC_MATRIX) console.log(specTables());
+  const built = matrix(), spec = specMatrix(), problems: string[] = spec.twice.map(k => `${k}: in SPEC twice`);
+  const known = new Set<string>();
+  for (const r of ROWS) {
+    for (const t of TYPES) {
+      const key = `${r} x ${t}`, got = spec.cells.get(key);
+      known.add(key);
+      if (got === undefined) problems.push(`${key}: missing in SPEC`);
+      else if (asSet(got) !== asSet(built[r][t])) problems.push(`${key}: SPEC says "${got}", transition() gives "${built[r][t]}"`);
+    }
+  }
+  for (const key of spec.cells.keys()) if (!known.has(key)) problems.push(`${key}: in SPEC, but not a state and an event of the machine`);
+  assert.equal(problems.length, 0, `SPEC section 5 and the machine differ in ${problems.length} cell(s):\n${problems.join("\n")}`);
+  assert.equal(spec.cells.size, 16 * 24);
 });
 
 test("initial(): ticket 1, the lock request; lost() and cutResult() are today's sentence and rc 9998 result", () => {

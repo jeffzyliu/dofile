@@ -19,7 +19,7 @@
 //
 // Each step 4 part edits only its own files; this file only places them and is not edited in step 4. Per part: the files,
 // the signals it writes (state.ts), what it calls, and the slots here it fills. Every part reads any signal.
-// Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8, "Changed in step 3.5 C"):
+// Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8):
 //  - `engine` has the machine's sixteen state names (types.ts EngineState): the page load is `checking-lock`, then
 //    `checking-cache` (`none` only with ?test=manual); `starting` is `starting-list` or `starting-worker`; `other-tab` is
 //    `other-tab-idle` or `other-tab-taking`. A view that treats a pair alike writes two `case`s; CSS keyed on

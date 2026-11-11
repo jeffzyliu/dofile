@@ -11,14 +11,16 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 
 - **Steps 0, 1 and 2 are merged into `main`** (not pushed). Checked on `main` after step 2 merged: `uv run poe test` (1346
   passed), `npm run check`, `npm test` (98 tests), `npm run e2e` (56 passed).
-- **The active task is step 3.5: the engine code made clear and auditable** (TypeScript everywhere, one state machine,
-  one build identity, the journal as the only channel). Its plan and status: [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md).
-  Read it next. How the engine code works before that step: [web-engine-data-flow.md](web-engine-data-flow.md).
+- **Step 3.5 is done: the engine code made clear and auditable** (TypeScript everywhere, one state machine, one build
+  identity, the journal as the only channel; steps A to E, committed on the branch up to D, E's documents in the worktree).
+  Its plan and status: [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md). How the engine code works as built, and what
+  is still open: [web-engine-data-flow.md](web-engine-data-flow.md). **Next: the maintainer's approval of steps 3 and 3.5 and the
+  merge, then step 4.**
 - **Step 3 (the app shell) is built, reviewed twice, and edited from the maintainer's notes. It is committed on its branch
   as a checkpoint and not merged: the merge waits for the maintainer's approval of steps 3 and 3.5.** The work is in the worktree
   `.claude/worktrees/agent-adc4512780de518ed`, branch `prototype1-step3` (made from `main` at `c014141`). What the step 4
   agents write against: `docs/design/SPEC.md` section 8 ("As built in step 3") and the header of `web/src/app/App.tsx`.
-- Checked on the branch after the last edits: `npm run check`; `npm test` (140 tests, all pass, none skipped); `SNAPSHOT_QUALITY=5 npm run e2e`
+- Checked on the branch after step 3.5 E: `npm run check`; `npm test` (212 tests, all pass, none skipped); step E changes no page code, so the e2e and design checks were not rerun for it, and the counts below are the last recorded: `SNAPSHOT_QUALITY=5 npm run e2e`
   (74 passed, 22 skipped: the 16 fixme cases of `e2e/poc.spec.ts`, and the two iPhone-only checks, the page scroll and the toast's place, in the three desktop profiles); `npm run axe`, `contrast`, `tabwalk`, `fonts`. Nothing under the root `src/` or `tests/` changed, so
   `uv run poe test` was not run again.
 - The last edits: the other-tab dialog has "Close editor" (focused; it goes to the landing page, a dead link until step 5)
@@ -34,15 +36,20 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   `dofile.downloaded` flag is gone; at load the page asks unless `client.cached()` finds this build's start files all in
   the Cache, and a `failed-twice` (not memory or no-wasm) deletes them (`client.forgetDownload()`).
 - **Next, in this order:**
-  1. Step 3.5 (its plan's steps A to E), on the same branch. The maintainer reviewed the engine code's design on
-     2026-11-10; that plan holds the decisions. It changes the internals of `web/src/app/engine.js`, `run.js` and
-     `web/src/engine/`; the contracts in SPEC section 8 are what step 4 relies on.
-  2. The merge of steps 3 and 3.5, once the maintainer approves them.
+  1. The maintainer's approval of steps 3 and 3.5 (done on the branch: step 3.5's steps A to E; the plan holds the
+     decisions). Step 3.5 changed the internals of `web/src/app/engine.ts`, `run.ts` and `web/src/engine/`; the contracts in
+     SPEC sections 5 to 8 are what step 4 relies on.
+  2. The merge of steps 3 and 3.5.
   3. Step 4 (4a and 4c first).
 - **To try on a real iPhone** (none of this can be tested here; the e2e iPhone profile is an emulation with no real
   keyboard, toolbars or touch scrolling): the page does not scroll or bounce; with the keyboard open the command line sits
   right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard
   while it is open. An Android phone (Chrome, Firefox) should behave the same now.
+- **Open from step 3.5** (listed in `web-engine-data-flow.md`, Part 3): a Break pressed between sending a run and the worker
+  starting it is lost and ends as a 9998 reset; when another page upgrades the database, the new worker mounts with a store
+  error and an empty `/work`; if only the worker fails to open the store, an upload shows in the file list but `use` on it gives
+  rc 601 with no banner; a closed database keeps today's restart (the maintainer's ruling, 2026-11-11); the failed states show
+  nothing until step 4d builds the banners.
 - **Open points:** the toast's offset on a phone is set against the placeholder command line, not 4b's real one (step
   4b); the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
 
@@ -95,7 +102,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, medium | parallel with 2 | done |
 | 2 | The file store with its `pending` journal, the self-hosted runtime, a build-written list of the start files with their sizes, download with byte counts and abort (resumed per file), Break as wait / reset now, the zip made in the page, the tab lock, `storage.persist()`, relaying the streamed log and the new ops; Node tests (spec section 7) | general-purpose, worktree | Fable, high | parallel with 1 | done |
 | 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | to review |
-| 3.5 | The engine code made clear and auditable: TypeScript everywhere, one explicit state machine, one build identity (no offline start), the journal as the only channel. Plan: `prototype1-step3.5-plan.md` | general-purpose, one step at a time | Opus, high | after 3, before the merge | not started |
+| 3.5 | The engine code made clear and auditable: TypeScript everywhere, one explicit state machine, one build identity (no offline start), the journal as the only channel. Plan: `prototype1-step3.5-plan.md` | general-purpose, one step at a time | Opus, high | after 3, before the merge | done |
 | 4a | File tree, editor tabs, upload and name clash, row menus | general-purpose, worktree | Opus, medium | after 3, with 4c | not started |
 | 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | not started |
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | not started |

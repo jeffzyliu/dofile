@@ -9,7 +9,7 @@ the same table cells.
 - **Date:** 2026-11-10, revised 2026-11-11.
 - **Paths** are relative to the repository root. A citation such as `web/src/engine/client.ts:268-356` is to the code
   at commit a11033d (step B2), which is what step C starts from.
-- **Scope:** documents only. Step C's code follows this design after approval.
+- **Scope:** documents only. Step C's code follows this design and was built in commit 22b614e; step D changed the file ops (marked where they appear); step E made SPEC section 5's transition table the machine's matrix, which `web/test/machine.test.ts` compares with it.
 
 Contents: Decisions; 1 State; 2 Event; 3 Effect; 4 The transition tables; 5 The stale guard and the tickets;
 6 The contracts, enforced; 7 Module boundaries (7.4 Single instances); 8 Race scenarios; 9 What changes for step 4;
@@ -50,7 +50,7 @@ additions came out of that evaluation:
 | A4 | A controller test with a simulated clock pins the Break timer across two runs on one worker. | items 5.2, 7.1 |
 | A5 | `EngineState` is written out by hand; no text calls it derived. | item 9 |
 
-Where SPEC section 5 and the code disagree, the machine follows the code in three places: Run in `none` queues the run
+Where SPEC section 5 and the code disagreed (before step E, which made SPEC section 5 say what the machine does), the machine followed the code in three places: Run in `none` queues the run
 and asks; Reset acts only in `ready`, `running`, `breaking` and `waiting`; the reset banner is added only when the engine
 being replaced had been ready.
 

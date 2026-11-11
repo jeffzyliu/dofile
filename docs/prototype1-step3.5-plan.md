@@ -4,8 +4,10 @@ The task proposal the maintainer approved on 2026-11-10, after reading the engin
 ([web-engine-data-flow.md](web-engine-data-flow.md)). It sits between step 3 (the app shell) and step 4 of
 [prototype1-plan.md](prototype1-plan.md). Update the status table here at the end of every session.
 
-To pick up: read this file, then `web/CLAUDE.md`, then `web-engine-data-flow.md` (how the code works **before** this
-step; Part 3 lists the problems this step answers), then run `git status` and `git log --oneline -5` in the worktree.
+To pick up: steps A to E are done and wait for the maintainer's approval and the merge. Read this file, then `web/CLAUDE.md`,
+then `web-engine-data-flow.md` (how the code works **as built**; its Part 3 lists what is still open), then run
+`git status` and `git log --oneline -5` in the worktree. The "Why" and step sections below are the plan as written, a
+record of what each step was meant to do.
 
 ## Why
 
@@ -63,7 +65,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | B2 | The build id covers the whole build; a stale snapshot fails the build; `manifest.json` is not deployed | done |
 | C | The state machine in one file; the contracts enforced | done |
 | D | The journal as the only channel; a run's changes found by time and size | done |
-| E | Docs: SPEC sections 5 to 8, `web/CLAUDE.md`, `web-engine-data-flow.md` revised to the code as built | not started |
+| E | Docs: SPEC sections 5 to 8, `web/CLAUDE.md`, `web-engine-data-flow.md` revised to the code as built | done |
 
 Run A first and alone (it touches every file). B, B2, C and D in that order: each is smaller after the one before. After
 each step: `npm run check`, `npm test`, `SNAPSHOT_QUALITY=5 npm run e2e` (the counts before this step: 144 tests; e2e 74
