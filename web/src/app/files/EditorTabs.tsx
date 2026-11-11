@@ -5,9 +5,9 @@
 //    the selected tab (aria-keyshortcuts="Delete"). Closing a tab with unsaved edits asks first (dialog close-tab:
 //    actions.ts askCloseTab). Ctrl/Cmd+W is the browser's: not bound.
 //  - FileSwitcher: the phone's top bar title on the Editor view (WP 1): the open file's name and ▾, a menu of the open
-//    files, and "Close <name>" (the phone has no ×). With no open file the title is "Editor".
+//    files, "Close <name>" (the phone has no ×) and "Show all files"; with no open file it says "Editor".
 // `dirty` is the editor's (state.ts setDirty); this file never sets it.
-import { activeTab, tabs } from "../state.ts";
+import { activeTab, phoneTab, tabs } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { askCloseTab } from "./actions.ts";
@@ -104,28 +104,34 @@ const switcherItems = (): MenuItem[] => {
         },
       }),
     ),
-    ...(active
-      ? (["rule", { label: `Close ${baseName(active)}`, onSelect: () => askCloseTab(active) }] as MenuItem[])
-      : []),
+    ...(list.length ? ["rule" as const] : []),
+    ...(active ? [{ label: `Close ${baseName(active)}`, onSelect: () => askCloseTab(active) }] : []),
+    {
+      label: "Show all files",
+      onSelect: () => {
+        phoneTab.value = "files";
+      },
+    },
   ];
 };
 
-/** The phone's top bar title on the Editor view: the open file's name and ▾; a tap opens the menu of open files. */
+/** The phone's top bar title on the Editor view: the open file's name (or "Editor" with none) and ▾; a tap opens the
+ *  menu of open files, "Close <name>" and "Show all files" (the Files view). One button in every case, as wide as the
+ *  title, so the top bar's boxes never move (e2e/shell.spec.ts). */
 export function FileSwitcher() {
   const active = tabs.value.find((t) => t.path === activeTab.value);
-  if (!active) return <>Editor</>;
-  const label = tabLabels(tabs.value.map((t) => t.path))[tabs.value.indexOf(active)];
+  const label = active ? tabLabels(tabs.value.map((t) => t.path))[tabs.value.indexOf(active)] : "Editor";
   return (
     <button
       type="button"
       class="file-switcher"
       aria-haspopup="menu"
       aria-expanded={openMenuState.value?.label === "Open files"}
-      aria-label={`${label}${active.dirty ? ", unsaved changes" : ""}. Open files`}
+      aria-label={`${label}${active?.dirty ? ", unsaved changes" : ""}. Open files`}
       onClick={(e) => openMenu({ label: "Open files", items: switcherItems, anchor: e.currentTarget })}
     >
       <span class="name">{label}</span>
-      {active.dirty && <span class="dot" aria-hidden="true" />}
+      {active?.dirty && <span class="dot" aria-hidden="true" />}
       <Icon name="down" />
     </button>
   );

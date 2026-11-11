@@ -647,17 +647,22 @@ input.filter::placeholder {
   font: var(--code) / 1.4 var(--font-mono);
   color: var(--ink);
 }
-/* the phone's top bar title on the Editor view: the open file and ▾ */
+/* the phone's top bar title on the Editor view: the open file and ▾, as wide as the title in every state, so the top
+   bar's boxes never move; the title clips, so the focus ring is drawn inside */
 .file-switcher {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
-  max-width: 100%;
+  width: 100%;
   font: inherit;
   color: inherit;
+  text-align: start;
   padding: 2px 4px;
-  margin: -2px -4px;
   border-radius: var(--radius);
+}
+.file-switcher:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .file-switcher .name {
   min-width: 0;

@@ -55,10 +55,18 @@ let pickFolder: HTMLInputElement | null = null;
 
 const rowSelector = (path: string) => `.files [data-path="${CSS.escape(path)}"]`;
 
-/** Make `path` the row in the tab order and focus it after the render that draws it. */
-function focusRow(path: string) {
+/** Make `path` the row in the tab order and focus it once a render draws it (after a rename the row appears when the
+ *  store has been listed again: up to about a second). */
+function focusRow(path: string, tries = 20) {
   rovingPath.value = path;
-  setTimeout(() => document.querySelector<HTMLElement>(rowSelector(path))?.focus());
+  setTimeout(
+    () => {
+      const el = document.querySelector<HTMLElement>(rowSelector(path));
+      if (el) el.focus();
+      else if (tries > 0 && rovingPath.value === path) focusRow(path, tries - 1);
+    },
+    tries === 20 ? 0 : 50,
+  );
 }
 
 const fail = (what: string) => (e: unknown) => {
@@ -209,11 +217,13 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
         ref={(el) => {
           if (!el || el.dataset.ready) return;
           el.dataset.ready = "1";
-          setTimeout(() => {
+          const take = () => {
             el.focus();
             const dot = row.dir ? -1 : row.name.lastIndexOf(".");
             el.setSelectionRange(0, dot > 0 ? dot : row.name.length); // the name without its extension
-          });
+          };
+          take();
+          if (document.activeElement !== el) setTimeout(take); // not in the document yet
         }}
         onInput={() => {
           if (r.problem) renaming.value = { ...r, problem: null };

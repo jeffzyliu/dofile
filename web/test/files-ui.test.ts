@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
+import type { ClashAnswer, ClashNow } from "../src/app/files/actions.ts";
 
 const S = await import("../src/app/state.ts");
 const { store } = await import("../src/app/store.ts");
@@ -33,7 +34,8 @@ store.blocked = false;
 
 async function reset(files: Record<string, string | Uint8Array> = {}) {
   for (const f of await store.list()) if (!f.path.includes("/")) await store.remove(f.path);
-  for (const [path, data] of Object.entries(files)) await store.write(path, typeof data === "string" ? enc(data) : data);
+  for (const [path, data] of Object.entries(files))
+    await store.write(path, typeof data === "string" ? enc(data) : data);
   await refresh();
   S.tabs.value = [];
   S.activeTab.value = null;
@@ -83,10 +85,17 @@ test("treeRows: folders first, then files, by name (numbers in order, case ignor
 });
 
 test("names and paths: sizes, a free name, what is wrong with a new name, tab labels, row counts, quoting", () => {
-  assert.deepEqual(
-    [0, 999, 1000, 41_200, 999_499, 999_500, 1_234_567, 48_600_000, 2_500_000_000].map(T.formatSize),
-    ["0 B", "999 B", "1 KB", "41 KB", "999 KB", "1.0 MB", "1.2 MB", "49 MB", "2.5 GB"],
-  );
+  assert.deepEqual([0, 999, 1000, 41_200, 999_499, 999_500, 1_234_567, 48_600_000, 2_500_000_000].map(T.formatSize), [
+    "0 B",
+    "999 B",
+    "1 KB",
+    "41 KB",
+    "999 KB",
+    "1.0 MB",
+    "1.2 MB",
+    "49 MB",
+    "2.5 GB",
+  ]);
   assert.equal(T.freeName("", "untitled.do", ["a.do"]), "untitled.do");
   assert.equal(T.freeName("", "untitled.do", ["untitled.do", "untitled-2.do"]), "untitled-3.do");
   assert.equal(T.freeName("data", "folder", ["data/folder"]), "data/folder-2");
@@ -172,7 +181,10 @@ test("toBase64 takes a large file in chunks", () => {
 });
 
 test("openFile: a file that isn't UTF-8 opens no tab and shows the not-text banner, one at a time", async () => {
-  await reset({ "survey.xlsx": Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe]), "b.xls": Uint8Array.from([0xd0]) });
+  await reset({
+    "survey.xlsx": Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe]),
+    "b.xls": Uint8Array.from([0xd0]),
+  });
   await openFile("survey.xlsx");
   assert.deepEqual(S.tabs.value, []);
   assert.deepEqual(S.banners.value, [{ b: "not-text", path: "survey.xlsx" }]);
@@ -228,7 +240,10 @@ test("rename: an open file, and a folder with open files under it: the tabs foll
       ["renamed", "data/raw/y.csv", "input/raw/y.csv"],
     ],
   );
-  assert.ok(calls.every((c) => c.tabs.includes("input/x.do")), "tabs first, then the editor");
+  assert.ok(
+    calls.every((c) => c.tabs.includes("input/x.do")),
+    "tabs first, then the editor",
+  );
   await A.renameEntry("a.do", "b.do");
   assert.equal(S.tabs.value[0].path, "b.do");
   await assert.rejects(A.renameEntry("b.do", "database.do"), /already exists/);
@@ -281,8 +296,8 @@ test("a folder's Download (.zip): every file and folder under it, named under th
 // ---- actions.ts: upload and its clashes ----
 
 /** Answer each clash dialog as it opens, in order; records what each showed. */
-function answering(answers: A.ClashAnswer[]) {
-  const seen: { dialog: unknown; now: A.ClashNow | null; inStore: string[] }[] = [];
+function answering(answers: ClashAnswer[]) {
+  const seen: { dialog: unknown; now: ClashNow | null; inStore: string[] }[] = [];
   const stop = effect(() => {
     const d = S.dialog.value;
     if (d?.d !== "clash") return;
@@ -331,10 +346,13 @@ test("upload with clashes: the others are written first; each clash asks, Keep m
     { ...seen[0].now, yours: { ...seen[0].now!.yours, mtime: 0 } },
     { path: "a.do", yours: { size: 5, mtime: 0 }, uploaded: 5, others: 1, left: 3, unsaved: false },
   );
-  assert.deepEqual(
-    await Promise.all(["a", "b", "c", "d", "new"].map((n) => textOf(`${n}.do`))),
-    ["old a", "new b", "new c", "new d", "new new"],
-  );
+  assert.deepEqual(await Promise.all(["a", "b", "c", "d", "new"].map((n) => textOf(`${n}.do`))), [
+    "old a",
+    "new b",
+    "new c",
+    "new d",
+    "new new",
+  ]);
   assert.equal(S.toast.value, "4 files uploaded");
   assert.equal(S.dialog.value, null);
   assert.equal(A.clashNow(), null);
@@ -346,19 +364,18 @@ test("upload: Esc keeps yours for every clash left and asks no more; Keep mine w
   await A.upload(["a", "b", "c", "x"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   stop();
   assert.equal(seen.length, 1);
-  assert.deepEqual(
-    await Promise.all(["a", "b", "c", "x"].map((n) => textOf(`${n}.do`))),
-    ["old a", "old b", "old c", "new x"],
-  );
+  assert.deepEqual(await Promise.all(["a", "b", "c", "x"].map((n) => textOf(`${n}.do`))), [
+    "old a",
+    "old b",
+    "old c",
+    "new x",
+  ]);
   assert.equal(S.toast.value, "1 file uploaded");
   ({ seen, stop } = answering([{ replace: false, same: true }]));
   await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   stop();
   assert.equal(seen.length, 1);
-  assert.deepEqual(
-    await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))),
-    ["old a", "old b"],
-  );
+  assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
 });
 
 test("upload over an open file: the clash says it has unsaved edits; Replace reloads it in the editor; one no longer text closes its tab", async () => {

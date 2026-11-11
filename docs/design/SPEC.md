@@ -910,6 +910,22 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
     inline rename) calls `preventDefault()`. No tab can become dirty before 4b's
     editor exists, so 4a's tests of the close-tab and reload paths call `setDirty(path, true)` themselves.
+    **As built in step 4a:** the plain logic is in `files/tree.ts` (the rows: in each folder its folders first, then its
+    files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
+    with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
+    rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
+    are written first, then each clash is asked; what the clash dialog shows beyond the `dialog` value is
+    `clashNow()`, its answer `answerClash()`), both tested in Node (`web/test/files-ui.test.ts`). `FilesPane.tsx` exports
+    `fileMenuItems()` (the head menu) for a phone ⋯. "Restore the sample" is not in the head menu until step 5's sample
+    exists (OQ-13 puts it above "Delete all files…"). A new folder is `folder` (`folder-2`, ...) in inline rename. The
+    phone's `FileSwitcher` is one button as wide as the title in every state ("Editor" with no open file, so the top
+    bar's boxes never move); its menu lists the open files, then "Close <name>" (the phone has no ×) and "Show all
+    files" (the Files view). Words the spec does not
+    give, drafts for the maintainer: the inline rename's reasons ("clean.do already exists here.", "Type a name.", "A
+    name can't contain / or \.", "That name isn't allowed.", "That name is dofile's own."); a folder's delete ("Delete
+    data/?" / "The folder and everything in it are kept only in this browser; there is no undo."); an upload with files
+    the store refused ("2 files uploaded · 1 couldn't be"); the live region's "survey.xlsx can't be opened in the
+    editor" and "<action> didn't work".
   - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands` and `selection`), `editor/RunControls.tsx`
     (built for the section 5 states, each button at one size, 3.4; 4b adds the timers, and the pill's time goes into
     its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the

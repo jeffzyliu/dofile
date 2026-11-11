@@ -256,10 +256,11 @@ export function entriesOf(dt: DataTransfer): (Entry | File)[] {
   const out: (Entry | File)[] = [];
   for (const item of dt.items ?? []) {
     if (item.kind !== "file") continue;
+    // a folder is walked through its entry; a file is taken as it is (a made-up drop's entry gives no file in WebKit)
     const entry = (item as DataTransferItem & { webkitGetAsEntry?(): Entry | null }).webkitGetAsEntry?.();
-    const file = entry ? null : item.getAsFile();
-    if (entry) out.push(entry);
-    else if (file) out.push(file);
+    const file = entry?.isDirectory ? null : item.getAsFile();
+    if (file) out.push(file);
+    else if (entry) out.push(entry);
   }
   if (!out.length) out.push(...(dt.files ?? []));
   return out;
