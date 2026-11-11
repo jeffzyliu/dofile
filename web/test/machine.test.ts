@@ -1040,6 +1040,7 @@ test("property: over every path, the effects never make a second worker while on
 export type NoRow = Expect<AnswersOk<Omit<Answers, "interrupt">>>;
 // @ts-expect-error a row for an effect without a ticket
 export type RowWithoutTicket = Expect<AnswersOk<Answers & { "own-files": never }>>;
+// biome-ignore format: @ts-expect-error covers the next line only, so the type stays on one line
 // @ts-expect-error an event without a ticket as an answer
 export type PlainAnswer = Expect<AnswersOk<Omit<Answers, "take-lock"> & { "take-lock": "lock-answered" | "lock-lost" }>>;
 // @ts-expect-error an event with a ticket that no effect is answered with
