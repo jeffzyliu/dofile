@@ -21,8 +21,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   are `npm run check` (Biome, then `tsc`), `npm run lint:strict`, `uv run poe lint` and a CI job for each. Decisions, rules turned
   off and commands: [formatting-proposal.md](formatting-proposal.md). Checked on the final state (2026-11-11): `npm run lint:strict`,
   `npm run check`, `uv run poe lint`; `npm test` (212 tests, all pass, none skipped); `SNAPSHOT_QUALITY=5 npm run e2e` (74
-  passed, 22 skipped, as before); `uv run poe ci` (1443 passed, 13 skipped, 3 xfailed). The design checks (`axe`, `contrast`,
-  `tabwalk`, `fonts`) were not rerun.
+  passed, 22 skipped, as before); `uv run poe ci` (1443 passed, 13 skipped, 3 xfailed). The design checks (`npm run axe`,
+  `contrast`, `tabwalk`, `fonts`) pass too: 0 violations in 36 runs, 0 contrast failures, 0 hidden focus stops, 0 font problems.
 - **Step 3 (the app shell) is built, reviewed twice, and edited from the maintainer's notes. It is committed on its branch
   as a checkpoint and not merged: the merge waits for the maintainer's approval of steps 3 and 3.5.** The work is in the worktree
   `.claude/worktrees/agent-adc4512780de518ed`, branch `prototype1-step3` (made from `main` at `c014141`). What the step 4
