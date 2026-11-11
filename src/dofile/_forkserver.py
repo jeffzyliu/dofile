@@ -2,6 +2,7 @@
 
 The forkserver is not sandboxed; each child installs the sandbox after the fork, as with spawn.
 """
+
 import os
 import sys
 import warnings
@@ -14,7 +15,8 @@ warnings.filterwarnings("ignore", "'dofile\\.mcp_server' found in sys.modules", 
 # building the font cache scans every system font (~10 s on macOS) although OpenDTA only uses DejaVu Sans.
 if "MPLCONFIGDIR" not in os.environ:
     base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser(
-        "~/Library/Caches" if sys.platform == "darwin" else "~/.cache")
+        "~/Library/Caches" if sys.platform == "darwin" else "~/.cache"
+    )
     os.environ["MPLCONFIGDIR"] = os.path.join(base, "dofile", "matplotlib")
     os.makedirs(os.environ["MPLCONFIGDIR"], mode=0o700, exist_ok=True)
 

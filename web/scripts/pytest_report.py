@@ -7,10 +7,11 @@ OUT.json: {"exit": int, "tests": {nodeid: {"outcome": passed|failed|skipped|xfai
 A failure in setup or teardown is "failed" with "why" starting "setup:" or "teardown:". A collection error is recorded
 under the module's id as "failed" with "why" starting "collect:".
 """
+
 import json
 import sys
 
-sys.dont_write_bytecode = True   # the Pyodide runs mount the repo's test folders: leave no .pyc behind
+sys.dont_write_bytecode = True  # the Pyodide runs mount the repo's test folders: leave no .pyc behind
 
 import pytest  # noqa: E402
 
@@ -40,13 +41,20 @@ class Report:
         if report.failed:
             e = self._entry(report.nodeid)
             e["outcome"] = "failed"
-            e["why"] = "collect: " + (getattr(getattr(report.longrepr, "reprcrash", None), "message", None) or str(report.longrepr)[-300:])[:400]
+            e["why"] = (
+                "collect: "
+                + (
+                    getattr(getattr(report.longrepr, "reprcrash", None), "message", None) or str(report.longrepr)[-300:]
+                )[:400]
+            )
 
 
 # The repo's pyproject.toml deselects these (OpenDTA tests that import the Qt GUI, which is not vendored). The Pyodide
 # runs have no pyproject, and the baseline passes -o addopts= too, so both sides get the same selection from here.
-DESELECT = [f"--deselect=tests_opendta/tests/test_i18n.py::{t}"
-            for t in ("test_dialog_commands", "test_dialog_commands_run", "test_graph_editor_edits")]
+DESELECT = [
+    f"--deselect=tests_opendta/tests/test_i18n.py::{t}"
+    for t in ("test_dialog_commands", "test_dialog_commands_run", "test_graph_editor_edits")
+]
 
 
 def run(out, args):

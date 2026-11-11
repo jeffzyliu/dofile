@@ -7,6 +7,7 @@ within GRACE seconds (one long command), or it died, it is killed and the call r
 reset"); the next call starts a fresh one.
 WorkerPool: one Worker per session key (a start_session token), with idle reaping and a size cap.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -51,6 +52,7 @@ def warm_up() -> None:
     """Start the forkserver in the background now, so the first session doesn't wait ~1 s for it."""
     if _ctx.get_start_method() == "forkserver":
         from multiprocessing import forkserver
+
         threading.Thread(target=forkserver.ensure_running, daemon=True).start()
 
 
@@ -58,14 +60,17 @@ def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> N
     """Child process: optionally confine itself, then answer requests until the pipe closes."""
     if sandboxed:
         from . import sandbox
+
         sandbox.install(workdir, read_dirs)
     from .engine import Engine
+
     eng = Engine(workdir, log_keep=LOG_KEEP, hints=False)  # bounded log; no console hints for agents
     busy = False
 
     def on_interrupt(signum, frame):  # the parent's interrupt: Break at the next safe point, never mid-command
         if busy:
             request_break()
+
     signal.signal(signal.SIGINT, on_interrupt)
     while True:
         try:
@@ -85,8 +90,15 @@ def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> N
 
 
 class Worker:
-    def __init__(self, workdir: str | Path, read_dirs: tuple[str, ...] = (), *, sandbox: bool = True,
-                 timeout: float = 60.0, owns_workdir: bool = False):
+    def __init__(
+        self,
+        workdir: str | Path,
+        read_dirs: tuple[str, ...] = (),
+        *,
+        sandbox: bool = True,
+        timeout: float = 60.0,
+        owns_workdir: bool = False,
+    ):
         self.workdir = str(workdir)
         self.read_dirs = tuple(read_dirs)
         self.sandbox = sandbox
@@ -182,16 +194,18 @@ class Worker:
         finally:
             self._active = None
 
-    def run(self, code: str, timeout: float | None = None, images: bool = False,
-            call: threading.Event | None = None) -> Result:
+    def run(
+        self, code: str, timeout: float | None = None, images: bool = False, call: threading.Event | None = None
+    ) -> Result:
         """`call`: an Event identifying this call, for interrupt()."""
         return self._call("run", code, images, timeout=timeout, call=call)
 
     def data_summary(self, vars: str | None = None, offset: int = 0, limit: int | None = None) -> dict | Result:
         return self._call("data", vars, offset, limit)
 
-    def matrix(self, name: str, rows: list[str] | None = None, cols: list[str] | None = None,
-               max_cells: int | None = None) -> dict | Result:
+    def matrix(
+        self, name: str, rows: list[str] | None = None, cols: list[str] | None = None, max_cells: int | None = None
+    ) -> dict | Result:
         return self._call("matrix", name, rows, cols, max_cells)
 
     @property
@@ -233,8 +247,11 @@ def _snapshot(workdir: str) -> dict[str, tuple[int, int]]:
 
 
 def _changes(before: dict, after: dict) -> list[dict[str, Any]]:
-    return [{"name": n, "status": "modified" if n in before else "created", "bytes": after[n][1]}
-            for n in sorted(after) if before.get(n) != after[n]]
+    return [
+        {"name": n, "status": "modified" if n in before else "created", "bytes": after[n][1]}
+        for n in sorted(after)
+        if before.get(n) != after[n]
+    ]
 
 
 def _broken(reason: str) -> Result:
@@ -253,8 +270,14 @@ class PoolFull(RuntimeError):
 class WorkerPool:
     """Workers keyed by session id. Each new session gets a fresh temp workdir unless `factory` says otherwise."""
 
-    def __init__(self, factory: Callable[[], Worker] | None = None, *, max_workers: int = 8,
-                 idle_seconds: float = 900.0, **worker_kw: Any):
+    def __init__(
+        self,
+        factory: Callable[[], Worker] | None = None,
+        *,
+        max_workers: int = 8,
+        idle_seconds: float = 900.0,
+        **worker_kw: Any,
+    ):
         self.factory = factory or (lambda: Worker(tempfile.mkdtemp(prefix="dofile-"), owns_workdir=True, **worker_kw))
         self.max_workers = max_workers
         self.idle_seconds = idle_seconds

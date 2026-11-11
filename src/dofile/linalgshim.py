@@ -18,7 +18,7 @@ import numpy as np
 
 _FUNCTIONS = ("inv", "solve", "cholesky")
 _MESSAGES = {"inv": "Singular matrix", "solve": "Singular matrix", "cholesky": "Matrix is not positive definite"}
-_installed: dict[str, object] = {}   # name -> the original function, for the functions that were wrapped
+_installed: dict[str, object] = {}  # name -> the original function, for the functions that were wrapped
 
 
 def _probe(name: str) -> bool:
@@ -43,6 +43,7 @@ def _wrap(name: str, f):
         if np.isnan(r).any() and (name == "cholesky" or all(np.isfinite(x).all() for x in (a, *args))):
             raise np.linalg.LinAlgError(_MESSAGES[name])
         return r
+
     wrapped.__name__ = name
     wrapped.__doc__ = f.__doc__
     wrapped.__wrapped__ = f

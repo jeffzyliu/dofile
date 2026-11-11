@@ -1,6 +1,7 @@
 """Engine features for the web demo (docs/design/SPEC.md, section 6): fresh_locals, on_output and the log cap,
 error_line, graph_commands, plot_theme, describe_file, macros, data_rows, memory and the tempfile hint. The MCP server
 does not send these; tests/test_mcp.py checks that its output is unchanged. browser.py's side: tests/test_browser.py."""
+
 import io
 import time
 
@@ -22,14 +23,14 @@ def eng(tmp_path, monkeypatch):
 
 # -- fresh_locals ---------------------------------------------------------------------------------------------------
 
-FILE = 'display "x=[`x\']"\nlocal x = `x\' + 1\n'
+FILE = "display \"x=[`x']\"\nlocal x = `x' + 1\n"
 
 
 def test_a_whole_file_run_twice_gives_the_same_result(eng):
     first, second = (eng.run(FILE, fresh_locals=True) for _ in range(2))
     assert "x=[]" in first.log and "x=[]" in second.log
-    assert eng.macros()["locals"] == {"x": "1"}   # the locals of the last run stay, for a selection run after it
-    kept = eng.run(FILE)   # the default keeps them (the MCP server, the CLI, a selection run)
+    assert eng.macros()["locals"] == {"x": "1"}  # the locals of the last run stay, for a selection run after it
+    kept = eng.run(FILE)  # the default keeps them (the MCP server, the CLI, a selection run)
     assert "x=[1]" in kept.log
 
 
@@ -41,6 +42,7 @@ def test_fresh_locals_keeps_globals_data_and_results(eng):
 
 
 # -- on_output and the log cap --------------------------------------------------------------------------------------
+
 
 def _sink():
     got: list[tuple[float, str]] = []
@@ -64,6 +66,7 @@ def slow_cmds():
         for i in range(60):
             s.output.write(f"line {i}\n", "text")
             time.sleep(0.01)
+
     yield
     REGISTRY.pop("dofile_test_busy", None)
     REGISTRY.pop("dofile_test_chatty", None)
@@ -75,7 +78,7 @@ def test_on_output_gets_the_whole_log_in_batches(eng, slow_cmds):
     r = eng.run("display 1\ndofile_test_chatty\ndisplay 2", on_output=sink)
     elapsed = time.monotonic() - t0
     assert "".join(t for _, t in got) == r.log
-    assert got[0][1].startswith(". display 1")   # the first text went at once
+    assert got[0][1].startswith(". display 1")  # the first text went at once
     # inside one command, at most one batch per STREAM_EVERY; plus one before each of the 3 commands and the last
     assert 3 <= len(got) <= elapsed / engine_mod.STREAM_EVERY + 5
 
@@ -95,7 +98,7 @@ def test_output_before_a_long_silent_command_is_sent_before_it_starts(eng, slow_
     end = time.monotonic()
     assert "".join(t for _, t in got) == r.log
     sent_early = "".join(text for t, text in got if end - t > 0.4)
-    assert "Variable" in sent_early and ". dofile_test_busy" in sent_early   # the summarize table and the echo
+    assert "Variable" in sent_early and ". dofile_test_busy" in sent_early  # the summarize table and the echo
 
 
 def test_the_echo_of_a_long_command_arrives_before_it_ends(eng):
@@ -155,6 +158,7 @@ def test_on_output_with_a_break(eng, break_cmds):
 def test_a_receiver_that_raises_a_base_exception_is_dropped(eng):
     def sink(text):
         raise KeyboardInterrupt
+
     eng.run("display 1\ndisplay 2", on_output=sink)
     assert eng._tee.sink is None
     assert eng.run("display 3").rc == 0
@@ -163,6 +167,7 @@ def test_a_receiver_that_raises_a_base_exception_is_dropped(eng):
 def test_a_failing_receiver_does_not_stop_the_run(eng):
     def sink(text):
         raise RuntimeError("the page is gone")
+
     r = eng.run("display 1\ndisplay 2", on_output=sink)
     assert r.rc == 0 and ". display 2" in r.log
 
@@ -177,19 +182,26 @@ def test_no_on_output_after_the_run(eng):
 
 # -- error_line -----------------------------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("code, line", [
-    ("display 1\n\n* a comment\n// another\n\nsummarize nosuch\n", 6),   # comment and blank lines count
-    ("display 1\r\n\r\n* c\r\nsummarize nosuch\r\n", 4),   # Windows line ends
-    ("/* a\nb\n*/\nsummarize nosuch\n", 4),
-    ("display 1\nsummarize x ///\n   nosuch\n", 2),   # a continued command: its first line
-    ("#delimit ;\ndisplay 1;\nsummarize\n  nosuch;\n#delimit cr\n", 3),   # a ; command: its first line
-    ("display 1\nforeach v in x nosuch {\n  display \"`v'\"\n  summarize `v'\n}\n", 4),   # the body line in a loop
-    ("forvalues i = 1/3 {\n  display `i'\n  if `i' == 2 summarize nosuch\n}\n", 3),
-    ("if 1 {\n  display 1\n  summarize nosuch\n}\n", 3),
-    ("capture program drop pp\nprogram define pp\n  display 1\n  summarize nosuch\nend\ndisplay 2\npp\n", 4),  # body
-    ("capture {\n  summarize nosuch\n}\ndisplay 1\nsummarize nosuch2\n", 5),   # a captured error is not the one
-    ("display 1\nsummarize nosuch\ndisplay 2\n", 2),
-])
+
+@pytest.mark.parametrize(
+    "code, line",
+    [
+        ("display 1\n\n* a comment\n// another\n\nsummarize nosuch\n", 6),  # comment and blank lines count
+        ("display 1\r\n\r\n* c\r\nsummarize nosuch\r\n", 4),  # Windows line ends
+        ("/* a\nb\n*/\nsummarize nosuch\n", 4),
+        ("display 1\nsummarize x ///\n   nosuch\n", 2),  # a continued command: its first line
+        ("#delimit ;\ndisplay 1;\nsummarize\n  nosuch;\n#delimit cr\n", 3),  # a ; command: its first line
+        ("display 1\nforeach v in x nosuch {\n  display \"`v'\"\n  summarize `v'\n}\n", 4),  # the body line in a loop
+        ("forvalues i = 1/3 {\n  display `i'\n  if `i' == 2 summarize nosuch\n}\n", 3),
+        ("if 1 {\n  display 1\n  summarize nosuch\n}\n", 3),
+        (
+            "capture program drop pp\nprogram define pp\n  display 1\n  summarize nosuch\nend\ndisplay 2\npp\n",
+            4,
+        ),  # body
+        ("capture {\n  summarize nosuch\n}\ndisplay 1\nsummarize nosuch2\n", 5),  # a captured error is not the one
+        ("display 1\nsummarize nosuch\ndisplay 2\n", 2),
+    ],
+)
 def test_error_line(eng, code, line):
     r = eng.run(code)
     assert r.rc == 111 and r.error_line == line
@@ -202,7 +214,7 @@ def test_error_line_is_none_for_rc_0_and_inside_a_nested_do_file(eng, tmp_path):
     r = eng.run("display 1\ndo inner.do\n")
     assert r.rc == 111 and r.error_line is None
     (tmp_path / "ok.do").write_text("display 1\n")
-    r = eng.run("do ok.do\nsummarize nosuch\n")   # after a nested do-file: a line of this code again
+    r = eng.run("do ok.do\nsummarize nosuch\n")  # after a nested do-file: a line of this code again
     assert r.rc == 111 and r.error_line == 2
 
 
@@ -240,6 +252,7 @@ def break_cmds():
     def _inside(s, args):
         request_break()
         brk.check()
+
     yield
     clear_break()
     REGISTRY.pop("dofile_test_break_after", None)
@@ -251,7 +264,7 @@ def test_error_line_of_a_break(eng, break_cmds):
     assert r.rc == RC_BREAK and r.error_line == 2
     # Break between commands: the line of the command it did not start (where the run stopped)
     r = eng.run("display 1\ndofile_test_break_after\ndisplay 2\n")
-    assert r.rc == RC_BREAK and r.error_line == 3 and r.error_command == "display 2"   # echoed above --Break--
+    assert r.rc == RC_BREAK and r.error_line == 3 and r.error_command == "display 2"  # echoed above --Break--
     # in a loop: Break between passes is taken at the loop's line
     r = eng.run("display 0\nforvalues i = 1/3 {\n  display `i'\n  if `i' == 2 dofile_test_break_after\n}\n")
     assert r.rc == RC_BREAK and r.error_line == 2
@@ -259,9 +272,13 @@ def test_error_line_of_a_break(eng, break_cmds):
 
 # -- graph_commands ---------------------------------------------------------------------------------------------------
 
+
 def test_graph_commands_name_the_command_of_each_image(eng):
-    r = eng.run("scatter y x\nforeach v in y {\n  line `v' x\n}\ncapture program drop gg\nprogram gg\n  histogram x\n"
-                "end\ngg\n#delimit ;\ntwoway scatter y x,\n  title(\"t\");\n#delimit cr\n", images=True)
+    r = eng.run(
+        "scatter y x\nforeach v in y {\n  line `v' x\n}\ncapture program drop gg\nprogram gg\n  histogram x\n"
+        'end\ngg\n#delimit ;\ntwoway scatter y x,\n  title("t");\n#delimit cr\n',
+        images=True,
+    )
     assert r.rc == 0 and len(r.images) == 4
     assert r.graph_commands == ["scatter y x", "line `v' x", "gg", 'twoway scatter y x,   title("t")']
 
@@ -272,7 +289,7 @@ def test_graph_commands_line_up_with_the_last_five_images(eng):
     assert r.new_graphs == 7 and len(r.images) == 5
     assert r.graph_commands == [f"scatter y x, title(g{i})" for i in range(3, 8)]
     assert r.graph_lines == [3, 4, 5, 6, 7]
-    plain = eng.run(code)   # no images asked for
+    plain = eng.run(code)  # no images asked for
     assert plain.graph_commands == [] and plain.graph_lines == []
 
 
@@ -286,48 +303,58 @@ def test_graph_commands_skip_a_graph_that_cannot_be_drawn(eng, monkeypatch):
 
 def test_graph_lines(eng, tmp_path):
     (tmp_path / "plots.do").write_text("scatter y x\n")
-    r = eng.run("scatter y x\n\nscatter y x\nforeach v in a b c {\n  scatter y x\n}\n"   # 1, 3, 5 x 3
-                "line y x, ///\n   sort\n"   # 7
-                "capture program drop gp\nprogram gp\n  scatter y x\nend\ngp\n"   # 13: the calling line
-                "do plots.do\n"   # 14: the do line
-                "#delimit ;\nscatter\n  y x;\n#delimit cr\n", images=True)   # 16
+    r = eng.run(
+        "scatter y x\n\nscatter y x\nforeach v in a b c {\n  scatter y x\n}\n"  # 1, 3, 5 x 3
+        "line y x, ///\n   sort\n"  # 7
+        "capture program drop gp\nprogram gp\n  scatter y x\nend\ngp\n"  # 13: the calling line
+        "do plots.do\n"  # 14: the do line
+        "#delimit ;\nscatter\n  y x;\n#delimit cr\n",
+        images=True,
+    )  # 16
     assert r.rc == 0 and r.new_graphs == 9
-    assert r.graph_lines == [5, 7, 13, 14, 16]   # the last five
+    assert r.graph_lines == [5, 7, 13, 14, 16]  # the last five
     assert r.graph_commands == ["scatter y x", "line y x,     sort", "gp", "do plots.do", "scatter   y x"]
-    r = eng.run("scatter y x\nscatter y x", images=True)   # identical commands: told apart by line
+    r = eng.run("scatter y x\nscatter y x", images=True)  # identical commands: told apart by line
     assert r.graph_lines == [1, 2]
 
 
 # -- plot_theme ---------------------------------------------------------------------------------------------------------
 
+
 def _corner(png: bytes) -> float:
     """Brightness (0 to 1) of the top-left pixel."""
     from matplotlib.image import imread
+
     return float(imread(io.BytesIO(png))[0, 0, :3].mean())
 
 
 def test_dark_plot_theme_changes_only_the_inline_images(eng, tmp_path):
     dark = eng.run("scatter y x\ngraph export g.png, replace", images=True, plot_theme="dark")
     assert dark.rc == 0 and _corner(dark.images[0]) < 0.3
-    assert _corner((tmp_path / "g.png").read_bytes()) > 0.9   # the exported file keeps the default style
-    assert _corner(eng.run("scatter y x", images=True).images[0]) > 0.9   # nothing left over for the next run
+    assert _corner((tmp_path / "g.png").read_bytes()) > 0.9  # the exported file keeps the default style
+    assert _corner(eng.run("scatter y x", images=True).images[0]) > 0.9  # nothing left over for the next run
     assert _corner(eng.run("scatter y x", images=True, plot_theme="light").images[0]) > 0.9
-    mono = eng.run("scatter y x, scheme(s1mono)", images=True, plot_theme="dark")   # a chosen scheme is kept
+    mono = eng.run("scatter y x, scheme(s1mono)", images=True, plot_theme="dark")  # a chosen scheme is kept
     assert _corner(mono.images[0]) > 0.9
 
 
 # -- describe_file ------------------------------------------------------------------------------------------------------
 
+
 def test_describe_file_leaves_data_results_and_log_alone(eng, tmp_path):
-    eng.run('clear\nset obs 3\ngen double w = _n\nlabel variable w "weight"\nlabel define yn 0 "no" 1 "yes"\n'
-            'gen byte ok = mod(_n, 2)\nlabel values ok yn\nsave other, replace')
+    eng.run(
+        'clear\nset obs 3\ngen double w = _n\nlabel variable w "weight"\nlabel define yn 0 "no" 1 "yes"\n'
+        "gen byte ok = mod(_n, 2)\nlabel values ok yn\nsave other, replace"
+    )
     eng.run(DATA + "\nregress y x\nsummarize x")
     before = (eng.session.data, eng.session.data.nobs, dict(eng.session.r), dict(eng.session.e), eng._capture.text)
     d = eng.describe_file("other.dta")
     assert d["nobs"] == 3 and d["nvars"] == 2 and d["filename"] == "other.dta"
-    assert d["variables"] == [{"name": "w", "type": "double", "format": "%10.0g", "label": "weight", "value_label": None},
-                              {"name": "ok", "type": "byte", "format": "%8.0g", "label": None, "value_label": "yn"}]
-    assert eng.describe_file("other") == {**d, "filename": "other"}   # .dta added, as `use` does
+    assert d["variables"] == [
+        {"name": "w", "type": "double", "format": "%10.0g", "label": "weight", "value_label": None},
+        {"name": "ok", "type": "byte", "format": "%8.0g", "label": None, "value_label": "yn"},
+    ]
+    assert eng.describe_file("other") == {**d, "filename": "other"}  # .dta added, as `use` does
     after = (eng.session.data, eng.session.data.nobs, dict(eng.session.r), dict(eng.session.e), eng._capture.text)
     assert after == before
     assert ". summarize x" in eng._capture.text
@@ -344,32 +371,47 @@ def test_describe_file_errors(eng, tmp_path):
 
 # -- macros ---------------------------------------------------------------------------------------------------------------
 
+
 def test_macros(eng):
-    eng.run("local a 1\nglobal g hello\nglobal S_level 90\ntempvar tv\ntempname tn\ntempfile tf\ngen `tv' = 1\n"
-            "capture program drop pp\nprogram pp\n  local inner 3\nend\npp\nforvalues i = 1/2 {\n}\n")
+    eng.run(
+        "local a 1\nglobal g hello\nglobal S_level 90\ntempvar tv\ntempname tn\ntempfile tf\ngen `tv' = 1\n"
+        "capture program drop pp\nprogram pp\n  local inner 3\nend\npp\nforvalues i = 1/2 {\n}\n"
+    )
     m = eng.macros()
-    assert m["locals"] == {"a": "1", "i": "2"}   # no program's locals; no temporary names
+    assert m["locals"] == {"a": "1", "i": "2"}  # no program's locals; no temporary names
     assert m["globals"]["g"] == "hello" and m["globals"]["S_level"] == "90"
     assert "S_ADO" in m["system_globals"] and "g" not in m["system_globals"]
-    assert "S_level" not in m["system_globals"]   # changed by the user
+    assert "S_level" not in m["system_globals"]  # changed by the user
     assert set(m["system_globals"]) <= set(m["globals"])
     # values that only look like temporary names (one the user types equal to a live tempname's is left out)
     eng.run("local b __0000FF\nlocal w __weight\nlocal c __00000A")
     assert {"b": "__0000FF", "w": "__weight", "c": "__00000A"}.items() <= eng.macros()["locals"].items()
-    eng.run("tempvar t2")   # a later run's tempvar is left out too, and the earlier ones stay out
+    eng.run("tempvar t2")  # a later run's tempvar is left out too, and the earlier ones stay out
     assert set(eng.macros()["locals"]) == {"a", "i", "b", "w", "c"}
 
 
 # -- data_rows --------------------------------------------------------------------------------------------------------
 
+
 def test_data_rows_as_list_prints_them(eng):
-    eng.run('clear\nset obs 4\ngen x = _n * 1.5\nformat x %9.2f\nreplace x = . in 2\nreplace x = .a in 3\n'
-            'gen s = "s" + string(_n)\nlabel define yn 0 "no" 1 "yes"\ngen byte ok = mod(_n, 2)\nlabel values ok yn\n'
-            'gen xx = 7')
+    eng.run(
+        "clear\nset obs 4\ngen x = _n * 1.5\nformat x %9.2f\nreplace x = . in 2\nreplace x = .a in 3\n"
+        'gen s = "s" + string(_n)\nlabel define yn 0 "no" 1 "yes"\ngen byte ok = mod(_n, 2)\nlabel values ok yn\n'
+        "gen xx = 7"
+    )
     r = eng.data_rows()
-    assert r == {"nobs": 4, "offset": 0, "vars": ["x", "s", "ok", "xx"], "more": 0,
-                 "rows": [["1.50", "s1", "yes", "7"], [".", "s2", "no", "7"], [".a", "s3", "yes", "7"],
-                          ["6.00", "s4", "no", "7"]]}
+    assert r == {
+        "nobs": 4,
+        "offset": 0,
+        "vars": ["x", "s", "ok", "xx"],
+        "more": 0,
+        "rows": [
+            ["1.50", "s1", "yes", "7"],
+            [".", "s2", "no", "7"],
+            [".a", "s3", "yes", "7"],
+            ["6.00", "s4", "no", "7"],
+        ],
+    }
     page = eng.data_rows("x*", offset=1, limit=2)
     assert page == {"nobs": 4, "offset": 1, "vars": ["x", "xx"], "more": 1, "rows": [[".", "7"], [".a", "7"]]}
     assert eng.data_rows(offset=10)["rows"] == [] and eng.data_rows(offset=10)["more"] == 0
@@ -377,6 +419,7 @@ def test_data_rows_as_list_prints_them(eng):
 
 
 # -- memory -------------------------------------------------------------------------------------------------------------
+
 
 def test_memory_is_the_size_of_the_data(eng):
     eng.run("clear\nset obs 10\ngen double a = 1\ngen float b = 1\ngen byte c = 1")
@@ -387,6 +430,7 @@ def test_memory_is_the_size_of_the_data(eng):
 
 # -- the tempfile hint ----------------------------------------------------------------------------------------------
 
+
 def test_the_tempfile_hint_is_a_parameter(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     e = Engine(tmp_path, tempfile_hint="our own words")
@@ -394,7 +438,7 @@ def test_the_tempfile_hint_is_a_parameter(tmp_path, monkeypatch):
     r = e.run("use `t', clear")
     assert r.rc == 601 and "(our own words)" in r.log and r.error.endswith("(our own words)")
     assert TEMPFILE_HINT not in r.log
-    assert "run_do" in TEMPFILE_HINT   # the default is still the MCP wording
+    assert "run_do" in TEMPFILE_HINT  # the default is still the MCP wording
 
 
 # -- under the sandbox ------------------------------------------------------------------------------------------------
@@ -417,6 +461,7 @@ def test_the_new_calls_under_the_sandbox(tmp_path):
     import json
     import subprocess
     import sys
+
     work = tmp_path / "work"
     work.mkdir()
     (tmp_path / "x.dta").write_bytes(b"")

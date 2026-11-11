@@ -2,6 +2,7 @@
 
 The first test also fails when an editable install is stale (pyproject.toml bumped, package not reinstalled): run
 `uv sync`. A bare source tree reports pyproject.toml's version plus the local tag `+src`."""
+
 import subprocess
 import sys
 import tomllib

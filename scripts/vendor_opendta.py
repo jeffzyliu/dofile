@@ -9,6 +9,7 @@ Usage: python scripts/vendor_opendta.py [COMMIT]
   mirroring the upstream layout so their relative paths keep working.
 - Imports of `opendta` (statements and "opendta.x" strings) are rewritten to dofile._vendor.opendta.
 """
+
 from __future__ import annotations
 
 import re
@@ -31,9 +32,9 @@ TESTS = ROOT / "tests_opendta"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 REWRITES = [
-    (re.compile(r"""(["'])opendta\."""), rf"\1{NEW}."),                          # "opendta.x" strings
+    (re.compile(r"""(["'])opendta\."""), rf"\1{NEW}."),  # "opendta.x" strings
     (re.compile(r"^(\s*)import opendta\s*$", re.M), rf"\1import {NEW} as opendta"),  # bare import
-    (re.compile(r"^(\s*)(from|import) opendta\b", re.M), rf"\1\2 {NEW}"),           # from opendta..., import opendta.x
+    (re.compile(r"^(\s*)(from|import) opendta\b", re.M), rf"\1\2 {NEW}"),  # from opendta..., import opendta.x
 ]
 
 
@@ -51,10 +52,12 @@ def rewrite(tree: Path) -> int:
 def leftovers(tree: Path) -> list[str]:
     """Module-level imports of the old name or of the dropped GUI (lazy ones inside functions are fine)."""
     bad = re.compile(r"^(from|import)\s+opendta\b|^from\s+\.+gui\b|^\s*(from|import)\s+opendta\b")
-    return [f"{py.relative_to(tree)}:{i}: {line.strip()}"
-            for py in tree.rglob("*.py")
-            for i, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1)
-            if bad.search(line)]
+    return [
+        f"{py.relative_to(tree)}:{i}: {line.strip()}"
+        for py in tree.rglob("*.py")
+        for i, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1)
+        if bad.search(line)
+    ]
 
 
 def main(commit: str = COMMIT) -> None:
@@ -88,21 +91,29 @@ def main(commit: str = COMMIT) -> None:
     patches = sorted((ROOT / "scripts" / "patches").glob("*.patch"))  # dofile's own changes, kept small
     for patch in patches:  # before the import check, so a patch can't bring old imports back unnoticed
         if subprocess.run(["git", "apply", str(patch)], cwd=ROOT).returncode:
-            sys.exit(f"{patch.name} does not apply to opendta@{commit[:7]}. The vendored copy is now UNPATCHED: "
-                     f"update the patch and re-run, or `git checkout -- {target.relative_to(ROOT)} "
-                     f"{TESTS.relative_to(ROOT)}` to restore the previous version.")
+            sys.exit(
+                f"{patch.name} does not apply to opendta@{commit[:7]}. The vendored copy is now UNPATCHED: "
+                f"update the patch and re-run, or `git checkout -- {target.relative_to(ROOT)} "
+                f"{TESTS.relative_to(ROOT)}` to restore the previous version."
+            )
     left = leftovers(target) + leftovers(TESTS)
     if left:
         sys.exit("unvendorable imports remain:\n" + "\n".join(left))
 
-    (DEST / "__init__.py").write_text('"""Third-party code vendored into dofile. Do not edit; re-run scripts/vendor_opendta.py (changes go in scripts/patches/)."""\n')
-    stamp = (f"source: {REPO}\ncommit: {commit}\nvendored: {date.today()}\n"
-             f"removed: {', '.join(DROP)}; tests removed: {', '.join(DROP_TESTS)}\n"
-             f"imports rewritten: package {n_pkg}, tests {n_tests}\n"
-             f"patches: {', '.join(p.name for p in patches) or 'none'}\n")
+    (DEST / "__init__.py").write_text(
+        '"""Third-party code vendored into dofile. Do not edit; re-run scripts/vendor_opendta.py (changes go in scripts/patches/)."""\n'
+    )
+    stamp = (
+        f"source: {REPO}\ncommit: {commit}\nvendored: {date.today()}\n"
+        f"removed: {', '.join(DROP)}; tests removed: {', '.join(DROP_TESTS)}\n"
+        f"imports rewritten: package {n_pkg}, tests {n_tests}\n"
+        f"patches: {', '.join(p.name for p in patches) or 'none'}\n"
+    )
     (target / "VENDORED").write_text(stamp)
     (TESTS / "VENDORED").write_text(stamp)
-    print(f"vendored opendta@{commit[:7]}: package -> {target.relative_to(ROOT)}, tests -> {TESTS.relative_to(ROOT)}\n{stamp}")
+    print(
+        f"vendored opendta@{commit[:7]}: package -> {target.relative_to(ROOT)}, tests -> {TESTS.relative_to(ROOT)}\n{stamp}"
+    )
 
 
 if __name__ == "__main__":

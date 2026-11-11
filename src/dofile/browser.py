@@ -17,7 +17,7 @@ import time
 from . import linalgshim, pathshim, sandbox
 from .engine import LOG_KEEP, Engine, about, clear_break, matrix_sizes, request_break
 
-DENIED = ("shell", "webuse")   # no programs and no network in a browser; file commands only touch the page's own files
+DENIED = ("shell", "webuse")  # no programs and no network in a browser; file commands only touch the page's own files
 # The note under the error about a tempfile an earlier run deleted. A draft: step 4d's word list replaces it (OQ-10).
 TEMPFILE_HINT = "a tempfile lasts one run: save it under a name to use it in a later run"
 
@@ -26,14 +26,14 @@ _busy = False
 
 
 def _on_interrupt(signum, frame) -> None:
-    if _busy:   # a Break that comes between runs must not stop the next one
+    if _busy:  # a Break that comes between runs must not stop the next one
         request_break()
 
 
 def start(root: str = "/work") -> str:
     """Set up the engine in `root` (once per worker). Returns the versions as JSON."""
     global _eng
-    linalgshim.install()   # numpy.linalg in WebAssembly returns NaN instead of raising LinAlgError (before any fit)
+    linalgshim.install()  # numpy.linalg in WebAssembly returns NaN instead of raising LinAlgError (before any fit)
     sandbox.deny_commands(DENIED)
     # Console hints on: a person reads this log. A run's log keeps its first and last LOG_KEEP characters (1 M each, as
     # for MCP): far more than a person reads, small enough for the page to hold and show. A runaway loop prints about
@@ -44,8 +44,9 @@ def start(root: str = "/work") -> str:
     return json.dumps(about())
 
 
-def run(code: str, images: bool = True, fresh_locals: bool = False, plot_theme: str | None = None,
-        on_output=None) -> str:
+def run(
+    code: str, images: bool = True, fresh_locals: bool = False, plot_theme: str | None = None, on_output=None
+) -> str:
     """Run Stata code like a do-file. JSON: rc, error, error_command, error_line (1-based line in `code` of the command
     that failed; null for rc 0 or an error inside a nested do-file), log, results (e() and r(), matrices by size: values
     come from matrix()), nobs, nvars, new_graphs, images (PNG, base64), graph_commands (the command that drew each image),
@@ -61,18 +62,34 @@ def run(code: str, images: bool = True, fresh_locals: bool = False, plot_theme: 
     _busy = True
     t0 = time.perf_counter()
     try:
-        r = _eng.run(code, images=images, fresh_locals=fresh_locals is True,
-                     plot_theme=plot_theme if plot_theme in ("light", "dark") else None,
-                     on_output=on_output if callable(on_output) else None)
+        r = _eng.run(
+            code,
+            images=images,
+            fresh_locals=fresh_locals is True,
+            plot_theme=plot_theme if plot_theme in ("light", "dark") else None,
+            on_output=on_output if callable(on_output) else None,
+        )
     finally:
         _busy = False
     t1 = time.perf_counter()
     encoded = [base64.b64encode(p).decode() for p in r.images]
-    return json.dumps({"rc": r.rc, "error": r.error, "error_command": r.error_command, "error_line": r.error_line,
-                       "log": r.log, "results": matrix_sizes(r.results), "nobs": r.nobs, "nvars": r.nvars,
-                       "new_graphs": r.new_graphs, "images": encoded, "graph_commands": r.graph_commands,
-                       "graph_lines": r.graph_lines,
-                       "timing": {"engine": t1 - t0, "encode": time.perf_counter() - t1}})
+    return json.dumps(
+        {
+            "rc": r.rc,
+            "error": r.error,
+            "error_command": r.error_command,
+            "error_line": r.error_line,
+            "log": r.log,
+            "results": matrix_sizes(r.results),
+            "nobs": r.nobs,
+            "nvars": r.nvars,
+            "new_graphs": r.new_graphs,
+            "images": encoded,
+            "graph_commands": r.graph_commands,
+            "graph_lines": r.graph_lines,
+            "timing": {"engine": t1 - t0, "encode": time.perf_counter() - t1},
+        }
+    )
 
 
 def describe(vars: str | None = None, offset: int = 0, limit: int | None = None) -> str:

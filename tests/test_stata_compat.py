@@ -4,6 +4,7 @@ One test per case, so `-n auto` runs them in parallel: each case runs in its own
 compare.py's own functions, and passes when its log matches Stata's or a known difference in
 compat/known_differences.txt accepts it (the same rule as `compare.py`).
 """
+
 import difflib
 import importlib.util
 import sys
@@ -40,5 +41,9 @@ def test_matches_stata14_reference_log(case, tmp_path):
     if compare.same_logs(a, b) or (k is not None and k.accepts(a, b)):
         return
     diff = list(difflib.unified_diff(a, b, "Stata 14", "dofile", n=1, lineterm=""))
-    pytest.fail(f"{case} differs from Stata 14" + (f" beyond its known difference ({k.why})" if k else "")
-                + ":\n" + "\n".join(diff[:80]))
+    pytest.fail(
+        f"{case} differs from Stata 14"
+        + (f" beyond its known difference ({k.why})" if k else "")
+        + ":\n"
+        + "\n".join(diff[:80])
+    )

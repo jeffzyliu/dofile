@@ -12,13 +12,21 @@ sides), so a covariance entry of 1e-11 next to entries of 1 is judged against 1.
   4. control-flow and text differences in results, and in the logs (opening times and temp paths are ignored).
 Exit code 1 if a control flow differs or a result is missing; the numbers are for reading, not for a pass/fail.
 """
+
 import collections
 import json
 import re
 import sys
 from pathlib import Path
 
-BINS = [(0.0, "bit-identical"), (1e-12, "<= 1e-12"), (1e-9, "<= 1e-9"), (1e-6, "<= 1e-6"), (1e-3, "<= 1e-3"), (float("inf"), "> 1e-3")]
+BINS = [
+    (0.0, "bit-identical"),
+    (1e-12, "<= 1e-12"),
+    (1e-9, "<= 1e-9"),
+    (1e-6, "<= 1e-6"),
+    (1e-3, "<= 1e-3"),
+    (float("inf"), "> 1e-3"),
+]
 NUM = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 IGNORE_LINE = re.compile(r"opened on|closed on|\blog:|/tmp|/var/folders|Temp\\|datasignature|elapsed|Time:")
 
@@ -55,8 +63,19 @@ def compare_case(ca, cb):
         bdiff = None
         for k in sorted(set(x["res"]["matrices"]) | set(y["res"]["matrices"])):
             m1, m2 = x["res"]["matrices"].get(k), y["res"]["matrices"].get(k)
-            if not m1 or not m2 or m1.get("size") or m2.get("size") or (m1["rows"], m1["cols"]) != (m2["rows"], m2["cols"]):
-                if (m1 and m1.get("size")) != (m2 and m2.get("size")) or not m1 or not m2 or (m1["rows"], m1["cols"]) != (m2["rows"], m2["cols"]):
+            if (
+                not m1
+                or not m2
+                or m1.get("size")
+                or m2.get("size")
+                or (m1["rows"], m1["cols"]) != (m2["rows"], m2["cols"])
+            ):
+                if (
+                    (m1 and m1.get("size")) != (m2 and m2.get("size"))
+                    or not m1
+                    or not m2
+                    or (m1["rows"], m1["cols"]) != (m2["rows"], m2["cols"])
+                ):
                     other.append((where, f"matrix {k}: shape or presence differs"))
                 continue
             v1 = [c for r in m1["data"] for c in r]
@@ -72,7 +91,18 @@ def compare_case(ca, cb):
                 bdiff = worst
         if bdiff is not None:
             s1, s2 = x["res"]["scalars"], y["res"]["scalars"]
-            models.append((bdiff, where, s1.get("ll"), s2.get("ll"), s1.get("converged"), s2.get("converged"), s1.get("ic"), s2.get("ic")))
+            models.append(
+                (
+                    bdiff,
+                    where,
+                    s1.get("ll"),
+                    s2.get("ll"),
+                    s1.get("converged"),
+                    s2.get("converged"),
+                    s1.get("ic"),
+                    s2.get("ic"),
+                )
+            )
     if control is None and len(ra) != len(rb):
         control = f"CPython recorded {len(ra)} results, Pyodide {len(rb)}"
     return diffs, models, other, control
@@ -85,7 +115,9 @@ def compare_logs(la, lb):
     nums = 0
     for a, b in zip(A, B):
         if a != b:
-            if NUM.sub("#", re.sub(r"\s+", " ", a)) == NUM.sub("#", re.sub(r"\s+", " ", b)):   # spacing shifts with the digits
+            if NUM.sub("#", re.sub(r"\s+", " ", a)) == NUM.sub(
+                "#", re.sub(r"\s+", " ", b)
+            ):  # spacing shifts with the digits
                 nums += 1
             else:
                 text.append((a.strip()[:90], b.strip()[:90]))
@@ -122,12 +154,19 @@ def main(cpy, wasm, top=10):
     print(f"{len(names)} cases, {total} numbers in e()/r() records")
     for _, lab in BINS:
         print(f"  {lab:14s} {hist[lab]:7d}  ({100 * hist[lab] / max(total, 1):.2f}%)")
-    print(f"\nquantities with a difference above 1e-9, largest first ({top} shown; e(gradient) and similar are noise near zero):")
+    print(
+        f"\nquantities with a difference above 1e-9, largest first ({top} shown; e(gradient) and similar are noise near zero):"
+    )
     for kind, (cnt, mx, ex) in sorted(by_kind.items(), key=lambda t: -t[1][1])[:top]:
         print(f"  {mx:8.1e} {cnt:5d}x  {kind:22s} e.g. {ex[0]} {ex[1]}: {ex[2]:.10g} vs {ex[3]:.10g}")
-    b = collections.Counter("<= 1e-9" if m[1] <= 1e-9 else "<= 1e-6" if m[1] <= 1e-6 else "<= 1e-3" if m[1] <= 1e-3 else "> 1e-3" for m in models)
-    print(f"\n{len(models)} estimation results; largest relative difference in e(b): "
-          + ", ".join(f"{b[k]} {k}" for k in ("<= 1e-9", "<= 1e-6", "<= 1e-3", "> 1e-3")))
+    b = collections.Counter(
+        "<= 1e-9" if m[1] <= 1e-9 else "<= 1e-6" if m[1] <= 1e-6 else "<= 1e-3" if m[1] <= 1e-3 else "> 1e-3"
+        for m in models
+    )
+    print(
+        f"\n{len(models)} estimation results; largest relative difference in e(b): "
+        + ", ".join(f"{b[k]} {k}" for k in ("<= 1e-9", "<= 1e-6", "<= 1e-3", "> 1e-3"))
+    )
     print("those above 1e-6 (e(ll) CPython vs Pyodide, converged, iterations):")
     for name, d, where, l1, l2, c1, c2, i1, i2 in sorted(models, key=lambda m: -m[1]):
         if d > 1e-6:
@@ -142,9 +181,13 @@ def main(cpy, wasm, top=10):
         for name, o in others:
             print(f"  {name}: {len(o)}, first: {o[0][0]} {o[0][1][:90]}")
     its = sum(1 for _, t in logtext for x, y in t if re.search(r"Iteration \d+:|\(not concave\)|\(backed up\)", x + y))
-    print(f"\nlogs: {loglines} lines differ only in a printed number; {sum(len(t) for _, t in logtext)} lines differ in their text "
-          f"in {len(logtext)} cases, {its} of them iteration lines (a fit that took another path); the others are listed by")
-    print("  `compare_logs` (a table row with a different word or sign, or a log of another length: read those by hand)")
+    print(
+        f"\nlogs: {loglines} lines differ only in a printed number; {sum(len(t) for _, t in logtext)} lines differ in their text "
+        f"in {len(logtext)} cases, {its} of them iteration lines (a fit that took another path); the others are listed by"
+    )
+    print(
+        "  `compare_logs` (a table row with a different word or sign, or a log of another length: read those by hand)"
+    )
     if missing:
         print(f"\nno Pyodide result for: {', '.join(missing)}")
     return 1 if controls or missing else 0
