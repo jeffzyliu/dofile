@@ -36,7 +36,7 @@ the last release until the next bump, so tagging an unbumped `main` fails at upl
    otherwise raise the patch. Until the first real release use a pre-release (`0.1.0.dev1`, `0.1.0a1`, `0.1.0rc1`);
    PEP 440 orders `.devN` < `aN` < `bN` < `rcN` < the final `0.1.0`, so go in that order and never backwards (a lower
    number than one already on PyPI uploads fine but pip prefers the higher one).
-3. Merge the pull request with a merge commit (never squash or rebase: root `CLAUDE.md`, Rules) and let `ci` go green, then tag the release commit
+3. Merge the pull request (merge commit, squash or rebase: all work) and let `ci` go green, then tag the release commit
    as it is on `main` (next section).
 
 ## Releasing with CI (`.github/workflows/release.yml`)

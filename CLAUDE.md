@@ -113,8 +113,10 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   stay out of distributions (excluded from the sdist in `pyproject.toml`).
 - `legacy/` holds the 2020 OpenStata repos (gitignored); leave it alone.
 - **`main` is protected: never push to it.** Every change is a pull request from a branch that is up to date with `main`; `ci ok`,
-  `web ok` and `lint ok` must pass. Merge with a merge commit, never squash or rebase (`.git-blame-ignore-revs` names two
-  commits by hash). A merge to `main` deploys the web page to Cloudflare (`deploy.yml`).
+  `web ok` and `lint ok` must pass. Any merge method works (the maintainer usually rebases), with one exception: a pull request
+  that holds a reformat commit named in `.git-blame-ignore-revs` is merged with a merge commit, since a rebase or squash gives the
+  commit a new hash and the file would name one that is not on `main`. A merge to `main` deploys the web page to Cloudflare
+  (`deploy.yml`).
 - Status and next steps: `docs/phase1-plan.md` (done), `docs/phase2-plan.md` (web demo; the history and gaps are in
   `docs/phase2-history.md`, `docs/browser-engine.md` and `docs/lazy-matplotlib.md`), `docs/phase3-plan.md` (hosted multi-user MCP
   server). `docs/prototype1-plan.md` (the build plan and status for prototype 1 of the web demo: read it first when picking that
