@@ -140,6 +140,7 @@
   --tok-macro: #7b3b99;
   --tok-number: var(--ink);
   --graph-card: #ffffff; /* graphs are PNGs with their own light colors: always on a light card */
+  --graph-card-dark: #1e2227; /* the card under a graph drawn with the dark plot theme: that theme's own background */
 }
 
 @media (prefers-color-scheme: dark) {

@@ -13,7 +13,7 @@ export default async function globalSetup(config: FullConfig) {
   if (served !== mine) {
     throw new Error(
       `${base} does not serve this folder's build (web/dist): another preview server is on that port, or it serves ` +
-        "an older build. Stop the other server (or run `npm run build` here), then try again.",
+        "an older build. Stop the other server (or run `npm run build` here), or set E2E_PORT to a free port, then try again.",
     );
   }
 }

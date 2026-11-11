@@ -14,7 +14,7 @@ Run from `web/` (`npm install` once). The wheel is rebuilt by the scripts that n
 ```bash
 npm test                  # the engine in Pyodide under Node, the file store, the client, the page's controllers (~70 s)
 npm run dev               # the page, on the LAN too
-npm run e2e               # builds the snapshot and the page, then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min)
+npm run e2e               # builds the snapshot and the page, then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min; E2E_PORT=4181 serves the build on another port than 4173, for a second worktree)
 npm run snapshot          # the Pyodide memory snapshot the page starts from; `npm run dev` needs it once, and again after a change to the engine
 npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide (~4 min; --normal: no snapshot; --cases a,b)
 npm run check-numeric     # e()/r() of all 98 Stata 14 programs at full precision (~4 min; the diff: header of scripts/compare_numeric.py)

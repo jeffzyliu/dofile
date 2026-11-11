@@ -275,9 +275,6 @@ body {
 
 /* a plot drawn dark (plot_theme "dark") sits on a dark card: OQ-21, the card follows the plot's theme. The colour is
    OpenDTA's dark scheme's background (graphics/scheme.py "opendta_dark"), so the card melts into the picture's edge. */
-:root {
-  --graph-card-dark: #1e2227;
-}
 .graph-card[data-theme="dark"] {
   background: var(--graph-card-dark);
 }
