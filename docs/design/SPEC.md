@@ -83,7 +83,10 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   the open file has the soft accent and the bar; a "new" badge marks files the last run wrote. Under it: the dropzone ("Drop
   files or folders" in P1; the mockup's "or a .zip" is P2, OQ-19; links "Upload" and "New .do file") and "Download all (.zip)".
 - **Upload:** the Upload link, "Upload a folder", or a drop anywhere; folder paths are kept. A name that exists asks (3.10).
-  Replacing the open file reloads it in the editor (`F 3.3`). P1 stores a .zip as one file.
+  Replacing the open file reloads it in the editor (`F 3.3`). P1 stores a .zip as one file. Uploads run one at a time, a
+  name clash never replaces another dialog (it waits for it to close), and a drop while a dialog is open, or while another
+  tab has the files, uploads nothing. A name with a control character (a line break) is refused, as the store refuses a
+  file, and counted in the toast.
 - **Row menu** (`S 13`): "Open", "Rename" (hint F2; edits the name in place), "Download", rule, "Delete…" (asks, 3.10). From
   the row's ⋯ (on the hovered, focused or open row; always on touch), right click, Shift+F10 or the menu key.
 - **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload a folder", "Download all (.zip)",
@@ -174,7 +177,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Empty** (`S 16`): "No graphs yet" / "Graphs drawn by a run appear here, for example `scatter wage educ`. A .png from the
   file list opens here too."
 - **Calls:** `RunResult.images` (base64 PNG, the last 5 a run drew at most; `new_graphs` counts all). Every run sends
-  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors. A graph whose command names a color itself (`mcolor(black)`, `lcolor(navy)`) is drawn light in both themes, since such a color is picked for a light background (decided 2026-11-11); `RunResult.graph_themes` says how each image was drawn, and the card follows it. Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
+  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors. A graph whose command names a color itself (`mcolor(black)`, `lcolor(navy)`) is drawn light in both themes, since such a color is picked for a light background (decided 2026-11-11): the command as the engine ran it, macros expanded, inside a program or a nested do-file too, text in quotes left out. `RunResult.graph_themes` says how each image was drawn, by its background (a scheme the graph keeps, `scheme(s1mono)`, says what it drew), and the card follows it; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
 
 ### 3.8 Data tab and Browse (P1, step 4c)
 - **Tab** (`P/Data`): facts ("500 obs", "3 vars", "from data/wages.dta", "6 KB in memory"); the field "Filter variables"; a
@@ -208,7 +211,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Dialog | Drawn | Content and rules |
 |---|---|---|
 | Download prompt, progress | `S 1`, `S 8`; `S 2`, `S 3` | Section 5. Download is the default (Enter) on purpose (UX-037). The bar is `role="progressbar"` with `aria-valuetext`; screen readers hear the stages, not the megabytes. |
-| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them". |
+| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is always asked, even after "Do the same". |
 | Delete (4a) | `P/Notices` | "Delete clean.do?" / "It's kept only in this browser; there is no undo." / Cancel (focused), Delete. `DS` words it differently: OQ-19. |
 | Reset | `S 14` | `role="alertdialog"`. "Reset the engine?" / "The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset. Not asked with no data in memory and no results. |
 | Upload report | `P/Upload report` | Drawn with P2 content only. P1: the toast "3 files uploaded" (OQ-19). |
@@ -223,9 +226,11 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
   `persisted()` is false, once per visit after files change). Above the log: running (`E?r`), stopping (`S 9`), waiting
   (`S 9b`), Break resets (`S 11`), reset (`P/Notices`), memory (`P/Notices`: "**Memory 1.6 GB of about 2 GB.** A bigger
   dataset may reset the engine. `compress` or `keep` fewer variables to save memory."; OQ-8). In the Files pane: not UTF-8.
-- **Toast** (`DS`; no mockup): a confirmation with no buttons ("Saved analysis.do", "Copied", "3 files uploaded"); inverted
-  colors, bottom center above the status bar, one at a time, 4 s (longer while hovered), never focused; the live region says
-  the same words. Anything to act on is a banner or a dialog. Its place on a phone: DS-7.
+- **Toast** (`DS`; no mockup): a confirmation with no buttons ("Saved analysis.do", "Copied", "3 files uploaded"), or an
+  error that needs no action from the visitor (a copy the browser refused, a matrix that could not be read, a load that
+  failed with its rc: "Couldn't load wages.dta: r(601)"; decided 2026-11-11); inverted colors, bottom center above the
+  status bar, one at a time, 4 s (longer while hovered), never focused, no buttons; the live region says the same words.
+  Anything the visitor must act on, or choose between, is a banner or a dialog. Its place on a phone: DS-7.
 - **Menus** (`DS`): buttons with `role="menuitem"`; arrows move, Esc closes; a key hint at the right; a destructive item in
   the error color, with "…" when it asks first. The trigger has `aria-haspopup="menu"` and `aria-expanded`.
 
@@ -241,6 +246,10 @@ A file is text when its bytes decode as strict UTF-8: `decodeText` in `web/src/a
 | other UTF-8 text | Editor tab; .md and .json with CodeMirror's packages, anything else plain. P2: .py, .R, .tex, .sql, .yaml. | `P/.log` caption |
 | .png | The Graph tab, and full size the same way. | `S 16` (text) |
 | not UTF-8 (.xlsx, ...) | No tab. A warning banner in the Files pane: "**survey.xlsx can't be opened in the editor.** It isn't UTF-8 text, so the editor would change it. Download it to edit it elsewhere." / "Download", "Dismiss". No Import button for .xlsx (OQ-19). | `P/.xlsx` |
+
+In the `use` and `import delimited` commands a `$` in the path is written `\$`, and a double quote puts it in compound
+quotes. A name the command cannot hold (a backquote, a control character, `"'`) gives no command: bar 2 says why in its
+place and Load or Import and Copy are off (`web/src/stata/quote.ts`).
 
 ### 3.12 Landing page, commands page, sample (P1, step 5)
 - Build `L` as drawn, desktop and phone. The banner and the do-file drawing are `aria-hidden`, with a hidden plain-text copy
@@ -633,8 +642,9 @@ interface RunResult {
   graph_commands: string[];                      // new (OQ-3): the command that drew each entry of `images`, same order
   graph_lines: (number | null)[];                // new (OQ-3): 1-based line of that command in the text sent (the calling
                                                  // line for a program, the `do` line for a nested file); same order
-  graph_themes: ("light" | "dark")[];            // new (step 4): how each image was drawn; "light" whatever plot_theme
-                                                 // says when the graph's command names a color (mcolor(black)); same order
+  graph_themes: ("light" | "dark")[];            // new (step 4): how each image was drawn, by its background; "light"
+                                                 // whatever plot_theme says when the graph's command names a color
+                                                 // (mcolor(black)); a kept scheme (s1mono) as drawn; same order
   files?: FileChange[];                          // new: what the after-run difference wrote to the store
   store_error?: string;                          // new: the store refused that write
   skipped?: string[];                            // new: files the run made or changed strictly under a folder the page
@@ -891,7 +901,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `{b: "download-failed"}` above the editor (on a phone on every view, since "Download all" is in every view's ⋯),
     one at a time (a second failure replaces it), says "Your files couldn't be
     downloaded" once in the live region and logs the cause to the console; a later download that works removes the
-    banner. No toast: a toast only confirms, 3.10. It never rejects), `saveAs`. With no file in the store (folders do not
+    banner. No toast: it offers "Try again", and what the visitor can act on is a banner, 3.10. It never rejects), `saveAs`. With no file in the store (folders do not
     count) `downloadAll` makes no zip, shows and says nothing and resolves false; the ⋯ menu's item is disabled then
     (`hasFiles`).
   - The page's one store: `web/src/app/store.ts`; views change files through it. It starts `blocked` and is unblocked
@@ -917,7 +927,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
     rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
     are written first, then each clash is asked; what the clash dialog shows beyond the `dialog` value is
-    `clashNow()`, its answer `answerClash()`), both tested in Node (`web/test/files-ui.test.ts`). `FilesPane.tsx` exports
+    `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
+    open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
+    is asked even after "Do the same"), both tested in Node
+    (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
+    its place, unless it has unsaved edits. After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
+    now selected, else the tree's row, else the editor. The commands built from a path (Import here, Load in 4c) come
+    from `web/src/stata/quote.ts` `fileCommand` (3.11). The page's drop listeners are the window's, in the capture phase,
+    so 4b's CodeMirror never sees a file drop. `FilesPane.tsx` exports
     `fileMenuItems()` (the head menu); on a phone the Files pane's head is hidden (the top bar already says "Files") and
     `App.tsx` puts those items in the top bar's ⋯ while the Files view is shown, as it does the Log head's (decided
     2026-11-11). A drop of files anywhere on the page uploads them (3.1); the Files pane is outlined meanwhile (OQ-16).
@@ -927,7 +944,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     bar's boxes never move); its menu lists the open files, then "Close <name>" (the phone has no ×) and "Show all
     files" (the Files view). Words the spec does not
     give, drafts for the maintainer: the inline rename's reasons ("clean.do already exists here.", "Type a name.", "A
-    name can't contain / or \.", "That name isn't allowed.", "That name is dofile's own."); a folder's delete ("Delete
+    name can't contain / or \.", "A name can't contain a line break or another control character.", "That name isn't
+    allowed.", "That name is dofile's own."); the bar of a file whose name a command can't hold ("Its name has a
+    character a command can't hold: rename the file to use it here.", also the .dta tab's); a folder's delete ("Delete
     data/?" / "The folder and everything in it are kept only in this browser; there is no undo."); an upload with files
     the store refused ("2 files uploaded · 1 couldn't be"); the live region's "survey.xlsx can't be opened in the
     editor" and "<action> didn't work".
@@ -954,8 +973,11 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the folds, the open matrices, the cells shown whole, what `describe_file` said of each .dta). Details where the
     sections above are silent: "graph n of N" counts by the graph's number `n` (the log's links) against the newest
     graph's number; the alt text is "Graph: scatter wage educ", and "Graph 2: scatter wage educ" when another kept graph
-    has the same command; the card of a dark plot is dark (`--graph-card-dark`, OQ-21); the full-size view is a fixed
-    overlay (not a native modal dialog, whose top layer would hide the toast) with its own focus trap; picking the picked
+    has the same command; the card of a plot drawn dark is dark (`--graph-card-dark`, OQ-21, from `graph_themes`), and a
+    .png from the files is on the light card; the full-size view is a fixed overlay (not a native modal dialog, whose top
+    layer would hide the toast) with its own focus trap, which leaves the keys to a native dialog opened over it, and a
+    move to another graph is said through `say()` (the graph's alt text); the .dta bar's size is the tree's
+    (`formatSize`, decimal units); picking the picked
     name again clears it; a Browse cell over 60 characters, or with a line break, is cut to one line (a break shows as ↵)
     and shows whole when pressed; the r() scalars start open when e() has no scalars; an open matrix closes when another
     run replaces the results; Load says "Loaded wages.dta" (or "Couldn't load wages.dta: r(601)") in a toast when it
