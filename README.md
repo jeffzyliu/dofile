@@ -96,13 +96,14 @@ uv sync --extra mcp
 uv run poe test          # in parallel, ~35 s; skips the slow Stata 14 log comparison
 uv run poe test tests    # dofile's own tests only, without OpenDTA's suite in tests_opendta/
 uv run poe slow          # the Stata 14 log comparison (~75 s)
-uv run poe ci            # everything, as CI does
+uv run poe ci            # every test, as CI runs them
+uv run poe lint          # ruff format --check, then ruff check (CI runs it too); `uv run poe format` fixes the layout
 ```
 
 - `tests/conformance/`: dofile's corpus with reference values from statsmodels/linearmodels, plus breadth probes.
   Known engine gaps are strict xfails, so a fix in OpenDTA shows up as a failure to remove.
 - `scripts/vendor_opendta.py [COMMIT]`: re-vendor OpenDTA, then run the full suite.
-- CI: Ubuntu and macOS, Python 3.12–3.14 (`.github/workflows/ci.yml`); the web demo has its own workflow
+- CI: Ubuntu and macOS, Python 3.12–3.14, and a ruff format and lint job (`.github/workflows/ci.yml`); the web demo has its own workflow
   (`.github/workflows/web.yml`). Dev default is 3.14 (`.python-version`).
 
 ## Web demo

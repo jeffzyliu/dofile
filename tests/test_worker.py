@@ -55,6 +55,7 @@ def test_code_that_ignores_the_interrupt_is_killed(worker, monkeypatch):
 
 def test_cancel_interrupts_the_running_call_and_skips_waiting_ones(worker):
     import threading
+
     worker.run("use panel, clear")
     running, waiting, out = threading.Event(), threading.Event(), {}
     a = threading.Thread(target=lambda: out.update(a=worker.run("while 1 {\n}", call=running)))
@@ -90,6 +91,7 @@ def test_dead_process_is_reported_then_restarted(worker):
 
 def test_failed_start_is_reported_then_retried(tmp_path, monkeypatch):
     from dofile import worker as wmod
+
     real = wmod._ctx
 
     class FailFirstStart:  # the real context, except that the first process refuses to start
@@ -105,8 +107,10 @@ def test_failed_start_is_reported_then_retried(tmp_path, monkeypatch):
 
                 def refuse():
                     raise OSError("no processes left")
+
                 p.start = refuse
             return p
+
     monkeypatch.setattr(wmod, "_ctx", FailFirstStart())
     w = Worker(tmp_path, timeout=30)
     try:
@@ -200,11 +204,21 @@ def test_full_pool_evicts_only_idle_sessions_and_refuses_when_all_are_busy():
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has only spawn")
 def test_sessions_fork_from_a_preloaded_forkserver(tmp_path, monkeypatch):
     import subprocess
+
     from dofile import worker as wmod
+
     assert wmod._ctx.get_start_method() == "forkserver"
     # the forkserver silently skips preload modules that fail to import, so check it imports here
-    p = subprocess.run([sys.executable, "-c", "import sys, dofile._forkserver; "
-                        "assert 'dofile._vendor.opendta.commands' in sys.modules"], capture_output=True, text=True)
+    p = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys, dofile._forkserver; assert 'dofile._vendor.opendta.commands' in sys.modules",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert p.returncode == 0, p.stderr
     wmod.warm_up()
     first = Worker(tmp_path, timeout=30)
@@ -222,6 +236,7 @@ def test_sessions_fork_from_a_preloaded_forkserver(tmp_path, monkeypatch):
             return time.perf_counter() - t
         finally:
             w.close()
+
     forked = first_call_seconds(wmod._ctx)
     spawned = first_call_seconds(multiprocessing.get_context("spawn"))
     # relative, not a fixed limit, so slow CI machines pass: here ~0.02 s vs ~0.7 s

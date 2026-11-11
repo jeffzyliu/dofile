@@ -4,7 +4,7 @@ In Pyodide (numpy 2.4.6) these three return NaN arrays instead of raising `LinAl
 positive definite matrix, probably because numpy reports the failure through the floating-point "invalid" flag,
 which WebAssembly cannot set or read. `scipy.linalg` raises correctly. The engine relies on the exception in about
 100 places; the one that was found first is `ml.maximize` testing concavity with `cholesky(-H)`, which never saw a
-non-concave Hessian in the browser and crawled to its 16,000-iteration limit (docs/phase2-plan.md, "Open investigation").
+non-concave Hessian in the browser and crawled to its 16,000-iteration limit (docs/browser-engine.md, "Open investigation").
 
 `install()` runs each function on a matrix that must fail and wraps only the ones that do not raise, so it does
 nothing on CPython and switches itself off if numpy is fixed. The wrapper raises when the inputs are all finite and the
@@ -18,7 +18,7 @@ import numpy as np
 
 _FUNCTIONS = ("inv", "solve", "cholesky")
 _MESSAGES = {"inv": "Singular matrix", "solve": "Singular matrix", "cholesky": "Matrix is not positive definite"}
-_installed: dict[str, object] = {}   # name -> the original function, for the functions that were wrapped
+_installed: dict[str, object] = {}  # name -> the original function, for the functions that were wrapped
 
 
 def _probe(name: str) -> bool:
@@ -43,6 +43,7 @@ def _wrap(name: str, f):
         if np.isnan(r).any() and (name == "cholesky" or all(np.isfinite(x).all() for x in (a, *args))):
             raise np.linalg.LinAlgError(_MESSAGES[name])
         return r
+
     wrapped.__name__ = name
     wrapped.__doc__ = f.__doc__
     wrapped.__wrapped__ = f

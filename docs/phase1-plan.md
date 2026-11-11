@@ -74,7 +74,7 @@ to [phase2-plan.md](phase2-plan.md) or [phase3-plan.md](phase3-plan.md), or in t
   tests/                  # unit tests; tests/conformance/ (corpus, probes, fixtures)
   docs/                   # this plan, research, OpenDTA issue sheet, agent ergonomics, replication tests
   tests_opendta/          # OpenDTA's own suite and Stata 14 reference logs, vendored
-  eval/                   # how the conformance fixtures were made (Phase 0)
+  eval/                   # how the conformance fixtures were made (Phase 0); removed on 2026-11-10; in git history at commit `10e0f1c`
 ```
 
 ## Components
@@ -185,7 +185,7 @@ readable. `--json` writes rc, error, the failing command, e()/r() and `versions`
   on and must match `ref.json` (independent statsmodels/linearmodels results) to 1e-6 relative. The probes
   (`tests/conformance/probe/`) run pass/fail with the sandbox on. Known OpenDTA gaps are `xfail(strict=True)`:
   1 corpus check and 2 probes (all GAP-1, community commands), so a fix shows up. The fixtures (`cps.dta`, `panel.dta`,
-  `grpinfo.dta`, `ref.json`) are committed; `eval/make_data.py` and `eval/reference.py` document how they were
+  `grpinfo.dta`, `ref.json`) are committed; `eval/make_data.py` and `eval/reference.py` (the `eval/` folder was removed on 2026-11-10; in git history at commit `10e0f1c`) document how they were
   made.
 - Unit and MCP tests cover the sandbox (denylist, path rules, network, launch folder), the worker (timeouts,
   Break, cancel, crashes, pool), the engine (results JSON, do-file scope per call, r(table), each patched ODT
@@ -204,7 +204,7 @@ readable. `--json` writes rc, error, the failing command, e()/r() and `versions`
 ## Order of work (each step ended green)
 1. `git init`, move the old repos to `legacy/`, scaffold the uv project at the top level, vendor script +
    vendored OpenDTA.
-2. `engine.py` + conformance tests (port of `eval/`).
+2. `engine.py` + conformance tests (port of `eval/`, removed on 2026-11-10; in git history at commit `10e0f1c`).
 3. `sandbox.py` + its tests.
 4. `worker.py` + timeout/crash tests.
 5. `mcp_server.py` + MCP client tests. Manual check: add it to Claude Code

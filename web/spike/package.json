@@ -1,7 +1,0 @@
-{
-  "name": "dofile-pyodide-spike",
-  "private": true,
-  "type": "module",
-  "scripts": { "spike": "node spike.mjs" },
-  "dependencies": { "pyodide": "314.0.7" }
-}

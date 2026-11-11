@@ -1,4 +1,5 @@
 """The vendored OpenDTA imports under its new name and runs headless."""
+
 import sys
 
 from dofile._vendor.opendta.core.output import Capture

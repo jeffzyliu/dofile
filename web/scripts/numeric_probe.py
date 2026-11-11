@@ -11,6 +11,7 @@ A record is written for a command after which e() (or r()) is not what it was be
 (a loop, a program, quietly) is recorded too, after its inner commands, so the sequence is the same on both platforms
 as long as the control flow is.
 """
+
 import importlib.util
 import json
 import sys
@@ -26,16 +27,21 @@ def main(case, tools, out):
     compare = importlib.util.module_from_spec(spec)
     sys.modules["compat_compare"] = compare
     spec.loader.exec_module(compare)
-    from dofile.engine import _same, group_results
     from dofile._vendor.opendta.commands.registry import REGISTRY
+    from dofile.engine import _same, group_results
 
     records = []
     MAX_CELLS = 5000
 
     def small(res):
-        for k, m in res["matrices"].items():   # a huge matrix is cut to its first cells; its size is kept
+        for k, m in res["matrices"].items():  # a huge matrix is cut to its first cells; its size is kept
             if len(m["rows"]) * len(m["cols"]) > MAX_CELLS:
-                res["matrices"][k] = {"rows": m["rows"][:1], "cols": m["cols"][:1], "data": [], "size": f'{len(m["rows"])}x{len(m["cols"])}'}
+                res["matrices"][k] = {
+                    "rows": m["rows"][:1],
+                    "cols": m["cols"][:1],
+                    "data": [],
+                    "size": f"{len(m['rows'])}x{len(m['cols'])}",
+                }
         return res
 
     def wrap(name, fn):
@@ -46,11 +52,15 @@ def main(case, tools, out):
             finally:
                 for which, before, now in (("e", e0, s.e), ("r", r0, s.r)):
                     if not _same(before, now):
-                        records.append({"i": len(records), "cmd": name, "which": which, "res": small(group_results(now))})
+                        records.append(
+                            {"i": len(records), "cmd": name, "which": which, "res": small(group_results(now))}
+                        )
+
         return run
 
     import dataclasses
-    for name, cs in list(REGISTRY.items()):   # CommandSpec is frozen: replace the entries
+
+    for name, cs in list(REGISTRY.items()):  # CommandSpec is frozen: replace the entries
         REGISTRY[name] = dataclasses.replace(cs, fn=wrap(name, cs.fn))
 
     outdir = Path(tempfile.mkdtemp())
@@ -59,7 +69,7 @@ def main(case, tools, out):
     try:
         logfile = compare.run_opendta(compare.COMPAT / "do" / f"{case}.do", outdir)
         log = Path(logfile).read_text(encoding="utf-8", errors="replace")
-    except BaseException as e:   # keep what was recorded
+    except BaseException as e:  # noqa: BLE001  (keep what was recorded, whatever stopped the probe)
         log = f"(probe stopped: {type(e).__name__}: {str(e)[:200]})"
     with open(out, "w") as f:
         json.dump({"case": case, "seconds": round(time.perf_counter() - t0, 2), "log": log, "records": records}, f)

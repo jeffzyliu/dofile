@@ -45,6 +45,8 @@ dev = [
     "pyreadstat>=1.3,<1.3.7",
     "pytest-xdist>=3.8.0",
     "poethepoet>=0.49.0",
+    # pinned exactly, so a new rule or style cannot fail an unrelated pull request; bump it on purpose
+    "ruff==0.17.4",
 ]
 
 [build-system]
@@ -70,6 +72,12 @@ addopts = [
   "--deselect=tests_opendta/tests/test_i18n.py::test_graph_editor_edits",
 ]
 
+# Formatter and linter for dofile's own Python (docs/formatting-proposal.md). The vendored engine and OpenDTA's tests are
+# never formatted: the vendor script's patches apply to upstream's exact text. The lint rules are ruff's defaults.
+[tool.ruff]
+line-length = 120
+extend-exclude = ["src/dofile/_vendor", "tests_opendta", "legacy"]
+
 # Task runner: `uv run poe <task>` (or `poe <task>` in the activated .venv); `poe` alone lists them.
 # The uv executor runs each task as `uv run --extra=mcp ...`, so the MCP tests are never skipped.
 [tool.poe]
@@ -81,4 +89,6 @@ opendta = { cmd = "pytest -q -n auto tests_opendta/tests", help = "OpenDTA's ven
 slow = { cmd = "pytest -q -m slow -n auto", help = "Stata 14 log comparison only" }
 ci = { cmd = "pytest -q -m '' -n auto", help = "everything, as CI runs it" }
 vendor = { cmd = "python scripts/vendor_opendta.py", help = "re-vendor OpenDTA and re-apply patches (pass a COMMIT)" }
+format = { cmd = "ruff format", help = "format dofile's own Python (never the vendored engine)" }
+lint = { sequence = [{ cmd = "ruff format --check" }, { cmd = "ruff check" }], help = "format check and lint, as CI runs them" }
 mcp = { cmd = "dofile-mcp", help = "MCP server (stdio; pass --http --port 8000 for HTTP)" }

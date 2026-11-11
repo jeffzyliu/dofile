@@ -14,8 +14,8 @@ import os
 import posixpath
 import re
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from ._vendor.opendta.core import userpath
 
@@ -31,7 +31,7 @@ def _candidates(text: str, root: str) -> tuple[str, list[str]]:
     """The path as a normalized absolute path, and the tails of it under root, longest first."""
     t = _DRIVE.sub("", text.replace("\\", "/"), count=1)
     if text[:1] == "~":
-        t = "/" + t[1:]   # someone else's home folder
+        t = "/" + t[1:]  # someone else's home folder
     full = posixpath.normpath(posixpath.join(os.getcwd(), t))
     parts = [x for x in full.split("/") if x]
     return full, [posixpath.join(root, *parts[i:]) for i in range(len(parts))]
@@ -41,15 +41,16 @@ def resolve(text: str, root: str) -> tuple[str, bool]:
     """Where a file the user named is in the working folder, and whether that is a mapping worth a note."""
     root = os.path.realpath(root)
     tmp = os.path.realpath(tempfile.gettempdir())
-    if os.path.exists(text) or (os.path.isabs(text) and _inside(os.path.realpath(text), tmp)):   # tempfiles
+    if os.path.exists(text) or (os.path.isabs(text) and _inside(os.path.realpath(text), tmp)):  # tempfiles
         return text, False
     full, tails = _candidates(text, root)
     if _inside(full, root):
-        return full, False   # relative, maybe with backslashes or `..` that stays inside
+        return full, False  # relative, maybe with backslashes or `..` that stays inside
     if not tails:
         return root, True
-    hit = next((c for c in tails if os.path.exists(c)), None) or \
-        next(c for c in tails if os.path.isdir(posixpath.dirname(c)))   # a new file: the last tail always fits
+    hit = next((c for c in tails if os.path.exists(c)), None) or next(
+        c for c in tails if os.path.isdir(posixpath.dirname(c))
+    )  # a new file: the last tail always fits
     return hit, True
 
 
@@ -75,8 +76,11 @@ def install(root: str, note: Callable[[str], None]) -> None:
             os.chdir(root)
             return
         full, tails = _candidates(t, root)
-        target = full if _inside(full, root) and os.path.isdir(full) else \
-            next((c for c in tails if os.path.isdir(c)), root if not tails else None)
+        target = (
+            full
+            if _inside(full, root) and os.path.isdir(full)
+            else next((c for c in tails if os.path.isdir(c)), root if not tails else None)
+        )
         if target is None:
             note(f"(cd {t} ignored: no such folder in the working folder)")
             return
@@ -94,6 +98,7 @@ def uninstall() -> None:
     """Back to real paths (tests use this, since the registry and the hook are process-wide)."""
     global _saved_cd
     from ._vendor.opendta.commands import registry
+
     userpath.mapper = None
     if _saved_cd is not None:
         registry.REGISTRY["cd"] = _saved_cd

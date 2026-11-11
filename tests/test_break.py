@@ -3,6 +3,7 @@
 The interrupt is injected at the k-th line the engine executes (sys.settrace), for many k, instead of by timing:
 whatever line it lands on, the data must match the state after a whole number of commands.
 """
+
 import sys
 
 import numpy as np
@@ -11,10 +12,19 @@ import pytest
 from dofile.engine import Engine, clear_break, request_break
 from dofile.worker import RC_RESET, Worker
 
-SETUP = ("clear\nset obs 60\ngen id = _n\ngen g = mod(_n, 4)\ngen x = _n * 1.5\ngen s = string(_n)\n"
-         "save t, replace\npreserve\nkeep g\nduplicates drop\ngen y = g * 10\nsave m, replace\nrestore")
-COMMANDS = ["append using t", "sort x", "expand 2", "bysort g: replace x = x + g",
-            "merge m:1 g using m, nogenerate", "drop if mod(id, 3) == 0", "collapse (mean) x y, by(g)"]
+SETUP = (
+    "clear\nset obs 60\ngen id = _n\ngen g = mod(_n, 4)\ngen x = _n * 1.5\ngen s = string(_n)\n"
+    "save t, replace\npreserve\nkeep g\nduplicates drop\ngen y = g * 10\nsave m, replace\nrestore"
+)
+COMMANDS = [
+    "append using t",
+    "sort x",
+    "expand 2",
+    "bysort g: replace x = x + g",
+    "merge m:1 g using m, nogenerate",
+    "drop if mod(id, 3) == 0",
+    "collapse (mean) x y, by(g)",
+]
 
 
 @pytest.fixture

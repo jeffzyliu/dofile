@@ -17,7 +17,7 @@ kept after a session ends.
 - `WorkerPool`: at most `--max-sessions`. When the pool is full, the least recently used idle session is closed,
   whoever it belongs to. So one client can push everyone else's sessions out. Idle sessions are closed after 15 min.
 - Per session: one call runs and one may wait (`mcp_server.py`), a per-call timeout (60 s default), a log capped at
-  2 × 1,000,000 characters in the worker, uploads up to `--max-upload` MB (1024 default). **No limits on memory, CPU
+  2 × 1,000,000 characters in the worker, uploads up to `--file-limit` MB (1024 default). **No limits on memory, CPU
   time across calls, disk use in the workdir, or number of sessions per client.**
 - `request_upload` and `request_download` URLs are built from `--public-url`.
 - The sandbox (denylist + audit hook) is defense in depth, not a security boundary ([phase1-plan.md](phase1-plan.md),
@@ -51,7 +51,7 @@ kept after a session ends.
 5. **Reverse proxy.** (Recommended) Caddy (automatic TLS, simple config). Required:
    - no response buffering on the MCP endpoint (streamed responses),
    - read timeouts longer than the longest call timeout,
-   - request body size that allows `--max-upload` on `/upload/`,
+   - request body size that allows `--file-limit` on `/upload/`,
    - `--public-url` set to the public https URL,
    - a Host and Origin allowlist for the public name (the SDK's DNS-rebinding check is localhost-only),
    - rate limits per IP on `start_session` and `/upload/`.

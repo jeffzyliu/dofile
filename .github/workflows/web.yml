@@ -60,11 +60,28 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: npm run check   # tsc --noEmit
+      - run: npm run check   # biome check (errors only), then tsc --noEmit
       - run: npm run commands   # regenerate the highlighter's command list from the engine's registry ...
       - run: git diff --exit-code -- src/stata/commands.json   # ... it must match what is committed
       - run: npm test   # builds the wheel, then node --test: the worker and client in Node, the shim, inflate/unpack
       - run: npm run build   # vite build
+
+  # Biome (web/biome.json): the format, the import order and the lint rules. Warnings fail here too; locally
+  # (`npm run check`, the dev server, a build) only errors do. Also on a push to main. The fix: `npm run format`.
+  lint:
+    name: format and lint (Biome)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint:strict   # biome ci --error-on-warnings
 
   e2e:
     name: browsers (Playwright)
@@ -121,7 +138,7 @@ jobs:
   ok:
     name: web ok
     if: always()
-    needs: [changes, unit, e2e, snapshot]
+    needs: [changes, unit, lint, e2e, snapshot]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

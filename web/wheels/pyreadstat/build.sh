@@ -6,7 +6,7 @@
 # its cross-build environment from its own version, so pin it below to the one whose `pyodide config get emscripten_version`
 # equals Pyodide's (Pyodide 314.0.7 = Emscripten 5.0.3 = pyodide-build 0.39.3).
 set -eu
-VERSION=1.3.6   # the version the dev group caps at: 1.3.7 returns "" for strL values (docs/phase2-plan.md, "pyreadstat in Pyodide")
+VERSION=1.3.6   # the version the dev group caps at: 1.3.7 returns "" for strL values (docs/browser-engine.md, "The two package-gap cases")
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

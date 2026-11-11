@@ -12,6 +12,7 @@ has to stop what OpenDTA's commands can do. It does not audit stat calls, so `co
 still tells whether an outside file exists. A public deployment should still run in a container.
 Audit hooks cannot be removed, so install() is for a process that does nothing else.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -25,11 +26,37 @@ from collections import deque
 DENIED = ("shell", "erase", "rm", "rmdir", "mkdir", "cd", "copy", "webuse")
 
 _BLOCKED_EVENTS = (
-    "subprocess.Popen", "os.system", "os.exec", "os.posix_spawn", "os.spawn", "os.fork", "os.forkpty",
-    "pty.spawn", "socket.connect", "socket.bind", "socket.getaddrinfo", "socket.gethostbyname", "urllib.Request", "ctypes.dlopen", "webbrowser.open",
+    "subprocess.Popen",
+    "os.system",
+    "os.exec",
+    "os.posix_spawn",
+    "os.spawn",
+    "os.fork",
+    "os.forkpty",
+    "pty.spawn",
+    "socket.connect",
+    "socket.bind",
+    "socket.getaddrinfo",
+    "socket.gethostbyname",
+    "urllib.Request",
+    "ctypes.dlopen",
+    "webbrowser.open",
 )
-_WRITE_EVENTS = ("os.remove", "os.rmdir", "os.mkdir", "os.rename", "os.symlink", "os.link", "os.chmod",
-                 "os.chown", "os.truncate", "os.utime", "shutil.rmtree", "shutil.move", "os.chdir")
+_WRITE_EVENTS = (
+    "os.remove",
+    "os.rmdir",
+    "os.mkdir",
+    "os.rename",
+    "os.symlink",
+    "os.link",
+    "os.chmod",
+    "os.chown",
+    "os.truncate",
+    "os.utime",
+    "shutil.rmtree",
+    "shutil.move",
+    "os.chdir",
+)
 _LIST_EVENTS = ("os.listdir", "os.scandir", "glob.glob")
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
 
@@ -58,6 +85,7 @@ def deny_commands(names: tuple[str, ...] = DENIED) -> None:
 
         def blocked(s, args, _name=name):
             raise StataError(199, f"command {_name} is disabled in the dofile sandbox")
+
         registry.REGISTRY[name] = dataclasses.replace(spec, fn=blocked)
 
 
@@ -88,6 +116,7 @@ def install(workdir: str | os.PathLike, read_dirs: tuple[str, ...] = ()) -> None
     os.chdir(work)
     deny_commands()
     import mimetypes
+
     mimetypes.init()  # reads system files like /etc/mime.types once; openpyxl (putexcel, export excel) needs it
 
     py_roots = {os.path.realpath(p) for p in (sys.prefix, sys.base_prefix, sys.exec_prefix)}

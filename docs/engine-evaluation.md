@@ -28,7 +28,7 @@ Corpus: 10 .do files with 63 numeric/return-code checks, covering the old OpenSt
 econometrics, data management, programming constructs and error handling. Data: the project's own CPS extract,
 plus a synthetic panel with a known data-generating process. Each check is compared with values computed
 independently in statsmodels/linearmodels, to 1e-6 relative tolerance. There was no Stata license, so the
-reference is not Stata itself. The kit is in `eval/` (see `eval/README.md`).
+reference is not Stata itself. The kit was in `eval/` (see `eval/README.md`); the folder was removed on 2026-11-10; in git history at commit `10e0f1c`.
 
 ## Results
 
@@ -52,7 +52,7 @@ names the interaction `c.yrsed#2.sex`. Both engines were right on both points.
 Commands without a CHECK line were also checked for a nonzero return code. The table notes every one that
 failed or never ran.
 
-### Breadth probe (pass/fail, `eval/probe/`)
+### Breadth probe (pass/fail, `eval/probe/`; the probes now live in `tests/conformance/probe/`, and `eval/` was removed on 2026-11-10; in git history at commit `10e0f1c`)
 | Command | OpenDTA | OpenStat |
 |---|---|---|
 | `twoway scatter` + `graph export` | ok | ok |

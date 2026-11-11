@@ -4,6 +4,7 @@ Each corpus .do prints `CHECK name=value`; values must match ref.json (independe
 linearmodels results) to 1e-6 relative. Known OpenDTA gaps are strict xfails, so a fix shows up; their IDs
 (ODT-n, GAP-n) are in docs/opendta-issues.md.
 """
+
 import json
 import re
 import shutil
@@ -16,12 +17,13 @@ from dofile.engine import Engine
 
 HERE = Path(__file__).parent / "conformance"
 REF = json.loads((HERE / "data" / "ref.json").read_text())
-CHECK = re.compile(r"^CHECK (\w+)=\s*(\S+)", re.M)
+CHECK = re.compile(r"^CHECK (\w+)=\s*(\S+)", re.MULTILINE)
 KNOWN_GAPS = {
     "hdfe_b_x1": "GAP-1: reghdfe is a community command, not in OpenDTA",
 }
-CASES = [(f.name, k) for f in sorted((HERE / "corpus").glob("*.do"))
-         for k in re.findall(r'"CHECK (\w+)=', f.read_text())]
+CASES = [
+    (f.name, k) for f in sorted((HERE / "corpus").glob("*.do")) for k in re.findall(r'"CHECK (\w+)=', f.read_text())
+]
 
 
 @cache

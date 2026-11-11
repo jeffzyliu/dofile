@@ -6,83 +6,187 @@
    text >= 4.5:1; the focus ring, control and input borders and the progress bar >= 3:1. --border is for dividers
    only, never the only edge of a control. Components: docs/design/system/. */
 
-@font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-700.woff2) format("woff2"); font-weight: 700; font-display: swap; }
-@font-face { font-family: "IBM Plex Sans"; src: url(fonts/ibm-plex-sans-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "IBM Plex Sans"; src: url(fonts/ibm-plex-sans-600.woff2) format("woff2"); font-weight: 600; font-display: swap; }
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(fonts/ibm-plex-mono-400.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(fonts/ibm-plex-mono-700.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url(fonts/ibm-plex-sans-400.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url(fonts/ibm-plex-sans-600.woff2) format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
 /* The files above are Latin subsets. Arrows (U+2190-21FF), box drawing and block elements (U+2500-259F: the banner)
    come from the complete, unmodified files (the OFL reserves the name "Plex", so we don't make subsets of our own).
    A browser downloads them only when the page uses one of these characters. Plex has no ⌘ ▶ ■ ● ▾ ⋯: the UI draws
-   those as SVG icons (.ico in mockups/ui.css), and ⌘ in a key label comes from the system font. */
-@font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-400-complete.woff2) format("woff2"); font-weight: 400;
-             font-display: swap; unicode-range: U+2190-21FF, U+2500-259F; }
-@font-face { font-family: "IBM Plex Mono"; src: url(fonts/ibm-plex-mono-700-complete.woff2) format("woff2"); font-weight: 700;
-             font-display: swap; unicode-range: U+2190-21FF, U+2500-259F; }
-@font-face { font-family: "IBM Plex Sans"; src: url(fonts/ibm-plex-sans-400-complete.woff2) format("woff2"); font-weight: 400;
-             font-display: swap; unicode-range: U+2190-21FF; }
-@font-face { font-family: "IBM Plex Sans"; src: url(fonts/ibm-plex-sans-600-complete.woff2) format("woff2"); font-weight: 600;
-             font-display: swap; unicode-range: U+2190-21FF; }
+   those as SVG icons (.ico in ui.css), and ⌘ in a key label comes from the system font. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(fonts/ibm-plex-mono-400-complete.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+2190-21FF, U+2500-259F;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(fonts/ibm-plex-mono-700-complete.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+2190-21FF, U+2500-259F;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url(fonts/ibm-plex-sans-400-complete.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+2190-21FF;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url(fonts/ibm-plex-sans-600-complete.woff2) format("woff2");
+  font-weight: 600;
+  font-display: swap;
+  unicode-range: U+2190-21FF;
+}
 
 :root {
   /* type: one monospace font (code, log, wordmark), one UI font. No italics (no italic files are loaded):
      comments are told apart by color. */
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --text-xs: 11.5px;  --text-sm: 12.5px;  --text-row: 13px;  --text-md: 14px;  --text-lg: 16px;  --text-xl: 22px;  --text-2xl: 30px;
+  /* in rem, so they follow the browser's font-size setting (DS-5); at the default 16 px: 11.5, 12.5, 13, 14, 16, 22, 30 px.
+     Spacing stays in px. At a 20 px default the log's 80 columns are wider than its pane and scroll sideways. */
+  --text-xs: 0.71875rem;
+  --text-sm: 0.78125rem;
+  --text-row: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.875rem;
   /* --text-row: file rows, menus, banners, buttons, group rows */
-  --code: 13px;       /* editor */
-  --log: 12.5px;      /* log: 80 columns fit in about 600 px */
+  --code: 0.8125rem; /* editor: 13 px */
+  --log: 0.78125rem; /* log: 12.5 px; 80 columns fit in about 600 px */
   --leading: 1.5;
   /* the only weights loaded: Sans 400/600, Mono 400/700; bold is a different number in each font */
-  --w-bold-ui: 600;  --w-bold-mono: 700;
-  font-synthesis: none;   /* never fake a weight or an italic; docs/design/fonts.mjs checks the pages */
+  --w-bold-ui: 600;
+  --w-bold-mono: 700;
+  font-synthesis: none; /* never fake a weight or an italic; docs/design/fonts.mjs checks the pages */
 
   /* spacing (4 px steps), radius, borders */
-  --s1: 4px;  --s2: 8px;  --s3: 12px;  --s4: 16px;  --s5: 24px;  --s6: 32px;  --s7: 48px;
-  --radius-sm: 3px;  --radius: 4px;  --radius-lg: 8px;
-  --bar: 3px;          /* the marker bar on a line or row's left edge: open file, running line, error line, picked row */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --radius-sm: 3px;
+  --radius: 4px;
+  --radius-lg: 8px;
+  /* control heights, in rem so they grow with the visitor's font size: the toolbar's buttons, and a pane head's */
+  --control: 2rem;
+  --control-sm: 1.625rem;
+  --bar: 3px; /* the marker bar on a line or row's left edge: open file, running line, error line, picked row */
   --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
-  --disabled-opacity: .45;
-  --shadow-menu: 0 8px 24px rgb(0 0 0 / .16);
-  --shadow-dialog: 0 10px 30px rgb(0 0 0 / .18);
-  --scrim: rgb(0 0 0 / .32);   /* black in both themes (ink is light in dark mode) */
+  --disabled-opacity: 0.45;
+  --shadow-menu: 0 8px 24px rgb(0 0 0 / 0.16);
+  --shadow-dialog: 0 10px 30px rgb(0 0 0 / 0.18);
+  --scrim: rgb(0 0 0 / 0.32); /* black in both themes (ink is light in dark mode) */
+  /* motion (DS-8): reduced motion turns the animations that use them off (ui.css) */
+  --dur-fast: 0.16s; /* the toast coming in */
+  --dur: 0.25s;
+  /* stacking (DS-8): menu under toast under dialog. Native dialogs and popovers sit in the browser's top layer above all
+     of these; the scale orders what is not there (a menu where the popover API is missing, the toast). */
+  --z-menu: 10;
+  --z-toast: 20;
+  --z-dialog: 30;
 
   /* light */
-  --bg: #f7f7f5;           /* page */
-  --surface: #ffffff;      /* panes, editor, log */
-  --surface-2: #efefec;    /* pane headers, status bar */
-  --ink: #1e2128;          /* text */
-  --muted: #5a606b;        /* secondary text, line numbers, comments */
-  --border: #d9dbe0;       /* dividers */
-  --border-strong: #828893;/* control borders (3:1) */
-  --accent: #3a4485;       /* softened navy: primary button, keywords, links, focus ring */
+  --bg: #f7f7f5; /* page */
+  --surface: #ffffff; /* panes, editor, log */
+  --surface-2: #efefec; /* pane headers, status bar */
+  --ink: #1e2128; /* text */
+  --muted: #5a606b; /* secondary text, line numbers, comments */
+  --border: #d9dbe0; /* dividers */
+  --border-strong: #828893; /* control borders (3:1) */
+  --accent: #3a4485; /* softened navy: primary button, keywords, links, focus ring */
   --on-accent: #ffffff;
-  --accent-soft: #e6e8f3;  /* selection, the open file, run lines */
+  --accent-soft: #e6e8f3; /* selection, the open file, run lines */
   --accent-hover: #2f3870; /* a primary button under the pointer */
-  --error: #b3261e;  --error-soft: #fbeceb;  --error-hover: #96201a;
+  --error: #b3261e;
+  --error-soft: #fbeceb;
+  --error-hover: #96201a;
   --ok: #1f6f3f;
-  --warn: #7a4f00;   --warn-soft: #fdf3e1;
+  --warn: #7a4f00;
+  --warn-soft: #fdf3e1;
   /* editor tokens */
-  --tok-keyword: var(--accent);  --tok-string: #1f6f3f;  --tok-comment: var(--muted);
-  --tok-macro: #7b3b99;          --tok-number: var(--ink);
-  --graph-card: #ffffff;   /* graphs are PNGs with their own light colors: always on a light card */
+  --tok-keyword: var(--accent);
+  --tok-string: #1f6f3f;
+  --tok-comment: var(--muted);
+  --tok-macro: #7b3b99;
+  --tok-number: var(--ink);
+  --graph-card: #ffffff; /* graphs are PNGs with their own light colors: always on a light card */
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #14161b;  --surface: #1c1f26;  --surface-2: #22262e;
-    --ink: #e4e6ea;  --muted: #9aa1ad;  --border: #30343d;  --border-strong: #6b7280;
-    --accent: #a3acec;  --on-accent: #14161b;  --accent-soft: #2a2f45;  --accent-hover: #bac1f2;
-    --error: #f2867c;  --error-soft: #3a2224;  --error-hover: #f6a198;  --ok: #7fcf9a;  --warn: #e6b450;  --warn-soft: #33291a;
-    --tok-string: #7fcf9a;  --tok-macro: #d4a8f0;
-    --graph-card: #ffffff;  --scrim: rgb(0 0 0 / .55);
+    --bg: #14161b;
+    --surface: #1c1f26;
+    --surface-2: #22262e;
+    --ink: #e4e6ea;
+    --muted: #9aa1ad;
+    --border: #30343d;
+    --border-strong: #6b7280;
+    --accent: #a3acec;
+    --on-accent: #14161b;
+    --accent-soft: #2a2f45;
+    --accent-hover: #bac1f2;
+    --error: #f2867c;
+    --error-soft: #3a2224;
+    --error-hover: #f6a198;
+    --ok: #7fcf9a;
+    --warn: #e6b450;
+    --warn-soft: #33291a;
+    --tok-string: #7fcf9a;
+    --tok-macro: #d4a8f0;
+    --graph-card: #ffffff;
+    --scrim: rgb(0 0 0 / 0.55);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #14161b;  --surface: #1c1f26;  --surface-2: #22262e;
-  --ink: #e4e6ea;  --muted: #9aa1ad;  --border: #30343d;  --border-strong: #6b7280;
-  --accent: #a3acec;  --on-accent: #14161b;  --accent-soft: #2a2f45;  --accent-hover: #bac1f2;
-  --error: #f2867c;  --error-soft: #3a2224;  --error-hover: #f6a198;  --ok: #7fcf9a;  --warn: #e6b450;  --warn-soft: #33291a;
-  --tok-string: #7fcf9a;  --tok-macro: #d4a8f0;
-  --graph-card: #ffffff;  --scrim: rgb(0 0 0 / .55);
+  --bg: #14161b;
+  --surface: #1c1f26;
+  --surface-2: #22262e;
+  --ink: #e4e6ea;
+  --muted: #9aa1ad;
+  --border: #30343d;
+  --border-strong: #6b7280;
+  --accent: #a3acec;
+  --on-accent: #14161b;
+  --accent-soft: #2a2f45;
+  --accent-hover: #bac1f2;
+  --error: #f2867c;
+  --error-soft: #3a2224;
+  --error-hover: #f6a198;
+  --ok: #7fcf9a;
+  --warn: #e6b450;
+  --warn-soft: #33291a;
+  --tok-string: #7fcf9a;
+  --tok-macro: #d4a8f0;
+  --graph-card: #ffffff;
+  --scrim: rgb(0 0 0 / 0.55);
 }

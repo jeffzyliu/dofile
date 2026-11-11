@@ -4,12 +4,17 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "lib": ["es2023", "dom", "dom.iterable"],
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
     "strict": true,
     "allowJs": true,
     "resolveJsonModule": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
-  "include": ["src"]
+  "include": ["src", "test"]
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="color-scheme" content="light dark">
 <title>dofile: start-up, Break, menus and empty states (mockup)</title>
-<link rel="stylesheet" href="ui.css">
+<link rel="stylesheet" href="../../../web/src/styles/ui.css">
 <style>
   body { padding: var(--s5); }
   h1 { font-size: var(--text-xl); margin: 0 0 4px; }
@@ -69,10 +69,10 @@
       <div class="scrim"></div>
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dl-h" aria-describedby="dl-p">
         <h2 id="dl-h">Download the engine?</h2>
-        <p id="dl-p">dofile runs your code inside this page, so the first time your browser downloads the engine: <b>about 36 MB</b>
+        <p id="dl-p">dofile runs your code inside this page, so the first time your browser downloads the engine: <b>about 48 MB</b>
           from a public CDN. Later visits use the copy your browser keeps and start in a few seconds.</p>
         <p class="meta">On a phone, Wi-Fi is best. Your files stay in this browser; they are never sent anywhere.</p>
-        <div class="actions"><button class="btn">Not now</button><button class="btn primary focus">Download 36 MB</button></div>
+        <div class="actions"><button class="btn">Not now</button><button class="btn primary focus">Download 48 MB</button></div>
       </div>
     </div>
     <figcaption><b>1. The prompt.</b> First visit only: shown when the page has no record of a finished download (a flag in
@@ -93,11 +93,11 @@
       <div class="scrim"></div>
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="st-h">
         <h2 id="st-h">Getting the engine ready</h2>
-        <div class="row"><b>Downloading</b><span class="spacer"></span><span>14.2 of 36 MB · 6 s</span></div>
-        <div class="progress" role="progressbar" aria-label="Download" aria-valuemin="0" aria-valuemax="36" aria-valuenow="14.2"
-             aria-valuetext="14 of 36 MB"><i style="width:39%"></i></div>
+        <div class="row"><b>Downloading</b><span class="spacer"></span><span>14.2 of 48 MB · 6 s</span></div>
+        <div class="progress" role="progressbar" aria-label="Download" aria-valuemin="0" aria-valuemax="48" aria-valuenow="14.2"
+             aria-valuetext="14 of 48 MB"><i style="width:30%"></i></div>
         <ol class="stages">
-          <li class="now"><span class="spin"></span>Download the engine<span class="when">14.2 of 36 MB</span></li>
+          <li class="now"><span class="spin"></span>Download the engine<span class="when">14.2 of 48 MB</span></li>
           <li class="todo"><span class="spin"></span>Start Python</li>
           <li class="todo"><span class="spin"></span>Load your files</li>
           <li class="todo"><span class="spin"></span>Load packages</li>
@@ -128,7 +128,7 @@
         <h2 id="st2-h">Getting the engine ready</h2>
         <div class="row"><b>Loading packages</b><span class="spacer"></span><span>step 4 of 5 · 9 s</span></div>
         <ol class="stages">
-          <li class="done"><span class="ico i-check"></span>Download the engine<span class="when">36 MB · 7.1 s</span></li>
+          <li class="done"><span class="ico i-check"></span>Download the engine<span class="when">48 MB · 7.1 s</span></li>
           <li class="done"><span class="ico i-check"></span>Start Python<span class="when">0.9 s</span></li>
           <li class="done"><span class="ico i-check"></span>Load your files<span class="when">0.1 s</span></li>
           <li class="now"><span class="spin"></span>Load packages</li>
@@ -166,7 +166,7 @@
         <button class="btn primary"><span class="ico i-play"></span>Run</button><span class="spacer"></span></div>
       <div class="panes" style="grid-template-columns:140px 1fr"><div><ul class="files"><li class="open">analysis.do</li><li>clean.do</li><li class="folder">data/</li></ul></div>
         <div><div class="banner" style="margin:8px"><div><b>The engine isn't downloaded.</b> You can open, edit, upload and download
-          files; running code needs the engine (about 36 MB).
+          files; running code needs the engine (about 48 MB).
           <div class="actions"><button class="btn primary">Download the engine</button></div></div></div>
           <pre class="code"><span class="ln"><span class="n">1</span><span class="c">* wages by age and schooling</span></span></pre></div></div>
       <div class="statusbar"><span><b>No engine</b> · Run downloads it first</span></div>
@@ -215,11 +215,11 @@
       <div class="scrim"></div>
       <div class="sheetup" role="dialog" aria-modal="true" aria-labelledby="pdl-h">
         <h2 id="pdl-h">Download the engine?</h2>
-        <p>dofile runs your code on this phone, so it first downloads the engine: <b>about 36 MB</b>. Later visits start without
+        <p>dofile runs your code on this phone, so it first downloads the engine: <b>about 48 MB</b>. Later visits start without
           downloading.</p>
         <p class="muted" style="font-size:var(--text-sm)">On mobile data, you may want to wait for Wi-Fi. Your files stay on
           this phone; they are never sent anywhere.</p>
-        <div class="stack"><button class="btn primary">Download 36 MB</button><button class="btn">Not now</button></div>
+        <div class="stack"><button class="btn primary">Download 48 MB</button><button class="btn">Not now</button></div>
       </div>
     </div>
     <figcaption><b>8. The prompt on a phone.</b> A sheet from the bottom, with the buttons in thumb reach and full width.

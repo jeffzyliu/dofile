@@ -1,7 +1,8 @@
 # Starting the web demo from a Pyodide memory snapshot
 
-Status (2026-11-09): built, measured and checked; **the demo's default start** (`?snapshot=0` is the normal boot; a missing
-or stale snapshot is an error that names `?snapshot=0`, not a silent fallback). It was opt-in with `?snapshot=1` until then,
+Status (2026-11-09): built, measured and checked; **the demo's default start** (`?snapshot=0` is the normal boot, a diagnostic mode
+for developers; a missing or stale snapshot is an error that gives its cause, not a silent fallback, and nothing the page
+shows names `?snapshot=0`). It was opt-in with `?snapshot=1` until then,
 and an old `?snapshot=1` link still starts from the snapshot. The default build is 39.9 MB
 (brotli 11, docstrings and asserts stripped). A return visit starts in 1.2 s against 4.5–9.2 s for the normal boot; a first
 visit takes 1.7 s unthrottled, 5.1 s at 100 Mbps and 13.9 s at 30 Mbps (normal boot: 5.8, 6.9, 13.9 s). It passes the conformance corpus, 95 of 97 Stata 14
@@ -45,7 +46,7 @@ memory snapshot saves.
 
 `pyodide.makeMemorySnapshot()` copies the wasm heap after the imports. `loadPyodide({_loadSnapshot})` copies it back,
 so Python resumes with numpy, scipy, matplotlib and dofile already imported. The API is experimental (underscore
-options). A straight try fails in a chain of ways, found one at a time (`web/spike/snapshot.mjs` has the working
+options). A straight try fails in a chain of ways, found one at a time (`web/spike/snapshot.mjs`, removed on 2026-11-10; in git history at commit `10e0f1c`, had the working
 version and a header with the result):
 
 1. **"Unexpected hiwire entry at index 6".** Any `loadPackage` call fills Pyodide's `loadedPackages` object, and the
@@ -89,9 +90,9 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 |---|---|
 | `web/scripts/make-snapshot.mjs` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes, almost all of it brotli quality 11, or seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
 | `web/src/engine/snapshot.js` | the loader patch, the library log, the restore options, and the brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's own decoder, with brotli-wasm as the fallback); used by the script and the worker |
-| `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went |
-| `web/src/engine/client.js`, `main.ts` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`, and the status says `(snapshot)` with the start's breakdown |
-| `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison |
+| `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went. Since 2026-11-10 (prototype 1, step 2) the start reads everything through one Cache: see "The start since prototype 1" below |
+| `web/src/engine/client.js`, `main.tsx` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`. Where the start's time went: the client's `startup` (the worker's `startup` op) and the worker's console line `[dofile] snapshot start: …`; the page's status line showed it until prototype 1, step 3 |
+| `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison (removed on 2026-11-10; in git history at commit `10e0f1c`) |
 | `docs/img/make-startup-times.mjs` | draws the chart below |
 
 - The snapshot is made in Node and runs in the browser. There are two big files: the **snapshot** (the Python heap,
@@ -99,8 +100,8 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
   it holds memory and not the filesystem). They are written **brotli-compressed at quality 11**, as
   `heap.brotli.bin` (19.8 MB) and `site-packages.brotli.bin` (20.0 MB), so 39.9 MB in all (the heap was 26.5 MB, 46.5 MB in all,
   before the library copies were zeroed and the docstrings stripped; see "Making the files smaller"). The small files are
-  `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` with the wheel's name and
-  SHA-256, the Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
+  `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` (the build record, not deployed) with the wheel's name and
+  SHA-256, the extra wheels' SHA-256s, the Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
   both files again with the decoder the page uses and fails if they are not identical.
 - **Only the compressed files are kept in the browser** (the Cache API, under a name with the build time; older builds
   are deleted): 39.9 MB of storage, not 229 MB. Every start reads them and decompresses them, with the browser's own
@@ -113,20 +114,49 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
   the browser test that checks the stored size caught this. If a host decodes the files anyway, `unpack` notices the
   decompressed length and uses the bytes as they are: it still works, but the storage is larger.
 - **A stale snapshot is refused with a message** (built for another wheel: "run `npm run snapshot` again"). It must
-  be rebuilt after changing the dofile wheel or the Pyodide version. The wheel's file name does not change with its
-  code, so the manifest also holds the wheel's SHA-256 and the page (Vite's `__WHEEL_HASH__`) compares it; a missing or
-  different hash is refused (the Node tests, which pass none, skip the check). Found 2026-11-08: a snapshot older than
+  be rebuilt after changing the dofile wheel, an extra wheel or the Pyodide version. The wheel's file name does not change
+  with its code, so the manifest holds the wheels' SHA-256s; `vite build` refuses a snapshot whose record differs, and the page
+  (Vite's `__BUILD_ID__`, `scripts/build-id.ts`) compares its build id with `start-files.json`'s (the Node tests that pass
+  none skip the check). Found 2026-11-08: a snapshot older than
   `browser.py` kept running the old code and broke the page's new run-timing display until it was rebuilt. `uv build
   --wheel` is reproducible (the same hash after a rebuild and after touching a source file), so a rebuild without a code
-  change does not make a snapshot stale. Test: "a snapshot from a different build of the wheel is refused" in `web/e2e/poc.spec.ts`.
+  change does not make a snapshot stale. Test: "a snapshot from a different build of the wheel is refused" in `web/e2e/shell.spec.ts` (in `poc.spec.ts` until prototype 1, step 3).
 - The snapshot is taken after one program has run in a throwaway engine, so the lazily imported modules (graphs,
   commands) are already loaded. The page's real `Engine` is created after the restore, as before.
+
+## The start since prototype 1 (2026-11-10)
+
+What changed in how the page starts from the snapshot (`web/src/engine/worker.js`, `client.js`; the contract is in
+`docs/design/SPEC.md`, sections 6 and 7). The sections below were written before it and describe the earlier start where
+they differ.
+
+- **The runtime comes from the page's own origin.** `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are
+  copied from the `pyodide` npm package into `web/public/pyodide/` by `vite.config.ts`. The snapshot start makes no request
+  to another origin (a browser test checks it). `?snapshot=0` keeps the CDN.
+- **The page can download first, counting bytes.** `client.download()` fetches every start file into the Cache
+  `dofile-snapshot-<built>` before a worker exists. The build writes the list of those files, with each one's size on disk
+  and compressed size, as `dist/start-files.json`, and the compressed total into `dist/index.html`
+  (`web/scripts/start-files.ts`): 48.5 MB on 2026-11-10 (snapshot 42.1, runtime 5.75, page 0.68). A file whose byte count
+  is not the list's is not kept.
+- **The worker reads that Cache for everything.** `loadPyodide` has options for the lock file and the standard library but
+  none for the `.wasm`: it fetches `indexURL + "pyodide.asm.wasm"` itself. So while the engine starts, the worker replaces
+  `fetch` with one that looks in the Cache first (`watchFetch`); a miss goes to the network. The worker never writes the
+  Cache: `download()` is its one writer, and it keeps only a file with the byte count of the build's list (a host that
+  answers a missing file with its `index.html` and status 200 would otherwise poison the cache). The start works with or
+  without `download()`; without it nothing is cached. The page calls `download()` before each start it makes (`src/app/engine.js`). A cached `.wasm` is given the type
+  `application/wasm`, because Pyodide compiles it with `instantiateStreaming` and has no fallback; a fetch that fails ends
+  the start with an error (Pyodide's loader would only log it and wait for ever).
+- **The patched loader is imported from a `blob:` URL** made from the cached bytes, so the start does not fetch it a second
+  time; if a browser refuses that import, the worker imports the loader's own URL. Checked in Chromium, Firefox and WebKit.
+- **A cached file that `unpack` refuses is deleted**, so the next start fetches it again.
+- **No IDBFS.** `/work` is a plain in-memory folder. The files live in dofile's own IndexedDB store, which the page reads
+  and writes directly; `mount` copies it into `/work`, and after each run the worker writes back what the run changed.
 
 ## Results
 
 Node, local files (one run of each, same machine):
 
-| | Normal boot | From the snapshot, uncompressed (`web/spike/snapshot.mjs`) | From the compressed snapshot (the demo) |
+| | Normal boot | From the snapshot, uncompressed (`web/spike/snapshot.mjs`, removed 2026-11-10, commit `10e0f1c`) | From the compressed snapshot (the demo) |
 |---|---|---|---|
 | Time to a running engine and a first regression | 5.2 s | 0.64–0.80 s | 1.31 s |
 
@@ -167,7 +197,7 @@ of 3 runs of the page's own "ready in X s" (a new browser context is a cold cach
 ## Packages added: `xlwt`, `xlrd` and `pyreadstat`, not pandas (2026-11-09)
 
 The page used to lack the packages for legacy `.xls` and for SAS transport, SPSS and Stata 7 and older `.dta` files
-([phase2-plan.md](phase2-plan.md#known-gaps-in-the-browser-engine)). The normal boot now installs `xlwt` and `xlrd` (pure Python,
+([browser-engine.md](browser-engine.md#known-gaps-in-the-browser-engine)). The normal boot now installs `xlwt` and `xlrd` (pure Python,
 from PyPI, as dependencies of the dofile wheel) and `pyreadstat`, which has no Pyodide build, so `web/wheels/` holds one we
 compiled (`web/wheels/README.md`). The snapshot holds all of them. Pandas is **not** installed: only `export sasxport` needs it.
 
@@ -213,23 +243,23 @@ decompresses it (0.6 s). Sizes below are compressed MB, measured unless marked; 
 | Zero the copies of native libraries in the heap | **Done, the default** | heap 26.5 → 22.2; total 46.5 → 42.3 | Emscripten keeps each `.so`'s bytes after `dlopen`, and the bundle has them too: 135 of 136 buffers (30.5 MB raw) were identical to their files. `zeroLibraryCopies` |
 | Strip docstrings and asserts (`PYTHONOPTIMIZE=2`) | **Done, the default** (since 2026-11-07) | heap 22.2 → 19.8; total 42.3 → 39.9 | `SNAPSHOT_STRIP_DOCS=0` builds without it; the manifest records `optimize: 2`. It removes the `assert`s of every library, so it rests on the checks below (identical results to the unstripped build), not on a proof |
 | Files named `.bin`, kept compressed in the browser | **Done** | the Cache API holds 40 MB, not 229 | a `.br` name makes hosts send `Content-Encoding: br`, and the browser decodes before the cache sees it |
-| Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" | the first graph then pays about 0.9 s (0.3 s with `.pyc` files); needs the bundle in two parts and a fetch. [Experiment](phase2-plan.md#experiment-loading-matplotlib-lazily) |
+| Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" | the first graph then pays about 0.9 s (0.3 s with `.pyc` files); needs the bundle in two parts and a fetch. [Experiment](lazy-matplotlib.md#experiment-loading-matplotlib-lazily) |
 | Ship `.pyc` files for the lazily loaded part | **Not done** (part of the row above) | 0.6 s of the 0.87 s first graph is compiling | |
 | Leave out the bundle's tests (6.6 MB raw) and type stubs (1.5 MB raw) | **Not done** | too small to matter | `bundle()` takes every file under site-packages |
 | Leave out unused scipy subpackages (`io`, `signal`, `cluster`, `odr`: 4.1 of 40.8 MB raw) | **Not done** | little to gain | the corpus programs import 493 scipy modules |
 | Zero the heap's free memory | **Tried, no gain** | 34.0 against 34.3 at brotli 5 | no large free blocks are left |
 | zstd or gzip instead of brotli | **Tried, rejected** | zstd 22 decoded the heap wrongly without any error; gzip is half as good | the build compares the decoded files with the originals |
 | Explain the 12 MB the heap gains from installing the packages, before any import | **Not investigated** | the largest piece nothing here removes | |
-| A smaller Pyodide runtime, or self-hosting it | **Not touched** | | both flows download Pyodide's runtime (about 5.5 MB compressed) from jsDelivr |
+| A smaller Pyodide runtime, or self-hosting it | **Self-hosted** (2026-11-10), not smaller | the snapshot start asks nothing of another origin | `vite.config.ts` copies `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` from the npm package into `public/pyodide/` (5.75 MB as a host sends them, 12.3 MB on disk); `?snapshot=0` still loads the runtime and the packages from jsDelivr |
 
 **Start time and memory**
 
 | Optimization | Status | Notes |
 |---|---|---|
-| The engine starts at page load, in the background | **Done** | `engine.start()` in `main.ts`; only Run and Reset wait |
+| The engine starts at page load, in the background | **Done** | `start()` in `src/app/engine.js`, after the tab lock (a first visit asks first); only Run and Reset wait |
 | Decompress in steps into one buffer per file | **Done** | the memory peak stays near the decompressed size; not a speed gain |
 | One snapshot that starts on iOS | **Done** | built without Pyodide's trampoline, [below](#the-trampoline) |
-| Starting from the snapshot at all | **Done, the default** (`?snapshot=0` = normal boot) | no fallback to the normal boot when the snapshot is missing, stale or fails: the page says why and names `?snapshot=0`, so CI cannot pass by quietly booting the old way. A crash on a low-memory phone (peak about 1.25 GB against 0.7 GB for the normal boot) is only checked on one iPhone 13 |
+| Starting from the snapshot at all | **Done, the default** (`?snapshot=0` = normal boot) | no fallback to the normal boot when the snapshot is missing, stale or fails: the page says why (a stale one: reload the page), so CI cannot pass by quietly booting the old way; it does not name `?snapshot=0` (since prototype 1, step 3). An automatic fallback is a possible later step, not built. A crash on a low-memory phone (peak about 1.25 GB against 0.7 GB for the normal boot) is only checked on one iPhone 13 |
 | Keep the files decompressed in the browser's storage | **Rejected** | 0.3–0.7 s faster per start, 229 MB stored instead of 40 |
 | Normal boot: import matplotlib only at the first graph | **Done already** | `browser.start()` imports numpy and scipy (1.8 s in Node); matplotlib and PIL come with the first graph (0.82 s) |
 | Normal boot: import scipy lazily | **Not done** | it is imported in `browser.start()` |
@@ -280,8 +310,8 @@ stripping; the last on the current 39.9 MB build, 150 s): 63 corpus checks, 12 p
 **95 of 97 Stata cases pass**, the same two failures as a normal boot (`xlwt`, `pyreadstat`; both packages were added on 2026-11-09 and all 97 pass, see "Packages added" below); the count is 97, not 98, because
 `1920_models4` has no Stata log. Before PATCH-4 and the `numpy.linalg` shim (`src/dofile/linalgshim.py`) 16 cases failed on
 the snapshot and the normal boot alike: 11 from one 32-bit numpy bug in `expand` and `stsplit`, 2 package gaps, and 3 numeric
-cases (which also ran 20–500 times slower). See [Known gaps](phase2-plan.md#known-gaps-in-the-browser-engine) and the
-[open investigation](phase2-plan.md#open-investigation-model-fits-take-far-longer-in-pyodide). No failure is specific to the
+cases (which also ran 20–500 times slower). See [Known gaps](browser-engine.md#known-gaps-in-the-browser-engine) and the
+[open investigation](browser-engine.md#open-investigation-model-fits-take-far-longer-in-pyodide). No failure is specific to the
 snapshot or to stripping docstrings.
 
 **Bugs the checks found in the snapshot's own code**
@@ -328,10 +358,11 @@ runs each, no repeats under controlled conditions: an indication, not a benchmar
   snapshot has it loaded). On the phone a run took 2–3 s in snapshot mode every time and 0.1–1 s on the normal boot, until
   the snapshot was rebuilt: then 0.1–0.2 s. The slow runs came with a snapshot older than the code, but the cause was not
   established (the run breakdown, below, had not shipped when it happened).
-- **The status line says where the time went.** A snapshot start: `[download|read from cache X s, unpack X s (heap, site-packages,
+- **The status line said where the time went** (the proof-of-concept page, until prototype 1, step 3; since then the
+  same numbers are in the client's `startup`, the worker's `[dofile] snapshot start` console line, and a run's `timing`). A snapshot start: `[download|read from cache X s, unpack X s (heap, site-packages,
   decoder native|wasm), restore X s, files X s, engine X s; not cached]`. A normal boot: `[runtime, files, packages, engine]`.
   A run: `rc 0 in X s (engine, encode, json, save, other)`, where engine includes drawing the graphs and `save` is the write
-  of `/work` to IndexedDB. The start's numbers are collected in the worker (`startup`); the run's come from `browser.run`
+  of the files the run changed to the file store in IndexedDB (until 2026-11-10: of `/work` through Emscripten's IDBFS). The start's numbers are collected in the worker (`startup`); the run's come from `browser.run`
   (`timing`) and the worker. The same facts go to the console (`[dofile] unpack with ...`).
 - **Not measured on a phone:** a first visit over a real network, a return visit with the cache working (needs HTTPS: a
   tunnel such as `cloudflared`, or a host), memory use, Low Power Mode.
@@ -371,6 +402,9 @@ on desktop never. It took long because several unrelated things looked alike. Wh
   took about 1 s on some of those writes (a run does not change `/work`; checked in Node). After a run the write is now skipped when
   the folder's paths, sizes and times are as at the last write; the page's file operations always write. Not checked on the phone
   after the change. Removed from the worker for now, so the rest of the branch can be retested on the phone without it.
+  Since 2026-11-10 there is no IDBFS at all: `/work` is a plain in-memory folder, the files live in dofile's own store
+  (`web/src/engine/store.js`), and after a run the worker writes only the files whose size or time changed, in one transaction.
+  Not timed on a phone yet.
 - **Ruled out:** a 304 reply without COEP (Wrangler's carry both headers), a stale snapshot (its wheel hash matched), the iOS
   user agent (Node with an iPhone user agent: 0.05 s per graph), Pyodide's trampoline.
 - **Method that worked:** a log line in the worker with a random id at the top of the script and in each `onmessage`, and one in the
@@ -380,7 +414,7 @@ on desktop never. It took long because several unrelated things looked alike. Wh
 ## Tests
 
 - `web/test/engine.test.mjs` (Node, `npm test`): the snapshot start runs a regression, a scipy computation, a graph,
-  file writes and Break (rc 1, data kept), and a snapshot built for another wheel is refused with its message. They
+  file writes and Break (rc 1, data kept), and a list of another build is refused with its message. They
   skip themselves if `public/snapshot/` has not been built.
 - `web/test/snapshot.test.mjs`: `inflate` and `unpack` with the page's decoder: a round trip in steps of any size, a
   file already decoded by a host, and truncated, damaged, wrongly sized and mismatched-manifest files all refused; and
@@ -391,7 +425,8 @@ on desktop never. It took long because several unrelated things looked alike. Wh
   decompresses, and **everything in the browser's caches adds up to between 10 and 80 MB** (about 40 MB; this is the
   check that found the `.br` problem); the status line shows the start's breakdown and, after a Run, the run's; a manifest
   with another wheel hash is refused. Skipped without a snapshot. All 6 e2e tests pass in each of the four browser profiles
-  (24 in all, 2026-11-08).
+  (24 in all, 2026-11-08). Since prototype 1, step 3 the snapshot cases run through the page's test hook: the cached start and the stored size in
+  `web/e2e/engine.spec.ts`, the stale manifest and `?snapshot=0` in `web/e2e/shell.spec.ts`.
 - The test file now ends every worker it starts in an `after` hook. Before, a failing assertion skipped the
   `terminate()` at the end of its test and `npm test` hung with the worker alive.
 
@@ -409,9 +444,10 @@ on desktop never. It took long because several unrelated things looked alike. Wh
 - **Browser memory** is higher: the heap image is 136 MB before anything runs, and during the start the compressed files
   (39.9 MB) and the decompressed ones (229 MB) are in memory together for a moment. The iPhone tried ran it without a crash;
   its memory use was not measured.
-- **Cache errors.** The worker used to swallow every error of `cache.put`. Now only the browser refusing storage
-  (`QuotaExceededError`, `SecurityError`, `NotAllowedError`, or no Cache API) lets the engine start uncached, reported as
-  `NOT CACHED: ...` with the start's timings; any other error is thrown.
+- **Cache errors.** The worker used to swallow every error of `cache.put`. Since prototype 1 it writes nothing to the Cache
+  (`download()` does); only the browser refusing to open it (`QuotaExceededError`, `SecurityError`, `NotAllowedError`, or
+  no Cache API) lets the engine start uncached, reported as `NOT CACHED: ...` with the start's timings; any other error is
+  thrown.
 - **A patched copy of Pyodide's loader.** It is generated from the installed Pyodide file, fails loudly if the text changes,
   and needs a rebuilt snapshot on every Pyodide upgrade. It relies on internals (`loadWebAssemblyModule`, `LDSO`,
   `wasmTable`) that Pyodide may change. Check upstream for native-extension snapshot support before each upgrade.
@@ -444,17 +480,17 @@ a pure Python loop, `list.append`, `sorted` and tiny numpy and scipy calls the s
 
 ## Recommendation
 
-Keep it opt-in for now. It is a clear win for return visitors and for first visits faster than about 100 Mbps, and about
+It has been the default start since 2026-11-09 (with no fallback; item 1 below is decided). It is a clear win for return visitors and for first visits faster than about 100 Mbps, and about
 level on a 30 Mbps first visit (13.9 s against 13.9 s). What is left, in order of effort (what is already done is in
 [File size](#file-size-what-is-done-and-what-is-not)):
 
-1. **Decide whether to make it the default, with a fallback to the normal boot.** The four browser profiles pass; a real
-   phone has not been tried, and memory there (136 MB heap, 229 MB decompressed during the start) is the open question.
+1. ~~**Decide whether to make it the default**~~ decided 2026-11-09: the default, without a fallback. The four browser profiles
+   pass; one real iPhone was tried ([On a real iPhone](#on-a-real-iphone-2026-11-08)); memory on a phone (136 MB heap, 229 MB decompressed during the start) is the open question.
 2. ~~**Decide on stripping docstrings**~~ done 2026-11-07: the default (2.4 MB less). It removes the `assert`s of every
    library; the checks on the quality-11 build match the unstripped build.
 3. **Load matplotlib and its dependencies on the first graph instead of in the snapshot** (not done; about 9.7 MB less before
    "ready" at brotli 11, estimated). The first plot then pays about 0.9 s, mostly compiling, unless `.pyc` files are shipped.
-   Findings, conjectures and the plan to measure it: [Experiment: loading matplotlib lazily](phase2-plan.md#experiment-loading-matplotlib-lazily).
+   Findings, conjectures and the plan to measure it: [Experiment: loading matplotlib lazily](lazy-matplotlib.md#experiment-loading-matplotlib-lazily).
 4. **Normal boot: import scipy lazily and download the packages lazily** (not done). Its matplotlib import is already lazy
    (first graph 0.82 s); scipy is imported in `browser.start()` and every package is downloaded at boot. This helps first
    visits without a big download; combine with the snapshot for return visits.

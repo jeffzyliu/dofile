@@ -4,7 +4,7 @@
 // and [data-theme] forcing each against the other. Fails if a forced theme differs from the system one (the dark
 // values are written twice in tokens.css), or if a pair below is under its minimum: 4.5 for text, 3 for the edges
 // and fills a control needs to be seen (WCAG 1.4.11). The list is every foreground/background pair the components in
-// docs/design/mockups/ui.css use; add a line when a component uses a new one. --matrix prints every token on every
+// web/src/styles/ui.css use; add a line when a component uses a new one. --matrix prints every token on every
 // background too, for picking colors (most of those pairs are never used, so they aren't checked).
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';

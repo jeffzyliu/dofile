@@ -1,7 +1,7 @@
 # Releasing to PyPI
 
-Status (2026-11-09): `0.1.0.dev0` is on PyPI (https://pypi.org/project/dofile/), uploaded by hand from `origin/main` at
-`818f4ed`. It is a pre-release: `pip install dofile` skips it, `pip install --pre dofile` installs it. The version number
+Status (2026-11-09): `0.1.0.dev1` is on PyPI (https://pypi.org/project/dofile/), published by the release workflow from
+the tag `v0.1.0.dev1`; `0.1.0.dev0` was uploaded by hand from `origin/main` at `818f4ed`. It is a pre-release: `pip install dofile` skips it, `pip install --pre dofile` installs it. The version number
 is used up for good: PyPI never accepts a number twice, even after a file is deleted. The web demo's landing page labels
 `pip install dofile` "with the first release"; keep that label until a non-pre-release is on PyPI.
 

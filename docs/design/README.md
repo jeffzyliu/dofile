@@ -5,13 +5,15 @@ the full editor, and produces the design that steps 6 and 8 build. The PoC page 
 the design brief, the deliverables, the rules, and the history of each round of feedback. It was moved here out of the
 plan on 2026-11-09 (iteration 2); the plan keeps a short summary of the decisions.
 
+The build spec for the pages is [`SPEC.md`](SPEC.md). This README is the history of the design rounds.
+
 | Folder | What |
 |---|---|
 | `moodboard/` | deliverable 1: legacy screenshots and references |
 | `flows/` | deliverable 2: user flows, decisions, and the states the design must show |
 | `wireframes/` | deliverable 3: low fidelity, desktop A and B, phone, states |
 | `mockups/` | deliverable 4: high fidelity, light and dark; `ux-analysis.md` is the UX crit of iteration 1 with its resolution |
-| `system/` | deliverable 5: the component sheet and its README; the tokens are `web/src/styles/tokens.css`, the components `mockups/ui.css` |
+| `system/` | deliverable 5: the component sheet and its README; the tokens are `web/src/styles/tokens.css`, the components `web/src/styles/ui.css` |
 | `specimen/` | the font specimen; the chosen IBM Plex files and their license are in `web/src/styles/fonts/` |
 | `axe.mjs`, `tabwalk.mjs`, `contrast.mjs`, `fonts.mjs` | the checks (`cd web && npm run axe`, `tabwalk`, `contrast`, `fonts`) |
 | `shot.mjs` | screenshots any page with Playwright from `web/node_modules` |
@@ -72,7 +74,7 @@ screenshots any page with Playwright from `web/node_modules`).
 - **Drafted, round 1 of feedback applied (2026-11-09; committed in c0cab10, final in iteration 3):** the high-fidelity mockups (`mockups/`: editor
   light/dark and running, landing desktop/phone, phone Log tab, `panels.html` for the Data/Results/Help tabs, opened
   files, the full-size graph and the dialogs, `ascii.html` for the banner candidates) on `tokens.css` and
-  `mockups/ui.css` (the start of deliverable 5). Their content is a sample do-file run with `dofile run` on synthetic
+  `ui.css` (the start of deliverable 5; it was in `mockups/` and moved to `web/src/styles/` on 2026-11-10). Their content is a sample do-file run with `dofile run` on synthetic
   data (`mockups/sample.do`, `img/scatter.png`).
 - **Round 1 of hi-fi feedback (2026-11-09), applied:**
   - Landing: welcome.do rewrapped to 72 columns (the phone gets its own 40-column text); the right column reaches the
@@ -151,7 +153,7 @@ finding is fixed in the mockups, dropped by a decision, or deferred: see the res
   doesn't change it. `do` and `include` read the saved file, as on a computer. When a nested `do` reads a file that is
   open with unsaved edits, the log says so (`states.html` 15). There is no read-only state while running; the running
   lines get a gutter bar that moves with their text.
-- **Engine download:** a first visit asks before downloading the engine (about 36 MB, the figure taken from the build),
+- **Engine download:** a first visit asks before downloading the engine (about 48 MB for the snapshot start: the 41.6 MB snapshot, about 1 MB of page and small files, and about 5.7 MB of Pyodide's runtime, `pyodide.asm.wasm` and `python_stdlib.zip`; added up from file sizes on 2026-11-10, not measured in a browser; it was 36 MB, the normal boot's figure; the page takes the number from the build),
   in a dialog that blocks the page, on desktop and phone alike (a bottom sheet on a phone). The same dialog then shows the
   download as a bar and the start-up stages in words; "Edit files while it loads" closes it. Later visits (a flag in
   the browser's storage) get no dialog: the stage shows on Run and in the status bar, as in the flows. "Not now" leaves an
@@ -212,7 +214,7 @@ UX-037). All are fixed in the mockups; its resolution table lists where.
 
 The component sheet is `system/index.html` (its README has the render command and what each check does).
 - **Tokens moved into `web/`:** `web/src/styles/tokens.css` and `web/src/styles/fonts/` (with `OFL.txt`) are the one
-  source; `mockups/ui.css`, the wireframes and the flows load them from there. The page doesn't import them yet (steps
+  source; `ui.css` (in `mockups/` then, in `web/src/styles/` since 2026-11-10), the wireframes and the flows load them from there. The page doesn't import them yet (steps
   6 and 8).
 - **Weights:** text asked for weights we don't ship (Sans 700 and 500, Mono 600 and 900), which the browser faked. Now
   `--w-bold-ui` (600) and `--w-bold-mono` (700), base rules for `b`, `strong`, headings and `th`, and

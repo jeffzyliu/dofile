@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="color-scheme" content="light dark">
 <title>dofile: design system (tokens and components)</title>
-<link rel="stylesheet" href="../mockups/ui.css">
+<link rel="stylesheet" href="../../../web/src/styles/ui.css">
 <style>
   body { padding: var(--s5); max-width: 1440px; }
   h1 { font-size: var(--text-xl); margin: 0 0 4px; }
@@ -41,7 +41,7 @@
 <h1>dofile design system</h1>
 <p class="lede">Deliverable 5 of the design step (<code>docs/design/README.md</code>). The tokens are
   <code>web/src/styles/tokens.css</code>, the one source for the page and the design pages; the components are
-  <code>docs/design/mockups/ui.css</code>, which the page takes over in steps 6 and 8. This sheet shows each component in
+  <code>web/src/styles/ui.css</code>, which the page takes over in steps 6 and 8. This sheet shows each component in
   its states; the mockups show them in place. It follows the system's light or dark setting; <code>?theme=light</code> or
   <code>?theme=dark</code> forces one. Checks: <code>npm run contrast</code>, <code>npm run fonts</code>, <code>npm run axe</code>,
   <code>npm run tabwalk</code> (from <code>web/</code>).</p>
@@ -297,7 +297,7 @@ Files stay in this browser. Try: help regress</span><span class="runhead"><b>Run
       destructive item in the error color with an ellipsis when it asks first.</p>
   </div>
   <div>
-    <div class="progress" role="progressbar" aria-label="Download (example)" aria-valuemin="0" aria-valuemax="36" aria-valuenow="14.2" aria-valuetext="14 of 36 MB"><i style="width:39%"></i></div>
+    <div class="progress" role="progressbar" aria-label="Download (example)" aria-valuemin="0" aria-valuemax="48" aria-valuenow="14.2" aria-valuetext="14 of 48 MB"><i style="width:30%"></i></div>
     <ol class="stages">
       <li class="done"><span class="ico i-check"></span>Download the engine<span class="when">8.1 s</span></li>
       <li class="now"><span class="spin"></span>Start Python</li>
@@ -313,6 +313,29 @@ Files stay in this browser. Try: help regress</span><span class="runhead"><b>Run
     for example <code>scatter wage educ</code>.</div></section>
   <p class="spec" style="margin-top:0"><b>Empty state.</b> Inside a tab with nothing to show: what goes here and one way to get
     it, centered, muted with the first line in ink.</p>
+</div>
+
+<h2 class="sec">Phone: bottom sheet and tab bar</h2>
+<div class="cols">
+  <div class="stage" style="height:330px;max-width:390px">
+    <div class="scrim"></div>
+    <div class="dialog sheet" role="dialog" aria-modal="false" aria-labelledby="sheet-h" style="position:absolute;left:0;right:0;bottom:0">
+      <h2 id="sheet-h">Download the engine?</h2>
+      <p>dofile runs your code inside this page, so the first time your browser downloads the engine: <b>about 48 MB</b>.</p>
+      <div class="actions"><button class="btn">Not now</button><button class="btn primary focus">Download 48 MB</button></div>
+    </div>
+  </div>
+  <div>
+    <p class="spec" style="margin-top:0"><b>Bottom sheet</b> (DS-7, prototype 1 step 3). Under 700 px every dialog is a sheet from
+      the bottom edge: full width, rounded top corners, the buttons stacked full width in thumb reach with the primary on top
+      (the same markup as the dialog: <code>.actions</code> is reversed), room for the home indicator below. The page's
+      dialogs are native <code>&lt;dialog&gt;</code>s, so the browser draws the scrim (<code>::backdrop</code>).</p>
+    <nav aria-label="Views (example)" style="margin-top:var(--s4);max-width:390px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+      <div class="tabbar" role="tablist" aria-label="Views (example)"><button role="tab" aria-selected="false" tabindex="-1"><i></i>Files</button><button role="tab" aria-selected="false" tabindex="-1"><i></i>Editor</button><button role="tab" aria-selected="true"><i></i>Log</button><button role="tab" aria-selected="false" tabindex="-1"><i></i>Data</button><button role="tab" aria-selected="false" tabindex="-1"><i></i>Results</button></div>
+    </nav>
+    <p class="spec"><b>Tab bar</b> (DS-7, step 3). The phone's views: a tablist at the bottom, five equal tabs at least 44 px tall;
+      the selected one in the accent and bold with a bar above its word (meaning is not color alone); arrows move between them.</p>
+  </div>
 </div>
 </main>
 <script>

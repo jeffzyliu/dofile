@@ -5,8 +5,8 @@ shim's logic by making the three functions behave the way Pyodide's do (return N
 rests on. The behaviour of the real WebAssembly numpy is tested in Pyodide: web/test/linalgshim.test.mjs.
 """
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -28,12 +28,13 @@ def wasm_like(monkeypatch):
             except np.linalg.LinAlgError:
                 shape = np.shape(args[0]) if name == "solve" else np.shape(a)
                 return np.full(shape, np.nan)
+
         return f
 
     for n in real:
         monkeypatch.setattr(np.linalg, n, nan_instead(n))
     yield
-    linalgshim.uninstall()   # before monkeypatch puts the originals back
+    linalgshim.uninstall()  # before monkeypatch puts the originals back
 
 
 def test_nothing_to_do_where_numpy_raises():
@@ -43,15 +44,15 @@ def test_nothing_to_do_where_numpy_raises():
 
 
 def test_functions_that_return_nan_are_wrapped(wasm_like):
-    assert np.isnan(np.linalg.inv(SINGULAR)).all()   # the Pyodide behaviour, simulated
+    assert np.isnan(np.linalg.inv(SINGULAR)).all()  # the Pyodide behaviour, simulated
     assert linalgshim.install() == ["inv", "solve", "cholesky"]
     with pytest.raises(np.linalg.LinAlgError, match="Singular"):
         np.linalg.inv(SINGULAR)
     with pytest.raises(np.linalg.LinAlgError, match="Singular"):
         np.linalg.solve(SINGULAR, np.ones(2))
     with pytest.raises(np.linalg.LinAlgError, match="positive definite"):
-        np.linalg.cholesky(-np.eye(3))   # what ml.maximize asks about a non-concave Hessian
-    assert linalgshim.install() == []   # twice does nothing
+        np.linalg.cholesky(-np.eye(3))  # what ml.maximize asks about a non-concave Hessian
+    assert linalgshim.install() == []  # twice does nothing
 
 
 def test_good_matrices_and_nan_input_are_left_alone(wasm_like):
@@ -91,6 +92,8 @@ def test_the_engine_reaches_numpy_linalg_through_the_module():
     bad = []
     for f in root.rglob("*.py"):
         for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
-            if re.search(r"from numpy\.linalg import|from numpy import .*\blinalg\b|import numpy\.linalg|\blinalg as\b", line):
+            if re.search(
+                r"from numpy\.linalg import|from numpy import .*\blinalg\b|import numpy\.linalg|\blinalg as\b", line
+            ):
                 bad.append(f"{f.relative_to(root)}:{n}: {line.strip()}")
     assert not bad, "the shim would miss these:\n" + "\n".join(bad)

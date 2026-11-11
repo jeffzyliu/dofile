@@ -2,48 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- No interactive-widget: by default (resizes-visual: Chrome 108+ and Firefox 132+ on Android) the keyboard shrinks only
+       the visual viewport, as on iOS Safari, and app/viewport.js handles both the same way. No maximum-scale or
+       user-scalable: pinch zoom stays. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
   <title>dofile</title>
-  <!-- Proof of concept (Phase 2, step 4): deliberately unstyled. The design comes in step 5. -->
-  <style>
-    body { margin: 0; font: 14px system-ui, sans-serif; }
-    header { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; padding: .5rem; border-bottom: 1px solid #ccc; }
-    main { display: grid; grid-template-columns: 14rem 1fr 1fr; height: calc(100vh - 3rem); }
-    #side, #editor, #output { overflow: auto; border-right: 1px solid #ccc; }
-    #side { padding: .5rem; }
-    #files li { display: flex; gap: .25rem; align-items: center; }
-    #files .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-    #files .open { font-weight: bold; }
-    #files .open.dirty::after { content: " ●"; }   /* edited since it was saved */
-    #log { margin: 0; padding: .5rem; font: 13px ui-monospace, monospace; white-space: pre; overflow-x: auto; }  /* Stata output is fixed width */
-    #graphs img { max-width: 100%; display: block; }
-    .cm-editor { height: 100%; }
-    @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } #editor { height: 50vh; } }
-  </style>
+  <!-- the theme the visitor chose (app/theme.js), before the first paint, so a dark page does not flash light -->
+  <script>try { const t = localStorage.getItem("dofile.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
 <body>
-  <header>
-    <strong>dofile</strong>
-    <button id="run" disabled title="Run the file (Ctrl/Cmd+Enter: the selection, or the file)">Run</button>
-    <button id="save" disabled title="Save the open file (Ctrl/Cmd+S). Run uses the editor's text and does not save it.">Save</button>
-    <button id="break" disabled>Break</button>
-    <button id="reset" disabled title="New engine: data in memory is cleared, files stay">Reset</button>
-    <button id="clear">Clear log</button>
-    <span id="status">starting…</span>
-  </header>
-  <main>
-    <section id="side">
-      <p>
-        <label>Upload files <input id="upload" type="file" multiple></label><br>
-        <label>Upload a folder <input id="upload-dir" type="file" webkitdirectory></label><br>
-        <button id="new">New .do file</button>
-      </p>
-      <p><small>Files are kept in this browser only (IndexedDB).</small></p>
-      <ul id="files"></ul>
-    </section>
-    <section id="editor"></section>
-    <section id="output"><pre id="log"></pre><div id="graphs"></div></section>
-  </main>
-  <script type="module" src="/src/main.ts"></script>
+  <div id="app"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
