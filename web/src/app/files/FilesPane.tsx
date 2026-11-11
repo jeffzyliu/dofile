@@ -1,18 +1,493 @@
-// STEP 4a: the file panel (docs/design/SPEC.md, section 3.1). App.tsx draws the pane, its head ("Files") and its
-// banners; this file fills the head's right side and the body.
-//  - FilesHead: the head menu "File actions" (MenuButton): New .do file, New folder, Upload a folder, Download all (.zip)
-//    (files.ts downloadAll), Restore the sample (OQ-13; step 5's sample), Delete all files… (dialog { d: "delete-all", count }).
-//  - FilesBody: the tree (role="tree", flat rows with aria-level, roving focus, row menus through ui/Menu openMenu), the
-//    dropzone and "Download all (.zip)". Reads `files`, `fresh`, `tabs`, `activeTab`; changes files with store.*
-//    (`import { store } from "../store.ts"`), never through the worker. A change lists the store again by itself (files.ts).
-//    Enter or a click opens a file through files/open.ts openFile(path). A rename or delete of an open file updates
-//    `tabs` and `activeTab` and calls editorCommands.renamed(from, to) or closed(path) (editor/commands.ts).
-import { Placeholder } from "../ui/Icon";
+// The file panel (docs/design/SPEC.md, section 3.1). App.tsx draws the pane, its head ("Files") and its banners; this
+// file fills the head's right side and the body.
+//  - FilesHead: the head menu "File actions" (fileMenuItems): New .do file, New folder, Upload a folder, Download all
+//    (.zip) (files.ts downloadAll; disabled while `hasFiles` is false), Delete all files… (dialog delete-all). "Restore
+//    the sample" (OQ-13) goes above Delete all files… with step 5's sample; it is not in the menu until then.
+//  - FilesBody: the tree, the dropzone ("Drop files or folders", Upload, New .do file) and "Download all (.zip)".
+//    The tree (role="tree", flat rows with aria-level; tree.ts treeRows): folders first, then files, each by name;
+//    folders fold (aria-expanded); sizes; the open file's mark (aria-selected); the unsaved dot; the "new" badge from
+//    `fresh`. Roving focus: one row in the tab order (the one last focused, else the open file, else the first);
+//    Up/Down, Home/End move; Right unfolds or goes in, Left folds or goes up; Enter (or Space, or a click) opens a file
+//    through open.ts openFile or folds a folder; F2 renames in place; Shift+F10, the menu key, a right click or the
+//    row's ⋯ (aria-hidden: a control inside a treeitem would be nested) open the row menu: Open, Rename (F2), Download,
+//    Delete… for a file; Rename, Download (.zip), Delete… for a folder (OQ-21).
+//  - Inline rename (DS-7): the name becomes a field; Enter renames, Esc cancels (preventDefault, so App.tsx's Esc that
+//    folds the list at 700 to 1199 px leaves it), leaving the field renames when the name can be used. A name in use
+//    ("clean.do already exists here.") or one that cannot be used keeps the field open, marked aria-invalid, with the
+//    reason under it. "New .do file" makes `untitled.do` and opens it in inline rename (OQ-21), then in the editor.
+//  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the Files pane (the
+//    pane gets the accent outline while a drag is over it: data-drop, OQ-16). A drop elsewhere on the page does
+//    nothing (the browser would otherwise leave the page to show the file). actions.ts upload() asks each clash.
+// Files change through the store (actions.ts), never through the worker; a change lists the store again (files.ts).
+import { signal } from "@preact/signals";
+import { useEffect, useRef } from "preact/hooks";
+import { downloadAll } from "../files.ts";
+import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
+import { Icon } from "../ui/Icon";
+import { MenuButton, type MenuItem, openMenu } from "../ui/Menu";
+import {
+  downloadEntry,
+  entriesOf,
+  fromDrop,
+  fromFileList,
+  type Incoming,
+  newDoFile,
+  newFolder,
+  renameEntry,
+  upload,
+} from "./actions.ts";
+import { openFile } from "./open.ts";
+import { formatSize, joinPath, nameProblem, parentOf, type Row, treeRows } from "./tree.ts";
 
-export const FilesHead = () => null;
+// ---- the panel's own state (not shared: state.ts holds what other parts read) ----
 
-export const FilesBody = () => (
-  <Placeholder step="4a">
-    The file tree, the dropzone ("Drop files or folders", Upload, New .do file) and Download all (.zip).
-  </Placeholder>
+const folded = signal<ReadonlySet<string>>(new Set()); // the folded folders
+const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
+interface Renaming {
+  path: string;
+  problem: string | null;
+  andOpen: boolean; // a new .do file: open it once named
+}
+const renaming = signal<Renaming | null>(null);
+
+let pickFiles: HTMLInputElement | null = null; // the hidden file inputs
+let pickFolder: HTMLInputElement | null = null;
+
+const rowSelector = (path: string) => `.files [data-path="${CSS.escape(path)}"]`;
+
+/** Make `path` the row in the tab order and focus it after the render that draws it. */
+function focusRow(path: string) {
+  rovingPath.value = path;
+  setTimeout(() => document.querySelector<HTMLElement>(rowSelector(path))?.focus());
+}
+
+const fail = (what: string) => (e: unknown) => {
+  console.warn(`[dofile] ${what}: ${(e as Error)?.message ?? e}`);
+  say(`${what} didn't work`);
+};
+
+function toggle(path: string, open?: boolean) {
+  const next = new Set(folded.value);
+  if (open ?? next.has(path)) next.delete(path);
+  else next.add(path);
+  folded.value = next;
+}
+
+function startRename(path: string, andOpen = false) {
+  renaming.value = { path, problem: null, andOpen };
+  rovingPath.value = path;
+}
+
+let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
+
+/** End the inline rename: `name` is the new name, or null to cancel. Keeps the field open when the name cannot be used. */
+async function endRename(name: string | null) {
+  const r = renaming.value;
+  if (!r || ending) return;
+  const dir = parentOf(r.path);
+  const to = name === null ? r.path : joinPath(dir, name);
+  const keep = (problem: string) => {
+    renaming.value = { ...r, problem };
+    say(problem);
+  };
+  if (to !== r.path) {
+    const problem = nameProblem(
+      name!,
+      dir,
+      files.value.map((f) => f.path),
+      r.path,
+    );
+    if (problem) return keep(problem);
+    ending = true;
+    try {
+      await renameEntry(r.path, to);
+    } catch (e) {
+      // the list was not current: the store says why
+      return keep(
+        (e as Error)?.message?.includes("already exists") ? `${name} already exists here.` : "This name can't be used.",
+      );
+    } finally {
+      ending = false;
+    }
+  }
+  renaming.value = null;
+  focusRow(to);
+  if (r.andOpen) openFile(to);
+}
+
+async function makeDoFile() {
+  try {
+    startRename(await newDoFile(), true);
+  } catch (e) {
+    fail("New .do file")(e);
+  }
+}
+
+async function makeFolder() {
+  try {
+    startRename(await newFolder());
+  } catch (e) {
+    fail("New folder")(e);
+  }
+}
+
+function send(items: Promise<Incoming[]>) {
+  items.then(upload).catch(fail("The upload"));
+}
+
+const askDelete = (path: string) => {
+  dialog.value = { d: "delete", paths: [path] };
+};
+
+/** The head menu "File actions" (S 13's caption). Exported for the phone's ⋯, should the shell put it there. */
+export const fileMenuItems = (): MenuItem[] => [
+  { label: "New .do file", onSelect: makeDoFile },
+  { label: "New folder", onSelect: makeFolder },
+  { label: "Upload a folder", onSelect: () => pickFolder?.click() },
+  {
+    label: "Download all (.zip)",
+    disabled: !hasFiles.value,
+    onSelect: () => {
+      downloadAll();
+    },
+  },
+  "rule",
+  {
+    label: "Delete all files…",
+    danger: true,
+    disabled: !hasFiles.value,
+    onSelect: () => {
+      dialog.value = { d: "delete-all", count: files.value.filter((f) => !f.dir).length };
+    },
+  },
+];
+
+export const FilesHead = () => (
+  <MenuButton label="File actions" class="head-link icon" items={fileMenuItems}>
+    <Icon name="more" />
+  </MenuButton>
 );
+
+/** A row's menu (S 13; a folder's, OQ-21). */
+function rowItems(row: Row): MenuItem[] {
+  const rename = { label: "Rename", hint: "F2", onSelect: () => startRename(row.path) };
+  const remove: MenuItem = { label: "Delete…", danger: true, onSelect: () => askDelete(row.path) };
+  const download = (label: string): MenuItem => ({
+    label,
+    onSelect: () => {
+      downloadEntry(row.path);
+    },
+  });
+  if (row.dir) return [rename, download("Download (.zip)"), "rule", remove];
+  return [
+    {
+      label: "Open",
+      onSelect: () => {
+        openFile(row.path);
+      },
+    },
+    rename,
+    download("Download"),
+    "rule",
+    remove,
+  ];
+}
+
+const menuLabel = (row: Row) => `Actions for ${row.path}${row.dir ? "/" : ""}`;
+
+function RenameField({ r, row }: { r: Renaming; row: Row }) {
+  return (
+    <>
+      <input
+        class="rename-field"
+        aria-label={`New name for ${row.name}`}
+        aria-invalid={r.problem ? "true" : undefined}
+        aria-describedby={r.problem ? "rename-problem" : undefined}
+        defaultValue={row.name}
+        spellcheck={false}
+        autoComplete="off"
+        ref={(el) => {
+          if (!el || el.dataset.ready) return;
+          el.dataset.ready = "1";
+          setTimeout(() => {
+            el.focus();
+            const dot = row.dir ? -1 : row.name.lastIndexOf(".");
+            el.setSelectionRange(0, dot > 0 ? dot : row.name.length); // the name without its extension
+          });
+        }}
+        onInput={() => {
+          if (r.problem) renaming.value = { ...r, problem: null };
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            endRename(e.currentTarget.value);
+          } else if (e.key === "Escape") {
+            e.preventDefault(); // App.tsx folds the list on an Esc nobody used
+            endRename(null);
+          }
+        }}
+        onBlur={(e) => {
+          const name = e.currentTarget.value;
+          // leaving the field: rename when the name can be used, else cancel
+          const usable =
+            name === row.name ||
+            !nameProblem(
+              name,
+              parentOf(row.path),
+              files.value.map((f) => f.path),
+              row.path,
+            );
+          if (renaming.value?.path === row.path) endRename(usable ? name : null);
+        }}
+      />
+      {r.problem && (
+        <span class="rename-problem" id="rename-problem">
+          {r.problem}
+        </span>
+      )}
+    </>
+  );
+}
+
+function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: Row[] }) {
+  const tab = tabs.value.find((t) => t.path === row.path);
+  const open = !row.dir && activeTab.value === row.path;
+  const r = renaming.value?.path === row.path ? renaming.value : null;
+  const showMenu = (el: HTMLElement, at?: { x: number; y: number }) =>
+    openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor: at ? null : el, at, restore: el });
+  const activate = () => {
+    if (row.dir) toggle(row.path);
+    else openFile(row.path);
+  };
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return; // keys typed in the rename field
+    const i = rows.indexOf(row);
+    const go = (j: number) => {
+      e.preventDefault();
+      const to = rows[Math.max(0, Math.min(rows.length - 1, j))];
+      if (to) focusRow(to.path);
+    };
+    switch (e.key) {
+      case "ArrowDown":
+        return go(i + 1);
+      case "ArrowUp":
+        return go(i - 1);
+      case "Home":
+        return go(0);
+      case "End":
+        return go(rows.length - 1);
+      case "ArrowRight":
+        e.preventDefault();
+        if (row.dir && !row.expanded) toggle(row.path, true);
+        else if (row.dir && rows[i + 1]?.depth > row.depth) go(i + 1);
+        return;
+      case "ArrowLeft": {
+        e.preventDefault();
+        if (row.dir && row.expanded) return toggle(row.path, false);
+        const parent = parentOf(row.path);
+        if (parent) focusRow(parent);
+        return;
+      }
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        return activate();
+      case "F2":
+        e.preventDefault();
+        return startRename(row.path);
+      case "ContextMenu":
+        e.preventDefault();
+        return showMenu(e.currentTarget as HTMLElement);
+      case "F10":
+        if (e.shiftKey) {
+          e.preventDefault();
+          showMenu(e.currentTarget as HTMLElement);
+        }
+        return;
+    }
+  };
+  const cls = [row.dir && "folder", open && "open", r && "renaming"].filter(Boolean).join(" ");
+  return (
+    <li
+      role="treeitem"
+      class={cls || undefined}
+      style={row.depth ? { "--d": row.depth } : undefined}
+      data-path={row.path}
+      aria-level={row.depth + 1}
+      aria-expanded={row.dir ? row.expanded : undefined}
+      aria-selected={row.dir ? undefined : open}
+      aria-haspopup="menu"
+      tabIndex={tabbable ? 0 : -1}
+      onFocus={(e) => {
+        if (e.target === e.currentTarget) rovingPath.value = row.path;
+      }}
+      onClick={(e) => {
+        if (r || (e.target as HTMLElement).closest(".rename-field")) return;
+        rovingPath.value = row.path;
+        activate();
+      }}
+      onContextMenu={(e) => {
+        if (r) return;
+        e.preventDefault();
+        const el = e.currentTarget as HTMLElement;
+        // a context menu from the keyboard comes with no pointer position: the menu goes under the row
+        showMenu(el, e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : undefined);
+      }}
+      onKeyDown={onKeyDown}
+    >
+      {row.dir && <Icon name={row.expanded ? "down" : "right"} />}
+      {r ? (
+        <RenameField r={r} row={row} />
+      ) : (
+        <>
+          <span class="name">
+            {row.name}
+            {row.dir && "/"}
+          </span>
+          {tab?.dirty && <span class="dot" role="img" aria-label="unsaved changes" />}
+          {!row.dir && fresh.value.has(row.path) && <span class="badge">new</span>}
+          {!row.dir && <span class="size">{formatSize(row.size)}</span>}
+          <span
+            class="row-more"
+            aria-hidden="true"
+            onClick={(e) => {
+              e.stopPropagation();
+              showMenu(e.currentTarget.closest("li") as HTMLElement);
+            }}
+          >
+            <Icon name="more" />
+          </span>
+        </>
+      )}
+    </li>
+  );
+}
+
+/** The drop target: the whole Files pane (the closest .files-pane), outlined while a drag with files is over it. */
+function useDrop(ref: { current: HTMLElement | null }) {
+  useEffect(() => {
+    const pane = ref.current?.closest<HTMLElement>(".files-pane");
+    if (!pane) return;
+    const withFiles = (e: DragEvent) => Boolean(e.dataTransfer?.types.includes("Files"));
+    let depth = 0; // dragenter and dragleave fire for each element inside: count them
+    const mark = (on: boolean) => {
+      if (on) pane.dataset.drop = "";
+      else delete pane.dataset.drop;
+    };
+    const enter = (e: DragEvent) => {
+      if (!withFiles(e)) return;
+      e.preventDefault();
+      depth++;
+      mark(true);
+    };
+    const over = (e: DragEvent) => {
+      if (!withFiles(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
+    const leave = () => {
+      depth = Math.max(0, depth - 1);
+      if (!depth) mark(false);
+    };
+    const drop = (e: DragEvent) => {
+      if (!withFiles(e) || !e.dataTransfer) return;
+      e.preventDefault();
+      e.stopPropagation();
+      depth = 0;
+      mark(false);
+      send(fromDrop(entriesOf(e.dataTransfer))); // the entries are taken now: the items are gone after this handler
+    };
+    // elsewhere on the page a drop of files does nothing, rather than the browser leaving the page to show the file
+    const elsewhere = (e: DragEvent) => {
+      if (withFiles(e)) e.preventDefault();
+    };
+    pane.addEventListener("dragenter", enter);
+    pane.addEventListener("dragover", over);
+    pane.addEventListener("dragleave", leave);
+    pane.addEventListener("drop", drop);
+    addEventListener("dragover", elsewhere);
+    addEventListener("drop", elsewhere);
+    return () => {
+      pane.removeEventListener("dragenter", enter);
+      pane.removeEventListener("dragover", over);
+      pane.removeEventListener("dragleave", leave);
+      pane.removeEventListener("drop", drop);
+      removeEventListener("dragover", elsewhere);
+      removeEventListener("drop", elsewhere);
+      mark(false);
+    };
+  }, []);
+}
+
+export function FilesBody() {
+  const ref = useRef<HTMLDivElement>(null);
+  useDrop(ref);
+  const rows = treeRows(files.value, folded.value);
+  const paths = rows.map((r) => r.path);
+  const tabbable =
+    [rovingPath.value, activeTab.value].find((p) => p !== null && paths.includes(p)) ?? rows[0]?.path ?? null;
+  const picked = (e: Event) => {
+    const input = e.currentTarget as HTMLInputElement;
+    const list = [...(input.files ?? [])];
+    input.value = "";
+    if (list.length) send(fromFileList(list));
+  };
+  return (
+    <div class="files-body" ref={ref}>
+      {rows.length > 0 && (
+        // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the tree's rows are a list's items, as ui.css draws them (.files li)
+        <ul class="files" role="tree" aria-label="Files">
+          {rows.map((row) => (
+            <TreeRow key={row.path} row={row} rows={rows} tabbable={row.path === tabbable} />
+          ))}
+        </ul>
+      )}
+      <div class="dropzone">
+        Drop files or folders
+        <br />
+        <button type="button" class="files-link" onClick={() => pickFiles?.click()}>
+          Upload
+        </button>
+        {" · "}
+        <button type="button" class="files-link" onClick={makeDoFile}>
+          New .do file
+        </button>
+      </div>
+      <div class="files-foot">
+        <button
+          type="button"
+          class="files-link"
+          disabled={!hasFiles.value}
+          onClick={() => {
+            downloadAll();
+          }}
+        >
+          Download all (.zip)
+        </button>
+      </div>
+      <input
+        type="file"
+        multiple
+        hidden
+        data-upload="files"
+        tabIndex={-1}
+        ref={(el) => {
+          pickFiles = el;
+        }}
+        onChange={picked}
+      />
+      <input
+        type="file"
+        hidden
+        data-upload="folder"
+        tabIndex={-1}
+        ref={(el) => {
+          pickFolder = el;
+          el?.setAttribute("webkitdirectory", ""); // a folder, its paths kept (webkitRelativePath)
+        }}
+        onChange={picked}
+      />
+    </div>
+  );
+}

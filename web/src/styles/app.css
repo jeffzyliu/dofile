@@ -535,3 +535,161 @@ input.filter::placeholder {
     border-left: var(--bar) solid Highlight;
   }
 }
+
+/* Step 4a: files and tabs (app/files/). The tree, the dropzone and the tabs are ui.css's; this block adds the inline
+   rename (DS-7), the link buttons of the dropzone, the drop target (OQ-16), the bars over a .csv, .tsv or .log
+   (.filebar; 4c's .dta bars may share it) and the phone's file switcher. */
+.files-body {
+  flex: 1;
+  overflow: auto;
+}
+.files li {
+  cursor: default;
+}
+.files li .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.files li .size {
+  flex: none;
+}
+/* the inline rename: the name becomes a field; a name that cannot be used keeps it open, with the reason under it */
+.files li.renaming {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.rename-field {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  margin: -2px 0;
+}
+.rename-field:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.rename-field[aria-invalid="true"] {
+  border-color: var(--error);
+}
+.rename-field[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 1px var(--error);
+}
+.rename-problem {
+  flex-basis: 100%;
+  white-space: normal;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--error);
+}
+/* Upload, New .do file, Download all: buttons that read as links */
+.files-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+.files-link:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  opacity: var(--disabled-opacity);
+}
+.dropzone .files-link {
+  margin-top: var(--s1);
+}
+/* the drop target: a drag with files over the Files pane */
+.files-pane[data-drop] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.files-pane[data-drop] .dropzone {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+/* the editor's tabs: the pane head scrolls them sideways rather than grow */
+.file-tabs {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.file-tabs .tab {
+  cursor: default;
+}
+/* the bars over a .csv, .tsv or .log (P/.csv, P/.log) */
+.filebar {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s3);
+  min-height: calc(var(--control) + var(--s2));
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  flex: none;
+}
+.filebar b {
+  color: var(--ink);
+}
+.filebar .what,
+.filebar .command {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filebar .command {
+  font: var(--code) / 1.4 var(--font-mono);
+  color: var(--ink);
+}
+/* the phone's top bar title on the Editor view: the open file and ▾ */
+.file-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font: inherit;
+  color: inherit;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: var(--radius);
+}
+.file-switcher .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-switcher .dot,
+.switch-item .dot {
+  color: var(--accent);
+}
+.file-switcher .ico {
+  color: var(--muted);
+}
+.switch-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+@media (forced-colors: active) {
+  .files-pane[data-drop],
+  .files-pane[data-drop] .dropzone {
+    forced-color-adjust: none;
+    border-color: Highlight;
+  }
+  .rename-field {
+    border-color: Highlight;
+  }
+  .rename-field[aria-invalid="true"] {
+    border: 2px solid Mark;
+  }
+  .filebar {
+    border-bottom-color: CanvasText;
+  }
+}
