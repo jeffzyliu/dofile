@@ -194,6 +194,7 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
   await page.getByRole("menu", { name: "Actions for b.do" }).getByRole("menuitem", { name: "Delete…" }).click();
   await ask.getByRole("button", { name: "Delete" }).click();
   await expect(row(page, /^b\.do/)).toHaveCount(0);
+  await expect(tree(page).locator('[tabindex="0"]')).toBeFocused(); // the focus goes back to the tree, not the page
   // a folder: Rename, Download (.zip), Delete…
   await row(page, /^data\//).click({ button: "right" });
   await expect(page.getByRole("menu", { name: "Actions for data/" }).getByRole("menuitem")).toHaveText([
@@ -219,6 +220,30 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
   await expect(tree(page)).toHaveCount(0);
   await page.getByRole("button", { name: "File actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Delete all files…" })).toHaveAttribute("aria-disabled", "true");
+});
+
+// 700 to 1199 px the list is folded away, and Esc in it folds it (App.tsx): an Esc that cancels a rename must not.
+test("the folded file list: Esc in an inline rename cancels the rename and leaves the list open", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "the folded list is a desktop width");
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await setUp(page, { "a.do": "1\n" });
+  const toggle = page.getByRole("button", { name: "Files 1" });
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await row(page, /^a\.do/).focus();
+  await page.keyboard.press("F2");
+  const field = page.getByRole("textbox", { name: "New name for a.do" });
+  await expect(field).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(field).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(row(page, /^a\.do/)).toBeFocused();
+  await page.keyboard.press("Escape"); // an Esc nobody used folds the list
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
 test("New .do file: untitled.do in inline rename, then it opens", async ({ page }) => {

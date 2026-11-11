@@ -22,6 +22,14 @@ const close = () => {
   dialog.value = null;
 };
 
+/** After a delete the row that opened the dialog is gone and the focus with it: give it to the tree's row in the tab
+ *  order, once the list has been read again. */
+const refocus = () =>
+  setTimeout(() => {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    document.querySelector<HTMLElement>('.files [role="treeitem"][tabindex="0"]')?.focus();
+  }, 100);
+
 /** Run `cancel` when the view is unmounted before it answered. Returns `answered()`, to call when it answers. */
 function useAnswer(cancel: () => void) {
   const done = useRef(false);
@@ -92,7 +100,7 @@ export function DeleteDialog({ dialog: d }: { dialog: DialogOf<"delete"> }) {
   const folder = d.paths.some((p) => dirs.has(p));
   const remove = () => {
     close();
-    deleteEntries(d.paths).catch((e) => console.warn(`[dofile] delete: ${e?.message ?? e}`));
+    deleteEntries(d.paths).then(refocus, (e) => console.warn(`[dofile] delete: ${e?.message ?? e}`));
   };
   return (
     <Dialog

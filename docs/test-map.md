@@ -118,17 +118,19 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 34 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 35 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 136 cases, of which 111 run and 25 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 140 cases, of which 114 run and 26 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
-profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input).
+profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
+rename on the iPhone, which has no folded list).
 
 - `shell.spec.ts` (11): desktop and phone layout, toolbar stability, panes never remounted, banners, toast position.
-- `files.spec.ts` (10): the file tree by keyboard, opening files in tabs, closing a tab with and without unsaved edits
-  (the phone's file switcher), inline rename and "already exists", the row and head menus, delete and delete-all, a new
-  .do file, upload with name clashes (Enter, Esc, "Do the same"), the unsaved-edits clash, a non-UTF-8 file's banner, a
-  folder upload (Chromium), a drop on the Files pane.
+- `files.spec.ts` (11): the file tree by keyboard, opening files in tabs, closing a tab with and without unsaved edits
+  (the phone's file switcher), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
+  open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
+  clashes (Enter, Esc, "Do the same"), the unsaved-edits clash, a non-UTF-8 file's banner, a folder upload (Chromium),
+  a drop on the Files pane.
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
 - `engine.spec.ts` (3): runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start.
@@ -175,7 +177,7 @@ profiles; the folder upload outside Chromium, where Playwright cannot give a fol
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (30 that run); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (31 that run); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
