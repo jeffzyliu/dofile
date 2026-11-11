@@ -17,12 +17,16 @@
 //    reason under it. "New .do file" makes `untitled.do` and opens it in inline rename (OQ-21), then in the editor.
 //  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the page (SPEC 3.1; the
 //    Files pane gets the accent outline while a drag with files is over the page: data-drop, OQ-16; with the list
-//    folded away the files are uploaded all the same, and the toast says so). actions.ts upload() asks each clash.
+//    folded away the files are uploaded all the same, and the toast says so). actions.ts upload() asks each clash. The
+//    page's listeners take a drag with files in the capture phase and stop it there, so nothing under them (4b's
+//    CodeMirror, which would paste a dropped file's text) sees it; a drop while a dialog is open, or while another tab
+//    has the files (the store is blocked), uploads nothing.
 // Files change through the store (actions.ts), never through the worker; a change lists the store again (files.ts).
 import { signal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
 import { downloadAll } from "../files.ts";
 import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
+import { store } from "../store.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem, openMenu } from "../ui/Menu";
 import {
@@ -377,7 +381,9 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
 
 /** A drop of files anywhere on the page uploads them (SPEC 3.1). The Files pane (the closest .files-pane) is outlined
  *  while a drag with files is over the page (OQ-16); with the list folded away or on another phone view the upload still
- *  happens, and the toast says so. */
+ *  happens, and the toast says so. The listeners are the window's, in the capture phase: a drag with files stops there,
+ *  so no element under them handles it too (CodeMirror pastes a dropped file's text). While a dialog is open or the store
+ *  is blocked a drop uploads nothing (the browser still does not open the file). */
 function useDrop(ref: { current: HTMLElement | null }) {
   useEffect(() => {
     const pane = ref.current?.closest<HTMLElement>(".files-pane");
@@ -388,16 +394,19 @@ function useDrop(ref: { current: HTMLElement | null }) {
       if (on) pane.dataset.drop = "";
       else delete pane.dataset.drop;
     };
+    const taken = () => dialog.value !== null || store.blocked; // no upload now
     const enter = (e: DragEvent) => {
       if (!withFiles(e)) return;
       e.preventDefault();
+      e.stopPropagation();
       depth++;
-      mark(true);
+      mark(!taken());
     };
     const over = (e: DragEvent) => {
       if (!withFiles(e)) return;
       e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = taken() ? "none" : "copy";
     };
     const leave = () => {
       depth = Math.max(0, depth - 1);
@@ -409,17 +418,18 @@ function useDrop(ref: { current: HTMLElement | null }) {
       e.stopPropagation();
       depth = 0;
       mark(false);
+      if (taken()) return;
       send(fromDrop(entriesOf(e.dataTransfer))); // the entries are taken now: the items are gone after this handler
     };
-    addEventListener("dragenter", enter);
-    addEventListener("dragover", over);
-    addEventListener("dragleave", leave);
-    addEventListener("drop", drop);
+    addEventListener("dragenter", enter, true);
+    addEventListener("dragover", over, true);
+    addEventListener("dragleave", leave, true);
+    addEventListener("drop", drop, true);
     return () => {
-      removeEventListener("dragenter", enter);
-      removeEventListener("dragover", over);
-      removeEventListener("dragleave", leave);
-      removeEventListener("drop", drop);
+      removeEventListener("dragenter", enter, true);
+      removeEventListener("dragover", over, true);
+      removeEventListener("dragleave", leave, true);
+      removeEventListener("drop", drop, true);
       mark(false);
     };
   }, []);

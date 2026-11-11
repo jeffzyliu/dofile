@@ -6,11 +6,13 @@
 //
 // It is a fixed overlay, not a native modal <dialog>: the browser's top layer would cover the toast ("Copied" after Copy
 // image). So it keeps the dialog's promises itself: role="dialog" aria-modal, the focus moves in and Tab stays inside,
-// and the opener gets the focus back. On a phone (CSS only) it is the full-screen graph of the wireframe: Close,
+// and the opener gets the focus back. Its keys are taken only while no native dialog is open over it (the other-tab
+// dialog, a drop's name clash): that dialog keeps its own Tab and Esc. A move to another graph is said in the live
+// region (state.ts say: the graph's alt text). On a phone (CSS only) it is the full-screen graph of the wireframe: Close,
 // the title, Export PNG at the top and Previous and Next at the foot.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { graphFull, graphIndex, graphs } from "../state.ts";
+import { say as announce, graphFull, graphIndex, graphs } from "../state.ts";
 import { Key } from "../ui/Icon";
 import { canCopyImage, copyImage, exportPng } from "./clip.ts";
 import { graphAlt, graphTitle } from "./format.ts";
@@ -41,6 +43,7 @@ function Viewer() {
     fullOpener.el = null;
     root.current?.focus();
     const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return; // a dialog over the view has the keys
       if (e.key === "Escape") {
         e.preventDefault();
         close();
@@ -69,6 +72,14 @@ function Viewer() {
       if (opener?.isConnected) opener.focus();
     };
   }, []);
+
+  // a move to another graph is said once (not on open: the view's name says what it is)
+  const seen = useRef(g.n);
+  useEffect(() => {
+    if (seen.current === g.n) return;
+    seen.current = g.n;
+    announce(graphAlt(g, list));
+  }, [g.n]);
 
   return (
     <div class="viewer" ref={root} role="dialog" aria-modal="true" aria-label="Full-size graph" tabIndex={-1}>
@@ -112,9 +123,6 @@ function Viewer() {
           Next
         </button>
       </div>
-      <span class="visually-hidden" aria-live="polite">
-        {graphAlt(g, list)}
-      </span>
     </div>
   );
 }

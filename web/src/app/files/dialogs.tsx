@@ -7,15 +7,17 @@
 //  - DeleteAllDialog { d: "delete-all", count }: "Delete all 12 files?" / Cancel (focused), "Delete all".
 //  - CloseTabDialog { d: "close-tab", path }: "Save changes to clean.do?" / Save (focused), "Don't save", Cancel; Esc is
 //    Cancel. Save: editorCommands.save(path), then the tab closes (it stays open when save resolves false: no editor,
-//    or the store refused); Don't save: the tab closes and editorCommands.closed(path) drops the edits.
+//    or the store refused); Don't save: the tab closes and editorCommands.closed(path) drops the edits. Once the tab
+//    has closed the focus goes to the tab now selected (EditorTabs.tsx focusAfterClose), not to the page.
 // The host draws a new dialog for each new value (clash 2 after clash 1); a view unmounted with no answer (another dialog
 // replaced it) answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import { editorCommands } from "../editor/commands.ts";
 import { dialog, files } from "../state.ts";
 import { Dialog } from "../ui/Dialog";
 import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries } from "./actions.ts";
+import { focusAfterClose } from "./EditorTabs";
 import { baseName, formatSize, shortDate } from "./tree.ts";
 
 const close = () => {
@@ -30,12 +32,14 @@ const refocus = () =>
     document.querySelector<HTMLElement>('.files [role="treeitem"][tabindex="0"]')?.focus();
   }, 100);
 
-/** Run `cancel` when the view is unmounted before it answered. Returns `answered()`, to call when it answers. */
+/** Run `cancel` when the view is unmounted before it answered. Returns `answered()`, to call when it answers. A layout
+ *  effect, so the cleanup is there from the first render: an effect runs after the paint, and a view replaced before
+ *  that would never cancel. */
 function useAnswer(cancel: () => void) {
   const done = useRef(false);
   const later = useRef(cancel);
   later.current = cancel;
-  useEffect(
+  useLayoutEffect(
     () => () => {
       if (!done.current) later.current();
     },
@@ -156,11 +160,15 @@ export function DeleteAllDialog({ dialog: d }: { dialog: DialogOf<"delete-all"> 
 export function CloseTabDialog({ dialog: d }: { dialog: DialogOf<"close-tab"> }) {
   const save = async () => {
     close();
-    if (await editorCommands.save(d.path)) closeTab(d.path);
+    if (await editorCommands.save(d.path)) {
+      closeTab(d.path);
+      focusAfterClose();
+    }
   };
   const discard = () => {
     close();
     closeTab(d.path);
+    focusAfterClose();
   };
   return (
     <Dialog

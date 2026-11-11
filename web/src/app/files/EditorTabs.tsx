@@ -3,10 +3,13 @@
 //    its folder when two open files share a name), the unsaved dot (role img, "unsaved changes") and the × (mouse only,
 //    aria-hidden). Roving focus: the active tab is in the tab order; Left/Right, Home/End move and select; Delete closes
 //    the selected tab (aria-keyshortcuts="Delete"). Closing a tab with unsaved edits asks first (dialog close-tab:
-//    actions.ts askCloseTab). Ctrl/Cmd+W is the browser's: not bound.
+//    actions.ts askCloseTab). Ctrl/Cmd+W is the browser's: not bound. After a tab closes from the keyboard or the
+//    close-tab dialog, the focus goes to the tab now selected; with none left, to the file tree's row in the tab order
+//    (when the list is shown), else to the editor (focusAfterClose).
 //  - FileSwitcher: the phone's top bar title on the Editor view (WP 1): the open file's name and ▾, a menu of the open
 //    files, "Close <name>" (the phone has no ×) and "Show all files"; with no open file it says "Editor".
 // `dirty` is the editor's (state.ts setDirty); this file never sets it.
+import { editorCommands } from "../editor/commands.ts";
 import { activeTab, phoneTab, tabs } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { type MenuItem, openMenu, openMenuState } from "../ui/Menu";
@@ -24,6 +27,21 @@ function focusTab(path: string | null) {
   });
 }
 
+const shown = (el: HTMLElement | null): el is HTMLElement => el !== null && el.getClientRects().length > 0;
+
+/** After a tab closed (its element, which may have had the focus, is gone): focus the selected tab, else the file
+ *  tree's row in the tab order when the list is shown, else the editor; never the page itself. */
+export function focusAfterClose() {
+  setTimeout(() => {
+    const i = tabs.value.findIndex((t) => t.path === activeTab.value);
+    const tab = i >= 0 ? document.getElementById(tabId(i)) : null;
+    const row = document.querySelector<HTMLElement>('.files [role="treeitem"][tabindex="0"]');
+    if (shown(tab)) tab.focus();
+    else if (shown(row)) row.focus();
+    else editorCommands.focus();
+  });
+}
+
 export function EditorTabs() {
   const list = tabs.value;
   if (!list.length) return null;
@@ -34,7 +52,7 @@ export function EditorTabs() {
     focusTab(list[i].path);
   };
   const close = (path: string, keyboard: boolean) => {
-    if (askCloseTab(path) && keyboard) focusTab(activeTab.value);
+    if (askCloseTab(path) && keyboard) focusAfterClose();
   };
   const onKeyDown = (e: KeyboardEvent) => {
     const next = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: list.length - 1 }[e.key];

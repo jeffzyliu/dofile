@@ -5,27 +5,31 @@
 //    before they call the editor (editorCommands.closed, renamed, reload), through the object.
 //  - Upload: the files that clash with none are written first, then each clash is asked in its own dialog
 //    ({ d: "clash", path, index, total }); what the dialog shows beyond those is `clashNow()`. The dialog answers with
-//    answerClash(). Esc, or a dialog unmounted with no answer, keeps yours for every clash left.
+//    answerClash(). Esc, or another dialog put in the clash's place with no answer, keeps yours for every clash left. Uploads run one at a
+//    time (a second waits for the first to end), and a clash waits while another dialog is open: it never replaces one.
+//    A clash over an open file with unsaved edits is always asked, even after "Do the same".
+import { effect } from "@preact/signals-core";
 import { zipParts } from "../../engine/zip.ts";
+import { CONTROL } from "../../stata/quote.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { saveAs } from "../files.ts";
-import { activeTab, banners, dialog, dismiss, files, say, showToast, tabs } from "../state.ts";
+import { activeTab, banners, dialog, dismiss, files, phoneTab, say, showToast, tabs } from "../state.ts";
 import { store } from "../store.ts";
-import { decodeText } from "./open.ts";
-import { baseName, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
+import type { Dialog } from "../types.ts";
+import { decodeText, openFile } from "./open.ts";
+import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
 
 // ---- tabs ----
 
 /** Close the tab of `path` with no question: the tab to its right becomes active (else the one to its left), then the
- *  editor drops its state. Returns the new active path. */
-export function closeTab(path: string): string | null {
+ *  editor drops its state. */
+export function closeTab(path: string): void {
   const i = tabs.value.findIndex((t) => t.path === path);
-  if (i < 0) return activeTab.value;
+  if (i < 0) return;
   const rest = tabs.value.filter((t) => t.path !== path);
   tabs.value = rest;
   if (activeTab.value === path) activeTab.value = (rest[i] ?? rest[i - 1])?.path ?? null;
   editorCommands.closed(path);
-  return activeTab.value;
 }
 
 /** The ×, Delete on a tab, the phone's "Close": a tab with unsaved edits asks first (dialog close-tab); another closes.
@@ -49,8 +53,13 @@ function closeUnder(top: string) {
 
 // ---- rename, new, delete, download ----
 
+/** How a file opens by its name: a .dta tab, or the editor (open.ts says which text files the editor takes). */
+const kindOf = (path: string) => (extOf(path) === ".dta" ? "dta" : "text");
+
 /** Rename (or move) `from` to `to` in the store; the tabs of it and of everything under it follow (`tabs` first, then
- *  editorCommands.renamed for each open file). Rejects as the store does (`to` exists, ...). */
+ *  editorCommands.renamed for each open file). A tab whose new name opens another way (a .dta renamed to .csv, a text
+ *  file to .dta) is opened again as its new name says, in its place, unless it has unsaved edits (the editor keeps
+ *  them). Rejects as the store does (`to` exists, ...). */
 export async function renameEntry(from: string, to: string): Promise<void> {
   if (from === to) return;
   await store.rename(from, to);
@@ -59,6 +68,28 @@ export async function renameEntry(from: string, to: string): Promise<void> {
   tabs.value = tabs.value.map((t) => ({ ...t, path: movedPath(t.path, from, to) }));
   if (activeTab.value !== null) activeTab.value = movedPath(activeTab.value, from, to);
   for (const p of moved) editorCommands.renamed(p, movedPath(p, from, to));
+  for (const p of moved.map((p) => movedPath(p, from, to))) {
+    const tab = tabs.value.find((t) => t.path === p);
+    if (tab && !tab.dirty && tab.kind !== kindOf(p)) await reopenAs(p);
+  }
+}
+
+/** Close the tab of `path` and open the file again (open.ts), in the same place, leaving the active tab and the phone's
+ *  view as they were. */
+async function reopenAs(path: string) {
+  const place = tabs.value.findIndex((t) => t.path === path);
+  const active = activeTab.value;
+  const view = phoneTab.value;
+  closeTab(path);
+  await openFile(path);
+  const tab = tabs.value.find((t) => t.path === path);
+  if (tab) {
+    const rest = tabs.value.filter((t) => t !== tab);
+    rest.splice(place, 0, tab);
+    tabs.value = rest;
+  }
+  if (active !== path && tabs.value.some((t) => t.path === active)) activeTab.value = active;
+  phoneTab.value = view;
 }
 
 /** The head menu's and the dropzone's "New .do file": an empty `untitled.do` (`untitled-2.do`, ... when taken) at the
@@ -161,17 +192,40 @@ export function answerClash(a: ClashAnswer) {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
+/** Resolves once no dialog is open (at once when none is). */
+const noDialog = () =>
+  new Promise<void>((ok) => {
+    const stop = effect(() => {
+      if (dialog.value === null)
+        queueMicrotask(() => {
+          stop();
+          ok();
+        });
+    });
+  });
+
+let uploads: Promise<unknown> = Promise.resolve(); // the uploads in progress, one after the other
+
 /** Upload `items` into the store. The files that clash with no file in the store are written first; then each clash is
  *  asked (Keep mine is the default). Replacing an open file reloads it in the editor (F 3.3); one that is no longer
  *  UTF-8 text closes its tab. Ends with the toast "3 files uploaded". A file the store refuses (a path where a folder
- *  is, the browser's quota) is counted and its reason goes to the console. Resolves with the paths written. */
-export async function upload(items: Incoming[]): Promise<string[]> {
+ *  is, the browser's quota) or whose name holds a control character (a line break) is counted, and its reason goes to
+ *  the console. Uploads run one at a time: a second one starts when the first has ended. Resolves with the paths
+ *  written. */
+export function upload(items: Incoming[]): Promise<string[]> {
+  const run = uploads.then(() => uploadNow(items));
+  uploads = run.catch(() => {});
+  return run;
+}
+
+async function uploadNow(items: Incoming[]): Promise<string[]> {
   if (!items.length) return [];
   const before = new Map((await store.list()).map((f) => [f.path, f]));
   const written: string[] = [];
   let failed = 0;
   const put = async ({ path, data }: Incoming) => {
     try {
+      if (CONTROL.test(path)) throw new Error("a name with a control character");
       await store.write(path, data);
       written.push(path);
       return true;
@@ -184,26 +238,40 @@ export async function upload(items: Incoming[]): Promise<string[]> {
   const last = new Map(items.map((it) => [it.path, it])); // the same path twice in one upload: the last one
   const clashes: Incoming[] = [];
   for (const it of last.values()) {
-    if (before.get(it.path)?.dir === false) clashes.push(it);
+    if (before.get(it.path)?.dir === false && !CONTROL.test(it.path)) clashes.push(it);
     else await put(it);
   }
   const others = written.length;
   let sticky: boolean | null = null; // "Do the same": replace (true) or keep (false) every clash left
+  let shown: Dialog = null; // the last clash dialog this upload opened
   for (const [i, it] of clashes.entries()) {
     let replace: boolean | null = sticky;
-    if (replace === null) {
+    const unsaved = tabs.value.some((t) => t.path === it.path && t.dirty);
+    if (replace === null || unsaved) {
       const mine = before.get(it.path)!;
+      while (dialog.value !== null) await noDialog(); // never over another dialog
       now = {
         path: it.path,
         yours: { size: mine.size, mtime: mine.mtime },
         uploaded: it.data.byteLength,
         others,
         left: clashes.length - i - 1,
-        unsaved: tabs.value.some((t) => t.path === it.path && t.dirty),
+        unsaved,
       };
+      const ask: Dialog = { d: "clash", path: it.path, index: i + 1, total: clashes.length };
+      shown = ask;
       const a = await new Promise<ClashAnswer>((ok) => {
         answer = ok;
-        dialog.value = { d: "clash", path: it.path, index: i + 1, total: clashes.length };
+        dialog.value = ask;
+        // another dialog put in its place (another tab took the engine), with no answer: Esc's meaning. Here, not only
+        // in the view, so an upload never waits for an answer that cannot come (the uploads after it would wait too).
+        const stop = effect(() => {
+          if (dialog.value === ask) return;
+          queueMicrotask(() => {
+            stop();
+            if (answer === ok) answerClash("stop");
+          });
+        });
       });
       now = null;
       if (a === "stop") sticky = replace = false;
@@ -214,7 +282,7 @@ export async function upload(items: Incoming[]): Promise<string[]> {
     }
     if (replace && (await put(it))) reopen(it);
   }
-  if (dialog.value?.d === "clash") dialog.value = null;
+  if (shown !== null && dialog.value === shown) dialog.value = null;
   if (written.length || failed) {
     const done = `${written.length} ${plural(written.length, "file", "files")} uploaded`;
     showToast(failed ? `${done} · ${failed} couldn't be` : done);

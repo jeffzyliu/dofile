@@ -522,6 +522,9 @@ input.filter::placeholder {
   .link-btn {
     padding-block: 11px;
   }
+  .cell-cut {
+    min-height: 44px;
+  }
 }
 
 /* forced colors: the marks that are fills or shadows get a system colour (the ring of a focused value is ui.css's) */
@@ -605,6 +608,15 @@ input.filter::placeholder {
 .dropzone .files-link {
   margin-top: var(--s1);
 }
+/* a finger: the dropzone's and the foot's links are 44 px high (SPEC section 1) */
+@media (pointer: coarse) {
+  .files-link {
+    min-height: 44px;
+  }
+  .dropzone .files-link {
+    margin-top: 0;
+  }
+}
 /* the drop target: a drag with files over the Files pane */
 .files-pane[data-drop] {
   border-color: var(--accent);
@@ -648,6 +660,12 @@ input.filter::placeholder {
   font: var(--code) / 1.4 var(--font-mono);
   color: var(--ink);
 }
+/* in place of the command, the reason there is none (a name a command can't hold): it wraps */
+.filebar .why,
+.dta-view .bar .why {
+  min-width: 0;
+  color: var(--ink);
+}
 /* the phone's top bar title on the Editor view: the open file and ▾, as wide as the title in every state, so the top
    bar's boxes never move; the title clips, so the focus ring is drawn inside */
 .file-switcher {
@@ -684,10 +702,15 @@ input.filter::placeholder {
   gap: 6px;
 }
 @media (forced-colors: active) {
+  /* a system color is kept in forced colors, so no forced-color-adjust (it is inherited: the rows would lose theirs) */
   .files-pane[data-drop],
   .files-pane[data-drop] .dropzone {
-    forced-color-adjust: none;
     border-color: Highlight;
+  }
+  .files-pane[data-drop] {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
   .rename-field {
     border-color: Highlight;

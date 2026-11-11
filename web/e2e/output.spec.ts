@@ -79,6 +79,42 @@ test("the empty states, and the reset wording of the Data tab", async ({ page })
   await expect(page.getByText("e() and r() appear after an estimation", { exact: false })).toBeVisible();
 });
 
+test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
+  await page.goto("/?test=manual");
+  await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
+  await page.evaluate(async () => {
+    window.__dofile.state.theme.value = "dark";
+    await window.__dofile.store.write("g.png", Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]));
+  });
+  if (phone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^g\.png/ })
+    .click();
+  // desktop: the Graph tab; phone: the full-size view
+  const card = phone(page) ? page.locator(".viewer .graph-card") : page.locator(".graph-wrap .graph-card");
+  await expect(card).toHaveAttribute("data-theme", "light");
+});
+
+test("a .dta tab whose name a command can't hold says so, and Load and Copy are off", async ({ page }) => {
+  await page.goto("/?test=manual");
+  await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
+  await page.evaluate(async () => {
+    await window.__dofile.store.write("a`b'.dta", new Uint8Array(16));
+    const s = window.__dofile.state;
+    s.tabs.value = [{ path: "a`b'.dta", kind: "dta", dirty: false }];
+    s.activeTab.value = "a`b'.dta";
+    s.phoneTab.value = "editor";
+  });
+  const view = page.locator(".dta-view");
+  await expect(view.locator(".why")).toHaveText(
+    "Its name has a character a command can't hold: rename the file to use it here.",
+  );
+  await expect(view.locator(".cmd")).toHaveCount(0);
+  await expect(view.getByRole("button", { name: "Load" })).toBeDisabled();
+  await expect(view.getByRole("button", { name: "Copy the use command" })).toBeDisabled();
+});
+
 test("a .dta tab with no engine shows its two bars, copies the use command, and no table", async ({ page }) => {
   await page.goto("/?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
@@ -96,7 +132,7 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
     s.phoneTab.value = "editor";
   });
   const view = page.locator(".dta-view");
-  await expect(view.locator(".bar").first()).toHaveText("data/wages.dta · 2 KB");
+  await expect(view.locator(".bar").first()).toHaveText("data/wages.dta · 2 KB"); // 2048 bytes, as the file tree says
   await expect(view.locator(".cmd")).toHaveText('use "data/wages.dta", clear');
   await expect(view.getByRole("button", { name: "Load" })).toBeEnabled(); // the prompt opens when it is pressed, so it is not pressed here
   await expect(view.locator("table")).toHaveCount(0);
@@ -160,8 +196,11 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     await expect(viewer.locator(".vtitle")).toHaveText("graph 3 of 3 · scatter wage educ");
     await page.keyboard.press("ArrowLeft");
     await expect(viewer.locator(".vtitle")).toHaveText("graph 2 of 3 · scatter wage educ");
-    await viewer.getByRole("button", { name: "Copy image" }).click();
-    if (await viewer.getByRole("button", { name: "Copy image" }).isEnabled()) {
+    await expect(page.locator('.visually-hidden[role="status"]')).toHaveText(/Graph 2: scatter wage educ$/); // said
+    const copyImage = viewer.getByRole("button", { name: "Copy image" });
+    if (await copyImage.isEnabled()) {
+      // off in a browser that cannot put an image on the clipboard: a click would wait for it to be enabled
+      await copyImage.click();
       await expect(viewer.locator(".vsaid")).toHaveText("Copied");
       expect(await copied(page)).toContain("image:1");
       await expect(page.locator(".toast")).toBeVisible(); // the toast shows over the view, not under it
@@ -331,4 +370,20 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await showTab(page, "data");
   await expect(page.locator(".facts")).toContainText("160 obs");
   await expect(page.locator(".facts")).toContainText("from wages.dta");
+
+  // ---- the card follows how each graph was drawn (RunResult.graph_themes) ----
+  await page.evaluate(() => {
+    window.__dofile.state.theme.value = "dark";
+  });
+  await run(page, "scatter wage educ, mcolor(black)\nscatter wage educ");
+  expect(
+    await page.evaluate(() => window.__dofile.state.graphs.value.slice(-2).map((g: { theme: string }) => g.theme)),
+  ).toEqual(["light", "dark"]); // the first names a color: drawn light in the dark theme
+  if (!phone(page)) {
+    await showTab(page, "graph");
+    const card = page.locator(".graph-wrap .graph-card");
+    await expect(card).toHaveAttribute("data-theme", "dark");
+    await page.locator(".graph-foot .thumb").nth(-2).click();
+    await expect(card).toHaveAttribute("data-theme", "light");
+  }
 });

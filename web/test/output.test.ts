@@ -17,7 +17,6 @@ import {
   sections,
   shown,
   sizeLabel,
-  useCommand,
 } from "../src/app/output/format.ts";
 import type { Graph } from "../src/app/types.ts";
 import type { Macros, Results } from "../src/engine/types.ts";
@@ -87,11 +86,6 @@ test("sizes and counts read as a person writes them", () => {
   assert.equal(bytes(12 * 1024 + 300), "12 KB");
   assert.equal(bytes(1.2 * 1024 * 1024), "1.2 MB");
   assert.equal(count(1204), "1,204");
-});
-
-test("the use command quotes the path, with compound quotes when it has a double quote", () => {
-  assert.equal(useCommand("data/wages.dta"), 'use "data/wages.dta", clear');
-  assert.equal(useCommand('data/a"b.dta'), 'use `"data/a"b.dta"\', clear');
 });
 
 test("a long Browse cell is cut to one line; a line break shows as an arrow; the title holds the value", () => {

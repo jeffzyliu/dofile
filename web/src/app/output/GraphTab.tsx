@@ -51,9 +51,13 @@ export function Thumbs({ list, current, label }: { list: Graph[]; current: numbe
   );
 }
 
-/** The card the graph is drawn on: its own background when the plot is dark (OQ-21: the card follows the plot's theme). */
+/** The card the graph is drawn on: its own background when a run drew the plot dark (OQ-21: the card follows the plot's
+ *  theme, RunResult.graph_themes). A .png from the files has its own colors, which are not known: it is always on the
+ *  light card. */
+export const cardTheme = (g: Graph) => (g.from === "run" ? g.theme : "light");
+
 export const GraphCard = ({ g, list, children }: { g: Graph; list: Graph[]; children?: ComponentChildren }) => (
-  <div class="graph-card" data-theme={g.theme}>
+  <div class="graph-card" data-theme={cardTheme(g)}>
     <img src={src(g)} alt={graphAlt(g, list)} />
     {children}
   </div>

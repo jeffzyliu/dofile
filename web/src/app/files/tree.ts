@@ -1,5 +1,6 @@
 // The file tree's plain logic (docs/design/SPEC.md, section 3.1), with no DOM and no store, so the Node tests run it:
 // the rows of the tree, sizes, names and paths. FilesPane.tsx draws the rows; actions.ts changes files and tabs.
+import { CONTROL } from "../../stata/quote.ts";
 import type { FileInfo } from "../types.ts";
 
 export interface Row {
@@ -89,6 +90,7 @@ export function freeName(dir: string, name: string, taken: Iterable<string>): st
 export function nameProblem(name: string, dir: string, taken: Iterable<string>, self?: string): string | null {
   if (name.trim() === "") return "Type a name.";
   if (name.includes("/") || name.includes("\\")) return "A name can't contain / or \\.";
+  if (CONTROL.test(name)) return "A name can't contain a line break or another control character.";
   if (name === "." || name === "..") return "That name isn't allowed.";
   if (!dir && name === ".dofile") return "That name is dofile's own.";
   const path = joinPath(dir, name);
@@ -111,11 +113,6 @@ export function tabLabels(paths: string[]): string[] {
 export function rowCount(text: string): string {
   const n = text.split(/\r\n|\n|\r/).filter((l) => l.trim() !== "").length;
   return `${n.toLocaleString("en-US")} ${n === 1 ? "row" : "rows"}`;
-}
-
-/** The command that reads `path`, with the path in quotes (compound quotes when it holds a double quote). */
-export function quoted(path: string) {
-  return path.includes('"') ? `\`"${path}"'` : `"${path}"`;
 }
 
 /** A day as the clash dialog shows it: "9 Nov". */

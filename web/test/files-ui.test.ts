@@ -16,6 +16,7 @@ const { editorCommands } = await import("../src/app/editor/commands.ts");
 const { openFile, toBase64 } = await import("../src/app/files/open.ts");
 const A = await import("../src/app/files/actions.ts");
 const T = await import("../src/app/files/tree.ts");
+const { fileCommand } = await import("../src/stata/quote.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -84,7 +85,7 @@ test("treeRows: folders first, then files, by name (numbers in order, case ignor
   assert.equal(T.treeRows(files, new Set(["data"]))[0].expanded, false);
 });
 
-test("names and paths: sizes, a free name, what is wrong with a new name, tab labels, row counts, quoting", () => {
+test("names and paths: sizes, a free name, what is wrong with a new name (a control character too), tab labels, row counts", () => {
   assert.deepEqual([0, 999, 1000, 41_200, 999_499, 999_500, 1_234_567, 48_600_000, 2_500_000_000].map(T.formatSize), [
     "0 B",
     "999 B",
@@ -117,8 +118,8 @@ test("names and paths: sizes, a free name, what is wrong with a new name, tab la
   assert.equal(T.rowCount("a,b\r\n1,2\n\n3,4\n"), "3 rows");
   assert.equal(T.rowCount(`${"x\n".repeat(1204)}`), "1,204 rows");
   assert.equal(T.rowCount("x"), "1 row");
-  assert.equal(T.quoted("data/a.csv"), '"data/a.csv"');
-  assert.equal(T.quoted('my "x".csv'), '`"my "x".csv"\'');
+  assert.match(T.nameProblem("a\nb.do", "", taken) ?? "", /line break/);
+  assert.match(T.nameProblem("a\tb.do", "", taken) ?? "", /control character/);
   assert.equal(T.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
   assert.equal(T.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
   assert.equal(T.extOf("data/Wages.DTA"), ".dta");
@@ -424,4 +425,148 @@ test("upload: a file the store refuses is counted in the toast; a path given twi
   assert.equal(S.toast.value, "1 file uploaded · 1 couldn't be");
   assert.equal(await textOf("y.do"), "second");
   await sleep(0);
+});
+
+// ---- stata/quote.ts: a path in a command ----
+
+test("a path in the use and import commands: quoted, compound quotes for a double quote, $ escaped; a backquote, a line break or \"' gives a reason, no command", () => {
+  assert.deepEqual(fileCommand("use", "data/wages.dta"), { command: 'use "data/wages.dta", clear' });
+  assert.deepEqual(fileCommand("import delimited", "raw/survey.csv"), {
+    command: 'import delimited "raw/survey.csv", clear',
+  });
+  assert.deepEqual(fileCommand("use", 'data/a"b.dta'), { command: 'use `"data/a"b.dta"\', clear' });
+  assert.deepEqual(fileCommand("use", "wages_$final.dta"), { command: 'use "wages_\\$final.dta", clear' });
+  assert.deepEqual(fileCommand("use", 'a"$x.dta'), { command: 'use `"a"\\$x.dta"\', clear' });
+  for (const bad of ["a`x'.dta", 'x.csv", clear\nerase main.do\n*.csv', "a\rb.dta", "a\tb.dta", "a\"'b.dta"])
+    assert.ok("problem" in fileCommand("use", bad), JSON.stringify(bad));
+  const made = fileCommand("import delimited", "a`b'.csv");
+  assert.equal(
+    "problem" in made && made.problem,
+    "Its name has a character a command can't hold: rename the file to use it here.",
+  );
+});
+
+// ---- actions.ts: the clash flow with other dialogs and other uploads ----
+
+const until = async (ok: () => boolean, what: string) => {
+  for (let i = 0; i < 200 && !ok(); i++) await sleep(5);
+  assert.ok(ok(), what);
+};
+const clashOf = () => (S.dialog.value?.d === "clash" ? S.dialog.value.path : null);
+/** The clash dialog's answer, as ClashDialog gives it: it closes, then answers. */
+const give = (a: ClashAnswer) => {
+  S.dialog.value = null;
+  A.answerClash(a);
+};
+
+test("a second upload waits for the first: it writes nothing and asks nothing until the first has ended", async () => {
+  await reset({ "a.do": "old a", "b.do": "old b" });
+  const first = A.upload([{ path: "a.do", data: enc("new a") }]);
+  await until(() => clashOf() === "a.do", "the first upload asks");
+  const second = A.upload([
+    { path: "b.do", data: enc("new b") },
+    { path: "z.do", data: enc("z") },
+  ]);
+  await sleep(30);
+  assert.equal(clashOf(), "a.do", "the second does not replace the first's question");
+  assert.ok(!(await store.list()).some((f) => f.path === "z.do"), "nor write anything before the first has ended");
+  give({ replace: true, same: false });
+  assert.deepEqual(await first, ["a.do"]);
+  await until(() => clashOf() === "b.do", "then the second asks");
+  give({ replace: false, same: false });
+  assert.deepEqual(await second, ["z.do"]);
+  assert.equal(S.toast.value, "1 file uploaded");
+  assert.deepEqual(await Promise.all(["a.do", "b.do"].map(textOf)), ["new a", "old b"]);
+  assert.equal(S.dialog.value, null);
+});
+
+test("a clash never replaces another dialog: it waits until that one has closed", async () => {
+  await reset({ "a.do": "old a" });
+  S.dialog.value = { d: "download", forRun: false };
+  const done = A.upload([{ path: "a.do", data: enc("new a") }]);
+  await sleep(30);
+  assert.deepEqual(S.dialog.value, { d: "download", forRun: false });
+  S.dialog.value = null;
+  await until(() => clashOf() === "a.do", "the clash is asked once the other dialog has closed");
+  give("stop");
+  assert.deepEqual(await done, []);
+  assert.equal(S.dialog.value, null);
+});
+
+test("another dialog put in the clash's place with no answer keeps yours for every clash left, and the next upload runs", async () => {
+  await reset({ "a.do": "old a", "b.do": "old b" });
+  const done = A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  await until(() => clashOf() === "a.do", "the clash is asked");
+  S.dialog.value = { d: "other-tab" }; // as the engine controller does when another tab takes the engine
+  assert.deepEqual(await done, ["y.do"]);
+  assert.deepEqual(S.dialog.value, { d: "other-tab" }, "the upload's end leaves the other dialog open");
+  assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
+  S.dialog.value = null;
+  assert.deepEqual(await A.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload is not held up");
+});
+
+test("after Do the same with Replace, a clash over an open file with unsaved edits is still asked", async () => {
+  await reset({ "a.do": "old a", "b.do": "old b", "c.do": "old c" });
+  await openFile("b.do");
+  S.setDirty("b.do", true); // no editor yet (step 4b): the test makes the edits
+  const { seen, stop } = answering([
+    { replace: true, same: true }, // a: replace, and the rest the same
+    { replace: false, same: false }, // b: asked all the same, as it has unsaved edits: keep it
+  ]);
+  await A.upload(["a", "b", "c"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  stop();
+  assert.deepEqual(
+    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.unsaved]),
+    [
+      ["a.do", false],
+      ["b.do", true],
+    ],
+  );
+  assert.deepEqual(await Promise.all(["a", "b", "c"].map((n) => textOf(`${n}.do`))), ["new a", "old b", "new c"]);
+});
+
+test("upload: a name with a control character is refused and counted", async () => {
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    assert.deepEqual(
+      await A.upload([
+        { path: "ok.do", data: enc("1") },
+        { path: "x.csv\nerase ok.do", data: enc("2") },
+      ]),
+      ["ok.do"],
+    );
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(S.toast.value, "1 file uploaded · 1 couldn't be");
+  assert.deepEqual(
+    (await store.list()).map((f) => f.path),
+    ["ok.do"],
+  );
+});
+
+// ---- actions.ts: a rename that changes how the file opens ----
+
+test("rename: a .dta tab renamed to .csv opens again as text in its place; an unsaved text tab renamed to .dta stays text", async () => {
+  await reset({ "a.do": "1", "w.dta": "a,b\n1,2\n", "c.do": "3" });
+  for (const p of ["a.do", "w.dta", "c.do"]) await openFile(p);
+  S.activeTab.value = "a.do";
+  S.phoneTab.value = "files";
+  calls = [];
+  await A.renameEntry("w.dta", "w.csv");
+  assert.deepEqual(
+    S.tabs.value.map((t) => [t.path, t.kind]),
+    [
+      ["a.do", "text"],
+      ["w.csv", "text"],
+      ["c.do", "text"],
+    ],
+  );
+  assert.equal(S.activeTab.value, "a.do", "the active tab stays");
+  assert.equal(S.phoneTab.value, "files");
+  assert.ok(calls.some((c) => c.op === "open" && c.args[0] === "w.csv"));
+  S.setDirty("c.do", true);
+  await A.renameEntry("c.do", "c.dta");
+  assert.deepEqual(S.tabs.value.at(-1), { path: "c.dta", kind: "text", dirty: true }, "the editor keeps the edits");
 });

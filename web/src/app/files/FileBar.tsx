@@ -4,18 +4,22 @@
 //  - .csv, .tsv: bar 1 "data/raw/survey.csv · 1,204 rows" (the lines that are not empty, of the file as the store has
 //    it, which is what Import reads); bar 2 `import delimited "data/raw/survey.csv", clear`, "Import" (run.ts
 //    runCommand; disabled unless the engine is `ready`, `none` or `declined`, where a command runs or is queued), "Copy"
-//    (aria-label "Copy the import command"; toast "Copied").
+//    (aria-label "Copy the import command"; output/clip.ts copyText, toast "Copied"). The command comes from
+//    stata/quote.ts fileCommand (`$` escaped); for a name a command cannot hold (a backquote, a line break, `"'`) bar 2
+//    says why in place of the command, and Import and Copy are off.
 //  - .log: "output/analysis.log · written by the last run" (the second part when `fresh` has it), "Download" (the file
 //    as the store has it).
 // The column colors of a .csv and the .log tokenizer are the editor's (step 4b).
 import { useEffect, useState } from "preact/hooks";
+import { fileCommand } from "../../stata/quote.ts";
+import { copyText } from "../output/clip.ts";
 import { runCommand } from "../run.ts";
-import { activeTab, engine, files, fresh, showToast, tabs } from "../state.ts";
+import { activeTab, engine, files, fresh, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import { Icon } from "../ui/Icon";
 import { downloadEntry } from "./actions.ts";
 import { decodeText } from "./open.ts";
-import { extOf, quoted, rowCount } from "./tree.ts";
+import { extOf, rowCount } from "./tree.ts";
 
 const TABLE = new Set([".csv", ".tsv"]);
 const CAN_RUN = new Set(["ready", "none", "declined"]); // a command runs now, or is queued while the prompt asks
@@ -40,15 +44,6 @@ function useRows(path: string | null) {
     };
   }, [path, info?.size, info?.mtime]);
   return rows;
-}
-
-async function copy(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    showToast("Copied");
-  } catch (e) {
-    console.warn(`[dofile] copy: ${(e as Error)?.message ?? e}`);
-  }
 }
 
 export function FileBar() {
@@ -77,7 +72,8 @@ export function FileBar() {
         </button>
       </div>
     );
-  const command = `import delimited ${quoted(path)}, clear`;
+  const made = fileCommand("import delimited", path);
+  const command = "command" in made ? made.command : null;
   return (
     <>
       <div class="filebar">
@@ -88,14 +84,18 @@ export function FileBar() {
         </span>
       </div>
       <div class="filebar">
-        <code class="command">{command}</code>
+        {command !== null ? (
+          <code class="command">{command}</code>
+        ) : (
+          <span class="why">{"problem" in made && made.problem}</span>
+        )}
         <span class="spacer" />
         <button
           type="button"
           class="btn"
-          disabled={!CAN_RUN.has(engine.value.s)}
+          disabled={command === null || !CAN_RUN.has(engine.value.s)}
           onClick={() => {
-            runCommand(command);
+            if (command !== null) runCommand(command);
           }}
         >
           Import
@@ -104,8 +104,9 @@ export function FileBar() {
           type="button"
           class="btn"
           aria-label="Copy the import command"
+          disabled={command === null}
           onClick={() => {
-            copy(command);
+            if (command !== null) copyText(command);
           }}
         >
           Copy

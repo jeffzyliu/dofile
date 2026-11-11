@@ -91,7 +91,7 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect(row(page, /^a\.do/)).toHaveClass(/\bopen\b/);
 });
 
-test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel, Don't save; Save keeps it with no editor)", async ({
+test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel, Don't save; Save keeps it with no editor); the focus goes to a tab or the tree, never the page", async ({
   page,
 }) => {
   await setUp(page, { "a.do": "1\n", "b.do": "2\n", "c.do": "3\n" });
@@ -149,6 +149,13 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   await again();
   await ask.getByRole("button", { name: "Don't save" }).click();
   await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
+  if (!isPhone(page)) {
+    const tabs = page.getByRole("tablist", { name: "Open files" });
+    await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused(); // the tab now selected, not the page
+    await page.keyboard.press("Delete"); // the last tab: the focus goes to the file tree
+    await expect.poll(() => openTabs(page)).toEqual([]);
+    await expect(tree(page).locator('[tabindex="0"]')).toBeFocused();
+  }
 });
 
 test("rename in place: F2; a name in use keeps the field open with the reason; Esc cancels; Enter renames, and the open tab follows", async ({
@@ -248,7 +255,9 @@ test("the folded file list: Esc in an inline rename cancels the rename and leave
   await toggle.focus();
   await page.keyboard.press("Enter");
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await row(page, /^a\.do/).focus();
+  // the unfolded list gives the focus to the tree's row after its render (App.tsx): wait for it, or that late focus
+  // would take the focus from the rename field below (a blur ends the rename) on a loaded machine
+  await expect(row(page, /^a\.do/)).toBeFocused();
   await page.keyboard.press("F2");
   const field = page.getByRole("textbox", { name: "New name for a.do" });
   await expect(field).toBeFocused();
@@ -299,6 +308,21 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(page.locator(".toast")).toHaveText("1 file uploaded");
   expect(await textOf(page, "a.do")).toBe("old a");
+  // another dialog put over the question (another tab took the engine, say) unmounts it: that answers as Esc does
+  await input.setInputFiles(["a.do", "b.do", "y.do", "y2.do"].map(file));
+  await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toBeVisible();
+  await page.evaluate(() => {
+    (window as unknown as { __dofile: { state: { dialog: { value: unknown } } } }).__dofile.state.dialog.value = {
+      d: "delete",
+      paths: ["c.do"],
+    };
+  });
+  await expect(page.locator(".toast")).toHaveText("2 files uploaded"); // y.do and y2.do; neither clash replaced
+  const other = page.getByRole("alertdialog", { name: "Delete c.do?" });
+  await expect(other).toBeVisible(); // the upload's end leaves the other dialog open
+  await page.keyboard.press("Escape");
+  await expect(other).toBeHidden();
+  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "new b.do"]);
 });
 
 test("the clash over an open file with unsaved edits says so", async ({ page }) => {
@@ -369,4 +393,33 @@ test("a drop anywhere on the page: the Files pane is marked while a drag is over
   await expect(pane).not.toHaveAttribute("data-drop");
   await expect(row(page, /^dropped\.do/)).toBeVisible();
   await expect(page.locator(".toast")).toHaveText("1 file uploaded");
+  // the page's listener takes the drop in the capture phase: an element under it never sees it
+  const seen = await page.evaluate(() => {
+    let reached = false;
+    document.querySelector(".editor-pane")!.addEventListener("drop", () => {
+      reached = true;
+    });
+    const dt = new DataTransfer();
+    dt.items.add(new File(["x"], "x.do", { type: "text/plain" }));
+    document
+      .querySelector(".editor-pane")!
+      .dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    return reached;
+  });
+  expect(seen).toBe(false);
+  // while a dialog is open a drop uploads nothing
+  await page.evaluate(() => {
+    (window as unknown as { __dofile: { state: { dialog: { value: unknown } } } }).__dofile.state.dialog.value = {
+      d: "delete",
+      paths: ["dropped.do"],
+    };
+    const w = window as unknown as { __dt?: DataTransfer };
+    w.__dt = new DataTransfer();
+    w.__dt.items.add(new File(["display 2\n"], "later.do", { type: "text/plain" }));
+  });
+  await fire("drop");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(row(page, /^x\.do/)).toBeVisible(); // the capture-phase drop above was uploaded
+  await expect(row(page, /^later\.do/)).toHaveCount(0);
 });

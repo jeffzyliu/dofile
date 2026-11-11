@@ -67,9 +67,6 @@ export function bytes(n: number): string {
 /** 1,204: a count with its thousands separators. */
 export const count = (n: number) => n.toLocaleString("en-US");
 
-/** `use "data/wages.dta", clear`; a path with a double quote in it gets compound quotes. */
-export const useCommand = (path: string) => (path.includes('"') ? `use \`"${path}"', clear` : `use "${path}", clear`);
-
 // ---- Browse: a long cell ----
 
 /** The longest a Browse cell shows before it is cut; the whole value is one click away. */
