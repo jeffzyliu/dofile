@@ -1611,7 +1611,7 @@ test("Download all: a store that cannot make the zip adds one banner (a second f
   try {
     assert.equal(await downloadAll(), false);
     assert.deepEqual(banners(), [{ b: "download-failed" }]);
-    assert.equal(S.toast.value, null, "a toast only confirms (SPEC 3.10)");
+    assert.equal(S.toast.value, null, "no toast: the failure offers Try again, so it is a banner (SPEC 3.10)");
     assert.equal(await heard(), "Your files couldn't be downloaded");
     assert.match(String(warn.mock.calls[0].arguments[0]), /the database is closed/);
     assert.equal(await downloadAll(), false); // "Try again", failing again
