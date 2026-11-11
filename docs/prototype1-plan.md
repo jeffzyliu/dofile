@@ -10,8 +10,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 ## Where things stand (2026-11-11)
 
 - **Steps 3 and 3.5 are merged into `main`**, with the formatting and linting work, by pull request #13 (the merge commit
-  `aff60a5`, 2026-11-11). `main` is pushed and protected (root `CLAUDE.md`, Rules): every change is a pull request, merged
-  with a merge commit, and a merge deploys the page. Checked before the merge, locally and in CI (Ubuntu and macOS, Python 3.12
+  `aff60a5`, 2026-11-11). `main` is pushed and protected (root `CLAUDE.md`, Rules): every change is a pull request, and a
+  merge deploys the page. Checked before the merge, locally and in CI (Ubuntu and macOS, Python 3.12
   to 3.14): the lint gates; `npm test` (212 pass); e2e (74 passed, 22 skipped); `uv run poe ci` (1443 passed, 13 skipped, 3
   xfailed); the design checks. The branch `prototype1-step3` and its worktree are no longer needed. **Next: step 4, parts 4a
   and 4c first.** The bullets below about steps 3 and 3.5 are the record of that work as it stood on the branch.
