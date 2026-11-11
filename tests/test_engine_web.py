@@ -345,7 +345,7 @@ def test_a_graph_whose_command_names_a_color_is_drawn_light_in_the_dark_theme(en
         "scatter y x, mco(navy)",  # abbreviated, as far as the engine accepts it
         'scatter y x, title("t", color(red))',  # a title's color
         "local opts lcolor(navy)",
-        "line y x, `opts'",  # the option is inside a macro: the graph itself holds a color
+        "line y x, `opts'",  # the option is inside a macro: the command as run names it
     ]
     code = "\n".join(lines)
     r = eng.run(code, images=True, plot_theme="dark")
@@ -358,6 +358,44 @@ def test_a_graph_whose_command_names_a_color_is_drawn_light_in_the_dark_theme(en
     light = eng.run("scatter y x\nscatter y x, mcolor(black)", images=True, plot_theme="light")
     assert light.graph_themes == ["light", "light"]
     assert eng.run("scatter y x", images=True).graph_themes == ["light"]  # no theme asked for
+
+
+def test_graph_themes_reads_the_graph_command_as_run(eng, tmp_path):
+    """The command inside a program or a nested do-file counts, macros expanded; text in quotes, an option OpenDTA sets
+    itself (qnorm's reference line) and a macro with no color do not; an axis's label color does."""
+    (tmp_path / "plots.do").write_text("scatter y x, mcolor(black)\nscatter y x\n")
+    lines = [
+        "capture program drop gp",
+        "program gp",
+        "  scatter y x, lcolor(navy)",
+        "end",
+        "gp",  # a program: its own command names a color
+        "do plots.do",  # a nested do-file: the first names one, the second not
+        'scatter y x, title("by color (red)")',  # only in a title's text: dark
+    ]
+    code = "\n".join(lines)
+    r = eng.run(code, images=True, plot_theme="dark")
+    assert r.rc == 0 and r.graph_commands == [
+        "gp",
+        "do plots.do",
+        "do plots.do",
+        'scatter y x, title("by color (red)")',
+    ]
+    assert r.graph_themes == ["light", "light", "dark", "dark"]
+    code = "local v x\nqnorm `v'\nscatter y x, xlabel(, labc(red))\nscatter y `v', msymbol(d)"
+    r = eng.run(code, images=True, plot_theme="dark")
+    assert r.rc == 0 and r.graph_themes == ["dark", "light", "dark"]
+
+
+def test_graph_themes_says_how_a_kept_scheme_was_drawn(eng):
+    """A scheme the page's theme does not change says what it drew: s1mono is light under the dark theme, s1rcolor (the
+    dark one) is dark under the light theme."""
+    r = eng.run("scatter y x, scheme(s1mono)\nscatter y x", images=True, plot_theme="dark")
+    assert r.graph_themes == ["light", "dark"]
+    assert [_corner(png) > 0.9 for png in r.images] == [True, False]
+    r = eng.run("scatter y x, scheme(s1rcolor)\nscatter y x", images=True, plot_theme="light")
+    assert r.graph_themes == ["dark", "light"]
+    assert [_corner(png) > 0.9 for png in r.images] == [False, True]
 
 
 # -- describe_file ------------------------------------------------------------------------------------------------------
