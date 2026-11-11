@@ -288,7 +288,8 @@ body {
   min-height: 0;
   overflow: auto;
 }
-.scroll-x,
+.out-scroll .scroll-x,
+.dta-view .scroll-x,
 .grid-wrap {
   overflow-x: auto;
 }
@@ -298,13 +299,15 @@ body {
 .rs .mat .grid-wrap {
   padding: 0;
 }
-.note {
+.out-scroll .note,
+.dta-view .note {
   margin: 0;
   padding: var(--s2) var(--s3);
   font-size: var(--text-sm);
   color: var(--muted);
 }
-.note code {
+.out-scroll .note code,
+.dta-view .note code {
   color: var(--ink);
 }
 
@@ -399,7 +402,7 @@ input.filter::placeholder {
   box-shadow: none;
   outline: none;
 } /* it holds the focus for the keys and shows no ring around the page */
-.vhead {
+.viewer .vhead {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -409,53 +412,53 @@ input.filter::placeholder {
   background: var(--surface);
   font-size: var(--text-sm);
 }
-.vtitle {
+.viewer .vtitle {
   font-weight: var(--w-bold-ui);
 }
-.vsaid {
+.viewer .vsaid {
   color: var(--ok);
 }
-.vbody {
+.viewer .vbody {
   flex: 1;
   display: flex;
   gap: var(--s3);
   padding: var(--s3);
   min-height: 0;
 }
-.vbody .graph-card {
+.viewer .vbody .graph-card {
   flex: 1;
   min-width: 0;
 }
-.strip {
+.viewer .strip {
   width: 76px;
   overflow-y: auto;
 }
-.strip .thumbs {
+.viewer .strip .thumbs {
   flex-direction: column;
   overflow-x: visible;
 }
-.strip .thumb {
+.viewer .strip .thumb {
   width: 66px;
   height: 48px;
 }
-.vfoot {
+.viewer .vfoot {
   display: none;
 }
 /* the phone's full-screen graph (WP 6): the strip under the picture, Previous and Next at the foot */
 @media (max-width: 699.98px) {
-  .vbody {
+  .viewer .vbody {
     flex-direction: column;
   }
-  .strip {
+  .viewer .strip {
     width: auto;
     overflow-y: visible;
     overflow-x: auto;
   }
-  .strip .thumbs {
+  .viewer .strip .thumbs {
     flex-direction: row;
     justify-content: center;
   }
-  .vfoot {
+  .viewer .vfoot {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--s2);
@@ -463,11 +466,11 @@ input.filter::placeholder {
     border-top: 1px solid var(--border);
     background: var(--surface);
   }
-  .vfoot .btn {
+  .viewer .vfoot .btn {
     justify-content: center;
     min-height: 44px;
   }
-  .vclose .key {
+  .viewer .vclose .key {
     display: none;
   } /* a phone has no Esc */
 }
@@ -508,7 +511,8 @@ input.filter::placeholder {
 @media (pointer: coarse) {
   .rs .row td,
   .rs .grp td,
-  .t td {
+  .out-scroll .t td,
+  .dta-view .t td {
     height: 44px;
   }
   .rs .val {
