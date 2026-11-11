@@ -8,7 +8,8 @@ the same table cells.
 - **Status:** approved by the maintainer on 2026-11-11, with the five additions listed under "Decisions".
 - **Date:** 2026-11-10, revised 2026-11-11.
 - **Paths** are relative to the repository root. A citation such as `web/src/engine/client.ts:268-356` is to the code
-  at commit a11033d (step B2), which is what step C starts from.
+  at commit a11033d (step B2), which is what step C starts from. The numbers are not kept up to date: step C and the later
+  reformat (Biome, ruff) moved the lines.
 - **Scope:** documents only. Step C's code follows this design and was built in commit 22b614e; step D changed the file ops (marked where they appear); step E made SPEC section 5's transition table the machine's matrix, which `web/test/machine.test.ts` compares with it.
 
 Contents: Decisions; 1 State; 2 Event; 3 Effect; 4 The transition tables; 5 The stale guard and the tickets;

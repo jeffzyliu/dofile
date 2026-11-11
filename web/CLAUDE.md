@@ -4,7 +4,7 @@ Loaded when work touches `web/`, the web demo: the engine in Pyodide inside a We
 `CLAUDE.md` still applies. What each script and folder does, with times: `web/README.md`. The plan and decisions:
 `docs/phase2-plan.md`. The build plan and status of prototype 1: `docs/prototype1-plan.md` (read it first when picking that work up). The rework of the engine code (step 3.5, done,
 waiting for the maintainer's approval and the merge): `docs/prototype1-step3.5-plan.md`; the state machine's design:
-`docs/prototype1-step3.5-c-design.md`. How data flows through the engine code, as built: `docs/web-engine-data-flow.md`.
+`docs/prototype1-step3.5-c-design.md`. Biome was added after step 3.5 and before the merge (`docs/formatting-proposal.md`). How data flows through the engine code, as built: `docs/web-engine-data-flow.md`.
 The build spec for the pages: `docs/design/SPEC.md` (section 5 holds the machine's transition matrix, which a test checks).
 
 ## Commands
@@ -19,12 +19,22 @@ npm run snapshot          # the Pyodide memory snapshot the page starts from; `n
 npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide (~4 min; --normal: no snapshot; --cases a,b)
 npm run check-numeric     # e()/r() of all 98 Stata 14 programs at full precision (~4 min; the diff: header of scripts/compare_numeric.py)
 npm run check-pytest [-- --ios]        # OpenDTA's unit tests inside Pyodide (~2 min; --ios: an iPhone user agent, so Pyodide creates no trampoline; compare with CPython: scripts/compare-pytest.mjs)
-npm run check             # TypeScript
+npm run check             # Biome (format, import order, lint errors), then TypeScript
+npm run format            # Biome: fix the layout and the import order, apply the safe lint fixes
+npm run lint:strict       # Biome as CI runs it: warnings fail too (npm run lint: the findings only)
 npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
 ```
 
 ## Rules
 
+- **Biome formats and lints `web/`** (`biome.json`: width 120, the recommended rules less six; version pinned exactly;
+  decisions in `docs/formatting-proposal.md`). A lint **error** fails `npm run check` and a build, and in `npm run dev` opens
+  a panel over the page (`vite-plugin-checker` in `vite.config.ts`, again on each change); a **warning** is only listed
+  there, and fails CI (`web ok`) and `npm run deploy`. So fix or ignore every finding before a commit that is to be
+  merged: `// biome-ignore lint/<group>/<rule>: <reason>`, always with the reason. Run `npm run format` at the end of a
+  task or before a commit, not after every edit. `src/stata/commands.json` is generated and not formatted. A
+  `// @ts-expect-error` covers one line: if Biome would split the statement under it, put a `// biome-ignore format:`
+  line above. The tests that read source text (`test/imports.test.ts`) must not depend on how a line is wrapped.
 - **The page is Preact with signals, in `src/app/`** (`src/main.tsx` wires it). The state is one module of signals,
   `src/app/state.ts` (SPEC section 8; types in `src/app/types.ts`); each signal has one owner and is exported
   `ReadonlySignal`, so a view that assigns one fails `npm run check`. The controllers own most of them and are `.ts` files that

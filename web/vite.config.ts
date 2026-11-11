@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Connect, defineConfig } from "vite";
+import checker from "vite-plugin-checker";
 import { about, buildId, inputs as readInputs, staleness } from "./scripts/build-id.ts";
 import { engineBytesMeta, listStartFiles, RUNTIME_FILES, writeStartFiles } from "./scripts/start-files.ts";
 
@@ -79,6 +80,7 @@ export default defineConfig({
   plugins: [
     {
       name: "cross-origin-isolation",
+      enforce: "pre", // before the checker below, which is "pre" too: the headers must be on its pages as well
       configureServer: (server) => {
         server.middlewares.use(isolate);
       },
@@ -86,6 +88,15 @@ export default defineConfig({
         server.middlewares.use(isolate);
       },
     },
+    // Biome's linter (biome.json), while the dev server runs and in a build. In development it runs again on each change:
+    // an error opens a panel over the page, a warning is only listed (the badge in the corner, and the terminal). A build
+    // fails on an error and not on a warning; CI and `npm run deploy` refuse warnings too (`npm run lint:strict`).
+    // Formatting is not checked here: `npm run check` and CI do that. Its panel is a frame from /__checker/, which the
+    // isolated page refuses unless it has the isolation headers: so cross-origin-isolation comes first.
+    checker({
+      biome: { command: "lint", watchPath: ["src", "test", "e2e", "scripts"], dev: { logLevel: ["error", "warning"] } },
+      overlay: { initialIsOpen: "error" },
+    }),
     {
       name: "start-files-dev",
       apply: "serve",

@@ -16,10 +16,12 @@ uv run poe test tests/test_mcp.py::test_stdio_mode_tools   # one test (extra arg
 uv run poe test tests                                 # dofile's own tests only (not OpenDTA's vendored suite)
 uv run poe opendta                                    # OpenDTA's vendored unit tests only (~22 s)
 uv run poe slow                                       # Stata 14 log comparison only (~75 s)
-uv run poe ci                                         # everything, as CI does
+uv run poe ci                                         # every test, as CI runs them (CI also runs `poe lint`)
 uv run dofile run path/to/file.do --json out.json     # batch run (sandboxed; --unsafe to lift it)
 uv run poe mcp [--http --port 8000]                   # MCP server, stdio by default
 uv run poe vendor [COMMIT]                            # re-vendor OpenDTA, re-apply patches
+uv run poe format                                     # ruff format: dofile's own Python (never the vendored engine)
+uv run poe lint                                       # ruff format --check, then ruff check, as CI runs them
 uv build                                              # sdist + wheel (the wheel is built from the sdist)
 ```
 
@@ -28,13 +30,22 @@ poe runs every task as `uv run --extra=mcp ...` (`[tool.poe] executor`), so the 
 `--python`: set `UV_PYTHON` to test another version (CI does). Run xdist from the project env (it's in
 the `dev` group), not `uv run --with pytest-xdist`: the overlay env's `sys.prefix` isn't the `.venv`, so the
 sandbox refuses the project's own packages and graph/sandbox tests fail with rc 603. The Stata comparison is one test
-per case, so `-n auto` runs those in parallel too. There is no linter or formatter configured.
+per case, so `-n auto` runs those in parallel too.
 
 Agents: run the whole suite (`poe test`, `poe slow`, `poe ci`) as a background task with its output going to a
 file, and read the file while it runs: `uv run poe test > .dofile/test.log 2>&1` (`.dofile/` is gitignored). Don't
 pipe it through `tail` or `head`: they print nothing until the command ends, so a run in progress looks like an
 empty one. pytest prints dots as tests finish and a summary line at the end; wait for the completion notice, then
 read the last lines of the log. A single test or file is quick enough to run in the foreground.
+
+Format and lint (decisions and reasons: `docs/formatting-proposal.md`): ruff 0.17.4 for dofile's own Python (`[tool.ruff]`
+in `pyproject.toml`: width 120, ruff's default rules), Biome for `web/` (`web/CLAUDE.md`). Both are pinned exactly and
+checked in CI (`ci ok`, `web ok`), where a warning fails as an error does. Run `uv run poe format` at the end of a task
+or before a commit, not after every edit (a reformat between a read and an edit makes the edit's text stop matching).
+**Never run a formatter on `_vendor/`, `tests_opendta/` or `legacy/`** (the config excludes them; the vendor script's
+patches apply to upstream's exact text). A finding is fixed, or ignored in place with the rule named and the reason
+(`# noqa: RULE  (reason)`), before a merge. The two reformat commits are in `.git-blame-ignore-revs`; in a new clone run
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 
 The web demo (`web/`) has its own commands and rules: `web/CLAUDE.md`.
 
@@ -100,7 +111,8 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   `docs/phase2-history.md`, `docs/browser-engine.md` and `docs/lazy-matplotlib.md`), `docs/phase3-plan.md` (hosted multi-user MCP
   server). `docs/prototype1-plan.md` (the build plan and status for prototype 1 of the web demo: read it first when picking that
   work up; its active task is `docs/prototype1-step3.5-plan.md`, and `docs/web-engine-data-flow.md` explains the web engine's data flow). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
-  `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`.
+  `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`. Formatting and linting (Biome, ruff; added on the branch
+  `prototype1-step3` after step 3.5, before the merge): `docs/formatting-proposal.md`.
 - Web demo design (moodboard, flows, wireframes, mockups): `docs/design/`. `docs/design/SPEC.md` is the build spec for the web
   demo's pages; `docs/design/README.md` holds the brief, the rules and every round of feedback (the plan keeps only a summary of
   the decisions). Renders are not committed; each folder's README has the command.

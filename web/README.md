@@ -33,7 +33,9 @@ Run them from `web/` with `npm run <name>`. Those that need the dofile wheel bui
 | `preview`  | Serves `web/dist/` (what the e2e tests use), also with `--host`, on port 4173. Run `build` first.                                                                                                                                                                                                                                                                                                                                                                |
 | `wheel`    | Builds the dofile wheel into `../dist/`. `vite.config.ts` copies the newest one into `public/`.                                                                                                                                                                                                                                                                                                                                                                  |
 | `commands` | Regenerates `src/stata/commands.json` (the command names and abbreviations the highlighter knows) from the engine's registry. Run it after the engine's command set changes; CI fails if the committed file is stale.                                                                                                                                                                                                                                            |
-| `check`    | Type-checks the TypeScript (`tsc --noEmit`).                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `check`    | Biome (`biome check`: format, import order, lint errors), then the TypeScript check (`tsc --noEmit`).                                                                                                                                                                                                                                                                                                                                                            |
+| `format`   | Biome fixes the layout and the import order and applies its safe lint fixes (`biome check --write`).                                                                                                                                                                                                                                                                                                                                                             |
+| `lint`     | Biome's lint findings (`biome lint`); `lint:strict` is what CI runs: warnings fail too.                                                                                                                                                                                                                                                                                                                                                                          |
 
 **All dev HTTP servers (`dev`, `preview`, `cf:dev`) listen on every network interface, for now**, so a phone on the LAN can test the page. Anyone on the same network can reach them; keep that in mind on a shared network, and keep any new dev server's script the same way (`--host` for Vite, `--ip 0.0.0.0` for Wrangler).
 
@@ -110,7 +112,7 @@ from the jsDelivr CDN, at the same version as the `pyodide` npm package.
 ## Cloudflare Workers (static assets)
 
 `wrangler.jsonc` serves `dist/` as static assets; `public/_headers` (copied into `dist/`) sends the two isolation headers.
-`npx wrangler login` once, then `npm run cf:dev` (local, workerd) or `npm run deploy`. Both build the snapshot first (the page
+`npx wrangler login` once, then `npm run cf:dev` (local, workerd) or `npm run deploy` (which runs `lint:strict` first). Both build the snapshot first (the page
 starts from it by default, and `public/snapshot/` is gitignored, so a page built without one would not start). Each asset must
 be under 25 MiB; the two snapshot files are about 20 MB, so they fit with little room to spare. `deploy.yml` fails the job when any file in `dist/` is over 25 MiB and warns over 23 MiB, because the brotli-11 snapshot is built only there.
 
@@ -119,9 +121,10 @@ inputs, and needs the repo secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare 
 
 ## CI
 
-`.github/workflows/web.yml` runs three jobs on every pull request. A push to `main` runs only the first (the fast one), and it can be started by hand:
+`.github/workflows/web.yml` runs four jobs on every pull request. A push to `main` runs only the first two (the fast ones), and it can be started by hand:
 
 - **types, unit tests, build:** `npm run check`, a check that `commands.json` is up to date, `npm test`, `npm run build`.
+- **format and lint (Biome):** `npm run lint:strict`: the format, the import order and the lint rules; a warning fails.
 - **browsers:** `npm run e2e` (Chromium, Firefox, WebKit, iPhone profile) on Ubuntu; Playwright's results are kept as an
   artifact on failure.
 - **memory snapshot:** `npm run snapshot`, then `npm test` (so the native-library test runs) and `npm run check-snapshot`.

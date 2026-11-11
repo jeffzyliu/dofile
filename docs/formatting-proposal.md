@@ -23,10 +23,23 @@ below changed both.
 | Style | Each tool's defaults (Biome: 2 spaces, double quotes, trailing commas; ruff: its defaults). |
 | CSS | Formatted by Biome (one declaration per line). |
 | Aligned trailing comments | Not kept: there were 412 in 47 files, too many to mark one by one. |
-| Lint rules, web | Biome's `recommended`, with three rules off: `noNonNullAssertion`, `noExplicitAny`, `noDescendingSpecificity`. |
-| Lint rules, Python | ruff's defaults. No separate list of warnings. |
+| Lint rules, web | Biome's `recommended`, with six rules off (below: `biome.json` cannot hold comments). |
+| Lint rules, Python | ruff's defaults (in 0.17 a broader set than `E4, E7, E9, F`: import order, unused `noqa`, and more). No rule is off. No separate list of warnings. |
 | Errors and warnings | A lint **error** blocks the dev server (an overlay over the page), a build and `npm run check`. A **warning** is allowed while developing, and fails a pull request, a push to `main` and a production build (`npm run deploy`). A finding is fixed or its rule is turned off, with the reason, before a merge. |
 | Markdown, YAML | Not formatted. (ruff does check Python code blocks in Markdown; none needed a change.) |
+
+## Rules turned off in `web/biome.json`, and why
+
+| Rule | Findings | Reason |
+|---|---|---|
+| `style/noNonNullAssertion` | 183 | `x!` is used on purpose under `strict`; a style choice, not a bug class. |
+| `suspicious/noExplicitAny` | 28 | Pyodide's objects, caught errors and test doubles; `tsc` is strict where it matters. |
+| `style/noDescendingSpecificity` | 23 | The CSS is ordered by component, not by specificity. |
+| `suspicious/noTemplateCurlyInString` | 6 | `"${name}"` in a plain string is deliberate: Stata's global macros, and source text the tests scan. |
+| `suspicious/noConfusingVoidType` | 7 | The `Ops` table (`src/engine/types.ts`) writes `void` for "no arguments" and "no result", as SPEC section 6 does. |
+| `complexity/noImportantStyles` | 2 | Both `!important` are deliberate: the `[hidden]` override and `.visually-hidden`. |
+
+To turn a rule back on, fix or ignore its findings in the same commit.
 
 ## Scope
 

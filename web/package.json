@@ -14,7 +14,8 @@
     "preview": "vite preview --host",
     "format": "biome check --write",
     "lint": "biome lint",
-    "check": "tsc --noEmit",
+    "lint:strict": "biome ci --error-on-warnings",
+    "check": "biome check && tsc --noEmit",
     "axe": "node ../docs/design/axe.mjs",
     "tabwalk": "node ../docs/design/tabwalk.mjs",
     "contrast": "node ../docs/design/contrast.mjs",
@@ -23,7 +24,7 @@
     "test": "node --test \"test/*.test.ts\"",
     "e2e": "npm run snapshot && npm run build && playwright test",
     "cf:dev": "npm run snapshot && npm run build && wrangler dev --ip 0.0.0.0",
-    "deploy": "npm run snapshot && npm run build && wrangler deploy"
+    "deploy": "npm run lint:strict && npm run snapshot && npm run build && wrangler deploy"
   },
   "dependencies": {
     "@codemirror/language": "^6.13.1",

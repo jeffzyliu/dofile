@@ -7,7 +7,8 @@ here are its names, and the transition tables in section 5 are its tables, cell 
 - **Status:** approved by the maintainer on 2026-11-11, with the design.
 - **Date:** 2026-11-10, revised 2026-11-11.
 - **Paths** are relative to the repository root; in the diagrams, `app/` and `engine/` stand for `web/src/app/` and
-  `web/src/engine/`.
+  `web/src/engine/`. A line number after "today" is the design's (commit a11033d), not the current code's: the reformat
+  moved the lines.
 
 Contents: 1 Data-flow map; 2 The states; 3 Events; 4 Effects; 5 The transition tables; 6 The stale guard and the
 tickets; 7 Races.
