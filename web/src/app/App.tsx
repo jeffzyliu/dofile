@@ -18,7 +18,24 @@
 //  fields are 16 px or more on a phone (app.css), so iOS does not zoom in on focus: 4b's command line and editor too.
 //
 // Each step 4 part edits only its own files; this file only places them and is not edited in step 4. Per part: the files,
-// the signals it writes (state.js), what it calls, and the slots here it fills. Every part reads any signal.
+// the signals it writes (state.ts), what it calls, and the slots here it fills. Every part reads any signal.
+// Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8, "Changed in step 3.5 C"):
+//  - `engine` has the machine's sixteen state names (types.ts EngineState): the page load is `checking-lock`, then
+//    `checking-cache` (`none` only with ?test=manual); `starting` is `starting-list` or `starting-worker`; `other-tab` is
+//    `other-tab-idle` or `other-tab-taking`. A view that treats a pair alike writes two `case`s; CSS keyed on
+//    <html data-engine> matches by prefix.
+//  - A signal with one owner is a ReadonlySignal: assigning it in a view fails `npm run check`. Views write `graphIndex`,
+//    `graphFull`, `dialog`, `tabs`, `activeTab`, `split`, `outputTab`, `phoneTab`, `pickedVar`, `theme`; the rest through
+//    the controllers' actions and state.ts's helpers.
+//  - There is no `about` signal: env.ts ABOUT (dofile, engine_commit, stata_version) is compiled in, there from the
+//    first paint. engine.ts no longer maps the worker's status texts to stages (the worker sends typed stage ids): the
+//    words of each Stage are stageStatus (the status bar) and stageWords (the live region).
+//  - The engine's actions return nothing, and each acts only in the states the machine's table says (elsewhere it does
+//    nothing): ask() in `none` and `declined`; decline in `asking` and `downloading`; start in `none`, `asking`,
+//    `declined`, `failed`; reset in `ready`, `running`, `breaking`, `waiting`; takeOver in `other-tab-idle`.
+//  - run.ts runCode and runCommand (through engine.ts run()) throw when called while a step of the state machine is in
+//    progress: inside a handler given to connectRun, and also inside a signal effect on `engine`, `lastRun` or `log`,
+//    which are written during a step. Start the next run after the step: when the run's promise has resolved, say.
 //   4a files/FilesPane.tsx (FilesHead, FilesBody), files/EditorTabs.tsx (EditorTabs, the phone's FileSwitcher),
 //      files/FileBar.tsx (FileBar: the bars over a .csv, .tsv or .log), files/open.js (openFile, decodeText),
 //      files/dialogs.tsx (clash, delete, delete-all, close-tab; the words of delete-all and close-tab are decided: SPEC
@@ -39,20 +56,22 @@
 //      runCommand(text), engine.js breakRun, keepWaiting, reset, files/open.js openFile (goToLine on a closed file),
 //      store.write (Save), showToast. Reads the log's per-run data on each text item (`unsaved`, `end`: types.d.ts LogItem).
 //      The command line: runCommand(text) returns { accepted, done } at once; clear the field only when `accepted` (it
-//      ran, or was queued with no engine; then it is in `history`, an error too); refused (a start or a run in progress):
-//      the text stays, and `history` is unchanged.
+//      ran, or was queued with no engine; then it is in `history`, an error too); refused (the page load, a start or a
+//      run in progress): the text stays, and `history` is unchanged. A queued run goes from `starting-worker` straight to
+//      `running`. The log's head ("dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax") takes its values from env.ts ABOUT.
 //   4c output/tabs.tsx (GraphTab, DataTab, ResultsTab), output/FullSize.tsx (FullSize), output/DtaView.tsx (DtaView).
-//      Writes `graphIndex`, `graphFull`, `pickedVar`, `rows` ("Show 50 more" appends, only if rows.value is still the
-//      object its request started from: run.js refreshData() replaces it after each run). Calls engine.js call(op, args)
-//      (browse, matrix, describe_file), run.js runCommand(text) (Load), showToast ("Copied").
+//      Writes `graphIndex`, `graphFull`, `pickedVar`. Not `rows`: "Show 50 more" calls run.ts moreRows(), which appends
+//      (run.ts is the one writer of `rows`), and no view calls `browse`. Calls engine.ts call(op, args) (matrix,
+//      describe_file: the read ops a view alone shows), run.ts moreRows() and runCommand(text) (Load), showToast ("Copied").
 //   4d states/DownloadDialog.tsx (the other-tab dialog's "Close editor" goes to env.ts LANDING_URL, step 5's page),
 //      states/ResetDialog.tsx (askReset), states/banners.tsx (the engine-state banners, reset, storage, memory, and
 //      download-failed, built in step 3: 4d may restyle or reword it). Writes `dialog` (reset; it closes download and
-//      other-tab), `banners` (only dismiss()). Calls engine.js start (also "Try again"), ask(false) (the declined banner's
-//      "Download the engine"), decline, stopDownload, takeOver, keepWaiting, reset; editorCommands.runFile ("Run the file
+//      other-tab), `banners` (only dismiss()). Calls engine.ts start (also "Try again"), ask() (the declined banner's
+//      "Download the engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,
+//      and a second press does nothing), keepWaiting, reset; editorCommands.runFile ("Run the file
 //      again"); files.js downloadAll() (when the store cannot make the zip it resolves false and adds the banner
 //      download-failed, which a later download that works removes; with no file to put in it, false and nothing shown).
-//      A failed start's `message` is the visitor's words; its `detail` is the developer's cause (types.d.ts FailReason).
+//      A failed start's `message` is the visitor's words; its `detail` is the developer's cause (types.ts EngineState).
 // editorCommands is filled field by field when 4b's editor mounts: every part calls through the object
 // (editorCommands.save(path)) and never destructures it, or it keeps the no-op.
 // Slots placed here: FilesHead, FilesBody, EditorTabs, FileBar, Editor (hidden, not unmounted, while a .dta tab shows
@@ -66,7 +85,6 @@
 import type { ComponentChildren } from "preact";
 import { signal } from "@preact/signals";
 import {
-    about,
     activeTab,
     engine,
     files,
@@ -84,7 +102,7 @@ import type { OutputTab, PhoneTab } from "./types.ts";
 import { THEME_ARIA, THEME_LABEL, cycleTheme } from "./theme.ts";
 import { downloadAll } from "./files.ts";
 import { clearLog } from "./run.ts";
-import { LANDING_URL } from "./env";
+import { ABOUT, LANDING_URL } from "./env";
 import { BannerSlot } from "./banners";
 import { DialogHost } from "./dialogs";
 import { askReset } from "./states/ResetDialog";
@@ -115,7 +133,7 @@ const moreItems = (): MenuItem[] => [
   { label: "Clear log", onSelect: clearLog },
   { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
   "rule",
-  { label: "About dofile", hint: about.value?.dofile, href: LANDING_URL },
+  { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
 ];
 
 /** The phone's ⋯ menu: Save and the theme (OQ-14); on the Log view the Log head's Find and Download log (4b's
@@ -128,7 +146,7 @@ const phoneMoreItems = (): MenuItem[] => [
   { label: "Clear log", onSelect: clearLog },
   { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
   "rule",
-  { label: "About dofile", hint: about.value?.dofile, href: LANDING_URL },
+  { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
 ];
 
 /** The desktop toolbar (E, section 3.4), from 700 px: the wordmark, Run and its neighbours, the theme button, ⋯. */

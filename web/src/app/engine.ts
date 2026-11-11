@@ -1,29 +1,45 @@
-// The engine controller: the one wrapper around EngineClient (client.js). It owns the `engine` signal and builds the
-// states of docs/design/SPEC.md, section 5, from what the client reports: onStatus (the start-up stages), onRestart
-// (a reset), resetAt (Break's deadline), a download() rejection (an AbortError means "Stop download") and a start()
-// rejection ("failed", or "failed-twice"). It decides from an error's `kind`, `reason` and `name`, never its text. At load
-// it starts without asking when the client's cached() says this build's start files are all in the Cache, and asks
-// otherwise; a start that fails twice (not for memory or WebAssembly) deletes them (forgetDownload()), so a reload downloads
-// them fresh. It also owns `about` and the reset banner. What a run leaves (results, data, memory, ...) is run.js's: it clears them on a new engine.
+// The engine controller: the one caller of the state machine (src/engine/machine.ts). It holds the machine, feeds it
+// events, performs the effects each step gives, and writes the `engine` signal from the machine's state. It decides
+// nothing itself: which state follows which event, and what must be done then, is the machine's table. The design:
+// docs/prototype1-step3.5-c-design.md (items 5 and 7); the data-flow map: docs/prototype1-step3.5-c-diagrams.md, 1.
 //
-// The page's order at load (main.tsx): the tab lock, then keepFiles(), then the store, then download() and start():
-//   connectEngine({ client, store, lock, snapshot, manual });  const lock = tabLock({ onLost: lost });  open();
-// Views call the actions below; they never call the client themselves, except through run.js.
-import { RC_RESET } from "../engine/client.ts";
+//   an action (start, decline, run, ...) or lost()      dispatch(event)          events WITHOUT a ticket only
+//   an answer to an effect (the lock, the download,     reply(effect)(answer)    THE ONE PLACE a ticket is put on an event
+//   the worker, the Break timer)
+//                                   both: enqueue -> transition (THE ONE CALL) -> the `engine` signal -> perform(effect)...
+//
+// The page's order at load (main.tsx, the only module that constructs or connects):
+//   connectFiles(store);  connectRun(handlers);  connectEngine({ client, lock, snapshot, manual });  open();
+// Views call the actions below and read the `engine` signal; they never reach the transport. `call` is the page's one
+// provider of read ops. What a run leaves (results, data, memory, ...) is run.ts's, which hears of a run and of a new or
+// lost engine through the handlers given to connectRun.
+import { RC_RESET, initial, transition } from "../engine/machine.ts";
 import * as S from "./state.ts";
-import { keep, refresh } from "./files.ts";
+import { engineWriter } from "./state.ts";
+import { block, own } from "./files.ts";
 import { editorCommands } from "./editor/commands.ts";
-import type { EngineClient } from "../engine/client.ts";
-import type { About, ClientError, OpResults, ResetKind, RunResult, StatusText } from "../engine/types.ts";
-import type { EngineStateName, FailReason, RunHead, Stage } from "./types.ts";
+import type { Builds, Lifecycle, Reader } from "../engine/client.ts";
+import type { Answered, AnyAnswer, Effect, Env, Event, Line, Machine, PlainEvent, Reply, RowName, State, Step, Ticket, TicketedEffect }
+  from "../engine/machine.ts";
+import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
+import type { EngineState, FailReason, RunHead, Stage } from "./types.ts";
 
-export const STAGE_OF: Record<StatusText, Stage> = {
-  "downloading the engine": "download", "unpacking the engine": "unpack", "loading Python": "python",
-  "loading your files": "files", "loading packages": "packages", "starting the engine": "engine",
-};
+// ---- the words ----
+
 /** The stages a start goes through, in order (OQ-11): the snapshot start, or ?snapshot=0. */
 export const stagesOf = (snapshot: boolean): Stage[] => (snapshot
   ? ["download", "unpack", "python", "files", "engine"] : ["download", "python", "files", "packages", "engine"]);
+
+/** What the live region says at each stage (S 2's stage list). */
+export const stageWords: Record<Stage, string> = ({
+  download: "Download the engine", unpack: "Unpack the engine", python: "Start Python", files: "Load your files",
+  packages: "Load packages", engine: "Start the engine",
+});
+/** What the status bar says at each stage. */
+export const stageStatus: Record<Stage, string> = ({
+  download: "downloading the engine", unpack: "unpacking the engine", python: "loading Python", files: "loading your files",
+  packages: "loading packages", engine: "starting the engine",
+});
 
 /** The message of a start that failed with reason "updated". 4d's "Reload the page" keys on the reason, not on these words. */
 export const UPDATED = "dofile has a newer version on this site: reload the page to use it";
@@ -40,259 +56,277 @@ export const FAILED: Record<FailReason, string> = ({
 /** The message of `failed-twice`, whatever the reason: it is not started again, so only a reload helps. */
 export const FAILED_TWICE = "The engine failed twice while starting, so it won't try again by itself. Reload the page to try again.";
 
-let deps: { client: EngineClient, store: { blocked: boolean }, lock: { take(o?: { steal?: boolean }): Promise<unknown> },
-  snapshot: boolean, manual: boolean, storage?: any };
-let downloading: AbortController | null = null;   // the download in progress: "Stop download" aborts it
-let stageAt = 0;          // when the current start-up stage began (Date.now())
-// Each start() and each reset takes the next number; ready() and failed() act only for the latest. A reset during a start
-// answers both the start() and the reset's `started` with the new worker's start (client.js), which would else count twice.
-let attempt = 0;
-let hadEngine = false;    // the engine now in use was ready once: a reset then loses its data (the banner, "Engine reset")
-let taking: Promise<void> | null = null;        // takeOver() in progress: a second press waits for it, never steals the lock twice
-// Counts the times this tab lost the tab lock (otherTab()). owned() and takeOver() read it before each await and stop if
-// it changed meanwhile: a tab that has just lost the lock must not unblock the store, close the dialog or start a worker.
-let lockGen = 0;
+/** The fixed lines of the live region (the effect `say`). A stage's line is stageWords. */
+const SAY: Record<Exclude<Line, { stage: Stage }>, string> = {
+  ready: "Engine ready", reset: "Engine reset", "download-stopped": "Download stopped",
+  failed: "The engine didn't start", "failed-twice": "The engine stopped after failing twice",
+};
 
-/** Wire the controller to the page's client, store and tab lock. `snapshot`: the snapshot start (not ?snapshot=0).
- *  `manual`: ?test=manual, no start until the test calls start(). `storage`: navigator.storage (the tests give theirs). */
-export function connectEngine(d: typeof deps) {
-  deps = d;
-  d.client.onStatus = onStatus;
-  d.client.onRestart = onRestart;
-  downloading = null;
-  attempt++;
-  hadEngine = false;
-  taking = null;
+// ---- the wiring ----
+
+/** What run.ts does for the engine (connectRun): a run began (its head, and the theme it is sent with), a chunk of its
+ *  log came, it ended with `result` (always after the `engine` signal has the new state; when the machine cut the run,
+ *  after engineGone), an engine is ready, the engine is gone. A handler must not call run(): a step is in progress. */
+export interface RunHandlers {
+  began(head: RunHead, theme: "light" | "dark"): void;
+  log(text: string): void;
+  ended(result: RunResult): void;
+  engineReady(): void;
+  engineGone(): void;
+}
+/** The tab lock (engine/tab.ts, tabLock). */
+type Lock = { take(o?: { steal?: boolean }): Promise<boolean> };
+/** An event that changed nothing: its type, the ticket it presented (when it has one), the state it found, and why. */
+export type Drop = { type: Event["type"], n?: number, row: RowName, why: "stale" | "not-valid" };
+
+// Each connectEngine makes a new wiring. A reply captures the one that performed its effect and does nothing once it
+// has been replaced: every machine counts its tickets from 1, so a ticket says which request, not which machine.
+let wiring: object = {};
+let env: Env | null = null;
+let reader: Reader | null = null;                        // the transport's read ops: `call`
+// what performs an effect: it alone holds the transport's Lifecycle and Builds, and the tab lock (performer())
+let perform: (effect: Effect) => void = () => { throw new Error("the engine controller is not connected: call connectEngine() first"); };
+let machine: Machine | null = null;                      // null until open()
+let queue: Event[] = [];                                 // events raised while a step's effects are performed
+let stepping = false;                                    // a step is in progress: its effects are being performed
+let dropped: Drop[] = [];                                // the drop record (the last DROPS_KEPT)
+const DROPS_KEPT = 200;
+// The two handles. Each is made by one effect and released by another; neither decides a state.
+let breakTimer: ReturnType<typeof setTimeout> | undefined;            // start-break-timer, cancel-break-timer
+let download: { n: Ticket, stop: AbortController } | null = null;     // start-download, abort-download
+let runs: RunHandlers = { began() {}, log() {}, ended() {}, engineReady() {}, engineGone() {} };
+
+/** Wire the controller to the page's transport and tab lock. `snapshot`: the snapshot start (not ?snapshot=0). `manual`:
+ *  ?test=manual, no start until the test calls start(). `graceMs`: how long Break waits before the engine is reset.
+ *  `canInterrupt`: whether Break can ask a run to stop (a SharedArrayBuffer exists; the tests may say). A second call
+ *  replaces the wiring: the machine, the queue, the handles and the drop record are cleared, and nothing of the earlier
+ *  wiring can act any more. open() then starts the new machine. */
+export function connectEngine({ client, lock, snapshot, manual, graceMs = 5000, canInterrupt = typeof SharedArrayBuffer !== "undefined" }:
+  { client: Reader & Lifecycle & Builds, lock: Lock, snapshot: boolean, manual: boolean, graceMs?: number, canInterrupt?: boolean }) {
+  clearTimeout(breakTimer);
+  download?.stop.abort();
+  breakTimer = undefined; download = null;
+  wiring = {};
+  machine = null; queue = []; dropped = [];
+  env = { snapshot, canInterrupt, graceMs, engineBytes: S.engineBytes, manual };
+  reader = client;
+  perform = performer(client, client, lock);
 }
 
-// ---- the page load and the tab lock ----
+/** Give the controller what run.ts does for it (main.tsx: connectRun(handlers)). */
+export function connectRun(handlers: RunHandlers) { runs = handlers; }
 
-/** The page load: take the tab lock; without it, the take-over dialog. With it: keep the files, list them, and start
- *  the engine (asking first unless the start files are all cached). Resolves when the engine's start has begun, not when it is ready. */
-export async function open() {
-  if (!(await deps.lock.take())) return otherTab();
-  await owned();
+/** The events that changed nothing since connectEngine, oldest first (the last 200): a stale answer, or an event that is
+ *  not valid in the state it found. The tests assert the exact list; the test hook has it too. */
+export const drops = (): Drop[] => [...dropped];
+
+// ---- events in, effects out ----
+
+/** The page load: the machine starts, and asks for the tab lock. Once for each wiring. */
+export function open(): void {
+  if (!env) throw new Error("the engine controller is not connected: call connectEngine() first");
+  if (machine) throw new Error("open() was called twice on one wiring");
+  const first = initial(env);
+  stepping = true;
+  try { apply(first, null); } finally { stepping = false; }
+  drain(null);
 }
 
-async function owned() {
-  const gen = lockGen;
-  deps.store.blocked = false;   // app/store.js opens it blocked: nothing is written before the lock answers
-  keep(deps.storage);   // storage.persist(), once; persisted() goes into the `persisted` signal
-  await refresh();
-  if (gen !== lockGen) return;   // the lock was lost meanwhile: otherTab() has blocked the tab again
-  S.engine.value = { s: "none" };
-  if (deps.manual) return;
-  const cached = await deps.client.cached();   // this build's start files are all in the Cache: no need to ask
-  if (gen !== lockGen) return;
-  if (cached) start(); else ask(false);
+/** An action, or the tab lock lost: an event without a ticket. Returns its step when it ran at once (the queue was
+ *  empty: an action called from an event handler), or null when it had to wait for a step in progress. */
+function dispatch(event: PlainEvent): Step | null {
+  return enqueue(event);
 }
 
-function otherTab() {
-  lockGen++;
-  deps.store.blocked = true;
-  downloading?.abort();
-  downloading = null;
-  attempt++;          // a start in progress ends with kind "stopped"; nothing it answers counts
-  hadEngine = false;
-  S.about.value = null;
-  S.engine.value = { s: "other-tab" };   // run.js clears what the old engine left (results, data, memory, ...)
-  S.dialog.value = { d: "other-tab" };
+/** A performer's way to answer its effect: bound to the effect's ticket, typed to that effect's answers. */
+const reply = <K extends Answered>(effect: TicketedEffect & { do: K }): Reply<K> => {
+  const mine = wiring;                                   // the wiring that performed this effect
+  return answer => {
+    if (mine !== wiring) return;                         // a reply of an earlier wiring does nothing
+    const said: AnyAnswer = answer; enqueue({ ...said, n: effect.n });   // THE ONE PLACE a ticket is put on an event
+  };
+};
+
+/** Queue an event, stamped with the time. It runs now unless a step is in progress: then it runs after that step's
+ *  effects, in order. */
+function enqueue(happening: PlainEvent | (AnyAnswer & { n: Ticket })): Step | null {
+  if (!machine) throw new Error("the engine controller is not open: call open() first");
+  const event: Event = { ...happening, at: Date.now() };
+  queue.push(event);
+  return stepping ? null : drain(event);
 }
 
-/** The tab lock was taken by another tab: end the worker and block this tab (tabLock's onLost). */
-export function lost() {
-  deps.client.stop("another tab took over");
-  otherTab();
-}
-
-/** "Use dofile in this tab": take the lock from the other tab, then go on as a page load. Only from `other-tab`; a second
- *  press while it runs gets the same promise (a second steal from this tab would make the tab lose its own lock). */
-export function takeOver() {
-  if (taking) return taking;
-  if (S.engine.value.s !== "other-tab") return Promise.resolve();
-  taking = (async () => {
-    try {
-      const gen = lockGen;
-      await deps.lock.take({ steal: true });
-      if (gen !== lockGen) return;   // the other tab took the lock back meanwhile: the dialog stays, and a press acts again
-      S.dialog.value = null;
-      await owned();
-    } finally {
-      taking = null;
-    }
-  })();
-  return taking;
-}
-
-// ---- the download prompt and the start ----
-
-/** Show the download prompt (`asking`). forRun: Run or the command line asked for it ("Download the engine to run code"). */
-export function ask(forRun: boolean) {
-  S.engine.value = { s: "asking", forRun };
-  S.dialog.value = { d: "download", forRun };
-}
-
-/** "Not now". During `downloading` it also aborts the download (what arrived stays in the cache). */
-export function decline() {
-  downloading?.abort();
-  S.engine.value = { s: "declined" };
-  if (S.dialog.value?.d === "download") S.dialog.value = null;
-}
-
-/** "Stop download": the fetches are aborted, and the state goes to `declined` (what arrived stays in the cache). */
-export function stopDownload() { downloading?.abort(); }
-
-/** States start() starts from: no engine, or one that did not start ("Try again"). Not `failed-twice` (reload the page). */
-const STARTABLE = new Set(["none", "asking", "declined", "failed"]);
-
-/** "Download 48 MB", "Try again", and every start the page makes: download() fills the cache, then start(). A download
- *  that fails other than by "Stop download" is `failed` with reason "download" (no start, no worker); one that finds the
- *  site updated (kind "updated") is `failed` with reason "updated". There is no offline start. In any other state (a
- *  start or a run in progress, `failed-twice`, `other-tab`) it does nothing. */
-export async function start() {
-  if (!STARTABLE.has(S.engine.value.s)) return;
-  downloading?.abort();
-  const ac = downloading = new AbortController();
-  hadEngine = false;
-  const t0 = Date.now();
-  S.engine.value = { s: "downloading", received: 0, total: S.engineBytes ?? 0, t0 };
+/** Run the queue: one step for each event, in order. Returns the step of `watched`. */
+function drain(watched: Event | null): Step | null {
+  let mine: Step | null = null;
+  stepping = true;
   try {
-    await deps.client.download({ signal: ac.signal, onProgress: ({ received, total }) => {
-      if (downloading === ac) S.engine.value = { s: "downloading", received, total, t0 };
-    } });
-  } catch (e) {
-    if (downloading !== ac) return;   // the tab lost the lock meanwhile
-    const err = (e as ClientError);
-    if (err?.name === "AbortError") {
-      downloading = null;
-      decline();
-      S.say("Download stopped");
-      return;
+    for (let event = queue.shift(); event && machine; event = queue.shift()) {
+      const step = transition(machine, event);           // THE ONE CALL of transition
+      if (event === watched) mine = step;
+      apply(step, event);
     }
-    // The page is older than the site ("updated": only a reload helps), or the download failed: no start can work.
-    downloading = null;
-    attempt++;
-    failed(err?.kind === "updated" ? err
-      : Object.assign(new Error(String(err?.message ?? e)), { kind: "failed", reason: "download", name: err?.name ?? "Error" }) as ClientError);
+  } finally {
+    stepping = false;
+  }
+  return mine;
+}
+
+/** One step: the machine, then the `engine` signal, then the effects, in order. An event that changed nothing is
+ *  recorded instead. The effects are performed also when a subscriber of the signal throws (a view's effect that calls
+ *  run() during the step, say): a step whose state is shown and whose effects are not would leave, on a reset, the old
+ *  worker live. The subscriber's error still goes to whoever raised the event. A performer that throws is another
+ *  matter, and a bug in the wiring (the transport's start() with a worker still live): the step's later effects are not
+ *  performed, the error goes to whoever raised the event, and the events queued behind it run with the next event. */
+function apply(step: Step, event: Event | null) {
+  const before = machine;
+  machine = step.machine;
+  if (event && step.outcome !== "taken") {
+    dropped.push({ type: event.type, ..."n" in event ? { n: event.n } : {}, row: step.machine.state.s, why: step.outcome });
+    if (dropped.length > DROPS_KEPT) dropped.shift();
     return;
   }
-  if (downloading !== ac) return;
-  downloading = null;
-  starting({ download: (Date.now() - t0) / 1000 });
-  const my = ++attempt;
-  await deps.client.start().then(a => { if (my === attempt) ready(a); }, e => { if (my === attempt) failed(e); });
-}
-
-// `starting`, at its first stage: the snapshot start reads the cache first ("download"), ?snapshot=0 starts Python.
-// `announce`: say the stage. Not after a reset: there the first stage reads the cache, and "Download the engine" would mislead.
-function starting(done: Partial<Record<Stage, number>> = {}, announce = true) {
-  stageAt = Date.now();
-  const stage = deps.snapshot ? "download" : "python";
-  S.engine.value = { s: "starting", stage, t0: stageAt, done };
-  if (announce) S.say(stageWords[stage]);
-}
-
-/** What the live region says at each stage (S 2's stage list). */
-export const stageWords: Record<Stage, string> = ({
-  download: "Download the engine", unpack: "Unpack the engine", python: "Start Python", files: "Load your files",
-  packages: "Load packages", engine: "Start the engine",
-});
-
-function onStatus(text: StatusText) {
-  const st = S.engine.value, stage = STAGE_OF[text];
-  if (st.s !== "starting" || !stage || stage === st.stage) return;
-  const now = Date.now();
-  // a stage seen twice (the snapshot start reads the cache after download() filled it) adds up its time
-  const done = { ...st.done, [st.stage]: (st.done[st.stage] ?? 0) + (now - stageAt) / 1000 };
-  stageAt = now;
-  S.engine.value = { s: "starting", stage, t0: now, done };
-  S.say(stageWords[stage]);
-}
-
-function ready(a: About) {
-  S.about.value = a;
-  hadEngine = true;
-  S.engine.value = { s: "ready" };   // run.js then asks for `memory`
-  if (S.dialog.value?.d === "download") {   // the dialog closes by itself, and focus goes to the editor
-    S.dialog.value = null;
-    setTimeout(() => editorCommands.focus(), 0);   // once the dialog is gone: the page is inert while it is open
+  try {
+    if (step.machine.state !== before?.state) engineWriter.engine.value = view(step.machine.state);
+  } finally {
+    for (const effect of step.effects) perform(effect);
   }
-  S.say("Engine ready");
 }
 
-/** Why a start failed, from the error's kind, reason and name. */
-const reasonOf = (e: ClientError): FailReason => (e?.kind === "updated" ? "updated" : e?.reason ?? "unknown");
-
-function failed(e: ClientError) {
-  if (e?.kind === "stopped") return;   // another tab took over, or a second start: that one says what happens
-  const detail = String(e?.message ?? e), reason = reasonOf(e), twice = e?.kind === "failed-twice";
-  console.warn(`[dofile] the engine didn't start (${reason}): ${detail}`);
-  // the start files may be at fault (not for memory or WebAssembly): a reload downloads them fresh
-  if (twice && reason !== "memory" && reason !== "no-wasm") deps.client.forgetDownload();
-  S.engine.value = twice ? { s: "failed-twice", reason, message: FAILED_TWICE, detail }
-    : { s: "failed", reason, message: FAILED[reason] ?? FAILED.unknown, detail };
-  if (S.dialog.value?.d === "download") S.dialog.value = null;
-  S.say(S.engine.value.s === "failed-twice" ? "The engine stopped after failing twice" : "The engine didn't start");
-}
-
-/** A reset (rc 9998): Break ran out of time, the worker crashed, Reset, "Reset now". Called by the client before the cut
- *  run's promise resolves, so run.js finds `starting` and leaves the state alone. The banner and "Engine reset" only when
- *  the engine being replaced had been ready: a crash during a start loses nothing. */
-function onRestart(reason: string, started: Promise<About>, kind: ResetKind) {
-  if (hadEngine) {
-    S.addBanner({ b: "reset", reason, kind });
-    S.say("Engine reset");
+/** The state as views see it: the same tag, without the tickets and the queued run, with the visitor's words. The one
+ *  writer of the `engine` signal. It drops and adds fields; it maps no names. */
+function view(state: State): EngineState {
+  switch (state.s) {
+    case "checking-lock": case "checking-cache": case "none": case "declined": case "ready":
+    case "other-tab-idle": case "other-tab-taking":
+      return { s: state.s };
+    case "asking": return { s: "asking", forRun: state.queued !== null };
+    case "downloading": return { s: "downloading", received: state.received, total: state.total, t0: state.t0 };
+    case "starting-list": case "starting-worker":
+      return { s: state.s, stage: state.stage, t0: state.t0, done: state.done };
+    case "running": case "waiting": return { s: state.s, run: state.run, t0: state.t0 };
+    case "breaking": return { s: "breaking", run: state.run, t0: state.t0, resetAt: state.resetAt };
+    case "failed": return { s: "failed", reason: state.reason, detail: state.detail, message: FAILED[state.reason] };
+    case "failed-twice": return { s: "failed-twice", reason: state.reason, detail: state.detail, message: FAILED_TWICE };
+    default: return state satisfies never;
   }
-  hadEngine = false;
-  starting({}, false);   // run.js clears results, macros, data, rows, memory and lastRun on `starting`
-  const my = ++attempt;
-  started.then(a => { if (my === attempt) ready(a); }, e => { if (my === attempt) failed(e); });
 }
 
-// ---- runs and Break (run.js calls run(); the toolbar calls the rest) ----
+/** Whether a download or a list fetch failed because the site was updated: from the error's kind, never its text. */
+const updated = (e: ClientError): boolean => e?.kind === "updated";
 
-/** Run `code` (the engine must be `ready`): `running` until the result, then `ready`, unless a reset came first. */
-export async function run(code: string, head: RunHead, { onLog }: { onLog?: (text: string) => void } = {}): Promise<RunResult> {
-  S.engine.value = { s: "running", run: head, t0: Date.now() };
-  const r = await deps.client.run(code, { onLog, fresh_locals: head.fresh_locals, plot_theme: S.resolvedTheme.value });
-  const s = (S.engine.value.s as EngineStateName);   // a reset may have come meanwhile
-  if (s === "running" || s === "breaking" || s === "waiting") S.engine.value = { s: "ready" };
-  return r;
+/** The effect performer. Only this function's result holds the transport's Lifecycle and Builds, and the tab lock. */
+function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: Effect) => void {
+  /** start-download: download() fills the Cache. An AbortError (abort-download) raises nothing. A download that fails for
+   *  any cause other than another build is reason "download". */
+  function startDownload(n: Ticket, say: Reply<"start-download">) {
+    const stop = new AbortController();
+    download = { n, stop };
+    builds.download({ signal: stop.signal, onProgress: ({ received, total }) => say({ type: "download-progress", received, total }) }).then(
+      done => say({ type: "download-done", build: done.build }),
+      e => { if (e?.name !== "AbortError") say({ type: "download-failed", reason: updated(e) ? "updated" : "download", detail: String(e?.message ?? e) }); });
+  }
+  /** send-run: run.ts is told the run began, then the worker is sent the code. A run whose worker was ended says
+   *  nothing: the machine has cut it already. */
+  function sendRun({ n, code, head }: Extract<Effect, { do: "send-run" }>, say: Reply<"send-run">) {
+    const theme = S.resolvedTheme.value;
+    runs.began(head, theme);
+    lifecycle.run(n, { code, fresh_locals: head.fresh_locals, plot_theme: theme }, text => runs.log(text)).then(
+      result => say({ type: "run-ended", result }),
+      (e: ClientError) => { if (e?.kind === "op") say({ type: "run-failed", message: String(e.message) }); });
+  }
+  return effect => {
+    switch (effect.do) {
+      case "take-lock": { const say = reply(effect); lock.take({ steal: effect.steal }).then(owned => say({ type: "lock-answered", owned })); return; }
+      case "own-files": return own();
+      case "block-store": return block();
+      case "check-cache": { const say = reply(effect); builds.cached().then(cached => say({ type: "cache-checked", cached })); return; }
+      case "start-download": return startDownload(effect.n, reply(effect));
+      case "abort-download": if (download?.n === effect.n) download.stop.abort(); return;
+      case "fetch-list": {
+        const say = reply(effect);
+        builds.build().then(build => say({ type: "list-checked", build }), (e: ClientError) => say({ type: "list-failed",
+          reason: updated(e) ? "updated" : e?.reason === "download" ? "download" : "unknown", detail: String(e?.message ?? e) }));
+        return;
+      }
+      case "forget-download": builds.forgetDownload(); return;
+      case "start-worker": return lifecycle.start(effect.n, effect.build, reply(effect));
+      case "end-worker": return lifecycle.end(effect.n, effect.ending);
+      case "send-run": return sendRun(effect, reply(effect));
+      case "interrupt": return lifecycle.interrupt(effect.n);
+      case "start-break-timer": { const say = reply(effect); breakTimer = setTimeout(() => say({ type: "break-timeout" }), effect.ms); return; }
+      case "cancel-break-timer": clearTimeout(breakTimer); breakTimer = undefined; return;
+      case "end-run": return runs.ended(effect.result);
+      case "engine-ready": return runs.engineReady();
+      case "engine-gone": return runs.engineGone();
+      case "show-dialog": S.dialog.value = effect.dialog === "download" ? { d: "download", forRun: effect.forRun } : { d: "other-tab" }; return;
+      case "close-dialog":
+        if (S.dialog.value?.d !== effect.dialog) return;
+        S.dialog.value = null;
+        // once the dialog is gone: the page is inert while it is open
+        if (effect.focusEditor) setTimeout(() => editorCommands.focus(), 0);
+        return;
+      case "add-reset-banner": return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind });
+      case "say": return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageWords[effect.line.stage]);
+      case "warn": return console.warn(`[dofile] ${effect.text}`);
+      default: return effect satisfies never;
+    }
+  };
 }
 
-/** Break: ask the run to stop. `breaking` until it stops or the client resets it (resetAt). A page that is not
- *  cross-origin isolated resets at once (the client restarts; onRestart sets `starting`). */
-export function breakRun() {
-  const st = S.engine.value;
-  if (st.s !== "running") return;
-  deps.client.breakRun();
-  const resetAt = deps.client.resetAt;
-  if (resetAt !== null && S.engine.value.s === "running") S.engine.value = { s: "breaking", run: st.run, t0: st.t0, resetAt };
+// ---- the actions: each is one event. The machine's table says where each acts; anywhere else it does nothing. ----
+
+/** "Download 48 MB", "Try again", and every start the visitor begins: the download fills the Cache, then the worker
+ *  starts. Acts in `none`, `asking`, `declined` and `failed`. A second press does nothing. */
+export function start(): void { dispatch({ type: "start" }); }
+
+/** Show the download prompt (`asking`): the declined banner's "Download the engine". Acts in `none` and `declined`. */
+export function ask(): void { dispatch({ type: "ask" }); }
+
+/** "Not now". Acts in `asking`, and in `downloading`, where it also aborts the download (what arrived stays in the cache). */
+export function decline(): void { dispatch({ type: "decline" }); }
+
+/** "Stop download": the fetches are aborted, and the state goes to `declined` (what arrived stays in the cache). */
+export function stopDownload(): void { dispatch({ type: "stop-download" }); }
+
+/** Reset (confirmed in its dialog) and "Reset now": a new worker; the data in memory is lost, the files stay. Acts in
+ *  `ready`, `running`, `breaking` and `waiting`. */
+export function reset(): void { dispatch({ type: "reset" }); }
+
+/** "Use dofile in this tab": take the lock from the other tab, then go on as a page load. Acts in `other-tab-idle`; a
+ *  second press while the take-over is in progress does nothing. */
+export function takeOver(): void { dispatch({ type: "take-over" }); }
+
+/** The tab lock was taken by another tab (tabLock's onLost): whatever this tab was doing ends, and it is blocked. */
+export function lost(): void { dispatch({ type: "lock-lost" }); }
+
+/** Break: ask the run to stop. `breaking` until it stops or the grace time runs out (`resetAt`), and then a reset. A page
+ *  that cannot ask (not cross-origin isolated) is reset at once. Acts in `running`. */
+export function breakRun(): void { dispatch({ type: "break" }); }
+
+/** "Don't reset: wait for it": the Break stays asked; the run stops after this command. Acts in `breaking`. */
+export function keepWaiting(): void { dispatch({ type: "keep-waiting" }); }
+
+/** Run `code` (run.ts calls this; views call run.ts). "started": the engine was ready, and the run began (run.ts has been
+ *  told). "queued": there is no engine yet (`none`, `declined`): the download prompt is open, titled for a run, and the
+ *  run begins when the engine has started. "refused": any other state; nothing happens.
+ *  It must not be called while a step is in progress (from a handler given to connectRun): it throws, before anything is
+ *  queued. Code that wants to run something when a run ends does it after the run's promise resolves. */
+export function run(code: string, head: RunHead): "started" | "queued" | "refused" {
+  if (stepping) throw new Error("run() was called while a step of the engine's state machine is in progress: call it after the step, for example when the run's promise has resolved");
+  const step = dispatch({ type: "run", code, head });
+  if (step?.outcome !== "taken") return "refused";
+  return step.effects.some(effect => effect.do === "send-run") ? "started" : "queued";
 }
 
-/** "Don't reset: wait for it": the Break stays asked; the run stops after this command. */
-export function keepWaiting() {
-  const st = S.engine.value;
-  if (st.s !== "breaking") return;
-  deps.client.keepWaiting();
-  S.engine.value = { s: "waiting", run: st.run, t0: st.t0 };
+/** A read op (describe, browse, matrix, macros, memory, describe_file): the page's one way to ask the engine for data.
+ *  run.ts asks after each run; a view asks only for what it alone shows (`matrix`, `describe_file`). It raises no event.
+ *  Rejects with the transport's error: kind "no-engine" with no worker, "reset" when a reset cut it. */
+export function call<K extends ViewOp>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
+  if (!reader) throw new Error("the engine controller is not connected: call connectEngine() first");
+  return reader.query(op, args);
 }
 
-/** The states reset() acts in: an engine that is up. Not while one starts (`downloading`, `starting`: the start would end
- *  the new worker), and never in `failed-twice` (it must stay stopped), `failed`, `other-tab` or with no engine. */
-const RESETTABLE = new Set(["ready", "running", "breaking", "waiting"]);
-
-/** Reset (confirmed in its dialog) and "Reset now": a new worker; the data in memory is lost, the files stay. Only in
- *  `ready`, `running`, `breaking` and `waiting`; in any other state it does nothing. */
-export function reset() {
-  if (!RESETTABLE.has(S.engine.value.s)) return Promise.resolve();
-  return deps.client.restart("reset by you", "user").catch(() => {});   // onRestart and failed() report it
-}
-
-/** An engine op other than run (describe, browse, matrix, macros, memory, describe_file): the views' way to ask the
- *  engine (step 4c). Rejects with the client's error (kind "no-engine" with no worker, "reset" when a reset cut it). */
-export function call<K extends keyof OpResults>(op: K, args?: object): Promise<OpResults[K]> { return deps.client.call(op, args); }
-
-/** Whether a result is the client's own rc 9998, with no log of its own: a run cut (a reset, another tab, no engine) or,
- *  with kind "run-failed", a run whose op failed in the worker (the worker stays). */
+/** Whether a result is the machine's own rc 9998, with no log of its own: a run cut (a reset, another tab) or, with kind
+ *  "run-failed", a run whose op failed in the worker (the worker stays). */
 export const fromClient = (r: RunResult) => r.rc === RC_RESET && "kind" in r;

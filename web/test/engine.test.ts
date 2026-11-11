@@ -1,6 +1,7 @@
-// The engine worker and client, run in Node: worker.js in a worker thread (as a browser Web Worker), Pyodide, the
-// built dofile wheel. Run `uv build --wheel` in the repo first. These tests use the worker's own file ops, which are
-// views of /work; the file store and the page's side of the files are in files.test.mjs and store.test.mjs.
+// The engine worker and the transport, run in Node: worker.ts in a worker thread (as a browser Web Worker), Pyodide, the
+// built dofile wheel. Run `uv build --wheel` in the repo first. No state machine here: the test starts and ends the
+// workers itself (harness.ts, startWorker), as the machine's effects would. These tests use the worker's own file ops,
+// which are views of /work; the file store and the page's side of the files are in files.test.ts and store.test.ts.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
@@ -8,10 +9,13 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { EngineClient, RC_RESET } from "../src/engine/client.ts";
-import { buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
+import { EngineClient } from "../src/engine/client.ts";
+import { about, buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
+import { live, runOn, startWorker } from "./harness.ts";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
-import type { DataSummary, Matrix } from "../src/engine/types.ts";
+import type { Answer } from "../src/engine/machine.ts";
+import type { FileStore } from "../src/engine/store.ts";
+import type { DataSummary, Matrix, ReadOps } from "../src/engine/types.ts";
 
 /** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
 type Ok<T> = Exclude<T, { error: string }>;
@@ -38,102 +42,202 @@ function nodeWorker() {
   return port as typeof port & globalThis.Worker;   // what client.ts wants of a (Web) Worker
 }
 
-test("engine worker: files, run, describe, matrix, Break, restart", { timeout: 180_000 }, async t => {
-  const statuses: string[] = [];
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, onStatus: s => statuses.push(s) });
-  const about = await eng.start();
-  assert.match(JSON.stringify(about), /opendta/i);
-  assert.deepEqual(statuses, ["loading Python", "loading your files", "loading packages", "starting the engine"]);
+// The page's store as the transport sees it, without a database: `change` sends a file op to the live worker the way the
+// store does (the mirror ops have no other sender), with no seq, so the worker applies it and keeps no journal. The ops
+// are answered in order, so a `files` or `read` asked after a change sees it.
+function pageStore() {
+  const store = { post: null as FileStore["post"], attach(post: FileStore["post"]) { store.post = post; } };
+  const change = (...[op, args]: Parameters<NonNullable<FileStore["post"]>>) => store.post!(op, args, []);
+  return { store, change };
+}
+// Everything about the engine that a visitor's code or the page can observe, gathered with the read ops and one run of
+// commands that change nothing (the probe). What it does not see: a change below a variable's display format (the values
+// are compared as `list` prints them), and state inside Python that no command shows (a cache, the heap).
+// `graphs`: list the graphs in memory too. Only `graph dir` lists them, and it sets r(list) (as Stata's does), so it is
+// in the probe only once r() is already what it leaves: the test runs `graph dir` first.
+async function fingerprint(eng: EngineClient, graphs: boolean) {
+  const described = await eng.query("describe");   // the variables in order, with type, format and labels; the counts; the file name
+  const nobs = "nobs" in described ? described.nobs : 0;
+  const rows = await eng.query("browse", { limit: Math.max(nobs, 1) });   // every value of every observation, in the data's order
+  const macros = await eng.query("macros");        // the locals and the globals
+  const { data_bytes } = await eng.query("memory");   // the data's size (not the heap, which may grow)
+  const files = await eng.query("files");          // /work, with sizes and times
+  // the sort order, the user's matrices, the graphs in memory: the probe's log. Its results: r() and e() (scalars, macros,
+  // the matrices' sizes), and that the probe itself changed neither.
+  const probe = await runOn(eng, `display "sorted by: \`: sortedby'"\nmatrix dir${graphs ? "\ngraph dir" : ""}`);
+  assert.equal(probe.rc, 0, probe.log);
+  assert.deepEqual([probe.results!.r_changed, probe.results!.e_changed], [false, false], "the probe leaves r() and e() as they were");
+  const matrices: Record<string, Matrix> = {};   // the values of each matrix of r() and e()
+  for (const set of ["e", "r"] as const) {
+    for (const name of Object.keys(probe.results![set].matrices)) matrices[`${set}(${name})`] = await eng.query("matrix", { name: `${set}(${name})` });
+  }
+  return { described, rows, macros, data_bytes, files, results: probe.results, matrices, log: probe.log };
+}
+// Each read op, with arguments other than the defaults. A new read op fails the check until it has a row here.
+const READ_ARGS: { [K in keyof ReadOps]: ReadOps[K]["args"][] } = {
+  describe: [{ vars: "x s", offset: 1, limit: 1 }, { vars: "nosuchvar" }],
+  describe_file: [{ path: "fp.dta" }, { path: "nothing.dta" }],
+  matrix: [{ name: "e(b)" }, { name: "e(V)" }, { name: "M" }, { name: "r(nothing)" }],
+  macros: [undefined],
+  browse: [{ vars: "y", offset: 5, limit: 7 }, { limit: 1000 }],
+  memory: [undefined],
+  files: [undefined],
+  read: [{ path: "fp.dta" }],
+};
+
+/** The stages a start said, in order, and how it ended. */
+const stagesOf = (said: Answer<"start-worker">[]) => said.map(a => (a.type === "stage" ? a.stage : a.type));
+
+test("engine worker: files, run, describe, matrix, Break, a new worker after end()", { timeout: 180_000 }, async t => {
+  const said: Answer<"start-worker">[] = [], { store, change } = pageStore();
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, store });
+  await startWorker(eng, null, said);
+  assert.match(JSON.stringify(eng.about), /opendta/i);
+  assert.deepEqual(stagesOf(said), ["python", "files", "packages", "engine", "started"], "typed stage ids, then started");
 
   await t.test("files: write, list, read, rename, remove, and nothing outside /work", async () => {
-    await eng.call("write", { path: "data/cps.dta", data: readFileSync(`${root}/tests/conformance/data/cps.dta`) });
-    await eng.call("write", { path: "notes.txt", data: new TextEncoder().encode("hi") });
-    const files = await eng.call("files");
+    change("write", { path: "data/cps.dta", data: readFileSync(`${root}/tests/conformance/data/cps.dta`) }, []);
+    change("write", { path: "notes.txt", data: new TextEncoder().encode("hi") }, []);
+    const files = await eng.query("files");
     assert.deepEqual(files.map(f => f.path).sort(), ["data", "data/cps.dta", "notes.txt"]);
-    assert.equal(new TextDecoder().decode(await eng.call("read", { path: "notes.txt" })), "hi");
-    await eng.call("rename", { from: "notes.txt", to: "old/notes.txt" });
-    await eng.call("remove", { path: "old" });
-    assert.deepEqual((await eng.call("files")).map(f => f.path).sort(), ["data", "data/cps.dta"]);
-    await assert.rejects(eng.call("read", { path: "../etc/passwd" }), /not in the working folder/);
+    assert.equal(new TextDecoder().decode(await eng.query("read", { path: "notes.txt" })), "hi");
+    change("rename", { from: "notes.txt", to: "old/notes.txt" }, []);
+    change("remove", { path: "old" }, []);
+    assert.deepEqual((await eng.query("files")).map(f => f.path).sort(), ["data", "data/cps.dta"]);
+    await assert.rejects(eng.query("read", { path: "../etc/passwd" }), /not in the working folder/);
   });
 
   await t.test("run with a Windows path, results, describe, matrix, graph, denied shell", async () => {
-    const r = await eng.run('use "C:\\Users\\me\\proj\\data\\cps", clear\ngenerate double lwage = ln(wage_hr)\nscatter lwage yrsed');
+    const r = await runOn(eng, 'use "C:\\Users\\me\\proj\\data\\cps", clear\ngenerate double lwage = ln(wage_hr)\nscatter lwage yrsed');
     assert.equal(r.rc, 0, r.log);
     assert.match(r.log, /\(path C:\\Users\\me\\proj\\data\\cps\.dta is data\/cps\.dta in the working folder\)/);
     assert.equal(r.images.length, 1);
-    const d = await eng.call("describe", { vars: "lwage yrsed" }) as Ok<DataSummary>;
+    const d = await eng.query("describe", { vars: "lwage yrsed" }) as Ok<DataSummary>;
     assert.deepEqual(d.variables.map(v => v.name), ["lwage", "yrsed"]);
-    const reg = await eng.run("regress lwage yrsed, robust");
+    const reg = await runOn(eng, "regress lwage yrsed, robust");
     assert.equal(reg.rc, 0, reg.log);
     assert.equal(reg.results!.e.macros.vcetype, "Robust");
-    const b = await eng.call("matrix", { name: "e(b)" }) as Ok<Matrix>;
+    const b = await eng.query("matrix", { name: "e(b)" }) as Ok<Matrix>;
     assert.deepEqual(b.cols, ["yrsed", "_cons"]);
-    assert.equal((await eng.run("shell ls")).rc, 199);
+    assert.equal((await runOn(eng, "shell ls")).rc, 199);
+  });
+
+  await t.test("the compiled-in ABOUT (scripts/build-id.ts, about()) is what the engine itself answers at boot", () => {
+    const { dofile, engine_commit, stata_version } = eng.about!;
+    assert.deepEqual({ dofile, engine_commit, stata_version }, about(), "the wheel is of this tree: its version, the vendored engine's commit, the Stata version");
+    assert.match(dofile, /^\d+\.\d+/);
+    assert.match(engine_commit!, /^[0-9a-f]{40}$/);
+  });
+
+  // ReadOps is a declaration (types.ts): anyone may send one, at any time, because each is said to change nothing. No type
+  // can prove that of a call into Python: this is the evidence.
+  await t.test("the read ops change nothing: the engine's fingerprint is the same after each, called twice", async () => {
+    const setup = await runOn(eng, ["clear", "set obs 30", "generate x = _n", "generate y = mod(x * 7, 11)", 'generate str3 s = "abc"',
+      'label variable y "the outcome"', "sort y x", "save fp.dta, replace", "regress y x", "matrix M = (1, 2 \\ 3, 4)", "local mine 5", "global G hello",
+      "scatter y x", "summarize y"].join("\n"));
+    assert.equal(setup.rc, 0, setup.log);
+    const unchangedByEveryReadOp = async (graphs: boolean) => {
+      const before = await fingerprint(eng, graphs);
+      // the helper itself changes nothing it reads: this covers the five read ops it is made of
+      assert.deepEqual(await fingerprint(eng, graphs), before, "fingerprint() twice in a row");
+      for (const op of Object.keys(READ_ARGS) as (keyof ReadOps)[]) {
+        for (const args of READ_ARGS[op]) {
+          const answers = [await eng.query(op, args), await eng.query(op, args)];
+          assert.deepEqual(answers[1], answers[0], `${op}: the same answer twice`);
+          assert.deepEqual(await fingerprint(eng, graphs), before, `${op} ${JSON.stringify(args)} changed something`);
+        }
+      }
+      return before;
+    };
+    // 1. With r() as the visitor's code left it. What the fingerprint sees: data in a sort order, r() and e() with their
+    // matrices, macros, a user matrix, files.
+    const first = await unchangedByEveryReadOp(false);
+    assert.match(first.log, /sorted by: y x/);
+    assert.match(first.log, /\bM\b/, "the user's matrix");
+    assert.deepEqual(Object.keys(first.matrices).sort(), ["e(V)", "e(b)"]);
+    assert.ok("mean" in first.results!.r.scalars && "N" in first.results!.e.scalars, "r() of summarize, e() of regress");
+    assert.deepEqual([first.macros.locals.mine, first.macros.globals.G], ["5", "hello"]);
+    assert.ok("rows" in first.rows && first.rows.rows.length === 30 && first.data_bytes > 0);
+    assert.ok(first.files.some(f => f.path === "fp.dta"));
+    // 2. The graphs in memory too. `graph dir` sets r(list): from here r() is that, before and after each probe.
+    assert.equal((await runOn(eng, "graph dir")).results!.r_changed, true);
+    const second = await unchangedByEveryReadOp(true);
+    assert.match(second.log, /^\s*Graph\s*$/m, "the graph in memory");
+    assert.deepEqual(second.results!.r.macros, { list: "Graph" });
+    assert.deepEqual([second.described, second.rows, second.matrices], [first.described, first.rows, first.matrices]);
+    // 3. And the fingerprint does see a change: each of these, made by a run, gives another one.
+    let last = await fingerprint(eng, false);
+    for (const change of ["sort x", "local other 1", "matrix N = (7)", "summarize x", 'replace s = "abd" in 1', "regress x y", "save fp2.dta", "format x %9.2f"]) {
+      const r = await runOn(eng, change);
+      assert.equal(r.rc, 0, r.log);
+      const now = await fingerprint(eng, false);
+      assert.notDeepEqual(now, last, `the fingerprint does not see: ${change}`);
+      last = now;
+    }
+    const dropped = await runOn(eng, "graph drop _all\ngraph dir");
+    assert.equal(dropped.rc, 0, dropped.log);
+    assert.notEqual((await fingerprint(eng, true)).log, second.log, "the fingerprint does not see: graph drop _all");
   });
 
   await t.test("Break stops at a safe point and keeps the data", async () => {
-    await eng.run("clear\nset obs 100\ngen x = 0");
-    const running = eng.run("while 1 {\n quietly replace x = x + 1\n}");
-    setTimeout(() => eng.breakRun(), 1000);
+    await runOn(eng, "clear\nset obs 100\ngen x = 0");
+    const running = runOn(eng, "while 1 {\n quietly replace x = x + 1\n}");
+    setTimeout(() => eng.interrupt(live(eng)), 1000);
     const r = await running;
     assert.equal(r.rc, 1, r.log);
-    const after = await eng.run("summarize x");
+    const after = await runOn(eng, "summarize x");
     assert.equal(after.rc, 0);
     assert.equal(after.nobs, 100);
   });
 
-  await t.test("restart: the run in progress ends with rc 9998 and a new worker answers", async () => {
-    const running = eng.run("while 1 {\n}");
+  // the machine's RESET: end-worker, then start-worker (the run's rc 9998 result is the machine's own: machine.test.ts)
+  await t.test("end() during a run: the run's call fails with the ending's kind, and a new worker answers", async () => {
+    const running = runOn(eng, "while 1 {\n}");
     await new Promise(r => setTimeout(r, 300));
-    await eng.restart("test");
-    const r = await running;
-    assert.equal(r.rc, RC_RESET);
-    assert.match(r.error!, /session reset: test/);
-    assert.equal((await eng.run("display 1")).rc, 0);
+    const old = eng.worker;
+    eng.end(live(eng), { kind: "reset", reset: "user", reason: "session reset: test." });
+    await assert.rejects(running, { kind: "reset", reset: "user", message: "session reset: test." });
+    await startWorker(eng);
+    assert.notEqual(eng.worker, old);
+    const r = await runOn(eng, 'display "N=" _N');
+    assert.equal(r.rc, 0);
+    assert.match(r.log, /N=0/, "the data in memory is gone");
   });
 
   eng.worker!.terminate();
 });
 
-test("a worker that fails to load is replaced, and start() still finishes", { timeout: 120_000 }, async () => {
+// The machine's RESET(crash) for a first crash: end-worker, then start-worker. That a worker which always fails is not
+// started for ever is the machine's (machine.test.ts, scenario 6) and the controller's (app.test.ts).
+test("a worker that fails to load says `crashed`; after end() the next start finishes", { timeout: 120_000 }, async () => {
   let first = true;
   const blocked = () => {   // as WebKit's refusal of a worker script: an error event, no messages
     const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
     return port as unknown as globalThis.Worker;
   };
   const eng = new EngineClient({ createWorker: () => (first ? ((first = false), blocked()) : nodeWorker()), wheel, extraWheels });
-  assert.match(JSON.stringify(await eng.start()), /opendta/i);
-  assert.equal((await eng.run("display 1")).rc, 0);
+  await assert.rejects(startWorker(eng), { type: "crashed", cause: "error", reason: "unknown", detail: "blocked" });
+  eng.end(live(eng), { kind: "reset", reset: "crash", reason: "session reset: the engine crashed (blocked)." });
+  await startWorker(eng);
+  assert.match(JSON.stringify(eng.about), /opendta/i);
+  assert.equal((await runOn(eng, "display 1")).rc, 0);
   eng.worker!.terminate();
 });
 
-test("a worker that always fails to load ends start() with an error instead of restarting forever", { timeout: 20_000 }, async () => {
-  let made = 0;
-  const createWorker = () => {
-    made++;
-    const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
-    return port as unknown as globalThis.Worker;
-  };
-  const eng = new EngineClient({ createWorker, wheel, extraWheels });
-  await assert.rejects(eng.start(), /failed twice/);
-  assert.equal(made, 2);
-});
-
 test("files can be listed, written and read while the engine is still loading, and a run sees them", { timeout: 180_000 }, async () => {
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels });
-  const starting = eng.start();   // not awaited: the page shows the files without waiting for this
+  const { store, change } = pageStore();
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, store });
+  const starting = startWorker(eng);   // not awaited: the page shows the files without waiting for this
   let booted = false;
   starting.then(() => { booted = true; });
   // posted straight after start(): they queue behind "mount" in the worker, so the order holds without waiting
-  const before = eng.call("files");
-  const write = eng.call("write", { path: "early.do", data: new TextEncoder().encode("display 6*7") });
+  const before = eng.query("files");
+  change("write", { path: "early.do", data: new TextEncoder().encode("display 6*7") }, []);
   assert.deepEqual(await before, []);
-  await write;
-  assert.equal(new TextDecoder().decode(await eng.call("read", { path: "early.do" })), "display 6*7");
+  assert.equal(new TextDecoder().decode(await eng.query("read", { path: "early.do" })), "display 6*7");
   assert.equal(booted, false, "the files were answered before the engine finished loading");
   // a run asked for before the engine is up waits for it (it does not fail)
-  const r = await eng.run("do early.do");
+  const r = await runOn(eng, "do early.do");
   assert.equal(r.rc, 0, r.log);
   assert.match(r.log, /42/);
   await starting;
@@ -145,9 +249,10 @@ test("files can be listed, written and read while the engine is still loading, a
 const snapshotDir = fileURLToPath(new URL("../public/snapshot/", import.meta.url));
 const manifest = readManifest();
 const current = inputs(), haveSnapshot = Boolean(manifest) && staleness(manifest!, current) === null;
-// What the build's list (start-files.json, scripts/start-files.ts) says of the snapshot: the client reads it and gives the
-// worker the build's identity. The files' own entries are not needed here: the worker reads the files from disk. The page's
-// id is made from the same stamp and the inputs, as vite.config.ts makes both.
+// What the build's list (start-files.json, scripts/start-files.ts) says of the snapshot: the transport reads it, compares
+// its build id with the page's (checkBuild), and gives the worker the build's time (`built`) and the snapshot's two big
+// files. The files' own entries are not needed here: the worker reads the files from disk. The page's id is made from the
+// same stamp and the inputs, as vite.config.ts makes both.
 const STAMP = "engine.test.ts";
 const startFiles = manifest && { built: manifest.built, buildId: buildId(STAMP, manifest), snapshot: manifest.files, files: [], size: 0, compressed: 0 };
 
@@ -156,32 +261,34 @@ test("engine from a memory snapshot: native code, graphs, files, Break; the work
   const bare = mkdtempSync(join(tmpdir(), "dofile-snapshot-"));
   after(() => rmSync(bare, { recursive: true, force: true }));
   for (const f of readdirSync(snapshotDir)) if (f !== "manifest.json") symlinkSync(`${snapshotDir}${f}`, join(bare, f));
-  const statuses: string[] = [];
+  const said: Answer<"start-worker">[] = [], { store, change } = pageStore();
   const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, buildId: buildId(STAMP, current), startFiles: startFiles!,
-    snapshot: `${pathToFileURL(bare).href}/`, onStatus: s => statuses.push(s) });
+    snapshot: `${pathToFileURL(bare).href}/`, store });
   const t0 = performance.now();
-  const about = await eng.start();
+  const build = await eng.build();   // the list, checked: what mount needs of it
+  assert.deepEqual(build, { built: manifest!.built, files: manifest!.files });
+  await startWorker(eng, build, said);
   console.log(`snapshot start: ${((performance.now() - t0) / 1000).toFixed(2)} s`);
-  assert.match(JSON.stringify(about), /opendta/i);
-  assert.deepEqual(statuses, ["downloading the engine", "unpacking the engine", "loading Python", "loading your files", "starting the engine"]);
+  assert.match(JSON.stringify(eng.about), /opendta/i);
+  assert.deepEqual(stagesOf(said), ["download", "unpack", "python", "files", "engine", "started"]);
 
   await t.test("regress, scipy, a graph and a file after the restore", async () => {
-    const r = await eng.run("clear\nset obs 80\ngen x = _n\ngen y = 2*x + mod(_n, 5)\nregress y x\ndisplay \"B=\" %12.8f _b[x]\nscatter y x\ndisplay normal(1.96)");
+    const r = await runOn(eng, "clear\nset obs 80\ngen x = _n\ngen y = 2*x + mod(_n, 5)\nregress y x\ndisplay \"B=\" %12.8f _b[x]\nscatter y x\ndisplay normal(1.96)");
     assert.equal(r.rc, 0, r.log);
     assert.match(r.log, /B=\s+2\.00000000|B=\s+1\.99\d+|B=\s+2\.0\d+/);
     assert.match(r.log, /\.97500\d+/);
     assert.equal(r.images.length, 1);
-    await eng.call("write", { path: "notes.txt", data: new TextEncoder().encode("hi") });
-    assert.equal(new TextDecoder().decode(await eng.call("read", { path: "notes.txt" })), "hi");
+    change("write", { path: "notes.txt", data: new TextEncoder().encode("hi") }, []);
+    assert.equal(new TextDecoder().decode(await eng.query("read", { path: "notes.txt" })), "hi");
   });
 
   await t.test("Break stops at a safe point and keeps the data", async () => {
-    await eng.run("clear\nset obs 100\ngen x = 0");
-    const running = eng.run("while 1 {\n quietly replace x = x + 1\n}");
-    setTimeout(() => eng.breakRun(), 1000);
+    await runOn(eng, "clear\nset obs 100\ngen x = 0");
+    const running = runOn(eng, "while 1 {\n quietly replace x = x + 1\n}");
+    setTimeout(() => eng.interrupt(live(eng)), 1000);
     const r = await running;
     assert.equal(r.rc, 1, r.log);
-    assert.equal((await eng.run("summarize x")).nobs, 100);
+    assert.equal((await runOn(eng, "summarize x")).nobs, 100);
   });
   eng.worker!.terminate();
 });
@@ -190,7 +297,7 @@ test("a list of another build is refused with kind \"updated\" before any worker
   let made = 0;
   const eng = new EngineClient({ createWorker: () => (made++, nodeWorker()), wheel, buildId: buildId("another build run", current), startFiles: startFiles!,
     snapshot: new URL("../public/snapshot/", import.meta.url).href });
-  await assert.rejects(eng.start(), { kind: "updated", message: /^dofile was updated: reload the page.*npm run snapshot/ });
+  await assert.rejects(eng.build(), { kind: "updated", message: /^dofile was updated: reload the page.*npm run snapshot/ });
   assert.equal(made, 0, "no worker is made");
   assert.equal(eng.worker, null);
 });

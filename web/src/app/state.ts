@@ -1,12 +1,16 @@
 // The page's state: one module of signals (docs/design/SPEC.md, section 8). Any component reads any of them; each is
-// written only by the owner named on its line. The controllers that own most of them: engine.js (the engine), run.js
-// (runs and their results), files.js (the file list). The types are in types.d.ts.
+// written only by the owner named on its line. The types are in types.ts.
 //
-// Plain JavaScript on @preact/signals-core, so the Node tests import it as it is. Components read the same signals through
+// A signal with one owner is exported read-only (ReadonlySignal): a view that assigns one fails `npm run check`. Its
+// owner writes it through a writer object, and test/imports.test.ts checks that each writer is imported only by its
+// owner: `engineWriter` by engine.ts, `runWriter` by run.ts, `filesWriter` by files.ts. `toast`, `banners` and `announce`
+// are written through the helpers below. The signals that views write themselves stay plain signals.
+//
+// On @preact/signals-core, so the Node tests import this file as it is. Components read the same signals through
 // @preact/signals (it re-exports this package's signals and re-renders a component that reads `.value`).
 import { computed, signal } from "@preact/signals-core";
-import { engineBytes as metaEngineBytes } from "../engine/client.ts";
-import type { About, Banner, BrowseRows, DataSummary, Dialog, EngineState, FileInfo, Graph, LastRun, Layout, LogItem, Macros, Memory,
+import type { ReadonlySignal } from "@preact/signals-core";
+import type { Banner, BrowseRows, DataSummary, Dialog, EngineState, FileInfo, Graph, LastRun, Layout, LogItem, Macros, Memory,
   OpenTab, OutputTab, PhoneTab, Results, Theme } from "./types.ts";
 
 // localStorage, which a browser may refuse (some private modes) and Node does not have
@@ -18,26 +22,39 @@ export const saved = {
   },
 };
 
-// ---- the engine (engine.js) ----
-export const engine = signal<EngineState>({ s: "none" });          // engine.js: the one wrapper around EngineClient
+// ---- the engine (engine.ts) ----
+/** The writer of the engine controller's signal. Only app/engine.ts imports it. */
+export const engineWriter = {
+  engine: signal<EngineState>({ s: "checking-lock" }),   // the machine's state as views see it (engine.ts, view())
+};
+export const engine: ReadonlySignal<EngineState> = engineWriter.engine;   // engine.ts, after every step of the state machine
 export const isolated = signal(Boolean(globalThis.crossOriginIsolated));   // set once at load
-export const about = signal<About | null>(null);                     // engine.js, when boot answers
-// The download size in bytes as a host sends them: start-files.json's `compressed` total, which the build writes into the
-// page (<meta name="dofile-engine-bytes">), so the prompt has it before any download, offline too. null: not a built page
-// (a dev server with no snapshot).
-export const engineBytes = metaEngineBytes();
-export const memory = signal<Memory | null>(null);                    // run.js: after a start and after each run; null on a new engine
 
-// ---- files (files.js) ----
-export const files = signal<FileInfo[]>([]);                       // files.js, after every store change and every run
+// The download size for the prompt, in bytes as a host sends them: the build writes start-files.json's `compressed` total
+// into the page (<meta name="dofile-engine-bytes">, vite.config.ts), so it is there at load, before any download.
+// null: not a built page (a dev server with no snapshot).
+function metaEngineBytes(doc: Document | undefined = globalThis.document): number | null {
+  const bytes = Number(doc?.querySelector('meta[name="dofile-engine-bytes"]')?.getAttribute("content"));
+  return bytes > 0 ? bytes : null;
+}
+export const engineBytes = metaEngineBytes();
+
+// ---- files (files.ts) ----
+/** The writers of the file service's signals. Only app/files.ts imports it. */
+export const filesWriter = {
+  files: signal<FileInfo[]>([]),                  // after every store change and every run
+  fresh: signal<Set<string>>(new Set()),          // paths the last run created or changed (the "new" badge)
+  persisted: signal<boolean | null>(null),        // from storage.persist() and persisted(); null: unknown
+};
+export const files: ReadonlySignal<FileInfo[]> = filesWriter.files;
 /** Whether the store has a file (folders do not count): "Download all (.zip)" is disabled without one. */
 export const hasFiles = computed(() => files.value.some(f => !f.dir));
-export const fresh = signal<Set<string>>(new Set());                // files.js: paths the last run created or changed (the "new" badge)
-export const persisted = signal<boolean | null>(null);                 // files.js, from storage.persist() and persisted(); null: unknown
+export const fresh: ReadonlySignal<Set<string>> = filesWriter.fresh;
+export const persisted: ReadonlySignal<boolean | null> = filesWriter.persisted;
 
 // ---- editor tabs (step 4a) ----
 export const tabs = signal<OpenTab[]>([]);                        // 4a (files/): adds, closes, renames, orders; `dirty` only through setDirty()
-export const activeTab = signal<string | null>(null);                 // 4a: the tabs, and the file tree when it opens a file (files/open.js)
+export const activeTab = signal<string | null>(null);                 // 4a: the tabs, and the file tree when it opens a file (files/open.ts)
 
 /** The unsaved dot of an open file: the editor (4b) sets it on an edit and clears it on a save; 4a's reload and discard
  *  clear it through the editor. A path with no tab is ignored. */
@@ -54,25 +71,36 @@ export const layout = signal<Layout>("desktop");               // main.tsx, from
 /** The phone layout: read this rather than passing a `phone` prop down. */
 export const isPhone = computed(() => layout.value === "phone");
 
-// ---- runs (run.js) ----
-export const log = signal<LogItem[]>([{ t: "head" }]);            // run.js; "Clear log" empties it
-export const lastRun = signal<LastRun | null>(null);                   // run.js
-export const history = signal<string[]>([]);                     // run.js runCommand(): the command line, Load and Import call it
-export const results = signal<Results | null>(null);                   // run.js, from each RunResult; null on a new engine and in other-tab
-export const macros = signal<Macros | null>(null);                    // run.js, after each run; null on a new engine and in other-tab
-export const data = signal<DataSummary | null>(null);                      // run.js, after each run; null on a new engine and in other-tab
-export const rows = signal<BrowseRows | null>(null);                      // run.js after each run (null on a new engine); the Data tab's "Show 50 more" appends
-// Two writers: run.js refreshData() replaces `rows`, "Show 50 more" (4c) appends. 4c appends only if rows.value is still the
-// object its request started from (a run or a new engine replaced it meanwhile: drop the answer).
+// ---- runs (run.ts) ----
+/** The writers of the run controller's signals. Only app/run.ts imports it. */
+export const runWriter = {
+  log: signal<LogItem[]>([{ t: "head" }]),        // "Clear log" empties it
+  lastRun: signal<LastRun | null>(null),
+  history: signal<string[]>([]),                  // runCommand(): the command line, Load and Import call it
+  results: signal<Results | null>(null),          // from each RunResult; null when the engine is gone (a reset, another tab)
+  macros: signal<Macros | null>(null),            // after each run; null when the engine is gone
+  data: signal<DataSummary | null>(null),         // after each run; null when the engine is gone
+  rows: signal<BrowseRows | null>(null),          // after each run (refreshData), and "Show 50 more" (moreRows); null when the engine is gone
+  memory: signal<Memory | null>(null),            // when an engine is ready and after each run; null when the engine is gone
+  graphs: signal<Graph[]>([]),                    // a run's graphs, and addFileGraph() for a .png opened (4a); "Clear log" empties
+};
+export const log: ReadonlySignal<LogItem[]> = runWriter.log;
+export const lastRun: ReadonlySignal<LastRun | null> = runWriter.lastRun;
+export const history: ReadonlySignal<string[]> = runWriter.history;
+export const results: ReadonlySignal<Results | null> = runWriter.results;
+export const macros: ReadonlySignal<Macros | null> = runWriter.macros;
+export const data: ReadonlySignal<DataSummary | null> = runWriter.data;
+export const rows: ReadonlySignal<BrowseRows | null> = runWriter.rows;
+export const memory: ReadonlySignal<Memory | null> = runWriter.memory;
 export const pickedVar = signal<string | null>(null);                 // the Data tab
-export const graphs = signal<Graph[]>([]);                      // run.js only: a run's graphs, and addFileGraph() for a .png opened (4a); "Clear log" empties
-// An index into `graphs`, which keeps the last 20 (run.js MAX_GRAPHS): the oldest drop off the front, so an index moves.
+export const graphs: ReadonlySignal<Graph[]> = runWriter.graphs;
+// An index into `graphs`, which keeps the last 20 (run.ts MAX_GRAPHS): the oldest drop off the front, so an index moves.
 // Find a graph by its `n` (graphs.value.findIndex(g => g.n === n)), never keep an index: the log's links carry `n`.
-export const graphIndex = signal(0);                   // the Graph tab, the full-size view and the log's graph links; run.js: the newest
+export const graphIndex = signal(0);                   // the Graph tab, the full-size view and the log's graph links; run.ts: the newest
 export const graphFull = signal(false);                // the full-size graph view (4c, output/FullSize.tsx) is open, on graphIndex:
                                                        // 4c's "Open full size" and Close, 4b's tap on an inline graph (phone)
 
-// ---- theme (theme.js) ----
+// ---- theme (theme.ts) ----
 const asTheme = (v: string | null): Theme => (v === "light" || v === "dark" ? v : "system");
 export const theme = signal<Theme>(asTheme(saved.get("dofile.theme")));   // the theme button; kept in localStorage (OQ-21)
 const darkQuery = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
@@ -82,10 +110,11 @@ darkQuery?.addEventListener?.("change", e => { systemDark.value = e.matches; });
 export const resolvedTheme = computed(() => (theme.value === "system" ? (systemDark.value ? "dark" : "light") : theme.value));
 
 // ---- dialogs, banners, toast, the live region (app/ui/) ----
-export const toast = signal<string | null>(null);                     // anyone, through showToast(text); it clears itself after 4 s
+const toastText = signal<string | null>(null), bannerList = signal<Banner[]>([]), announced = signal("");
+export const toast: ReadonlySignal<string | null> = toastText;   // anyone, through showToast(text); it clears itself after 4 s
 export const dialog = signal<Dialog>(null);                    // whoever opens one; the dialog closes itself (sets null)
-export const banners = signal<Banner[]>([]);                     // their owners add; Dismiss removes one (dismiss())
-export const announce = signal("");                    // the hidden live region: through say()
+export const banners: ReadonlySignal<Banner[]> = bannerList;     // their owners add (addBanner()); Dismiss removes one (dismiss())
+export const announce: ReadonlySignal<string> = announced;       // the hidden live region: through say()
 
 let saying: string[] = [];   // what say() was given in this 50 ms window
 /** Say `text` once in the hidden live region (role=status, polite). The same words twice in a row are said twice. What is
@@ -95,30 +124,30 @@ export function say(text: string) {
   if (saying.at(-1) === text) return;
   saying.push(text);
   if (saying.length > 1) return;
-  announce.value = "";
+  announced.value = "";
   // a screen reader hears a change of the region's text; the empty step makes a repeat a change
-  setTimeout(() => { announce.value = saying.join(". "); saying = []; }, 50);
+  setTimeout(() => { announced.value = saying.join(". "); saying = []; }, 50);
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 /** A toast: a short confirmation with no buttons ("Saved analysis.do", "Copied"). One at a time, 4 s; the live region says
  *  it too. `holdToast(true)` while the pointer is on it keeps it; `holdToast(false)` gives it 4 s again. */
 export function showToast(text: string) {
-  toast.value = text;
+  toastText.value = text;
   say(text);
   holdToast(false);
 }
 export function holdToast(hold: boolean) {
   clearTimeout(toastTimer);
-  if (!hold && toast.value !== null) toastTimer = setTimeout(() => { toast.value = null; }, 4000);
+  if (!hold && toastText.value !== null) toastTimer = setTimeout(() => { toastText.value = null; }, 4000);
 }
 
-/** Add a banner (one of each kind and path: a second replaces the first). Who adds each kind: types.d.ts, Banner. */
+/** Add a banner (one of each kind and path: a second replaces the first). Who adds each kind: types.ts, Banner. */
 export function addBanner(b: Banner) {
-  banners.value = [...banners.value.filter(x => !sameBanner(x, b)), b];
+  bannerList.value = [...bannerList.value.filter(x => !sameBanner(x, b)), b];
 }
 /** Remove a banner: its Dismiss, or its cause went away. */
 export function dismiss(b: Banner) {
-  banners.value = banners.value.filter(x => !sameBanner(x, b));
+  bannerList.value = bannerList.value.filter(x => !sameBanner(x, b));
 }
 const sameBanner = (a: Banner, b: Banner) => a.b === b.b && ("path" in a ? a.path : null) === ("path" in b ? b.path : null);

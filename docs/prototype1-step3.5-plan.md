@@ -58,7 +58,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | A | Convert to TypeScript, no behaviour change | done |
 | B | One build identity; no offline; a failed download is `failed` | done |
 | B2 | The build id covers the whole build; a stale snapshot fails the build; `manifest.json` is not deployed | done |
-| C | The state machine in one file; the contracts enforced | not started |
+| C | The state machine in one file; the contracts enforced | done |
 | D | The journal as the only channel; mtime only | not started |
 | E | Docs: SPEC sections 5 to 8, `web/CLAUDE.md`, `web-engine-data-flow.md` revised to the code as built | not started |
 

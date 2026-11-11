@@ -1,64 +1,70 @@
-// The page's handle on the engine worker (worker.js): cached(), download(), forgetDownload(), start(), call(op, args),
-// run(code, options), breakRun(), keepWaiting(), restart(reason), stop(reason).
-// Break works like the MCP server's: the interrupt buffer asks the engine to stop at the next safe point (rc 1, data
-// kept). If it hasn't stopped after graceMs, the worker is replaced (rc 9998: data in memory is gone, files stay), unless
-// keepWaiting() was called first. Without a SharedArrayBuffer (a page that isn't cross-origin isolated) Break can only restart.
+// The transport: the page's side of the engine worker (worker.ts), and the build's files before a worker exists. It
+// decides nothing. The state machine (machine.ts) says when a worker starts and ends; the controller (src/app/engine.ts)
+// performs that here. Its interface is three parts (docs/prototype1-step3.5-c-design.md, item 7):
+//   Reader     query(op, args): the read ops (types.ts, ReadOps). Safe at any time, from anywhere.
+//   Lifecycle  start(n, build, reply), end(n, ending), run(n, args, onLog), interrupt(n): what changes the engine. Only the
+//              effect performer holds this.
+//   Builds     cached(), download(), build(), forgetDownload(): the build's list and its files in the Cache.
+// `n` is the live worker's number: the performer passes the effect's ticket, and the transport only compares it. It never
+// puts it on an event: what a worker's start has to say goes through the `reply` given with it (stage, started,
+// start-failed, crashed), which the controller has bound to the ticket.
+// The transport does not restart, count crashes, hold a timer, make run results or know a state name, and it awaits
+// nothing before it makes a worker. One worker is live at a time: start() with one still live throws.
 //
-// Errors. Every error this client rejects with has a `kind`:
-//   "failed"        start() could not start the engine. `reason`: "no-wasm" | "download" | "memory" | "unknown"; `name` is
-//                   the worker's error name ("DownloadError": a start file did not arrive; "SnapshotError": the snapshot is
-//                   damaged or unusable). Also download(), and start() before it makes a worker, with reason "download" when
-//                   the build's list or a file did not arrive as the list says.
-//   "failed-twice"  the worker failed twice before a start finished; it is not started again. `reason` as above.
-//   "updated"       download() or start(): the build's list is of another build than the page (checkBuild); reload.
-//   "reset"         the call was cut by a restart. `reset`: "break" | "crash" | "user".
-//   "stopped"       the call was cut by stop(), or by a second start().
-//   "no-engine"     call() with no worker.
-//   "busy"          run() while a run is in progress.
-//   "op"            the worker answered the call with an error; `name` is the worker's error name. Never from run().
-// download() rejects with an AbortError (the signal's reason when that is one) when its signal aborts. run() never rejects,
-// "busy" excepted: a run that is cut resolves with an rc 9998 result whose `kind` is "break", "crash" or "user" (a
-// restart), "stopped", "failed-twice" or "no-engine"; a run whose op failed in the worker (no memory for its result, say)
-// resolves with an rc 9998 result of kind "run-failed" and the worker's message as `error`. That worker is not restarted.
+// Errors. Every error the transport rejects with has a `kind`:
+//   "failed"        download() or build(): the build's list or a file did not arrive as the list says (`reason`
+//                   "download"), or the build has no snapshot, or the Cache broke (`reason` "unknown"). Also a call cut
+//                   because its worker's start failed.
+//   "failed-twice"  the call was cut because its worker failed twice while starting.
+//   "updated"       download() or build(): the build's list is of another build than the page (checkBuild); reload.
+//   "reset"         the call was cut by a reset. `reset`: "break" | "crash" | "user".
+//   "stopped"       the call was cut because another tab took the engine.
+//   "no-engine"     query() or run() with no live worker.
+//   "op"            the worker answered the call with an error; `name` is the worker's error name.
+// download() rejects with an AbortError (the signal's reason when that is one) when its signal aborts.
 import { isStorageRefusal, openCache } from "./snapshot.ts";
+import type { Ending, Reply } from "./machine.ts";
 import type { FileStore } from "./store.ts";
-import type { About, ClientError, CutKind, Downloaded, MountArgs, OpResults, PendingRow, Progress, ResetKind, RunOptions, RunResult,
-  StartFiles, Startup, StatusText } from "./types.ts";
+import type { About, Build, ClientError, Downloaded, FromWorker, MirrorOps, MountArgs, Op, Ops, Progress, ReadOps, RunResult, StartFiles, Startup,
+  Wheel } from "./types.ts";
 
-/** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
-type Wheel = string | { name: string, bytes: Uint8Array };
 /** One file of the build's list of start files. */
 type StartFile = StartFiles["files"][number];
 /** A call waiting for the worker's answer. */
-type Pending = { op: string, resolve: (value: any) => void, reject: (error: ClientError) => void, onLog?: (text: string) => void };
+type Pending = { resolve: (value: any) => void, reject: (error: ClientError) => void, onLog?: (text: string) => void };
+/** The live worker's record: its number, its calls, its interrupt buffer. `ended`: what end() rejected its calls with. */
+type Live = { n: number, worker: Worker, pending: Map<number, Pending>, interrupt: Int32Array<SharedArrayBuffer> | null, ended: ClientError | null };
 
-export const RC_RESET = 9998;
+/** Read ops only: safe at any time, from anywhere. */
+export interface Reader { query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> }
+/** What changes the engine. Only the effect performer holds this. */
+export interface Lifecycle {
+  start(n: number, build: Build | null, reply: Reply<"start-worker">): void;
+  end(n: number, ending: Ending): void;
+  run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult>;
+  interrupt(n: number): void;
+}
+/** The build's files, before a worker exists. */
+export interface Builds {
+  cached(): Promise<boolean>;
+  download(o: { onProgress?: (p: Progress) => void, signal?: AbortSignal }): Promise<Downloaded>;
+  build(): Promise<Build | null>;        // the list, fetched fresh and checked (checkBuild); null for the normal start
+  forgetDownload(): Promise<void>;
+}
 
 const fail = (message: string, kind: ClientError["kind"], more: Partial<ClientError> = {}): ClientError => Object.assign(new Error(message), { kind, ...more });
 // what download() rejects with when the caller's signal aborted: an AbortError, whatever reason the caller gave
 const aborted = (signal: AbortSignal) => (signal.reason?.name === "AbortError" ? signal.reason
   : new DOMException(String(signal.reason?.message ?? signal.reason ?? "aborted"), "AbortError"));
-const lost = (what: string) => `session reset: ${what}. Data in memory is gone; your files are kept.`;
 
-// what a run that was cut resolves with: every RunResult field and no timing, plus `kind` (why)
-const resetResult = (error: string, kind: CutKind): RunResult => ({ rc: RC_RESET, error, error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0,
-  images: [], error_line: null, graph_commands: [], graph_lines: [], kind });
-
-// why a start failed, from the worker's error
+// why a start failed or a worker crashed, from the worker's error
 function reasonOf({ name, message }: { name?: string, message: string }): "download" | "memory" | "unknown" {
   if (name === "DownloadError") return "download";
   if (name === "RangeError" || /out of memory|MemoryError|could not allocate|allocation failed/i.test(message)) return "memory";
   return "unknown";
 }
 
-// The download size for the prompt, in bytes as a host sends them: the build writes it into the page
-// (<meta name="dofile-engine-bytes">, vite.config.ts), so it is there at load, offline too. null: not a built page.
-export function engineBytes(doc: Document | undefined = globalThis.document): number | null {
-  const bytes = Number(doc?.querySelector('meta[name="dofile-engine-bytes"]')?.getAttribute("content"));
-  return bytes > 0 ? bytes : null;
-}
-
-export class EngineClient {
+export class EngineClient implements Reader, Lifecycle, Builds {
   declare createWorker: () => Worker;
   declare wheel: Wheel;
   declare extraWheels: Wheel[];
@@ -66,71 +72,51 @@ export class EngineClient {
   declare indexURL: string | undefined;
   declare snapshot: string | undefined;
   declare brotli: string | undefined;
-  declare graceMs: number;
-  // the callbacks, for the page's types; the engine controller (app/engine.js) sets its own after construction
-  declare onStatus: (status: StatusText) => void;
-  declare onRestart: (reason: string, started: Promise<About>, kind: ResetKind) => void;
-  declare onFileError: (error: ClientError, op: string, path: string) => void;
+  declare onFileError: (error: ClientError, op: keyof MirrorOps, path: string) => void;
   declare store: Pick<FileStore, "attach"> | null;
   declare startFiles: string | (StartFiles & { base?: string }) | undefined;
   declare fetch: typeof globalThis.fetch;
   declare caches: CacheStorage | null | undefined;
   declare wasm: object | null | undefined;
   declare nextId: number;
-  declare pending: Map<number, Pending>;
-  declare running: Promise<RunResult> | null;
-  declare errorRestarts: number;
-  declare worker: Worker | null;
-  declare breakTimer: ReturnType<typeof setTimeout> | null;
-  declare resetAt: number | null;
+  // facts of the last start, for the tests and the test hook; nothing decides by them
   declare storeError: string | null;
   declare about: About | null;
   declare startup: Startup | null;
-  declare interrupt: Int32Array<SharedArrayBuffer> | null;
-  declare gen: number | undefined;
+  #live: Live | null = null;
 
   // createWorker: () => a Worker (in the page: new Worker(new URL("./worker.ts", import.meta.url), {type: "module"}))
   // snapshot: the URL (ending in "/") of a snapshot built by scripts/make-snapshot.mjs, to start from instead of
   // installing the packages. Its build (`built`, its two big files) comes from startFiles, which a snapshot start needs.
-  // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.js), to compare them
+  // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.ts), to compare them
   // extraWheels: more wheels installed after the dofile one (web/wheels/: pyreadstat), each a URL or {name, bytes} like `wheel`
   // buildId: the page's build id (scripts/build-id.ts, compiled in by vite.config.ts); a build's list with another one is of
   //   another build, or (in development) of a stale snapshot, and is refused (checkBuild)
-  // store: the page's FileStore (store.js). While a worker exists, the store sends it each change the page makes.
-  // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download() and a
-  //   snapshot start() need it
-  // onRestart(reason, started, kind): a new worker was started; kind is "break" (Break ran out of time, or the page
-  //   cannot ask a run to stop), "crash" (the worker failed) or "user" (restart() was called); `started` is its start().
-  //   It is called at once, before the cut run's promise resolves with rc 9998.
+  // store: the page's FileStore (store.ts). While a worker is live, the store sends it each change the page makes.
+  // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download(), build() and
+  //   cached() need it
   // onFileError(error, op, path): a change the page made to the store could not be put into the engine's folder; the
   //   folder then has the store's version, unless that failed too (the next start has it).
   // fetch, caches, wasm: the browser's, unless the tests give their own
-  constructor({ createWorker, wheel, extraWheels = [], buildId, indexURL, snapshot, brotli, graceMs = 5000,
-    onStatus = (_status) => {}, onRestart = (_reason, _started, _kind) => {}, onFileError = (_error, _op, _path) => {},
-    store = null, startFiles = undefined,
+  constructor({ createWorker, wheel, extraWheels = [], buildId, indexURL, snapshot, brotli,
+    onFileError = (_error, _op, _path) => {}, store = null, startFiles = undefined,
     fetch = (...a) => globalThis.fetch(...a), caches = globalThis.caches, wasm = globalThis.WebAssembly }: {
     createWorker: () => Worker, wheel: Wheel, extraWheels?: Wheel[],
-    buildId?: string, indexURL?: string, snapshot?: string, brotli?: string, graceMs?: number,
-    onStatus?: (status: StatusText) => void,
-    onRestart?: (reason: string, started: Promise<About>, kind: ResetKind) => void,
-    onFileError?: (error: ClientError, op: string, path: string) => void,
+    buildId?: string, indexURL?: string, snapshot?: string, brotli?: string,
+    onFileError?: (error: ClientError, op: keyof MirrorOps, path: string) => void,
     store?: Pick<FileStore, "attach"> | null, startFiles?: string | (StartFiles & { base?: string }), fetch?: typeof globalThis.fetch,
     caches?: CacheStorage | null, wasm?: object | null }) {
-    Object.assign(this, { createWorker, wheel, extraWheels, buildId, indexURL, snapshot, brotli, graceMs, onStatus, onRestart, onFileError,
-      store, startFiles, fetch, caches, wasm });
-    this.onStatus = onStatus;
-    this.onRestart = onRestart;
+    Object.assign(this, { createWorker, wheel, extraWheels, buildId, indexURL, snapshot, brotli, onFileError, store, startFiles, fetch, caches, wasm });
     this.nextId = 0;
-    this.pending = new Map();
-    this.running = null;
-    this.errorRestarts = 0;
-    this.worker = null;
-    this.breakTimer = null;
-    this.resetAt = null;   // while Break counts down: the time (Date.now()) the engine is reset at
     this.storeError = null;   // after a start: why the worker could not copy the files, if it could not
     this.about = null;     // what boot answered, after a start
-    this.startup = null;   // where the last start's time went (worker.js, `startup`)
+    this.startup = null;   // where the last start's time went (worker.ts, `startup`)
   }
+
+  /** The live worker, or null. */
+  get worker(): Worker | null { return this.#live?.worker ?? null; }
+
+  // ---- Builds: the build's list and its files in the Cache ----
 
   // The build's list of start files: { built, buildId, snapshot, files: [{ path, size, compressed, download }], size,
   // compressed } (scripts/start-files.ts).
@@ -161,9 +147,28 @@ export class EngineClient {
     }
   }
 
+  // What `mount` needs of a list, after the checks: a list of another build is "updated", whatever it lacks; a build with
+  // no snapshot rejects with kind "failed", reason "unknown".
+  #buildOf(list: StartFiles): Build {
+    const none = () => fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
+    if (!list.built) throw none();
+    this.checkBuild(list);
+    if (!list.snapshot) throw none();
+    return { built: list.built, files: list.snapshot };
+  }
+
+  // The build's list, fetched fresh and checked: what `mount` needs of it for a snapshot start. null for the normal start
+  // (?snapshot=0), which has no list. Every restart asks for it (the machine's `starting-list`): the Cache may have been
+  // evicted since the first start, and the worker would then fetch the files of whatever build the site has now. A list
+  // that does not arrive rejects with kind "failed", reason "download"; one of another build with kind "updated".
+  async build(): Promise<Build | null> {
+    if (!this.snapshot) return null;
+    return this.#buildOf(await this.startList());
+  }
+
   // Whether every file the build's list marks `download` is in the Cache `dofile-snapshot-<built>` of the list's build: the
   // page then starts without asking. False when it cannot tell (no snapshot start, no Cache API, the list cannot be fetched,
-  // offline too: no start works offline, since start() fetches the list). Never rejects; writes nothing.
+  // offline too: no start works offline, since a start needs the list). Never rejects; writes nothing.
   async cached(): Promise<boolean> {
     try {
       if (!this.snapshot || !this.caches) return false;
@@ -196,21 +201,21 @@ export class EngineClient {
   // A file that does not arrive whole (a failed fetch, another size than the list says) is not kept, and download()
   // rejects (kind "failed", reason "download"); a list from another build than the page rejects with kind "updated"; a
   // Cache that fails other than by refusing storage rejects with kind "failed", reason "unknown".
-  // Resolves with { cached: true, received, total }, or { cached: false, why } when there is nothing to fill (no snapshot
-  // start, no Cache API, storage refused): start() then downloads by itself, uncounted.
+  // Resolves with { cached: true, received, total, build }, or { cached: false, why, build } when there is nothing to fill
+  // (no snapshot start, no Cache API, storage refused): the worker then downloads by itself, uncounted. `build`: what
+  // `mount` needs of the list just checked (null: the normal start), so the start that follows fetches no list.
   async download({ onProgress = (_progress) => {}, signal = undefined }: { onProgress?: (progress: Progress) => void, signal?: AbortSignal } = {}):
     Promise<Downloaded> {
-    if (!this.snapshot) return { cached: false, why: "the normal start loads from the CDN" };
+    if (!this.snapshot) return { cached: false, why: "the normal start loads from the CDN", build: null };
     if (signal?.aborted) throw aborted(signal);
     const list = await this.startList(signal);
-    if (!list.built) throw fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
-    this.checkBuild(list);
-    if (!this.caches) return { cached: false, why: "there is no Cache API here (not a secure context?)" };
+    const build = this.#buildOf(list);
+    if (!this.caches) return { cached: false, why: "there is no Cache API here (not a secure context?)", build };
     let cache: Cache;
     try {
-      cache = await openCache(this.caches, list.built);
+      cache = await openCache(this.caches, build.built);
     } catch (e: any) {
-      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}` };
+      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };
       throw fail(String(e?.message ?? e), "failed", { reason: "unknown" });
     }
     const total = list.compressed, got = new Map<StartFile, number>();
@@ -253,198 +258,132 @@ export class EngineClient {
     try {
       await Promise.all(list.files.filter(f => f.download).map(f => one(f).catch(failed)));
     } catch (e: any) {
-      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}` };   // the browser would not keep a file
+      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };   // the browser would not keep a file
       throw e;
     } finally {
       signal?.removeEventListener("abort", abort);
     }
-    return { cached: true, received, total };
+    return { cached: true, received, total, build };
   }
 
-  // Start a worker and the engine in it. A worker that is still there (a second start()) is ended first. A snapshot start
-  // first fetches the build's list, fresh, and checks it (checkBuild): a list that does not arrive (kind "failed", reason
-  // "download") or is of another build (kind "updated") makes no worker. If the start fails, the worker is ended, the store
-  // stops sending to it, and start() rejects (kind "failed", "failed-twice" or "updated").
-  async start(): Promise<About> {
-    if (this.worker) this.end(fail(lost("the engine was started again"), "stopped"), null);
-    if (!this.wasm) throw fail("this browser has no WebAssembly support", "failed", { reason: "no-wasm" });
-    // A stop() or another start() while the list is fetched takes the next number: this start then makes no worker.
-    const gen = this.gen = (this.gen ?? 0) + 1;
-    let mountArgs: MountArgs = { indexURL: this.indexURL, brotli: this.brotli };
-    if (this.snapshot) {   // the build's list, fresh: the worker gets the build's identity from it, and fetches no manifest
-      try {
-        const list = await this.startList();
-        if (!list.built) throw fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
-        this.checkBuild(list);   // first, as in download(): a list of another build is "updated", whatever it lacks
-        if (!list.snapshot) throw fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
-        mountArgs = { ...mountArgs, snapshot: this.snapshot, built: list.built, files: list.snapshot };
-      } catch (e) {
-        if (gen === this.gen) { this.store?.attach(null); throw e; }
-      }
-      if (gen !== this.gen) throw fail("the start was stopped before its worker existed", "stopped");
-    }
-    this.interrupt = typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4));
+  // ---- Lifecycle: what changes the engine. Only the effect performer calls these. ----
+
+  // Make worker `n` and start the engine in it: mount, boot, startup, in order. What happens is said through `reply`:
+  // `stage` as each stage begins, then `started`; `start-failed` when there is no WebAssembly, the worker cannot be made,
+  // or mount, boot or startup fails in the worker; `crashed` when the worker errors or the browser closes the file
+  // storage, now or at any time while it is live. It fetches nothing first: `build` is what `mount` needs of the build's
+  // list (null: the normal start). The worker is made before start() returns, so calls made right after it queue behind
+  // "mount" in the worker. A worker that failed is not ended here: the machine says so (end()).
+  // With a worker still live it throws: the machine always ends a worker before it starts another.
+  start(n: number, build: Build | null, reply: Reply<"start-worker">): void {
+    if (this.#live) throw new Error(`start(${n}): worker ${this.#live.n} is still live`);
+    if (!this.wasm) return reply({ type: "start-failed", reason: "no-wasm", detail: "this browser has no WebAssembly support" });
     let worker: Worker;
     try {
-      worker = this.worker = this.createWorker();
+      worker = this.createWorker();
     } catch (e: any) {
-      this.store?.attach(null);
-      throw fail(String(e?.message ?? e), "failed", { reason: "unknown", name: e?.name ?? "Error" });
+      return reply({ type: "start-failed", reason: "unknown", detail: String(e?.message ?? e) });
     }
-    worker.onmessage = ({ data }) => {
-      if (worker !== this.worker) return;   // a message from before a restart
-      if (data.status) return this.onStatus(data.status);
-      const p = this.pending.get(data.id);
+    const live: Live = { n, worker, pending: new Map(), ended: null,
+      interrupt: typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4)) };
+    this.#live = live;
+    // A message for a call that end() has dropped finds nothing in `pending`. A stage or an error of a worker that was
+    // ended is still said: its reply carries that worker's ticket, and the machine drops what is out of date.
+    worker.onmessage = ({ data }: MessageEvent<FromWorker>) => {
+      if ("stage" in data) return reply({ type: "stage", stage: data.stage });
+      const p = live.pending.get(data.id);
       if (!p) return;
       if ("log" in data) return p.onLog?.(data.log);   // a chunk of a running run's log: the call stays pending
-      this.pending.delete(data.id);
-      if (!("error" in data)) p.resolve(data.result);
-      else if (p.op === "run") p.resolve(resetResult(data.error, "run-failed"));   // run() never rejects; the worker stays
-      else p.reject(fail(data.error, "op", { name: data.name ?? "Error" }));
-    };
-    // An error restarts the worker once; a second one before a start() has finished (a script that never loads, a crash while
-    // starting) ends the start instead of looping, since each new worker can cost a phone a GB.
-    // A closed database (below) counts the same way.
-    const crashed = (reason: string, what: string, name: string | undefined) => {
-      if (worker !== this.worker) return;
-      if (this.errorRestarts++ < 1) {   // a failed start reaches the caller through its own start(); the catch only keeps it from being unhandled
-        this.restart(reason, "crash").catch(() => {});
-        return;
-      }
-      this.errorRestarts = 0;
-      this.end(fail(`the engine's worker failed twice (${what}); reload the page`, "failed-twice", { reason: reasonOf({ name, message: what }) }), null);
+      live.pending.delete(data.id);
+      if ("error" in data) p.reject(fail(data.error, "op", { name: data.name ?? "Error" }));
+      else p.resolve(data.result);
     };
     worker.onerror = (e: any) => {
       const what = String(e?.message ?? e);
-      crashed(`the engine crashed (${what})`, what, e?.name);
+      reply({ type: "crashed", cause: "error", reason: reasonOf({ name: e?.name, message: what }), detail: what });
     };
-    // The page's file changes go to this worker from now on (the store writes itself first). One that a restart cut off
-    // is not lost: the new worker copies the whole store. If the browser closes the database under the page (another
-    // page deleted it, "Clear site data"), its seqs may start again from 1, below what the worker has covered: the worker
-    // is restarted (kind "crash"), so that it copies the store as it is now.
-    const send = (op: PendingRow["op"], args: { path?: string, from?: string }, transfer: Transferable[]) => {
-      this.call(op, args, transfer).catch(e => { if (e.kind === "op") this.onFileError(e, op, (args.path ?? args.from)!); });
+    // The page's file changes go to this worker from now on (the store writes itself first). One that an end() cut off
+    // is not lost: the next worker copies the whole store. If the browser closes the database under the page (another
+    // page deleted it, "Clear site data"), its seqs may start again from 1, below what the worker has covered: that is
+    // `crashed` with cause "storage", so that a new worker copies the store as it is now.
+    const send: NonNullable<FileStore["post"]> = (op, args, transfer) => {
+      this.#send(live, op, args as Ops[typeof op]["args"], transfer).catch(e => { if (e.kind === "op") this.onFileError(e, op, (args.path ?? args.from)!); });
     };
-    const onClosed = () => crashed("the browser closed the file storage", "the browser closed the file storage", "Error");
+    const onClosed = () => reply({ type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
     this.store?.attach(send, { onClosed });
-    // Two steps (see worker.js). Calls the page makes once the worker exists queue behind "mount" in the worker: they are
-    // answered before the engine has loaded. (A snapshot start makes the worker only after the list has arrived; a call
-    // before that rejects with kind "no-engine".)
-    // If a restart happens during a step (mount, boot or startup), that step's answer is the new start()'s result and this
-    // one ends with it.
-    try {
-      const mounted = await this.call("mount", mountArgs);
-      if (gen !== this.gen) return mounted as unknown as About;   // end() answered this step with the new start()
-      const about = await this.call("boot", { wheel: this.wheel, extraWheels: this.extraWheels, interruptBuffer: this.interrupt });
-      if (gen !== this.gen) return about;
+    const mount: MountArgs = build && this.snapshot ? { indexURL: this.indexURL, brotli: this.brotli, snapshot: this.snapshot, built: build.built, files: build.files }
+      : { indexURL: this.indexURL, brotli: this.brotli };
+    // Two steps (see worker.ts), then where the start's time went. Every step goes through this worker's own record: one
+    // that resumes after end() rejects with what end() said, and reaches no other worker.
+    const steps = async () => {
+      await this.#send(live, "mount", mount);
+      const about = await this.#send(live, "boot", { wheel: this.wheel, extraWheels: this.extraWheels, interruptBuffer: live.interrupt });
+      const startup = await this.#send(live, "startup", undefined);   // where the start's time went: the page shows it in its status line
+      return { about, startup };
+    };
+    steps().then(({ about, startup }) => {
+      if (live.ended) return;   // ended just as its last step was answered: it says nothing more
       this.about = about;
-      const startup = await this.call("startup");   // where the start's time went (worker.js); the page shows it in its status line
-      if (gen !== this.gen) return startup as unknown as About;
       this.startup = startup;
-      this.storeError = this.startup?.storeError ?? null;
+      this.storeError = startup?.storeError ?? null;
       // a worker with no store never deletes a `pending` row: the page's changes go to it without one
       if (this.storeError) this.store?.attach(send, { onClosed, journal: false });
-      this.errorRestarts = 0;
-      return about;
-    } catch (e: any) {
-      if (e.kind !== "op" || gen !== this.gen) throw e;   // ended from outside (stop, a restart, a second failure): it said why
-      const error = fail(e.message, "failed", { reason: reasonOf(e), name: e.name });   // mount or boot failed in the worker
-      // errorRestarts is not cleared here, on purpose: a retry after a failed start that crashes again is "failed twice"
-      this.end(error, null);
-      throw error;
-    }
-  }
-
-  call<K extends keyof OpResults>(op: K, args: object = {}, transfer: Transferable[] = [], extra: object = {}): Promise<OpResults[K]> {
-    return new Promise((resolve, reject) => {
-      if (!this.worker) return reject(fail("the engine is not running", "no-engine"));
-      const id = ++this.nextId;
-      this.pending.set(id, { op, resolve, reject, ...extra });
-      this.worker.postMessage({ id, op, args }, transfer);
+      reply({ type: "started" });
+    }, (e: ClientError) => {
+      // "op": mount, boot or startup failed in the worker. Any other kind: the worker was ended, and whoever ended it knows.
+      if (e.kind === "op") reply({ type: "start-failed", reason: reasonOf(e), detail: e.message });
     });
   }
 
-  // options: fresh_locals, plot_theme (RunOptions), and onLog(text), called with each chunk of the log while the run
-  // prints. The chunks are a preview: when the result comes, its `log` replaces them.
-  // One run at a time: a second run() while one is in progress rejects (kind "busy"). With no worker it resolves with an
-  // rc 9998 result (kind "no-engine").
-  run(code: string, { onLog = undefined, fresh_locals = undefined, plot_theme = undefined }: RunOptions & { onLog?: (text: string) => void } = {}):
-    Promise<RunResult> {
-    if (this.running) return Promise.reject(fail("a run is in progress", "busy"));
-    if (!this.worker) return Promise.resolve(resetResult(lost("the engine is not running"), "no-engine"));
-    const p = this.call("run", { code, fresh_locals, plot_theme }, [], { onLog });
-    this.running = p;
-    const done = () => {
-      if (this.running !== p) return;
-      this.running = null;
-      this.clearBreak();
-    };
-    p.then(done, done);
-    return p;
+  // End worker `n`: it is terminated, the store stops sending to it, and every call of it that is pending rejects with a
+  // ClientError of the ending's kind (`reason` is its message). With no live worker it does nothing (a start that failed
+  // before a worker existed). With another worker live it throws: a bug in the caller.
+  end(n: number, ending: Ending): void {
+    const live = this.#live;
+    if (!live) return;
+    if (live.n !== n) throw new Error(`end(${n}): the live worker is ${live.n}`);
+    this.#live = null;
+    live.worker.terminate();
+    this.store?.attach(null);
+    live.ended = fail(ending.reason, ending.kind, ending.kind === "reset" ? { reset: ending.reset } : {});
+    const pending = [...live.pending.values()];
+    live.pending.clear();
+    for (const p of pending) p.reject(live.ended);
   }
 
-  // The Break button: asks the run to stop, and starts the timer that resets the engine if it has not stopped after
-  // graceMs (`resetAt` is when). A second Break before that keeps the first deadline. A page that is not cross-origin
-  // isolated has no way to ask: it resets at once.
-  breakRun(): void {
-    const running = this.running;
-    if (!running) return;
-    if (!this.interrupt) {
-      this.restart("Break reset the engine, because this page is not cross-origin isolated and cannot ask a run to stop", "break").catch(() => {});
-      return;
-    }
-    Atomics.store(this.interrupt, 0, 2);   // SIGINT
-    if (this.breakTimer) return;
-    this.resetAt = Date.now() + this.graceMs;
-    this.breakTimer = setTimeout(() => {
-      this.clearBreak();
-      if (this.running === running) this.restart("the code did not stop at Break", "break").catch(() => {});
-    }, this.graceMs);
+  // Run code on worker `n`. onLog(text) is called with each chunk of the log while the run prints; the chunks are a
+  // preview: the result's `log` replaces them. Resolves with the worker's result. Rejects with kind "op" when the worker
+  // answered the op with an error (that worker stays), and with the ending's kind when the worker was ended meanwhile.
+  run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
+    const live = this.#live;
+    if (live?.n !== n) return Promise.reject(fail("the engine is not running", "no-engine"));
+    return this.#send(live, "run", args, [], onLog);
   }
 
-  // "Don't reset: wait for it": the timer is cancelled and the Break stays asked, so the run stops after the command it
-  // is in, with the data kept.
-  keepWaiting(): void { this.clearBreak(); }
-
-  clearBreak(): void {
-    clearTimeout(this.breakTimer as ReturnType<typeof setTimeout> | undefined);
-    this.breakTimer = this.resetAt = null;
+  // Break: ask the run on worker `n` to stop at its next safe point (SIGINT in the shared buffer; the worker clears it
+  // when a run starts). Nothing to do without a SharedArrayBuffer: the machine resets instead (machine.ts, BREAK).
+  interrupt(n: number): void {
+    const live = this.#live;
+    if (live?.n === n && live.interrupt) Atomics.store(live.interrupt, 0, 2);   // SIGINT
   }
 
-  // The worker is ended, with `error` (its kind says why). A run in progress resolves with rc 9998 and `runKind`; a start
-  // in progress gets `started` (the new worker's start) or, with none, fails; every other call fails with `error`.
-  end(error: ClientError, started: Promise<About> | null, runKind: CutKind = error.kind as CutKind): void {
-    this.clearBreak();
-    this.worker?.terminate();
-    this.worker = null;
-    if (!started) this.store?.attach(null);
-    const pending = [...this.pending.values()];
-    this.pending.clear();
-    this.running = null;
-    for (const p of pending) {
-      if (p.op === "run") p.resolve(resetResult(error.message, runKind));
-      else if (started && ["mount", "boot", "startup"].includes(p.op)) p.resolve(started);   // a restart while starting: the first start() ends with the new one
-      else p.reject(error);
-    }
+  // ---- Reader: the read ops. Anyone may ask. ----
+
+  // A read op (types.ts, ReadOps). With no live worker it rejects with kind "no-engine". While the worker starts or runs
+  // it waits in the worker's queue; if its worker is ended first it rejects with the ending's kind.
+  query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
+    if (!this.#live) return Promise.reject(fail("the engine is not running", "no-engine"));
+    return this.#send(this.#live, op, args);
   }
 
-  // Reset, and "Reset now": a new worker. A run in progress ends with rc 9998, other calls fail (kind "reset"). The files
-  // come back from the store; the run that was cut wrote nothing to it. kind: "user" unless the client restarts by
-  // itself ("break", "crash"). onRestart is called before this returns, so before the cut run's promise resolves.
-  async restart(reason: string, kind: ResetKind = "user"): Promise<About> {
-    if (kind !== "crash") this.errorRestarts = 0;
-    let begin!: (value: Promise<About>) => void;
-    const started = new Promise<About>(ok => { begin = ok; });
-    this.end(fail(lost(reason), "reset", { reset: kind }), started, kind);
-    begin(this.start());
-    this.onRestart(reason, started, kind);
-    return started;
-  }
-
-  // End the worker and start no new one (another tab took over). start() makes one again.
-  stop(reason: string): void {
-    this.gen = (this.gen ?? 0) + 1;
-    this.errorRestarts = 0;
-    this.end(fail(lost(reason), "stopped"), null);
+  // THE ONE PLACE the worker is posted to. The call is kept in the worker's own record until it is answered or the
+  // worker is ended; on a record that has ended it rejects at once with what end() said.
+  #send<K extends Op>(live: Live, op: K, args: Ops[K]["args"] | undefined, transfer: Transferable[] = [], onLog?: (text: string) => void): Promise<Ops[K]["result"]> {
+    return new Promise((resolve, reject) => {
+      if (live.ended) return reject(live.ended);
+      const id = ++this.nextId;
+      live.pending.set(id, { resolve, reject, onLog });
+      live.worker.postMessage({ id, op, args }, transfer);   // a ToWorker message
+    });
   }
 }

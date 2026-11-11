@@ -27,7 +27,7 @@ html, body { overflow: hidden; overscroll-behavior: none; }
 /* The toolbar keeps one size: each button holds all its labels (RunControls.tsx), and in other-tab the run buttons keep
    their place unseen (SPEC 5: none). It is one row and never wider than the window: if it cannot fit (a large default
    font) it scrolls sideways instead of widening the page. */
-:root[data-engine="other-tab"] .run-ctl { visibility: hidden; }
+:root[data-engine^="other-tab"] .run-ctl { visibility: hidden; }
 .toolbar { min-width: 0; overflow-x: auto; }
 /* Below 56em (896 px at the default font size; an em query follows the visitor's font size) the widest toolbar does not
    fit: the theme button shows its icon only (its aria-label says the rest), and Run selection and Save drop their key

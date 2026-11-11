@@ -1,12 +1,12 @@
 // The toolbar's Run, Run selection, Break and Save (docs/design/SPEC.md, sections 3.4 and 5), and the phone's one Run
 // button that Break replaces while a run is on. Step 3 built what the engine states decide (enabled, disabled,
 // aria-disabled, the labels); STEP 4b finishes it: the running time on the phone's Break pill, and anything the editor
-// adds. The actions are editor/commands.js's (the editor fills them in) and app/engine.js's.
+// adds. The actions are editor/commands.ts's (the editor fills them in) and app/engine.ts's.
 // Each button holds all its labels in one cell (ui/Icon.tsx Labels), so it keeps one size in every engine state, with or
 // without a selection or unsaved edits, and nothing in the toolbar moves (e2e/shell.spec.ts measures it). Keep it so: a
 // new label goes into the button's list, and the pill's time ("Break" "3.4 s") goes in with a sizer of its widest form.
 // The phone's Run and Break pill are two buttons with the same list (PHONE_LABELS), so they are the same width. In
-// `other-tab` the buttons stay in place, hidden (app.css), so the bar keeps its height.
+// `other-tab-idle` and `other-tab-taking` the buttons stay in place, hidden (app.css), so the bar keeps its height.
 import { engine, isolated, tabs, activeTab } from "../state.ts";
 import * as eng from "../engine.ts";
 import { editorCommands, selection } from "./commands.ts";
@@ -27,9 +27,9 @@ function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boo
   const s = engine.value.s;
   if (s === "ready" || s === "declined") return { label: "Run", disabled: false, busy: false };
   if (s === "running" || s === "breaking" || s === "waiting") return { label: "Run", disabled: s !== "running", busy: true };
-  if (s === "downloading" || s === "starting") return { label: "Starting…", disabled: true, busy: false };
+  if (s === "downloading" || s === "starting-list" || s === "starting-worker") return { label: "Starting…", disabled: true, busy: false };
   if (s === "failed" || s === "failed-twice") return { label: "Stopped", disabled: true, busy: false };
-  return { label: "Run", disabled: true, busy: false };   // none, asking, other-tab
+  return { label: "Run", disabled: true, busy: false };   // the page load (checking-lock, checking-cache), none, asking, other-tab-idle, other-tab-taking
 }
 
 /** Break's label and look (section 5's Break column). Not isolated, Break resets at once: "Break (reset)". */

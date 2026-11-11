@@ -1,15 +1,63 @@
 // The engine's types, shared by worker.ts, client.ts, store.ts and snapshot.ts (which the Node tests run as they are:
 // Node removes the types) and the page. Source: docs/design/SPEC.md, sections 6 and 7; keep the two in step.
 
+// ---- what the state machine (machine.ts) and the page share ----
+
+/** One start-up stage. The snapshot start has no "packages"; ?snapshot=0 has no "unpack" (OQ-11). */
+export type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
+/** Why the engine did not start: worked out from an error's `kind`, `reason` and `name` by whoever raises the event, never
+ *  from its text. "updated": the site was updated since the page loaded (offer "Reload the page", keyed on this reason). */
+export type FailReason = "no-wasm" | "download" | "memory" | "updated" | "unknown";
+/** What a run sends and how the page names it (SPEC section 4). `lines` are 1-based lines of the active file. */
+export interface RunHead { kind: "file" | "selection" | "command"; path?: string; lines?: [number, number]; fresh_locals: boolean }
+/** What `mount` needs of the build's list for a snapshot start. null: the normal start (?snapshot=0). */
+export type Build = { built: number; files: SnapshotFiles };
+
 // ---- the worker protocol (SPEC section 6) ----
 
-export type Op = "mount" | "boot" | "startup" | "run" | "describe" | "describe_file" | "matrix" | "macros" | "browse" | "memory"
-  | "write" | "mkdir" | "remove" | "rename" | "files" | "read";
-export type ToWorker = { id: number; op: Op; args?: object };
-export type StatusText = "downloading the engine" | "unpacking the engine" | "loading Python" | "loading your files"
-  | "loading packages" | "starting the engine";
-export type FromWorker = { id: number; result: unknown } | { id: number; error: string; name?: string } | { status: StatusText }
-  | { id: number; log: string };   // a chunk of a running run's log
+// The ops, in three sets. Each op belongs to one, here and in the worker (worker.ts has one handler object per set), and
+// the set decides who can send it: the transport's types (client.ts) let nothing else through.
+
+/** Ops that change the engine. Sent only by the transport's start() and run(), which only the effect performer calls. */
+export interface LifecycleOps {
+  mount:   { args: MountArgs; result: void };
+  boot:    { args: BootArgs; result: About };
+  startup: { args: void; result: Startup };
+  run:     { args: { code: string } & RunOptions; result: RunResult };
+}
+/** Ops DECLARED to change nothing: not the data, r(), e(), the macros, the matrices, the graphs, the sort order, the log
+ *  or /work. Anyone may send one. The declaration is tested (test/engine.test.ts, the fingerprint), not proved. */
+export interface ReadOps {
+  describe:      { args: DescribeArgs; result: DataSummary };
+  describe_file: { args: { path: string }; result: DataSummary };
+  matrix:        { args: { name: string }; result: Matrix };
+  macros:        { args: void; result: Macros };
+  browse:        { args: DescribeArgs; result: BrowseRows };
+  memory:        { args: void; result: Memory };
+  files:         { args: void; result: FileInfo[] };            // /work as it is: for the tests, not for views
+  read:          { args: { path: string }; result: Uint8Array };
+}
+/** Ops that copy a page change into /work. Sent only by the function the transport gives to store.attach.
+ *  Step D deletes these four and the interface holds `sync` alone. */
+export interface MirrorOps {
+  write:  { args: { path: string; data: Uint8Array; seq?: number }; result: void };
+  mkdir:  { args: { path: string; seq?: number }; result: void };
+  remove: { args: { path: string; seq?: number }; result: void };
+  rename: { args: { from: string; to: string; seq?: number }; result: void };
+}
+export type Ops = LifecycleOps & ReadOps & MirrorOps;
+export type Op = keyof Ops;
+/** The read ops the page asks for through the controller's call: not the two views of /work. */
+export type ViewOp = Exclude<keyof ReadOps, "files" | "read">;
+export type ToWorker = { [K in Op]: { id: number; op: K; args: Ops[K]["args"] } }[Op];
+export type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: number; error: string; name: string }
+  | { id: number; log: string }   // a chunk of a running run's log
+  | { stage: Stage };             // a start-up stage began
+
+/** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
+export type Wheel = string | { name: string; bytes: Uint8Array };
+/** `boot`'s arguments. `interruptBuffer`: an Int32Array on a SharedArrayBuffer (Break), or null. */
+export type BootArgs = { wheel: Wheel; extraWheels?: Wheel[]; interruptBuffer?: Int32Array | null };
 
 /** `mount`'s arguments. A snapshot start has `snapshot` (the URL of its folder, ending in "/"), `built` (which names the
  *  Cache, `dofile-snapshot-<built>`) and `files` (its two big files): all three from the build's list, start-files.json,
@@ -41,12 +89,13 @@ export interface RunOptions {
 export interface FileChange { name: string; status: "created" | "modified" | "removed"; bytes: number }
 
 export type ResetKind = "break" | "crash" | "user";
-/** Why the client made an rc 9998 result itself. */
-export type CutKind = ResetKind | "stopped" | "failed" | "failed-twice" | "no-engine" | "run-failed";
+/** The `kind` of an rc 9998 run result, which the state machine makes (machine.ts, cutResult): a reset, another tab took
+ *  the engine ("stopped"), or the run's op failed in the worker ("run-failed": that worker stays). */
+export type CutKind = ResetKind | "stopped" | "run-failed";
 
 export interface RunResult {
   rc: number; error: string | null; error_command: string | null; log: string;
-  results: Results | null;                       // null only in the client's rc 9998 result
+  results: Results | null;                       // null only in the machine's rc 9998 result
   nobs: number; nvars: number; new_graphs: number;
   images: string[];                              // base64 PNG, the last 5 at most
   timing?: { engine: number; encode: number; parse: number; save: number };   // seconds; absent for rc 9998
@@ -57,7 +106,7 @@ export interface RunResult {
   files?: FileChange[];                          // what the after-run difference wrote to the store
   store_error?: string;                          // the store refused that write
   skipped?: string[];                            // a run's files under a folder the page removed or renamed during the run
-  kind?: CutKind;                                // only on the client's rc 9998 result
+  kind?: CutKind;                                // only on the machine's rc 9998 result
 }
 
 export interface Variable { name: string; type: string; format: string; label: string | null; value_label: string | null }
@@ -68,25 +117,21 @@ export interface Macros { locals: Record<string, string>; globals: Record<string
 export type BrowseRows = { nobs: number; offset: number; vars: string[]; more: number; rows: string[][] } | { error: string };
 export interface Memory { heap_bytes: number; data_bytes: number }
 
-/** What each op answers (client.call). */
-export interface OpResults {
-  mount: void; boot: About; startup: Startup; run: RunResult;
-  describe: DataSummary; describe_file: DataSummary; matrix: Matrix; macros: Macros; browse: BrowseRows; memory: Memory;
-  write: void; mkdir: void; remove: void; rename: void; files: FileInfo[]; read: Uint8Array;
-}
 export interface DescribeArgs { vars?: string; offset?: number; limit?: number }
 
-// ---- client.js ----
+// ---- client.ts ----
 
-/** client.js's errors: an Error with a `kind` (the header of client.js lists them). */
+/** client.ts's errors: an Error with a `kind` (the header of client.ts lists them). */
 export interface ClientError extends Error {
-  kind: "failed" | "failed-twice" | "updated" | "reset" | "stopped" | "no-engine" | "busy" | "op";
-  reason?: "no-wasm" | "download" | "memory" | "unknown";   // "failed", "failed-twice"
+  kind: "failed" | "failed-twice" | "updated" | "reset" | "stopped" | "no-engine" | "op";
+  reason?: "no-wasm" | "download" | "memory" | "unknown";   // "failed", from download() and build()
   reset?: ResetKind;                                          // "reset"
 }
 
 export interface Progress { received: number; total: number }
-export type Downloaded = { cached: true; received: number; total: number } | { cached: false; why: string };
+/** What download() resolves with. `build`: what `mount` needs of the list download() has just checked (null: the normal
+ *  start), so that a start the visitor begins does not fetch the list a second time. */
+export type Downloaded = ({ cached: true; received: number; total: number } | { cached: false; why: string }) & { build: Build | null };
 
 /** The build's list of start files (start-files.json, scripts/start-files.ts): the one statement of the build.
  *  `buildId`: scripts/build-id.ts, from the build's stamp and the snapshot's record; the page compares it with its own (checkBuild). */

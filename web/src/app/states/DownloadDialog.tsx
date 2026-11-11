@@ -6,6 +6,8 @@
 // the data in its memory, so a stray Enter must not do it) and "Use dofile in this tab". WS 6 draws "Close this tab",
 // but a page may close only a tab a script opened, so the button leaves the editor for the landing page instead.
 // That page is step 5's: until it exists, LANDING_URL is a dead link (step 5 checks this button).
+// While a take-over is in progress the engine is `other-tab-taking` (a few milliseconds): the machine ignores a second
+// press of "Use dofile in this tab". 4d may mark the button aria-disabled then, with the same label.
 import { dialog, engine, engineBytes } from "../state.ts";
 import * as eng from "../engine.ts";
 import { Dialog } from "../ui/Dialog";
@@ -32,7 +34,7 @@ export function DownloadDialog({ dialog: d }: { dialog: DialogOf<"download"> }) 
       </Dialog>
     );
   }
-  // downloading, starting: "Edit files while it loads" only closes the dialog
+  // downloading, starting-list, starting-worker: "Edit files while it loads" only closes the dialog
   const close = () => { dialog.value = null; };
   const pct = st.s === "downloading" && st.total ? Math.min(100, (100 * st.received) / st.total) : null;
   return (
@@ -46,7 +48,7 @@ export function DownloadDialog({ dialog: d }: { dialog: DialogOf<"download"> }) 
         <p><b>Downloading</b> {st.total ? `${(st.received / 1e6).toFixed(1)} of ${mb(st.total)}` : null}</p>
         <div class="progress" role="progressbar" aria-label="Download" aria-valuemin={0} aria-valuemax={100}
           aria-valuenow={Math.round(pct ?? 0)}><i style={{ width: `${pct ?? 0}%` }} /></div>
-      </> : st.s === "starting" ? (
+      </> : st.s === "starting-list" || st.s === "starting-worker" ? (
         <ol class="stages">
           {eng.stagesOf(snapshotStart).map(s => (
             <li class={st.done[s] !== undefined && s !== st.stage ? "done" : s === st.stage ? "now" : "todo"}>

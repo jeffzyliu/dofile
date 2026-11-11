@@ -4,23 +4,23 @@
 // "Files may be cleared by this browser" (`persisted`), or "You can edit and upload while it starts" while starting.
 import type { ComponentChildren } from "preact";
 import { engine } from "../state.ts";
-import { stagesOf, STAGE_OF } from "../engine.ts";
+import { stagesOf, stageStatus } from "../engine.ts";
 import { snapshotStart } from "../env";
-import type { EngineState, Stage } from "../types.ts";
-
-const stageText = Object.fromEntries(Object.entries(STAGE_OF).map(([text, stage]) => [stage, text])) as Record<Stage, string>;
+import type { EngineState } from "../types.ts";
 
 const lines = (l?: [number, number]) => (l ? (l[0] === l[1] ? ` line ${l[0]}` : ` lines ${l[0]}–${l[1]}`) : "");
 
-/** The state's words: the bold word, then the rest. */
+/** The state's words: the bold word, then the rest. One case for each of the sixteen states: a new state fails the
+ *  check until it has its words. The page load (`checking-lock`, `checking-cache`) takes the words of `none` until step 4b
+ *  chooses others. */
 export function stateWords(st: EngineState): [ComponentChildren, ComponentChildren] {
   switch (st.s) {
-    case "none": case "asking": return [null, "No engine yet"];
+    case "checking-lock": case "checking-cache": case "none": case "asking": return [null, "No engine yet"];
     case "declined": return ["No engine", " · Run downloads it first"];
     case "downloading": return ["Starting", " · downloading"];
-    case "starting": {
+    case "starting-list": case "starting-worker": {
       const all = stagesOf(snapshotStart);
-      return ["Starting", ` · ${stageText[st.stage]} (step ${all.indexOf(st.stage) + 1} of ${all.length})`];
+      return ["Starting", ` · ${stageStatus[st.stage]} (step ${all.indexOf(st.stage) + 1} of ${all.length})`];
     }
     case "ready": return ["Ready", null];
     case "running": return ["Running", lines(st.run.lines)];
@@ -28,7 +28,7 @@ export function stateWords(st: EngineState): [ComponentChildren, ComponentChildr
     case "waiting": return ["Waiting", " · Break after this command"];
     case "failed": return ["Stopped", " · the engine didn't start"];
     case "failed-twice": return ["Stopped", " · failed twice"];
-    case "other-tab": return [null, "paused"];
+    case "other-tab-idle": case "other-tab-taking": return [null, "paused"];
   }
 }
 

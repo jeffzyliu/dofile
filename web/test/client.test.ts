@@ -1,12 +1,17 @@
-// The engine client (src/engine/client.js) without an engine: the counted download into the Cache, with a stand-in fetch
-// and Cache (Node has no Cache API; the real ones are checked in the browsers, e2e/step2.spec.ts), and the worker's
-// messages, with a stand-in worker. SPEC.md section 7, test 10, and section 6 (the {id, log} chunks).
+// The transport (src/engine/client.ts) alone, without an engine and without the state machine: the counted download into
+// the Cache and the build's list, with a stand-in fetch and Cache (Node has no Cache API; the real ones are checked in the
+// browsers, e2e/step2.spec.ts), and the worker's messages, with a stand-in worker. SPEC.md section 7, test 10, and section
+// 6 (the {id, log} chunks). The transport decides nothing: when a worker starts and ends is the machine's
+// (test/machine.test.ts), and the controller on a stand-in transport is test/app.test.ts. The workers here are numbered
+// 1, 2, 3 by the test (harness.ts, startWorker).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EngineClient, RC_RESET } from "../src/engine/client.ts";
-import { sleep } from "./harness.ts";
+import { EngineClient } from "../src/engine/client.ts";
+import { fakeWorker, live, runOn, sleep, startWorker, starts } from "./harness.ts";
+import type { FakePort, Message, Post } from "./harness.ts";
 import { buildId } from "../scripts/build-id.ts";
-import type { Op, ResetKind, StartFiles } from "../src/engine/types.ts";
+import type { Answer } from "../src/engine/machine.ts";
+import type { StartFiles } from "../src/engine/types.ts";
 import type { FileStore } from "../src/engine/store.ts";
 
 type ClientOptions = ConstructorParameters<typeof EngineClient>[0];
@@ -82,6 +87,7 @@ function fakeFetch({ hold, missing, offline, short }: { hold?: string, missing?:
   return { fetch, calls, modes };
 }
 
+const BUILD = { built: LIST.built, files: LIST.snapshot };   // what mount needs of the list
 const noWorker = () => { throw new Error("download() must not start a worker"); };
 const client = (fetch: Fetch, caches: object | null | undefined, more: Partial<ClientOptions> = {}) => new EngineClient({ createWorker: noWorker,
   wheel: "dofile.whl", snapshot: `${BASE}snapshot/`, startFiles: { base: `${BASE}start-files.json`, ...LIST } as StartFiles & { base: string },
@@ -93,7 +99,7 @@ test("download: every start file goes into the Cache, the counts rise to the tot
   await (await caches.open("dofile-snapshot-1")).put(`${BASE}snapshot/heap.bin`, new Response("an older build"));
   const seen: { received: number, total: number }[] = [];
   const done = await client(fetch, caches).download({ onProgress: p => seen.push(p) });
-  assert.deepEqual(done, { cached: true, received: 13_300, total: 13_300 });
+  assert.deepEqual(done, { cached: true, received: 13_300, total: 13_300, build: BUILD }, "with what mount needs of the list it has just checked");
   assert.deepEqual(seen[0], { received: 200, total: 13_300 }, "the page's own files are here already");
   assert.deepEqual(seen.at(-1), { received: 13_300, total: 13_300 });
   assert.ok(seen.length > 10, "progress while the bytes arrive, not once per file");
@@ -239,36 +245,22 @@ test("checkBuild: a list of another stamp, extra wheel, Pyodide version or dofil
 
 test("download: with nowhere to keep the files it resolves with the reason; a build with no snapshot rejects", async () => {
   const { fetch, calls } = fakeFetch();
-  assert.deepEqual(await client(fetch, undefined).download(), { cached: false, why: "there is no Cache API here (not a secure context?)" });
+  assert.deepEqual(await client(fetch, undefined).download(), { cached: false, why: "there is no Cache API here (not a secure context?)", build: BUILD });
   const refused = await client(fetch, fakeCaches({ refuse: true })).download();
   assert.equal(refused.cached, false);
   assert.match((refused as { why: string }).why, /QuotaExceededError/);
+  assert.deepEqual(refused.build, BUILD, "the list was checked all the same: the start that follows needs no second fetch");
   calls.length = 0;
-  assert.equal((await client(fetch, fakeCaches(), { snapshot: undefined }).download()).cached, false, "the normal start (?snapshot=0) has nothing to download here");
+  assert.deepEqual(await client(fetch, fakeCaches(), { snapshot: undefined }).download(), { cached: false, why: "the normal start loads from the CDN", build: null },
+    "the normal start (?snapshot=0) has nothing to download here, and no list");
   assert.deepEqual(calls, []);
   await assert.rejects(client(fetch, fakeCaches(), { startFiles: { ...LIST, built: null } as unknown as StartFiles }).download(), /no snapshot in this build: run `npm run snapshot`/);
 });
 
 // ---- messages ----
 
-// A worker that answers as `script(message, post)` says, a moment later, like a real one.
-function fakeWorker(script: Script) {
-  const port: FakePort = { onmessage: null, onerror: null, terminated: false, terminate() { port.terminated = true; },
-    postMessage(message) { setTimeout(() => script(message, data => port.onmessage?.({ data }), port), 1); } };
-  return port as FakePort & globalThis.Worker;   // what client.ts wants of a Worker
-}
-/** A message the client posts; `args` as the op has them. */
-type Message = { id: number, op: Op, args: any };
-type Post = (data: unknown) => void;
-type Script = (message: Message, post: Post, port: FakePort) => unknown;
-type FakePort = { onmessage: null | ((e: { data: unknown }) => void), onerror: null | ((e: unknown) => void), terminated: boolean,
-  terminate(): void, postMessage(message: Message): void };
-const starts = (message: Message, post: Post) => {
-  if (message.op === "mount" || message.op === "startup") post({ id: message.id, result: undefined });
-  else if (message.op === "boot") post({ id: message.id, result: { dofile: "test" } });
-  else return false;
-  return true;
-};
+/** What a worker's start said, for a test that reads it. */
+type Said = Answer<"start-worker">[];
 
 test("a {id, log} message goes to the run's onLog and never settles the call; the result does", async () => {
   let finish!: () => void;
@@ -285,51 +277,54 @@ test("a {id, log} message goes to the run's onLog and never settles the call; th
       setTimeout(() => post({ id: m.id, result: { nobs: 3 } }), 5);
     }
   }) });
-  await eng.start();
+  await startWorker(eng);
+  assert.deepEqual([eng.about, eng.startup, eng.storeError], [{ dofile: "test" }, { mode: "normal" }, null], "the facts of the start");
   const chunks: string[] = [];
   let settled = false;
-  const running = eng.run("display 1", { onLog: c => chunks.push(c), fresh_locals: true, plot_theme: "dark" });
+  const running = runOn(eng, "display 1", { onLog: c => chunks.push(c), fresh_locals: true, plot_theme: "dark" });
   running.then(() => { settled = true; });
   await sleep(20);
   assert.deepEqual(chunks, [". display 1\n", "", "1\n"]);
   assert.equal(settled, false, "three log messages with the call's id, and the call is still pending");
-  assert.equal(eng.running, running);
   finish();
   assert.deepEqual(await running, { rc: 0, log: ". display 1\n1\nlate\n" });
   assert.deepEqual(chunks, [". display 1\n", "", "1\n", "late\n"]);
-  assert.equal(eng.running, null);
-  assert.deepEqual(await eng.call("describe"), { nobs: 3 });
-  assert.deepEqual(await eng.run("quick"), { rc: 0, log: ". display 1\n1\nlate\n" }, "a run with no onLog");
+  assert.deepEqual(await eng.query("describe"), { nobs: 3 });
+  assert.deepEqual(await runOn(eng, "quick"), { rc: 0, log: ". display 1\n1\nlate\n" });
 });
 
-test("run sends its options; a page that is not cross-origin isolated resets at Break, at once", async () => {
+test("run sends its options; what an ended worker still says settles no call of the next worker, and its stage goes to its own reply", async () => {
   const sent: Message[] = [], workers: FakePort[] = [];
   const eng = new EngineClient({ wheel: "dofile.whl", createWorker: () => {
     const w = fakeWorker((m, post) => { sent.push(m); starts(m, post); });
     workers.push(w);
     return w;
   } });
-  await eng.start();
-  eng.interrupt = null;   // as in a page with no SharedArrayBuffer
-  const running = eng.run("while 1 {\n}", { fresh_locals: true, plot_theme: "dark" });
+  const first: Said = [], second: Said = [];
+  await startWorker(eng, null, first);
+  const running = runOn(eng, "while 1 {\n}", { fresh_locals: true, plot_theme: "dark" });
   await sleep(10);
   assert.deepEqual(sent.at(-1)!.args, { code: "while 1 {\n}", fresh_locals: true, plot_theme: "dark" });
-  eng.breakRun();
-  const r = await running;
-  assert.equal(r.rc, RC_RESET);
-  assert.equal(r.kind, "break");
-  assert.match(r.error!, /^session reset: Break reset the engine, because this page is not cross-origin isolated/);
-  assert.equal(eng.resetAt, null, "no countdown: there was nothing to wait for");
-  assert.equal(workers.length, 2);
+  eng.end(1, { kind: "reset", reset: "break", reason: "the code did not stop" });
+  await assert.rejects(running, { kind: "reset", reset: "break", message: "the code did not stop" });
   assert.equal(workers[0].terminated, true);
-  // what the old worker still says is not taken for the new one's
+  await startWorker(eng, null, second);
+  assert.equal(workers.length, 2);
+  // the new worker's run has the next id; the old worker answers it, and names a stage
+  const next = runOn(eng, "display 1");
+  let settled = false;
+  next.then(() => { settled = true; }, () => { settled = true; });
   workers[0].onmessage!({ data: { id: eng.nextId, result: "from the old worker" } });
-  workers[0].onmessage!({ data: { status: "old status" } });
+  workers[0].onmessage!({ data: { stage: "engine" } });
   await sleep(10);
-  assert.equal(eng.about?.dofile, "test", "the new worker started");
+  assert.equal(settled, false, "the old worker's answer is not taken for the new worker's call");
+  assert.deepEqual(first.at(-1), { type: "stage", stage: "engine" }, "said through the first worker's reply: its ticket is out of date, and the machine drops it");
+  assert.deepEqual(second, [{ type: "started" }]);
+  workers[1].onmessage!({ data: { id: eng.nextId, result: { rc: 0 } } });
+  assert.deepEqual(await next, { rc: 0 });
 });
 
-// ---- starts that fail, kinds of error, one run at a time ----
+// ---- starts that fail, kinds of error ----
 
 const fakeStore = () => ({ post: undefined as FileStore["post"] | undefined, attach(post: FileStore["post"]) { this.post = post; } });
 // a client whose workers answer as `script` says; `workers` collects them
@@ -343,185 +338,150 @@ function scripted(script: (message: Message, post: Post, port: FakePort, index: 
   return { eng, workers };
 }
 
-test("a start that fails at mount or boot ends the worker, detaches the store, and says what kind of failure it was", async () => {
+test("a start that fails at mount or boot says start-failed with the reason; the worker is ended by end(), which detaches the store and fails the calls made meanwhile", async () => {
   for (const [op, name, message, reason] of [
     ["mount", "DownloadError", "https://dofile.test/pyodide/pyodide.asm.wasm: 503", "download"],
     ["mount", "RangeError", "WebAssembly.Memory(): could not allocate memory", "memory"],
     ["boot", "PythonError", "MemoryError", "memory"],
     ["boot", "PythonError", "ModuleNotFoundError: No module named 'dofile'", "unknown"],
-    ["mount", "UpdatedError", "the snapshot was built from a different build of dofile.whl than this page has", "unknown"]]) {
+    ["mount", "SomeOtherError", "the snapshot was built from a different build of dofile.whl than this page has", "unknown"]]) {
     const store = fakeStore();
     const { eng, workers } = scripted((m, post) => {
       if (m.op === op) post({ id: m.id, error: message, name });
       else starts(m, post);
     }, { store });
-    const queued = eng.start();
-    const files = eng.call("files");   // a call made while it starts fails with the start
-    await assert.rejects(queued, { kind: "failed", reason, name, message });
-    await assert.rejects(files, { kind: "failed", reason });
+    const starting = startWorker(eng);
+    const files = eng.query("files");   // a call made while it starts: never answered by this worker
+    await assert.rejects(starting, { type: "start-failed", reason, detail: message });
     assert.equal(workers.length, 1, "no second try by itself");
+    assert.deepEqual([workers[0].terminated, eng.worker, typeof store.post], [false, workers[0], "function"], "the transport ends nothing by itself");
+    eng.end(1, { kind: "failed", reason: message });   // the machine's FAIL
+    await assert.rejects(files, { kind: "failed", message });
     assert.equal(workers[0].terminated, true, "the worker that could not start is ended");
     assert.equal(eng.worker, null);
     assert.equal(store.post, null, "the store no longer sends the page's changes to it");
-    await assert.rejects(eng.call("files"), { kind: "no-engine" });
+    await assert.rejects(eng.query("files"), { kind: "no-engine" });
   }
 });
 
-test("no WebAssembly: start() fails with reason no-wasm and makes no worker", async () => {
+test("no WebAssembly: start-failed with reason no-wasm, and no worker is made", async () => {
   const { eng, workers } = scripted(starts, { wasm: null });
-  await assert.rejects(eng.start(), { kind: "failed", reason: "no-wasm" });
+  await assert.rejects(startWorker(eng), { type: "start-failed", reason: "no-wasm" });
   assert.equal(workers.length, 0);
+  assert.equal(eng.worker, null);
+  eng.end(1, { kind: "failed", reason: "no WebAssembly" });   // the machine's FAIL ends a worker that never was: nothing to do
 });
 
-test("a second start() ends the first worker instead of leaking it", async () => {
+test("start() with a worker still live throws; end() of another worker than the live one throws; after end() the next start works", async () => {
   const store = fakeStore();
   const { eng, workers } = scripted((m, post, _port, index) => { if (index === 1) starts(m, post); }, { store });   // the first worker never answers
-  const first = eng.start();
+  const said: Said = [];
+  eng.start(1, null, a => said.push(a));
   await sleep(5);
-  const second = eng.start();
-  await assert.rejects(first, { kind: "stopped" });
-  assert.deepEqual(await second, { dofile: "test" });
+  assert.throws(() => eng.start(2, null, a => said.push(a)), /start\(2\): worker 1 is still live/);
+  assert.equal(workers.length, 1, "no second worker was made");
+  assert.throws(() => eng.end(2, { kind: "stopped", reason: "x" }), /end\(2\): the live worker is 1/);
+  assert.equal(workers[0].terminated, false);
+  eng.end(1, { kind: "stopped", reason: "another tab took over" });
+  eng.end(1, { kind: "stopped", reason: "again" });   // no live worker: nothing to do
+  assert.deepEqual(said, [], "a start that was ended says nothing");
+  await new Promise<void>((ok, no) => eng.start(2, null, a => (a.type === "started" ? ok() : no(a))));
   assert.deepEqual(workers.map(w => w.terminated), [true, false]);
   assert.equal(typeof store.post, "function", "the store sends to the new worker");
 });
 
-test("error kinds: an op's error keeps the worker's name; stop, restart and a worker that fails twice are told apart", async () => {
-  const restarts: [string, ResetKind][] = [], order: string[] = [];
+test("error kinds: an op's error keeps the worker's name; end() fails the pending calls with the ending's kind, the run too", async () => {
   const { eng, workers } = scripted((m, post) => {
     if (starts(m, post)) return;
     if (m.op === "matrix") post({ id: m.id, error: "file system error ENOENT", name: "ErrnoError" });
-  }, { onRestart: (reason, started, kind) => { restarts.push([reason, kind]); order.push("onRestart"); started.catch(() => {}); } });
-  await eng.start();
-  await assert.rejects(eng.call("matrix"), { kind: "op", name: "ErrnoError", message: "file system error ENOENT" });
+  });
+  await startWorker(eng);
+  await assert.rejects(eng.query("matrix", { name: "e(b)" }), { kind: "op", name: "ErrnoError", message: "file system error ENOENT" });
 
-  // restart(): "user" unless the client says otherwise; onRestart comes first, then the cut run's result
-  let running = eng.run("while 1 {\n}"), waiting = eng.call("describe");
-  running.then(() => order.push("run resolved"));
-  const started = eng.restart("reset by you");
-  assert.deepEqual(order, ["onRestart"], "onRestart is called before restart() returns");
-  assert.deepEqual(await running, { rc: RC_RESET, error: "session reset: reset by you. Data in memory is gone; your files are kept.", error_command: null, log: "",
-    results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [], error_line: null, graph_commands: [], graph_lines: [], kind: "user" });
-  assert.deepEqual(order, ["onRestart", "run resolved"]);
-  await assert.rejects(waiting, { kind: "reset", reset: "user" });
-  await started;
-  assert.deepEqual(restarts, [["reset by you", "user"]]);
-
-  // a crash: the worker's error event
-  running = eng.run("while 1 {\n}");
-  workers.at(-1)!.onerror!(new Error("out of memory"));
-  assert.equal((await running).kind, "crash");
-  assert.deepEqual(restarts.at(-1), ["the engine crashed (out of memory)", "crash"]);
-  await sleep(20);   // the new worker starts
-
-  // stop(): no new worker; not the same kind as a failure
-  running = eng.run("while 1 {\n}");
-  waiting = eng.call("describe");
-  eng.stop("another tab took over");
-  const stopped = await running;
-  assert.deepEqual([stopped.rc, stopped.kind], [RC_RESET, "stopped"]);
-  assert.match(stopped.error!, /^session reset: another tab took over\./);
-  await assert.rejects(waiting, { kind: "stopped" });
-  assert.equal(eng.worker, null);
-  assert.equal(restarts.length, 2, "stop() is not a restart");
+  const endings = [
+    [{ kind: "reset", reset: "user", reason: "session reset: reset by you." }, { kind: "reset", reset: "user", message: "session reset: reset by you." }],
+    [{ kind: "reset", reset: "crash", reason: "session reset: the engine crashed." }, { kind: "reset", reset: "crash" }],
+    [{ kind: "stopped", reason: "session reset: another tab took over." }, { kind: "stopped", message: "session reset: another tab took over." }],
+    [{ kind: "failed-twice", reason: "the engine's worker failed twice" }, { kind: "failed-twice" }],
+  ] as const;
+  for (const [ending, error] of endings) {
+    const running = runOn(eng, "while 1 {\n}"), waiting = eng.query("describe");
+    eng.end(live(eng), ending);
+    await assert.rejects(running, error, `${ending.kind}: the run`);   // the machine has cut the run already: its performer says nothing
+    await assert.rejects(waiting, error, `${ending.kind}: a query`);
+    assert.equal(eng.worker, null);
+    await assert.rejects(runOn(eng, "display 1"), { kind: "no-engine" }, "run() with no live worker");
+    await assert.rejects(eng.query("describe"), { kind: "no-engine" });
+    await startWorker(eng);
+  }
+  assert.equal(workers.length, endings.length + 1, "one worker for each start, and none the transport made by itself");
+  await assert.rejects(eng.run(live(eng) - 1, { code: "display 1" }, () => {}), { kind: "no-engine" }, "run() for a worker that is not the live one");
 });
 
-test("a worker that fails twice: kind failed-twice, with the reason; stop() and restart() clear the count of failures", async () => {
-  const failing = () => { const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new RangeError("Out of memory")), 5); } }; return port as unknown as Worker; };
+test("a worker's error is said as `crashed`, with the reason; the transport neither ends the worker nor makes another", async () => {
+  let made = 0;
+  const failing = () => { made++; const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminated: false, terminate() { port.terminated = true; }, postMessage() { setTimeout(() => port.onerror?.(new RangeError("Out of memory")), 5); } }; return port as unknown as Worker; };
   const eng = new EngineClient({ wheel: "dofile.whl", createWorker: failing });
-  await assert.rejects(eng.start(), { kind: "failed-twice", reason: "memory", message: /failed twice \(Out of memory\); reload the page/ });
-  assert.equal(eng.worker, null);
-  assert.equal(eng.errorRestarts, 0);
-
-  // one failure, then the user resets or the tab is stopped: the next failure is a first one again
-  const { eng: other } = scripted(starts);
-  await other.start();
-  other.errorRestarts = 1;
-  other.stop("another tab took over");
-  assert.equal(other.errorRestarts, 0);
-  await other.start();
-  other.errorRestarts = 1;
-  const again = other.restart("reset by you");
-  assert.equal(other.errorRestarts, 0);
-  await again;
+  await assert.rejects(startWorker(eng), { type: "crashed", cause: "error", reason: "memory", detail: "Out of memory" });
+  assert.equal(made, 1, "no restart: that is the machine's to say (RESET, then TWICE)");
+  assert.notEqual(eng.worker, null, "and it is not ended until the machine says so");
+  // a crash of a worker that is up, with another error
+  const { eng: other, workers } = scripted(starts);
+  const said: Said = [];
+  await startWorker(other, null, said);
+  workers[0].onerror!(new Error("the script stopped"));
+  assert.deepEqual(said.at(-1), { type: "crashed", cause: "error", reason: "unknown", detail: "the script stopped" });
 });
 
-test("one run at a time: a second run() is refused, and Break acts on the run that is running", async () => {
-  const finish: (() => void)[] = [];
-  const { eng, workers } = scripted((m, post) => {
-    if (starts(m, post)) return;
-    if (m.op === "run") finish.push(() => post({ id: m.id, result: { rc: 0, log: m.args.code } }));
-  }, { graceMs: 150 });
-  // with no worker, run() resolves: the result says there is no engine
-  const none = await eng.run("display 1");
-  assert.deepEqual([none.rc, none.kind, none.results], [RC_RESET, "no-engine", null]);
-  assert.match(none.error!, /^session reset: the engine is not running\./);
-
-  await eng.start();
-  const first = eng.run("first");
-  await assert.rejects(eng.run("second"), { kind: "busy", message: "a run is in progress" });
-  assert.equal(eng.running, first, "the refused call changed nothing");
-  await sleep(10);
-  finish.shift()!();
-  assert.deepEqual(await first, { rc: 0, log: "first" });
-  assert.equal(finish.length, 0, "the second run never reached the worker");
-
-  // Break counts down for the run that is running; a second Break keeps the first deadline
-  const stuck = eng.run("stuck");
-  await sleep(10);
-  eng.breakRun();
-  const deadline = eng.resetAt, timer = eng.breakTimer;
-  assert.ok(deadline! > Date.now());
-  await sleep(60);
-  eng.breakRun();
-  assert.equal(eng.resetAt, deadline, "the countdown did not start again");
-  assert.equal(eng.breakTimer, timer, "the same timer: the reset comes at the first deadline");
-  const r = await stuck;
-  assert.deepEqual([r.rc, r.kind], [RC_RESET, "break"]);
-  assert.match(r.error!, /the code did not stop at Break/);
-  assert.ok(Date.now() >= deadline! - 5, "not before the deadline");
-  assert.equal(workers.length, 2);
-  await sleep(20);
-  // after keepWaiting(), nothing counts down, and a run that ends clears the Break
-  const slow = eng.run("slow");
-  await sleep(10);
-  eng.breakRun();
-  eng.keepWaiting();
-  assert.equal(eng.resetAt, null);
-  await sleep(200);
-  assert.equal(workers.length, 2, "no reset");
-  finish.at(-1)!();
-  assert.deepEqual(await slow, { rc: 0, log: "slow" });
+test("interrupt(n) puts SIGINT into the buffer the live worker was given at boot; another number, or no worker, does nothing", async () => {
+  let buffer!: Int32Array;
+  const { eng } = scripted((m, post) => { if (m.op === "boot") buffer = m.args.interruptBuffer; starts(m, post); });
+  eng.interrupt(1);   // no worker yet
+  await startWorker(eng);
+  assert.equal(buffer[0], 0);
+  eng.interrupt(2);
+  assert.equal(buffer[0], 0, "not the live worker's number");
+  eng.interrupt(1);
+  assert.equal(Atomics.load(buffer, 0), 2, "SIGINT");
+  eng.end(1, { kind: "stopped", reason: "x" });
+  buffer[0] = 0;
+  eng.interrupt(1);
+  assert.equal(buffer[0], 0, "the worker was ended");
 });
 
-test("a page change the worker could not put into its folder reaches onFileError; a restart's cut is not an error", async () => {
-  const store = fakeStore(), errors: [string, string, string, string, string][] = [];
+test("a page change the worker could not put into its folder reaches onFileError; a change cut by end() is not an error; a closed database is `crashed`, cause storage", async () => {
+  const store = { post: null as FileStore["post"], onClosed: null as null | (() => void),
+    attach(post: FileStore["post"], o: { onClosed?: null | (() => void) } = {}) { store.post = post; store.onClosed = o.onClosed ?? null; } };
+  const errors: [string, string, string, string, string][] = [];
   const { eng } = scripted((m, post) => {
     if (starts(m, post)) return;
     if (m.op === "write") post({ id: m.id, error: "write q: file system error EISDIR", name: "MirrorError" });
   }, { store, onFileError: (error, op, path) => errors.push([error.name, error.kind, error.message, op, path]) });
-  await eng.start();
+  const said: Said = [];
+  await startWorker(eng, null, said);
   store.post!("write", { path: "q", data: new Uint8Array(1), seq: 1 }, []);
   await sleep(20);
   assert.deepEqual(errors, [["MirrorError", "op", "write q: file system error EISDIR", "write", "q"]]);
-  store.post!("rename", { from: "a", to: "b", seq: 2 }, []);   // never answered: cut by the restart
-  await eng.restart("reset by you");
+  store.onClosed!();   // the browser closed the database under the page
+  assert.deepEqual(said.at(-1), { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
+  store.post!("rename", { from: "a", to: "b", seq: 2 }, []);   // never answered: cut by the end
+  eng.end(1, { kind: "reset", reset: "crash", reason: "x" });
   await sleep(10);
   assert.equal(errors.length, 1);
+  assert.deepEqual([store.post, store.onClosed], [null, null], "detached: with no worker a closed database says nothing");
 });
 
-// ---- every failure has a kind; a run's op error is a result ----
+// ---- every failure has a kind ----
 
-test("a run whose op fails in the worker resolves with rc 9998, kind failed; the worker stays and the next run works", async () => {
+test("a run whose op fails in the worker rejects with kind op; the worker stays and the next run works", async () => {
   const { eng, workers } = scripted((m, post) => {
     if (starts(m, post)) return;
     if (m.op === "run") post(m.args.code === "bad" ? { id: m.id, error: "MemoryError", name: "PythonError" } : { id: m.id, result: { rc: 0, log: "ok" } });
   });
-  await eng.start();
-  assert.deepEqual(await eng.run("bad"), { rc: RC_RESET, error: "MemoryError", error_command: null, log: "", results: null, nobs: 0, nvars: 0,
-    new_graphs: 0, images: [], error_line: null, graph_commands: [], graph_lines: [], kind: "run-failed" });
-  assert.equal(eng.running, null);
-  assert.equal(eng.worker, workers[0], "no restart: the worker is the same");
-  assert.deepEqual(await eng.run("good"), { rc: 0, log: "ok" });
+  await startWorker(eng);
+  await assert.rejects(runOn(eng, "bad"), { kind: "op", name: "PythonError", message: "MemoryError" });   // the performer then says run-failed
+  assert.equal(eng.worker, workers[0], "the worker is the same");
+  assert.deepEqual(await runOn(eng, "good"), { rc: 0, log: "ok" });
 });
 
 test("download: no network for the list, an HTML page for the list, a Cache that breaks: each has a kind", async () => {
@@ -549,14 +509,13 @@ test("download: an abort with a reason of the caller's own still rejects as an A
   }
 });
 
-// ---- the snapshot start: the build's identity from the list, in mount's arguments ----
+// ---- the snapshot start: the build's time (`built`) and its two big files from the list, in mount's arguments ----
 
-// A fetch that answers only the list, with `buildId` (or fails as offline, or waits for `hold`); `calls`: what was asked.
-function listFetch({ buildId = "w", offline = false, hold }: { buildId?: string, offline?: boolean, hold?: Promise<void> } = {}) {
+// A fetch that answers only the list, with `buildId` (or fails as offline); `calls`: what was asked.
+function listFetch({ buildId = "w", offline = false }: { buildId?: string, offline?: boolean } = {}) {
   const calls: [string, RequestCache | undefined][] = [];
   const fetch = async (url: string, init: RequestInit = {}) => {
     calls.push([url, init.cache]);
-    await hold;
     if (offline) throw new TypeError("Failed to fetch");
     return url === `${BASE}start-files.json` ? Response.json({ ...LIST, buildId }) : new Response("no", { status: 404 });
   };
@@ -565,79 +524,85 @@ function listFetch({ buildId = "w", offline = false, hold }: { buildId?: string,
 const snapshotStart = (fetch: typeof globalThis.fetch, store = fakeStore()) => scripted((m, post) => { starts(m, post); },
   { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, buildId: "w", fetch, store, indexURL: "https://cdn.test/" });
 
-test("start (snapshot): the list, fetched fresh, gives mount the build id and the two big files; only the list is fetched, no manifest", async () => {
+test("build(): the list, fetched fresh, gives what mount needs; start() puts it in mount's arguments and fetches nothing, no manifest", async () => {
   const { fetch, calls } = listFetch(), sent: Message[] = [];
   const { eng, workers } = scripted((m, post) => { sent.push(m); starts(m, post); },
     { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, buildId: "w", fetch, indexURL: "https://cdn.test/", brotli: "wasm" });
-  await eng.start();
+  const build = await eng.build();
+  assert.deepEqual(build, BUILD);
+  assert.deepEqual(calls, [[`${BASE}start-files.json`, "no-cache"]], "the page fetches the list, fresh, and nothing else");
+  assert.equal(workers.length, 0, "build() makes no worker");
+  await startWorker(eng, build);
   assert.equal(workers.length, 1);
   assert.deepEqual(sent.find(m => m.op === "mount")!.args,
     { indexURL: "https://cdn.test/", brotli: "wasm", snapshot: `${BASE}snapshot/`, built: 777, files: LIST.snapshot });
-  assert.deepEqual(calls, [[`${BASE}start-files.json`, "no-cache"]], "the page fetches the list, fresh, and nothing else");
+  assert.equal(calls.length, 1, "start() fetches nothing: the list came in as `build`");
   // ?snapshot=0: no list, no snapshot arguments
-  const normal = scripted((m, post) => { sent.push(m); starts(m, post); }, { fetch: listFetch().fetch, indexURL: "https://cdn.test/" });
-  await normal.eng.start();
+  const other = listFetch();
+  const normal = scripted((m, post) => { sent.push(m); starts(m, post); }, { fetch: other.fetch, indexURL: "https://cdn.test/" });
+  assert.equal(await normal.eng.build(), null);
+  assert.deepEqual(other.calls, [], "the normal start has no list");
+  await startWorker(normal.eng, null);
   assert.deepEqual(sent.filter(m => m.op === "mount").at(-1)!.args, { indexURL: "https://cdn.test/", brotli: undefined });
 });
 
-test("start (snapshot): a list of another build rejects with kind updated, and no worker is made", async () => {
-  const store = fakeStore();
-  store.attach((() => {}) as unknown as FileStore["post"]);   // as after a restart's end(): still attached to the old worker's sender
-  const { eng, workers } = snapshotStart(listFetch({ buildId: "a newer build" }).fetch, store);
-  await assert.rejects(eng.start(), { kind: "updated", message: /^dofile was updated: reload the page/ });
-  assert.equal(workers.length, 0, "no worker");
-  assert.equal(eng.worker, null);
-  assert.equal(store.post, null, "the store sends nothing");
-});
-
-test("start (snapshot): a list that does not arrive rejects (kind failed, reason download), and no worker is made", async () => {
-  const { eng, workers } = snapshotStart(listFetch({ offline: true }).fetch);
-  await assert.rejects(eng.start(), { kind: "failed", reason: "download" });
-  assert.equal(workers.length, 0);
+test("build(): a list of another build rejects with kind updated; one that does not arrive with kind failed, reason download; a build with no snapshot, reason unknown", async () => {
+  const { eng, workers } = snapshotStart(listFetch({ buildId: "a newer build" }).fetch);
+  await assert.rejects(eng.build(), { kind: "updated", message: /^dofile was updated: reload the page/ });
+  const offline = snapshotStart(listFetch({ offline: true }).fetch);
+  await assert.rejects(offline.eng.build(), { kind: "failed", reason: "download" });
   const none = scripted(starts, { snapshot: `${BASE}snapshot/`, fetch: listFetch().fetch });   // a snapshot start with no list
-  await assert.rejects(none.eng.start(), { kind: "failed", reason: "unknown", message: /no snapshot in this build/ });
-  assert.equal(none.workers.length, 0);
+  await assert.rejects(none.eng.build(), { kind: "failed", reason: "unknown", message: /no snapshot in this build/ });
+  // a list of another build that also lacks the snapshot is "updated": the comparison comes first
+  const both = scripted(starts, { snapshot: `${BASE}snapshot/`, buildId: "w", startFiles: { ...LIST, buildId: "newer", snapshot: undefined } as unknown as StartFiles });
+  await assert.rejects(both.eng.build(), { kind: "updated" });
+  assert.deepEqual([workers.length, offline.workers.length, none.workers.length, both.workers.length], [0, 0, 0, 0], "no worker is made");
 });
 
-test("start (snapshot): stop() or a second start() while the list is fetched: the first start makes no worker", async () => {
-  let open!: () => void;
-  const hold = new Promise<void>(ok => { open = ok; });
-  const stopped = snapshotStart(listFetch({ hold }).fetch);
-  const first = stopped.eng.start();
-  stopped.eng.stop("another tab took over");
-  open();
-  await assert.rejects(first, { kind: "stopped" });
-  assert.equal(stopped.workers.length, 0, "a tab that lost the lock starts no worker");
-
-  let open2!: () => void;
-  const hold2 = new Promise<void>(ok => { open2 = ok; });
-  const twice = snapshotStart(listFetch({ hold: hold2 }).fetch);
-  const a = twice.eng.start(), b = twice.eng.start();
-  open2();
-  await assert.rejects(a, { kind: "stopped" });
-  await b;
-  assert.equal(twice.workers.length, 1, "one worker, the second start's");
-});
-
-test("start: a worker that cannot be made fails with kind failed, reason unknown", async () => {
+test("start: a worker that cannot be made is start-failed, reason unknown; the store is not attached", async () => {
   const store = fakeStore();
   const eng = new EngineClient({ wheel: "dofile.whl", store, createWorker: () => { throw new SyntaxError("the worker script is broken"); } });
-  await assert.rejects(eng.start(), { kind: "failed", reason: "unknown", name: "SyntaxError", message: "the worker script is broken" });
+  await assert.rejects(startWorker(eng), { type: "start-failed", reason: "unknown", detail: "the worker script is broken" });
   assert.equal(eng.worker, null);
-  assert.equal(store.post, null);
+  assert.equal(store.post, undefined);
 });
 
-test("a restart while start() waits for `startup` hands that start the new one's result", async () => {
+// The live worker's record keeps what end() said (`ended`). It is for the moment a step's answer and end() come in the
+// same tick: the step is settled already, so end() finds nothing pending to reject, and the start's next line runs after
+// end() returned.
+test("a start whose step is answered in the same tick as end(): nothing more is posted or said, the facts stay, and the store is not attached to the dead worker", async () => {
+  for (const at of ["mount", "startup"] as const) {
+    const store = fakeStore(), sent: Message[] = [], held: Message[] = [], said: Said = [];
+    const { eng, workers } = scripted(m => { sent.push(m); if (m.op === at) held.push(m); else if (m.op === "mount") workers[0].onmessage!({ data: { id: m.id, result: undefined } });
+      else if (m.op === "boot") workers[0].onmessage!({ data: { id: m.id, result: { dofile: "test" } } }); }, { store });
+    eng.start(1, null, a => said.push(a));
+    while (!held.length) await sleep(1);
+    // the worker's answer and the machine's end-worker, one after the other with nothing between
+    workers[0].onmessage!({ data: { id: held[0].id, result: at === "startup" ? { mode: "normal", storeError: "the files are not saved" } : undefined } });
+    eng.end(1, { kind: "stopped", reason: "another tab took over" });
+    await sleep(20);
+    assert.deepEqual(said, [], `${at}: not started, and not start-failed`);
+    assert.deepEqual(sent.map(m => m.op), at === "mount" ? ["mount"] : ["mount", "boot", "startup"], `${at}: nothing was posted to the worker after it was ended`);
+    assert.deepEqual([eng.about, eng.startup, eng.storeError], [null, null, null], `${at}: the facts are a live worker's`);
+    assert.equal(store.post, null, `${at}: the store is not attached again (a start that found no store attaches it without a journal)`);
+    assert.deepEqual([eng.worker, workers[0].terminated], [null, true]);
+  }
+});
+
+test("a start that is ended while it waits for `startup` says nothing more, and does not write over the next start's facts", async () => {
   const { eng } = scripted((m, post, _port, index) => {
     if (m.op === "mount") post({ id: m.id, result: undefined });
     else if (m.op === "boot") post({ id: m.id, result: { dofile: `worker ${index}` } });
     else if (m.op === "startup" && index > 0) post({ id: m.id, result: { mode: "normal", worker: index } });   // the first never answers
-  }, { onRestart: () => {} });
-  const first = eng.start();
-  while (![...eng.pending.values()].some(p => p.op === "startup")) await sleep(1);
-  const again = eng.restart("reset by you");
-  assert.deepEqual(await first, { dofile: "worker 1" });
-  assert.deepEqual(await again, { dofile: "worker 1" });
-  assert.deepEqual(eng.startup, { mode: "normal", worker: 1 }, "the old start did not write over the new one's startup");
+  });
+  const first: Said = [];
+  eng.start(1, null, a => first.push(a));
+  await sleep(20);   // mount and boot are answered; startup waits
+  assert.equal(eng.about, null, "the facts are written when the start is complete");
+  eng.end(1, { kind: "reset", reset: "user", reason: "reset by you" });
+  await new Promise<void>((ok, no) => eng.start(2, null, a => (a.type === "started" ? ok() : no(a))));
+  await sleep(10);
+  assert.deepEqual(first, [], "the first start said nothing: not started, and not start-failed");
+  assert.deepEqual(eng.startup, { mode: "normal", worker: 1 });
   assert.equal(eng.about!.dofile, "worker 1");
 });

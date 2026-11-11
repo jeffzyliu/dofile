@@ -135,7 +135,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 
 ### 3.5 Log pane and command line (P1, step 4b)
 - **Lines, top to bottom** (`DS` "Log"): the head (`.head`: banner B2, `book+drop+skew` in `mockups/art.js`, `aria-hidden`;
-  "dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax" from `About`; "Files stay in this browser. Try: help regress"); per run a
+  "dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax" from `ABOUT` (`web/src/app/env.ts`: compiled in, section 8); "Files stay in this browser. Try: help regress"); per run a
   run-head (`.runhead`, section 4); each echo (`.echo`); output; notes (`.note`: the path shim's "(path … is … in the working
   folder)"); the error and its `r(N);` (`.err`); the engine's hint (`.hint`); "Go to line 17" (`.jump`), which moves the
   editor's cursor. Mono at `--log`, 80 columns, no wrapping; wide tables scroll sideways.
@@ -550,17 +550,26 @@ they are not in `banners`.
 ```ts
 type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";   // snapshot start: no "packages";
                                                                                    // ?snapshot=0: no "unpack" (OQ-11)
-// One status text per stage: downloading the engine = download, unpacking the engine = unpack, loading Python = python,
-// loading your files = files, loading packages = packages, starting the engine = engine.
 interface RunHead { kind: "file" | "selection" | "command"; path?: string; lines?: [number, number]; fresh_locals: boolean }
+// The engine's state as views see it (step 3.5 C): the sixteen state names of the engine's state machine
+// (web/src/engine/machine.ts), without its tickets and its queued run. Written out by hand in web/src/app/types.ts.
 type EngineState =
-  | { s: "none" } | { s: "asking"; forRun: boolean } | { s: "declined" } | { s: "ready" } | { s: "other-tab" }
+  | { s: "checking-lock" }                                                    // the page load: waiting for the tab lock
+  | { s: "checking-cache" }                                                   // then for the cache check
+  | { s: "none" }                                                             // only with ?test=manual
+  | { s: "asking"; forRun: boolean }                                          // forRun: a run is queued
+  | { s: "declined" }
   | { s: "downloading"; received: number; total: number; t0: number }
-  | { s: "starting"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }   // seconds per finished stage
-  | { s: "running" | "waiting"; run: RunHead; t0: number }
+  | { s: "starting-list"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }     // a restart fetches the build's list
+  | { s: "starting-worker"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }   // done: seconds per finished stage
+  | { s: "ready" }
+  | { s: "running"; run: RunHead; t0: number }
   | { s: "breaking"; run: RunHead; t0: number; resetAt: number }
-  | { s: "failed"; reason: FailReason; message: string; detail: string }        // message: the visitor's words;
-  | { s: "failed-twice"; reason: FailReason; message: string; detail: string }; // detail: the cause, for a developer
+  | { s: "waiting"; run: RunHead; t0: number }
+  | { s: "failed"; reason: FailReason; detail: string; message: string }      // message: the visitor's words;
+  | { s: "failed-twice"; reason: FailReason; detail: string; message: string }   // detail: the cause, for a developer
+  | { s: "other-tab-idle" }
+  | { s: "other-tab-taking" };                                                // a take-over is in progress
 type FailReason = "no-wasm" | "download" | "memory" | "updated" | "unknown";            // "updated": reload the page
 interface LastRun extends RunHead { rc: number; line: number | null; seconds: number; skipped?: string[]; store_error?: string }
 interface OpenTab { path: string; kind: "text" | "dta"; dirty: boolean }               // the text lives in CodeMirror
@@ -575,37 +584,37 @@ type Dialog = null | { d: "download"; forRun: boolean } | { d: "clash"; path: st
 type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user" } | { b: "memory" } | { b: "storage" }
             | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string };
 
-export const engine: Signal<EngineState>;        // the engine controller, the one wrapper around EngineClient
+// A signal with one owner is a ReadonlySignal (step 3.5 C): a view that assigns one fails `npm run check`.
+export const engine: ReadonlySignal<EngineState>;        // the engine controller, from the state machine's state; starts as checking-lock
 export const isolated: Signal<boolean>;          // set once at load from crossOriginIsolated
-export const about: Signal<About | null>;        // engine controller, when boot answers
 export const engineBytes: number;                // the download size, from the page's meta tag written at build (OQ-12)
-export const memory: Signal<Memory | null>;      // run controller, after the start and after each run
-export const files: Signal<FileInfo[]>;          // file service, after every store change and every run
-export const fresh: Signal<Set<string>>;         // file service: paths the last run created or changed (the "new" badge)
-export const persisted: Signal<boolean | null>;  // file service, from storage.persist() and persisted()
+export const memory: ReadonlySignal<Memory | null>;      // run controller, after the start and after each run
+export const files: ReadonlySignal<FileInfo[]>;          // file service, after every store change and every run
+export const fresh: ReadonlySignal<Set<string>>;         // file service: paths the last run created or changed (the "new" badge)
+export const persisted: ReadonlySignal<boolean | null>;  // file service, from storage.persist() and persisted()
 export const tabs: Signal<OpenTab[]>;            // editor tabs (4a); `dirty` only through setDirty(path, on) (the editor, 4b)
 export const activeTab: Signal<string | null>;   // editor tabs, and the file tree when it opens a file (4a, files/open.js)
 export const split: Signal<boolean>;             // the Log head's Split and Unsplit; kept in localStorage
 export const outputTab: Signal<"log" | "graph" | "data" | "results" | "help">;   // the Output tablist; "log" only unsplit
 export const phoneTab: Signal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar; Run sets "log";
                                                  // 4a's openFile sets "editor" (a text or .dta tab)
-export const log: Signal<LogItem[]>;             // run controller; "Clear log" empties it
-export const lastRun: Signal<LastRun | null>;    // run controller
-export const history: Signal<string[]>;          // run controller's runCommand(): the command line, Load and Import
-export const results: Signal<Results | null>;    // run controller, from each RunResult; null on a new engine, other-tab
-export const macros: Signal<Macros | null>;      // run controller, after each run; null on a new engine, other-tab
-export const data: Signal<DataSummary | null>;   // run controller, after each run; null on a new engine, other-tab
-export const rows: Signal<BrowseRows | null>;    // run controller (after each run; null as data); the Data tab appends,
-                                                 // only if rows.value is still the object its request started from
+export const log: ReadonlySignal<LogItem[]>;             // run controller; "Clear log" empties it
+export const lastRun: ReadonlySignal<LastRun | null>;    // run controller
+export const history: ReadonlySignal<string[]>;          // run controller's runCommand(): the command line, Load and Import
+export const results: ReadonlySignal<Results | null>;    // run controller, from each RunResult; null when the engine is gone
+export const macros: ReadonlySignal<Macros | null>;      // run controller, after each run; null when the engine is gone
+export const data: ReadonlySignal<DataSummary | null>;   // run controller, after each run; null when the engine is gone
+export const rows: ReadonlySignal<BrowseRows | null>;    // run controller alone: after each run (null as data), and
+                                                 // moreRows() for the Data tab's "Show 50 more"
 export const pickedVar: Signal<string | null>;   // the Data tab
-export const graphs: Signal<Graph[]>;            // run controller: a run's, and addFileGraph() for a .png; "Clear log" empties
+export const graphs: ReadonlySignal<Graph[]>;            // run controller: a run's, and addFileGraph() for a .png; "Clear log" empties
 export const graphIndex: Signal<number>;         // the Graph tab, the full-size view and the log's graph links (by `n`)
 export const graphFull: Signal<boolean>;         // the full-size view is open: 4c's Open full size and Close, 4b's inline tap
 export const theme: Signal<"system" | "light" | "dark">;   // the theme button
-export const toast: Signal<string | null>;       // anyone, through showToast(text); it clears itself after 4 s
+export const toast: ReadonlySignal<string | null>;       // anyone, through showToast(text); it clears itself after 4 s
 export const dialog: Signal<Dialog>;             // whoever opens one; the dialog closes itself
-export const banners: Signal<Banner[]>;          // their owners; Dismiss removes one
-export const announce: Signal<string>;           // the hidden live region: through say() (controllers, showToast, views)
+export const banners: ReadonlySignal<Banner[]>;          // their owners, through addBanner(); Dismiss removes one (dismiss())
+export const announce: ReadonlySignal<string>;           // the hidden live region: through say() (controllers, showToast, views)
 ```
 
 **As built in step 3** (the step 4 agents write against this and the header of `web/src/app/App.tsx`, which say the same):
@@ -613,27 +622,36 @@ export const announce: Signal<string>;           // the hidden live region: thro
   components read the same signals through `@preact/signals`). The types above: `web/src/app/types.d.ts`; section 6's:
   `web/src/engine/types.d.ts`, named in JSDoc by `client.js`, `store.js`, `worker.js` and `snapshot.js`. The controllers,
   also plain JavaScript, tested in `web/test/app.test.mjs`:
-  - `engine.js` owns `engine`, `about` and the reset banner. At load it asks unless `client.cached()` says the start files
-    are all in the Cache; a start that ends `failed-twice` (reason not `memory` or `no-wasm`) calls
+  - `engine.ts` owns `engine` and the reset banner. Since step 3.5 C it is the one caller of the engine's state machine
+    (`web/src/engine/machine.ts`): each action is one event, the machine's table says in which states it acts (in any
+    other it does nothing), and the `engine` signal is the machine's state. At load it asks unless `client.cached()` says
+    the start files are all in the Cache; a start that ends `failed-twice` (reason not `memory` or `no-wasm`) calls
     `client.forgetDownload()`, which deletes the `dofile-snapshot-*` Caches, so the reload the message asks for downloads them
-    fresh. Actions: `open`, `ask(forRun)`,
-    `decline` (during `downloading` it also aborts the download), `start` (also "Try again"; only from `none`, `asking`,
-    `declined`, `failed`), `stopDownload`, `takeOver` (only from `other-tab`; a second press gets the same promise),
-    `lost`, `run`, `breakRun`, `keepWaiting`, `reset` (only in `ready`, `running`, `breaking`, `waiting`; else nothing),
-    and `call(op, args)` for the views' engine ops. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a
-    failed start (`UPDATED` is reason "updated"'s).
-  - `run.js` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows` (the Data tab also appends),
-    `memory`, `graphs`, `graphIndex` (to the newest) and `history`. It clears `results`, `macros`, `data`, `rows`,
-    `memory` and `lastRun` when a new engine starts (`starting`, a reset too) and on `other-tab`, and asks for `memory`
+    fresh. Actions, all returning nothing (a second press does nothing): `open` (the page load), `ask()` (only in `none`
+    and `declined`), `decline` (only in `asking`, and in `downloading`, where it also aborts the download), `start` (also
+    "Try again"; only in `none`, `asking`, `declined`, `failed`), `stopDownload`, `takeOver` (only in `other-tab-idle`),
+    `lost`, `breakRun`, `keepWaiting`, `reset` (only in `ready`, `running`, `breaking`, `waiting`), `run(code, head)`
+    (run.ts's way in: it answers "started", "queued" or "refused"; views call `runCode` and `runCommand`), and
+    `call(op, args)`, the page's one provider of read ops: `describe`, `describe_file`, `matrix`, `macros`, `browse`,
+    `memory`; views use `matrix` and `describe_file`. It rejects with kind `no-engine` with no worker and `reset` when a
+    reset cut it. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start (`UPDATED` is reason
+    "updated"'s); `stageWords` (the live region) and `stageStatus` (the status bar) are the words of each `Stage`
+    (`STAGE_OF` is gone: the worker sends typed stage ids); `stagesOf(snapshot)` is the stages in order.
+  - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs`,
+    `graphIndex` (to the newest) and `history`. It clears `results`, `macros`, `data`, `rows`, `memory` and `lastRun`
+    when the engine is gone (a reset, or another tab took it: the machine's effect `engine-gone`), and asks for `memory`
     when an engine is ready. Actions: `runCode(code, head)`, `runCommand(text)`, `addFileGraph(path, png)` (a .png
     opened; the same path opened again replaces its entry, with the new image and the same `n`, and selects it),
-    `refreshData`, `clearLog`.
+    `refreshData`, `moreRows(count = 50)` (the Data tab's "Show 50 more": the next rows appended to `rows`; resolves true
+    when rows were added, and appends nothing if a run or a new engine replaced `rows` meanwhile), `clearLog`.
   - `runCommand(text)` (the command line, Load, Import; kind "command", locals kept) returns `{ accepted, done }` at once.
     `accepted` is true when the command runs now (`ready`) or is queued (`none`, `declined`: the prompt opens titled for a
-    run, and it runs once the engine is ready; a queued command counts as accepted); only then is it added to `history`
-    (not twice in a row), also when the run ends in an error, and the command line clears its field. In any other state
-    (a start or a run in progress, `failed`, `other-tab`) or for an empty command it is refused: `history` is unchanged
-    and the text stays in the field. `done` is `runCode`'s promise: the result, or null when nothing ran now.
+    run, and it runs when the engine has started: the state goes from `starting-worker` straight to `running`; a queued
+    command counts as accepted); only then is it added to `history` (not twice in a row), also when the run ends in an
+    error, and the command line clears its field. In any other state (the page load: `checking-lock`, `checking-cache`;
+    a start or a run in progress, `failed`, `other-tab-idle`, `other-tab-taking`) or for an empty command it is refused:
+    `history` is unchanged and the text stays in the field. `done` is `runCode`'s promise: the result, or null when
+    nothing ran now.
   - `files.js` owns `files`, `fresh`, `persisted`, the download-failed banner (below) and the storage banner (S 19: once per visit, when `persisted` is false
     and the files change, by the page or a run). Actions: `refresh`, `keep`, `afterRun`, `downloadAll` (resolves true
     once the zip is handed to the browser; false when the store cannot make it: then it adds the banner
@@ -643,8 +661,8 @@ export const announce: Signal<string>;           // the hidden live region: thro
     banner. No toast: a toast only confirms, 3.10. It never rejects), `saveAs`. With no file in the store (folders do not
     count) `downloadAll` makes no zip, shows and says nothing and resolves false; the ⋯ menu's item is disabled then
     (`hasFiles`).
-  - The page's one store: `web/src/app/store.js`; views change files through it. It starts `blocked` and `engine.js`
-    unblocks it once the tab lock is this tab's.
+  - The page's one store: `web/src/app/store.js`; views change files through it. It starts `blocked` and is unblocked
+    once the tab lock is this tab's (`files.ts` `own()`, an effect of the engine's state machine).
   - Helpers in `state.js`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `setDirty(path, on)`, `saved`
     (localStorage); computed `isPhone` (the layout is the phone's: read it, never pass a `phone` prop) and `hasFiles`
     (the store has a file; folders do not count).
@@ -675,9 +693,9 @@ export const announce: Signal<string>;           // the hidden live region: thro
   - **4c** `output/tabs.tsx` (`GraphTab`, `DataTab`, `ResultsTab`; they may be mounted again when the layout changes, so
     their state lives in signals), `output/FullSize.tsx` (`FullSize`, placed once over the page for every width, open
     while `graphFull`), `output/DtaView.tsx` (`DtaView({path})`, a .dta tab, shown in the editor's place). Writes
-    `graphIndex`, `graphFull`, `pickedVar`, `rows` ("Show 50 more" appends; `rows` has two writers, so append only if
-    `rows.value` is still the object the request started from: `refreshData` replaces it after each run). Calls
-    `call("browse" | "matrix" | "describe_file", ...)`, `runCommand` (Load), `showToast` ("Copied").
+    `graphIndex`, `graphFull`, `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
+    run.ts `moreRows()`, which appends (run.ts is the one writer of `rows`). Calls
+    `call("matrix" | "describe_file", ...)`, `moreRows()`, `runCommand` (Load), `showToast` ("Copied").
   - **4d** `states/DownloadDialog.tsx` (the prompt and "dofile is open in another tab", built as far as the start and the
     tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, a dead link until step 5),
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
@@ -685,8 +703,10 @@ export const announce: Signal<string>;           // the hidden live region: thro
     files couldn't be downloaded: this browser didn't open the storage where dofile keeps them." / "Try again"
     (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d may restyle or reword
     it). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
-    `ask(false)` (the declined banner's "Download the engine" leads back to `asking`, section 5), `decline`,
-    `stopDownload`, `takeOver`, `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `downloadAll`.
+    `ask()` (the declined banner's "Download the engine" leads back to `asking`, section 5), `decline`,
+    `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
+    milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
+    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `downloadAll`.
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.d.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
     on a phone every view draws it (download-failed); the hidden views are `display: none`, so it is read and tabbed once.
@@ -723,6 +743,38 @@ export const announce: Signal<string>;           // the hidden live region: thro
   `download()`). `outputTab` has no "help" (P2). New signals: `layout` ("phone" under 700 px), `resolvedTheme` (computed:
   what a run sends as `plot_theme`), `graphFull`. Kept in localStorage: `dofile.theme`, `dofile.split`. Whether
   to ask before the download is read from the Cache, not stored.
+- **Changed in step 3.5 C** (the engine's state machine; `docs/prototype1-step3.5-c-design.md`, item 9). What a step 4
+  part sees:
+  1. `engine` has the machine's sixteen state names. New: `checking-lock` and `checking-cache` (the page load; `engine`
+     starts as `checking-lock`, and `none` is seen only with `?test=manual`). `starting` is `starting-list` (a restart
+     fetching the build's list; no worker yet) or `starting-worker`; `other-tab` is `other-tab-idle` or
+     `other-tab-taking`. Each pair has the fields of the old state, and a view that treats a pair alike writes two
+     `case`s. `<html data-engine>` shows one of the sixteen; CSS that keys on it matches by prefix
+     (`[data-engine^="other-tab"]`).
+  2. `ask(forRun)` is `ask()`. `open`, `start`, `takeOver` and `reset` return nothing, not promises.
+  3. `STAGE_OF` is gone; `stageStatus` (a `Record<Stage, string>`) has the status bar's words. `Stage`, `RunHead` and
+     `FailReason` are defined in `web/src/engine/types.ts`, and `web/src/app/types.ts` re-exports them.
+  4. The `about` signal is gone. `ABOUT` in `web/src/app/env.ts` is compiled in (`dofile`, `engine_commit`,
+     `stata_version`): there from the first paint, with or without an engine.
+  5. The signals with one owner are `ReadonlySignal` (the list above): `engine`; `memory`, `log`, `lastRun`, `history`,
+     `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`, `persisted`; `banners`, `toast`, `announce` (through
+     the helpers). The others stay writable: `graphIndex`, `graphFull`, `dialog`, `tabs`, `activeTab`, `split`,
+     `outputTab`, `phoneTab`, `pickedVar`, `theme`, `layout`, `isolated`.
+  6. `rows` has one writer, run.ts: "Show 50 more" is `moreRows()`. `call` takes only the six read ops.
+  7. Run and the command line during the page load are refused (`accepted: false`). A queued run goes from
+     `starting-worker` straight to `running`. `decline` acts only in `asking` and `downloading`; `ask` only in `none`
+     and `declined`.
+  8. After a reset whose new start fails, "Try again" does not clear `lastRun`: it stays the run the reset cut.
+  9. After Break, a run's result stands as the engine gave it: rc 1 when the engine took the Break, the run's own rc
+     when it had ended before a safe point. rc 9998 is always a reset (or kind `run-failed`).
+  10. `runCode` and `runCommand` (through `engine.run()`) throw when called while a step of the state machine is in
+      progress: that is inside a handler given to `connectRun`, and also inside a signal effect on `engine`, `lastRun`
+      or `log`, which are written during a step; start the next run after the step, for example when the run's promise
+      has resolved.
+  11. `refreshData()` no longer looks at the state: with no engine its calls reject and nothing is written; while an
+      engine starts or a run is on, it waits for the worker.
+  The paragraph below, "Engine controller choices", still describes the controller as it was before the machine (each
+  start taking a number, the lock counter, `start()`'s promise, `about`); step 3.5 E rewrites it, with sections 5 to 7.
 - **Engine controller choices.** It decides from an error's `kind`, `reason` and `name`, never its text. A `download()`
   failure other than "Stop download" is `failed` with reason "download" at once, with no `start()` and no worker (step
   3.5 B; section 6); `kind: "updated"`, from `download()` or `start()`, is `failed` with reason "updated": 4d offers
@@ -739,7 +791,7 @@ export const announce: Signal<string>;           // the hidden live region: thro
   announced (it reads the cache; "Download the engine" would mislead). Reset and "Reset now" give the reason "reset by
   you" (4d's words may change it). Run or the command line in `none` or `declined` opens the prompt with `forRun` and
   runs once the engine is ready; "Not now", a failed start and another tab drop that run. Losing the tab lock clears
-  `about` (and run.js the rest). `open()` and `takeOver()` check after each await that the lock was not lost meanwhile
+  what the engine left (run.ts). `open()` and `takeOver()` check after each await that the lock was not lost meanwhile
   (a counter that losing it increments): a tab that has just lost it does not unblock the store, close the dialog or
   start a worker, and "Use dofile in this tab" acts again.
 - **Run controller choices.** A result the client made (rc 9998) keeps the text that streamed in and adds its `error`

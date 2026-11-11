@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SnapshotManifest } from "../src/engine/types.ts";
+import type { About, SnapshotManifest } from "../src/engine/types.ts";
 
 /** What a snapshot is built from, and what the page is built against. `extraWheels`: file name -> SHA-256, web/wheels/*.whl. */
 export interface BuildInputs { wheel: string; wheelHash: string; extraWheels: Record<string, string>; pyodide: string }
@@ -29,6 +29,18 @@ export function inputs(): BuildInputs {
   for (const f of readdirSync(wheels).filter(f => f.endsWith(".whl")).sort()) extraWheels[f] = sha256(new URL(f, wheels));
   const pyodide = JSON.parse(readFileSync(new URL("node_modules/pyodide/package.json", web), "utf8")).version;
   return { wheel, wheelHash: sha256(new URL(wheel, dist)), extraWheels, pyodide };
+}
+
+/** What the page shows of the engine without asking it (the "About dofile" hint, the log's head): the package's version,
+ *  from the wheel's file name (dofile-0.1.0.dev1-py3-none-any.whl); the vendored engine's commit, from its VENDORED stamp;
+ *  and the Stata version it emulates. All three are fixed when the page is built: the page is compiled against one wheel
+ *  (vite.config.ts compiles this in as __ABOUT__), and the wheel is built from this tree. The engine says the same when
+ *  it starts (`boot` answers About): test/engine.test.ts compares the two. */
+export function about({ wheel }: Pick<BuildInputs, "wheel"> = inputs()): Pick<About, "dofile" | "engine_commit" | "stata_version"> {
+  const version = wheel.split("-")[1];   // {name}-{version}-{python}-{abi}-{platform}.whl
+  if (!wheel.startsWith("dofile-") || !version) throw new Error(`cannot read the version from the wheel's name: ${wheel}`);
+  const stamp = readFileSync(new URL("../src/dofile/_vendor/opendta/VENDORED", web), "utf8");
+  return { dofile: version, engine_commit: /^commit: (\S+)$/m.exec(stamp)?.[1] ?? null, stata_version: 14 };
 }
 
 /** SHA-256 over the stamp, the dofile wheel's hash, the extra wheels' hashes (by file name) and the Pyodide version. A record

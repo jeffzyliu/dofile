@@ -1,15 +1,17 @@
-// The file store with a running engine: the real worker.js in a worker thread, the page's store in this thread
+// The file store with a running engine: the real worker.ts in a worker thread, the page's store in this thread
 // (fake-indexeddb), as a page and its worker share one database. SPEC.md section 7, tests 2 to 8 and 11; and the worker
-// ops that came with prototype 1 (section 6).
+// ops that came with prototype 1 (section 6). The transport alone, with no state machine: the test starts and ends the
+// workers itself (harness.ts, startWorker), as the machine's effects would.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
-import { EngineClient, RC_RESET } from "../src/engine/client.ts";
+import { EngineClient } from "../src/engine/client.ts";
 import { openStore } from "../src/engine/store.ts";
-import { bytes, endWorkers, extraWheels, nodeWorker, pendingRows, refuseWrites, sleep, text, wheel } from "./harness.ts";
+import { bytes, endWorkers, extraWheels, live, nodeWorker, pendingRows, refuseWrites, runOn, sleep, startWorker, text, wheel } from "./harness.ts";
+import type { Answer } from "../src/engine/machine.ts";
 import type { FileStore } from "../src/engine/store.ts";
-import type { About, BrowseRows, DataSummary, FileInfo, ResetKind } from "../src/engine/types.ts";
+import type { BrowseRows, DataSummary, FileInfo } from "../src/engine/types.ts";
 
 /** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
 type Ok<T> = Exclude<T, { error: string }>;
@@ -20,9 +22,9 @@ const byPath = (a: FileInfo, b: FileInfo) => (a.path < b.path ? -1 : 1);
 // The store and /work hold the same folders and files, byte for byte. The `files` op waits in the worker's queue behind
 // every page change posted before it, so /work is compared after those are in.
 async function same(store: FileStore, eng: EngineClient) {
-  const inWork = (await eng.call("files")).sort(byPath), inStore = await store.list();
+  const inWork = (await eng.query("files")).sort(byPath), inStore = await store.list();
   assert.deepEqual(inWork.map(f => [f.path, f.dir, f.size]), inStore.map(f => [f.path, f.dir, f.size]), "/work (first) is not the store (second)");
-  for (const f of inStore) if (!f.dir) assert.deepEqual(await eng.call("read", { path: f.path }), await store.read(f.path), f.path);
+  for (const f of inStore) if (!f.dir) assert.deepEqual(await eng.query("read", { path: f.path }), await store.read(f.path), f.path);
   return inStore.map(f => f.path);
 }
 // Stata code that writes `content` to the file `path`
@@ -32,8 +34,8 @@ const writes = (path: string, content: string) => `file open f using ${path}, wr
 function untilGo(eng: EngineClient, code: string) {
   let log = "", go!: () => void;
   const going = new Promise<void>(ok => { go = ok; });
-  const running = eng.run(code, { onLog: c => { log += c; if (/^go$/m.test(log)) go(); } });
-  running.then(() => go());   // a run that ends first: the assertions after it say what went wrong
+  const running = runOn(eng, code, { onLog: c => { log += c; if (/^go$/m.test(log)) go(); } });
+  running.then(go, go);   // a run that ends first (or is cut): the assertions after it say what went wrong
   return { running, going };
 }
 // a record's time in the store, set directly (the page's own writes always take the time now)
@@ -44,7 +46,7 @@ const setMtime = (store: FileStore, path: string, mtime: number) => store.tx(["i
 }));
 const deleteDatabase = (factory: IDBFactory) => new Promise((ok, err) => { const r = factory.deleteDatabase("dofile"); r.onsuccess = ok; r.onerror = () => err(r.error); });
 
-test("the store and the engine: the start copy, the after-run difference, page changes during a run, restart, a refused write", { timeout: 300_000 }, async t => {
+test("the store and the engine: the start copy, the after-run difference, page changes during a run, a refused write, end() and a new worker", { timeout: 300_000 }, async t => {
   const store = openStore({ indexedDB: new IDBFactory() });
   // written before any worker exists
   await store.write("early.do", bytes('display "early " 6*7'));
@@ -55,10 +57,10 @@ test("the store and the engine: the start copy, the after-run difference, page c
   await setMtime(store, "early.do", Date.now() + 3_600_000);
   assert.deepEqual(await pendingRows(store), []);
 
-  const statuses: string[] = [], fileErrors: [string, string, string, string][] = [];
-  const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store, onStatus: s => statuses.push(s),
+  const said: Answer<"start-worker">[] = [], fileErrors: [string, string, string, string][] = [];
+  const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store,
     onFileError: (error, op, path) => fileErrors.push([error.name, error.message, op, path]) });
-  const starting = eng.start();
+  const starting = startWorker(eng, null, said);
   let up = false;
   starting.then(() => { up = true; });
 
@@ -77,7 +79,7 @@ test("the store and the engine: the start copy, the after-run difference, page c
     await store.rename("y.txt", "x.txt");
     await store.rename("swap.tmp", "y.txt");
     assert.equal((await store.zip()).size > 0, true);
-    assert.ok(!statuses.includes("loading your files"), "all of it was answered while the worker was still loading Python");
+    assert.ok(!said.some(a => a.type === "stage" && a.stage === "files"), "all of it was answered while the worker was still loading Python");
     assert.equal(up, false);
   });
 
@@ -85,9 +87,9 @@ test("the store and the engine: the start copy, the after-run difference, page c
     assert.deepEqual(await same(store, eng), ["a.txt", "data", "data/moved.txt", "during.do", "early.do", "kept.txt", "out", "x.txt", "y.txt"]);
     assert.deepEqual(await pendingRows(store), [], "every page change is in /work");
     assert.equal(up, false, "the files were there before the engine finished loading");
-    assert.deepEqual(await Promise.all(["kept.txt", "a.txt", "x.txt", "y.txt"].map(async p => text(await eng.call("read", { path: p })))),
+    assert.deepEqual(await Promise.all(["kept.txt", "a.txt", "x.txt", "y.txt"].map(async p => text(await eng.query("read", { path: p })))),
       ["first a", "second a", "first y", "first x"], "the changes made during mount were not applied twice");
-    const r = await eng.run("do early.do\ndo during.do\ntype data/moved.txt");
+    const r = await runOn(eng, "do early.do\ndo during.do\ntype data/moved.txt");
     assert.equal(r.rc, 0, r.log);
     assert.match(r.log, /early 42/);
     assert.match(r.log, /during 42/);
@@ -141,7 +143,7 @@ sleep 1000`);
   await t.test("two runs in a row that rewrite a file with the same number of bytes: each one is saved", async () => {
     for (let i = 0; i < 20; i++) {
       const content = String(1000 + i);   // always 4 bytes
-      const r = await eng.run(writes("tick.txt", content));
+      const r = await runOn(eng, writes("tick.txt", content));
       assert.deepEqual(r.files, [{ name: "tick.txt", status: i ? "modified" : "created", bytes: 4 }], `run ${i}`);
       assert.equal(text(await store.read("tick.txt")), content, `run ${i}`);
     }
@@ -178,10 +180,10 @@ copy src.txt other.txt, replace`);
     assert.equal(text(await store.read("same.txt")), "the user's text");
     assert.equal(text(await store.read("renamed.txt")), "the page's file");
     assert.equal(text(await store.read("folder/a.txt")), "the page's a");
-    assert.equal(text(await eng.call("read", { path: "same.txt" })), "the user's text");
-    assert.equal(text(await eng.call("read", { path: "renamed.txt" })), "the page's file");
+    assert.equal(text(await eng.query("read", { path: "same.txt" })), "the user's text");
+    assert.equal(text(await eng.query("read", { path: "renamed.txt" })), "the page's file");
     // and the next run sees the page's versions and saves over them as usual
-    const next = await eng.run("type same.txt\ncopy src.txt same.txt, replace");
+    const next = await runOn(eng, "type same.txt\ncopy src.txt same.txt, replace");
     assert.match(next.log, /the user's text/);
     assert.deepEqual(next.files, [{ name: "same.txt", status: "modified", bytes: 18 }]);
     assert.equal(text(await store.read("same.txt")), "written by the run");
@@ -204,8 +206,8 @@ copy src.txt other.txt, replace`);
     const all = await same(store, eng);
     assert.ok(all.includes("u.txt") && all.includes("box3/in.txt"));
     for (const gone of ["f.txt", "t.txt", "box", "box2", "box3/new.txt"]) assert.ok(!all.includes(gone), gone);
-    assert.equal(text(await eng.call("read", { path: "u.txt" })), "the page's f");
-    assert.equal(text(await eng.call("read", { path: "box3/in.txt" })), "the page's in");
+    assert.equal(text(await eng.query("read", { path: "u.txt" })), "the page's f");
+    assert.equal(text(await eng.query("read", { path: "box3/in.txt" })), "the page's in");
     assert.deepEqual(await pendingRows(store), []);
     await store.remove("u.txt");
     await store.remove("box3");
@@ -259,21 +261,21 @@ copy src.txt other.txt, replace`);
     assert.equal(r.rc, 0, r.log);
     assert.deepEqual(r.skipped, [], "not a folder the page renamed or removed: not listed");
     assert.ok((await same(store, eng)).includes("q"));
-    assert.equal(text(await eng.call("read", { path: "q" })), "the page's q");
+    assert.equal(text(await eng.query("read", { path: "q" })), "the page's q");
     assert.deepEqual(await pendingRows(store), []);
     assert.deepEqual(fileErrors, [], "no op failed: the worker took the store's version with the run's result");
     await store.remove("q");
   });
 
   await t.test("a page change that cannot be put into /work: the page is told, the row goes, and /work takes the store's version", async () => {
-    await eng.call("mkdir", { path: "clash" });   // only in /work (no seq): a folder where the page will write a file
+    store.post!("mkdir", { path: "clash" }, []);   // only in /work (no seq): a folder where the page will write a file
     await store.write("clash", bytes("a file"));
     await store.write("after.txt", bytes("the next change still arrives"));
     assert.ok((await same(store, eng)).includes("clash"));
-    assert.equal(text(await eng.call("read", { path: "clash" })), "a file");
+    assert.equal(text(await eng.query("read", { path: "clash" })), "a file");
     assert.deepEqual(fileErrors, [["MirrorError", "write clash: file system error EISDIR", "write", "clash"]]);
     assert.deepEqual(await pendingRows(store), [], "no row is left to hide later runs' files");
-    const r = await eng.run(writes("clash", "run"));   // and a run's change to it is saved again
+    const r = await runOn(eng, writes("clash", "run"));   // and a run's change to it is saved again
     assert.deepEqual(r.files, [{ name: "clash", status: "modified", bytes: 3 }]);
     await store.remove("clash");
     await store.remove("after.txt");
@@ -283,7 +285,7 @@ copy src.txt other.txt, replace`);
     await store.write("m.txt", bytes("old m"));
     await store.write("fold/in.txt", bytes("in"));
     const undo = refuseWrites(tt);
-    const r = await eng.run(`${writes("quota.txt", "x")}\nerase keep.txt\ncopy src.txt m.txt, replace\nerase fold/in.txt\nrmdir fold`);
+    const r = await runOn(eng, `${writes("quota.txt", "x")}\nerase keep.txt\ncopy src.txt m.txt, replace\nerase fold/in.txt\nrmdir fold`);
     assert.equal(r.rc, 0, r.log);
     assert.match(r.store_error!, /quota/);
     assert.deepEqual(r.files, []);
@@ -291,66 +293,63 @@ copy src.txt other.txt, replace`);
     assert.ok(!before.includes("quota.txt") && before.includes("keep.txt") && before.includes("fold/in.txt"), "nothing of the refused write is in the store");
     undo();
     await store.rename("m.txt", "n.txt");   // the page renames a file whose new text the store has not got yet
-    const again = await eng.run("display 1");
+    const again = await runOn(eng, "display 1");
     assert.equal(again.store_error, undefined);
     // the run's text goes with the rename; a file the store had is "modified"; the folder is not listed as a file
     assert.deepEqual(again.files!.map(f => [f.name, f.status]).sort(), [["fold/in.txt", "removed"], ["keep.txt", "removed"], ["n.txt", "modified"], ["quota.txt", "created"]]);
     assert.equal(text(await store.read("n.txt")), "written by the run");
     const all = await same(store, eng);
     assert.ok(!all.includes("fold") && !all.includes("m.txt"));
-    assert.deepEqual((await eng.run("display 2")).files, [], "nothing is tried a third time");
+    assert.deepEqual((await runOn(eng, "display 2")).files, [], "nothing is tried a third time");
   });
 
   await t.test("a refused write to a file the page then renames, in the same copy of the store as a failed page change: nothing is owed for it", async tt => {
     await store.write("owed.txt", bytes("old"));
     const undo = refuseWrites(tt);
-    assert.match((await eng.run("copy src.txt owed.txt, replace")).store_error!, /quota/);
+    assert.match((await runOn(eng, "copy src.txt owed.txt, replace")).store_error!, /quota/);
     undo();
-    await eng.call("mkdir", { path: "clash2" });   // only in /work: the page's write there fails, and /work copies the store
+    store.post!("mkdir", { path: "clash2" }, []);   // only in /work: the page's write there fails, and /work copies the store
     const errors = fileErrors.length;
     // the rename is in the store before the worker copies it for the failed write: that copy covers it, so its op is skipped
     await Promise.all([store.write("clash2", bytes("a file")), store.rename("owed.txt", "owed2.txt")]);
     await same(store, eng);
     assert.equal(fileErrors.length, errors + 1);
-    assert.equal(text(await eng.call("read", { path: "owed2.txt" })), "old", "/work has the store's version");
-    assert.deepEqual((await eng.run("display 1")).files, [], "not a removal of owed.txt: nothing is owed for the old name");
+    assert.equal(text(await eng.query("read", { path: "owed2.txt" })), "old", "/work has the store's version");
+    assert.deepEqual((await runOn(eng, "display 1")).files, [], "not a removal of owed.txt: nothing is owed for the old name");
     await store.remove("clash2");
     await store.remove("owed2.txt");
   });
 
-  await t.test("restart (rc 9998): the cut run wrote nothing, /work is rebuilt from the store, pending is empty", async () => {
+  // the machine's RESET: end-worker, then start-worker (the run's rc 9998 result is the machine's own: machine.test.ts)
+  await t.test("end() during a run, then a new worker: the cut run wrote nothing, /work is rebuilt from the store, pending is empty", async () => {
     const before = (await store.list()).map(f => f.path);
-    const restarts: [string, Promise<About>, ResetKind][] = [], order: string[] = [];
-    eng.onRestart = (reason, started, kind) => { restarts.push([reason, started, kind]); order.push("onRestart"); };
     const { running, going } = untilGo(eng, `${writes("cut.txt", "never saved")}\nerase src.txt\ndisplay "go"\nsleep 30000`);
-    running.then(() => order.push("the run's result"));
     await going;
     await store.write("saved.txt", bytes("saved by the page during the run"));
     assert.equal((await pendingRows(store)).length, 1);
-    const old = eng.worker, started = eng.restart("test");
-    assert.deepEqual(order, ["onRestart"], "onRestart is called inside restart(), before the cut run resolves");
-    assert.deepEqual(await running, { rc: RC_RESET, error: "session reset: test. Data in memory is gone; your files are kept.", error_command: null,
-      log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [], error_line: null, graph_commands: [], graph_lines: [], kind: "user" });
-    assert.deepEqual(order, ["onRestart", "the run's result"]);
-    assert.deepEqual(restarts.map(([reason, , kind]) => [reason, kind]), [["test", "user"]]);
-    assert.equal(await restarts[0][1], await started, "onRestart got the new start");
+    const old = eng.worker;
+    eng.end(live(eng), { kind: "reset", reset: "user", reason: "session reset: test. Data in memory is gone; your files are kept." });
+    await assert.rejects(running, { kind: "reset", reset: "user", message: "session reset: test. Data in memory is gone; your files are kept." });
+    assert.equal(eng.worker, null);
+    await startWorker(eng);
     assert.notEqual(eng.worker, old);
     assert.deepEqual(await same(store, eng), [...before, "saved.txt"].sort());
     assert.ok(before.includes("src.txt") && !before.includes("cut.txt"));
     assert.deepEqual(await pendingRows(store), []);
-    const r = await eng.run('display "N=" _N\ntype saved.txt');
+    const r = await runOn(eng, 'display "N=" _N\ntype saved.txt');
     assert.equal(r.rc, 0, r.log);
     assert.match(r.log, /N=0/);
     assert.match(r.log, /saved by the page during the run/);
   });
 
-  await t.test("stop(): the worker ends, no new one starts, and the store goes on without it", async () => {
-    eng.stop("another tab took over");
+  // the machine's LOST: end-worker, and no start
+  await t.test("end() with no new start: the worker is gone, and the store goes on without it", async () => {
+    eng.end(live(eng), { kind: "stopped", reason: "session reset: another tab took over." });
     assert.equal(eng.worker, null);
-    await assert.rejects(eng.call("files"), { kind: "no-engine" });
+    await assert.rejects(eng.query("files"), { kind: "no-engine" });
     await store.write("after-stop.txt", bytes("x"));
     assert.deepEqual(await pendingRows(store), [], "no worker: nothing is journalled");
-    assert.equal((await eng.run("display 1")).kind, "no-engine", "a run with no engine resolves, with rc 9998");
+    await assert.rejects(runOn(eng, "display 1"), { kind: "no-engine" }, "a run with no worker is refused");
   });
 });
 
@@ -361,9 +360,10 @@ test("after a start that failed, every store call works and nothing is journalle
     return port as unknown as globalThis.Worker;
   };
   const eng = new EngineClient({ createWorker: blocked, wheel, extraWheels, store });
-  const starting = eng.start();
+  const starting = startWorker(eng);
   await store.write("while-failing.do", bytes("display 1"));   // a worker exists for a moment: journalled, and harmless
-  await assert.rejects(starting, { kind: "failed-twice", message: /failed twice/ });
+  await assert.rejects(starting, { type: "crashed", cause: "error", detail: "blocked" });
+  eng.end(live(eng), { kind: "failed-twice", reason: "the engine's worker failed twice (blocked); reload the page" });   // the machine's TWICE
   await store.write("a/b.do", bytes("display 2"));
   await store.mkdir("c");
   await store.rename("a/b.do", "c/b.do");
@@ -376,14 +376,14 @@ test("after a start that failed, every store call works and nothing is journalle
 
 test("a worker that cannot open the file store still starts, and says the files are not saved", { timeout: 120_000 }, async () => {
   const eng = new EngineClient({ createWorker: () => nodeWorker({ noDatabase: true }), wheel, extraWheels });
-  await eng.start();
+  await startWorker(eng);
   assert.match(eng.storeError!, /^the files are not saved: this browser has no storage for files/);
   assert.equal(eng.startup!.storeError, eng.storeError);
-  const r = await eng.run(writes("lost.txt", "x"));
+  const r = await runOn(eng, writes("lost.txt", "x"));
   assert.equal(r.rc, 0, r.log);
   assert.match(r.store_error!, /the files are not saved/);
   assert.deepEqual([r.files, r.skipped], [[], []]);
-  assert.equal((await eng.run("display 1")).store_error, undefined, "a run that writes no file has nothing to say");
+  assert.equal((await runOn(eng, "display 1")).store_error, undefined, "a run that writes no file has nothing to say");
   eng.worker!.terminate();
 });
 
@@ -391,42 +391,42 @@ test("the page's store with a worker that has none: the page's changes reach /wo
   const store = openStore({ indexedDB: new IDBFactory() });
   const worker = () => nodeWorker({ store: { takeAll: async () => { throw new Error("this browser has no storage for files (IndexedDB)"); } } as unknown as FileStore });
   const eng = new EngineClient({ createWorker: worker, wheel, extraWheels, store });
-  await eng.start();
+  await startWorker(eng);
   assert.match(eng.storeError!, /^the files are not saved/);
   await store.write("page.txt", bytes("from the page"));
-  assert.equal(text(await eng.call("read", { path: "page.txt" })), "from the page");
+  assert.equal(text(await eng.query("read", { path: "page.txt" })), "from the page");
   assert.deepEqual(await pendingRows(store), [], "no row that no worker would ever delete");
   eng.worker!.terminate();
 });
 
-test("the browser deletes the database under a live worker: the worker is restarted and copies the store as it is now", { timeout: 120_000 }, async () => {
-  const factory = new IDBFactory(), store = openStore({ indexedDB: factory }), restarts: [string, Promise<About>, ResetKind][] = [];
-  const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store,
-    onRestart: (reason, started, kind) => restarts.push([reason, started, kind]) });
-  const starting = eng.start();
+test("the browser deletes the database under a live worker: the transport says `crashed`, cause storage; a new worker copies the store as it is now", { timeout: 120_000 }, async () => {
+  const factory = new IDBFactory(), store = openStore({ indexedDB: factory }), said: Answer<"start-worker">[] = [];
+  const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store });
+  const starting = startWorker(eng, null, said);
   for (let i = 0; i < 5; i++) await store.write(`m${i}.txt`, bytes("x"));   // while it mounts: the copy covers seq 1 to 5
   await starting;
   await deleteDatabase(factory);   // "Clear site data": the seqs start again from 1
-  assert.deepEqual(restarts.map(([reason, , kind]) => [reason, kind]), [["the browser closed the file storage", "crash"]]);
+  assert.deepEqual(said.at(-1), { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
+  // the machine's RESET(crash): end-worker, then (the list fetched) start-worker
+  eng.end(live(eng), { kind: "reset", reset: "crash", reason: "session reset: the browser closed the file storage." });
+  const again = startWorker(eng);
   await store.write("new.txt", bytes("after the database was cleared"));
-  await restarts[0][1];
+  await again;
   assert.deepEqual(await same(store, eng), ["new.txt"]);
-  const r = await eng.run("type new.txt");
+  const r = await runOn(eng, "type new.txt");
   assert.equal(r.rc, 0, r.log);
   assert.match(r.log, /after the database was cleared/);
   eng.worker!.terminate();
 });
 
-test("the engine with its own database: the old /work database is left alone; Break, keepWaiting and the reset timer", { timeout: 300_000 }, async t => {
+test("the engine with its own database: the old /work database is left alone; Break (interrupt) on a long command, on one that does not stop, on a loop; the ops", { timeout: 300_000 }, async t => {
   let port!: ReturnType<typeof nodeWorker>;
-  const restarts: [string, Promise<About>, ResetKind][] = [];
-  const eng = new EngineClient({ createWorker: () => (port = nodeWorker({ oldDatabase: true })), wheel, extraWheels, graceMs: 200,
-    onRestart: (reason, started, kind) => restarts.push([reason, started, kind]) });
-  await eng.start();
+  const eng = new EngineClient({ createWorker: () => (port = nodeWorker({ oldDatabase: true })), wheel, extraWheels });
+  await startWorker(eng);
 
   await t.test("the old IDBFS database is not read, changed or deleted; the files go to the new one", async () => {
-    assert.deepEqual(await eng.call("files"), [], "nothing was imported from the old database");
-    const r = await eng.run(writes("made.txt", "new store"));
+    assert.deepEqual(await eng.query("files"), [], "nothing was imported from the old database");
+    const r = await runOn(eng, writes("made.txt", "new store"));
     assert.equal(r.rc, 0, r.log);
     assert.deepEqual(r.files, [{ name: "made.txt", status: "created", bytes: 9 }]);
     const dbs = await port.harness("databases");
@@ -443,77 +443,72 @@ test("the engine with its own database: the old /work database is left alone; Br
     assert.deepEqual(dbs.dofile.stores.pending, []);
   });
 
-  await t.test("keepWaiting() after breakRun(): a long command ends by itself, then the run stops with rc 1 and the data", async () => {
+  // The Break timer, its deadline and "Don't reset" are the machine's and the controller's (machine.test.ts, app.test.ts).
+  // Here: what the engine does with the request (the `interrupt` effect) while no timer cuts it.
+  await t.test("interrupt() during a long command: it is not cut; it ends by itself, then the run stops with rc 1 and the data", async () => {
     // One command that cannot stop mid-way and runs for more than a second: a sort of six million random numbers
-    // (`sleep` would not do: it stops at a Break).
-    // The Break comes just after the sort starts (the "go" line is sent before it), and graceMs is short, so the sort lasts
-    // longer than graceMs on any machine.
-    assert.equal((await eng.run("clear\nset obs 6000000\ngenerate double k1 = runiform()\ngenerate double k2 = runiform()\ngenerate byte x = 1")).rc, 0);
-    eng.graceMs = 50;
+    // (`sleep` would not do: it stops at a Break). The Break comes just after the sort starts (the "go" line is sent
+    // before it).
+    assert.equal((await runOn(eng, "clear\nset obs 6000000\ngenerate double k1 = runiform()\ngenerate double k2 = runiform()\ngenerate byte x = 1")).rc, 0);
     const worker = eng.worker;
     const { running, going } = untilGo(eng, 'display "go"\nsort k1\ngenerate y = 2');
     await going;
     await sleep(30);   // past the Break check before the sort
-    eng.breakRun();
+    eng.interrupt(live(eng));
     const asked = Date.now();
-    assert.ok(eng.resetAt !== null && eng.resetAt <= asked + eng.graceMs, "the reset is due within graceMs");
-    eng.keepWaiting();
-    assert.equal(eng.resetAt, null);
     const r = await running;
     assert.equal(r.rc, 1, r.log);
-    assert.ok(Date.now() - asked > eng.graceMs, "the command was not cut: it ended by itself, after the reset would have come");
-    assert.equal(eng.worker, worker, "no reset");
-    assert.deepEqual(restarts, []);
-    const after = await eng.run("summarize x\nconfirm variable y");
+    assert.ok(Date.now() - asked > 50, "the command was not cut: it ended by itself, well after the Break was asked");
+    assert.equal(eng.worker, worker, "the same worker");
+    const after = await runOn(eng, "summarize x\nconfirm variable y");
     assert.equal(after.nobs, 6000000, "the data is kept");
     assert.equal(after.rc, 111, "and the command after the Break did not run");
   });
 
-  await t.test("breakRun() alone: a command that has not stopped after graceMs is reset (rc 9998) and a new worker answers", async () => {
+  // the machine's RESET(break), when the grace time runs out: end-worker, then start-worker
+  await t.test("a command that has not stopped a while after interrupt() is still running; end() cuts it and a new worker answers", async () => {
     const worker = eng.worker;
     const { running, going } = untilGo(eng, 'display "go"\nsort k2');
     await going;
     await sleep(30);   // the sort is under way
-    eng.breakRun();
-    const r = await running;
-    assert.equal(r.rc, RC_RESET);
-    assert.equal(r.kind, "break");
-    assert.match(r.error!, /^session reset: the code did not stop at Break\. Data in memory is gone; your files are kept\.$/);
-    assert.equal(restarts.length, 1);
-    assert.deepEqual([restarts[0][0], restarts[0][2]], ["the code did not stop at Break", "break"]);
-    await restarts[0][1];
+    eng.interrupt(live(eng));
+    let settled = false;
+    running.then(() => { settled = true; }, () => { settled = true; });
+    await sleep(50);
+    assert.equal(settled, false, "the sort does not stop mid-way");
+    const reason = "session reset: the code did not stop at Break. Data in memory is gone; your files are kept.";
+    eng.end(live(eng), { kind: "reset", reset: "break", reason });
+    await assert.rejects(running, { kind: "reset", reset: "break", message: reason });
+    await startWorker(eng);
     assert.notEqual(eng.worker, worker);
-    assert.equal(eng.resetAt, null);
-    // (the files are not checked here: this thread's database ended with the thread. The restart test above has them.)
-    const next = await eng.run('display "N=" _N');
+    // (the files are not checked here: this thread's database ended with the thread. The end() test above has them.)
+    const next = await runOn(eng, 'display "N=" _N');
     assert.match(next.log, /N=0/, "the data in memory is gone");
   });
 
-  await t.test("a Break that works stops the timer: no reset later", async () => {
-    eng.graceMs = 2000;   // a loop takes a Break at its next pass: long before this
-    await eng.run("clear\nset obs 10\ngenerate x = 0");
-    const running = eng.run("while 1 {\n quietly replace x = x + 1\n}");
+  await t.test("a Break that works: rc 1; an interrupt asked while nothing runs does not stop the next run", async () => {
+    await runOn(eng, "clear\nset obs 10\ngenerate x = 0");
+    const running = runOn(eng, "while 1 {\n quietly replace x = x + 1\n}");
     await sleep(500);
-    eng.breakRun();
+    eng.interrupt(live(eng));   // a loop takes a Break at its next pass
     assert.equal((await running).rc, 1);
-    assert.equal(eng.resetAt, null);
-    await sleep(400);
-    assert.equal(restarts.length, 1, "no second reset");
-    eng.breakRun();   // nothing is running: nothing happens
-    assert.equal(eng.resetAt, null);
+    eng.interrupt(live(eng));   // nothing is running
+    const next = await runOn(eng, "display 1\ndisplay 2");
+    assert.equal(next.rc, 0, "the worker clears the request when a run starts");
+    assert.match(next.log, /^2$/m);
   });
 
   // ---- the worker ops of prototype 1 (SPEC.md section 6). Python's side is src/dofile/browser.py.
 
   await t.test("an op's error has the error's name, and a file system error is readable", async () => {
-    await assert.rejects(eng.call("read", { path: "nothing-here.txt" }), { kind: "op", name: "ErrnoError", message: "file system error ENOENT" });
-    await assert.rejects(eng.call("read", { path: "../etc/passwd" }), { kind: "op", name: "Error", message: /not in the working folder/ });
-    await assert.rejects(eng.call("nosuchop" as "files"), { kind: "op", message: "unknown op nosuchop" });
+    await assert.rejects(eng.query("read", { path: "nothing-here.txt" }), { kind: "op", name: "ErrnoError", message: "file system error ENOENT" });
+    await assert.rejects(eng.query("read", { path: "../etc/passwd" }), { kind: "op", name: "Error", message: /not in the working folder/ });
+    await assert.rejects(eng.query("nosuchop" as "files"), { kind: "op", message: "unknown op nosuchop" });
   });
 
   await t.test("run: the log streams to onLog while the run prints, and the result still has all of it", async () => {
     const chunks: string[] = [], at: number[] = [], t0 = Date.now();
-    const r = await eng.run('forvalues i = 1/6 {\n display "line `i\'"\n sleep 250\n}', { onLog: c => { chunks.push(c); at.push(Date.now() - t0); } });
+    const r = await runOn(eng, 'forvalues i = 1/6 {\n display "line `i\'"\n sleep 250\n}', { onLog: c => { chunks.push(c); at.push(Date.now() - t0); } });
     assert.equal(r.rc, 0, r.log);
     assert.ok(chunks.length >= 2, `${chunks.length} chunks`);
     assert.ok(at[0] < 1200, "the first chunk came while the run was still going");
@@ -524,15 +519,15 @@ test("the engine with its own database: the old /work database is left alone; Br
   });
 
   await t.test("run options: fresh_locals, plot_theme; the result has error_line, graph_commands and graph_lines", async () => {
-    await eng.run("local a 5");
-    assert.match((await eng.run('display "[`a\']"')).log, /\[5\]/);
-    assert.match((await eng.run('display "[`a\']"', { fresh_locals: true })).log, /\[\]/);
-    const bad = await eng.run("display 1\nnosuchcommand\ndisplay 3");
+    await runOn(eng, "local a 5");
+    assert.match((await runOn(eng, 'display "[`a\']"')).log, /\[5\]/);
+    assert.match((await runOn(eng, 'display "[`a\']"', { fresh_locals: true })).log, /\[\]/);
+    const bad = await runOn(eng, "display 1\nnosuchcommand\ndisplay 3");
     assert.equal(bad.rc, 199);
     assert.equal(bad.error_line, 2);
-    const light = await eng.run("clear\nset obs 20\ngenerate x = _n\ngenerate y = x^2\nscatter y x");
+    const light = await runOn(eng, "clear\nset obs 20\ngenerate x = _n\ngenerate y = x^2\nscatter y x");
     assert.deepEqual(light.graph_lines, [5]);
-    const dark = await eng.run("scatter y x", { plot_theme: "dark" });
+    const dark = await runOn(eng, "scatter y x", { plot_theme: "dark" });
     assert.equal(dark.rc, 0, dark.log);
     assert.deepEqual(dark.graph_commands, ["scatter y x"]);
     assert.equal(dark.images.length, 1);
@@ -540,30 +535,30 @@ test("the engine with its own database: the old /work database is left alone; Br
   });
 
   await t.test("macros, browse, memory, describe_file", async () => {
-    await eng.run("clear\nset obs 60\ngenerate x = _n\ngenerate str3 s = \"abc\"\nsave d.dta, replace\nlocal mine 5\nglobal G hello");
-    const m = await eng.call("macros");
+    await runOn(eng, "clear\nset obs 60\ngenerate x = _n\ngenerate str3 s = \"abc\"\nsave d.dta, replace\nlocal mine 5\nglobal G hello");
+    const m = await eng.query("macros");
     assert.equal(m.locals.mine, "5");
     assert.equal(m.globals.G, "hello");
     assert.ok(Array.isArray(m.system_globals));
 
-    const first = await eng.call("browse") as Ok<BrowseRows>;
+    const first = await eng.query("browse") as Ok<BrowseRows>;
     assert.deepEqual([first.nobs, first.offset, first.rows.length, first.more], [60, 0, 50, 10]);
     assert.deepEqual(first.vars, ["x", "s"]);
-    const page = await eng.call("browse", { vars: "x", offset: 50, limit: 5 }) as Ok<BrowseRows>;
+    const page = await eng.query("browse", { vars: "x", offset: 50, limit: 5 }) as Ok<BrowseRows>;
     assert.deepEqual([page.offset, page.rows.length, page.more, page.vars], [50, 5, 5, ["x"]]);
     assert.equal(page.rows[0][0].trim(), "51");
-    assert.ok((await eng.call("browse", { vars: "nosuchvar" }) as { error: string }).error);
+    assert.ok((await eng.query("browse", { vars: "nosuchvar" }) as { error: string }).error);
 
-    const mem = await eng.call("memory");
+    const mem = await eng.query("memory");
     assert.ok(mem.data_bytes > 0);
     assert.ok(mem.heap_bytes > 30 << 20 && mem.heap_bytes % 65536 === 0, "the size of the WebAssembly memory");
 
-    await eng.run("clear");
-    const d = await eng.call("describe_file", { path: "d.dta" }) as Ok<DataSummary>;
+    await runOn(eng, "clear");
+    const d = await eng.query("describe_file", { path: "d.dta" }) as Ok<DataSummary>;
     assert.deepEqual([d.nobs, d.nvars, d.variables.map(v => v.name)], [60, 2, ["x", "s"]]);
-    assert.equal((await eng.call("describe") as Ok<DataSummary>).nobs, 0, "the data in memory is as it was");
-    assert.ok((await eng.call("describe_file", { path: "nothing.dta" }) as { error: string }).error);
-    await assert.rejects(eng.call("describe_file", { path: "../etc/passwd" }), /not in the working folder/);
+    assert.equal((await eng.query("describe") as Ok<DataSummary>).nobs, 0, "the data in memory is as it was");
+    assert.ok((await eng.query("describe_file", { path: "nothing.dta" }) as { error: string }).error);
+    await assert.rejects(eng.query("describe_file", { path: "../etc/passwd" }), /not in the working folder/);
   });
 
   eng.worker!.terminate();

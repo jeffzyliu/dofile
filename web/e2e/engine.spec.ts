@@ -17,7 +17,7 @@ type Hook = {
   engine: { startup: { mode: string; fetched?: string } | null };
   store: { blocked: boolean; list(): Promise<{ path: string }[]>; write(path: string, data: Uint8Array): Promise<unknown> };
   run(code: string): Promise<RunResult | null>;
-  breakRun(): void; reset(): Promise<unknown>;   // the engine controller's Break and Reset
+  breakRun(): void; reset(): void;   // the engine controller's Break and Reset
   state: { engine: { value: { s: string } }; banners: { value: { b: string; kind?: string }[] } };
 };
 declare global { interface Window { __dofile: Hook } }

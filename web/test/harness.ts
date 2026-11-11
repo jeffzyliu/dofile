@@ -5,8 +5,10 @@ import type { Transferable as NodeTransferable } from "node:worker_threads";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
+import type { Lifecycle } from "../src/engine/client.ts";
+import type { Answer } from "../src/engine/machine.ts";
 import type { FileStore } from "../src/engine/store.ts";
-import type { PendingRow } from "../src/engine/types.ts";
+import type { Build, Op, PendingRow, RunOptions, RunResult } from "../src/engine/types.ts";
 
 export const root = fileURLToPath(new URL("../..", import.meta.url));
 // DOFILE_WHEEL_DIR: a folder with another build of the wheel, to run the tests against it
@@ -53,6 +55,51 @@ export function nodeWorker({ store, oldDatabase = false, noDatabase = false }:
   w.on("error", e => port.onerror?.(e));
   return port as typeof port & globalThis.Worker;   // what client.ts wants of a (Web) Worker
 }
+
+// ---- a transport alone, with no state machine: the tests that drive a real worker ----
+
+// The numbers a test gives a transport's workers: 1, 2, 3. They are plain numbers: a test makes no ticket.
+const numbers = new WeakMap<Lifecycle, number>();
+/** The number of the worker startWorker() made last on `client`. */
+export const live = (client: Lifecycle): number => numbers.get(client) ?? 0;
+/** Start a worker: client.start() with the next number. Resolves at `started`; rejects with the `start-failed` or
+ *  `crashed` answer. `said` collects every answer (the stages too). A restart is `client.end(live(client), ending)`, then
+ *  this again. `build`: for a snapshot start, `await client.build()`. */
+export function startWorker(client: Lifecycle, build: Build | null = null, said: Answer<"start-worker">[] = []): Promise<void> {
+  const n = live(client) + 1;
+  numbers.set(client, n);
+  return new Promise((ok, no) => client.start(n, build, answer => {
+    said.push(answer);
+    if (answer.type === "started") ok();
+    else if (answer.type !== "stage") no(answer);
+  }));
+}
+/** Run `code` on the worker startWorker() made last. Rejects if the worker is ended first, or its `run` op fails. */
+export const runOn = (client: Lifecycle, code: string, { onLog = () => {}, ...options }: RunOptions & { onLog?: (text: string) => void } = {}): Promise<RunResult> =>
+  client.run(live(client), { code, ...options }, onLog);
+
+// ---- a stand-in worker, for the transport without an engine (client.test.ts, app.test.ts) ----
+
+/** A message the transport posts; `args` as the op has them. */
+export type Message = { id: number, op: Op, args: any };
+export type Post = (data: unknown) => void;
+export type Script = (message: Message, post: Post, port: FakePort) => unknown;
+export type FakePort = { onmessage: null | ((e: { data: unknown }) => void), onerror: null | ((e: unknown) => void), terminated: boolean,
+  terminate(): void, postMessage(message: Message): void };
+/** A worker that answers as `script(message, post)` says, a moment later, like a real one. */
+export function fakeWorker(script: Script) {
+  const port: FakePort = { onmessage: null, onerror: null, terminated: false, terminate() { port.terminated = true; },
+    postMessage(message) { setTimeout(() => script(message, data => port.onmessage?.({ data }), port), 1); } };
+  return port as FakePort & globalThis.Worker;   // what client.ts wants of a Worker
+}
+/** Answer the three steps of a start. True when `message` was one of them. */
+export const starts = (message: Message, post: Post) => {
+  if (message.op === "mount") post({ id: message.id, result: undefined });
+  else if (message.op === "startup") post({ id: message.id, result: { mode: "normal" } });
+  else if (message.op === "boot") post({ id: message.id, result: { dofile: "test" } });
+  else return false;
+  return true;
+};
 
 // the rows of a store's `pending` journal
 export const pendingRows = (store: FileStore) => store.tx(["pending"], "readonly", t => new Promise<PendingRow[]>(ok => {

@@ -176,10 +176,14 @@ test("the toolbar does not move: its box and every button's box are the same in 
   await page.goto("/?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   const head = { kind: "file", fresh_locals: true };
-  const states = [{ s: "none" }, { s: "declined" }, { s: "downloading", received: 1, total: 2, t0: 0 },
-    { s: "starting", stage: "python", t0: 0, done: {} }, { s: "ready" }, { s: "running", run: head, t0: 0 },
+  // the sixteen states of the engine's state machine (src/app/types.ts, EngineState)
+  const states = [{ s: "checking-lock" }, { s: "checking-cache" }, { s: "none" }, { s: "asking", forRun: false }, { s: "declined" },
+    { s: "downloading", received: 1, total: 2, t0: 0 }, { s: "starting-list", stage: "download", t0: 0, done: {} },
+    { s: "starting-worker", stage: "python", t0: 0, done: {} }, { s: "ready" }, { s: "running", run: head, t0: 0 },
     { s: "breaking", run: head, t0: 0, resetAt: 0 }, { s: "waiting", run: head, t0: 0 },
-    { s: "failed", reason: "download", message: "x", detail: "x" }, { s: "failed-twice", reason: "memory", message: "x", detail: "x" }, { s: "other-tab" }];
+    { s: "failed", reason: "download", message: "x", detail: "x" }, { s: "failed-twice", reason: "memory", message: "x", detail: "x" },
+    { s: "other-tab-idle" }, { s: "other-tab-taking" }];
+  expect(states).toHaveLength(16);
   for (const width of [1440, 1024, 390]) {
     await page.setViewportSize({ width, height: 800 });
     const seen = new Map<string, string>();

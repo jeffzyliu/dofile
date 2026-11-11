@@ -5,9 +5,10 @@
 //  - GraphTab: `graphs`, `graphIndex`; "Open full size" sets `graphFull` (output/FullSize.tsx draws that view; App.tsx
 //    places it); empty state S 16. `graphs` keeps the last 20, so an index moves: find a graph by its `n`. The phone has
 //    no Graph tab: graphs show inline in its log (4b), and a tap opens the full-size view.
-//  - DataTab: `data`, `rows`, `pickedVar`; "Show 50 more" through engine.js call("browse", ...) appends to `rows`; empty
-//    state S 17 ("The engine was reset, so no data is in memory" while `banners` has a reset).
-//  - ResultsTab: `results`, `macros`; View a matrix with call("matrix", { name }); empty state S 18.
+//  - DataTab: `data`, `rows`, `pickedVar`; "Show 50 more" calls run.ts moreRows(), which appends to `rows` (run.ts is
+//    the one writer of `rows`: this view never writes it and never calls `browse`); empty state S 17 ("The engine was
+//    reset, so no data is in memory" while `banners` has a reset).
+//  - ResultsTab: `results`, `macros`; View a matrix with engine.ts call("matrix", { name }); empty state S 18.
 import { Placeholder } from "../ui/Icon";
 
 export const GraphTab = () => <Placeholder step="4c">The Graph tab: the latest graph, thumbnails, Open full size, Export PNG.</Placeholder>;

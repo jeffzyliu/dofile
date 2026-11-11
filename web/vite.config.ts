@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { engineBytesMeta, listStartFiles, RUNTIME_FILES, writeStartFiles } from "./scripts/start-files.ts";
-import { buildId, inputs as readInputs, staleness } from "./scripts/build-id.ts";
+import { about, buildId, inputs as readInputs, staleness } from "./scripts/build-id.ts";
 
 // What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in ../dist, `npm run wheel`), the extra
 // wheels (web/wheels/: pyreadstat built for Pyodide) and the Pyodide version, with their hashes.
@@ -60,6 +60,7 @@ export default defineConfig({
     __EXTRA_WHEELS__: JSON.stringify(extraWheels),
     __BUILD_ID__: JSON.stringify(buildId(stamp, inputs)),   // start-files.json must carry the same (client.ts, checkBuild)
     __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
+    __ABOUT__: JSON.stringify(about(inputs)),   // the version, the engine's commit, the Stata version: app/env.ts ABOUT
   },
   plugins: [{
     name: "cross-origin-isolation",

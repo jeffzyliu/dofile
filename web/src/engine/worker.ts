@@ -2,17 +2,19 @@
 // /work is a plain in-memory folder. The files live in dofile's own store in IndexedDB (store.js), which the page reads
 // and writes directly: "mount" copies the store into /work, the page's changes arrive as ops that mirror them into /work,
 // and after each run the worker writes what the run changed back to the store (docs/design/SPEC.md, section 7).
-// Protocol: the page posts {id, op, args}; the worker answers {id, result} or {id, error, name}, one op at a time, posts
-// {status} lines while it starts and {id, log} chunks while a run prints. client.js is the page's side. Python's side:
-// src/dofile/browser.py.
+// Protocol (types.ts: Ops, ToWorker, FromWorker): the page posts {id, op, args}; the worker answers {id, result} or
+// {id, error, name}, one op at a time, posts {stage} (a typed id, never text for the page to match) as each start-up
+// stage begins and {id, log} chunks while a run prints. client.ts is the page's side. Python's side: src/dofile/browser.py.
+// The handlers are three objects, one per set of ops (LifecycleOps, ReadOps, MirrorOps): a new op must choose its set,
+// here and in types.ts.
 import { loadPyodide } from "pyodide";
 import { hasNativeBrotli, isStorageRefusal, openCache, restoreOptions, unpackAsync } from "./snapshot.ts";
 import { openStore } from "./store.ts";
 import type { BrotliWasmType } from "brotli-wasm";
 import type { AppliedRun, FileStore, RunChange } from "./store.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
-import type { DescribeArgs, FileChange, FileInfo, MountArgs, Op, RunOptions, SnapshotFile, SnapshotFiles, StatusText, Startup, ToWorker }
-  from "./types.ts";
+import type { BootArgs, DescribeArgs, FileChange, FileInfo, LifecycleOps, MirrorOps, MountArgs, ReadOps, RunOptions, SnapshotFile, SnapshotFiles,
+  Stage, Startup, ToWorker } from "./types.ts";
 
 /** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in for it (test/node-worker.ts). */
 type WorkerStore = Pick<FileStore, "takeAll" | "done" | "applyRun">;
@@ -30,7 +32,6 @@ interface Browser {
   browse(vars: string | undefined, offset: number, limit: number): string;
   memory(): string;
 }
-type Wheel = string | { name: string, bytes: Uint8Array };
 type Io = { stdout: (line: string) => void, stderr: (line: string) => void };
 // This worker's global scope. The page's types are the DOM's, where `self` is a Window, which has no postMessage(message, transfer).
 declare const self: Window & typeof globalThis & { postMessage(message: unknown, transfer: Transferable[]): void };
@@ -45,7 +46,8 @@ let upTo = 0;
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
 let unsaved = new Map<string, { status: FileChange["status"], dir: boolean }>();
 
-const status = (text: StatusText) => self.postMessage({ status: text });
+/** Tell the page a start-up stage began. */
+const stage = (id: Stage) => self.postMessage({ stage: id });
 const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);   // `path` is `top` or under it
 
 // An error for the page: { message, name }. Emscripten's file system errors carry only a number.
@@ -301,7 +303,7 @@ async function loadFromSnapshot(base: string, built: number, files: SnapshotFile
     const t = performance.now(), s = (t - last) / 1000;
     laps.push(`${what} ${s.toFixed(2)}s`); secs.push([what, s]); last = t;
   };
-  status("downloading the engine");   // or reading it from the cache, when the page's download() or an earlier visit filled it
+  stage("download");   // or reading it from the cache, when the page's download() or an earlier visit filled it
   const { snapshot: snapFile, bundle: bundleFile } = files;
   const cache = isFile ? undefined : await snapshotCache(built, refused);
   const hadCache = Boolean(cache) && Boolean(await cache!.match(`${base}${snapFile.name}`));
@@ -315,7 +317,7 @@ async function loadFromSnapshot(base: string, built: number, files: SnapshotFile
       loadBrotli(),
     ]);
     lap(hadCache ? "read from cache" : "download");
-    status("unpacking the engine");
+    stage("unpack");
     // The browser's own brotli decoder when it has one (brotli-wasm took 25 s for the 229 MB on an iPhone); `?brotli=wasm` in
     // the page's URL forces brotli-wasm, to compare. In Node (the tests) the wasm decoder stays, so they run what the build checks.
     const native = !isFile && brotliMode !== "wasm" && hasNativeBrotli();
@@ -335,7 +337,7 @@ async function loadFromSnapshot(base: string, built: number, files: SnapshotFile
     console.info(`[dofile] unpack with ${decoder}: heap ${heapS.toFixed(2)}s (${(snapFile.raw / 1e6 / heapS).toFixed(0)} MB/s out), ` +
       `site-packages ${sitePackagesS.toFixed(2)}s (${(bundleFile.raw / 1e6 / sitePackagesS).toFixed(0)} MB/s out), ` +
       `native brotli available ${hasNativeBrotli()}, hardwareConcurrency ${navigator.hardwareConcurrency}, deviceMemory ${(navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? "n/a"}`);
-    status("loading Python");
+    stage("python");
     const options = restoreOptions(create, { snapshot, dso, index, blob }, lap);
     const loaded = await Promise.race([loadPyodide({ indexURL, ...options, ...io }), fetches.failed]) as SnapshotPy;
     lap("copy the heap");
@@ -364,9 +366,13 @@ function forget(path: string) {
   for (const p of [...unsaved.keys()]) if (within(p, path)) unsaved.delete(p);
 }
 
-const ops = {
+/** One handler for each op of the set S, with that op's arguments. */
+type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A : never, id: number) => unknown };
+
+// The ops that change the engine: the transport sends them from start() and run() only.
+const lifecycle: Handlers<LifecycleOps> = {
   async mount({ indexURL, snapshot, built, files, brotli: brotliMode }: MountArgs) {
-    if (!snapshot) status("loading Python");   // a snapshot start names its own steps (loadFromSnapshot)
+    if (!snapshot) stage("python");   // a snapshot start names its own steps (loadFromSnapshot)
     const io: Io = { stdout: l => console.log(l), stderr: l => console.warn(l) };
     fromSnapshot = Boolean(snapshot);
     const tRuntime = performance.now();
@@ -385,7 +391,7 @@ const ops = {
     }
     py.FS.mkdirTree(ROOT);
     const tFiles = performance.now();
-    status("loading your files");
+    stage("files");
     await copyStore();
     startup.filesS = since(tFiles);
     if (storeError) startup.storeError = storeError;
@@ -393,10 +399,10 @@ const ops = {
   startup: () => startup,
   // wheel: the dofile wheel's URL, or {name, bytes}; extraWheels: more of the same, installed with it; interruptBuffer: an
   // Int32Array on a SharedArrayBuffer, or null
-  async boot({ wheel, extraWheels = [], interruptBuffer }: { wheel: Wheel, extraWheels?: Wheel[], interruptBuffer?: Int32Array | null }) {
+  async boot({ wheel, extraWheels = [], interruptBuffer }: BootArgs) {
     const tPackages = performance.now();
     if (!fromSnapshot) {   // a snapshot has the packages and the wheel in it already
-      status("loading packages");
+      stage("packages");
       // no pandas: pyreadstat reads SAS transport and SPSS without it; only export sasxport needs it (about 5 MB more
       // to download and 2 s on a cold start, docs/pyodide-snapshot.md, "Packages added"), so that command is not available here
       await py.loadPackage("micropip", { messageCallback: () => {} });
@@ -412,7 +418,7 @@ const ops = {
     interrupt = interruptBuffer ?? null;
     if (interrupt) py.setInterruptBuffer(interrupt);
     if (!fromSnapshot) startup.packagesS = since(tPackages);
-    status("starting the engine");
+    stage("engine");
     const tEngine = performance.now();
     browser = py.pyimport("dofile.browser");
     const about = JSON.parse(browser.start(ROOT));
@@ -440,6 +446,10 @@ const ops = {
     if (k) result.timing = { ...k, parse: (t1 - t0) / 1000 - k.engine - k.encode, save: (performance.now() - t1) / 1000 };
     return result;
   },
+};
+
+// The ops declared to change nothing (types.ts, ReadOps): anyone may send one.
+const read: Handlers<ReadOps> = {
   // undefined becomes Python's None (null would become JsNull)
   describe: async ({ vars, offset = 0, limit }: DescribeArgs) => (await booted, JSON.parse(browser.describe(vars, offset, limit))),
   matrix: async ({ name }: { name: string }) => (await booted, JSON.parse(browser.matrix(name))),
@@ -457,7 +467,10 @@ const ops = {
   // `files` and `read` are views of /work, for the tests: the page lists and reads the store
   files: () => walk(ROOT),
   read: ({ path }: { path: string }) => py.FS.readFile(inRoot(path)),
-  // The page's changes (see mirror). Each is safe to apply twice.
+};
+
+// The page's changes (see mirror), sent by the function the transport gives the store. Each is safe to apply twice.
+const mirrored: Handlers<MirrorOps> = {
   write: ({ path, data, seq }: { path: string, data: Uint8Array, seq?: number }) => mirror(`write ${path}`, seq, () => {
     const full = inRoot(path);
     py.FS.mkdirTree(py.PATH.dirname(full));
@@ -484,10 +497,13 @@ const ops = {
   }),
 };
 
-const answer = async (id: number, op: Op, args: object | undefined) => {
+const ops = { ...lifecycle, ...read, ...mirrored };
+
+// One op, answered: {id, result}, or {id, error, name}. An op with no arguments is given {}.
+const answer = async ({ id, op, args }: ToWorker) => {
   try {
     if (!ops[op]) throw new Error(`unknown op ${op}`);
-    const result = await (ops[op] as (args: object, id: number) => unknown)(args ?? {}, id);
+    const result = await (ops[op] as (args: unknown, id: number) => unknown)(args ?? {}, id);
     self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []);   // a file: moved, not copied
   } catch (e) {
     const { message, name } = describe(e);
@@ -496,11 +512,12 @@ const answer = async (id: number, op: Op, args: object | undefined) => {
 };
 
 // answers: FromWorker
-self.onmessage = ({ data: { id, op, args } }: MessageEvent<ToWorker>) => {
-  if (op === "boot") {   // outside the queue, so file ops are answered while the engine loads
-    ops.boot((args ?? {}) as Parameters<typeof ops.boot>[0]).then(about => { bootDone.ok(); self.postMessage({ id, result: about }); },
+self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
+  if (data.op === "boot") {   // outside the queue, so file ops are answered while the engine loads
+    const { id } = data;
+    Promise.resolve(lifecycle.boot(data.args, id)).then(about => { bootDone.ok(); self.postMessage({ id, result: about }); },
       e => { bootDone.err(e); const { message, name } = describe(e); self.postMessage({ id, error: message, name }); });
     return;
   }
-  queue = queue.then(() => answer(id, op, args));
+  queue = queue.then(() => answer(data));
 };

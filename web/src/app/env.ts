@@ -1,5 +1,13 @@
 // What the page's URL and build say, read once at load.
+import type { About } from "../engine/types.ts";
+
 const q = new URLSearchParams(location.search);
+
+/** What the page shows of the engine, with or without one: dofile's version (the "About dofile" hint), the engine's
+ *  commit and the Stata version it emulates (the log's head, step 4b). Compiled in (scripts/build-id.ts, about()): the
+ *  page is built against one wheel, so these are what `boot` answers when the engine starts (test/engine.test.ts
+ *  compares them). */
+export const ABOUT: Pick<About, "dofile" | "engine_commit" | "stata_version"> = __ABOUT__;
 
 /** The snapshot start, the page's default; ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN).
  *  Any other value, a bare ?snapshot included, is the snapshot. */

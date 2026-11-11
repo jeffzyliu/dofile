@@ -3,10 +3,11 @@
 // another origin; the store's zip. Since step 3 the page is the app shell: these tests reach the client, the store and
 // the state through the page's test hook, and click the shell's own dialogs (the download prompt, the take-over). They
 // move to the flows' tests in step 6.
-// The hook (main.tsx): with ?test in the URL, window.__dofile = { engine (the EngineClient), store, start (the
-// controller's download then start), persisted, engineBytes, state (the signals of src/app/state.js), run (a run through
-// the controller), breakRun and reset (the engine controller's) }; with ?test=manual the page starts no engine until
-// start() is called. The store is blocked until the tab lock answers.
+// The hook (main.tsx): with ?test in the URL, window.__dofile = { engine (the transport: its facts `worker` and `startup`,
+// cached() and download(); it starts and runs nothing by itself), store, start (the controller's: the download, then the
+// worker), persisted, engineBytes, state (the signals of src/app/state.ts), run (a run through the controller), breakRun
+// and reset (the engine controller's), drops (the events that changed nothing) }; with ?test=manual the page starts no
+// engine until start() is called. The store is blocked until the tab lock answers.
 import type { BrowserContext, Page } from "@playwright/test";
 import { test, expect, startEngine } from "./fixtures";   // storage kept by default (fixtures.ts)
 
@@ -15,10 +16,11 @@ type StartFiles = { built: number; buildId: string; compressed: number; files: {
 type Progress = { received: number; total: number };
 type RunResult = { rc: number; log: string; images: string[] };
 type Handle = {
-  engine: { worker: unknown; cached(): Promise<boolean>; startup: { mode: string; fetched?: string } | null; start(): Promise<unknown>; run(code: string): Promise<RunResult>;
-    download(o?: { onProgress?: (p: Progress) => void; signal?: AbortSignal }): Promise<{ cached: boolean; received: number; total: number; why?: string }> };
+  engine: { worker: unknown; cached(): Promise<boolean>; startup: { mode: string; fetched?: string } | null;
+    download(o?: { onProgress?: (p: Progress) => void; signal?: AbortSignal }): Promise<{ cached: boolean; received: number; total: number; why?: string; build: unknown }> };
   store: { blocked: boolean; list(): Promise<{ path: string }[]>; write(path: string, data: Uint8Array): Promise<unknown>; zip(): Promise<File> };
-  start(): Promise<void>; persisted(): boolean | null | undefined; engineBytes: number | null; run(code: string): Promise<RunResult | null>;
+  start(): void; reset(): void; persisted(): boolean | null | undefined; engineBytes: number | null; run(code: string): Promise<RunResult | null>;
+  drops(): { type: string; n?: number; row: string; why: string }[];
   state: { engine: { value: { s: string; message?: string; detail?: string } }; files: { value: { path: string }[] }; graphs: { value: unknown[] } };
 };
 declare global { interface Window { __dofile: Handle; __persistCalls?: number } }
@@ -117,7 +119,8 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   expect(wanted.length).toBeGreaterThanOrEqual(8);   // the snapshot's five, the runtime's three, the brotli decoder
   expect(list.files.map(f => f.path), "the snapshot's manifest is not a start file").not.toContain("snapshot/manifest.json");
   expect(list.snapshot.snapshot.name).toBe(list.files.find(f => f.path.startsWith("snapshot/heap"))!.path.slice("snapshot/".length));
-  // The start takes the build's identity from the list: a request for the manifest would fail, and is looked for below.
+  // The start takes the build's time (`built`) and its two big files from the list: a request for the manifest would fail,
+  // and is looked for below.
   await context.route("**/snapshot/manifest.json", route => route.abort());
   const urls = requests(context);
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
@@ -155,7 +158,8 @@ test("download: the counts reach the total, abort keeps the finished files, and 
     const done = await window.__dofile.engine.download({ onProgress: p => seen.push(p) });
     return { done, first: seen[0], last: seen.at(-1)!, steps: seen.length, rising: seen.every((p, i) => i === 0 || p.received > seen[i - 1].received) };
   });
-  expect(second.done).toEqual({ cached: true, received: list.compressed, total: list.compressed });
+  // with what `mount` needs of the list it has just checked, so that the start which follows fetches no list
+  expect(second.done).toEqual({ cached: true, received: list.compressed, total: list.compressed, build: { built: list.built, files: list.snapshot } });
   expect(second.last).toEqual({ received: list.compressed, total: list.compressed });
   expect(second.first.received).toBeGreaterThan(0);   // the page's own files, and what the first try kept
   expect(second.rising).toBe(true);
@@ -173,7 +177,9 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   const during = urls.slice(before).map(pathOf);
   for (const path of wanted) expect(during, `${path} was fetched again by the start`).not.toContain(path);
   expect(urls.map(pathOf), "no request for the snapshot's manifest, at any point").not.toContain("/snapshot/manifest.json");
-  expect(during, "the start fetches the build's list, fresh").toContain("/start-files.json");
+  expect(during.filter(path => path === "/start-files.json"), "the download fetches the build's list, fresh, and the start that follows reuses it: one fetch")
+    .toHaveLength(1);
+  expect(await page.evaluate(() => window.__dofile.drops()), "no event was dropped on the way").toEqual([]);
   expect(elsewhere(urls, origin)).toEqual([]);
 
   // and the engine it started works: native code, a graph, the file stored before it existed
@@ -208,21 +214,30 @@ test("a damaged file in the cache fails the start once and is fetched again by t
   await runSample(page);
 });
 
-// download() is the one writer of the Cache: a start without it works, and keeps nothing (a host's error page for a
-// missing file, sent with status 200, could otherwise end up in the cache for good).
-test("a start without download() works and writes nothing to the Cache", async ({ page }) => {
+// download() is the one writer of the Cache: a worker that finds its files missing there fetches them itself, and keeps
+// nothing (a host's error page for a missing file, sent with status 200, could otherwise end up in the cache for good).
+// A restart is that start: it fetches the build's list fresh and downloads nothing first. Here the Cache is emptied after
+// a first start (as a browser may evict it), then Reset.
+test("a restart whose files are no longer in the Cache works and writes nothing to it", async ({ page }) => {
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
   await page.goto("/?test=manual");
   await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked);   // the tab lock answered
-  const kept = await page.evaluate(async () => {
+  await page.evaluate(() => { window.__dofile.start(); });
+  await ready(page);
+  await page.evaluate(async () => {
     for (const name of await caches.keys()) await caches.delete(name);
-    await window.__dofile.engine.start();
+    window.__dofile.reset();
+  });
+  expect(await state(page), "a reset goes to starting-list at once").toMatch(/^starting-(list|worker)$/);
+  await ready(page);
+  const kept = await page.evaluate(async () => {
     const urls: string[] = [];
     for (const name of await caches.keys()) for (const r of await (await caches.open(name)).keys()) urls.push(r.url);
     return urls;
   });
   expect(kept).toEqual([]);
-  expect(await page.evaluate(async () => (await window.__dofile.engine.run('display "N=" 6*7')).log)).toContain("N=42");
+  expect(await page.evaluate(async () => (await window.__dofile.run('display "N=" 6*7'))?.log)).toContain("N=42");
+  expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
 });
 
 test("tab lock: a second tab gets no engine and writes nothing; taking over ends the first tab's engine", async ({ page, context }) => {
@@ -239,7 +254,7 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
   await second.goto("/?test");
   const otherTab = (p: Page) => p.getByRole("alertdialog", { name: "dofile is open in another tab" });
   await expect(otherTab(second)).toBeVisible();
-  expect(await state(second)).toBe("other-tab");
+  expect(await state(second)).toBe("other-tab-idle");
   // two buttons; "Close editor" has the first focus, so a stray Enter does not take over
   await expect(otherTab(second).getByRole("button")).toHaveText(["Close editor", "Use dofile in this tab"]);
   await expect(otherTab(second)).toContainText("The other tab keeps its data until you take over here.");
@@ -258,9 +273,9 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
   // "Use dofile in this tab": the second tab takes the lock; the first one ends its worker and shows the same dialog
   await otherTab(second).getByRole("button", { name: "Use dofile in this tab" }).click();
   await expect(otherTab(page)).toBeVisible({ timeout: 30_000 });
-  expect(await state(page)).toBe("other-tab");
+  expect(await state(page)).toBe("other-tab-idle");
   expect(await page.evaluate(() => window.__dofile.engine.worker)).toBeNull();
-  await expect.poll(() => state(second)).not.toMatch(/^(other-tab|none)$/);   // it has taken over and decided
+  await expect.poll(() => state(second)).not.toMatch(/^(other-tab|checking)/);   // it has taken over and decided
   await startEngine(second);   // the first tab filled the Cache, so it starts; a browser that kept nothing asks
   await ready(second);
   await expect(otherTab(second)).toBeHidden();
