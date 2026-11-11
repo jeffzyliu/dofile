@@ -32,7 +32,8 @@ export type EngineStateName = EngineState["s"];
 
 /** true when V has the tags of the machine's State. */
 export type SameTags<V extends { s: string }> = Equal<V["s"], State["s"]>;
-/** The type of every field, over every member. */
+/** The type of every field, over every member. `keyof` of a union lists only the keys all members share, so each member is
+ *  taken on its own: FieldOf<{ s: "a"; x: 1 } | { s: "b"; y: "t" }> is "a" | 1 | "b" | "t". */
 type FieldOf<T> = T extends unknown ? T[keyof T] : never;
 /** true when no field of any member of V is a ticket or a queued run. */
 export type NothingHidden<V> = Equal<Extract<FieldOf<V>, Ticket | QueuedRun>, never>;

@@ -425,14 +425,25 @@ type AskedBy<A, T> = { [K in keyof A]: T extends A[K] ? K : never }[keyof A];
 /** The event types that sit under two effects in A. */
 type Twice<A> = { [T in TicketedEvent["type"]]: IsUnion<AskedBy<A, T>> extends false ? never : T }[TicketedEvent["type"]];
 
-/** true when A is a right answers map for this machine. */
+/** 1. One row for each effect with a ticket, and no other row. */
+export type RowsMatchEffects<A> = Equal<keyof A, TicketedEffect["do"]>;
+/** 2. Only events with a ticket, and every one of them. */
+export type AnswersMatchEvents<A> = Equal<A[keyof A], TicketedEvent["type"]>;
+/** 3. No event under two effects. */
+export type NoEventTwice<A> = Equal<Twice<A>, never>;
+
+/** true when A is a right answers map for this machine: all three hold. */
 export type AnswersOk<A> =
-  Equal<keyof A, TicketedEffect["do"]> extends true            // 1. one row for each effect with a ticket, and no other row
-    ? Equal<A[keyof A], TicketedEvent["type"]> extends true    // 2. only events with a ticket, and every one of them
-      ? Equal<Twice<A>, never>                                 // 3. no event under two effects
+  RowsMatchEffects<A> extends true
+    ? AnswersMatchEvents<A> extends true
+      ? NoEventTwice<A>
       : false
     : false;
-type _answers = Expect<AnswersOk<Answers>>;                    // fails `npm run check` if any of the three does not hold
+
+/** Each fails `npm run check` on its own line if its rule does not hold for Answers. */
+export type RowsOk = Expect<RowsMatchEffects<Answers>>;
+export type EventsOk = Expect<AnswersMatchEvents<Answers>>;
+export type NoDuplicates = Expect<NoEventTwice<Answers>>;
 
 /** The effects that are answered: their performers get a reply (item 5.1). */
 export type Answered = { [K in keyof Answers]: [Answers[K]] extends [never] ? never : K }[keyof Answers];

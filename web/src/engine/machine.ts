@@ -153,27 +153,49 @@ export interface Answers {
 }
 
 // Answers is checked by the compiler, both ways: three facts about it are types that must come out `true`.
+// The rules are the logic; the types below only carry them out. Four ideas recur in them:
+//  - Distribution: `T extends unknown ? F<T> : never` applies F to each member of a union T on its own.
+//  - Map, then index: `{ [K in keyof X]: ... }[keyof X]` builds an object, then reads every key at once: the union of the values.
+//  - `[T] extends [U]` (in brackets) compares T as a whole and stops distribution; `never` needs it (a bare `never` distributes to nothing).
+//  - `Equal<T, never>` asks "is this set empty?".
+/** true when A and B are exactly the same type (stricter than assignable both ways: it tells `any` and unions apart). */
 export type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+/** Compiles only for `true`, so `Expect<Equal<X, Y>>` is an assertion: `Expect<false>` is a type error. */
 export type Expect<T extends true> = T;
+/** true for a union of two or more types: IsUnion<"a" | "b"> is true, IsUnion<"a"> is false, IsUnion<never> is never. */
 type IsUnion<U, V = U> = U extends unknown ? ([V] extends [U] ? false : true) : never;
 /** The effects whose row in A names the event type T. */
 type AskedBy<A, T> = { [K in keyof A]: T extends A[K] ? K : never }[keyof A];
 /** The event types that sit under two effects in A. */
 type Twice<A> = { [T in TicketedEvent["type"]]: IsUnion<AskedBy<A, T>> extends false ? never : T }[TicketedEvent["type"]];
 
-/** true when A is a right answers map for this machine. */
+/** 1. One row for each effect with a ticket, and no other row. */
+export type RowsMatchEffects<A> = Equal<keyof A, TicketedEffect["do"]>;
+/** 2. Only events with a ticket, and every one of them. */
+export type AnswersMatchEvents<A> = Equal<A[keyof A], TicketedEvent["type"]>;
+/** 3. No event under two effects. */
+export type NoEventTwice<A> = Equal<Twice<A>, never>;
+
+/** true when A is a right answers map for this machine: all three hold. */
 export type AnswersOk<A> =
-  Equal<keyof A, TicketedEffect["do"]> extends true            // 1. one row for each effect with a ticket, and no other row
-    ? Equal<A[keyof A], TicketedEvent["type"]> extends true    // 2. only events with a ticket, and every one of them
-      ? Equal<Twice<A>, never>                                 // 3. no event under two effects
+  RowsMatchEffects<A> extends true
+    ? AnswersMatchEvents<A> extends true
+      ? NoEventTwice<A>
       : false
     : false;
-/** Fails `npm run check` if any of the three does not hold. */
-export type AnswersChecked = Expect<AnswersOk<Answers>>;
 
-/** The effects that are answered: their performers get a reply. */
+/** Each fails `npm run check` on its own line if its rule does not hold for Answers. */
+export type RowsOk = Expect<RowsMatchEffects<Answers>>;
+export type EventsOk = Expect<AnswersMatchEvents<Answers>>;
+export type NoDuplicates = Expect<NoEventTwice<Answers>>;
+
+/** The effects that are answered: their performers get a reply. The keys of Answers whose row is not `never`
+ *  (map each key to itself or `never`, then read them all: a row of `never` drops out). */
 export type Answered = { [K in keyof Answers]: [Answers[K]] extends [never] ? never : K }[keyof Answers];
 
+/** Omit, for each member of a union on its own. Plain Omit on a union keeps only the keys all members share and
+ *  loses each member's own fields: DistributiveOmit<{ type: "a"; x: 1; n: T } | { type: "b"; y: 2; n: T }, "n"> is
+ *  { type: "a"; x: 1 } | { type: "b"; y: 2 }. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** Every event with a ticket, without the ticket: all that any performer could say. */
 export type AnyAnswer = DistributiveOmit<TicketedEvent, "n">;
@@ -188,8 +210,7 @@ export type Reply<K extends Answered> = (answer: Answer<K>) => void;
 export const lost = (reason: string): string => `session reset: ${reason}. Data in memory is gone; your files are kept.`;
 
 /** What a run that was cut ends with: every RunResult field and no timing, plus `kind` (why). */
-export const cutResult = (error: string, kind: CutKind): RunResult => ({ rc: RC_RESET, error, error_command: null, log: "", results: null,
-  nobs: 0, nvars: 0, new_graphs: 0, images: [], error_line: null, graph_commands: [], graph_lines: [], kind });
+export const cutResult = (error: string, kind: CutKind): RunResult => ({ rc: RC_RESET, error, error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [], error_line: null, graph_commands: [], graph_lines: [], kind });
 
 /** The ticket of what this state waits on or uses; null when it has none. */
 export function ticketOf(state: State): Ticket | null {
