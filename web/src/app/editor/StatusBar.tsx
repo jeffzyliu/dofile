@@ -1,4 +1,4 @@
-// The status bar (docs/design/SPEC.md, sections 3.6 and 5). Not a live region: say() in state.js announces changes.
+// The status bar (docs/design/SPEC.md, sections 3.6 and 5). Not a live region: say() in state.ts announces changes.
 // Step 3 built the state dot and words of section 5. STEP 4b adds: the timers ("3.4 s", "resets in 4 s", the stage's
 // seconds), the last run (`lastRun`), "Memory 612 MB" (`memory`), and at the right "Files are kept in this browser" or
 // "Files may be cleared by this browser" (`persisted`), or "You can edit and upload while it starts" while starting.

@@ -13,7 +13,7 @@
 // tallest it has been at this width (a new width, a rotation, starts again). The same attributes are set.
 // With the keyboard closed, nothing is set and .app simply fills the window (position: fixed; inset: 0).
 // Zoomed in (a pinch), the visual viewport is small because of the zoom, not a keyboard: nothing is set then either.
-// A real keyboard cannot be tested here: test/app.test.mjs drives this with a fake visualViewport.
+// A real keyboard cannot be tested here: test/app.test.ts drives this with a fake visualViewport.
 
 /** How much shorter than the layout viewport the visual viewport must be to count as a keyboard (a keyboard is about 260
  *  px or more; Safari's toolbars change the height by less). */

@@ -22,7 +22,7 @@ const repo = fileURLToPath(new URL("../..", import.meta.url));
 const out = resolve(arg("--out", `${repo}/.dofile/pytest-wasm`));
 // dofile tests that make sense in the page's Python. Left out, because they start subprocesses, need the `mcp` package or
 // the repo's src/ tree, or assume the numpy.linalg shim is not installed yet (it is, as in the page): test_browser
-// (covered by web/test/engine.test.mjs), test_pathshim, test_linalgshim (covered by web/test/linalgshim.test.mjs), test_log_cut
+// (covered by web/test/engine.test.ts), test_pathshim, test_linalgshim (covered by web/test/linalgshim.test.ts), test_log_cut
 // (mcp_server), test_mcp, test_worker, test_sandbox, test_break, test_dofile_cli, test_vendor, test_conformance, test_stata_compat.
 const WEB_TESTS = ["tests/test_engine.py"];
 

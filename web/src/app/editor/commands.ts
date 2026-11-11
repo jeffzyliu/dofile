@@ -2,14 +2,14 @@
 // controller (4b, step 3), the file tree and tabs (4a), the log's "Go to line" (4b) and the reset banner (4d). The editor
 // (Editor.tsx, CodeMirror 6) replaces each function when it mounts and keeps `selection` current; until then they do
 // nothing, so the shell runs without an editor and 4a can call them before 4b exists. Run sends the active tab's text
-// through run.js's runCode() (docs/design/SPEC.md, section 4); Save writes it with store.write and shows the toast "Saved
+// through run.ts's runCode() (docs/design/SPEC.md, section 4); Save writes it with store.write and shows the toast "Saved
 // <name>".
 //
 // Who does what with an open file:
-//  - 4a owns `tabs` and `activeTab` (state.js): it adds a tab and makes it active, closes, renames and orders tabs. It reads
-//    the file and decides how it opens (files/open.js, SPEC 3.11); for a text file it then calls open(path, text). After a
+//  - 4a owns `tabs` and `activeTab` (state.ts): it adds a tab and makes it active, closes, renames and orders tabs. It reads
+//    the file and decides how it opens (files/open.ts, SPEC 3.11); for a text file it then calls open(path, text). After a
 //    change to an open file in the store it calls reload, renamed or closed, so the editor's state follows the tab.
-//  - 4b's editor owns each open file's text (one EditorState per tab) and the unsaved dot: it calls state.js setDirty(path,
+//  - 4b's editor owns each open file's text (one EditorState per tab) and the unsaved dot: it calls state.ts setDirty(path,
 //    on) on an edit and after a save; reload() and closed() drop the edits.
 //
 // The editor fills `editorCommands` field by field when it mounts. Call through the object (`editorCommands.save(path)`),
@@ -42,7 +42,7 @@ export const editorCommands = {
   /** 4a: a tab was closed (the close-tab dialog's "Don't save" too: its edits go with it) or its file was deleted: drop its
    *  state. 4a has already removed the tab. */
   closed(_path: string) {},
-  /** The log's "Go to line N" (4b) and the reset banner (4d): make `path` the active tab (opening it through files/open.js
+  /** The log's "Go to line N" (4b) and the reset banner (4d): make `path` the active tab (opening it through files/open.ts
    *  openFile when it is not open; default: the active tab), put the cursor on line `line` (1-based), scroll it into view
    *  and focus the editor. */
   goToLine(_line: number, _path?: string) {},

@@ -7,7 +7,7 @@
 // Protocol (types.ts: Ops, ToWorker, FromWorker): the page posts {id, op, args}; the worker answers {id, result} or
 // {id, error, name}, one op at a time, posts {stage} (a typed id, never text for the page to match) as each start-up
 // stage begins and {id, log} chunks while a run prints. client.ts is the page's side. Python's side: src/dofile/browser.py.
-// The handlers are three objects, one per set of ops (LifecycleOps, ReadOps, MirrorOps): a new op must choose its set,
+// The handlers are three objects, one per set of ops (LifecycleOps, ReadOps, JournalOps): a new op must choose its set,
 // here and in types.ts.
 import { loadPyodide } from "pyodide";
 import { hasNativeBrotli, isStorageRefusal, openCache, restoreOptions, unpackAsync } from "./snapshot.ts";
@@ -15,7 +15,7 @@ import { openStore } from "./store.ts";
 import type { BrotliWasmType } from "brotli-wasm";
 import type { AppliedRun, FileStore, RunChange } from "./store.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
-import type { BootArgs, DescribeArgs, FileChange, FileInfo, LifecycleOps, MirrorOps, MountArgs, ReadOps, RunOptions, SnapshotFile, SnapshotFiles,
+import type { BootArgs, DescribeArgs, FileChange, FileInfo, LifecycleOps, JournalOps, MountArgs, ReadOps, RunOptions, SnapshotFile, SnapshotFiles,
   Stage, Startup, ToWorker } from "./types.ts";
 
 /** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in for it (test/node-worker.ts). */
@@ -465,13 +465,13 @@ const read: Handlers<ReadOps> = {
 // (the journal is emptied in the same transaction). A sync that finds the journal empty (a run's after-run write or an
 // earlier sync took it) does nothing. With no store (mount could not open it) there is no journal to read, and the
 // transport attaches none: a sync that arrives before it knows that does nothing.
-const pageChanges: Handlers<MirrorOps> = {
+const journal: Handlers<JournalOps> = {
   async sync() {
     if (store) takePageVersion(await store.applyRun([]));
   },
 };
 
-const ops = { ...lifecycle, ...read, ...pageChanges };
+const ops = { ...lifecycle, ...read, ...journal };
 
 // One op, answered: {id, result}, or {id, error, name}. An op with no arguments is given {}.
 const answer = async ({ id, op, args }: ToWorker) => {

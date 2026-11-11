@@ -171,7 +171,7 @@ The ops are one typed map (`Ops` in `engine/types.ts`) in three sets, and the se
   send them, and only the machine's effect performer calls those.
 - **`ReadOps`:** `describe`, `describe_file`, `matrix`, `macros`, `browse`, `memory`, and the test-only views of `/work`,
   `files` and `read`. Declared to change nothing; anyone may send one through `query()`.
-- **`MirrorOps`** (the page's file changes; the code's name for the set): `sync`, with no arguments. Only the function the
+- **`JournalOps`** (the page's file changes; formerly `MirrorOps`): `sync`, with no arguments. Only the function the
   transport gives to `store.attach` sends it.
 
 The worker handles ops strictly one at a time through a promise chain (`queue = queue.then(...)`). `boot` is the one

@@ -1,6 +1,6 @@
 // The theme button (docs/design/SPEC.md, section 2): System, Light, Dark in turn. System sets nothing; the others set
 // data-theme on <html> (tokens.css). The choice is kept in localStorage (OQ-21); index.html sets it before the first
-// paint, so a dark page does not flash light. `resolvedTheme` (state.js) is what a run sends as plot_theme.
+// paint, so a dark page does not flash light. `resolvedTheme` (state.ts) is what a run sends as plot_theme.
 import { effect } from "@preact/signals-core";
 import { saved, theme } from "./state.ts";
 import type { Theme } from "./types.ts";

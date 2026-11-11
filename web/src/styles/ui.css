@@ -177,24 +177,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .num { color: var(--tok-number); }
 .warnword { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
 
-/* the banner (art.js): solid strokes in the accent color, the shading muted */
-.art-ink { color: var(--accent); font-weight: var(--w-bold-mono); }
-.art-shade { color: var(--border-strong); font-weight: 400; }
-.art { font-family: var(--font-mono); white-space: pre; line-height: 1.2; margin: 0; }
-/* one pixel down and right: a pixel is one character (0.6em in Plex Mono) by half a line (0.6em at line-height 1.2) */
-.art-drop { text-shadow: 0.6em 0.6em 0 var(--border); }
-/* a 12 degree slant: skew each line about its bottom edge, then move it right by its height above the last line
-   (--k lines of 1.2em, times tan 12deg = 0.2126), so the lines stay joined */
-.art-skew { display: inline-block; transform-origin: 0 100%;
-            transform: translateX(calc(var(--k) * 1.2em * 0.2126)) skewX(-12deg); }
-/* WebKit and Firefox leave hairline seams between skewed block characters: a same-color copy 0.04em to the right
-   covers them (and one for the drop shadow) */
-.art-skew .art-ink { text-shadow: 0.04em 0 0 currentColor; }
-.art-skew .art-drop { text-shadow: 0.04em 0 0 currentColor, 0.6em 0.6em 0 var(--border), 0.64em 0.6em 0 var(--border); }
-.code .ln.art-ln { line-height: 1.2; }   /* block letters join only below about 1.2 */
-.code .ln.art-ln:first-child { padding-top: 4px; }
-.code .ln.art-ln .n { font-size: var(--code); }
-
 /* log */
 .log { font: var(--log)/1.5 var(--font-mono); padding: var(--s2) var(--s3); margin: 0; white-space: pre; overflow: hidden; }
 .log .echo { font-weight: var(--w-bold-mono); }

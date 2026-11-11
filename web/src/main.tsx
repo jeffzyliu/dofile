@@ -49,7 +49,7 @@ const narrow = matchMedia("(max-width: 699.98px)");
 const fit = () => { S.layout.value = narrow.matches ? "phone" : "desktop"; };
 fit();
 narrow.addEventListener("change", fit);
-// a phone's on-screen keyboard: .app sized to the area above it (app/viewport.js)
+// a phone's on-screen keyboard: .app sized to the area above it (app/viewport.ts)
 const viewport = watchViewport({ enabled: () => S.isPhone.value });
 effect(() => { S.isPhone.value; viewport.update(); });
 // the engine's state on <html>, for the tests and for CSS that needs it

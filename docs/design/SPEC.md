@@ -469,7 +469,7 @@ and in the worker (`web/src/engine/worker.ts` has one handler object for each se
   `read`, for the tests) are declared to change nothing: not the data, r(), e(), the macros, the matrices, the graphs, the sort
   order, the log or `/work`. Anyone may send one, through the transport's `query()`. The declaration is tested
   (`web/test/engine.test.ts`), not proved.
-- **`MirrorOps`** (the page's file changes; the code's name for the set, which once held four mirror ops) holds one op,
+- **`JournalOps`** (the page's file changes; formerly `MirrorOps`, when it held four mirror ops) holds one op,
   `sync`. Only the function the transport gives to `store.attach` sends it.
 
 | Op | Set | Args | Result | Errors | Needs | Owner |
@@ -593,8 +593,8 @@ interface ReadOps {                              // declared to change nothing: 
   browse: { args: DescribeArgs; result: BrowseRows };      memory: { args: void; result: Memory };
   files: { args: void; result: FileInfo[] };               read: { args: { path: string }; result: Uint8Array };   // views of /work, for tests
 }
-interface MirrorOps { sync: { args: void; result: void } }   // the page's file changes: the worker reads the journal (section 7)
-type Ops = LifecycleOps & ReadOps & MirrorOps;
+interface JournalOps { sync: { args: void; result: void } }   // the page's file changes: the worker reads the journal (section 7)
+type Ops = LifecycleOps & ReadOps & JournalOps;
 type Op = keyof Ops;
 type ViewOp = Exclude<keyof ReadOps, "files" | "read">;      // what the controller's call() accepts
 type ToWorker = { [K in Op]: { id: number; op: K; args: Ops[K]["args"] } }[Op];

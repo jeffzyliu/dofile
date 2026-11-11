@@ -104,8 +104,10 @@ export class FileStore {
   // The engine client calls this when a worker starts, and with null when the worker is gone (or has no store of its own,
   // so it could never read the journal). While `sync` is null, a change writes no `pending` row: the next worker copies
   // the whole store. `onClosed`: called when the browser closes the database (another page deleted or upgraded it,
-  // "Clear site data"): /work then holds files the store may no longer have, which the journal cannot say, so the
-  // worker must copy the store afresh.
+  // "Clear site data"): /work then holds files the store may no longer have, which the journal cannot say. After a
+  // deleted database the new worker's mount copies the store as it is now; after an upgrade by another page this page
+  // still opens version 1, which fails (VersionError): the new worker mounts with a store error and an empty /work, and
+  // the store is detached from it.
   attach(sync: FileStore["sync"], { onClosed = null }: { onClosed?: null | (() => void) } = {}) { Object.assign(this, { sync, onClosed }); }
 
   // One transaction. It rejects with the browser's error if it fails, and then nothing of it is kept. A database the

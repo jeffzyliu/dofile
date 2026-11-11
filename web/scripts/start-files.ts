@@ -1,6 +1,6 @@
 // The list of every file the snapshot start loads, with its size on disk and its compressed size (SPEC.md, OQ-12 a).
 // vite.config.ts writes it as dist/start-files.json after a build (and serves it in dev); the page's download prompt
-// and progress bar take their numbers from it (src/engine/client.js, download).
+// and progress bar take their numbers from it (src/engine/client.ts, download).
 //   node scripts/start-files.ts [dir]      prints the list for a built page (default: dist); with no build stamp, no build id
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -24,7 +24,7 @@ function compressedSize(bytes: Uint8Array): number {
 // `manifest`: the snapshot's build record, public/snapshot/manifest.json (it is not deployed: the build removes it from
 // dist/); null: no snapshot.
 // Returns { built, buildId, snapshot, files: [{ path, size, compressed, download }], size, compressed }, the one statement
-// of the build: the page reads it, and gives the worker what it needs from it (client.js, start; the worker reads no manifest):
+// of the build: the page reads it, and gives the worker what it needs from it (client.ts, start; the worker reads no manifest):
 //   built      the snapshot's build time (its manifest), which names the Cache the files are kept in; null: no snapshot
 //   buildId    scripts/build-id.ts, buildId(stamp, the manifest): equal to the page's only when both are of one build run and
 //              the snapshot is of that build's inputs; null: no snapshot or no stamp

@@ -10,7 +10,7 @@
 //    changes to clean.do?" (the file's name) / Save (focused), "Don't save", Cancel; Esc is Cancel. Save: await
 //    editorCommands.save(path), then close the tab (it stays open when save resolves false); Don't save: close the tab
 //    (editorCommands.closed(path) drops the edits). No tab is dirty before 4b's editor exists: 4a's tests make one with
-//    state.js setDirty(path, true).
+//    state.ts setDirty(path, true).
 // The host draws a new dialog for each new value (clash 2 after clash 1); a view unmounted with no answer (another dialog
 // replaced it) answers Cancel: Esc's meaning (for a clash, "keep yours for every remaining clash").
 import type { DialogOf } from "../dialogs";

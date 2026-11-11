@@ -1,6 +1,6 @@
-// The file store (src/engine/store.js) by itself, with no engine and no worker: its API, the pending journal, the zip,
-// a failing transaction; and the tab lock and storage.persist() (src/engine/tab.js). The store with a running engine is
-// in files.test.mjs. SPEC.md section 7, tests 1, 2, 8, 12 and 13.
+// The file store (src/engine/store.ts) by itself, with no engine and no worker: its API, the pending journal, the zip,
+// a failing transaction; and the tab lock and storage.persist() (src/engine/tab.ts). The store with a running engine is
+// in files.test.ts. SPEC.md section 7, tests 1, 2, 8, 12 and 13.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import "fake-indexeddb/auto";

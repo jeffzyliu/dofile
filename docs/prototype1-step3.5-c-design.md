@@ -68,7 +68,7 @@ being replaced had been ready.
 | Question | Answer | Main alternative, and why not |
 |---|---|---|
 | A. The right ticket on every event | A `Ticket` is a branded type that only the machine can make. A performer never writes one: it gets a `reply` function bound to its effect's ticket and typed to the events that effect may be answered with. Every event that changes nothing is recorded, and the tests assert the record (item 5). | A branded type per kind (`WorkerNo`, `DownloadNo`): with bound replies a performer cannot choose a ticket at all, so the kinds add types and no safety. |
-| B. Operations outside the machine | The op map is three sets: `LifecycleOps`, `ReadOps`, `MirrorOps` (since step D the one op `sync`). The transport's `query` takes only `ReadOps`; the lifecycle ops leave the transport only through its `Lifecycle` interface, which only the effect performer holds. The compiler proves who can send what; that a read op changes nothing is declared and tested, not proved (item 7.2). A read op with no worker is rejected with kind `no-engine`; during a run it waits in the worker's queue, as today. | Reject a read op during a run with a new kind: the worker's queue already gives the right answer (the data as the run left it), and every view would have to ask again. |
+| B. Operations outside the machine | The op map is three sets: `LifecycleOps`, `ReadOps`, `JournalOps` (since step D the one op `sync`). The transport's `query` takes only `ReadOps`; the lifecycle ops leave the transport only through its `Lifecycle` interface, which only the effect performer holds. The compiler proves who can send what; that a read op changes nothing is declared and tested, not proved (item 7.2). A read op with no worker is rejected with kind `no-engine`; during a run it waits in the worker's queue, as today. | Reject a read op during a run with a new kind: the worker's queue already gives the right answer (the data as the run left it), and every view would have to ask again. |
 | C. Does a failed save reach the machine? | Only one does, as today: the browser closing the database, as `crashed` with cause `storage`, because its remedy is a new worker. Every other store failure stays with the caller, the run's result or the transport; the machine has no event for it (item 7.3). | A `save-failed` event and a flag in the state: no transition would read it. |
 | D. Should `break` and `keep-waiting` move to `web/src/app/run.ts`? | No: one machine. The run's events are grouped in one table (table E), which reads as the run's own small machine (item 4.4). | A second machine nested under `ready`: every engine event during a run (a crash, a reset, the lock lost) would need a protocol between the two, with an order to keep, which is the kind of contract this step removes. |
 | The list fetch in a snapshot start | The machine owns it as a step of a restart, with a ticket: the state `starting-list`, the effect `fetch-list`, the events `list-checked` and `list-failed`. A start the visitor begins reuses the list `download()` has just checked. The transport's `start` has no hidden `await` (items 1, 4). | Keep the fetch inside the transport's `start`: the transport would then decide, after an `await`, whether to make a worker, with its own counter. |
@@ -1077,7 +1077,7 @@ and its call ids; `run.ts`'s counters `runs`, `sessionRuns` and `graphCount`, an
 **`web/src/engine/worker.ts`**
 - Owns Pyodide, `/work` and the op queue.
 - The handlers are three objects, one per set of item 7.2, each typed by its own set
-  (`{ [K in keyof ReadOps]: … }` and the same for `LifecycleOps` and `MirrorOps`), and `ops` is the three spread together.
+  (`{ [K in keyof ReadOps]: … }` and the same for `LifecycleOps` and `JournalOps`), and `ops` is the three spread together.
   A new op cannot be added without choosing its set, here and in `types.ts`.
 - Posts `{ stage }` at today's `status()` sites: `web/src/engine/worker.ts:304` download, `:318` unpack, `:338` and
   `:369` python, `:388` files, `:399` packages, `:415` engine.
@@ -1185,15 +1185,16 @@ export interface ReadOps {
   files:         { args: void; result: FileInfo[] };            // /work as it is: for the tests, not for views
   read:          { args: { path: string }; result: Uint8Array };
 }
-/** Ops that copy a page change into /work. Sent only by the function the transport gives to store.attach.
+/** Ops that copy a page change into /work (named `MirrorOps` when this was written; renamed `JournalOps` after step D).
+ *  Sent only by the function the transport gives to store.attach.
  *  Step D deletes these four and the interface holds `sync` alone. */
-export interface MirrorOps {
+export interface JournalOps {
   write:  { args: { path: string; data: Uint8Array; seq?: number }; result: void };
   mkdir:  { args: { path: string; seq?: number }; result: void };
   remove: { args: { path: string; seq?: number }; result: void };
   rename: { args: { from: string; to: string; seq?: number }; result: void };
 }
-export type Ops = LifecycleOps & ReadOps & MirrorOps;
+export type Ops = LifecycleOps & ReadOps & JournalOps;
 export type Op = keyof Ops;
 /** The read ops the page asks for through the controller's call: not the two views of /work. */
 export type ViewOp = Exclude<keyof ReadOps, "files" | "read">;
@@ -1205,12 +1206,12 @@ export type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: numbe
 type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A : never, id: number) => unknown };
 const lifecycle: Handlers<LifecycleOps> = { mount, boot, startup, run };
 const read: Handlers<ReadOps> = { describe, describe_file, matrix, macros, browse, memory, files, read: readFile };
-const mirror: Handlers<MirrorOps> = { write, mkdir, remove, rename };
-const ops = { ...lifecycle, ...read, ...mirror };
+const journal: Handlers<JournalOps> = { write, mkdir, remove, rename };
+const ops = { ...lifecycle, ...read, ...journal };
 ```
 
-Step D: `MirrorOps` holds one op, `sync: { args: void; result: void }`, and the worker's third object is
-`pageChanges: Handlers<MirrorOps> = { sync }`.
+Step D: `JournalOps` holds one op, `sync: { args: void; result: void }`, and the worker's third object is
+`journal: Handlers<JournalOps> = { sync }`.
 
 `OpResults` (`web/src/engine/types.ts:72-76`) is deleted: `Ops` says the same and more. The name `ReadOps` stays; its
 comment says "declared".
@@ -1334,10 +1335,10 @@ No read op raises an event, so none can change a state or be dropped by the guar
 | The worker is posted to in one place | `postMessage` occurs once in `web/src/engine/client.ts`, in `#send` (source text). |
 
 **Where the file ops sit.** `write`, `mkdir`, `remove` and `rename` are not read-only (they change `/work`) and are
-not lifecycle (no state depends on them). They are the third set, `MirrorOps`, with one sender: the function that
-`start()` gives to `store.attach`, typed to `keyof MirrorOps`. The store is attached exactly while a worker is live;
+not lifecycle (no state depends on them). They are the third set, `JournalOps`, with one sender: the function that
+`start()` gives to `store.attach`, typed to `keyof JournalOps`. The store is attached exactly while a worker is live;
 `end()` detaches it, and a change made with no worker is copied by the next `mount`, as today. Step D changes
-`MirrorOps` to `sync` alone and deletes that function's arguments, the four handlers in the worker and `onFileError`;
+`JournalOps` (then still `MirrorOps`) to `sync` alone and deletes that function's arguments, the four handlers in the worker and `onFileError`;
 nothing in the machine, the controller, `ReadOps` or `LifecycleOps` changes. (Step D did so. The function sends `sync`
 with no arguments, so the cast in it went too; a `sync` that the worker answers with an error is said on the console.)
 

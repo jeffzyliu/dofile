@@ -1,4 +1,4 @@
-// Boot Pyodide from a built snapshot in Node, with the restore code the page uses (src/engine/snapshot.js). Shared by
+// Boot Pyodide from a built snapshot in Node, with the restore code the page uses (src/engine/snapshot.ts). Shared by
 // scripts/check-snapshot.mjs and the tests. `dir` is a snapshot folder (default public/snapshot).
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";

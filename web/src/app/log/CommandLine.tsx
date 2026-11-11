@@ -1,6 +1,6 @@
 // STEP 4b: the Log pane's foot and the phone's.
 //  - CommandLine (.cmdline, section 3.5): prompt ".", the input aria-label="Command" (placeholder "Type a command · ↑ ↓
-//    for earlier ones"; phone: "Type a command"), "Run command". Enter runs through run.js's runCommand(text) (kind
+//    for earlier ones"; phone: "Type a command"), "Run command". Enter runs through run.ts's runCommand(text) (kind
 //    "command", fresh_locals false). It answers { accepted, done } at once: accepted (it runs now, or is queued while there
 //    is no engine) means it is in `history` and the field clears; refused (a start or a run in progress) means not in
 //    `history`, and the text stays in the field. ↑ ↓ recall `history`.

@@ -1,8 +1,8 @@
-// Runs worker.js in a Node worker thread with the Web Worker globals it uses (self, postMessage, onmessage).
+// Runs worker.ts in a Node worker thread with the Web Worker globals it uses (self, postMessage, onmessage).
 // The file store, one of two ways (workerData):
 //   storePort: the test's own store, reached through this port. The database then lives in the test's thread, as it is
 //     shared between a page and its worker in a browser: the test can change files while this thread is busy in a run.
-//   otherwise: an in-memory IndexedDB of this thread's own (fake-indexeddb), which worker.js opens itself. With
+//   otherwise: an in-memory IndexedDB of this thread's own (fake-indexeddb), which worker.ts opens itself. With
 //     oldDatabase, a database as Emscripten's IDBFS left it ("/work") is made first; {harness: "databases"} reports
 //     what is there afterwards.
 import { parentPort, workerData } from "node:worker_threads";

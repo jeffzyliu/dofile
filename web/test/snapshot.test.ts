@@ -1,4 +1,4 @@
-// inflate and unpack (src/engine/snapshot.js): the brotli decoding of the snapshot's two big files, with the same
+// inflate and unpack (src/engine/snapshot.ts): the brotli decoding of the snapshot's two big files, with the same
 // brotli-wasm module the worker loads. No snapshot needs to be built for these.
 import { test } from "node:test";
 import assert from "node:assert/strict";

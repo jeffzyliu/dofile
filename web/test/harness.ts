@@ -1,4 +1,4 @@
-// Shared by the tests: the built wheel, and worker.js in a Node worker thread standing in for a browser's Web Worker.
+// Shared by the tests: the built wheel, and worker.ts in a Node worker thread standing in for a browser's Web Worker.
 import assert from "node:assert/strict";
 import { MessageChannel, Worker } from "node:worker_threads";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
@@ -23,7 +23,7 @@ export const extraWheels = readdirSync(`${root}/web/wheels`).filter(f => f.endsW
 const started = new Set<Worker>();
 export const endWorkers = () => { for (const w of started) w.terminate(); };
 
-// A Worker as client.js wants it. `store`: the page's FileStore, which the worker thread then uses (node-worker.mjs);
+// A Worker as client.ts wants it. `store`: the page's FileStore, which the worker thread then uses (node-worker.ts);
 // without it the thread has its own database, and `oldDatabase` puts an IDBFS-style "/work" database there first;
 // `noDatabase`: the thread has no IndexedDB at all. port.harness("databases") asks the thread what its IndexedDB holds.
 export function nodeWorker({ store, oldDatabase = false, noDatabase = false }:

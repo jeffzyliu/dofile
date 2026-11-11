@@ -211,7 +211,7 @@ test("the worker is posted to in one place: postMessage occurs once in client.ts
   assert.equal(count(bodyOf(text, "#send<K extends Op>(live: Live, op: K, args: Ops[K][\"\"] | undefined, onLog?: (text: string) => void): Promise<Ops[K][\"\"]> {"), /\bpostMessage\(/), 1);
   // and the lifecycle ops leave it only from start() and run()
   for (const op of ["mount", "boot", "startup", "run"]) assert.equal(count(source("src/engine/client.ts"), new RegExp(`#send\\(live, "${op}"`)), 1, op);
-  // and the one op of MirrorOps from the function start() gives to store.attach, with nothing in it
+  // and the one op of JournalOps from the function start() gives to store.attach, with nothing in it
   assert.equal(count(source("src/engine/client.ts"), /#send\(live, "sync", undefined\)/), 1, "sync");
   assert.equal(count(source("src/engine/client.ts"), /#send\(live, "sync"/), 1, "sync");
 });

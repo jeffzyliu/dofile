@@ -1,7 +1,7 @@
 // The hidden live region, the toast, and the banner (docs/design/SPEC.md, sections 1 and 3.10).
-//  - say(text) (state.js): the one role="status" region says each change once ("Run started", "Engine ready"). The
+//  - say(text) (state.ts): the one role="status" region says each change once ("Run started", "Engine ready"). The
 //    status bar is not a live region.
-//  - showToast(text) (state.js): a confirmation with no buttons, inverted colors, bottom center, 4 s (kept while the
+//  - showToast(text) (state.ts): a confirmation with no buttons, inverted colors, bottom center, 4 s (kept while the
 //    pointer is on it), never focused; the live region says the same words. Anything to act on is a banner or a dialog.
 //  - <Banner kind>: a pane's notice above its content, until its cause goes or it is dismissed. Warning and error carry
 //    the warning icon (meaning is never color alone).

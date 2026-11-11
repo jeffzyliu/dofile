@@ -1,4 +1,4 @@
-// STEP 4b: the log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[], run.js writes it) and draws it: the head
+// STEP 4b: the log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[], run.ts writes it) and draws it: the head
 // (banner B2, the About line), run-heads, the text split into echo, output, note, error and hint lines by the .log
 // tokenizer (OQ-4), "Go to line N", each graph's link after the echo on its line (desktop) or the graph inline (phone),
 // and the page's own notes. It follows the end unless the user scrolled up. role="log".

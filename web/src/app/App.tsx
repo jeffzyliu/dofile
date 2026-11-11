@@ -10,11 +10,11 @@
 //    Each phone piece sits in this file next to its desktop counterpart: PhoneTopBar after Toolbar (and the phone's ⋯
 //    items, phoneMoreItems, after the desktop's, moreItems), PhoneOutputViews after OutputPane, PhoneViews (the tab bar)
 //    in place of the status bar. Each pane is a Pane: on a phone it is also one of the Views tablist's panels, hidden
-//    while another view is selected. Components read `isPhone` (state.js); no `phone` prop is passed down. Every phone
+//    while another view is selected. Components read `isPhone` (state.ts); no `phone` prop is passed down. Every phone
 //    view has a BannerSlot, so a banner marked for every view (download-failed: banners.tsx) shows on the current one.
 //    The phone ⋯'s Theme item cycles the theme and keeps the menu open (ui/Menu.tsx keepOpen).
 //  The page itself never scrolls (app.css: .app is fixed to the window); on a phone with the keyboard open, .app is the
-//  area above it, the tab bar is hidden, and the toast sits above the command line there (viewport.js, app.css). Text
+//  area above it, the tab bar is hidden, and the toast sits above the command line there (viewport.ts, app.css). Text
 //  fields are 16 px or more on a phone (app.css), so iOS does not zoom in on focus: 4b's command line and editor too.
 //
 // Each step 4 part edits only its own files; this file only places them and is not edited in step 4. Per part: the files,
@@ -37,24 +37,24 @@
 //    progress: inside a handler given to connectRun, and also inside a signal effect on `engine`, `lastRun` or `log`,
 //    which are written during a step. Start the next run after the step: when the run's promise has resolved, say.
 //   4a files/FilesPane.tsx (FilesHead, FilesBody), files/EditorTabs.tsx (EditorTabs, the phone's FileSwitcher),
-//      files/FileBar.tsx (FileBar: the bars over a .csv, .tsv or .log), files/open.js (openFile, decodeText),
+//      files/FileBar.tsx (FileBar: the bars over a .csv, .tsv or .log), files/open.ts (openFile, decodeText),
 //      files/dialogs.tsx (clash, delete, delete-all, close-tab; the words of delete-all and close-tab are decided: SPEC
 //      3.10), files/banners.tsx (not-text).
 //      Writes `tabs` (not `dirty`), `activeTab`, `dialog` (its four kinds), `banners` (not-text); openFile writes
 //      `phoneTab` = "editor" on a phone when a text or .dta tab opens, and for a .png `outputTab` = "graph" (desktop) or
-//      `graphFull` (phone). Calls store.* (app/store.js), files.js downloadAll() and saveAs, editorCommands.open, reload,
-//      renamed, closed, save(path) (editor/commands.js), run.js addFileGraph(path, png) and runCommand(text) (Import),
-//      state.js addBanner, dismiss, showToast. downloadAll() makes no zip and resolves false when the store has no file
-//      (folders do not count): disable your "Download all (.zip)" while state.js `hasFiles` is false, as the ⋯ menu
-//      does; a failure shows by itself (files.js adds the banner download-failed). No tab can be dirty before 4b's
-//      editor exists: 4a's tests of the close-tab and reload paths call state.js setDirty(path, true) themselves.
-//   4b editor/Editor.tsx, editor/commands.js (fills editorCommands and `selection`), editor/RunControls.tsx,
+//      `graphFull` (phone). Calls store.* (app/store.ts), files.ts downloadAll() and saveAs, editorCommands.open, reload,
+//      renamed, closed, save(path) (editor/commands.ts), run.ts addFileGraph(path, png) and runCommand(text) (Import),
+//      state.ts addBanner, dismiss, showToast. downloadAll() makes no zip and resolves false when the store has no file
+//      (folders do not count): disable your "Download all (.zip)" while state.ts `hasFiles` is false, as the ⋯ menu
+//      does; a failure shows by itself (files.ts adds the banner download-failed). No tab can be dirty before 4b's
+//      editor exists: 4a's tests of the close-tab and reload paths call state.ts setDirty(path, true) themselves.
+//   4b editor/Editor.tsx, editor/commands.ts (fills editorCommands and `selection`), editor/RunControls.tsx,
 //      editor/StatusBar.tsx, editor/banners.tsx (save-failed), log/LogView.tsx, log/CommandLine.tsx (CommandLine,
 //      LogActions, logMenuItems for the phone's ⋯, PhoneStrip).
-//      Writes `tabs[].dirty` only through state.js setDirty(path, on), `banners` (save-failed), `graphIndex` and
-//      `outputTab` (a graph link), `graphFull` (a tap on an inline graph, phone). Calls run.js runCode(code, head) and
-//      runCommand(text), engine.js breakRun, keepWaiting, reset, files/open.js openFile (goToLine on a closed file),
-//      store.write (Save), showToast. Reads the log's per-run data on each text item (`unsaved`, `end`: types.d.ts LogItem).
+//      Writes `tabs[].dirty` only through state.ts setDirty(path, on), `banners` (save-failed), `graphIndex` and
+//      `outputTab` (a graph link), `graphFull` (a tap on an inline graph, phone). Calls run.ts runCode(code, head) and
+//      runCommand(text), engine.ts breakRun, keepWaiting, reset, files/open.ts openFile (goToLine on a closed file),
+//      store.write (Save), showToast. Reads the log's per-run data on each text item (`unsaved`, `end`: types.ts LogItem).
 //      The command line: runCommand(text) returns { accepted, done } at once; clear the field only when `accepted` (it
 //      ran, or was queued with no engine; then it is in `history`, an error too); refused (the page load, a start or a
 //      run in progress): the text stays, and `history` is unchanged. A queued run goes from `starting-worker` straight to
@@ -69,7 +69,7 @@
 //      other-tab), `banners` (only dismiss()). Calls engine.ts start (also "Try again"), ask() (the declined banner's
 //      "Download the engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,
 //      and a second press does nothing), keepWaiting, reset; editorCommands.runFile ("Run the file
-//      again"); files.js downloadAll() (when the store cannot make the zip it resolves false and adds the banner
+//      again"); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner
 //      download-failed, which a later download that works removes; with no file to put in it, false and nothing shown).
 //      A failed start's `message` is the visitor's words; its `detail` is the developer's cause (types.ts EngineState).
 // editorCommands is filled field by field when 4b's editor mounts: every part calls through the object

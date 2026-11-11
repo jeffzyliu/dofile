@@ -285,7 +285,7 @@ test("the folded file list: the Files button says what it does and how many file
 // On a phone the page itself never scrolls: only panes do (an iPhone scrolled the page a few px). The emulated iPhone has
 // no real keyboard or toolbars, and Playwright cannot make a real touch scroll, so this guards the layout: the document is
 // no taller or wider than the window, and a scroll by script (and a wheel, where the browser takes one) leaves it at the
-// top. app/viewport.js's keyboard handling is tested in test/app.test.mjs.
+// top. app/viewport.ts's keyboard handling is tested in test/app.test.ts.
 test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) => {
   test.skip(!isMobile, "the iPhone profile");
   await page.goto("/?test=manual");
@@ -358,7 +358,7 @@ test("a failed Download all shows one banner with Try again, on every phone view
   await expect(banner).toHaveCount(0);
 });
 
-// The phone's toast sits above the command line and the tab bar; with the keyboard open (viewport.js's attributes, set by
+// The phone's toast sits above the command line and the tab bar; with the keyboard open (viewport.ts's attributes, set by
 // script: a real keyboard cannot be opened here) it sits above the command line at the foot of the visible area.
 test("phone: the toast is above the command line and the tab bar, and above the keyboard when it is open", async ({ page, isMobile }) => {
   test.skip(!isMobile, "the iPhone profile");

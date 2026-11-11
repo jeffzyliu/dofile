@@ -40,10 +40,10 @@ export interface ReadOps {
 /** The op that brings the page's file changes into /work. Sent only by the function the transport gives to store.attach,
  *  which the store calls after each change it has journalled. It carries nothing: the worker reads the journal (`pending`),
  *  takes the store's version of those paths and clears the journal, in one transaction, then puts that version into /work. */
-export interface MirrorOps {
+export interface JournalOps {
   sync: { args: void; result: void };
 }
-export type Ops = LifecycleOps & ReadOps & MirrorOps;
+export type Ops = LifecycleOps & ReadOps & JournalOps;
 export type Op = keyof Ops;
 /** The read ops the page asks for through the controller's call: not the two views of /work. */
 export type ViewOp = Exclude<keyof ReadOps, "files" | "read">;
@@ -144,7 +144,7 @@ export interface StartFiles {
 /** A row of the journal (`pending`): a page change that /work has not taken yet. */
 export interface PendingRow { op: "write" | "mkdir" | "remove" | "rename"; path: string; to?: string }
 
-// ---- the snapshot (snapshot.js, scripts/make-snapshot.mjs) ----
+// ---- the snapshot (snapshot.ts, scripts/make-snapshot.mjs) ----
 
 /** One big file of the snapshot: its name, its size decompressed (`raw`) and as stored (`size`, brotli). */
 export interface SnapshotFile { name: string; raw: number; size: number }

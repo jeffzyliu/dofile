@@ -2,11 +2,11 @@
 // Two sources:
 //  - the engine's states (`engine`, `isolated`), not in `banners`: states/banners.tsx's EditorStateBanners and
 //    LogStateBanners (step 4d);
-//  - the `banners` signal, one entry per banner, added by its owner (state.js addBanner) and removed by Dismiss or when
+//  - the `banners` signal, one entry per banner, added by its owner (state.ts addBanner) and removed by Dismiss or when
 //    its cause goes (dismiss). Each kind's view is in its owner's file:
 //      reset, memory, storage, download-failed: states/banners.tsx (step 4d) · not-text: files/banners.tsx (step 4a)
 //      save-failed: editor/banners.tsx (step 4b)
-// Add a kind here, in types.d.ts and in SPEC.md section 8 together.
+// Add a kind here, in types.ts and in SPEC.md section 8 together.
 // `phone: "every"`: on a phone every view's slot draws it (the phone's Data and Results views have a slot, "output", for
 // these only), so it is seen whichever view is shown; the hidden views are display: none, so it is read and tabbed once.
 import type { ComponentType } from "preact";

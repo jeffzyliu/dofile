@@ -35,7 +35,7 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   controllers' actions; they never call the transport or the machine. Each step 4 part has its own files, which `App.tsx` only places (its header lists
   them; each phone piece sits there next to its desktop counterpart, and components read `isPhone` rather than a `phone` prop); dialogs and banners are drawn through the registries `dialogs.tsx` and `banners.tsx`, one view per kind. The
   shared pieces are in `src/app/ui/`: `Dialog` (native `<dialog>`, a bottom sheet under 700 px), `Menu` (`MenuButton`,
-  `openMenu`; an item with `keepOpen` leaves the menu open), `Tablist`, `Banner`, the live region (`say()`) and the toast (`showToast()`), `Icon`, `Key`, `Labels` (a control's
+  `openMenu`; an item with `keepOpen` leaves the menu open), `Tablist`, `Live` (the live region `say()`, the toast `showToast()` and `Banner`), `Icon` (and `Key`), `Labels` (a control's
   labels in one cell, so the toolbar never changes size; keep labels short, the widest sets the width). Toolbar buttons
   share one height (`--control` in `tokens.css`), a pane head's controls another (`--control-sm`). `src/app/viewport.ts` sizes the page to the area above a phone's
   on-screen keyboard.
