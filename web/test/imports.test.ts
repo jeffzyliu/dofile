@@ -208,9 +208,12 @@ test("events get in through two doors: enqueue() is called only in dispatch() an
 test("the worker is posted to in one place: postMessage occurs once in client.ts, in #send", () => {
   const text = source("src/engine/client.ts", true);
   assert.equal(count(text, /\bpostMessage\(/), 1);
-  assert.equal(count(bodyOf(text, "#send<K extends Op>(live: Live, op: K, args: Ops[K][\"\"] | undefined, transfer: Transferable[] = [], onLog?: (text: string) => void): Promise<Ops[K][\"\"]> {"), /\bpostMessage\(/), 1);
+  assert.equal(count(bodyOf(text, "#send<K extends Op>(live: Live, op: K, args: Ops[K][\"\"] | undefined, onLog?: (text: string) => void): Promise<Ops[K][\"\"]> {"), /\bpostMessage\(/), 1);
   // and the lifecycle ops leave it only from start() and run()
   for (const op of ["mount", "boot", "startup", "run"]) assert.equal(count(source("src/engine/client.ts"), new RegExp(`#send\\(live, "${op}"`)), 1, op);
+  // and the one op of MirrorOps from the function start() gives to store.attach, with nothing in it
+  assert.equal(count(source("src/engine/client.ts"), /#send\(live, "sync", undefined\)/), 1, "sync");
+  assert.equal(count(source("src/engine/client.ts"), /#send\(live, "sync"/), 1, "sync");
 });
 
 test("single instances: main.tsx is the only module that constructs or connects; the store is opened in two places, one for each thread", () => {

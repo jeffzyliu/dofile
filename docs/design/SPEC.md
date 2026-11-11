@@ -492,7 +492,7 @@ never hold `..` or a leading `/`. A path whose first part is `.dofile` is refuse
 |---|---|---|
 | `info` | `path` | `FileInfo`: one record per file or folder |
 | `data` | `path` | the file's bytes (`ArrayBuffer`); none for a folder |
-| `pending` | `seq` (auto) | `{op: "write" \| "mkdir" \| "remove" \| "rename", path, to?}`: a page change the worker has not mirrored yet |
+| `pending` | a key (auto) | `{op: "write" \| "mkdir" \| "remove" \| "rename", path, to?}`: the journal, a page change `/work` has not taken yet |
 
 ```ts
 interface FileStore {                                // the page's API: works with no worker, during a run, after a failed start
@@ -505,28 +505,31 @@ interface FileStore {                                // the page's API: works wi
   zip(): Promise<File>;                              // "Download all (.zip)": dofile-YYYY-MM-DD.zip (local date, F 7.2),
                                                      // stored (no compression), at most 65,535 entries and 4 GB
   onChange: (() => void) | null;                     // after each page change (not after a run's write); the tree re-lists
-  attach(post, opts: {onClosed, journal}): void;     // the client connects the store to its worker; journal false: no
-                                                     // pending rows (a worker with no store); onClosed: database closed
+  attach(sync: (() => void) | null, opts?: {onClosed}): void;   // the client connects the store to its live worker:
+                                                     // `sync` posts it the op `sync`; null: no worker, or one with no store
+                                                     // (no row is written then); onClosed: the browser closed the database
   blocked: boolean;                                  // set by the page in a tab without the lock: every change rejects
 }
 ```
 
 | Rule | Contract |
 |---|---|
-| Page change while a worker exists | One transaction changes `info` and `data` and adds a `pending` row; then the page posts the op with that `seq`. The worker applies it to `/work` and deletes the row. Whenever the worker copies from the store (`mount`, the after-run write), it reads the highest `pending` seq in the same transaction (`upTo`) and ignores mirror ops up to it. A mirror op that fails: `/work` takes the store's version, the row is deleted, `onFileError`. `rename` rejects when `to` exists or lies inside `from`; `write` rejects when the path is a folder or a parent is a file. |
-| Engine start | `mount` copies every record into `/work`, a plain in-memory folder, then clears `pending`. A restarted worker does the same: files come back, data in memory does not. |
-| After each run | Inside the `run` op, the worker lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone. `RunResult.files` lists what it wrote. Before the run it waits until the clock is past the newest mtime in the list that is not in the future (one clock step, up to 100 ms with a clamped clock), so a same-size rewrite is seen. A write the store refused is tried again by the next run. |
-| A page change during a run wins | After the run the worker reads `pending` and leaves those paths (both names of a rename) out of the difference: a changed path is left out when it is a pending path, under one, or above one (for a `mkdir` row: the path and the paths above it only). The store's records for those paths go into `/work`. A run's file under a folder the page removed, or under a folder's old name after a page rename, is not saved and is listed in `RunResult.skipped`; the other dropped cases are not listed (see `RunResult.skipped`). So after a save during a run that writes the same file, the store and `/work` both hold the user's text. |
+| Page change while a worker exists | **The journal is the only way a page change reaches `/work`.** One transaction changes `info` and `data` and adds a `pending` row; then the store calls `sync`, which posts the worker the op `sync`, with no arguments and no bytes. The worker, in one transaction, reads the `pending` rows, takes the store's version of those paths (the path and everything under it, both names of a rename; for a `mkdir` row, the folder) and clears the journal; then it puts that version into `/work`, replacing what `/work` had there. A sync that finds the journal empty (an earlier sync, a `mount` or a run's after-run write took it) does nothing. So the order in which the syncs arrive does not matter, and no change is applied twice: whichever sync or copy finds a row takes the store's version as it is then. A sync that `/work` cannot take is said on the console. Cost, accepted: the worker reads an upload back from the store, and a renamed folder is copied again, not renamed in place. `rename` rejects when `to` exists or lies inside `from`; `write` rejects when the path is a folder or a parent is a file. |
+| Page change with no worker | One transaction changes `info` and `data`; no row is written and nothing is posted. The next `mount` copies the whole store. |
+| Engine start | `mount` copies every record into `/work`, a plain in-memory folder, and clears `pending`, in one transaction. A restarted worker does the same: files come back, data in memory does not. |
+| After each run | Inside the `run` op, the worker lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone; in the same transaction it takes the journal, as `sync` does. A file counts as changed when its modification time or its size changed. Before the run the worker waits until the clock is past the newest mtime in the list that is not in the future (one clock step, up to 100 ms with a clamped clock): that makes the time enough for any write of one byte or more, which gets a later time than any file had (or, for a time in the future, another one), so a same-size rewrite is seen. The size catches a truncation (a file the run empties), which MEMFS does not stamp with a time. `RunResult.files` lists what it wrote. A write the store refused is tried again by the next run, unless the page changes that path first, or makes a folder where the run left a file (then the page's version wins in `/work` and the store, and nothing is owed for it). |
+| A page change during a run wins | The page's syncs wait behind the run in the worker's queue. The after-run write reads `pending` and leaves those paths (both names of a rename) out of the difference: a changed path is left out when it is a pending path, under one, or above one (for a `mkdir` row: the path and the paths above it only). The store's records for those paths go into `/work`, and the waiting syncs then find the journal empty. A run's file under a folder the page removed, or under a folder's old name after a page rename, is not saved and is listed in `RunResult.skipped`; the other dropped cases are not listed (see `RunResult.skipped`). So after a save during a run that writes the same file, the store and `/work` both hold the user's text. |
 | A run that is cut | A reset, a crash or a closed tab while the run's code is still running: nothing is written to the store. A reset that lands during the after-run write may leave that run's files in the store although the client reports rc 9998. |
 | Tab lock | The tab that holds the Web Lock `dofile-engine` (*proposed*) owns the engine. A tab that cannot get it shows the take-over dialog (section 5), starts no worker and writes nothing to the store (OQ-16). "Use dofile in this tab" takes the lock with `steal`; the tab that loses it ends its worker and shows the same dialog. A closed tab frees the lock. Without Web Locks (not a secure context: plain HTTP on a LAN, the dev server only) every tab owns the engine; accepted. |
 | Persistence | The page calls `navigator.storage.persist()` once at start (a browser may show its own prompt, `F1` branches) and puts `persisted()` in the `persisted` signal. |
-| Failures | A failed write (quota exceeded) rejects with the browser's error and keeps the old record; the tab stays unsaved. A failed after-run write sets `RunResult.store_error`. A worker that cannot open the store still mounts, with an empty `/work`, and sets the client's `storeError`. A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. None of these states is drawn: OQ-16. |
+| Failures | A failed write (quota exceeded) rejects with the browser's error, keeps the old record and writes no row; the tab stays unsaved. A failed after-run write sets `RunResult.store_error`. A worker that cannot open the store still mounts, with an empty `/work`, and sets the client's `storeError`; it cannot read the journal, so the client detaches the store from it: the page's changes stay in the store and do not reach `/work`. When the browser closes the database, the worker is replaced (`crashed`, cause `storage`). If another page deleted it ("Clear site data"), `/work` may hold files the store no longer has, which no row says, and the new worker's `mount` copies the store as it is now (empty, with what the page wrote since). If another page upgraded it to a newer version, this page still opens version 1, which fails (`VersionError`) in both threads: the new worker mounts with `storeError` and an empty `/work`, and the store is detached from it, as above. A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. None of these states is drawn: OQ-16. |
 
 **Tests step 2 must have** (Node with `fake-indexeddb` and the real `worker.js`, unless "e2e"):
 1. Store API: write, list, read, mkdir; rename and remove of a file and of a folder; a path that leaves the folder is refused;
    `list` reads no file bytes.
 2. No engine: every call works with no worker, while `mount` runs, and after a start that failed.
-3. Start copy: a run reads files written before the worker existed; a write posted during `mount` is not lost.
+3. Start copy: a run reads files written before the worker existed; a change made during `mount` is neither lost nor applied
+   twice.
 4. After-run difference: a run that creates, changes and deletes files leaves the store equal to `/work`; an untouched large
    file is not rewritten; a file the page added during the run is still in the store.
 5. A page save, delete and rename during a run that touches the same file: the store and `/work` hold the page's version.
@@ -540,6 +543,9 @@ interface FileStore {                                // the page's API: works wi
 12. Zip: every file with its folders, no `.dofile/`, made with no engine loaded.
 13. `persist()` is called once (`keepFiles(storage, onAnswer)` answers at once with `persisted()` and again when `persist()` is
     answered, since Firefox can leave it unanswered behind its prompt; a `persisted()` that rejects answers null); step 3 tests that a false value reaches the signal.
+14. The journal (step 3.5 D): each kind of change alone reaches `/work` and leaves no row; changes during a run (the page's
+    version wins; `skipped`); a change made with no worker, then a start; a sync when the journal is empty; the store closed
+    by the browser; a run's write the store refuses, then the next run.
 
 ## 8. State model (step 3)
 

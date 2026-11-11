@@ -25,7 +25,7 @@
 import { isStorageRefusal, openCache } from "./snapshot.ts";
 import type { Ending, Reply } from "./machine.ts";
 import type { FileStore } from "./store.ts";
-import type { About, Build, ClientError, Downloaded, FromWorker, MirrorOps, MountArgs, Op, Ops, Progress, ReadOps, RunResult, StartFiles, Startup,
+import type { About, Build, ClientError, Downloaded, FromWorker, MountArgs, Op, Ops, Progress, ReadOps, RunResult, StartFiles, Startup,
   Wheel } from "./types.ts";
 
 /** One file of the build's list of start files. */
@@ -72,7 +72,6 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   declare indexURL: string | undefined;
   declare snapshot: string | undefined;
   declare brotli: string | undefined;
-  declare onFileError: (error: ClientError, op: keyof MirrorOps, path: string) => void;
   declare store: Pick<FileStore, "attach"> | null;
   declare startFiles: string | (StartFiles & { base?: string }) | undefined;
   declare fetch: typeof globalThis.fetch;
@@ -92,21 +91,18 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // extraWheels: more wheels installed after the dofile one (web/wheels/: pyreadstat), each a URL or {name, bytes} like `wheel`
   // buildId: the page's build id (scripts/build-id.ts, compiled in by vite.config.ts); a build's list with another one is of
   //   another build, or (in development) of a stale snapshot, and is refused (checkBuild)
-  // store: the page's FileStore (store.ts). While a worker is live, the store sends it each change the page makes.
+  // store: the page's FileStore (store.ts). While a worker is live, the store tells it of each change the page makes.
   // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download(), build() and
   //   cached() need it
-  // onFileError(error, op, path): a change the page made to the store could not be put into the engine's folder; the
-  //   folder then has the store's version, unless that failed too (the next start has it).
   // fetch, caches, wasm: the browser's, unless the tests give their own
   constructor({ createWorker, wheel, extraWheels = [], buildId, indexURL, snapshot, brotli,
-    onFileError = (_error, _op, _path) => {}, store = null, startFiles = undefined,
+    store = null, startFiles = undefined,
     fetch = (...a) => globalThis.fetch(...a), caches = globalThis.caches, wasm = globalThis.WebAssembly }: {
     createWorker: () => Worker, wheel: Wheel, extraWheels?: Wheel[],
     buildId?: string, indexURL?: string, snapshot?: string, brotli?: string,
-    onFileError?: (error: ClientError, op: keyof MirrorOps, path: string) => void,
     store?: Pick<FileStore, "attach"> | null, startFiles?: string | (StartFiles & { base?: string }), fetch?: typeof globalThis.fetch,
     caches?: CacheStorage | null, wasm?: object | null }) {
-    Object.assign(this, { createWorker, wheel, extraWheels, buildId, indexURL, snapshot, brotli, onFileError, store, startFiles, fetch, caches, wasm });
+    Object.assign(this, { createWorker, wheel, extraWheels, buildId, indexURL, snapshot, brotli, store, startFiles, fetch, caches, wasm });
     this.nextId = 0;
     this.storeError = null;   // after a start: why the worker could not copy the files, if it could not
     this.about = null;     // what boot answered, after a start
@@ -302,15 +298,18 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       const what = String(e?.message ?? e);
       reply({ type: "crashed", cause: "error", reason: reasonOf({ name: e?.name, message: what }), detail: what });
     };
-    // The page's file changes go to this worker from now on (the store writes itself first). One that an end() cut off
-    // is not lost: the next worker copies the whole store. If the browser closes the database under the page (another
-    // page deleted it, "Clear site data"), its seqs may start again from 1, below what the worker has covered: that is
-    // `crashed` with cause "storage", so that a new worker copies the store as it is now.
-    const send: NonNullable<FileStore["post"]> = (op, args, transfer) => {
-      this.#send(live, op, args as Ops[typeof op]["args"], transfer).catch(e => { if (e.kind === "op") this.onFileError(e, op, (args.path ?? args.from)!); });
+    // The page's file changes reach this worker from now on: the store writes the change and a journal row first, then
+    // calls `sync`, and the worker takes the store's version of what the journal names. A sync that end() cuts off loses
+    // nothing: its row stays, and the next worker copies the whole store. If the browser closes the database under the
+    // page (another page deleted it, "Clear site data"), /work may hold files the store no longer has, which no journal
+    // row says: that is `crashed` with cause "storage", so that a new worker copies the store as it is now.
+    const sync = () => {
+      this.#send(live, "sync", undefined).catch((e: ClientError) => {
+        if (e.kind === "op") console.warn(`[dofile] the engine's folder could not take a change to your files: ${e.message}`);
+      });
     };
     const onClosed = () => reply({ type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
-    this.store?.attach(send, { onClosed });
+    this.store?.attach(sync, { onClosed });
     const mount: MountArgs = build && this.snapshot ? { indexURL: this.indexURL, brotli: this.brotli, snapshot: this.snapshot, built: build.built, files: build.files }
       : { indexURL: this.indexURL, brotli: this.brotli };
     // Two steps (see worker.ts), then where the start's time went. Every step goes through this worker's own record: one
@@ -326,8 +325,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       this.about = about;
       this.startup = startup;
       this.storeError = startup?.storeError ?? null;
-      // a worker with no store never deletes a `pending` row: the page's changes go to it without one
-      if (this.storeError) this.store?.attach(send, { onClosed, journal: false });
+      // A worker with no store cannot read the journal, so the page's changes cannot reach it: the store is detached, and
+      // writes no row that no worker would clear. The start's storeError has said the files are not saved.
+      if (this.storeError) this.store?.attach(null);
       reply({ type: "started" });
     }, (e: ClientError) => {
       // "op": mount, boot or startup failed in the worker. Any other kind: the worker was ended, and whoever ended it knows.
@@ -335,7 +335,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     });
   }
 
-  // End worker `n`: it is terminated, the store stops sending to it, and every call of it that is pending rejects with a
+  // End worker `n`: it is terminated, the store is detached from it, and every call of it that is pending rejects with a
   // ClientError of the ending's kind (`reason` is its message). With no live worker it does nothing (a start that failed
   // before a worker existed). With another worker live it throws: a bug in the caller.
   end(n: number, ending: Ending): void {
@@ -357,7 +357,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
     const live = this.#live;
     if (live?.n !== n) return Promise.reject(fail("the engine is not running", "no-engine"));
-    return this.#send(live, "run", args, [], onLog);
+    return this.#send(live, "run", args, onLog);
   }
 
   // Break: ask the run on worker `n` to stop at its next safe point (SIGINT in the shared buffer; the worker clears it
@@ -378,12 +378,12 @@ export class EngineClient implements Reader, Lifecycle, Builds {
 
   // THE ONE PLACE the worker is posted to. The call is kept in the worker's own record until it is answered or the
   // worker is ended; on a record that has ended it rejects at once with what end() said.
-  #send<K extends Op>(live: Live, op: K, args: Ops[K]["args"] | undefined, transfer: Transferable[] = [], onLog?: (text: string) => void): Promise<Ops[K]["result"]> {
+  #send<K extends Op>(live: Live, op: K, args: Ops[K]["args"] | undefined, onLog?: (text: string) => void): Promise<Ops[K]["result"]> {
     return new Promise((resolve, reject) => {
       if (live.ended) return reject(live.ended);
       const id = ++this.nextId;
       live.pending.set(id, { resolve, reject, onLog });
-      live.worker.postMessage({ id, op, args }, transfer);   // a ToWorker message
+      live.worker.postMessage({ id, op, args });   // a ToWorker message
     });
   }
 }

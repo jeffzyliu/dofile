@@ -30,7 +30,7 @@ export function nodeWorker({ store, oldDatabase = false, noDatabase = false }:
   { store?: FileStore, oldDatabase?: boolean, noDatabase?: boolean } = {}) {
   const channel = store && new MessageChannel();
   if (channel) {
-    channel.port1.on("message", async ({ n, method, args }: { n: number, method: "takeAll" | "done" | "applyRun", args: any[] }) => {
+    channel.port1.on("message", async ({ n, method, args }: { n: number, method: "takeAll" | "applyRun", args: any[] }) => {
       try {
         channel.port1.postMessage({ n, result: await (store![method] as (...a: any[]) => Promise<unknown>)(...args) });
       } catch (e: any) {

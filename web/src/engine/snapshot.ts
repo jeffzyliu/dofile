@@ -54,7 +54,7 @@ const SKIPS = [
   ['var init=moduleExports["__wasm_call_ctors"];if(init){', 'var init=moduleExports["__wasm_call_ctors"];if(init&&!__rec){'],
 ];
 
-// A snapshot that cannot be used (damaged, cut short, made for another Pyodide): worker.js passes the name on, and the page
+// A snapshot that cannot be used (damaged, cut short, made for another Pyodide): worker.ts passes the name on, and the page
 // decides from it, not from the text.
 const snapshotError = (message: string) => Object.assign(new Error(message), { name: "SnapshotError" });
 
@@ -82,7 +82,7 @@ const STORAGE_REFUSALS = new Set(["QuotaExceededError", "SecurityError", "NotAll
 export const isStorageRefusal = (e: any): boolean => STORAGE_REFUSALS.has(e?.name);
 
 // The Cache that holds one build's start files: the snapshot, the runtime, and what else the build's list names. The page
-// fills it (client.js, download) and the worker reads it. A rebuild has a new `built`; the older builds are dropped.
+// fills it (client.ts, download) and the worker reads it. A rebuild has a new `built`; the older builds are dropped.
 export async function openCache(caches: CacheStorage, built: number): Promise<Cache> {
   const name = `dofile-snapshot-${built}`;
   for (const other of await caches.keys()) if (other.startsWith("dofile-snapshot-") && other !== name) await caches.delete(other);

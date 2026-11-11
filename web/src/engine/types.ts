@@ -37,13 +37,11 @@ export interface ReadOps {
   files:         { args: void; result: FileInfo[] };            // /work as it is: for the tests, not for views
   read:          { args: { path: string }; result: Uint8Array };
 }
-/** Ops that copy a page change into /work. Sent only by the function the transport gives to store.attach.
- *  Step D deletes these four and the interface holds `sync` alone. */
+/** The op that brings the page's file changes into /work. Sent only by the function the transport gives to store.attach,
+ *  which the store calls after each change it has journalled. It carries nothing: the worker reads the journal (`pending`),
+ *  takes the store's version of those paths and clears the journal, in one transaction, then puts that version into /work. */
 export interface MirrorOps {
-  write:  { args: { path: string; data: Uint8Array; seq?: number }; result: void };
-  mkdir:  { args: { path: string; seq?: number }; result: void };
-  remove: { args: { path: string; seq?: number }; result: void };
-  rename: { args: { from: string; to: string; seq?: number }; result: void };
+  sync: { args: void; result: void };
 }
 export type Ops = LifecycleOps & ReadOps & MirrorOps;
 export type Op = keyof Ops;
@@ -141,8 +139,9 @@ export interface StartFiles {
   files: { path: string; size: number; compressed: number; download: boolean }[];
 }
 
-// ---- the file store (SPEC section 7; store.js) ----
+// ---- the file store (SPEC section 7; store.ts) ----
 
+/** A row of the journal (`pending`): a page change that /work has not taken yet. */
 export interface PendingRow { op: "write" | "mkdir" | "remove" | "rename"; path: string; to?: string }
 
 // ---- the snapshot (snapshot.js, scripts/make-snapshot.mjs) ----

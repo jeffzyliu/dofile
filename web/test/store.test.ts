@@ -93,7 +93,7 @@ test("list reads the info records only, never a file's bytes", async () => {
   assert.deepEqual(opened, [["info"]]);
 });
 
-test("with no worker nothing is journalled; with one, each change adds a pending row and then posts the op with its seq", async () => {
+test("with no worker nothing is journalled; with one, each change adds a pending row and then calls sync, with nothing in it", async () => {
   const store = fresh();
   await store.write("a.do", bytes("1"));
   await store.mkdir("d");
@@ -101,40 +101,35 @@ test("with no worker nothing is journalled; with one, each change adds a pending
   await store.remove("d");
   assert.deepEqual(await pendingRows(store), [], "no worker: no rows");
 
-  const posted: { op: string, args: Parameters<NonNullable<FileStore["post"]>>[1], transfer: Transferable[] }[] = [];
-  let rowsAtPost: Promise<PendingRow[]> | undefined;
-  store.attach((op, args, transfer) => { posted.push({ op, args, transfer }); rowsAtPost ??= pendingRows(store); });
+  const rowsAtSync: Promise<PendingRow[]>[] = [];
+  store.attach((...args: unknown[]) => { assert.deepEqual(args, [], "sync carries nothing"); rowsAtSync.push(pendingRows(store)); });
   let changes = 0;
   store.onChange = () => { changes++; };
   await store.write("a.do", bytes("12"));
-  assert.equal((await rowsAtPost)!.length, 1, "the row is in the store before the op is posted");
+  assert.deepEqual(await rowsAtSync[0], [{ op: "write", path: "a.do" }], "the row is in the store before sync is called");
   await store.mkdir("d/e");
   await store.rename("a.do", "d/b.do");
   await store.remove("d/e");
   assert.deepEqual(await pendingRows(store), [
     { op: "write", path: "a.do" }, { op: "mkdir", path: "d/e" }, { op: "rename", path: "a.do", to: "d/b.do" }, { op: "remove", path: "d/e" }]);
-  assert.deepEqual(posted.map(p => [p.op, p.args.seq]), [["write", 1], ["mkdir", 2], ["rename", 3], ["remove", 4]]);
-  assert.equal(text(posted[0].args.data!), "12");
-  assert.deepEqual(posted[0].transfer, [posted[0].args.data!.buffer], "the bytes are moved to the worker, not copied");
-  assert.deepEqual([posted[2].args.from, posted[2].args.to], ["a.do", "d/b.do"]);
+  assert.equal(rowsAtSync.length, 4, "one sync for each change");
   assert.equal(changes, 4);
 
-  // the worker's side: done(seq) drops one row; takeAll gives every record, the highest seq it covers, and empties the journal
-  await store.done(2);
-  assert.deepEqual((await pendingRows(store)).map(r => r.op), ["write", "rename", "remove"]);
+  // the worker's side: takeAll gives every record and empties the journal; applyRun([]) (the worker's sync) on an empty
+  // journal gives nothing to take
   const all = await store.takeAll();
   assert.deepEqual(all.infos.map(i => i.path), ["d", "d/b.do"]);
   assert.deepEqual(all.data.map(([path, data]) => [path, text(new Uint8Array(data))]), [["d/b.do", "12"]]);
-  assert.equal(all.upTo, 4, "the copy holds every change up to the newest row");
   assert.deepEqual(await pendingRows(store), []);
-  assert.equal((await store.takeAll()).upTo, 0, "an empty journal covers no op");
+  assert.deepEqual(await store.applyRun([]), { files: [], skipped: [], resync: { paths: [], infos: [], data: [], dirs: [] } });
   await store.mkdir("later");
-  assert.equal(posted.at(-1)!.args.seq, 5, "the seq goes on counting after the journal was emptied");
-  await store.done(5);
+  assert.deepEqual(await pendingRows(store), [{ op: "mkdir", path: "later" }], "a change after the copy is journalled again");
+  assert.deepEqual((await store.applyRun([])).resync, { paths: [], infos: [], data: [], dirs: ["later"] });
+  assert.deepEqual(await pendingRows(store), []);
 
-  // a refused change posts nothing and journals nothing
+  // a refused change calls nothing and journals nothing
   await assert.rejects(store.rename("nothing", "x"), /no such file/);
-  assert.equal(posted.length, 5);
+  assert.equal(rowsAtSync.length, 5);
   assert.deepEqual(await pendingRows(store), []);
 
   // a listener that throws does not undo a change that was made
@@ -169,14 +164,13 @@ test("the after-run write: the page's version of what it changed stays, is given
   await store.remove("dir");                             // pending 2: dir (and so dir/in.txt, dir/new.txt)
   await store.rename("old.txt", "new.txt");              // pending 3: old.txt and new.txt
   await store.write("deep/er/y.txt", bytes("page"));     // pending 4: deep/er/y.txt (deep and deep/er are above it)
-  const { files, skipped, upTo, resync } = await store.applyRun([
+  const { files, skipped, resync } = await store.applyRun([
     change("same.txt", "modified"), change("dir/in.txt", "modified"), change("dir/new.txt", "created"), change("old.txt", "modified"),
     change("new.txt", "created"), change("deep", "removed", true), change("deep/er", "removed", true), change("deep/er/x.txt", "removed"),
     change("free.txt", "modified"), change("made", "created", true), change("made/out.txt", "created")]);
   assert.deepEqual(files, [{ name: "deep/er/x.txt", status: "removed", bytes: 0 }, { name: "free.txt", status: "modified", bytes: 3 }, { name: "made/out.txt", status: "created", bytes: 3 }]);
   // only the run's files lost under a folder the page removed; the page's own file (same.txt, a rename's names) wins
   assert.deepEqual(skipped, ["dir/in.txt", "dir/new.txt"], "the run's files dropped with a folder the page removed");
-  assert.equal(upTo, 4);
   assert.deepEqual(await pendingRows(store), [], "the copy covers the four changes: their rows are gone");
   // the folders the run removed stay, since the page put a file under them
   assert.deepEqual(await paths(store), ["deep", "deep/er", "deep/er/y.txt", "free.txt", "made", "made/out.txt", "new.txt", "same.txt"]);
@@ -203,7 +197,7 @@ test("the after-run write: a folder the page made covers only itself; a chain of
   await store.rename("moved", "moved2");       // a folder renamed twice
   await store.write("q", bytes("page q"));     // the run puts a folder where the page has this file
   await store.write("file/under.txt", bytes("page"));   // the run puts a file where the page has this folder
-  const { files, skipped, upTo, resync } = await store.applyRun([
+  const { files, skipped, resync } = await store.applyRun([
     change("out", "created", true), change("out/t.txt", "created"), change("f.txt", "modified"),
     change("d", "removed", true), change("d/x.txt", "removed"), change("d/y.txt", "removed"),
     change("folder/a.txt", "modified"), change("folder/new.txt", "created"),
@@ -212,7 +206,7 @@ test("the after-run write: a folder the page made covers only itself; a chain of
   // under a folder the page renamed: listed. f.txt (the page renamed that file), q/inner.txt (under a file the page wrote)
   // and `file` (where the page has a folder) are dropped and not listed
   assert.deepEqual(skipped, ["folder/a.txt", "folder/new.txt"]);
-  assert.equal(upTo, 8);
+  assert.deepEqual(await pendingRows(store), [], "the eight rows are gone");
   assert.deepEqual(await paths(store), ["file", "file/under.txt", "moved2", "moved2/a.txt", "out", "out/t.txt", "q", "u.txt"]);
   assert.equal(text(await store.read("out/t.txt")), "run", "the run's file under the folder the page made is saved");
   assert.equal(text(await store.read("u.txt")), "page");
@@ -221,14 +215,14 @@ test("the after-run write: a folder the page made covers only itself; a chain of
   assert.deepEqual(names(resync.data), ["u.txt=page", "moved2/a.txt=page", "q=page q", "file/under.txt=page"]);
   assert.deepEqual(resync.dirs, ["out"]);
   // with no changes it is only the copy: nothing pending, nothing to take
-  assert.deepEqual(await store.applyRun([]), { files: [], skipped: [], upTo: 0, resync: { paths: [], infos: [], data: [], dirs: [] } });
+  assert.deepEqual(await store.applyRun([]), { files: [], skipped: [], resync: { paths: [], infos: [], data: [], dirs: [] } });
 });
 
 test("a transaction that aborts after its requests were taken rejects the write with its error and keeps the old record", async t => {
   const store = fresh();
   await store.write("keep.do", bytes("old text"));
   const posted: string[] = [];
-  store.attach(op => posted.push(op));
+  store.attach(() => posted.push("sync"));
   const undo = abortWrites(t);
   await assert.rejects(store.write("keep.do", bytes("new text, longer")), { name: "ConstraintError" });
   await assert.rejects(store.write("new/deep/file.do", bytes("x")), { name: "ConstraintError" });
@@ -255,7 +249,7 @@ test("a failing transaction rejects the page's write with the browser's error an
   const store = fresh();
   await store.write("keep.do", bytes("old text"));
   const posted: string[] = [];
-  store.attach(op => posted.push(op));
+  store.attach(() => posted.push("sync"));
   const undo = refuseWrites(t);
   await assert.rejects(store.write("keep.do", bytes("new text, longer")), { name: "QuotaExceededError" });
   await assert.rejects(store.write("new/deep/file.do", bytes("x")), { name: "QuotaExceededError" });
@@ -264,7 +258,7 @@ test("a failing transaction rejects the page's write with the browser's error an
   assert.equal(text(await store.read("keep.do")), "old text");
   assert.deepEqual((await store.list()).map(f => [f.path, f.size]), [["keep.do", 8]], "no half-made folders, no size of the refused write");
   assert.deepEqual(await pendingRows(store), [], "no row for a change that was not made");
-  assert.deepEqual(posted, [], "and no op to the worker");
+  assert.deepEqual(posted, [], "and no sync to the worker");
   await store.write("keep.do", bytes("new"));   // the store still works
   assert.equal(text(await store.read("keep.do")), "new");
 });
@@ -285,7 +279,7 @@ test("zip: every file with its folders, no engine, named with the date, and a re
   await store.write("data/raw/naïve données.csv", bytes("é,ü\n"));
   await store.write("empty.txt", new Uint8Array(0));
   await store.mkdir("out/empty-folder");
-  assert.equal(store.post, null, "no worker was ever attached");
+  assert.equal(store.sync, null, "no worker was ever attached");
   const zip = await store.zip();
   const d = new Date(), two = (n: number) => String(n).padStart(2, "0");
   assert.equal(zip.name, `dofile-${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}.zip`);

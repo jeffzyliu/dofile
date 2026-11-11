@@ -326,7 +326,7 @@ test("run sends its options; what an ended worker still says settles no call of 
 
 // ---- starts that fail, kinds of error ----
 
-const fakeStore = () => ({ post: undefined as FileStore["post"] | undefined, attach(post: FileStore["post"]) { this.post = post; } });
+const fakeStore = () => ({ sync: undefined as FileStore["sync"] | undefined, attach(sync: FileStore["sync"]) { this.sync = sync; } });
 // a client whose workers answer as `script` says; `workers` collects them
 function scripted(script: (message: Message, post: Post, port: FakePort, index: number) => unknown, more: Partial<ClientOptions> = {}) {
   const workers: FakePort[] = [];
@@ -354,12 +354,12 @@ test("a start that fails at mount or boot says start-failed with the reason; the
     const files = eng.query("files");   // a call made while it starts: never answered by this worker
     await assert.rejects(starting, { type: "start-failed", reason, detail: message });
     assert.equal(workers.length, 1, "no second try by itself");
-    assert.deepEqual([workers[0].terminated, eng.worker, typeof store.post], [false, workers[0], "function"], "the transport ends nothing by itself");
+    assert.deepEqual([workers[0].terminated, eng.worker, typeof store.sync], [false, workers[0], "function"], "the transport ends nothing by itself");
     eng.end(1, { kind: "failed", reason: message });   // the machine's FAIL
     await assert.rejects(files, { kind: "failed", message });
     assert.equal(workers[0].terminated, true, "the worker that could not start is ended");
     assert.equal(eng.worker, null);
-    assert.equal(store.post, null, "the store no longer sends the page's changes to it");
+    assert.equal(store.sync, null, "the store no longer tells it of the page's changes");
     await assert.rejects(eng.query("files"), { kind: "no-engine" });
   }
 });
@@ -387,7 +387,7 @@ test("start() with a worker still live throws; end() of another worker than the 
   assert.deepEqual(said, [], "a start that was ended says nothing");
   await new Promise<void>((ok, no) => eng.start(2, null, a => (a.type === "started" ? ok() : no(a))));
   assert.deepEqual(workers.map(w => w.terminated), [true, false]);
-  assert.equal(typeof store.post, "function", "the store sends to the new worker");
+  assert.equal(typeof store.sync, "function", "the store tells the new worker");
 });
 
 test("error kinds: an op's error keeps the worker's name; end() fails the pending calls with the ending's kind, the run too", async () => {
@@ -449,26 +449,35 @@ test("interrupt(n) puts SIGINT into the buffer the live worker was given at boot
   assert.equal(buffer[0], 0, "the worker was ended");
 });
 
-test("a page change the worker could not put into its folder reaches onFileError; a change cut by end() is not an error; a closed database is `crashed`, cause storage", async () => {
-  const store = { post: null as FileStore["post"], onClosed: null as null | (() => void),
-    attach(post: FileStore["post"], o: { onClosed?: null | (() => void) } = {}) { store.post = post; store.onClosed = o.onClosed ?? null; } };
-  const errors: [string, string, string, string, string][] = [];
+test("the store's sync posts `sync`, with nothing in it, to the live worker; a sync that fails or that end() cuts is not an error of the page's; a closed database is `crashed`, cause storage", async () => {
+  const store = { sync: null as FileStore["sync"], onClosed: null as null | (() => void),
+    attach(sync: FileStore["sync"], o: { onClosed?: null | (() => void) } = {}) { store.sync = sync; store.onClosed = o.onClosed ?? null; } };
+  const syncs: Message[] = [];
   const { eng } = scripted((m, post) => {
     if (starts(m, post)) return;
-    if (m.op === "write") post({ id: m.id, error: "write q: file system error EISDIR", name: "MirrorError" });
-  }, { store, onFileError: (error, op, path) => errors.push([error.name, error.kind, error.message, op, path]) });
+    if (m.op === "sync") { syncs.push(m); if (syncs.length === 1) post({ id: m.id, error: "file system error ENOTDIR", name: "ErrnoError" }); }
+  }, { store });
   const said: Said = [];
   await startWorker(eng, null, said);
-  store.post!("write", { path: "q", data: new Uint8Array(1), seq: 1 }, []);
-  await sleep(20);
-  assert.deepEqual(errors, [["MirrorError", "op", "write q: file system error EISDIR", "write", "q"]]);
-  store.onClosed!();   // the browser closed the database under the page
-  assert.deepEqual(said.at(-1), { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
-  store.post!("rename", { from: "a", to: "b", seq: 2 }, []);   // never answered: cut by the end
-  eng.end(1, { kind: "reset", reset: "crash", reason: "x" });
-  await sleep(10);
-  assert.equal(errors.length, 1);
-  assert.deepEqual([store.post, store.onClosed], [null, null], "detached: with no worker a closed database says nothing");
+  const warn = console.warn, warned: unknown[] = [];
+  console.warn = (...a: unknown[]) => { warned.push(a.join(" ")); };
+  try {
+    store.sync!();   // the worker answers it with an error: said on the console, and nothing else happens
+    await sleep(20);
+    assert.deepEqual(syncs.map(m => [m.op, m.args]), [["sync", undefined]], "one op, with no arguments");
+    assert.deepEqual(warned, ["[dofile] the engine's folder could not take a change to your files: file system error ENOTDIR"]);
+    store.onClosed!();   // the browser closed the database under the page
+    assert.deepEqual(said.at(-1), { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
+    store.sync!();   // never answered: cut by the end
+    await sleep(5);
+    eng.end(1, { kind: "reset", reset: "crash", reason: "x" });
+    await sleep(10);
+    assert.equal(syncs.length, 2);
+    assert.equal(warned.length, 1, "a sync cut by end() says nothing");
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual([store.sync, store.onClosed], [null, null], "detached: with no worker a closed database says nothing");
 });
 
 // ---- every failure has a kind ----
@@ -564,7 +573,7 @@ test("start: a worker that cannot be made is start-failed, reason unknown; the s
   const eng = new EngineClient({ wheel: "dofile.whl", store, createWorker: () => { throw new SyntaxError("the worker script is broken"); } });
   await assert.rejects(startWorker(eng), { type: "start-failed", reason: "unknown", detail: "the worker script is broken" });
   assert.equal(eng.worker, null);
-  assert.equal(store.post, undefined);
+  assert.equal(store.sync, undefined);
 });
 
 // The live worker's record keeps what end() said (`ended`). It is for the moment a step's answer and end() come in the
@@ -584,7 +593,7 @@ test("a start whose step is answered in the same tick as end(): nothing more is 
     assert.deepEqual(said, [], `${at}: not started, and not start-failed`);
     assert.deepEqual(sent.map(m => m.op), at === "mount" ? ["mount"] : ["mount", "boot", "startup"], `${at}: nothing was posted to the worker after it was ended`);
     assert.deepEqual([eng.about, eng.startup, eng.storeError], [null, null, null], `${at}: the facts are a live worker's`);
-    assert.equal(store.post, null, `${at}: the store is not attached again (a start that found no store attaches it without a journal)`);
+    assert.equal(store.sync, null, `${at}: the store is not attached again`);
     assert.deepEqual([eng.worker, workers[0].terminated], [null, true]);
   }
 });

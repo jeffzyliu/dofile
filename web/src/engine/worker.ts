@@ -1,7 +1,9 @@
 // The engine's Web Worker: Pyodide + the dofile wheel, the user's files in /work.
-// /work is a plain in-memory folder. The files live in dofile's own store in IndexedDB (store.js), which the page reads
-// and writes directly: "mount" copies the store into /work, the page's changes arrive as ops that mirror them into /work,
-// and after each run the worker writes what the run changed back to the store (docs/design/SPEC.md, section 7).
+// /work is a plain in-memory folder. The files live in dofile's own store in IndexedDB (store.ts), which the page reads
+// and writes directly: "mount" copies the store into /work; a page change is journalled in the store and the op "sync"
+// (with nothing in it) makes the worker take the store's version of what the journal names; after each run the worker
+// writes what the run changed back to the store, and takes the journal in the same transaction (docs/design/SPEC.md,
+// section 7).
 // Protocol (types.ts: Ops, ToWorker, FromWorker): the page posts {id, op, args}; the worker answers {id, result} or
 // {id, error, name}, one op at a time, posts {stage} (a typed id, never text for the page to match) as each start-up
 // stage begins and {id, log} chunks while a run prints. client.ts is the page's side. Python's side: src/dofile/browser.py.
@@ -17,7 +19,7 @@ import type { BootArgs, DescribeArgs, FileChange, FileInfo, LifecycleOps, Mirror
   Stage, Startup, ToWorker } from "./types.ts";
 
 /** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in for it (test/node-worker.ts). */
-type WorkerStore = Pick<FileStore, "takeAll" | "done" | "applyRun">;
+type WorkerStore = Pick<FileStore, "takeAll" | "applyRun">;
 declare global {
   var dofileStore: WorkerStore | undefined;   // the Node tests give the page's store (test/node-worker.ts)
 }
@@ -40,9 +42,6 @@ const ROOT = "/work", HIDDEN = ".dofile";
 let py: SnapshotPy, browser: Browser, interrupt: Int32Array | null = null, fromSnapshot = false;
 let queue = Promise.resolve();
 let store: WorkerStore | null = null, storeError = "";   // the file store, or why there is none
-// The page's changes with a seq up to this are in /work already: the worker copied the store after they were made
-// (at mount, or after a run), so their ops, still in the queue, are not applied again.
-let upTo = 0;
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
 let unsaved = new Map<string, { status: FileChange["status"], dir: boolean }>();
 
@@ -103,10 +102,8 @@ function putRecords({ infos, data }: { infos: FileInfo[], data: [IDBValidKey, Ar
 // empty, the start's summary says why (startup.storeError), and every run that writes a file says so too (store_error).
 async function copyStore() {
   try {
-    store = self.dofileStore ?? openStore();   // dofileStore: the Node tests give the page's store (test/node-worker.mjs)
-    const all = await store.takeAll();
-    upTo = all.upTo;
-    putRecords(all);
+    store = self.dofileStore ?? openStore();   // dofileStore: the Node tests give the page's store (test/node-worker.ts)
+    putRecords(await store.takeAll());
   } catch (e) {
     store = null;
     storeError = `the files are not saved: ${describe(e).message}`;
@@ -114,48 +111,42 @@ async function copyStore() {
   }
 }
 
-// What store.applyRun gives back besides the run's files: the page's version of what the page changed and /work has not
-// got yet (`resync`), and the seq those changes go up to. /work takes that version, and their ops are then skipped.
-function takePageVersion({ upTo: seq, resync }: AppliedRun) {
-  upTo = Math.max(upTo, seq);
+// What store.applyRun gives back besides the run's files (`resync`): the page's version of the paths the journal named,
+// which /work now takes. This is the one way a page change reaches /work.
+function takePageVersion({ resync }: AppliedRun) {
   for (const path of resync.paths) {
     if (exists(`${ROOT}/${path}`)) removeTree(`${ROOT}/${path}`);
     forget(path);   // /work has the store's version there now: a run's refused write to it is not owed any more
   }
+  // Where the store has a folder (above each record it gives, and at each folder the page made), /work may have a file:
+  // a run's that the store refused. mkdirTree would pass over it (it ignores EEXIST) and the write under it would fail.
+  for (const i of resync.infos) foldersAt(i.path, i.dir);
+  for (const path of resync.dirs) foldersAt(path, true);
   putRecords(resync);
   for (const path of resync.dirs) py.FS.mkdirTree(`${ROOT}/${path}`);
 }
 
-// a page change with this seq is in /work now: its `pending` row can go
-async function applied(seq: number | undefined) {
-  if (seq == null || !store) return;
-  await store.done(seq).catch(e => console.warn(`[dofile] pending ${seq}: ${describe(e).message}`));
-}
-
-// A change the page made: `apply` puts it into /work, then its `pending` row goes. The page wrote the store first.
-// An op the worker has covered already by a copy of the store (seq <= upTo) is not applied again. If it cannot be
-// applied (a file where a folder should go, no memory for a big upload), /work takes the store's version of everything
-// the page changed, the row goes all the same, and the op's error tells the page.
-async function mirror(what: string, seq: number | undefined, apply: () => void) {
-  if (seq != null && seq <= upTo) return;
-  try {
-    apply();
-  } catch (e) {
-    try {
-      if (store) takePageVersion(await store.applyRun([]));
-    } catch (again) {
-      console.warn(`[dofile] ${what}: ${describe(again).message}`);
+// The folders above `path` (and `path` itself, with `self`) are folders in the store: a file /work has at one of them goes,
+// and is not owed any more. The page's version wins, as everywhere else.
+function foldersAt(path: string, self: boolean) {
+  const parts = path.split("/");
+  for (let n = 1; n <= parts.length - (self ? 0 : 1); n++) {
+    const p = parts.slice(0, n).join("/"), full = `${ROOT}/${p}`;
+    if (exists(full) && !py.FS.isDir(py.FS.stat(full).mode)) {
+      py.FS.unlink(full);
+      forget(p);
     }
-    throw Object.assign(new Error(`${what}: ${describe(e).message}`), { name: "MirrorError" });
-  } finally {
-    await applied(seq);
   }
 }
 
 // After a run: what it did to /work, written to the store. `before`: walk() from before the run. Files the run created or
-// changed (size or time) are written, files that were there before and are gone are deleted, and the rest is not read at
-// all. The store leaves out what the page changed meanwhile, and /work then takes the page's version of that. Returns
-// RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again).
+// changed (another modification time or size) are written, files that were there before and are gone are deleted, and
+// the rest is not read at all. The store leaves out what the page changed meanwhile, and /work then takes the page's
+// version of that. Returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then
+// tries again).
+// Why the two: the wait in `run` makes the time enough for any write of one byte or more (it gets a time later than any
+// time in `before`, or, for a time in the future, another one). A truncation is not stamped by MEMFS (its setattr takes
+// no time with a size, and a write of 0 bytes sets none), so a run that empties a file changes only its size.
 async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[], skipped: string[], store_error?: string }> {
   const was = new Map(before.map(f => [f.path, f])), now = new Set<string>(), changes: RunChange[] = [];
   for (const f of walk(ROOT)) {
@@ -188,10 +179,10 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[], skipp
 }
 
 // Starting is two steps so the page can show the user's files early:
-//   mount: Pyodide itself and the files in /work. It is an ordinary queued op, so every file op posted after it waits
-//          for it (a write can't reach /work before the saved files have been loaded into it).
-//   boot:  the packages, the dofile wheel and the engine. It runs outside the queue, so file ops are answered while it
-//          loads; the ops that need the engine (run, describe, matrix) wait for it.
+//   mount: Pyodide itself and the files in /work. It is an ordinary queued op, so every `sync` posted after it waits
+//          for it (and then finds the journal that mount's copy emptied, or the rows written since).
+//   boot:  the packages, the dofile wheel and the engine. It runs outside the queue, so `sync`, `files` and `read` are
+//          answered while it loads; the ops that need the engine (run, describe, matrix) wait for it.
 let bootDone: { ok: () => void, err: (e: unknown) => void };
 const booted = new Promise<void>((ok, err) => { bootDone = { ok, err }; });
 booted.catch(() => {});   // the error reaches the page through boot's own answer
@@ -215,7 +206,7 @@ async function fetchBytes(url: string, cache?: Cache): Promise<Uint8Array<ArrayB
 }
 const fetchJSON = async (url: string, cache?: Cache) => JSON.parse(new TextDecoder().decode(await fetchBytes(url, cache)));
 
-// The Cache holding this build's start files (snapshot.js, openCache): the page's download() fills it; this worker only
+// The Cache holding this build's start files (snapshot.ts, openCache): the page's download() fills it; this worker only
 // reads it.
 async function snapshotCache(built: number, refused: (e: any) => void): Promise<Cache | undefined> {
   if (typeof caches === "undefined") { refused(Object.assign(new Error("there is no Cache API here (not a secure context?)"), { name: "NoCacheAPI" })); return undefined; }
@@ -431,8 +422,9 @@ const lifecycle: Handlers<LifecycleOps> = {
     if (interrupt) interrupt[0] = 0;   // a Break pressed while idle must not stop this run
     const before = walk(ROOT);
     // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets a
-    // later time: a rewrite with the same size is then still seen as a change. A time after now (a file from a clock that
-    // was ahead) is left out: any rewrite changes it anyway.
+    // later time than any file had before: saveRun then tells any write of one byte or more by the time, a same-size
+    // rewrite too (a truncation, which MEMFS does not stamp, it tells by the size). A time after now (a file from a clock
+    // that was ahead) is left out: any rewrite changes it anyway.
     const now = Date.now(), newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
     while (Date.now() <= newest) { /* one clock step (up to 100 ms with a clamped clock) */ }
     const t0 = performance.now();
@@ -469,35 +461,17 @@ const read: Handlers<ReadOps> = {
   read: ({ path }: { path: string }) => py.FS.readFile(inRoot(path)),
 };
 
-// The page's changes (see mirror), sent by the function the transport gives the store. Each is safe to apply twice.
-const mirrored: Handlers<MirrorOps> = {
-  write: ({ path, data, seq }: { path: string, data: Uint8Array, seq?: number }) => mirror(`write ${path}`, seq, () => {
-    const full = inRoot(path);
-    py.FS.mkdirTree(py.PATH.dirname(full));
-    py.FS.writeFile(full, data, { canOwn: true });   // the bytes were moved here: no copy
-    forget(path);
-  }),
-  mkdir: ({ path, seq }: { path: string, seq?: number }) => mirror(`mkdir ${path}`, seq, () => { py.FS.mkdirTree(inRoot(path)); }),
-  remove: ({ path, seq }: { path: string, seq?: number }) => mirror(`remove ${path}`, seq, () => {
-    const full = inRoot(path);
-    if (full === ROOT) throw new Error("cannot remove the working folder");
-    if (exists(full)) removeTree(full);
-    forget(path);
-  }),
-  rename: ({ from, to, seq }: { from: string, to: string, seq?: number }) => mirror(`rename ${from}`, seq, () => {
-    const src = inRoot(from), dest = inRoot(to);
-    if (!exists(src)) return;   // applied already
-    if (exists(dest)) removeTree(dest);
-    py.FS.mkdirTree(py.PATH.dirname(dest));
-    py.FS.rename(src, dest);
-    forget(to);
-    for (const [p, failed] of [...unsaved]) {   // what the store still owes for the old name, it owes for the new one
-      if (within(p, from)) { unsaved.delete(p); unsaved.set(to + p.slice(from.length), failed); }
-    }
-  }),
+// The page's changes, told by the function the transport gives the store: the store's version of what the journal names
+// (the journal is emptied in the same transaction). A sync that finds the journal empty (a run's after-run write or an
+// earlier sync took it) does nothing. With no store (mount could not open it) there is no journal to read, and the
+// transport attaches none: a sync that arrives before it knows that does nothing.
+const pageChanges: Handlers<MirrorOps> = {
+  async sync() {
+    if (store) takePageVersion(await store.applyRun([]));
+  },
 };
 
-const ops = { ...lifecycle, ...read, ...mirrored };
+const ops = { ...lifecycle, ...read, ...pageChanges };
 
 // One op, answered: {id, result}, or {id, error, name}. An op with no arguments is given {}.
 const answer = async ({ id, op, args }: ToWorker) => {
@@ -513,7 +487,7 @@ const answer = async ({ id, op, args }: ToWorker) => {
 
 // answers: FromWorker
 self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
-  if (data.op === "boot") {   // outside the queue, so file ops are answered while the engine loads
+  if (data.op === "boot") {   // outside the queue, so `sync`, `files` and `read` are answered while the engine loads
     const { id } = data;
     Promise.resolve(lifecycle.boot(data.args, id)).then(about => { bootDone.ok(); self.postMessage({ id, result: about }); },
       e => { bootDone.err(e); const { message, name } = describe(e); self.postMessage({ id, error: message, name }); });

@@ -25,7 +25,7 @@ if (workerData.storePort) {
     error ? err(Object.assign(new Error(error.message), { name: error.name })) : ok(result);
   });
   const remote = (method: string) => (...args: unknown[]) => new Promise((ok, err) => { waiting.set(++n, { ok, err }); port.postMessage({ n, method, args }); });
-  globalThis.dofileStore = Object.fromEntries(["takeAll", "done", "applyRun"].map(m => [m, remote(m)])) as unknown as typeof globalThis.dofileStore;
+  globalThis.dofileStore = Object.fromEntries(["takeAll", "applyRun"].map(m => [m, remote(m)])) as unknown as typeof globalThis.dofileStore;
 } else if (!workerData.noDatabase) {   // noDatabase: no IndexedDB at all, as in a browser that refuses storage
   await import("fake-indexeddb/auto");
   if (workerData.oldDatabase) {

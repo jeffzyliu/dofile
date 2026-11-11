@@ -68,7 +68,7 @@ being replaced had been ready.
 | Question | Answer | Main alternative, and why not |
 |---|---|---|
 | A. The right ticket on every event | A `Ticket` is a branded type that only the machine can make. A performer never writes one: it gets a `reply` function bound to its effect's ticket and typed to the events that effect may be answered with. Every event that changes nothing is recorded, and the tests assert the record (item 5). | A branded type per kind (`WorkerNo`, `DownloadNo`): with bound replies a performer cannot choose a ticket at all, so the kinds add types and no safety. |
-| B. Operations outside the machine | The op map is three sets: `LifecycleOps`, `ReadOps`, `MirrorOps`. The transport's `query` takes only `ReadOps`; the lifecycle ops leave the transport only through its `Lifecycle` interface, which only the effect performer holds. The compiler proves who can send what; that a read op changes nothing is declared and tested, not proved (item 7.2). A read op with no worker is rejected with kind `no-engine`; during a run it waits in the worker's queue, as today. | Reject a read op during a run with a new kind: the worker's queue already gives the right answer (the data as the run left it), and every view would have to ask again. |
+| B. Operations outside the machine | The op map is three sets: `LifecycleOps`, `ReadOps`, `MirrorOps` (since step D the one op `sync`). The transport's `query` takes only `ReadOps`; the lifecycle ops leave the transport only through its `Lifecycle` interface, which only the effect performer holds. The compiler proves who can send what; that a read op changes nothing is declared and tested, not proved (item 7.2). A read op with no worker is rejected with kind `no-engine`; during a run it waits in the worker's queue, as today. | Reject a read op during a run with a new kind: the worker's queue already gives the right answer (the data as the run left it), and every view would have to ask again. |
 | C. Does a failed save reach the machine? | Only one does, as today: the browser closing the database, as `crashed` with cause `storage`, because its remedy is a new worker. Every other store failure stays with the caller, the run's result or the transport; the machine has no event for it (item 7.3). | A `save-failed` event and a flag in the state: no transition would read it. |
 | D. Should `break` and `keep-waiting` move to `web/src/app/run.ts`? | No: one machine. The run's events are grouped in one table (table E), which reads as the run's own small machine (item 4.4). | A second machine nested under `ready`: every engine event during a run (a crash, a reset, the lock lost) would need a protocol between the two, with an order to keep, which is the kind of contract this step removes. |
 | The list fetch in a snapshot start | The machine owns it as a step of a restart, with a ticket: the state `starting-list`, the effect `fetch-list`, the events `list-checked` and `list-failed`. A start the visitor begins reuses the list `download()` has just checked. The transport's `start` has no hidden `await` (items 1, 4). | Keep the fetch inside the transport's `start`: the transport would then decide, after an `await`, whether to make a worker, with its own counter. |
@@ -1198,6 +1198,9 @@ const mirror: Handlers<MirrorOps> = { write, mkdir, remove, rename };
 const ops = { ...lifecycle, ...read, ...mirror };
 ```
 
+Step D: `MirrorOps` holds one op, `sync: { args: void; result: void }`, and the worker's third object is
+`pageChanges: Handlers<MirrorOps> = { sync }`.
+
 `OpResults` (`web/src/engine/types.ts:72-76`) is deleted: `Ops` says the same and more. The name `ReadOps` stays; its
 comment says "declared".
 
@@ -1324,7 +1327,8 @@ not lifecycle (no state depends on them). They are the third set, `MirrorOps`, w
 `start()` gives to `store.attach`, typed to `keyof MirrorOps`. The store is attached exactly while a worker is live;
 `end()` detaches it, and a change made with no worker is copied by the next `mount`, as today. Step D changes
 `MirrorOps` to `sync` alone and deletes that function's arguments, the four handlers in the worker and `onFileError`;
-nothing in the machine, the controller, `ReadOps` or `LifecycleOps` changes.
+nothing in the machine, the controller, `ReadOps` or `LifecycleOps` changes. (Step D did so. The function sends `sync`
+with no arguments, so the cast in it went too; a `sync` that the worker answers with an error is said on the console.)
 
 ### 7.3 A failed save and the machine
 
@@ -1333,9 +1337,9 @@ nothing in the machine, the controller, `ReadOps` or `LifecycleOps` changes.
 | Failure | What happens today | Must the machine know? |
 |---|---|---|
 | The store refuses a page change (quota, the store blocked, a bad path) | `store.write` and the others reject with the browser's error; the transaction keeps nothing, no `pending` row is written and nothing is posted (`web/src/engine/store.ts:136-148`). | **No.** `/work` and the store still agree. It is the caller's business (4b's `save-failed` banner, 4a's upload). |
-| The store took a page change but the worker could not put it into `/work` (`MirrorError`) | The worker takes the store's version of what the page changed; `onFileError` is called, and nothing in the page listens (`web/src/engine/worker.ts:137-151`, `web/src/engine/client.ts:325-327`). | **No.** No state depends on it. `onFileError` stays inside the transport, untouched; step D deletes it with `MirrorError`. |
+| The store took a page change but the worker could not put it into `/work` (`MirrorError`) | The worker takes the store's version of what the page changed; `onFileError` is called, and nothing in the page listens (`web/src/engine/worker.ts:137-151`, `web/src/engine/client.ts:325-327`). | **No.** No state depends on it. `onFileError` stays inside the transport, untouched; step D deletes it with `MirrorError`. (Step D: deleted. A `sync` that `/work` cannot take is said on the console.) |
 | The store refuses a run's files (`store_error`) | The result carries `store_error`; the worker remembers the paths and the next run writes them (`web/src/engine/worker.ts:157-186`). `run.ts` keeps it on the run's log item. | **No.** It travels inside `RunResult`, which the machine passes on unread. |
-| The worker cannot open the store at `mount` | The engine runs; `startup.storeError` says why; the transport attaches the store without a journal (`web/src/engine/client.ts:344-346`). | **No.** `started` is the same event either way. |
+| The worker cannot open the store at `mount` | The engine runs; `startup.storeError` says why; the transport attaches the store without a journal (`web/src/engine/client.ts:344-346`). Step D: such a worker cannot read the journal, so the transport detaches the store from it, and the page's changes do not reach its `/work`. | **No.** `started` is the same event either way. |
 | The browser closes the database under the page | The worker is restarted, kind `crash`, "the browser closed the file storage", counted like a crash (`web/src/engine/client.ts:321-329`). | **Yes.** The remedy is a new worker that copies the store afresh, which is a transition. It is `crashed {cause: "storage"}`, raised through the live worker's `reply`; with no worker nothing is raised, since the next start copies the store anyway. |
 
 So the machine knows of one store failure, and only as a cause of `crashed` with its own reason text. A `save-failed`
@@ -1344,7 +1348,9 @@ the rejection of `store.write`) it has already.
 
 For step D: with the journal as the only channel, the reason the code gives for this restart (the seqs may start again
 below `upTo`) is gone. Whether a closed database still needs a new worker is D's question. If not, D deletes the
-`storage` member of `cause`, its reason string and the `onClosed` wiring, and nothing else.
+`storage` member of `cause`, its reason string and the `onClosed` wiring, and nothing else. (Step D kept the restart, with
+its test, and left the question to the maintainer: a deleted database still leaves `/work` with files the store no longer
+has, which no journal row can say, so something must copy the whole store again.)
 
 ### 7.4 Single instances
 

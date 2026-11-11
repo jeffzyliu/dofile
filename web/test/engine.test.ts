@@ -1,9 +1,12 @@
 // The engine worker and the transport, run in Node: worker.ts in a worker thread (as a browser Web Worker), Pyodide, the
 // built dofile wheel. Run `uv build --wheel` in the repo first. No state machine here: the test starts and ends the
-// workers itself (harness.ts, startWorker), as the machine's effects would. These tests use the worker's own file ops,
-// which are views of /work; the file store and the page's side of the files are in files.test.ts and store.test.ts.
+// workers itself (harness.ts, startWorker), as the machine's effects would. The page's file changes go through a store in
+// this thread (fake-indexeddb), as in the page: its journal and the op `sync` (files.test.ts has the store with a running
+// engine in full, store.test.ts the store alone); `files` and `read` are the worker's views of /work.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
 import { Worker } from "node:worker_threads";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,10 +14,10 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { EngineClient } from "../src/engine/client.ts";
 import { about, buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
-import { live, runOn, startWorker } from "./harness.ts";
+import { openStore } from "../src/engine/store.ts";
+import { endWorkers, live, nodeWorker as storeWorker, runOn, startWorker } from "./harness.ts";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
 import type { Answer } from "../src/engine/machine.ts";
-import type { FileStore } from "../src/engine/store.ts";
 import type { DataSummary, Matrix, ReadOps } from "../src/engine/types.ts";
 
 /** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
@@ -30,6 +33,7 @@ const extraWheels = readdirSync(`${root}/web/wheels`).filter(f => f.endsWith(".w
 // `eng.worker.terminate()` at the end of its test, and a live worker keeps the process (and so `npm test`) from exiting.
 const started = new Set<Worker>();
 after(() => { for (const w of started) w.terminate(); });
+after(endWorkers);
 
 function nodeWorker() {
   const w = new Worker(new URL("./node-worker.ts", import.meta.url),
@@ -42,13 +46,11 @@ function nodeWorker() {
   return port as typeof port & globalThis.Worker;   // what client.ts wants of a (Web) Worker
 }
 
-// The page's store as the transport sees it, without a database: `change` sends a file op to the live worker the way the
-// store does (the mirror ops have no other sender), with no seq, so the worker applies it and keeps no journal. The ops
-// are answered in order, so a `files` or `read` asked after a change sees it.
+// The page's store, in a fresh database of this thread, and a worker that uses it (harness.ts). A change resolves once
+// its `sync` is posted, and the worker answers in order, so a `files` or `read` asked after it sees the change.
 function pageStore() {
-  const store = { post: null as FileStore["post"], attach(post: FileStore["post"]) { store.post = post; } };
-  const change = (...[op, args]: Parameters<NonNullable<FileStore["post"]>>) => store.post!(op, args, []);
-  return { store, change };
+  const store = openStore({ indexedDB: new IDBFactory() });
+  return { store, createWorker: () => storeWorker({ store }) };
 }
 // Everything about the engine that a visitor's code or the page can observe, gathered with the read ops and one run of
 // commands that change nothing (the probe). What it does not see: a change below a variable's display format (the values
@@ -89,20 +91,20 @@ const READ_ARGS: { [K in keyof ReadOps]: ReadOps[K]["args"][] } = {
 const stagesOf = (said: Answer<"start-worker">[]) => said.map(a => (a.type === "stage" ? a.stage : a.type));
 
 test("engine worker: files, run, describe, matrix, Break, a new worker after end()", { timeout: 180_000 }, async t => {
-  const said: Answer<"start-worker">[] = [], { store, change } = pageStore();
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, store });
+  const said: Answer<"start-worker">[] = [], { store, createWorker } = pageStore();
+  const eng = new EngineClient({ createWorker, wheel, extraWheels, store });
   await startWorker(eng, null, said);
   assert.match(JSON.stringify(eng.about), /opendta/i);
   assert.deepEqual(stagesOf(said), ["python", "files", "packages", "engine", "started"], "typed stage ids, then started");
 
   await t.test("files: write, list, read, rename, remove, and nothing outside /work", async () => {
-    change("write", { path: "data/cps.dta", data: readFileSync(`${root}/tests/conformance/data/cps.dta`) }, []);
-    change("write", { path: "notes.txt", data: new TextEncoder().encode("hi") }, []);
+    await store.write("data/cps.dta", readFileSync(`${root}/tests/conformance/data/cps.dta`));
+    await store.write("notes.txt", new TextEncoder().encode("hi"));
     const files = await eng.query("files");
     assert.deepEqual(files.map(f => f.path).sort(), ["data", "data/cps.dta", "notes.txt"]);
     assert.equal(new TextDecoder().decode(await eng.query("read", { path: "notes.txt" })), "hi");
-    change("rename", { from: "notes.txt", to: "old/notes.txt" }, []);
-    change("remove", { path: "old" }, []);
+    await store.rename("notes.txt", "old/notes.txt");
+    await store.remove("old");
     assert.deepEqual((await eng.query("files")).map(f => f.path).sort(), ["data", "data/cps.dta"]);
     await assert.rejects(eng.query("read", { path: "../etc/passwd" }), /not in the working folder/);
   });
@@ -225,15 +227,15 @@ test("a worker that fails to load says `crashed`; after end() the next start fin
 });
 
 test("files can be listed, written and read while the engine is still loading, and a run sees them", { timeout: 180_000 }, async () => {
-  const { store, change } = pageStore();
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, store });
+  const { store, createWorker } = pageStore();
+  const eng = new EngineClient({ createWorker, wheel, extraWheels, store });
   const starting = startWorker(eng);   // not awaited: the page shows the files without waiting for this
   let booted = false;
   starting.then(() => { booted = true; });
-  // posted straight after start(): they queue behind "mount" in the worker, so the order holds without waiting
-  const before = eng.query("files");
-  change("write", { path: "early.do", data: new TextEncoder().encode("display 6*7") }, []);
-  assert.deepEqual(await before, []);
+  // written straight after start(): mount's copy has it, or its sync (queued behind mount) brings it, so the ops asked
+  // after it see it either way
+  await store.write("early.do", new TextEncoder().encode("display 6*7"));
+  assert.deepEqual((await eng.query("files")).map(f => f.path), ["early.do"]);
   assert.equal(new TextDecoder().decode(await eng.query("read", { path: "early.do" })), "display 6*7");
   assert.equal(booted, false, "the files were answered before the engine finished loading");
   // a run asked for before the engine is up waits for it (it does not fail)
@@ -261,8 +263,8 @@ test("engine from a memory snapshot: native code, graphs, files, Break; the work
   const bare = mkdtempSync(join(tmpdir(), "dofile-snapshot-"));
   after(() => rmSync(bare, { recursive: true, force: true }));
   for (const f of readdirSync(snapshotDir)) if (f !== "manifest.json") symlinkSync(`${snapshotDir}${f}`, join(bare, f));
-  const said: Answer<"start-worker">[] = [], { store, change } = pageStore();
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, buildId: buildId(STAMP, current), startFiles: startFiles!,
+  const said: Answer<"start-worker">[] = [], { store, createWorker } = pageStore();
+  const eng = new EngineClient({ createWorker, wheel, extraWheels, buildId: buildId(STAMP, current), startFiles: startFiles!,
     snapshot: `${pathToFileURL(bare).href}/`, store });
   const t0 = performance.now();
   const build = await eng.build();   // the list, checked: what mount needs of it
@@ -278,7 +280,7 @@ test("engine from a memory snapshot: native code, graphs, files, Break; the work
     assert.match(r.log, /B=\s+2\.00000000|B=\s+1\.99\d+|B=\s+2\.0\d+/);
     assert.match(r.log, /\.97500\d+/);
     assert.equal(r.images.length, 1);
-    change("write", { path: "notes.txt", data: new TextEncoder().encode("hi") }, []);
+    await store.write("notes.txt", new TextEncoder().encode("hi"));
     assert.equal(new TextDecoder().decode(await eng.query("read", { path: "notes.txt" })), "hi");
   });
 

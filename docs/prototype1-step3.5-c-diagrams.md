@@ -95,8 +95,8 @@ signals; a view asks only for what it alone shows, a matrix by name or a `.dta` 
 never reach the machine. With no worker a read op is rejected (kind `no-engine`); during a run
 it waits in the worker's queue; if its worker is ended it is rejected with the ending's kind. Only `perform` holds the
 transport's `Lifecycle` interface, so nothing else can send `mount`, `boot`, `startup` or `run`. The page's file
-changes (`write`, `mkdir`, `remove`, `rename`) go from the store to the worker through a function the transport gives
-the store; they are not drawn.
+changes are journalled in the store, which then calls a function the transport gave it; that function posts the worker
+the op `sync`, with nothing in it (step D). They are not drawn.
 
 ## 2. The states
 

@@ -45,6 +45,9 @@ and plainly so. Today:
 5. **The journal is the only channel** from the page's file changes to `/work` (the simpler design below).
 6. **A run's changes are found by modification time alone.** The size comparison is dropped; the wait before each run
    (until the clock is past the newest file) stays, since it is what makes the time enough.
+   *Revised 2026-11-11, after step D's review:* the size comparison stays beside the time. The wait makes the time
+   enough for any write of one byte or more, but Pyodide's file system does not stamp a truncation, so a run that
+   empties a file changes only its size.
 7. The IndexedDB code may stay detailed, as long as it is tested thoroughly against an in-memory database
    (`fake-indexeddb`, which the tests use already). Simpler is better.
 
@@ -59,7 +62,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | B | One build identity; no offline; a failed download is `failed` | done |
 | B2 | The build id covers the whole build; a stale snapshot fails the build; `manifest.json` is not deployed | done |
 | C | The state machine in one file; the contracts enforced | done |
-| D | The journal as the only channel; mtime only | not started |
+| D | The journal as the only channel; a run's changes found by time and size | done |
 | E | Docs: SPEC sections 5 to 8, `web/CLAUDE.md`, `web-engine-data-flow.md` revised to the code as built | not started |
 
 Run A first and alone (it touches every file). B, B2, C and D in that order: each is smaller after the one before. After
@@ -188,6 +191,9 @@ Wanted: one way.
   copied again where today it is renamed in place.
 - Change detection after a run: modification time only. Remove the size comparison in `saveRun`; keep the wait before
   the run and say in one comment why it is enough.
+  Found in step D's review (2026-11-11): MEMFS does not stamp a truncation with a time, so a run that empties a file
+  changes only its size (test: `web/test/files.test.ts`, "a run that empties a file"); the size comparison is kept beside
+  the time. The maintainer ruled the same day that it stays (decision 6, revised).
 - Tests (against `fake-indexeddb`): each kind of change alone; changes made during a run (the page's version wins;
   `skipped`); a change made with no worker, then a start; a `sync` when the journal is empty; the store closed by the
   browser; a run's write the store refuses (`unsaved`), then the next run.

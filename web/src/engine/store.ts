@@ -1,30 +1,30 @@
 // The user's files: dofile's own store in IndexedDB, one record per file or folder (docs/design/SPEC.md, section 7).
-// The page works on it directly, with no engine, during a run and after a failed start. The worker (worker.js) copies it
+// The page works on it directly, with no engine, during a run and after a failed start. The worker (worker.ts) copies it
 // into /work when it starts and writes back what each run changed.
 //   info:    path -> { path, dir, size, mtime }    one record per file or folder
 //   data:    path -> ArrayBuffer                    a file's bytes
-//   pending: seq  -> { op, path, to? }              a page change the worker has not put into /work yet
+//   pending: key  -> { op, path, to? }              the journal: a page change that /work has not taken yet
 // The old Emscripten IDBFS database (named "/work") is another database: nothing here opens it.
 //
-// How the page's changes reach /work. The page writes the store first (the records and a `pending` row, one
-// transaction), then posts the op with the row's seq, and the worker applies it to /work and deletes the row. The worker
-// also copies from the store: everything when it starts (takeAll), and after a run the paths the page changed meanwhile
-// (applyRun). Each copy reads the highest seq in `pending` in the same transaction (`upTo`) and empties the journal:
-// the copy already holds every change up to that seq, so the worker ignores the ops with a seq up to it.
+// How the page's changes reach /work: one way, the journal. While a worker is live, a page change writes its records
+// and a `pending` row in one transaction, then calls `sync` (the transport's), which posts the worker the op `sync`, with
+// nothing in it. The worker then reads the journal in one transaction (applyRun with no changes): the store's version of
+// every path in it, and the journal emptied. After a run, applyRun does the same in the transaction that writes the
+// run's files. When it starts, the worker copies everything and empties the journal (takeAll). So /work takes the
+// store's version of a path, whichever message or copy finds its row first; a sync that finds the journal empty does
+// nothing, and the order in which the syncs arrive does not matter.
 import { zipParts } from "./zip.ts";
 import type { FileChange, FileInfo, PendingRow } from "./types.ts";
 
 /** What a run did to one path in /work (worker.ts saveRun), for applyRun. `data`: a file's bytes, unless removed. */
 export interface RunChange { path: string; dir: boolean; size: number; mtime: number; status: FileChange["status"]; data?: Uint8Array }
-/** What takeAll gives the worker: every record, and the highest seq the copy covers. */
-export interface StoreCopy { infos: FileInfo[]; data: [IDBValidKey, ArrayBuffer][]; upTo: number }
+/** What takeAll gives the worker: every record. */
+export interface StoreCopy { infos: FileInfo[]; data: [IDBValidKey, ArrayBuffer][] }
 /** What applyRun gives back (see there). */
 export interface AppliedRun {
-  files: FileChange[]; skipped: string[]; upTo: number;
+  files: FileChange[]; skipped: string[];
   resync: { paths: string[]; infos: FileInfo[]; data: [string, ArrayBuffer][]; dirs: string[] };
 }
-/** A page change's arguments, as posted to the worker (with its seq). */
-type ChangeArgs = { path?: string; from?: string; to?: string; data?: Uint8Array };
 
 export const DB_NAME = "dofile";
 const HIDDEN = ".dofile";   // the engine's own folder: never listed, copied or zipped
@@ -88,25 +88,25 @@ function open(factory: IDBFactory | null | undefined, closed: () => void) {
 export class FileStore {
   declare factory: IDBFactory | null | undefined;
   declare opened: Promise<IDBDatabase> | undefined;
-  declare post: null | ((op: PendingRow["op"], args: ChangeArgs & { seq?: IDBValidKey }, transfer: Transferable[]) => void);
+  declare sync: null | (() => void);
   declare blocked: boolean;
   declare onChange: null | (() => void);
   declare onClosed: null | (() => void);
-  declare journal: boolean;
   constructor(factory: IDBFactory | null | undefined) {
     this.factory = factory;
     this.opened = undefined;   // the open database, once asked for
-    this.post = null;      // sends the op to the worker; null while there is no worker
+    this.sync = null;      // tells the live worker to take the journal; null while there is none
     this.blocked = false;  // true in a tab that does not own the files (the tab lock): it writes nothing
     this.onChange = () => {};   // called after every change this page made
     this.onClosed = null;   // the engine client's: called when the browser closed the database under us
-    this.journal = true;    // false: the worker has no store of its own, so it would never delete a `pending` row
   }
 
-  // The engine client calls this when a worker starts (and with null when it is gone for good). `onClosed`: called when
-  // the browser closes the database (another page deleted or upgraded it, "Clear site data"): the seqs may start again
-  // from 1, so the worker must copy the store afresh. `journal`: as above.
-  attach(post: FileStore["post"], { onClosed = null, journal = true }: { onClosed?: null | (() => void); journal?: boolean } = {}) { Object.assign(this, { post, onClosed, journal }); }
+  // The engine client calls this when a worker starts, and with null when the worker is gone (or has no store of its own,
+  // so it could never read the journal). While `sync` is null, a change writes no `pending` row: the next worker copies
+  // the whole store. `onClosed`: called when the browser closes the database (another page deleted or upgraded it,
+  // "Clear site data"): /work then holds files the store may no longer have, which the journal cannot say, so the
+  // worker must copy the store afresh.
+  attach(sync: FileStore["sync"], { onClosed = null }: { onClosed?: null | (() => void) } = {}) { Object.assign(this, { sync, onClosed }); }
 
   // One transaction. It rejects with the browser's error if it fails, and then nothing of it is kept. A database the
   // browser closed is opened again by the next call.
@@ -131,18 +131,17 @@ export class FileStore {
     }
   }
 
-  // A change made by the page: the records and, when a worker exists, a `pending` row in one transaction; then the op
-  // goes to the worker with the row's seq, and the worker deletes the row once /work has the change.
-  async change<T>(op: PendingRow["op"], args: ChangeArgs, fn: (t: IDBTransaction) => T | Promise<T>, transfer: Transferable[] = []): Promise<T> {
+  // A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then `sync`
+  // tells the worker, which takes the store's version of what the journal names and empties it.
+  async change<T>(row: PendingRow, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
     if (this.blocked) throw new Error("dofile is open in another tab");
-    const post = this.post, journal = post && this.journal;
-    let seq: IDBValidKey | undefined;
+    const sync = this.sync;
     const out = await this.tx(ALL, "readwrite", async t => {
       const out = await fn(t);
-      if (journal) seq = await req(t.objectStore("pending").add({ op, path: args.path ?? args.from, ...(args.to ? { to: args.to } : {}) }));
+      if (sync) await req(t.objectStore("pending").add(row));
       return out;
     });
-    if (post) post(op, { ...args, seq }, transfer);
+    sync?.();
     try { this.onChange?.(); } catch (e) { console.warn(e); }   // the change is made: a listener that throws does not undo it
     return out;
   }
@@ -162,20 +161,20 @@ export class FileStore {
 
   async write(path: string, data: Uint8Array): Promise<FileInfo> {
     cleanPath(path);
-    const bytes = exact(data);   // our own copy: the caller keeps its array, and this one can be moved to the worker
+    const bytes = exact(data);   // only the view's bytes, not the whole buffer under it
     const info: FileInfo = { path, dir: false, size: bytes.byteLength, mtime: Date.now() };
-    await this.change("write", { path, data: new Uint8Array(bytes) }, async t => {
+    await this.change({ op: "write", path }, async t => {
       await makeParents(t, path);
       if ((await req(t.objectStore("info").get(path)))?.dir) throw new Error(`${path} is a folder`);
       t.objectStore("info").put(info);
       t.objectStore("data").put(bytes, path);
-    }, [bytes]);
+    });
     return info;
   }
 
   async mkdir(path: string): Promise<void> {
     cleanPath(path);
-    await this.change("mkdir", { path }, t => makeParents(t, `${path}/`));
+    await this.change({ op: "mkdir", path }, t => makeParents(t, `${path}/`));
   }
 
   // a file, or a folder with everything under it
@@ -184,7 +183,7 @@ export class FileStore {
     cleanPath(to);
     if (to === from) return;
     if (to.startsWith(`${from}/`)) throw new Error(`cannot move ${from} into itself`);
-    await this.change("rename", { from, to }, async t => {
+    await this.change({ op: "rename", path: from, to }, async t => {
       const info = t.objectStore("info"), data = t.objectStore("data");
       const old: FileInfo | undefined = await req(info.get(from));
       if (!old) throw new Error(`no such file: ${from}`);
@@ -204,7 +203,7 @@ export class FileStore {
   // the same; a path that is not there is not an error
   async remove(path: string): Promise<void> {
     cleanPath(path);
-    await this.change("remove", { path }, t => {
+    await this.change({ op: "remove", path }, t => {
       for (const s of ["info", "data"]) { t.objectStore(s).delete(path); t.objectStore(s).delete(under(path)); }
     });
   }
@@ -221,26 +220,20 @@ export class FileStore {
 
   // ---- the worker's side ----
 
-  // The engine's start: every record, the highest seq in `pending` (upTo: every page change up to it is in this copy), and
-  // the journal emptied, in one transaction.
+  // The engine's start: every record, and the journal emptied, in one transaction (the copy holds every change in it).
   async takeAll(): Promise<StoreCopy> {
     return this.tx(ALL, "readwrite", async t => {
-      const [infos, keys, values, seqs] = await Promise.all([
-        req(t.objectStore("info").getAll()), req(t.objectStore("data").getAllKeys()), req(t.objectStore("data").getAll()),
-        req(t.objectStore("pending").getAllKeys())]);
+      const [infos, keys, values] = await Promise.all([
+        req(t.objectStore("info").getAll()), req(t.objectStore("data").getAllKeys()), req(t.objectStore("data").getAll())]);
       t.objectStore("pending").clear();
-      return { infos, data: keys.map((k, i): [IDBValidKey, ArrayBuffer] => [k, values[i]]), upTo: (seqs.at(-1) ?? 0) as number };
+      return { infos, data: keys.map((k, i): [IDBValidKey, ArrayBuffer] => [k, values[i]]) };
     });
   }
 
-  // a page change is in /work now
-  async done(seq: number): Promise<void> {
-    await this.tx(["pending"], "readwrite", t => { t.objectStore("pending").delete(seq); });
-  }
-
   // After a run: write what it did to /work, and give back the page's version of what the page changed meanwhile.
+  // With no changes (the worker's `sync`) it is only the second part: the page's version of what the journal names.
   // `changes`: [{ path, dir, size, mtime, status, data? }], status "created", "modified" or "removed". One transaction,
-  // so a page change lands wholly before it or wholly after it.
+  // so a page change lands wholly before it (its row is read here) or wholly after it (its row waits for the next one).
   //  - What the page changed (a `pending` row for a write, remove or rename: the path, anything under it, both names of
   //    a rename) keeps the page's version: the run's change to it is left out.
   //  - A folder the page made (a mkdir row) keeps only itself: the run's files under it are written.
@@ -248,13 +241,13 @@ export class FileStore {
   //    nothing is left under it; a file the run put where the page has a folder is left out.
   // Returns { files: what was written, as RunResult.files (files only); skipped: the files the run created or changed
   // that were left out because they are under a folder the page renamed or removed (a file the page saved, removed or
-  // renamed itself is not listed: the page's version wins, nothing is lost); upTo: the highest seq in `pending`, which is emptied; resync: what the worker must now
-  // put into /work to have the page's version: `paths` to replace with the records in `infos` and `data`, and `dirs`
-  // to make }. With no changes it is only the copy: the worker calls it so when an op of the page failed in /work.
+  // renamed itself is not listed: the page's version wins); resync: what the worker must now put into /work to have the
+  // page's version: `paths` to replace with the records in `infos` and `data`, and `dirs` to make }. The journal is
+  // emptied.
   async applyRun(changes: RunChange[]): Promise<AppliedRun> {
     return this.tx(ALL, "readwrite", async t => {
       const info = t.objectStore("info"), data = t.objectStore("data"), pending = t.objectStore("pending");
-      const [seqs, rows]: [IDBValidKey[], PendingRow[]] = await Promise.all([req(pending.getAllKeys()), req(pending.getAll())]);
+      const rows: PendingRow[] = await req(pending.getAll());
       const deep: string[] = [], made: string[] = [], gone: string[] = [];   // gone: what the page renamed (the old name) or removed
       for (const r of rows) {
         if (r.op === "mkdir") made.push(r.path); else deep.push(r.path, ...(r.to ? [r.to] : []));
@@ -296,7 +289,7 @@ export class FileStore {
         resync.data.push(...files);
       }
       for (const p of made) if ((await req(info.get(p)))?.dir) resync.dirs.push(p);
-      return { files: written, skipped, upTo: (seqs.at(-1) ?? 0) as number, resync };
+      return { files: written, skipped, resync };
     });
   }
 }

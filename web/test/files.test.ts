@@ -1,6 +1,6 @@
 // The file store with a running engine: the real worker.ts in a worker thread, the page's store in this thread
-// (fake-indexeddb), as a page and its worker share one database. SPEC.md section 7, tests 2 to 8 and 11; and the worker
-// ops that came with prototype 1 (section 6). The transport alone, with no state machine: the test starts and ends the
+// (fake-indexeddb), as a page and its worker share one database. A page change reaches /work one way: its journal row,
+// then `sync` (store.ts). SPEC.md section 7, tests 2 to 8 and 11; and the worker ops that came with prototype 1 (section 6). The transport alone, with no state machine: the test starts and ends the
 // workers itself (harness.ts, startWorker), as the machine's effects would.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
@@ -57,9 +57,8 @@ test("the store and the engine: the start copy, the after-run difference, page c
   await setMtime(store, "early.do", Date.now() + 3_600_000);
   assert.deepEqual(await pendingRows(store), []);
 
-  const said: Answer<"start-worker">[] = [], fileErrors: [string, string, string, string][] = [];
-  const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store,
-    onFileError: (error, op, path) => fileErrors.push([error.name, error.message, op, path]) });
+  const said: Answer<"start-worker">[] = [];
+  const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store });
   const starting = startWorker(eng, null, said);
   let up = false;
   starting.then(() => { up = true; });
@@ -71,8 +70,8 @@ test("the store and the engine: the start copy, the after-run difference, page c
     await store.remove("tmp");
     await store.rename("data/in.txt", "data/moved.txt");
     assert.equal(text(await store.read("data/moved.txt")), "in the store first\n");
-    // Changes whose result depends on their order. The worker copies the store as it is after all of them, so it must
-    // not apply them a second time on top of the copy.
+    // Changes whose result depends on their order. The worker copies the store as it is after all of them, and their
+    // syncs, queued behind mount, then find the journal empty: nothing is applied a second time on top of the copy.
     await store.rename("a.txt", "kept.txt");
     await store.write("a.txt", bytes("second a"));        // applied again: kept.txt would get this text
     await store.rename("x.txt", "swap.tmp");              // a swap of x and y: applied again, it is undone
@@ -100,6 +99,84 @@ test("the store and the engine: the start copy, the after-run difference, page c
     await starting;
     assert.equal(eng.storeError, null);
     for (const p of ["a.txt", "kept.txt", "x.txt", "y.txt"]) await store.remove(p);
+  });
+
+  await t.test("each kind of change alone reaches /work through its journal row and sync, and leaves no row", async () => {
+    const steps: [string, () => Promise<unknown>][] = [
+      ["write a file, with its folder", () => store.write("one/f.txt", bytes("f"))],
+      ["write it again", () => store.write("one/f.txt", bytes("f, longer"))],
+      ["make a folder", () => store.mkdir("two/deep")],
+      ["rename a file", () => store.rename("one/f.txt", "g.txt")],
+      ["rename a folder", () => store.rename("two", "three")],
+      ["remove a file", () => store.remove("g.txt")],
+      ["remove a folder", () => store.remove("three")],
+      ["remove an empty folder", () => store.remove("one")],
+    ];
+    for (const [what, step] of steps) {
+      await step();
+      const all = await same(store, eng);   // `files` is answered after the change's sync
+      assert.deepEqual(await pendingRows(store), [], what);
+      if (what === "write it again") assert.equal(text(await eng.query("read", { path: "one/f.txt" })), "f, longer");
+      if (what === "rename a folder") assert.ok(all.includes("three/deep") && !all.some(p => p.startsWith("two")));
+    }
+  });
+
+  // Hold the worker's syncs while `changes` runs, so their rows wait in the journal; then one sync.
+  const oneSync = async (changes: () => Promise<unknown>) => {
+    const sync = store.sync!, onClosed = store.onClosed;
+    let held = 0;
+    store.attach(() => { held++; }, { onClosed });
+    try {
+      await changes();
+    } finally {
+      store.attach(sync, { onClosed });
+    }
+    const rows = (await pendingRows(store)).length;
+    assert.equal(rows, held, "a row for each change, and the worker has heard of none");
+    sync();
+    return rows;
+  };
+
+  await t.test("one sync takes several journal rows at once; the next finds the journal empty", async () => {
+    const rows = await oneSync(async () => {
+      await store.write("s/a.txt", bytes("a"));
+      await store.write("s/b.txt", bytes("b"));
+      await store.rename("s/a.txt", "s/c.txt");
+      await store.mkdir("s/d");
+      await store.remove("s/b.txt");
+      await store.write("s/c.txt", bytes("c, written again"));
+    });
+    assert.equal(rows, 6);
+    const all = await same(store, eng);
+    assert.deepEqual(all.filter(p => p.startsWith("s/")), ["s/c.txt", "s/d"]);
+    assert.equal(text(await eng.query("read", { path: "s/c.txt" })), "c, written again");
+    assert.deepEqual(await pendingRows(store), []);
+    const before = await eng.query("files");
+    store.sync!();
+    assert.deepEqual(await eng.query("files"), before, "the next sync changes nothing");
+    await store.remove("s");
+  });
+
+  await t.test("through a sync alone: a file replaced by a folder of the same name, and the reverse", async () => {
+    await store.write("fx", bytes("a file"));
+    await same(store, eng);
+    await oneSync(async () => { await store.remove("fx"); await store.write("fx/in.txt", bytes("in the folder")); });
+    assert.ok((await same(store, eng)).includes("fx/in.txt"));
+    assert.equal(text(await eng.query("read", { path: "fx/in.txt" })), "in the folder");
+    await oneSync(async () => { await store.remove("fx"); await store.write("fx", bytes("a file again")); });
+    const all = await same(store, eng);
+    assert.ok(all.includes("fx") && !all.includes("fx/in.txt"));
+    assert.equal(text(await eng.query("read", { path: "fx" })), "a file again");
+    assert.deepEqual(await pendingRows(store), []);
+    await store.remove("fx");
+  });
+
+  await t.test("a sync that finds the journal empty changes nothing", async () => {
+    const before = await eng.query("files");
+    store.sync!();
+    store.sync!();
+    assert.deepEqual(await eng.query("files"), before, "the same files, with the same times");
+    assert.deepEqual(await pendingRows(store), []);
   });
 
   await t.test("after-run difference: created, changed and deleted files; an untouched big file is not read; a file the page adds during the run stays", async () => {
@@ -148,6 +225,21 @@ sleep 1000`);
       assert.equal(text(await store.read("tick.txt")), content, `run ${i}`);
     }
     await store.remove("tick.txt");
+  });
+
+  // MEMFS does not stamp a truncation with a time (its setattr takes no size time, and a write of 0 bytes sets none):
+  // only the size tells. The engine has no command that shortens a file but leaves it non-empty without writing to it.
+  await t.test("a run that empties a file, with no write or with an empty one: the file is saved as modified, 0 bytes", async () => {
+    for (const [i, code] of [`file open f using e.txt, write replace\nfile close f`,
+      `file open f using e.txt, write replace\nfile write f ""\nfile close f`].entries()) {
+      await store.write("e.txt", bytes("not empty"));
+      const r = await runOn(eng, code);
+      assert.equal(r.rc, 0, r.log);
+      assert.deepEqual(r.files, [{ name: "e.txt", status: "modified", bytes: 0 }], `case ${i}`);
+      assert.equal(text(await store.read("e.txt")), "", `case ${i}`);
+      assert.equal((await store.list()).find(f => f.path === "e.txt")!.size, 0, `case ${i}`);
+    }
+    await store.remove("e.txt");
   });
 
   await t.test("a save, a delete and a rename by the page during a run that writes the same files: the store and /work hold the page's version", async () => {
@@ -263,25 +355,51 @@ copy src.txt other.txt, replace`);
     assert.ok((await same(store, eng)).includes("q"));
     assert.equal(text(await eng.query("read", { path: "q" })), "the page's q");
     assert.deepEqual(await pendingRows(store), []);
-    assert.deepEqual(fileErrors, [], "no op failed: the worker took the store's version with the run's result");
     await store.remove("q");
   });
 
-  await t.test("a page change that cannot be put into /work: the page is told, the row goes, and /work takes the store's version", async () => {
-    store.post!("mkdir", { path: "clash" }, []);   // only in /work (no seq): a folder where the page will write a file
-    await store.write("clash", bytes("a file"));
+  await t.test("a run's folder the store refused, then the page writes a file at that path: /work takes the page's file, and nothing is owed", async tt => {
+    const undo = refuseWrites(tt);
+    const r = await runOn(eng, `mkdir clash\n${writes("clash/x.txt", "the run's x")}`);
+    assert.match(r.store_error!, /quota/);
+    undo();
+    assert.ok(!(await store.list()).some(f => f.path.startsWith("clash")), "the store has none of it");
+    await store.write("clash", bytes("a file"));   // where /work has the run's folder
     await store.write("after.txt", bytes("the next change still arrives"));
     assert.ok((await same(store, eng)).includes("clash"));
     assert.equal(text(await eng.query("read", { path: "clash" })), "a file");
-    assert.deepEqual(fileErrors, [["MirrorError", "write clash: file system error EISDIR", "write", "clash"]]);
     assert.deepEqual(await pendingRows(store), [], "no row is left to hide later runs' files");
-    const r = await runOn(eng, writes("clash", "run"));   // and a run's change to it is saved again
-    assert.deepEqual(r.files, [{ name: "clash", status: "modified", bytes: 3 }]);
+    assert.deepEqual((await runOn(eng, "display 1")).files, [], "nothing is owed for the run's folder or its file");
+    const again = await runOn(eng, writes("clash", "run"));   // and a run's change to it is saved again
+    assert.deepEqual(again.files, [{ name: "clash", status: "modified", bytes: 3 }]);
     await store.remove("clash");
     await store.remove("after.txt");
   });
 
-  await t.test("a refused after-run write gives the run store_error, and the next run writes it, also after the page renamed the file", async tt => {
+  // A run's file the store refused stands in /work where the page's version has a folder: above a file the page writes
+  // (a), or at a folder the page makes (b). The page's version wins: the run's file goes from /work and is not owed.
+  for (const [name, page] of [["clashA", "writes clashA/x.txt"], ["clashB", "makes the folder clashB"]] as const) {
+    await t.test(`a run's file the store refused, then the page ${page}: /work and the store hold the page's folder, and nothing is owed`, async tt => {
+      const undo = refuseWrites(tt);
+      assert.match((await runOn(eng, writes(name, "the run's file"))).store_error!, /quota/);
+      undo();
+      if (name === "clashA") await store.write("clashA/x.txt", bytes("the page's x"));
+      else await store.mkdir("clashB");
+      const want = name === "clashA" ? [["clashA", true], ["clashA/x.txt", false]] : [["clashB", true]];
+      const records = async () => (await store.list()).filter(f => f.path.startsWith(name)).map(f => [f.path, f.dir]);
+      const all = await same(store, eng);
+      assert.ok(all.includes(name));
+      assert.deepEqual(await records(), want);
+      if (name === "clashA") assert.equal(text(await eng.query("read", { path: "clashA/x.txt" })), "the page's x");
+      assert.deepEqual(await pendingRows(store), []);
+      assert.deepEqual((await runOn(eng, "display 1")).files, [], "nothing is owed for the run's file");
+      assert.deepEqual(await records(), want, "the store still has the page's folder");
+      await same(store, eng);
+      await store.remove(name);
+    });
+  }
+
+  await t.test("a refused after-run write gives the run store_error, and the next run writes it; a file the page renamed meanwhile keeps the page's version, and nothing is owed for either name", async tt => {
     await store.write("m.txt", bytes("old m"));
     await store.write("fold/in.txt", bytes("in"));
     const undo = refuseWrites(tt);
@@ -292,32 +410,20 @@ copy src.txt other.txt, replace`);
     const before = (await store.list()).map(f => f.path);
     assert.ok(!before.includes("quota.txt") && before.includes("keep.txt") && before.includes("fold/in.txt"), "nothing of the refused write is in the store");
     undo();
-    await store.rename("m.txt", "n.txt");   // the page renames a file whose new text the store has not got yet
+    // The page renames a file whose new text the store has not got. The page's version wins, as for a rename during a
+    // run: /work takes the store's n.txt (the text from before the run), and the run's text for m.txt is not owed.
+    await store.rename("m.txt", "n.txt");
+    assert.equal(text(await eng.query("read", { path: "n.txt" })), "old m", "/work has the store's version");
     const again = await runOn(eng, "display 1");
     assert.equal(again.store_error, undefined);
-    // the run's text goes with the rename; a file the store had is "modified"; the folder is not listed as a file
-    assert.deepEqual(again.files!.map(f => [f.name, f.status]).sort(), [["fold/in.txt", "removed"], ["keep.txt", "removed"], ["n.txt", "modified"], ["quota.txt", "created"]]);
-    assert.equal(text(await store.read("n.txt")), "written by the run");
+    // the rest is written: a file the store had is "removed"; the folder is not listed as a file; neither name of the
+    // renamed file is listed
+    assert.deepEqual(again.files!.map(f => [f.name, f.status]).sort(), [["fold/in.txt", "removed"], ["keep.txt", "removed"], ["quota.txt", "created"]]);
+    assert.equal(text(await store.read("n.txt")), "old m");
     const all = await same(store, eng);
     assert.ok(!all.includes("fold") && !all.includes("m.txt"));
     assert.deepEqual((await runOn(eng, "display 2")).files, [], "nothing is tried a third time");
-  });
-
-  await t.test("a refused write to a file the page then renames, in the same copy of the store as a failed page change: nothing is owed for it", async tt => {
-    await store.write("owed.txt", bytes("old"));
-    const undo = refuseWrites(tt);
-    assert.match((await runOn(eng, "copy src.txt owed.txt, replace")).store_error!, /quota/);
-    undo();
-    store.post!("mkdir", { path: "clash2" }, []);   // only in /work: the page's write there fails, and /work copies the store
-    const errors = fileErrors.length;
-    // the rename is in the store before the worker copies it for the failed write: that copy covers it, so its op is skipped
-    await Promise.all([store.write("clash2", bytes("a file")), store.rename("owed.txt", "owed2.txt")]);
-    await same(store, eng);
-    assert.equal(fileErrors.length, errors + 1);
-    assert.equal(text(await eng.query("read", { path: "owed2.txt" })), "old", "/work has the store's version");
-    assert.deepEqual((await runOn(eng, "display 1")).files, [], "not a removal of owed.txt: nothing is owed for the old name");
-    await store.remove("clash2");
-    await store.remove("owed2.txt");
+    await store.remove("n.txt");
   });
 
   // the machine's RESET: end-worker, then start-worker (the run's rc 9998 result is the machine's own: machine.test.ts)
@@ -387,15 +493,17 @@ test("a worker that cannot open the file store still starts, and says the files 
   eng.worker!.terminate();
 });
 
-test("the page's store with a worker that has none: the page's changes reach /work and leave no `pending` row", { timeout: 120_000 }, async () => {
+test("the page's store with a worker that has none: the store is detached, so the page's changes stay in the store, with no `pending` row, and do not reach /work", { timeout: 120_000 }, async () => {
   const store = openStore({ indexedDB: new IDBFactory() });
   const worker = () => nodeWorker({ store: { takeAll: async () => { throw new Error("this browser has no storage for files (IndexedDB)"); } } as unknown as FileStore });
   const eng = new EngineClient({ createWorker: worker, wheel, extraWheels, store });
   await startWorker(eng);
   assert.match(eng.storeError!, /^the files are not saved/);
+  assert.equal(store.sync, null, "detached: the worker could not read the journal");
   await store.write("page.txt", bytes("from the page"));
-  assert.equal(text(await eng.query("read", { path: "page.txt" })), "from the page");
-  assert.deepEqual(await pendingRows(store), [], "no row that no worker would ever delete");
+  assert.equal(text(await store.read("page.txt")), "from the page");
+  assert.deepEqual(await eng.query("files"), [], "/work does not get it");
+  assert.deepEqual(await pendingRows(store), [], "no row that no worker would ever clear");
   eng.worker!.terminate();
 });
 
@@ -403,9 +511,9 @@ test("the browser deletes the database under a live worker: the transport says `
   const factory = new IDBFactory(), store = openStore({ indexedDB: factory }), said: Answer<"start-worker">[] = [];
   const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store });
   const starting = startWorker(eng, null, said);
-  for (let i = 0; i < 5; i++) await store.write(`m${i}.txt`, bytes("x"));   // while it mounts: the copy covers seq 1 to 5
+  for (let i = 0; i < 5; i++) await store.write(`m${i}.txt`, bytes("x"));   // while it mounts
   await starting;
-  await deleteDatabase(factory);   // "Clear site data": the seqs start again from 1
+  await deleteDatabase(factory);   // "Clear site data": the store is empty now, and /work still has the five files
   assert.deepEqual(said.at(-1), { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
   // the machine's RESET(crash): end-worker, then (the list fetched) start-worker
   eng.end(live(eng), { kind: "reset", reset: "crash", reason: "session reset: the browser closed the file storage." });
