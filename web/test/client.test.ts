@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EngineClient, RC_RESET } from "../src/engine/client.ts";
 import { sleep } from "./harness.ts";
+import { buildId } from "../scripts/build-id.ts";
 import type { Op, ResetKind, StartFiles } from "../src/engine/types.ts";
 import type { FileStore } from "../src/engine/store.ts";
 
@@ -207,13 +208,33 @@ test("forgetDownload(): every dofile-snapshot-* Cache is deleted, nothing else; 
 
 test("download: a list from another build than the page says so before anything is fetched", async () => {
   const caches = fakeCaches(), { fetch, calls } = fakeFetch();
-  const eng = client(fetch, caches, { wheelHash: "the page's wheel", startFiles: { base: `${BASE}start-files.json`, ...LIST, wheelHash: "a newer wheel" } });
+  const eng = client(fetch, caches, { buildId: "the page's build", startFiles: { base: `${BASE}start-files.json`, ...LIST, buildId: "a newer build" } });
   await assert.rejects(eng.download(), { kind: "updated", message: /^dofile was updated: reload the page \(.*npm run snapshot/ });
   assert.deepEqual(calls, []);
   assert.deepEqual(await cached(caches), []);
-  // the same wheel: fine
-  const same = client(fetch, caches, { wheelHash: "w", startFiles: { base: `${BASE}start-files.json`, ...LIST, wheelHash: "w" } });
+  // the same build: fine
+  const same = client(fetch, caches, { buildId: "w", startFiles: { base: `${BASE}start-files.json`, ...LIST, buildId: "w" } });
   assert.equal((await same.download()).cached, true);
+});
+
+// The id is scripts/build-id.ts's: the page's from the stamp and the files it is built from, the list's from the stamp and
+// the snapshot's record (vite.config.ts). Here both come from the real function.
+test("checkBuild: a list of another stamp, extra wheel, Pyodide version or dofile wheel is \"updated\"; the same stamp and inputs pass", () => {
+  const inputs: { wheelHash: string, extraWheels: Record<string, string>, pyodide: string } = { wheelHash: "a".repeat(64), extraWheels: { "pyreadstat.whl": "b".repeat(64), "other.whl": "d".repeat(64) }, pyodide: "314.0.7" };
+  const page = client(fakeFetch().fetch, fakeCaches(), { buildId: buildId("stamp 1", inputs) });
+  const list = (stamp: string, record: typeof inputs) => ({ ...LIST, buildId: buildId(stamp, record) }) as unknown as StartFiles;
+  // equal inputs, the extra wheels in another order (as a manifest read back may have them): the same id
+  page.checkBuild(list("stamp 1", { ...inputs, extraWheels: { "other.whl": "d".repeat(64), "pyreadstat.whl": "b".repeat(64) } }));
+  const others: [string, StartFiles][] = [
+    ["another stamp (another build run, or a restarted dev server)", list("stamp 2", inputs)],
+    ["another extra wheel", list("stamp 1", { ...inputs, extraWheels: { ...inputs.extraWheels, "pyreadstat.whl": "c".repeat(64) } })],
+    ["one extra wheel fewer", list("stamp 1", { ...inputs, extraWheels: { "pyreadstat.whl": "b".repeat(64) } })],
+    ["another Pyodide version", list("stamp 1", { ...inputs, pyodide: "314.0.8" })],
+    ["another dofile wheel", list("stamp 1", { ...inputs, wheelHash: "e".repeat(64) })],
+  ];
+  for (const [what, other] of others) {
+    assert.throws(() => page.checkBuild(other), { kind: "updated", message: /^dofile was updated: reload the page \(the site's start files are of the build [0-9a-f]{12}, this page of [0-9a-f]{12}; in development: `npm run snapshot`.*restart the dev server\)$/ }, what);
+  }
 });
 
 test("download: with nowhere to keep the files it resolves with the reason; a build with no snapshot rejects", async () => {
@@ -530,24 +551,24 @@ test("download: an abort with a reason of the caller's own still rejects as an A
 
 // ---- the snapshot start: the build's identity from the list, in mount's arguments ----
 
-// A fetch that answers only the list, with `wheelHash` (or fails as offline, or waits for `hold`); `calls`: what was asked.
-function listFetch({ wheelHash = "w", offline = false, hold }: { wheelHash?: string, offline?: boolean, hold?: Promise<void> } = {}) {
+// A fetch that answers only the list, with `buildId` (or fails as offline, or waits for `hold`); `calls`: what was asked.
+function listFetch({ buildId = "w", offline = false, hold }: { buildId?: string, offline?: boolean, hold?: Promise<void> } = {}) {
   const calls: [string, RequestCache | undefined][] = [];
   const fetch = async (url: string, init: RequestInit = {}) => {
     calls.push([url, init.cache]);
     await hold;
     if (offline) throw new TypeError("Failed to fetch");
-    return url === `${BASE}start-files.json` ? Response.json({ ...LIST, wheelHash }) : new Response("no", { status: 404 });
+    return url === `${BASE}start-files.json` ? Response.json({ ...LIST, buildId }) : new Response("no", { status: 404 });
   };
   return { fetch: fetch as typeof globalThis.fetch, calls };
 }
 const snapshotStart = (fetch: typeof globalThis.fetch, store = fakeStore()) => scripted((m, post) => { starts(m, post); },
-  { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, wheelHash: "w", fetch, store, indexURL: "https://cdn.test/" });
+  { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, buildId: "w", fetch, store, indexURL: "https://cdn.test/" });
 
 test("start (snapshot): the list, fetched fresh, gives mount the build id and the two big files; only the list is fetched, no manifest", async () => {
   const { fetch, calls } = listFetch(), sent: Message[] = [];
   const { eng, workers } = scripted((m, post) => { sent.push(m); starts(m, post); },
-    { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, wheelHash: "w", fetch, indexURL: "https://cdn.test/", brotli: "wasm" });
+    { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, buildId: "w", fetch, indexURL: "https://cdn.test/", brotli: "wasm" });
   await eng.start();
   assert.equal(workers.length, 1);
   assert.deepEqual(sent.find(m => m.op === "mount")!.args,
@@ -562,7 +583,7 @@ test("start (snapshot): the list, fetched fresh, gives mount the build id and th
 test("start (snapshot): a list of another build rejects with kind updated, and no worker is made", async () => {
   const store = fakeStore();
   store.attach((() => {}) as unknown as FileStore["post"]);   // as after a restart's end(): still attached to the old worker's sender
-  const { eng, workers } = snapshotStart(listFetch({ wheelHash: "a newer wheel" }).fetch, store);
+  const { eng, workers } = snapshotStart(listFetch({ buildId: "a newer build" }).fetch, store);
   await assert.rejects(eng.start(), { kind: "updated", message: /^dofile was updated: reload the page/ });
   assert.equal(workers.length, 0, "no worker");
   assert.equal(eng.worker, null);

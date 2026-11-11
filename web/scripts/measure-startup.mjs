@@ -61,7 +61,7 @@ const server = createServer((req, res) => {
   res.writeHead(200, {
     "Content-Type": TYPES[ext] ?? "application/octet-stream", "Content-Length": payload.length,
     ...(useBr ? { "Content-Encoding": "br" } : {}), Vary: "Accept-Encoding",
-    "Cache-Control": hashed ? "public, max-age=31536000, immutable" : url.pathname.endsWith("manifest.json") ? "no-cache" : "public, max-age=3600",
+    "Cache-Control": hashed ? "public, max-age=31536000, immutable" : url.pathname.endsWith("start-files.json") ? "no-cache" : "public, max-age=3600",
     "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp",
   });
   served.bytes += payload.length;
@@ -125,10 +125,10 @@ for (let rep = 1; rep <= reps; rep++) {
 }
 const median = a => { const s = [...a].sort((x, y) => x - y); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 for (const m of modes) for (const n of nets) { const c = results[m][n.key]; c.medianCold = median(c.cold); c.medianWarm = median(c.warm); }
-const manifest = JSON.parse(readFileSync(join(dist, "snapshot/manifest.json"), "utf8"));
+const list = JSON.parse(readFileSync(join(dist, "start-files.json"), "utf8"));   // the snapshot's manifest.json is not deployed
 writeFileSync(out, JSON.stringify({
   measured: new Date().toISOString().slice(0, 10), browser: `Chromium ${browser.version()}`, reps,
-  networks: nets.map(n => ({ key: n.key, label: n.label })), snapshot: { built: manifest.built, compressedMB: Object.values(manifest.files).reduce((s, f) => s + f.size, 0) / 1e6 },
+  networks: nets.map(n => ({ key: n.key, label: n.label })), snapshot: { built: list.built, compressedMB: Object.values(list.snapshot).reduce((s, f) => s + f.size, 0) / 1e6 },
   results,
 }, null, 1));
 console.log(`written to ${out}`);

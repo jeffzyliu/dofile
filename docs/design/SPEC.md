@@ -47,7 +47,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
 - **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the
   `pyodide` npm package at build time and served from the page's own origin. `?snapshot=0` keeps the CDN: a diagnostic mode.
 - **From the build, never literals:** the version, and the download size: 48.6 MB for the snapshot start today (42.1 MB
-  snapshot, 5.75 MB runtime, 0.68 MB page and small files). The build writes `start-files.json` (`{built, wheelHash, files:
+  snapshot, 5.75 MB runtime, 0.68 MB page and small files). The build writes `start-files.json` (`{built, buildId, snapshot, files:
   [{path, size, compressed, download}], size, compressed}`; `compressed` is an estimate, brotli quality 5, never more than
   `size`) and puts the total in the page as `<meta name="dofile-engine-bytes">`, so the prompt has it before any download
   (OQ-12). The build fails if it cannot write either.
@@ -318,7 +318,7 @@ run one at a time in a queue, except `boot`. A file's bytes are transferred, not
 
 | Op | Args | Result | Errors | Needs | Owner after the file-store change |
 |---|---|---|---|---|---|
-| `mount` | `MountArgs`: `{indexURL?, brotli?}`, and for a snapshot start `{snapshot, built, files}` (the folder's URL; from `start-files.json`: the build id and the two big files, `{snapshot, bundle}`, each `{name, raw, size}`) | none | a failed fetch; a damaged file | nothing | Worker. Loads Python, then copies the store into `/work` (no IDBFS). It fetches no manifest: the page has checked the list's build (`checkBuild`) before it made the worker. |
+| `mount` | `MountArgs`: `{indexURL?, brotli?}`, and for a snapshot start `{snapshot, built, files}` (the folder's URL; from `start-files.json`: the build time `built` and the two big files, `{snapshot, bundle}`, each `{name, raw, size}`) | none | a failed fetch; a damaged file | nothing | Worker. Loads Python, then copies the store into `/work` (no IDBFS). It fetches no manifest: the page has checked the list's build (`checkBuild`) before it made the worker. |
 | `boot` | `{wheel, extraWheels, interruptBuffer}` | `About` | install or import failure | `mount` | Worker, outside the queue. |
 | `startup` | none | `Startup` | | `mount` | Worker. |
 | `run` | `{code, fresh_locals?, plot_theme?}` | `RunResult`; while it runs, `{id, log}` chunks | never rejects, except `busy` (rc 9998 comes from the client on a restart, on `stop()`, after the worker failed twice, with no worker, and when the run op failed in the worker: `kind: "run-failed"`, the worker stays) | engine | Worker. Then writes the run's difference to the store (section 7). |
@@ -353,10 +353,19 @@ As built in step 2:
   is `failed` and `start()` is not called. There is no offline start. `restart()` reads what is cached, after the same fresh fetch of the list as any snapshot `start()`. `engineBytes()`
   reads the page's meta tag; `startList()` fetches the list.
 - **One statement of the build:** `start-files.json`. `checkBuild(list)` is the one comparison of the page's build with
-  it (the wheel's SHA-256, compiled into the page); another build throws `kind: "updated"`. `download()` calls it, and so does
-  a snapshot `start()`, which fetches the list fresh before it makes a worker and passes `built` and the two big files in
-  `mount`'s arguments. The snapshot's `manifest.json` is a build artefact (read by `scripts/start-files.mjs` and the build
-  scripts); the page and the worker never fetch it.
+  it: the build id, a SHA-256 over a stamp made once per build (or per dev-server start), the dofile wheel's hash, the extra
+  wheels' hashes and the Pyodide version (`scripts/build-id.ts`, `buildId`). The page's id is made from the files it is
+  built from and compiled in; the list's from the same stamp and the snapshot's record, so the two are equal only for a page
+  and a list of one build whose snapshot is of that build's inputs. Another build throws `kind: "updated"`; so does, in
+  development, a stale snapshot. `download()` calls it, and so does a snapshot `start()`, which fetches the list fresh before
+  it makes a worker and passes `built` and the two big files in `mount`'s arguments. Accepted cost: after any deploy, a page
+  that was open says "reload" at its next start or Reset.
+- **The snapshot's `manifest.json` is its build record, not deployed:** what it was built from (the dofile wheel's name and
+  hash, the extra wheels' hashes, the Pyodide version), its build time `built` and its two big files. It stays in
+  `public/snapshot/` (CI restores it with the snapshot); the build reads it, fails if it differs from the wheels or the
+  Pyodide version being built (saying which, and to run `npm run snapshot`; a record without the extra wheels is stale), and
+  removes it from `dist/`. A build with no snapshot still succeeds, with `built: null` in the list. The page and the worker
+  never fetch it. The Cache stays named by `built`, so a deploy that changes only the page does not download the snapshot or the runtime again.
 - `cached()` (step 3) resolves `true` when every file the list marks `download` is in `dofile-snapshot-<built>` (checked with
   `caches.has`, then `match`: it creates and deletes nothing), else `false`, and never rejects: `false` with no snapshot start,
   no Cache API, or a list that cannot be fetched (offline, say). `forgetDownload()` (step 3) deletes every `dofile-snapshot-*` Cache, logging any error; the

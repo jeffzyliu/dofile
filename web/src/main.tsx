@@ -28,7 +28,7 @@ const client = new EngineClient({
   createWorker: () => new Worker(new URL("./engine/worker.ts", import.meta.url), { type: "module" }),
   wheel: here(__WHEEL__),
   extraWheels: __EXTRA_WHEELS__.map(here),
-  wheelHash: __WHEEL_HASH__,
+  buildId: __BUILD_ID__,
   // the snapshot start takes Pyodide's runtime from the page's own origin (public/pyodide/); ?snapshot=0 uses the CDN
   indexURL: snapshotStart ? here("pyodide/") : __PYODIDE__,
   store,

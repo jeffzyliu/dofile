@@ -100,8 +100,8 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
   it holds memory and not the filesystem). They are written **brotli-compressed at quality 11**, as
   `heap.brotli.bin` (19.8 MB) and `site-packages.brotli.bin` (20.0 MB), so 39.9 MB in all (the heap was 26.5 MB, 46.5 MB in all,
   before the library copies were zeroed and the docstrings stripped; see "Making the files smaller"). The small files are
-  `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` with the wheel's name and
-  SHA-256, the Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
+  `dso.json` and `files.json`, the patched `pyodide.asm.patched.mjs`, and a `manifest.json` (the build record, not deployed) with the wheel's name and
+  SHA-256, the extra wheels' SHA-256s, the Pyodide version, a build time, and each big file's name, compressed size and decompressed size. The build decodes
   both files again with the decoder the page uses and fails if they are not identical.
 - **Only the compressed files are kept in the browser** (the Cache API, under a name with the build time; older builds
   are deleted): 39.9 MB of storage, not 229 MB. Every start reads them and decompresses them, with the browser's own
@@ -114,9 +114,10 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
   the browser test that checks the stored size caught this. If a host decodes the files anyway, `unpack` notices the
   decompressed length and uses the bytes as they are: it still works, but the storage is larger.
 - **A stale snapshot is refused with a message** (built for another wheel: "run `npm run snapshot` again"). It must
-  be rebuilt after changing the dofile wheel or the Pyodide version. The wheel's file name does not change with its
-  code, so the manifest also holds the wheel's SHA-256 and the page (Vite's `__WHEEL_HASH__`) compares it; a missing or
-  different hash is refused (the Node tests, which pass none, skip the check). Found 2026-11-08: a snapshot older than
+  be rebuilt after changing the dofile wheel, an extra wheel or the Pyodide version. The wheel's file name does not change
+  with its code, so the manifest holds the wheels' SHA-256s; `vite build` refuses a snapshot whose record differs, and the page
+  (Vite's `__BUILD_ID__`, `scripts/build-id.ts`) compares its build id with `start-files.json`'s (the Node tests that pass
+  none skip the check). Found 2026-11-08: a snapshot older than
   `browser.py` kept running the old code and broke the page's new run-timing display until it was rebuilt. `uv build
   --wheel` is reproducible (the same hash after a rebuild and after touching a source file), so a rebuild without a code
   change does not make a snapshot stale. Test: "a snapshot from a different build of the wheel is refused" in `web/e2e/shell.spec.ts` (in `poc.spec.ts` until prototype 1, step 3).
@@ -135,7 +136,7 @@ they differ.
 - **The page can download first, counting bytes.** `client.download()` fetches every start file into the Cache
   `dofile-snapshot-<built>` before a worker exists. The build writes the list of those files, with each one's size on disk
   and compressed size, as `dist/start-files.json`, and the compressed total into `dist/index.html`
-  (`web/scripts/start-files.mjs`): 48.5 MB on 2026-11-10 (snapshot 42.1, runtime 5.75, page 0.68). A file whose byte count
+  (`web/scripts/start-files.ts`): 48.5 MB on 2026-11-10 (snapshot 42.1, runtime 5.75, page 0.68). A file whose byte count
   is not the list's is not kept.
 - **The worker reads that Cache for everything.** `loadPyodide` has options for the lock file and the standard library but
   none for the `.wasm`: it fetches `indexURL + "pyodide.asm.wasm"` itself. So while the engine starts, the worker replaces
@@ -413,7 +414,7 @@ on desktop never. It took long because several unrelated things looked alike. Wh
 ## Tests
 
 - `web/test/engine.test.mjs` (Node, `npm test`): the snapshot start runs a regression, a scipy computation, a graph,
-  file writes and Break (rc 1, data kept), and a snapshot built for another wheel is refused with its message. They
+  file writes and Break (rc 1, data kept), and a list of another build is refused with its message. They
   skip themselves if `public/snapshot/` has not been built.
 - `web/test/snapshot.test.mjs`: `inflate` and `unpack` with the page's decoder: a round trip in steps of any size, a
   file already decoded by a host, and truncated, damaged, wrongly sized and mismatched-manifest files all refused; and

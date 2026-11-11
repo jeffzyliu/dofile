@@ -10,7 +10,7 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { test, expect, startEngine } from "./fixtures";   // storage kept by default (fixtures.ts)
 
-type StartFiles = { built: number; wheelHash: string; compressed: number; files: { path: string; size: number; compressed: number; download: boolean }[];
+type StartFiles = { built: number; buildId: string; compressed: number; files: { path: string; size: number; compressed: number; download: boolean }[];
   snapshot: { snapshot: { name: string; raw: number; size: number }; bundle: { name: string; raw: number; size: number } } };
 type Progress = { received: number; total: number };
 type RunResult = { rc: number; log: string; images: string[] };
@@ -88,7 +88,7 @@ test("the default start asks nothing of another origin; persist() is asked once;
   expect(list.compressed).toBeGreaterThan(30e6);
   expect(await page.evaluate(() => window.__dofile.engineBytes)).toBe(list.compressed);
   expect(await page.locator('meta[name="dofile-engine-bytes"]').getAttribute("content")).toBe(String(list.compressed));
-  expect(list.wheelHash).toMatch(/^[0-9a-f]{64}$/);
+  expect(list.buildId).toMatch(/^[0-9a-f]{64}$/);
 
   // "Download all (.zip)": from the store, no Python
   await page.evaluate(() => window.__dofile.store.write("notes.txt", new TextEncoder().encode("hello\n")));

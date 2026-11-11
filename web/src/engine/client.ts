@@ -62,7 +62,7 @@ export class EngineClient {
   declare createWorker: () => Worker;
   declare wheel: Wheel;
   declare extraWheels: Wheel[];
-  declare wheelHash: string | undefined;
+  declare buildId: string | undefined;
   declare indexURL: string | undefined;
   declare snapshot: string | undefined;
   declare brotli: string | undefined;
@@ -94,7 +94,8 @@ export class EngineClient {
   // installing the packages. Its build (`built`, its two big files) comes from startFiles, which a snapshot start needs.
   // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.js), to compare them
   // extraWheels: more wheels installed after the dofile one (web/wheels/: pyreadstat), each a URL or {name, bytes} like `wheel`
-  // wheelHash: SHA-256 of the wheel; a build's list with another one is of other code and is refused (checkBuild)
+  // buildId: the page's build id (scripts/build-id.ts, compiled in by vite.config.ts); a build's list with another one is of
+  //   another build, or (in development) of a stale snapshot, and is refused (checkBuild)
   // store: the page's FileStore (store.js). While a worker exists, the store sends it each change the page makes.
   // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download() and a
   //   snapshot start() need it
@@ -104,18 +105,18 @@ export class EngineClient {
   // onFileError(error, op, path): a change the page made to the store could not be put into the engine's folder; the
   //   folder then has the store's version, unless that failed too (the next start has it).
   // fetch, caches, wasm: the browser's, unless the tests give their own
-  constructor({ createWorker, wheel, extraWheels = [], wheelHash, indexURL, snapshot, brotli, graceMs = 5000,
+  constructor({ createWorker, wheel, extraWheels = [], buildId, indexURL, snapshot, brotli, graceMs = 5000,
     onStatus = (_status) => {}, onRestart = (_reason, _started, _kind) => {}, onFileError = (_error, _op, _path) => {},
     store = null, startFiles = undefined,
     fetch = (...a) => globalThis.fetch(...a), caches = globalThis.caches, wasm = globalThis.WebAssembly }: {
     createWorker: () => Worker, wheel: Wheel, extraWheels?: Wheel[],
-    wheelHash?: string, indexURL?: string, snapshot?: string, brotli?: string, graceMs?: number,
+    buildId?: string, indexURL?: string, snapshot?: string, brotli?: string, graceMs?: number,
     onStatus?: (status: StatusText) => void,
     onRestart?: (reason: string, started: Promise<About>, kind: ResetKind) => void,
     onFileError?: (error: ClientError, op: string, path: string) => void,
     store?: Pick<FileStore, "attach"> | null, startFiles?: string | (StartFiles & { base?: string }), fetch?: typeof globalThis.fetch,
     caches?: CacheStorage | null, wasm?: object | null }) {
-    Object.assign(this, { createWorker, wheel, extraWheels, wheelHash, indexURL, snapshot, brotli, graceMs, onStatus, onRestart, onFileError,
+    Object.assign(this, { createWorker, wheel, extraWheels, buildId, indexURL, snapshot, brotli, graceMs, onStatus, onRestart, onFileError,
       store, startFiles, fetch, caches, wasm });
     this.onStatus = onStatus;
     this.onRestart = onRestart;
@@ -131,8 +132,8 @@ export class EngineClient {
     this.startup = null;   // where the last start's time went (worker.js, `startup`)
   }
 
-  // The build's list of start files: { built, wheelHash, snapshot, files: [{ path, size, compressed, download }], size,
-  // compressed } (scripts/start-files.mjs).
+  // The build's list of start files: { built, buildId, snapshot, files: [{ path, size, compressed, download }], size,
+  // compressed } (scripts/start-files.ts).
   // `path` is relative to the list's own URL; `size` is the file on disk and `compressed` what a host sends; `download`
   // marks the files download() fetches (the rest came with the page).
   // A list that cannot be fetched or read (offline, a host's error page) rejects with kind "failed", reason "download".
@@ -148,13 +149,15 @@ export class EngineClient {
     }
   }
 
-  // The one comparison of the page's build with the list's: the SHA-256 of the dofile wheel. A list of another build (the
-  // site was updated since the page loaded; in development, a snapshot older than the wheel) throws kind "updated".
-  // A page without a hash (some Node tests) skips it.
+  // The one comparison of the page's build with the list's: the build id (scripts/build-id.ts: the build's stamp, the wheels'
+  // hashes, the Pyodide version). A list of another build (the site was deployed again since the page loaded; in development,
+  // a snapshot of other wheels or another Pyodide than the page, or a dev server restarted since the page loaded) throws kind
+  // "updated". A page without an id (some Node tests) skips it.
   checkBuild(list: StartFiles): void {
-    if (this.wheelHash && list.wheelHash !== this.wheelHash) {
-      throw fail(`dofile was updated: reload the page (the site's start files are of the wheel ${String(list.wheelHash).slice(0, 12)}, ` +
-        `this page of ${this.wheelHash.slice(0, 12)}; in development: \`npm run snapshot\`)`, "updated");
+    if (this.buildId && list.buildId !== this.buildId) {
+      throw fail(`dofile was updated: reload the page (the site's start files are of the build ${String(list.buildId).slice(0, 12)}, ` +
+        `this page of ${this.buildId.slice(0, 12)}; in development: \`npm run snapshot\` if the snapshot is stale (the dev server's ` +
+        "console says), else restart the dev server)", "updated");
     }
   }
 

@@ -4,14 +4,14 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { EngineClient, RC_RESET } from "../src/engine/client.ts";
+import { buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
-import type { DataSummary, Matrix, SnapshotManifest } from "../src/engine/types.ts";
+import type { DataSummary, Matrix } from "../src/engine/types.ts";
 
 /** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
 type Ok<T> = Exclude<T, { error: string }>;
@@ -140,15 +140,16 @@ test("files can be listed, written and read while the engine is still loading, a
   eng.worker!.terminate();
 });
 
-// The snapshot start (npm run snapshot builds public/snapshot/). Skipped when it has not been built, or was built from
-// another wheel (the page's checkBuild would refuse it: the test after this one).
+// The snapshot start (npm run snapshot builds public/snapshot/). Skipped when it has not been built, or is stale: built from
+// other wheels or another Pyodide (a build refuses it; the page's checkBuild too: the test after this one).
 const snapshotDir = fileURLToPath(new URL("../public/snapshot/", import.meta.url));
-const wheelHash = createHash("sha256").update(wheel.bytes).digest("hex");
-const manifest: SnapshotManifest | null = existsSync(`${snapshotDir}manifest.json`) ? JSON.parse(readFileSync(`${snapshotDir}manifest.json`, "utf8")) : null;
-const haveSnapshot = manifest?.wheelHash === wheelHash;
-// What the build's list (start-files.json, scripts/start-files.mjs) says of the snapshot: the client reads it and gives the
-// worker the build's identity. The files' own entries are not needed here: the worker reads the files from disk.
-const startFiles = manifest && { built: manifest.built, wheelHash: manifest.wheelHash, snapshot: manifest.files, files: [], size: 0, compressed: 0 };
+const manifest = readManifest();
+const current = inputs(), haveSnapshot = Boolean(manifest) && staleness(manifest!, current) === null;
+// What the build's list (start-files.json, scripts/start-files.ts) says of the snapshot: the client reads it and gives the
+// worker the build's identity. The files' own entries are not needed here: the worker reads the files from disk. The page's
+// id is made from the same stamp and the inputs, as vite.config.ts makes both.
+const STAMP = "engine.test.ts";
+const startFiles = manifest && { built: manifest.built, buildId: buildId(STAMP, manifest), snapshot: manifest.files, files: [], size: 0, compressed: 0 };
 
 test("engine from a memory snapshot: native code, graphs, files, Break; the worker needs no manifest.json", { timeout: 180_000, skip: !haveSnapshot && "no current snapshot: npm run snapshot" }, async t => {
   // The snapshot's files, in a folder with no manifest.json: a worker that read one would fail to start.
@@ -156,7 +157,7 @@ test("engine from a memory snapshot: native code, graphs, files, Break; the work
   after(() => rmSync(bare, { recursive: true, force: true }));
   for (const f of readdirSync(snapshotDir)) if (f !== "manifest.json") symlinkSync(`${snapshotDir}${f}`, join(bare, f));
   const statuses: string[] = [];
-  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, wheelHash, startFiles: startFiles!,
+  const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, buildId: buildId(STAMP, current), startFiles: startFiles!,
     snapshot: `${pathToFileURL(bare).href}/`, onStatus: s => statuses.push(s) });
   const t0 = performance.now();
   const about = await eng.start();
@@ -185,9 +186,9 @@ test("engine from a memory snapshot: native code, graphs, files, Break; the work
   eng.worker!.terminate();
 });
 
-test("a snapshot built for another wheel is refused with kind \"updated\" before any worker is made", { timeout: 60_000, skip: !manifest && "no snapshot" }, async () => {
+test("a list of another build is refused with kind \"updated\" before any worker is made", { timeout: 60_000, skip: !manifest && "no snapshot" }, async () => {
   let made = 0;
-  const eng = new EngineClient({ createWorker: () => (made++, nodeWorker()), wheel, wheelHash: "0".repeat(64), startFiles: startFiles!,
+  const eng = new EngineClient({ createWorker: () => (made++, nodeWorker()), wheel, buildId: buildId("another build run", current), startFiles: startFiles!,
     snapshot: new URL("../public/snapshot/", import.meta.url).href });
   await assert.rejects(eng.start(), { kind: "updated", message: /^dofile was updated: reload the page.*npm run snapshot/ });
   assert.equal(made, 0, "no worker is made");

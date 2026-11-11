@@ -137,18 +137,19 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
   expect(after).toEqual({ body: false, trigger: false, inPage: true });
 });
 
-// A snapshot built from other code than the page's wheel is refused with a message, not run (moved from poc.spec.ts).
+// A list of another build (the site deployed again since the page loaded; in development, a stale snapshot) is refused with a
+// message, not run (moved from poc.spec.ts).
 test("a snapshot from a different build of the wheel is refused with reason \"updated\"; the message says reload in plain words, and the detail gives the cause", async ({ page, request }) => {
   const res = await request.get("/start-files.json");
   expect(res.ok(), "no build: run npm run snapshot, then npm run build").toBe(true);
   const list = await res.json();
   expect(list.built, "no snapshot: run npm run snapshot, then npm run build").toBeTruthy();
-  // the build's list is the one statement of the build: a list of another wheel is a site updated since the page loaded
-  await page.route("**/start-files.json", route => route.fulfill({ json: { ...list, wheelHash: "0".repeat(64) } }));
+  // the build's list is the one statement of the build: a list of another build id is a site updated since the page loaded
+  await page.route("**/start-files.json", route => route.fulfill({ json: { ...list, buildId: "0".repeat(64) } }));
   await page.goto("/?test");
   await startEngine(page);
   await expect.poll(() => page.evaluate(() => { const s = (window as unknown as { __dofile: Hook }).__dofile.state.engine.value; return s.s === "failed" ? s.detail : s.s; }),
-    { timeout: 120_000 }).toMatch(/^dofile was updated: reload the page \(the site's start files are of the wheel 000000000000.*npm run snapshot/);
+    { timeout: 120_000 }).toMatch(/^dofile was updated: reload the page \(the site's start files are of the build 000000000000.*npm run snapshot/);
   expect(await page.evaluate(() => (window as unknown as { __dofile: { engine: { worker: unknown } } }).__dofile.engine.worker), "no worker").toBeNull();
   // the visitor's case is a site updated since the page loaded: the reason says so, for "Reload the page"
   const st = await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.engine.value);

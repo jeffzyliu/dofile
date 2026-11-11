@@ -88,9 +88,10 @@ export interface ClientError extends Error {
 export interface Progress { received: number; total: number }
 export type Downloaded = { cached: true; received: number; total: number } | { cached: false; why: string };
 
-/** The build's list of start files (start-files.json, scripts/start-files.mjs): the one statement of the build. */
+/** The build's list of start files (start-files.json, scripts/start-files.ts): the one statement of the build.
+ *  `buildId`: scripts/build-id.ts, from the build's stamp and the snapshot's record; the page compares it with its own (checkBuild). */
 export interface StartFiles {
-  built: number; wheelHash: string; size: number; compressed: number;
+  built: number; buildId: string; size: number; compressed: number;
   snapshot: SnapshotFiles;                       // the snapshot's two big files, for `mount`
   files: { path: string; size: number; compressed: number; download: boolean }[];
 }
@@ -105,9 +106,11 @@ export interface PendingRow { op: "write" | "mkdir" | "remove" | "rename"; path:
 export interface SnapshotFile { name: string; raw: number; size: number }
 /** The snapshot's two big files: the heap and the site-packages bundle. */
 export interface SnapshotFiles { snapshot: SnapshotFile; bundle: SnapshotFile }
-/** public/snapshot/manifest.json: which build the snapshot belongs to. A build artefact: scripts/start-files.mjs copies
- *  `built`, `wheelHash` and `files` into start-files.json; the page and the worker never fetch it. */
+/** public/snapshot/manifest.json: what the snapshot was built from (scripts/build-id.ts, BuildInputs), its time and its two big
+ *  files. The build's record, not deployed: scripts/start-files.ts refuses a build whose inputs differ from it, and copies
+ *  `built`, `files` and the build id made from it into start-files.json; the page and the worker never fetch it.
+ *  `extraWheels`: file name -> SHA-256 of web/wheels/*.whl (a manifest without it is stale). */
 export interface SnapshotManifest {
-  wheel: string; wheelHash: string; pyodide: string; built: number; optimize: 0 | 2;
+  wheel: string; wheelHash: string; extraWheels: Record<string, string>; pyodide: string; built: number; optimize: 0 | 2;
   files: SnapshotFiles;
 }

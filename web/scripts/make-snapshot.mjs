@@ -1,17 +1,18 @@
 // Builds the Pyodide memory snapshot the page starts from by default, unless ?snapshot=0 (`npm run snapshot`): Python started, the dofile wheel
 // installed, numpy, scipy, matplotlib, openpyxl and the engine's modules imported and one program run, so the page doesn't
 // repeat that. Writes public/snapshot/ (gitignored): the heap image and the site-packages bundle, brotli-compressed
-// (about 40 MB at brotli 11 with docstrings stripped; 229 MB uncompressed), plus small JSON files and a manifest. Rebuild after changing the dofile
-// wheel or the pyodide version: the page checks the manifest and refuses a stale snapshot. Needs the network once
+// (about 40 MB at brotli 11 with docstrings stripped; 229 MB uncompressed), plus small JSON files and a manifest, the snapshot's build record (what it was built from:
+// scripts/build-id.ts, inputs()). Rebuild after changing the dofile wheel, a wheel in web/wheels/ or the pyodide version: a build
+// refuses a stale snapshot, and in development the page says "updated" (scripts/build-id.ts, staleness). Needs the network once
 // (micropip fetches openpyxl from PyPI); numpy and the rest come from node_modules/pyodide.
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
 import { installEngine } from "./install-engine.ts";
+import { inputs } from "./build-id.ts";
 import { patchAsm, makeOptions, makeSnapshot, bundle, inflate, zeroLibraryCopies } from "../src/engine/snapshot.ts";
 
 const here = new URL("..", import.meta.url);
@@ -20,11 +21,9 @@ const OUT = process.env.SNAPSHOT_OUT ? `${process.env.SNAPSHOT_OUT.replace(/\/*$
 // compiled in it, in the snapshot and after the restore (the flag is part of the heap). Smaller heap. SNAPSHOT_STRIP_DOCS=0
 // builds without it.
 const stripDocs = process.env.SNAPSHOT_STRIP_DOCS !== "0";
-const dist = new URL("../dist/", here);
-const wheel = readdirSync(dist).filter(f => f.endsWith(".whl")).sort().at(-1);
-if (!wheel) throw new Error("no wheel in ../dist: run `npm run wheel`");
+// what the snapshot is built from (the dofile wheel, web/wheels/, the Pyodide version), with their hashes: the manifest records it
+const record = inputs();
 const pyodideDir = new URL("node_modules/pyodide/", here);
-const version = JSON.parse(readFileSync(new URL("package.json", pyodideDir), "utf8")).version;
 
 const t0 = performance.now();
 const lap = what => console.log(`${((performance.now() - t0) / 1000).toFixed(1).padStart(5)} s  ${what}`);
@@ -98,8 +97,8 @@ writeFileSync(`${OUT}site-packages.brotli.bin`, bundleBr);
 writeFileSync(`${OUT}dso.json`, JSON.stringify(saved.dso));
 writeFileSync(`${OUT}files.json`, JSON.stringify(saved.index));
 writeFileSync(`${OUT}manifest.json`, JSON.stringify({
-  wheel, wheelHash: createHash("sha256").update(readFileSync(new URL(wheel, dist))).digest("hex"),   // the page compares it with its own wheel's
-  pyodide: version, built: Date.now(), optimize: stripDocs ? 2 : 0,
+  ...record,   // wheel, wheelHash, extraWheels, pyodide: a build compares them with its own (scripts/build-id.ts, staleness)
+  built: Date.now(), optimize: stripDocs ? 2 : 0,
   files: { snapshot: { name: "heap.brotli.bin", raw: snapshot.length, size: snapshotBr.length },
     bundle: { name: "site-packages.brotli.bin", raw: saved.blob.length, size: bundleBr.length } },
 }));

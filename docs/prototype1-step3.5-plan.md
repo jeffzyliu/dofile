@@ -57,11 +57,12 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 0 | Checkpoint: step 3 committed on `prototype1-step3` | done |
 | A | Convert to TypeScript, no behaviour change | done |
 | B | One build identity; no offline; a failed download is `failed` | done |
+| B2 | The build id covers the whole build; a stale snapshot fails the build; `manifest.json` is not deployed | done |
 | C | The state machine in one file; the contracts enforced | not started |
 | D | The journal as the only channel; mtime only | not started |
 | E | Docs: SPEC sections 5 to 8, `web/CLAUDE.md`, `web-engine-data-flow.md` revised to the code as built | not started |
 
-Run A first and alone (it touches every file). B, C and D in that order: each is smaller after the one before. After
+Run A first and alone (it touches every file). B, B2, C and D in that order: each is smaller after the one before. After
 each step: `npm run check`, `npm test`, `SNAPSHOT_QUALITY=5 npm run e2e` (the counts before this step: 144 tests; e2e 74
 passed, 22 skipped), then a review in a fresh context.
 
@@ -87,7 +88,7 @@ passed, 22 skipped), then a review in a fresh context.
 - Today: `client.cached()` and `download()` read `start-files.json` (`built`, `wheelHash`, the files with sizes); the
   worker fetches `snapshot/manifest.json` itself, fresh, and compares its `wheel` and `wheelHash` with what the page
   has. Wanted: the page reads the one list and passes what the worker needs (the build id, the two snapshot files'
-  names and sizes) in `mount`'s arguments. The worker fetches no manifest at start. Check what `scripts/start-files.mjs`
+  names and sizes) in `mount`'s arguments. The worker fetches no manifest at start. Check what `scripts/start-files.ts`
   must add to the list for that, and keep `manifest.json` only if the build scripts need it.
 - One function compares the page's build with the list's (the wheel hash), in one place, and gives `updated`.
 - A download that fails (not "Stop download", not `updated`) is `failed` with reason `download`. `start()` is not
@@ -95,6 +96,32 @@ passed, 22 skipped), then a review in a fresh context.
 - Keep: `cached()` deciding whether to ask, `forgetDownload()` on `failed-twice`, the byte-count check of each file.
 - Done when: a test shows the worker starts with no request for `manifest.json`; the stale-snapshot test still gives
   reason `updated`; a failed download gives `failed` with no worker created.
+
+### B2. The build id (added 2026-11-10, after the review of B)
+
+After B the identity is the dofile wheel's SHA-256 alone, and only CI checks (with a shell `grep`) that the snapshot is
+of the wheel being built. A deploy that keeps the wheel but changes Pyodide, the extra wheels or the page's own code
+passes `checkBuild` on a page that was already open, which then mixes its worker with the new build's files.
+
+- **One build id**, a SHA-256 over: a stamp made once per build (or per dev-server start), the dofile wheel's hash, the
+  extra wheels' hashes, and the Pyodide version. The page computes it from the files it is built from and compiles it
+  in; `start-files.json` carries the one computed from the stamp and the snapshot's own record (`manifest.json`). They
+  are equal only when page and list are of one build and the snapshot is of that build's inputs. `checkBuild` stays the
+  one comparison, now of this id. The stamp is needed because CI keeps the snapshot across deploys, so its `built` time
+  does not change when only the page does.
+- **A build fails on a stale snapshot**: `writeStartFiles` refuses a snapshot whose record differs from the wheel, the
+  extra wheels or the Pyodide version being built, and says which. The workflow's `grep` becomes a call of the same
+  check (it still decides whether to rebuild the snapshot). In development the stale snapshot is still `updated` at run
+  time, with the `npm run snapshot` hint.
+- `make-snapshot.mjs` records the extra wheels' hashes in the manifest.
+- The Cache stays named by the snapshot's `built`: a deploy that changes only the page must not make a visitor download
+  the snapshot again.
+- **`manifest.json` stays as the snapshot's build record and is not deployed**: it is what says, next to a snapshot
+  that CI restored from its cache, what that snapshot was built from. The build removes it from `dist/`.
+- No content hash per file: the byte counts stay the download's check.
+- Accepted cost: after any deploy, a page that was open says "reload" at its next start or Reset.
+- Done when: the checks pass; a test shows a build with a stale snapshot fails with the reason; a test shows a list of
+  another stamp, another extra wheel or another Pyodide version gives `updated`; `dist/` has no `manifest.json`.
 
 ### C. The state machine
 

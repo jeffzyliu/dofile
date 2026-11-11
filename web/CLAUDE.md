@@ -58,8 +58,11 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   reload the page). Its `message` is plain words for the visitor, one per reason (`app/engine.js` `FAILED`); the cause,
   `npm run snapshot` and all, is its `detail` and goes to the console. Nothing the page shows names `?snapshot=0`. An automatic fallback to the normal boot
   when the snapshot fails is a possible later step, not built. Rebuild it (`npm run snapshot`) after a change to the dofile code, a wheel or the
-  Pyodide version: the manifest holds the wheel's SHA-256 and the page refuses a snapshot of another build. The e2e tests and
-  `npm run deploy` build it first, and the deploy workflow builds it before `vite build`.
+  Pyodide version: its `manifest.json` (the build record, not deployed) holds the wheels' SHA-256s and the Pyodide version,
+  `vite build` fails on a snapshot of other inputs, and in development the page says `updated`. The build id
+  (`scripts/build-id.ts`) covers a per-build stamp, the wheels and Pyodide: the page compiles in its own and
+  `start-files.json` carries the list's. The e2e tests and `npm run deploy` build the snapshot first, and the deploy workflow
+  rebuilds it before `vite build` when `node scripts/build-id.ts` says the cached one is stale.
 - **The snapshot's loader is a patched copy of Pyodide's** that re-links the native libraries. The patch throws if Pyodide's
   loader text changes: a Pyodide upgrade needs the patch updated. The two big files are unpacked with the browser's own brotli
   decoder when it has one, else brotli-wasm. See `docs/pyodide-snapshot.md`.
@@ -75,7 +78,7 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   worker and writes nothing (`store.blocked`). Without Web Locks (plain HTTP on a LAN) every tab owns them.
 - **The snapshot start takes Pyodide's runtime from the page's own origin.** `vite.config.ts` copies three files from the
   `pyodide` npm package into `public/pyodide/` (gitignored). `?snapshot=0` keeps the CDN. The build writes
-  `dist/start-files.json` (every start file with its size on disk and its compressed size: `scripts/start-files.mjs`) and
+  `dist/start-files.json` (every start file with its size on disk and its compressed size: `scripts/start-files.ts`) and
   the compressed total into `dist/index.html` (`<meta name="dofile-engine-bytes">`, which the page reads as `engineBytes`:
   the size is there before any request, offline too); it fails if it cannot. The page's `download()` fills the Cache `dofile-snapshot-<built>` from that list, and the worker reads the same Cache for
   everything while it starts (a cache-first `fetch`, the loader from a `blob:` URL): `docs/pyodide-snapshot.md`, "The start
@@ -84,7 +87,7 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
 - **Errors from `client.ts` carry a `kind`** (its header lists them); the worker answers `{id, error, name}`. Keep both when
   adding a failure path: the page decides what to show from them, not from the text. A snapshot that cannot be used
   throws a named error in the worker (`DownloadError`, `SnapshotError`): `app/engine.ts` decides by that name, never by
-  the text. Another build of the site is `kind: "updated"`, from the client's `checkBuild` (in `download()` and in a
+  the text. Another build of the site is `kind: "updated"`, from the client's `checkBuild` (the build id; in `download()` and in a
   snapshot `start()`, before any worker is made); the worker fetches no `manifest.json` and compares no build.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`). A chunk that imports the worker's entry made
   iOS Safari run the entry twice (a `V.loadPackage` error with a snapshot start); see `docs/pyodide-snapshot.md`, "Debugging an
