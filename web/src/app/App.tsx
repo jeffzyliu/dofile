@@ -79,11 +79,11 @@ import {
     split,
     tabs,
     theme
-} from "./state.js";
-import type { OutputTab, PhoneTab } from "./types";
-import { THEME_ARIA, THEME_LABEL, cycleTheme } from "./theme.js";
-import { downloadAll } from "./files.js";
-import { clearLog } from "./run.js";
+} from "./state.ts";
+import type { OutputTab, PhoneTab } from "./types.ts";
+import { THEME_ARIA, THEME_LABEL, cycleTheme } from "./theme.ts";
+import { downloadAll } from "./files.ts";
+import { clearLog } from "./run.ts";
 import { LANDING_URL } from "./env";
 import { BannerSlot } from "./banners";
 import { DialogHost } from "./dialogs";
@@ -91,7 +91,7 @@ import { askReset } from "./states/ResetDialog";
 import { FilesBody, FilesHead } from "./files/FilesPane";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
-import { editorCommands } from "./editor/commands.js";
+import { editorCommands } from "./editor/commands.ts";
 import { Editor } from "./editor/Editor";
 import { PhoneRun, RunControls } from "./editor/RunControls";
 import { StatusBar } from "./editor/StatusBar";

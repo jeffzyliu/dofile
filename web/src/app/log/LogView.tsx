@@ -3,7 +3,7 @@
 // tokenizer (OQ-4), "Go to line N", each graph's link after the echo on its line (desktop) or the graph inline (phone),
 // and the page's own notes. It follows the end unless the user scrolled up. role="log".
 // What step 3 left here is the plainest view of the same items, so the shell can be run and tested: replace it.
-import { log } from "../state.js";
+import { log } from "../state.ts";
 
 export function LogView() {
   return (

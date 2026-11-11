@@ -11,8 +11,8 @@ import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
-import { installEngine } from "./install-engine.mjs";
-import { patchAsm, makeOptions, makeSnapshot, bundle, inflate, zeroLibraryCopies } from "../src/engine/snapshot.js";
+import { installEngine } from "./install-engine.ts";
+import { patchAsm, makeOptions, makeSnapshot, bundle, inflate, zeroLibraryCopies } from "../src/engine/snapshot.ts";
 
 const here = new URL("..", import.meta.url);
 const OUT = process.env.SNAPSHOT_OUT ? `${process.env.SNAPSHOT_OUT.replace(/\/*$/, "")}/` : fileURLToPath(new URL("public/snapshot/", here));

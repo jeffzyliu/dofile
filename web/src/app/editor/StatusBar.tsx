@@ -3,10 +3,10 @@
 // seconds), the last run (`lastRun`), "Memory 612 MB" (`memory`), and at the right "Files are kept in this browser" or
 // "Files may be cleared by this browser" (`persisted`), or "You can edit and upload while it starts" while starting.
 import type { ComponentChildren } from "preact";
-import { engine } from "../state.js";
-import { stagesOf, STAGE_OF } from "../engine.js";
+import { engine } from "../state.ts";
+import { stagesOf, STAGE_OF } from "../engine.ts";
 import { snapshotStart } from "../env";
-import type { EngineState, Stage } from "../types";
+import type { EngineState, Stage } from "../types.ts";
 
 const stageText = Object.fromEntries(Object.entries(STAGE_OF).map(([text, stage]) => [stage, text])) as Record<Stage, string>;
 

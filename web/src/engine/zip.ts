@@ -7,23 +7,23 @@ const TABLE = new Uint32Array(256).map((_, n) => {
   return n >>> 0;
 });
 
-export function crc32(bytes) {
+export function crc32(bytes: Uint8Array): number {
   let c = 0xffffffff;
   for (let i = 0; i < bytes.length; i++) c = TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
 // MS-DOS time and date, local time (the format has no time zone); nothing before 1980
-function dosTime(ms) {
+function dosTime(ms: number): [number, number] {
   const d = new Date(ms), year = Math.max(d.getFullYear(), 1980);
   return [(d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), ((year - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()];
 }
 
 // entries: [{ name, data, mtime }]; a folder's name ends in "/" and it has no data. Returns the parts of the file, in
 // order, for `new Blob(parts)`.
-export function zipParts(entries) {
+export function zipParts(entries: { name: string; data: Uint8Array<ArrayBuffer>; mtime?: number }[]): (ArrayBuffer | Uint8Array<ArrayBuffer>)[] {
   if (entries.length > 0xffff) throw new Error("too many files for a .zip (65,535 at most)");
-  const parts = [], central = [], encoder = new TextEncoder();
+  const parts: (ArrayBuffer | Uint8Array<ArrayBuffer>)[] = [], central: (ArrayBuffer | Uint8Array<ArrayBuffer>)[] = [], encoder = new TextEncoder();
   let offset = 0;
   for (const { name, data, mtime } of entries) {
     const dir = name.endsWith("/"), bytes = dir ? new Uint8Array(0) : data, nameBytes = encoder.encode(name);

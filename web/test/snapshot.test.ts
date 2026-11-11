@@ -5,10 +5,10 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
-import { hasNativeBrotli, inflate, inflateNative, isStorageRefusal, unpack, unpackAsync } from "../src/engine/snapshot.js";
+import { hasNativeBrotli, inflate, inflateNative, isStorageRefusal, unpack, unpackAsync } from "../src/engine/snapshot.ts";
 
 const brotli = createRequire(import.meta.url)("brotli-wasm");
-const compress = (data, quality = 5) => new Uint8Array(zlib.brotliCompressSync(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality } }));
+const compress = (data: Uint8Array, quality = 5) => new Uint8Array(zlib.brotliCompressSync(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality } }));
 
 // incompressible, repetitive and zero-filled parts, longer than the decoder's input and output steps
 const random = crypto.randomBytes(3_000_000);
@@ -56,8 +56,8 @@ test("inflateNative and unpackAsync give the same bytes as brotli-wasm, and a da
 });
 
 test("only the browser refusing storage is carried on from; every other cache error is a bug and is not swallowed", () => {
-  const named = (name, msg = "x") => Object.assign(new Error(msg), { name });
+  const named = (name: string, msg = "x") => Object.assign(new Error(msg), { name });
   for (const name of ["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI", "UnknownError"]) assert.equal(isStorageRefusal(named(name)), true, name);
-  for (const e of [new TypeError("Request scheme 'blob' is unsupported"), named("InvalidStateError"), named("AbortError"), new Error("boom"), undefined, null, "QuotaExceededError"])
+  for (const e of [new TypeError("Request scheme 'blob' is unsupported"), named("InvalidStateError"), named("AbortError"), new Error("boom"), undefined, null, "QuotaExceededError"] as any[])
     assert.equal(isStorageRefusal(e), false, String(e?.name ?? e));
 });

@@ -9,23 +9,23 @@ import "./styles/ui.css";
 import "./styles/app.css";
 import { render } from "preact";
 import { effect } from "@preact/signals";
-import { EngineClient } from "./engine/client.js";
-import { tabLock } from "./engine/tab.js";
-import * as S from "./app/state.js";
-import { breakRun, connectEngine, lost, open, reset, start } from "./app/engine.js";
-import { connectFiles } from "./app/files.js";
-import { runCode } from "./app/run.js";
-import { selection } from "./app/editor/commands.js";
-import { applyTheme } from "./app/theme.js";
-import { watchViewport } from "./app/viewport.js";
-import { store } from "./app/store.js";
+import { EngineClient } from "./engine/client.ts";
+import { tabLock } from "./engine/tab.ts";
+import * as S from "./app/state.ts";
+import { breakRun, connectEngine, lost, open, reset, start } from "./app/engine.ts";
+import { connectFiles } from "./app/files.ts";
+import { runCode } from "./app/run.ts";
+import { selection } from "./app/editor/commands.ts";
+import { applyTheme } from "./app/theme.ts";
+import { watchViewport } from "./app/viewport.ts";
+import { store } from "./app/store.ts";
 import { brotli, snapshotStart, testMode } from "./app/env";
 import { App } from "./app/App";
 
 const here = (path: string) => new URL(`${import.meta.env.BASE_URL}${path}`, location.href).href;
 
 const client = new EngineClient({
-  createWorker: () => new Worker(new URL("./engine/worker.js", import.meta.url), { type: "module" }),
+  createWorker: () => new Worker(new URL("./engine/worker.ts", import.meta.url), { type: "module" }),
   wheel: here(__WHEEL__),
   extraWheels: __EXTRA_WHEELS__.map(here),
   wheelHash: __WHEEL_HASH__,

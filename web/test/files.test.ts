@@ -5,39 +5,44 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
-import { EngineClient, RC_RESET } from "../src/engine/client.js";
-import { openStore } from "../src/engine/store.js";
-import { bytes, endWorkers, extraWheels, nodeWorker, pendingRows, refuseWrites, sleep, text, wheel } from "./harness.mjs";
+import { EngineClient, RC_RESET } from "../src/engine/client.ts";
+import { openStore } from "../src/engine/store.ts";
+import { bytes, endWorkers, extraWheels, nodeWorker, pendingRows, refuseWrites, sleep, text, wheel } from "./harness.ts";
+import type { FileStore } from "../src/engine/store.ts";
+import type { About, BrowseRows, DataSummary, FileInfo, ResetKind } from "../src/engine/types.ts";
+
+/** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
+type Ok<T> = Exclude<T, { error: string }>;
 
 after(endWorkers);
 
-const byPath = (a, b) => (a.path < b.path ? -1 : 1);
+const byPath = (a: FileInfo, b: FileInfo) => (a.path < b.path ? -1 : 1);
 // The store and /work hold the same folders and files, byte for byte. The `files` op waits in the worker's queue behind
 // every page change posted before it, so /work is compared after those are in.
-async function same(store, eng) {
+async function same(store: FileStore, eng: EngineClient) {
   const inWork = (await eng.call("files")).sort(byPath), inStore = await store.list();
   assert.deepEqual(inWork.map(f => [f.path, f.dir, f.size]), inStore.map(f => [f.path, f.dir, f.size]), "/work (first) is not the store (second)");
   for (const f of inStore) if (!f.dir) assert.deepEqual(await eng.call("read", { path: f.path }), await store.read(f.path), f.path);
   return inStore.map(f => f.path);
 }
 // Stata code that writes `content` to the file `path`
-const writes = (path, content) => `file open f using ${path}, write replace\nfile write f "${content}"\nfile close f`;
+const writes = (path: string, content: string) => `file open f using ${path}, write replace\nfile write f "${content}"\nfile close f`;
 // Start a run whose code has `display "go"` in it: `going` resolves when that line has reached the page (the log streams
 // before each command), so a test makes its changes while what follows (a `sleep`) goes on. No guess of how long it takes.
-function untilGo(eng, code) {
-  let log = "", go;
-  const going = new Promise(ok => { go = ok; });
+function untilGo(eng: EngineClient, code: string) {
+  let log = "", go!: () => void;
+  const going = new Promise<void>(ok => { go = ok; });
   const running = eng.run(code, { onLog: c => { log += c; if (/^go$/m.test(log)) go(); } });
   running.then(() => go());   // a run that ends first: the assertions after it say what went wrong
   return { running, going };
 }
 // a record's time in the store, set directly (the page's own writes always take the time now)
-const setMtime = (store, path, mtime) => store.tx(["info"], "readwrite", t => new Promise((ok, err) => {
+const setMtime = (store: FileStore, path: string, mtime: number) => store.tx(["info"], "readwrite", t => new Promise<void>((ok, err) => {
   const info = t.objectStore("info"), r = info.get(path);
   r.onsuccess = () => { info.put({ ...r.result, mtime }); ok(); };
   r.onerror = () => err(r.error);
 }));
-const deleteDatabase = factory => new Promise((ok, err) => { const r = factory.deleteDatabase("dofile"); r.onsuccess = ok; r.onerror = () => err(r.error); });
+const deleteDatabase = (factory: IDBFactory) => new Promise((ok, err) => { const r = factory.deleteDatabase("dofile"); r.onsuccess = ok; r.onerror = () => err(r.error); });
 
 test("the store and the engine: the start copy, the after-run difference, page changes during a run, restart, a refused write", { timeout: 300_000 }, async t => {
   const store = openStore({ indexedDB: new IDBFactory() });
@@ -50,7 +55,7 @@ test("the store and the engine: the start copy, the after-run difference, page c
   await setMtime(store, "early.do", Date.now() + 3_600_000);
   assert.deepEqual(await pendingRows(store), []);
 
-  const statuses = [], fileErrors = [];
+  const statuses: string[] = [], fileErrors: [string, string, string, string][] = [];
   const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store, onStatus: s => statuses.push(s),
     onFileError: (error, op, path) => fileErrors.push([error.name, error.message, op, path]) });
   const starting = eng.start();
@@ -100,7 +105,7 @@ test("the store and the engine: the start copy, the after-run difference, page c
     await store.write("change.txt", bytes("KEEP"));   // same size as what the run copies over it: only the time tells
     await store.write("gone.txt", bytes("to be erased"));
     const big = await store.write("big.bin", new Uint8Array(3 << 20).fill(7));
-    const seen = [], applyRun = store.applyRun.bind(store);
+    const seen: string[] = [], applyRun = store.applyRun.bind(store);
     store.applyRun = changes => { seen.push(...changes.map(c => c.path)); return applyRun(changes); };
     t.after(() => { store.applyRun = applyRun; });
     const { running, going } = untilGo(eng, `${writes("new.txt", "made by the run")}
@@ -118,10 +123,10 @@ sleep 1000`);
     const r = await running;
     store.applyRun = applyRun;
     assert.equal(r.rc, 0, r.log);
-    assert.deepEqual(r.files.map(f => [f.name, f.status]).sort(), [["change.txt", "modified"], ["gone.txt", "removed"], ["new.txt", "created"], ["results/d.dta", "created"]]);
-    assert.equal(r.files.find(f => f.name === "new.txt").bytes, 15);
+    assert.deepEqual(r.files!.map(f => [f.name, f.status]).sort(), [["change.txt", "modified"], ["gone.txt", "removed"], ["new.txt", "created"], ["results/d.dta", "created"]]);
+    assert.equal(r.files!.find(f => f.name === "new.txt")!.bytes, 15);
     assert.deepEqual(r.skipped, []);
-    assert.ok(r.timing.save >= 0);
+    assert.ok(r.timing!.save >= 0);
     assert.deepEqual(seen.sort(), ["change.txt", "gone.txt", "new.txt", "results", "results/d.dta"], "only what the run touched was read from /work");
     assert.deepEqual((await store.list()).find(f => f.path === "big.bin"), big, "the big file's record is as the page wrote it");
     const all = await same(store, eng);
@@ -166,7 +171,7 @@ copy src.txt other.txt, replace`);
     const r = await running;
     assert.equal(r.rc, 0, r.log);
     assert.deepEqual(r.files, [{ name: "other.txt", status: "created", bytes: 18 }], "the run's versions of the page's files are left out");
-    assert.deepEqual([...r.skipped].sort(), ["dir/a.txt", "dir/b.txt"], "the result names only the files lost with the folder the page renamed");
+    assert.deepEqual([...r.skipped!].sort(), ["dir/a.txt", "dir/b.txt"], "the result names only the files lost with the folder the page renamed");
     assert.deepEqual(await pendingRows(store), [], "the worker took the page's version with the run's result: nothing waits");
     const all = await same(store, eng);
     for (const gone of ["del.txt", "ren.txt", "dir", "dir/a.txt", "dir/b.txt", "folder/b.txt"]) assert.ok(!all.includes(gone), gone);
@@ -195,7 +200,7 @@ copy src.txt other.txt, replace`);
     const r = await running;
     assert.equal(r.rc, 0, r.log);
     assert.deepEqual(r.files, []);
-    assert.deepEqual([...r.skipped].sort(), ["box/in.txt", "box/new.txt"], "not f.txt: the page renamed that file itself");
+    assert.deepEqual([...r.skipped!].sort(), ["box/in.txt", "box/new.txt"], "not f.txt: the page renamed that file itself");
     const all = await same(store, eng);
     assert.ok(all.includes("u.txt") && all.includes("box3/in.txt"));
     for (const gone of ["f.txt", "t.txt", "box", "box2", "box3/new.txt"]) assert.ok(!all.includes(gone), gone);
@@ -229,7 +234,7 @@ copy src.txt other.txt, replace`);
     const r = await running;
     assert.equal(r.rc, 0, r.log);
     assert.deepEqual(r.files, [{ name: "free.txt", status: "created", bytes: 4 }]);
-    assert.deepEqual([...r.skipped].sort(), ["old/log.txt", "proj/out.txt"]);
+    assert.deepEqual([...r.skipped!].sort(), ["old/log.txt", "proj/out.txt"]);
     const all = await same(store, eng);
     assert.ok(all.includes("project/main.do") && !all.some(p => p.startsWith("proj/") || p.startsWith("old") || p === "project/out.txt"));
     await store.remove("project");
@@ -280,7 +285,7 @@ copy src.txt other.txt, replace`);
     const undo = refuseWrites(tt);
     const r = await eng.run(`${writes("quota.txt", "x")}\nerase keep.txt\ncopy src.txt m.txt, replace\nerase fold/in.txt\nrmdir fold`);
     assert.equal(r.rc, 0, r.log);
-    assert.match(r.store_error, /quota/);
+    assert.match(r.store_error!, /quota/);
     assert.deepEqual(r.files, []);
     const before = (await store.list()).map(f => f.path);
     assert.ok(!before.includes("quota.txt") && before.includes("keep.txt") && before.includes("fold/in.txt"), "nothing of the refused write is in the store");
@@ -289,7 +294,7 @@ copy src.txt other.txt, replace`);
     const again = await eng.run("display 1");
     assert.equal(again.store_error, undefined);
     // the run's text goes with the rename; a file the store had is "modified"; the folder is not listed as a file
-    assert.deepEqual(again.files.map(f => [f.name, f.status]).sort(), [["fold/in.txt", "removed"], ["keep.txt", "removed"], ["n.txt", "modified"], ["quota.txt", "created"]]);
+    assert.deepEqual(again.files!.map(f => [f.name, f.status]).sort(), [["fold/in.txt", "removed"], ["keep.txt", "removed"], ["n.txt", "modified"], ["quota.txt", "created"]]);
     assert.equal(text(await store.read("n.txt")), "written by the run");
     const all = await same(store, eng);
     assert.ok(!all.includes("fold") && !all.includes("m.txt"));
@@ -299,7 +304,7 @@ copy src.txt other.txt, replace`);
   await t.test("a refused write to a file the page then renames, in the same copy of the store as a failed page change: nothing is owed for it", async tt => {
     await store.write("owed.txt", bytes("old"));
     const undo = refuseWrites(tt);
-    assert.match((await eng.run("copy src.txt owed.txt, replace")).store_error, /quota/);
+    assert.match((await eng.run("copy src.txt owed.txt, replace")).store_error!, /quota/);
     undo();
     await eng.call("mkdir", { path: "clash2" });   // only in /work: the page's write there fails, and /work copies the store
     const errors = fileErrors.length;
@@ -315,7 +320,7 @@ copy src.txt other.txt, replace`);
 
   await t.test("restart (rc 9998): the cut run wrote nothing, /work is rebuilt from the store, pending is empty", async () => {
     const before = (await store.list()).map(f => f.path);
-    const restarts = [], order = [];
+    const restarts: [string, Promise<About>, ResetKind][] = [], order: string[] = [];
     eng.onRestart = (reason, started, kind) => { restarts.push([reason, started, kind]); order.push("onRestart"); };
     const { running, going } = untilGo(eng, `${writes("cut.txt", "never saved")}\nerase src.txt\ndisplay "go"\nsleep 30000`);
     running.then(() => order.push("the run's result"));
@@ -352,8 +357,8 @@ copy src.txt other.txt, replace`);
 test("after a start that failed, every store call works and nothing is journalled", { timeout: 20_000 }, async () => {
   const store = openStore({ indexedDB: new IDBFactory() });
   const blocked = () => {   // as a worker script that never loads: an error event, no messages
-    const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
-    return port;
+    const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
+    return port as unknown as globalThis.Worker;
   };
   const eng = new EngineClient({ createWorker: blocked, wheel, extraWheels, store });
   const starting = eng.start();
@@ -372,30 +377,30 @@ test("after a start that failed, every store call works and nothing is journalle
 test("a worker that cannot open the file store still starts, and says the files are not saved", { timeout: 120_000 }, async () => {
   const eng = new EngineClient({ createWorker: () => nodeWorker({ noDatabase: true }), wheel, extraWheels });
   await eng.start();
-  assert.match(eng.storeError, /^the files are not saved: this browser has no storage for files/);
-  assert.equal(eng.startup.storeError, eng.storeError);
+  assert.match(eng.storeError!, /^the files are not saved: this browser has no storage for files/);
+  assert.equal(eng.startup!.storeError, eng.storeError);
   const r = await eng.run(writes("lost.txt", "x"));
   assert.equal(r.rc, 0, r.log);
-  assert.match(r.store_error, /the files are not saved/);
+  assert.match(r.store_error!, /the files are not saved/);
   assert.deepEqual([r.files, r.skipped], [[], []]);
   assert.equal((await eng.run("display 1")).store_error, undefined, "a run that writes no file has nothing to say");
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });
 
 test("the page's store with a worker that has none: the page's changes reach /work and leave no `pending` row", { timeout: 120_000 }, async () => {
   const store = openStore({ indexedDB: new IDBFactory() });
-  const worker = () => nodeWorker({ store: { takeAll: async () => { throw new Error("this browser has no storage for files (IndexedDB)"); } } });
+  const worker = () => nodeWorker({ store: { takeAll: async () => { throw new Error("this browser has no storage for files (IndexedDB)"); } } as unknown as FileStore });
   const eng = new EngineClient({ createWorker: worker, wheel, extraWheels, store });
   await eng.start();
-  assert.match(eng.storeError, /^the files are not saved/);
+  assert.match(eng.storeError!, /^the files are not saved/);
   await store.write("page.txt", bytes("from the page"));
   assert.equal(text(await eng.call("read", { path: "page.txt" })), "from the page");
   assert.deepEqual(await pendingRows(store), [], "no row that no worker would ever delete");
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });
 
 test("the browser deletes the database under a live worker: the worker is restarted and copies the store as it is now", { timeout: 120_000 }, async () => {
-  const factory = new IDBFactory(), store = openStore({ indexedDB: factory }), restarts = [];
+  const factory = new IDBFactory(), store = openStore({ indexedDB: factory }), restarts: [string, Promise<About>, ResetKind][] = [];
   const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store,
     onRestart: (reason, started, kind) => restarts.push([reason, started, kind]) });
   const starting = eng.start();
@@ -409,12 +414,12 @@ test("the browser deletes the database under a live worker: the worker is restar
   const r = await eng.run("type new.txt");
   assert.equal(r.rc, 0, r.log);
   assert.match(r.log, /after the database was cleared/);
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });
 
 test("the engine with its own database: the old /work database is left alone; Break, keepWaiting and the reset timer", { timeout: 300_000 }, async t => {
-  let port;
-  const restarts = [];
+  let port!: ReturnType<typeof nodeWorker>;
+  const restarts: [string, Promise<About>, ResetKind][] = [];
   const eng = new EngineClient({ createWorker: () => (port = nodeWorker({ oldDatabase: true })), wheel, extraWheels, graceMs: 200,
     onRestart: (reason, started, kind) => restarts.push([reason, started, kind]) });
   await eng.start();
@@ -433,7 +438,7 @@ test("the engine with its own database: the old /work database is left alone; Br
     assert.equal(key, "/work/old.do");
     assert.equal(text(record.contents), "display 1\n");
     assert.equal(record.timestamp.getTime(), 1700000000000);
-    assert.deepEqual(dbs.dofile.stores.info.map(([path]) => path), ["made.txt"]);
+    assert.deepEqual(dbs.dofile.stores.info.map(([path]: [string]) => path), ["made.txt"]);
     assert.equal(text(new Uint8Array(dbs.dofile.stores.data[0][1])), "new store");
     assert.deepEqual(dbs.dofile.stores.pending, []);
   });
@@ -473,7 +478,7 @@ test("the engine with its own database: the old /work database is left alone; Br
     const r = await running;
     assert.equal(r.rc, RC_RESET);
     assert.equal(r.kind, "break");
-    assert.match(r.error, /^session reset: the code did not stop at Break\. Data in memory is gone; your files are kept\.$/);
+    assert.match(r.error!, /^session reset: the code did not stop at Break\. Data in memory is gone; your files are kept\.$/);
     assert.equal(restarts.length, 1);
     assert.deepEqual([restarts[0][0], restarts[0][2]], ["the code did not stop at Break", "break"]);
     await restarts[0][1];
@@ -503,11 +508,11 @@ test("the engine with its own database: the old /work database is left alone; Br
   await t.test("an op's error has the error's name, and a file system error is readable", async () => {
     await assert.rejects(eng.call("read", { path: "nothing-here.txt" }), { kind: "op", name: "ErrnoError", message: "file system error ENOENT" });
     await assert.rejects(eng.call("read", { path: "../etc/passwd" }), { kind: "op", name: "Error", message: /not in the working folder/ });
-    await assert.rejects(eng.call("nosuchop"), { kind: "op", message: "unknown op nosuchop" });
+    await assert.rejects(eng.call("nosuchop" as "files"), { kind: "op", message: "unknown op nosuchop" });
   });
 
   await t.test("run: the log streams to onLog while the run prints, and the result still has all of it", async () => {
-    const chunks = [], at = [], t0 = Date.now();
+    const chunks: string[] = [], at: number[] = [], t0 = Date.now();
     const r = await eng.run('forvalues i = 1/6 {\n display "line `i\'"\n sleep 250\n}', { onLog: c => { chunks.push(c); at.push(Date.now() - t0); } });
     assert.equal(r.rc, 0, r.log);
     assert.ok(chunks.length >= 2, `${chunks.length} chunks`);
@@ -541,25 +546,25 @@ test("the engine with its own database: the old /work database is left alone; Br
     assert.equal(m.globals.G, "hello");
     assert.ok(Array.isArray(m.system_globals));
 
-    const first = await eng.call("browse");
+    const first = await eng.call("browse") as Ok<BrowseRows>;
     assert.deepEqual([first.nobs, first.offset, first.rows.length, first.more], [60, 0, 50, 10]);
     assert.deepEqual(first.vars, ["x", "s"]);
-    const page = await eng.call("browse", { vars: "x", offset: 50, limit: 5 });
+    const page = await eng.call("browse", { vars: "x", offset: 50, limit: 5 }) as Ok<BrowseRows>;
     assert.deepEqual([page.offset, page.rows.length, page.more, page.vars], [50, 5, 5, ["x"]]);
     assert.equal(page.rows[0][0].trim(), "51");
-    assert.ok((await eng.call("browse", { vars: "nosuchvar" })).error);
+    assert.ok((await eng.call("browse", { vars: "nosuchvar" }) as { error: string }).error);
 
     const mem = await eng.call("memory");
     assert.ok(mem.data_bytes > 0);
     assert.ok(mem.heap_bytes > 30 << 20 && mem.heap_bytes % 65536 === 0, "the size of the WebAssembly memory");
 
     await eng.run("clear");
-    const d = await eng.call("describe_file", { path: "d.dta" });
+    const d = await eng.call("describe_file", { path: "d.dta" }) as Ok<DataSummary>;
     assert.deepEqual([d.nobs, d.nvars, d.variables.map(v => v.name)], [60, 2, ["x", "s"]]);
-    assert.equal((await eng.call("describe")).nobs, 0, "the data in memory is as it was");
-    assert.ok((await eng.call("describe_file", { path: "nothing.dta" })).error);
+    assert.equal((await eng.call("describe") as Ok<DataSummary>).nobs, 0, "the data in memory is as it was");
+    assert.ok((await eng.call("describe_file", { path: "nothing.dta" }) as { error: string }).error);
     await assert.rejects(eng.call("describe_file", { path: "../etc/passwd" }), /not in the working folder/);
   });
 
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });

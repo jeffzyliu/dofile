@@ -3,24 +3,30 @@
 // messages, with a stand-in worker. SPEC.md section 7, test 10, and section 6 (the {id, log} chunks).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EngineClient, RC_RESET } from "../src/engine/client.js";
-import { sleep } from "./harness.mjs";
+import { EngineClient, RC_RESET } from "../src/engine/client.ts";
+import { sleep } from "./harness.ts";
+import type { Op, ResetKind, StartFiles } from "../src/engine/types.ts";
+import type { FileStore } from "../src/engine/store.ts";
+
+type ClientOptions = ConstructorParameters<typeof EngineClient>[0];
+/** What the stand-in fetch is called with. */
+type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 // ---- download ----
 
 function fakeCaches({ refuse = false } = {}) {
-  const all = new Map();   // cache name -> Map(url -> Response)
+  const all = new Map<string, Map<string, Response>>();   // cache name -> Map(url -> Response)
   return {
     all,
     async keys() { return [...all.keys()]; },
-    async has(name) { return all.has(name); },
-    async delete(name) { return all.delete(name); },
-    async open(name) {
+    async has(name: string) { return all.has(name); },
+    async delete(name: string) { return all.delete(name); },
+    async open(name: string) {
       if (!all.has(name)) all.set(name, new Map());
-      const entries = all.get(name);
+      const entries = all.get(name)!;
       return {
-        async match(url) { return entries.get(url)?.clone(); },
-        async put(url, response) {
+        async match(url: string) { return entries.get(url)?.clone(); },
+        async put(url: string, response: Response) {
           if (refuse) throw new DOMException("the quota has been exceeded", "QuotaExceededError");
           entries.set(url, response);
         },
@@ -30,8 +36,8 @@ function fakeCaches({ refuse = false } = {}) {
 }
 
 const BASE = "https://dofile.test/app/";
-const content = (n, seed) => new Uint8Array(n).map((_, i) => (i * 7 + seed) % 256);
-const FILES = {   // path -> [bytes, type]
+const content = (n: number, seed: number) => new Uint8Array(n).map((_, i) => (i * 7 + seed) % 256);
+const FILES: Record<string, [Uint8Array<ArrayBuffer>, string]> = {   // path -> [bytes, type]
   "snapshot/heap.bin": [content(10_000, 1), "application/octet-stream"],
   "pyodide/pyodide.asm.wasm": [content(8_000, 2), "application/octet-stream"],   // a host that does not know the type
   "snapshot/dso.json": [content(600, 3), "application/json"],
@@ -46,9 +52,9 @@ const LIST = { built: 777, size: 19_100, compressed: 13_300, files: [
 // A fetch that sends each file in 1,000-byte pieces. `hold`: a path whose answer stops after its first piece until the
 // request is aborted. `missing`: a path that is a 404. `offline`: a path whose fetch fails as with no network. `short`: a
 // path that arrives 100 bytes short, with status 200. `calls`: the URLs asked for; `modes`: the cache mode of each.
-function fakeFetch({ hold, missing, offline, short } = {}) {
-  const calls = [], modes = [];
-  const fetch = async (url, { signal, cache } = {}) => {
+function fakeFetch({ hold, missing, offline, short }: { hold?: string, missing?: string, offline?: string, short?: string } = {}) {
+  const calls: string[] = [], modes: (RequestCache | undefined)[] = [];
+  const fetch = async (url: string, { signal, cache }: RequestInit = {}) => {
     calls.push(url);
     modes.push(cache);
     signal?.throwIfAborted();
@@ -62,27 +68,28 @@ function fakeFetch({ hold, missing, offline, short } = {}) {
       async pull(controller) {
         if (at >= data.length) return controller.close();
         if (path === hold && at > 0) {
-          return new Promise(() => { signal?.addEventListener("abort", () => controller.error(signal.reason)); });
+          return new Promise(() => { signal?.addEventListener("abort", () => controller.error(signal!.reason)); });
         }
         await sleep(1);
         controller.enqueue(data.subarray(at, at += 1000));
       },
     });
-    signal?.addEventListener("abort", () => { try { body.cancel(signal.reason).catch(() => {}); } catch { /* locked: the reader gets the error */ } });
+    signal?.addEventListener("abort", () => { try { body.cancel(signal!.reason).catch(() => {}); } catch { /* locked: the reader gets the error */ } });
     return new Response(body, { headers: { "Content-Type": type } });
   };
   return { fetch, calls, modes };
 }
 
 const noWorker = () => { throw new Error("download() must not start a worker"); };
-const client = (fetch, caches, more = {}) => new EngineClient({ createWorker: noWorker, wheel: "dofile.whl", snapshot: `${BASE}snapshot/`,
-  startFiles: { base: `${BASE}start-files.json`, ...LIST }, fetch, caches, ...more });
-const cached = async (caches, name = "dofile-snapshot-777") => [...(caches.all.get(name) ?? new Map()).keys()].map(u => u.slice(BASE.length)).sort();
+const client = (fetch: Fetch, caches: object | null | undefined, more: Partial<ClientOptions> = {}) => new EngineClient({ createWorker: noWorker,
+  wheel: "dofile.whl", snapshot: `${BASE}snapshot/`, startFiles: { base: `${BASE}start-files.json`, ...LIST } as StartFiles & { base: string },
+  fetch: fetch as typeof globalThis.fetch, caches: caches as CacheStorage | null | undefined, ...more });
+const cached = async (caches: ReturnType<typeof fakeCaches>, name = "dofile-snapshot-777") => [...(caches.all.get(name) ?? new Map()).keys()].map(u => u.slice(BASE.length)).sort();
 
 test("download: every start file goes into the Cache, the counts rise to the total, before any worker exists", async () => {
   const caches = fakeCaches(), { fetch, calls, modes } = fakeFetch();
   await (await caches.open("dofile-snapshot-1")).put(`${BASE}snapshot/heap.bin`, new Response("an older build"));
-  const seen = [];
+  const seen: { received: number, total: number }[] = [];
   const done = await client(fetch, caches).download({ onProgress: p => seen.push(p) });
   assert.deepEqual(done, { cached: true, received: 13_300, total: 13_300 });
   assert.deepEqual(seen[0], { received: 200, total: 13_300 }, "the page's own files are here already");
@@ -94,9 +101,9 @@ test("download: every start file goes into the Cache, the counts rise to the tot
   const cache = await caches.open("dofile-snapshot-777");
   for (const [path, [data, type]] of Object.entries(FILES)) {
     const kept = await cache.match(BASE + path);
-    assert.deepEqual(new Uint8Array(await kept.arrayBuffer()), data, path);
+    assert.deepEqual(new Uint8Array(await kept!.arrayBuffer()), data, path);
     // a .wasm is compiled from the cached answer only with this type, whatever the host sent
-    assert.equal(kept.headers.get("Content-Type"), path.endsWith(".wasm") ? "application/wasm" : type);
+    assert.equal(kept!.headers.get("Content-Type"), path.endsWith(".wasm") ? "application/wasm" : type);
   }
   assert.deepEqual(modes, ["no-cache", "no-cache", "no-cache"], "each file is asked for fresh, not taken from the HTTP cache of an older build");
 });
@@ -111,7 +118,7 @@ test("download: the list can be a URL (start-files.json), fetched fresh, and its
 
 test("download: abort stops the fetches and rejects; a second try keeps the finished files and fetches the rest", async () => {
   const caches = fakeCaches(), first = fakeFetch({ hold: "snapshot/heap.bin" });
-  const eng = client(first.fetch, caches), stop = new AbortController(), seen = [];
+  const eng = client(first.fetch, caches), stop = new AbortController(), seen: number[] = [];
   const downloading = eng.download({ signal: stop.signal, onProgress: p => { seen.push(p.received); } });
   while ((await cached(caches)).length < 2) await sleep(5);   // the two small files are in; the big one waits
   stop.abort();
@@ -120,8 +127,8 @@ test("download: abort stops the fetches and rejects; a second try keeps the fini
   assert.equal(seen.at(-1), 200 + 3_000 + 100 + 1_000, "it had counted the big file's first piece");
   assert.equal(eng.worker, null, "no worker: the page goes back to having no engine");
 
-  const second = fakeFetch(), again = [];
-  eng.fetch = second.fetch;
+  const second = fakeFetch(), again: number[] = [];
+  eng.fetch = second.fetch as typeof globalThis.fetch;
   const done = await eng.download({ onProgress: p => again.push(p.received) });
   assert.deepEqual(second.calls, [`${BASE}snapshot/heap.bin`], "only the unfinished file is fetched, from its start");
   assert.equal(again[0], 200);
@@ -133,7 +140,7 @@ test("download: abort stops the fetches and rejects; a second try keeps the fini
   const third = fakeFetch(), aborted = new AbortController();
   aborted.abort();
   caches.all.clear();
-  eng.fetch = third.fetch;
+  eng.fetch = third.fetch as typeof globalThis.fetch;
   await assert.rejects(eng.download({ signal: aborted.signal }), { name: "AbortError" });
   assert.deepEqual(await cached(caches), []);
 });
@@ -213,22 +220,28 @@ test("download: with nowhere to keep the files it resolves with the reason; a bu
   assert.deepEqual(await client(fetch, undefined).download(), { cached: false, why: "there is no Cache API here (not a secure context?)" });
   const refused = await client(fetch, fakeCaches({ refuse: true })).download();
   assert.equal(refused.cached, false);
-  assert.match(refused.why, /QuotaExceededError/);
+  assert.match((refused as { why: string }).why, /QuotaExceededError/);
   calls.length = 0;
   assert.equal((await client(fetch, fakeCaches(), { snapshot: undefined }).download()).cached, false, "the normal start (?snapshot=0) has nothing to download here");
   assert.deepEqual(calls, []);
-  await assert.rejects(client(fetch, fakeCaches(), { startFiles: { ...LIST, built: null } }).download(), /no snapshot in this build: run `npm run snapshot`/);
+  await assert.rejects(client(fetch, fakeCaches(), { startFiles: { ...LIST, built: null } as unknown as StartFiles }).download(), /no snapshot in this build: run `npm run snapshot`/);
 });
 
 // ---- messages ----
 
 // A worker that answers as `script(message, post)` says, a moment later, like a real one.
-function fakeWorker(script) {
-  const port = { onmessage: null, onerror: null, terminated: false, terminate() { port.terminated = true; },
+function fakeWorker(script: Script) {
+  const port: FakePort = { onmessage: null, onerror: null, terminated: false, terminate() { port.terminated = true; },
     postMessage(message) { setTimeout(() => script(message, data => port.onmessage?.({ data }), port), 1); } };
-  return port;
+  return port as FakePort & globalThis.Worker;   // what client.ts wants of a Worker
 }
-const starts = (message, post) => {
+/** A message the client posts; `args` as the op has them. */
+type Message = { id: number, op: Op, args: any };
+type Post = (data: unknown) => void;
+type Script = (message: Message, post: Post, port: FakePort) => unknown;
+type FakePort = { onmessage: null | ((e: { data: unknown }) => void), onerror: null | ((e: unknown) => void), terminated: boolean,
+  terminate(): void, postMessage(message: Message): void };
+const starts = (message: Message, post: Post) => {
   if (message.op === "mount" || message.op === "startup") post({ id: message.id, result: undefined });
   else if (message.op === "boot") post({ id: message.id, result: { dofile: "test" } });
   else return false;
@@ -236,7 +249,7 @@ const starts = (message, post) => {
 };
 
 test("a {id, log} message goes to the run's onLog and never settles the call; the result does", async () => {
-  let finish;
+  let finish!: () => void;
   const eng = new EngineClient({ wheel: "dofile.whl", createWorker: () => fakeWorker((m, post) => {
     if (starts(m, post)) return;
     if (m.op === "run") {
@@ -251,7 +264,7 @@ test("a {id, log} message goes to the run's onLog and never settles the call; th
     }
   }) });
   await eng.start();
-  const chunks = [];
+  const chunks: string[] = [];
   let settled = false;
   const running = eng.run("display 1", { onLog: c => chunks.push(c), fresh_locals: true, plot_theme: "dark" });
   running.then(() => { settled = true; });
@@ -268,7 +281,7 @@ test("a {id, log} message goes to the run's onLog and never settles the call; th
 });
 
 test("run sends its options; a page that is not cross-origin isolated resets at Break, at once", async () => {
-  const sent = [], workers = [];
+  const sent: Message[] = [], workers: FakePort[] = [];
   const eng = new EngineClient({ wheel: "dofile.whl", createWorker: () => {
     const w = fakeWorker((m, post) => { sent.push(m); starts(m, post); });
     workers.push(w);
@@ -278,28 +291,28 @@ test("run sends its options; a page that is not cross-origin isolated resets at 
   eng.interrupt = null;   // as in a page with no SharedArrayBuffer
   const running = eng.run("while 1 {\n}", { fresh_locals: true, plot_theme: "dark" });
   await sleep(10);
-  assert.deepEqual(sent.at(-1).args, { code: "while 1 {\n}", fresh_locals: true, plot_theme: "dark" });
+  assert.deepEqual(sent.at(-1)!.args, { code: "while 1 {\n}", fresh_locals: true, plot_theme: "dark" });
   eng.breakRun();
   const r = await running;
   assert.equal(r.rc, RC_RESET);
   assert.equal(r.kind, "break");
-  assert.match(r.error, /^session reset: Break reset the engine, because this page is not cross-origin isolated/);
+  assert.match(r.error!, /^session reset: Break reset the engine, because this page is not cross-origin isolated/);
   assert.equal(eng.resetAt, null, "no countdown: there was nothing to wait for");
   assert.equal(workers.length, 2);
   assert.equal(workers[0].terminated, true);
   // what the old worker still says is not taken for the new one's
-  workers[0].onmessage({ data: { id: eng.nextId, result: "from the old worker" } });
-  workers[0].onmessage({ data: { status: "old status" } });
+  workers[0].onmessage!({ data: { id: eng.nextId, result: "from the old worker" } });
+  workers[0].onmessage!({ data: { status: "old status" } });
   await sleep(10);
   assert.equal(eng.about?.dofile, "test", "the new worker started");
 });
 
 // ---- starts that fail, kinds of error, one run at a time ----
 
-const fakeStore = () => ({ post: undefined, attach(post) { this.post = post; } });
+const fakeStore = () => ({ post: undefined as FileStore["post"] | undefined, attach(post: FileStore["post"]) { this.post = post; } });
 // a client whose workers answer as `script` says; `workers` collects them
-function scripted(script, more = {}) {
-  const workers = [];
+function scripted(script: (message: Message, post: Post, port: FakePort, index: number) => unknown, more: Partial<ClientOptions> = {}) {
+  const workers: FakePort[] = [];
   const eng = new EngineClient({ wheel: "dofile.whl", createWorker: () => {
     const w = fakeWorker((m, post, port) => script(m, post, port, workers.indexOf(port)));
     workers.push(w);
@@ -351,7 +364,7 @@ test("a second start() ends the first worker instead of leaking it", async () =>
 });
 
 test("error kinds: an op's error keeps the worker's name; stop, restart and a worker that fails twice are told apart", async () => {
-  const restarts = [], order = [];
+  const restarts: [string, ResetKind][] = [], order: string[] = [];
   const { eng, workers } = scripted((m, post) => {
     if (starts(m, post)) return;
     if (m.op === "matrix") post({ id: m.id, error: "file system error ENOENT", name: "ErrnoError" });
@@ -373,7 +386,7 @@ test("error kinds: an op's error keeps the worker's name; stop, restart and a wo
 
   // a crash: the worker's error event
   running = eng.run("while 1 {\n}");
-  workers.at(-1).onerror(new Error("out of memory"));
+  workers.at(-1)!.onerror!(new Error("out of memory"));
   assert.equal((await running).kind, "crash");
   assert.deepEqual(restarts.at(-1), ["the engine crashed (out of memory)", "crash"]);
   await sleep(20);   // the new worker starts
@@ -384,14 +397,14 @@ test("error kinds: an op's error keeps the worker's name; stop, restart and a wo
   eng.stop("another tab took over");
   const stopped = await running;
   assert.deepEqual([stopped.rc, stopped.kind], [RC_RESET, "stopped"]);
-  assert.match(stopped.error, /^session reset: another tab took over\./);
+  assert.match(stopped.error!, /^session reset: another tab took over\./);
   await assert.rejects(waiting, { kind: "stopped" });
   assert.equal(eng.worker, null);
   assert.equal(restarts.length, 2, "stop() is not a restart");
 });
 
 test("a worker that fails twice: kind failed-twice, with the reason; stop() and restart() clear the count of failures", async () => {
-  const failing = () => { const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new RangeError("Out of memory")), 5); } }; return port; };
+  const failing = () => { const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new RangeError("Out of memory")), 5); } }; return port as unknown as Worker; };
   const eng = new EngineClient({ wheel: "dofile.whl", createWorker: failing });
   await assert.rejects(eng.start(), { kind: "failed-twice", reason: "memory", message: /failed twice \(Out of memory\); reload the page/ });
   assert.equal(eng.worker, null);
@@ -411,7 +424,7 @@ test("a worker that fails twice: kind failed-twice, with the reason; stop() and 
 });
 
 test("one run at a time: a second run() is refused, and Break acts on the run that is running", async () => {
-  const finish = [];
+  const finish: (() => void)[] = [];
   const { eng, workers } = scripted((m, post) => {
     if (starts(m, post)) return;
     if (m.op === "run") finish.push(() => post({ id: m.id, result: { rc: 0, log: m.args.code } }));
@@ -419,14 +432,14 @@ test("one run at a time: a second run() is refused, and Break acts on the run th
   // with no worker, run() resolves: the result says there is no engine
   const none = await eng.run("display 1");
   assert.deepEqual([none.rc, none.kind, none.results], [RC_RESET, "no-engine", null]);
-  assert.match(none.error, /^session reset: the engine is not running\./);
+  assert.match(none.error!, /^session reset: the engine is not running\./);
 
   await eng.start();
   const first = eng.run("first");
   await assert.rejects(eng.run("second"), { kind: "busy", message: "a run is in progress" });
   assert.equal(eng.running, first, "the refused call changed nothing");
   await sleep(10);
-  finish.shift()();
+  finish.shift()!();
   assert.deepEqual(await first, { rc: 0, log: "first" });
   assert.equal(finish.length, 0, "the second run never reached the worker");
 
@@ -435,15 +448,15 @@ test("one run at a time: a second run() is refused, and Break acts on the run th
   await sleep(10);
   eng.breakRun();
   const deadline = eng.resetAt, timer = eng.breakTimer;
-  assert.ok(deadline > Date.now());
+  assert.ok(deadline! > Date.now());
   await sleep(60);
   eng.breakRun();
   assert.equal(eng.resetAt, deadline, "the countdown did not start again");
   assert.equal(eng.breakTimer, timer, "the same timer: the reset comes at the first deadline");
   const r = await stuck;
   assert.deepEqual([r.rc, r.kind], [RC_RESET, "break"]);
-  assert.match(r.error, /the code did not stop at Break/);
-  assert.ok(Date.now() >= deadline - 5, "not before the deadline");
+  assert.match(r.error!, /the code did not stop at Break/);
+  assert.ok(Date.now() >= deadline! - 5, "not before the deadline");
   assert.equal(workers.length, 2);
   await sleep(20);
   // after keepWaiting(), nothing counts down, and a run that ends clears the Break
@@ -454,21 +467,21 @@ test("one run at a time: a second run() is refused, and Break acts on the run th
   assert.equal(eng.resetAt, null);
   await sleep(200);
   assert.equal(workers.length, 2, "no reset");
-  finish.at(-1)();
+  finish.at(-1)!();
   assert.deepEqual(await slow, { rc: 0, log: "slow" });
 });
 
 test("a page change the worker could not put into its folder reaches onFileError; a restart's cut is not an error", async () => {
-  const store = fakeStore(), errors = [];
+  const store = fakeStore(), errors: [string, string, string, string, string][] = [];
   const { eng } = scripted((m, post) => {
     if (starts(m, post)) return;
     if (m.op === "write") post({ id: m.id, error: "write q: file system error EISDIR", name: "MirrorError" });
   }, { store, onFileError: (error, op, path) => errors.push([error.name, error.kind, error.message, op, path]) });
   await eng.start();
-  store.post("write", { path: "q", data: new Uint8Array(1), seq: 1 }, []);
+  store.post!("write", { path: "q", data: new Uint8Array(1), seq: 1 }, []);
   await sleep(20);
   assert.deepEqual(errors, [["MirrorError", "op", "write q: file system error EISDIR", "write", "q"]]);
-  store.post("rename", { from: "a", to: "b", seq: 2 }, []);   // never answered: cut by the restart
+  store.post!("rename", { from: "a", to: "b", seq: 2 }, []);   // never answered: cut by the restart
   await eng.restart("reset by you");
   await sleep(10);
   assert.equal(errors.length, 1);
@@ -505,12 +518,12 @@ test("download: an abort with a reason of the caller's own still rejects as an A
     const downloading = client(fetch, caches).download({ signal: stop.signal });
     while ((await cached(caches)).length < 2) await sleep(5);
     reason === undefined ? stop.abort() : stop.abort(reason);
-    await assert.rejects(downloading, e => e?.name === "AbortError" && !e.kind, String(reason));
+    await assert.rejects(downloading, (e: any) => e?.name === "AbortError" && !e.kind, String(reason));
     // aborted before it starts
     const early = new AbortController();
     early.abort(reason);
     await assert.rejects(client(fakeFetch().fetch, fakeCaches(), { startFiles: `${BASE}start-files.json` }).download({ signal: early.signal }),
-      e => e?.name === "AbortError" && !e.kind, `early: ${reason}`);
+      (e: any) => e?.name === "AbortError" && !e.kind, `early: ${reason}`);
   }
 });
 
@@ -534,5 +547,5 @@ test("a restart while start() waits for `startup` hands that start the new one's
   assert.deepEqual(await first, { dofile: "worker 1" });
   assert.deepEqual(await again, { dofile: "worker 1" });
   assert.deepEqual(eng.startup, { mode: "normal", worker: 1 }, "the old start did not write over the new one's startup");
-  assert.equal(eng.about.dofile, "worker 1");
+  assert.equal(eng.about!.dofile, "worker 1");
 });

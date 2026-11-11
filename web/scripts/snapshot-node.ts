@@ -5,13 +5,13 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { loadPyodide } from "pyodide";
-import { restoreOptions, unpack } from "../src/engine/snapshot.js";
+import { restoreOptions, unpack } from "../src/engine/snapshot.ts";
 
 export const defaultDir = fileURLToPath(new URL("../public/snapshot", import.meta.url));
 
 export async function bootFromSnapshot(dir = defaultDir, io = { stdout: () => {}, stderr: () => {} }) {
   dir = resolve(dir);
-  const read = n => readFileSync(`${dir}/${n}`);
+  const read = (n: string) => readFileSync(`${dir}/${n}`);
   const manifest = JSON.parse(read("manifest.json").toString());
   const brotli = createRequire(import.meta.url)("brotli-wasm");
   const snapshot = unpack(brotli, new Uint8Array(read(manifest.files.snapshot.name)), manifest.files.snapshot);
@@ -24,7 +24,7 @@ export async function bootFromSnapshot(dir = defaultDir, io = { stdout: () => {}
 // Calls into the native libraries (scipy's LAPACK and the rest, matplotlib's font code) that a restore can break by
 // linking them wrong: a call can fail with "Dynamic linking error: cannot resolve symbol" or "table index is out of
 // bounds" at the first use, or end the whole process. Each is [label, python expression, expected value or null].
-export const NATIVE_CHECKS = [
+export const NATIVE_CHECKS: [string, string, number | null][] = [
   ["scipy.linalg.solve", "float(__import__('scipy.linalg').linalg.solve([[3., 1], [1, 2]], [1., 2])[0])", 0],
   ["scipy.linalg.solve, symmetric (LAPACK dsytrf)", "float(__import__('scipy.linalg').linalg.solve([[2., 1], [1, 3]], [1., 2], assume_a='sym')[0])", 0.2],
   ["scipy.linalg.lapack.dsytrf", "float(__import__('scipy.linalg.lapack', fromlist=['x']).dsytrf([[2., 1], [1, 3]])[0][0, 0])", 5 / 3],

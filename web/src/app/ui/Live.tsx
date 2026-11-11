@@ -6,7 +6,7 @@
 //  - <Banner kind>: a pane's notice above its content, until its cause goes or it is dismissed. Warning and error carry
 //    the warning icon (meaning is never color alone).
 import type { ComponentChildren, Ref } from "preact";
-import { announce, holdToast, toast } from "../state.js";
+import { announce, holdToast, toast } from "../state.ts";
 import { Icon } from "./Icon";
 
 export const LiveRegion = () => <div class="visually-hidden" role="status" aria-live="polite">{announce.value}</div>;

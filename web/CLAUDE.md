@@ -25,8 +25,8 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
 ## Rules
 
 - **The page is Preact with signals, in `src/app/`** (`src/main.tsx` wires it). The state is one module of signals,
-  `src/app/state.js` (SPEC section 8; types in `src/app/types.d.ts`); each signal has one owner. The controllers own most
-  of them and are plain JavaScript, tested in Node (`test/app.test.mjs`): `engine.js` (the one wrapper around
+  `src/app/state.ts` (SPEC section 8; types in `src/app/types.ts`); each signal has one owner. The controllers own most
+  of them and are `.ts` files that import no `.tsx`, tested in Node (`test/app.test.ts`): `engine.ts` (the one wrapper around
   `EngineClient`: the section 5 states, the tab lock, asking at load unless `client.cached()` finds this build's start
   files all in the Cache; there is no "downloaded" flag), `run.js` (runs, the log, results,
   graphs, the after-run calls), `files.js` (the file list, `persisted`). Views read signals and call the controllers'
@@ -37,9 +37,10 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   labels in one cell, so the toolbar never changes size; keep labels short, the widest sets the width). Toolbar buttons
   share one height (`--control` in `tokens.css`), a pane head's controls another (`--control-sm`). `src/app/viewport.js` sizes the page to the area above a phone's
   on-screen keyboard.
-- **The engine's types are in `src/engine/types.d.ts`** (SPEC section 6). `worker.js`, `client.js`, `store.js` and
-  `snapshot.js` stay plain JavaScript, so the Node tests run them as they are; they name those types in JSDoc, which is
-  how the page gets typed results. Keep the types, the JSDoc and the spec in step.
+- **The engine's types are in `src/engine/types.ts`** (SPEC section 6). Everything in `src/engine/`, the controllers
+  and `test/` is TypeScript with real annotations (no JSDoc types). Node runs these `.ts` files as they are, by
+  removing the types, so: imports spell the `.ts` extension, and only syntax that can be erased is allowed (no `enum`,
+  no `namespace`, no constructor parameter properties; `npm run check` enforces it). Keep the types and the spec in step.
 - **The test hook stays, behind a flag.** With `?test` in the URL the page sets `window.__dofile = {engine, store, start,
   persisted, engineBytes, state, run, breakRun, reset, selection}` (the client, the store, the controller's start, the
   signals, a run through the controller, the controller's Break and Reset, the editor's `selection` signal); with `?test=manual` it starts no engine until the test calls

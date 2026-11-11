@@ -12,8 +12,8 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { loadPyodide } from "pyodide";
-import { installEngine } from "./install-engine.mjs";
-import { bootFromSnapshot, NATIVE_CHECKS, defaultDir } from "./snapshot-node.mjs";
+import { installEngine } from "./install-engine.ts";
+import { bootFromSnapshot, NATIVE_CHECKS, defaultDir } from "./snapshot-node.ts";
 
 const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);

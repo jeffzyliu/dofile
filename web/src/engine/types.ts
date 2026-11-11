@@ -1,6 +1,5 @@
-// The engine's types, shared by worker.js, client.js, store.js and snapshot.js (plain JavaScript: the Node tests run them
-// as they are) and the page's TypeScript. The JavaScript files name these in JSDoc (`import("./types").RunResult`), so
-// the page gets typed results without casts. Source: docs/design/SPEC.md, sections 6 and 7; keep the two in step.
+// The engine's types, shared by worker.ts, client.ts, store.ts and snapshot.ts (which the Node tests run as they are:
+// Node removes the types) and the page. Source: docs/design/SPEC.md, sections 6 and 7; keep the two in step.
 
 // ---- the worker protocol (SPEC section 6) ----
 

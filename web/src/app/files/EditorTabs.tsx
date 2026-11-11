@@ -5,7 +5,7 @@
 //    editorCommands.closed(path). `dirty` is the editor's (state.js setDirty); this file never sets it.
 //  - FileSwitcher: the phone's top bar title on the Editor tab (WP 1): the open file's name and ▾, a menu of the open
 //    files. The default below shows the name only.
-import { activeTab } from "../state.js";
+import { activeTab } from "../state.ts";
 
 export const EditorTabs = () => null;
 

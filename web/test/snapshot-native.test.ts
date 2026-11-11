@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "../scripts/snapshot-node.mjs";
+import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "../scripts/snapshot-node.ts";
 
 test("native-library calls work in an engine restored from the snapshot", { timeout: 120_000, skip: !existsSync(`${defaultDir}/manifest.json`) && "no snapshot: npm run snapshot" }, async t => {
   const { py } = await bootFromSnapshot();

@@ -7,9 +7,9 @@
 // new label goes into the button's list, and the pill's time ("Break" "3.4 s") goes in with a sizer of its widest form.
 // The phone's Run and Break pill are two buttons with the same list (PHONE_LABELS), so they are the same width. In
 // `other-tab` the buttons stay in place, hidden (app.css), so the bar keeps its height.
-import { engine, isolated, tabs, activeTab } from "../state.js";
-import * as eng from "../engine.js";
-import { editorCommands, selection } from "./commands.js";
+import { engine, isolated, tabs, activeTab } from "../state.ts";
+import * as eng from "../engine.ts";
+import { editorCommands, selection } from "./commands.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 
 // The play icon says Run and the stop icon says Break, so the state labels are short; the words a screen reader hears

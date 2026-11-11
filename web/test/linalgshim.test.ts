@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
-import { installEngine } from "../scripts/install-engine.mjs";
+import { installEngine } from "../scripts/install-engine.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 

@@ -6,8 +6,8 @@
 // the data in its memory, so a stray Enter must not do it) and "Use dofile in this tab". WS 6 draws "Close this tab",
 // but a page may close only a tab a script opened, so the button leaves the editor for the landing page instead.
 // That page is step 5's: until it exists, LANDING_URL is a dead link (step 5 checks this button).
-import { dialog, engine, engineBytes } from "../state.js";
-import * as eng from "../engine.js";
+import { dialog, engine, engineBytes } from "../state.ts";
+import * as eng from "../engine.ts";
 import { Dialog } from "../ui/Dialog";
 import type { DialogOf } from "../dialogs";
 import { LANDING_URL, snapshotStart } from "../env";

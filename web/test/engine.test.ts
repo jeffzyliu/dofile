@@ -6,31 +6,37 @@ import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { EngineClient, RC_RESET } from "../src/engine/client.js";
+import { EngineClient, RC_RESET } from "../src/engine/client.ts";
+import type { Transferable as NodeTransferable } from "node:worker_threads";
+import type { DataSummary, Matrix } from "../src/engine/types.ts";
+
+/** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
+type Ok<T> = Exclude<T, { error: string }>;
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const wheels = readdirSync(`${root}/dist`).filter(f => f.endsWith(".whl")).sort();
 assert.ok(wheels.length, "no wheel in dist/: run `uv build --wheel` first");
-const wheel = { name: wheels.at(-1), bytes: readFileSync(`${root}/dist/${wheels.at(-1)}`) };
+const wheel = { name: wheels.at(-1)!, bytes: readFileSync(`${root}/dist/${wheels.at(-1)}`) };
 const extraWheels = readdirSync(`${root}/web/wheels`).filter(f => f.endsWith(".whl")).map(f => ({ name: f, bytes: readFileSync(`${root}/web/wheels/${f}`) }));
 
 // Every worker started here is ended when the file's tests are done, passed or failed: a failing assertion skips the
 // `eng.worker.terminate()` at the end of its test, and a live worker keeps the process (and so `npm test`) from exiting.
-const started = new Set();
+const started = new Set<Worker>();
 after(() => { for (const w of started) w.terminate(); });
 
 function nodeWorker() {
-  const w = new Worker(new URL("./node-worker.mjs", import.meta.url),
-    { workerData: { script: new URL("../src/engine/worker.js", import.meta.url).href } });
+  const w = new Worker(new URL("./node-worker.ts", import.meta.url),
+    { workerData: { script: new URL("../src/engine/worker.ts", import.meta.url).href } });
   started.add(w);
-  const port = { postMessage: (m, t) => w.postMessage(m, t), terminate: () => w.terminate(), onmessage: null, onerror: null };
+  const port = { postMessage: (m: unknown, t?: readonly NodeTransferable[]) => w.postMessage(m, t), terminate: () => w.terminate(),
+    onmessage: null as null | ((e: { data: unknown }) => void), onerror: null as null | ((e: unknown) => void) };
   w.on("message", data => port.onmessage?.({ data }));
   w.on("error", e => port.onerror?.(e));
-  return port;
+  return port as typeof port & globalThis.Worker;   // what client.ts wants of a (Web) Worker
 }
 
 test("engine worker: files, run, describe, matrix, Break, restart", { timeout: 180_000 }, async t => {
-  const statuses = [];
+  const statuses: string[] = [];
   const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, onStatus: s => statuses.push(s) });
   const about = await eng.start();
   assert.match(JSON.stringify(about), /opendta/i);
@@ -53,12 +59,12 @@ test("engine worker: files, run, describe, matrix, Break, restart", { timeout: 1
     assert.equal(r.rc, 0, r.log);
     assert.match(r.log, /\(path C:\\Users\\me\\proj\\data\\cps\.dta is data\/cps\.dta in the working folder\)/);
     assert.equal(r.images.length, 1);
-    const d = await eng.call("describe", { vars: "lwage yrsed" });
+    const d = await eng.call("describe", { vars: "lwage yrsed" }) as Ok<DataSummary>;
     assert.deepEqual(d.variables.map(v => v.name), ["lwage", "yrsed"]);
     const reg = await eng.run("regress lwage yrsed, robust");
     assert.equal(reg.rc, 0, reg.log);
-    assert.equal(reg.results.e.macros.vcetype, "Robust");
-    const b = await eng.call("matrix", { name: "e(b)" });
+    assert.equal(reg.results!.e.macros.vcetype, "Robust");
+    const b = await eng.call("matrix", { name: "e(b)" }) as Ok<Matrix>;
     assert.deepEqual(b.cols, ["yrsed", "_cons"]);
     assert.equal((await eng.run("shell ls")).rc, 199);
   });
@@ -80,31 +86,31 @@ test("engine worker: files, run, describe, matrix, Break, restart", { timeout: 1
     await eng.restart("test");
     const r = await running;
     assert.equal(r.rc, RC_RESET);
-    assert.match(r.error, /session reset: test/);
+    assert.match(r.error!, /session reset: test/);
     assert.equal((await eng.run("display 1")).rc, 0);
   });
 
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });
 
 test("a worker that fails to load is replaced, and start() still finishes", { timeout: 120_000 }, async () => {
   let first = true;
   const blocked = () => {   // as WebKit's refusal of a worker script: an error event, no messages
-    const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
-    return port;
+    const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
+    return port as unknown as globalThis.Worker;
   };
   const eng = new EngineClient({ createWorker: () => (first ? ((first = false), blocked()) : nodeWorker()), wheel, extraWheels });
   assert.match(JSON.stringify(await eng.start()), /opendta/i);
   assert.equal((await eng.run("display 1")).rc, 0);
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });
 
 test("a worker that always fails to load ends start() with an error instead of restarting forever", { timeout: 20_000 }, async () => {
   let made = 0;
   const createWorker = () => {
     made++;
-    const port = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
-    return port;
+    const port = { onmessage: null, onerror: null as null | ((e: Error) => void), terminate() {}, postMessage() { setTimeout(() => port.onerror?.(new Error("blocked")), 10); } };
+    return port as unknown as globalThis.Worker;
   };
   const eng = new EngineClient({ createWorker, wheel, extraWheels });
   await assert.rejects(eng.start(), /failed twice/);
@@ -128,7 +134,7 @@ test("files can be listed, written and read while the engine is still loading, a
   assert.equal(r.rc, 0, r.log);
   assert.match(r.log, /42/);
   await starting;
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });
 
 // The snapshot start (npm run snapshot builds public/snapshot/). Skipped when it has not been built; the build script
@@ -139,7 +145,7 @@ const haveSnapshot = existsSync(`${snapshotDir}manifest.json`) &&
   JSON.parse(readFileSync(`${snapshotDir}manifest.json`, "utf8")).wheel === wheel.name;
 
 test("engine from a memory snapshot: native code, graphs, files, Break", { timeout: 180_000, skip: !haveSnapshot && "no current snapshot: npm run snapshot" }, async t => {
-  const statuses = [];
+  const statuses: string[] = [];
   const eng = new EngineClient({ createWorker: nodeWorker, wheel, extraWheels, snapshot, onStatus: s => statuses.push(s) });
   const t0 = performance.now();
   const about = await eng.start();
@@ -165,7 +171,7 @@ test("engine from a memory snapshot: native code, graphs, files, Break", { timeo
     assert.equal(r.rc, 1, r.log);
     assert.equal((await eng.run("summarize x")).nobs, 100);
   });
-  eng.worker.terminate();
+  eng.worker!.terminate();
 });
 
 test("a snapshot built for another wheel is refused with a message", { timeout: 60_000, skip: !existsSync(`${snapshotDir}manifest.json`) && "no snapshot" }, async () => {

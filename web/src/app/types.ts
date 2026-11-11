@@ -1,6 +1,6 @@
 // The page's state model: docs/design/SPEC.md, section 8, as built in step 3. The signals that hold these are in state.js.
 
-import type { About, BrowseRows, DataSummary, FileInfo, Macros, Memory, ResetKind, Results } from "../engine/types";
+import type { About, BrowseRows, DataSummary, FileInfo, Macros, Memory, ResetKind, Results } from "../engine/types.ts";
 export type { About, BrowseRows, DataSummary, FileInfo, Macros, Memory, ResetKind, Results };
 
 /** One start-up stage. The snapshot start has no "packages"; ?snapshot=0 has no "unpack" (OQ-11). */

@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve, basename } from "node:path";
 import { loadPyodide } from "pyodide";
-import { installEngine } from "./install-engine.mjs";
+import { installEngine } from "./install-engine.ts";
 
 const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);

@@ -11,32 +11,45 @@
 // also copies from the store: everything when it starts (takeAll), and after a run the paths the page changed meanwhile
 // (applyRun). Each copy reads the highest seq in `pending` in the same transaction (`upTo`) and empties the journal:
 // the copy already holds every change up to that seq, so the worker ignores the ops with a seq up to it.
-import { zipParts } from "./zip.js";
+import { zipParts } from "./zip.ts";
+import type { FileChange, FileInfo, PendingRow } from "./types.ts";
+
+/** What a run did to one path in /work (worker.ts saveRun), for applyRun. `data`: a file's bytes, unless removed. */
+export interface RunChange { path: string; dir: boolean; size: number; mtime: number; status: FileChange["status"]; data?: Uint8Array }
+/** What takeAll gives the worker: every record, and the highest seq the copy covers. */
+export interface StoreCopy { infos: FileInfo[]; data: [IDBValidKey, ArrayBuffer][]; upTo: number }
+/** What applyRun gives back (see there). */
+export interface AppliedRun {
+  files: FileChange[]; skipped: string[]; upTo: number;
+  resync: { paths: string[]; infos: FileInfo[]; data: [string, ArrayBuffer][]; dirs: string[] };
+}
+/** A page change's arguments, as posted to the worker (with its seq). */
+type ChangeArgs = { path?: string; from?: string; to?: string; data?: Uint8Array };
 
 export const DB_NAME = "dofile";
 const HIDDEN = ".dofile";   // the engine's own folder: never listed, copied or zipped
 const ALL = ["info", "data", "pending"];
 
 // a path inside the working folder: relative, with "/", no "..", and not in the hidden folder
-export function cleanPath(path) {
+export function cleanPath(path: string): string {
   const parts = typeof path === "string" ? path.split("/") : [""];
   if (parts[0] === HIDDEN || parts.some(p => p === "" || p === "." || p === "..")) throw new Error(`not in the working folder: ${path}`);
   return path;
 }
 
-const req = r => new Promise((ok, err) => { r.onsuccess = () => ok(r.result); r.onerror = () => err(r.error); });
-const under = path => IDBKeyRange.bound(`${path}/`, `${path}0`, false, true);   // "0" is the character after "/"
-const exact = data => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-const within = (path, top) => path === top || path.startsWith(`${top}/`);   // `path` is `top` or under it
+const req = <T>(r: IDBRequest<T>) => new Promise<T>((ok, err) => { r.onsuccess = () => ok(r.result); r.onerror = () => err(r.error); });
+const under = (path: string) => IDBKeyRange.bound(`${path}/`, `${path}0`, false, true);   // "0" is the character after "/"
+const exact = (data: Uint8Array): ArrayBuffer => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);   // `path` is `top` or under it
 
-function parents(path) {
-  const out = [];
+function parents(path: string): string[] {
+  const out: string[] = [];
   for (let i = path.indexOf("/"); i > 0; i = path.indexOf("/", i + 1)) out.push(path.slice(0, i));
   return out;
 }
 
 // the folders above `path`, made if missing
-async function makeParents(t, path) {
+async function makeParents(t: IDBTransaction, path: string) {
   const info = t.objectStore("info");
   for (const p of parents(path)) {
     const old = await req(info.get(p));
@@ -46,15 +59,15 @@ async function makeParents(t, path) {
 }
 
 // `path` and everything under it: [info records, [path, bytes] of the files]
-async function tree(t, path) {
+async function tree(t: IDBTransaction, path: string): Promise<[FileInfo[], [string, ArrayBuffer][]]> {
   const info = t.objectStore("info"), data = t.objectStore("data"), top = await req(info.get(path));
-  const infos = [...(top ? [top] : []), ...await req(info.getAll(under(path)))];
-  return [infos, await Promise.all(infos.filter(i => !i.dir).map(async i => [i.path, await req(data.get(i.path))]))];
+  const infos: FileInfo[] = [...(top ? [top] : []), ...await req(info.getAll(under(path)))];
+  return [infos, await Promise.all(infos.filter(i => !i.dir).map(async (i): Promise<[string, ArrayBuffer]> => [i.path, await req(data.get(i.path))]))];
 }
 
 // `closed()` is called when the browser closes the database under us (another page upgrades or deletes it)
-function open(factory, closed) {
-  return new Promise((ok, err) => {
+function open(factory: IDBFactory | null | undefined, closed: () => void) {
+  return new Promise<IDBDatabase>((ok, err) => {
     if (!factory) return err(new Error("this browser has no storage for files (IndexedDB)"));
     const r = factory.open(DB_NAME, 1);
     r.onupgradeneeded = () => {
@@ -73,14 +86,18 @@ function open(factory, closed) {
 }
 
 export class FileStore {
-  constructor(factory) {
+  declare factory: IDBFactory | null | undefined;
+  declare opened: Promise<IDBDatabase> | undefined;
+  declare post: null | ((op: PendingRow["op"], args: ChangeArgs & { seq?: IDBValidKey }, transfer: Transferable[]) => void);
+  declare blocked: boolean;
+  declare onChange: null | (() => void);
+  declare onClosed: null | (() => void);
+  declare journal: boolean;
+  constructor(factory: IDBFactory | null | undefined) {
     this.factory = factory;
-    /** @type {any} */
     this.opened = undefined;   // the open database, once asked for
-    /** @type {null | ((op: string, args: object, transfer: Transferable[]) => void)} */
     this.post = null;      // sends the op to the worker; null while there is no worker
     this.blocked = false;  // true in a tab that does not own the files (the tab lock): it writes nothing
-    /** @type {null | (() => void)} */
     this.onChange = () => {};   // called after every change this page made
     this.onClosed = null;   // the engine client's: called when the browser closed the database under us
     this.journal = true;    // false: the worker has no store of its own, so it would never delete a `pending` row
@@ -89,25 +106,25 @@ export class FileStore {
   // The engine client calls this when a worker starts (and with null when it is gone for good). `onClosed`: called when
   // the browser closes the database (another page deleted or upgraded it, "Clear site data"): the seqs may start again
   // from 1, so the worker must copy the store afresh. `journal`: as above.
-  attach(post, { onClosed = null, journal = true } = {}) { Object.assign(this, { post, onClosed, journal }); }
+  attach(post: FileStore["post"], { onClosed = null, journal = true }: { onClosed?: null | (() => void); journal?: boolean } = {}) { Object.assign(this, { post, onClosed, journal }); }
 
   // One transaction. It rejects with the browser's error if it fails, and then nothing of it is kept. A database the
   // browser closed is opened again by the next call.
-  async tx(stores, mode, fn) {
-    const mine = this.opened ??= open(this.factory, () => {
+  async tx<T>(stores: string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
+    const mine: Promise<IDBDatabase> = this.opened ??= open(this.factory, () => {
       if (this.opened !== mine) return;
       this.opened = undefined;
       try { this.onClosed?.(); } catch (e) { console.warn(e); }
     })
       .catch(e => { this.opened = undefined; throw e; });
     const t = (await mine).transaction(stores, mode);
-    const done = new Promise((ok, err) => { t.oncomplete = () => ok(); t.onabort = () => err(t.error ?? new Error("the transaction was aborted")); });
+    const done = new Promise<void>((ok, err) => { t.oncomplete = () => ok(); t.onabort = () => err(t.error ?? new Error("the transaction was aborted")); });
     done.catch(() => {});
     try {
       const out = await fn(t);
       await done;
       return out;
-    } catch (e) {
+    } catch (e: any) {
       try { t.abort(); } catch { /* already aborted */ }
       // a request that was waiting when the transaction aborted only says "aborted": the transaction's error says why
       throw e?.name === "AbortError" && t.error ? t.error : e;
@@ -116,10 +133,10 @@ export class FileStore {
 
   // A change made by the page: the records and, when a worker exists, a `pending` row in one transaction; then the op
   // goes to the worker with the row's seq, and the worker deletes the row once /work has the change.
-  async change(op, args, fn, transfer = []) {
+  async change<T>(op: PendingRow["op"], args: ChangeArgs, fn: (t: IDBTransaction) => T | Promise<T>, transfer: Transferable[] = []): Promise<T> {
     if (this.blocked) throw new Error("dofile is open in another tab");
     const post = this.post, journal = post && this.journal;
-    let seq;
+    let seq: IDBValidKey | undefined;
     const out = await this.tx(ALL, "readwrite", async t => {
       const out = await fn(t);
       if (journal) seq = await req(t.objectStore("pending").add({ op, path: args.path ?? args.from, ...(args.to ? { to: args.to } : {}) }));
@@ -132,25 +149,21 @@ export class FileStore {
 
   // ---- the page's API ----
 
-  /** @returns {Promise<import("./types").FileInfo[]>} */
-  async list() {   // reads `info` only
+  async list(): Promise<FileInfo[]> {   // reads `info` only
     return this.tx(["info"], "readonly", t => req(t.objectStore("info").getAll()));
   }
 
-  /** @returns {Promise<Uint8Array<ArrayBuffer>>} */
-  /** @param {string} path */
-  async read(path) {
+  async read(path: string): Promise<Uint8Array<ArrayBuffer>> {
     cleanPath(path);
-    const bytes = await this.tx(["data"], "readonly", t => req(t.objectStore("data").get(path)));
+    const bytes: ArrayBuffer | undefined = await this.tx(["data"], "readonly", t => req(t.objectStore("data").get(path)));
     if (!bytes) throw new Error(`no such file: ${path}`);
     return new Uint8Array(bytes);
   }
 
-  /** @param {string} path @param {Uint8Array} data @returns {Promise<import("./types").FileInfo>} */
-  async write(path, data) {
+  async write(path: string, data: Uint8Array): Promise<FileInfo> {
     cleanPath(path);
     const bytes = exact(data);   // our own copy: the caller keeps its array, and this one can be moved to the worker
-    const info = { path, dir: false, size: bytes.byteLength, mtime: Date.now() };
+    const info: FileInfo = { path, dir: false, size: bytes.byteLength, mtime: Date.now() };
     await this.change("write", { path, data: new Uint8Array(bytes) }, async t => {
       await makeParents(t, path);
       if ((await req(t.objectStore("info").get(path)))?.dir) throw new Error(`${path} is a folder`);
@@ -160,26 +173,24 @@ export class FileStore {
     return info;
   }
 
-  /** @param {string} path @returns {Promise<void>} */
-  async mkdir(path) {
+  async mkdir(path: string): Promise<void> {
     cleanPath(path);
     await this.change("mkdir", { path }, t => makeParents(t, `${path}/`));
   }
 
   // a file, or a folder with everything under it
-  /** @param {string} from @param {string} to @returns {Promise<void>} */
-  async rename(from, to) {
+  async rename(from: string, to: string): Promise<void> {
     cleanPath(from);
     cleanPath(to);
     if (to === from) return;
     if (to.startsWith(`${from}/`)) throw new Error(`cannot move ${from} into itself`);
     await this.change("rename", { from, to }, async t => {
       const info = t.objectStore("info"), data = t.objectStore("data");
-      const old = await req(info.get(from));
+      const old: FileInfo | undefined = await req(info.get(from));
       if (!old) throw new Error(`no such file: ${from}`);
       if (await req(info.get(to))) throw new Error(`${to} already exists`);
       await makeParents(t, to);
-      for (const i of [old, ...(old.dir ? await req(info.getAll(under(from))) : [])]) {
+      for (const i of [old, ...(old.dir ? await req<FileInfo[]>(info.getAll(under(from))) : [])]) {
         const dest = to + i.path.slice(from.length);
         info.delete(i.path);
         info.put({ ...i, path: dest });
@@ -191,8 +202,7 @@ export class FileStore {
   }
 
   // the same; a path that is not there is not an error
-  /** @param {string} path @returns {Promise<void>} */
-  async remove(path) {
+  async remove(path: string): Promise<void> {
     cleanPath(path);
     await this.change("remove", { path }, t => {
       for (const s of ["info", "data"]) { t.objectStore(s).delete(path); t.objectStore(s).delete(under(path)); }
@@ -200,13 +210,12 @@ export class FileStore {
   }
 
   // "Download all (.zip)": every file with its folders, made here with no engine. A File, named with the date.
-  /** @returns {Promise<File>} */
-  async zip() {
+  async zip(): Promise<File> {
     const [infos, keys, values] = await this.tx(["info", "data"], "readonly", t => Promise.all([
       req(t.objectStore("info").getAll()), req(t.objectStore("data").getAllKeys()), req(t.objectStore("data").getAll())]));
     const bytes = new Map(keys.map((k, i) => [k, new Uint8Array(values[i])]));
     const parts = zipParts(infos.map(i => ({ name: i.dir ? `${i.path}/` : i.path, mtime: i.mtime, data: bytes.get(i.path) ?? new Uint8Array(0) })));
-    const d = new Date(), two = n => String(n).padStart(2, "0");
+    const d = new Date(), two = (n: number) => String(n).padStart(2, "0");
     return new File(parts, `dofile-${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}.zip`, { type: "application/zip" });
   }
 
@@ -214,18 +223,18 @@ export class FileStore {
 
   // The engine's start: every record, the highest seq in `pending` (upTo: every page change up to it is in this copy), and
   // the journal emptied, in one transaction.
-  async takeAll() {
+  async takeAll(): Promise<StoreCopy> {
     return this.tx(ALL, "readwrite", async t => {
       const [infos, keys, values, seqs] = await Promise.all([
         req(t.objectStore("info").getAll()), req(t.objectStore("data").getAllKeys()), req(t.objectStore("data").getAll()),
         req(t.objectStore("pending").getAllKeys())]);
       t.objectStore("pending").clear();
-      return { infos, data: keys.map((k, i) => [k, values[i]]), upTo: seqs.at(-1) ?? 0 };
+      return { infos, data: keys.map((k, i): [IDBValidKey, ArrayBuffer] => [k, values[i]]), upTo: (seqs.at(-1) ?? 0) as number };
     });
   }
 
   // a page change is in /work now
-  async done(seq) {
+  async done(seq: number): Promise<void> {
     await this.tx(["pending"], "readwrite", t => { t.objectStore("pending").delete(seq); });
   }
 
@@ -242,18 +251,18 @@ export class FileStore {
   // renamed itself is not listed: the page's version wins, nothing is lost); upTo: the highest seq in `pending`, which is emptied; resync: what the worker must now
   // put into /work to have the page's version: `paths` to replace with the records in `infos` and `data`, and `dirs`
   // to make }. With no changes it is only the copy: the worker calls it so when an op of the page failed in /work.
-  async applyRun(changes) {
+  async applyRun(changes: RunChange[]): Promise<AppliedRun> {
     return this.tx(ALL, "readwrite", async t => {
       const info = t.objectStore("info"), data = t.objectStore("data"), pending = t.objectStore("pending");
-      const [seqs, rows] = await Promise.all([req(pending.getAllKeys()), req(pending.getAll())]);
-      const deep = [], made = [], gone = [];   // gone: what the page renamed (the old name) or removed
+      const [seqs, rows]: [IDBValidKey[], PendingRow[]] = await Promise.all([req(pending.getAllKeys()), req(pending.getAll())]);
+      const deep: string[] = [], made: string[] = [], gone: string[] = [];   // gone: what the page renamed (the old name) or removed
       for (const r of rows) {
         if (r.op === "mkdir") made.push(r.path); else deep.push(r.path, ...(r.to ? [r.to] : []));
         if (r.op === "rename" || r.op === "remove") gone.push(r.path);
       }
-      const pageHas = p => deep.some(h => within(p, h));
-      const above = p => made.includes(p) || [...deep, ...made].some(h => h.startsWith(`${p}/`));
-      const written = [], skipped = [], emptied = [], replace = [...deep];
+      const pageHas = (p: string) => deep.some(h => within(p, h));
+      const above = (p: string) => made.includes(p) || [...deep, ...made].some(h => h.startsWith(`${p}/`));
+      const written: FileChange[] = [], skipped: string[] = [], emptied: string[] = [], replace = [...deep];
       for (const c of changes) {
         if (pageHas(c.path)) {   // listed only when lost with a folder the page renamed or removed
           if (!c.dir && c.status !== "removed" && gone.some(g => c.path.startsWith(`${g}/`))) skipped.push(c.path);
@@ -270,7 +279,7 @@ export class FileStore {
           data.delete(c.path);
         } else {
           info.put({ path: c.path, dir: c.dir, size: c.size, mtime: c.mtime });
-          if (c.dir) data.delete(c.path); else data.put(exact(c.data), c.path);
+          if (c.dir) data.delete(c.path); else data.put(exact(c.data!), c.path);
         }
         if (!c.dir) written.push({ name: c.path, status: c.status, bytes: c.status === "removed" ? 0 : c.size });
       }
@@ -280,17 +289,17 @@ export class FileStore {
       pending.clear();
       // the page's version of what it changed, as the store has it now
       const paths = [...new Set(replace)].filter((p, _, all) => !all.some(q => q !== p && within(p, q)));
-      const resync = { paths, infos: [], data: [], dirs: [] };
+      const resync: AppliedRun["resync"] = { paths, infos: [], data: [], dirs: [] };
       for (const p of paths) {
         const [infos, files] = await tree(t, p);
         resync.infos.push(...infos);
         resync.data.push(...files);
       }
       for (const p of made) if ((await req(info.get(p)))?.dir) resync.dirs.push(p);
-      return { files: written, skipped, upTo: seqs.at(-1) ?? 0, resync };
+      return { files: written, skipped, upTo: (seqs.at(-1) ?? 0) as number, resync };
     });
   }
 }
 
 // indexedDB: the factory to use (the tests pass their own); by default the browser's
-export const openStore = ({ indexedDB = globalThis.indexedDB } = {}) => new FileStore(indexedDB);
+export const openStore = ({ indexedDB = globalThis.indexedDB }: { indexedDB?: IDBFactory | null } = {}) => new FileStore(indexedDB);

@@ -4,38 +4,69 @@
 // the `persisted` signal). The real client and worker are tested in client.test.mjs and the e2e tests.
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import { sleep } from "./harness.mjs";
+import { sleep } from "./harness.ts";
+import type { Signal } from "@preact/signals-core";
+import type { EngineClient } from "../src/engine/client.ts";
+import type { About, FileInfo, Progress, ResetKind, Results, RunOptions, StatusText } from "../src/engine/types.ts";
+import type { Banner, EngineStateName, FailReason, LastRun, LogItem, RunHead, Stage } from "../src/app/types.ts";
+
+// The engine state, a log item and a banner with every member's fields, for reading in assertions: a test reads the fields
+// of the member it expects, and an assertion on `s` must not narrow the signal's value for the rest of the test.
+type AnyEngineState = { s: EngineStateName } & Partial<{ forRun: boolean, received: number, total: number, t0: number, stage: Stage,
+  done: Partial<Record<Stage, number>>, run: RunHead, resetAt: number, reason: FailReason, message: string, detail: string }>;
+type AnyLogItem = { t: LogItem["t"] } & Partial<{ run: RunHead | number, first: boolean, text: string, streaming: boolean, unsaved: string[],
+  end: LastRun, n: number }>;
+type AnyBanner = { b: Banner["b"] } & Partial<{ reason: string, kind: ResetKind, path: string, message: string }>;
 
 // localStorage, as the page has it (Node's needs a file)
-const stored = new Map();
+const stored = new Map<string, string>();
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
-  getItem: k => (stored.has(k) ? stored.get(k) : null), setItem: (k, v) => stored.set(k, String(v)), removeItem: k => stored.delete(k) } });
+  getItem: (k: string) => (stored.has(k) ? stored.get(k) : null), setItem: (k: string, v: unknown) => stored.set(k, String(v)),
+  removeItem: (k: string) => stored.delete(k) } });
 
-const S = await import("../src/app/state.js");
-const engine = await import("../src/app/engine.js");
-const { runCode, runCommand, clearLog, addFileGraph, MAX_GRAPHS } = await import("../src/app/run.js");
-const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.js");
-const { cycleTheme, applyTheme } = await import("../src/app/theme.js");
-const { decodeText } = await import("../src/app/files/open.js");
-const { watchViewport, KEYBOARD } = await import("../src/app/viewport.js");
+const S = await import("../src/app/state.ts") as unknown as Omit<typeof import("../src/app/state.ts"), "engine" | "log" | "banners"> &
+  { engine: Signal<AnyEngineState>, log: Signal<AnyLogItem[]>, banners: Signal<AnyBanner[]> };
+const engine = await import("../src/app/engine.ts");
+const { runCode, runCommand, clearLog, addFileGraph, MAX_GRAPHS } = await import("../src/app/run.ts");
+const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.ts");
+const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");
+const { decodeText } = await import("../src/app/files/open.ts");
+const { watchViewport, KEYBOARD } = await import("../src/app/viewport.ts");
 
 const tick = () => sleep(0);
-const later = () => { let ok, no; const p = new Promise((a, b) => { ok = a; no = b; }); return Object.assign(p, { ok, no }); };
+/** A promise the test settles: ok(value), no(error). */
+type Later<T = unknown> = Promise<T> & { ok(value?: T | PromiseLike<T>): void, no(error: unknown): void };
+const later = <T = unknown>(): Later<T> => { let ok!: (value: T | PromiseLike<T>) => void, no!: (error: unknown) => void; const p = new Promise<T>((a, b) => { ok = a; no = b; }); return Object.assign(p, { ok, no }); };
 const ABOUT = { dofile: "0.1.0", engine: "OpenDTA", engine_commit: "abc", engine_patches: [], stata_version: 14 };
-const result = (more = {}) => ({ rc: 0, error: null, error_command: null, log: "", results: { e: {}, r: {}, e_changed: false, r_changed: false },
+const result = (more: object = {}) => ({ rc: 0, error: null, error_command: null, log: "", results: { e: {}, r: {}, e_changed: false, r_changed: false },
   nobs: 0, nvars: 0, new_graphs: 0, images: [], error_line: null, graph_commands: [], graph_lines: [], files: [], ...more });
 
 // A client that does what the test says, when it says: each download(), start() and run() waits on a promise the test settles.
 class FakeClient {
+  declare onStatus: (status: StatusText) => void;
+  declare onRestart: (reason: string, started: Promise<About>, kind: ResetKind) => void;
+  declare resetAt: number | null;
+  declare stopped: string[];
+  declare restarts: [string, ResetKind][];
+  declare runs: { code: string, options: RunOptions & { onLog?: (text: string) => void }, done: Later }[];
+  declare calls: [string, object | undefined][];
+  declare downloads: number;
+  declare starts: number;
+  declare forgot: number;
+  declare downloading: Later;
+  declare starting: Later;
+  declare isCached: boolean | Promise<boolean>;
+  declare signal: AbortSignal | undefined;
+  declare progress: ((progress: Progress) => void) | undefined;
   constructor() {
     Object.assign(this, { onStatus: () => {}, onRestart: () => {}, resetAt: null, stopped: [], restarts: [], runs: [], calls: [],
       downloads: 0, starts: 0, forgot: 0 });
     this.downloading = later(); this.starting = later();
-    this.isCached = /** @type {boolean | Promise<boolean>} */ (false);   // what cached() answers
+    this.isCached = (false);   // what cached() answers
   }
   async cached() { return this.isCached; }
   async forgetDownload() { this.forgot++; }
-  download({ signal, onProgress }) {
+  download({ signal, onProgress }: { signal?: AbortSignal, onProgress?: (progress: Progress) => void }) {
     this.downloads++;
     this.signal = signal;
     signal?.addEventListener("abort", () => this.downloading.no(new DOMException("stopped", "AbortError")));
@@ -43,33 +74,36 @@ class FakeClient {
     return this.downloading;
   }
   start() { this.starts++; return this.starting; }
-  run(code, options) { const r = later(); this.runs.push({ code, options, done: r }); return r; }
-  call(op, args) { this.calls.push([op, args]); return Promise.resolve({ op }); }
+  run(code: string, options: RunOptions & { onLog?: (text: string) => void }) { const r = later(); this.runs.push({ code, options, done: r }); return r; }
+  call(op: string, args?: object) { this.calls.push([op, args]); return Promise.resolve({ op }); }
   breakRun() { this.resetAt = 12345; }
   keepWaiting() { this.resetAt = null; }
-  restart(reason, kind) {
+  restart(reason: string, kind: ResetKind) {
     const old = this.starting;
     this.starting = later();
     this.restarts.push([reason, kind]);
     old.ok(this.starting);   // as client.js end(): a start in progress ends with the new worker's start
-    this.onRestart(reason, this.starting, kind);
+    this.onRestart(reason, this.starting as Promise<About>, kind);
     return this.starting;
   }
-  stop(reason) {
+  stop(reason: string) {
     this.stopped.push(reason);
     this.starting.catch(() => {});   // as client.js end(): a start in progress rejects (kind "stopped"); none may be waiting
     this.starting.no(Object.assign(new Error(reason), { kind: "stopped" }));
   }
 }
-const fakeStore = (paths = []) => ({ blocked: false, onChange: null, list: async () => paths.map(path => ({ path, dir: false, size: 1, mtime: 1 })) });
-const fakeLock = (free = true) => ({ asked: [], async take(o = {}) { this.asked.push(o); return free || Boolean(o.steal); } });
+/** The page's store as files.ts and engine.ts use it; a test gives it a zip() when it needs one. */
+type FakeStore = { blocked: boolean, onChange: null | (() => void), list: () => Promise<FileInfo[]>, zip?: () => Promise<Blob> };
+const fakeStore = (paths: string[] = []): FakeStore => ({ blocked: false, onChange: null, list: async () => paths.map(path => ({ path, dir: false, size: 1, mtime: 1 })) });
+const fakeLock = (free = true) => ({ asked: [] as { steal?: boolean }[], async take(o: { steal?: boolean } = {}) { this.asked.push(o); return free || Boolean(o.steal); } });
 
-let client, store, lock;
-function setUp({ free = true, snapshot = true, files = [], cached = false } = {}) {
+let client: FakeClient, store: ReturnType<typeof fakeStore>, lock: ReturnType<typeof fakeLock>;
+function setUp({ free = true, snapshot = true, files = [], cached = false }:
+  { free?: boolean, snapshot?: boolean, files?: string[], cached?: boolean | Promise<boolean> } = {}) {
   client = new FakeClient(); store = fakeStore(files); lock = fakeLock(free);
   client.isCached = cached;
-  connectFiles(store);
-  engine.connectEngine({ client, store, lock, snapshot, manual: false, storage: { persist: async () => true, persisted: async () => true } });
+  connectFiles(store as Parameters<typeof connectFiles>[0]);
+  engine.connectEngine({ client: client as unknown as EngineClient, store, lock, snapshot, manual: false, storage: { persist: async () => true, persisted: async () => true } });
 }
 beforeEach(() => {
   stored.clear();
@@ -95,22 +129,22 @@ test("with nothing cached the page asks; Download counts bytes, the stages come 
   assert.deepEqual(S.files.value.map(f => f.path), ["a.do"], "the store was listed before the engine");
   const started = engine.start();
   assert.equal(S.engine.value.s, "downloading");
-  client.progress({ received: 10, total: 100 });
+  client.progress!({ received: 10, total: 100 });
   assert.deepEqual([S.engine.value.received, S.engine.value.total], [10, 100]);
   client.downloading.ok({ cached: true, received: 100, total: 100 });
   await tick();
   assert.equal(S.engine.value.s, "starting");
   assert.equal(S.engine.value.stage, "download");
-  assert.ok(S.engine.value.done.download >= 0, "the download's time is the first stage's");
+  assert.ok(S.engine.value.done!.download! >= 0, "the download's time is the first stage's");
   client.onStatus("downloading the engine");   // the cache read after download(): the same stage
   client.onStatus("unpacking the engine");
   client.onStatus("loading Python");
   assert.equal(S.engine.value.stage, "python");
-  assert.deepEqual(Object.keys(S.engine.value.done).sort(), ["download", "unpack"]);
+  assert.deepEqual(Object.keys(S.engine.value.done!).sort(), ["download", "unpack"]);
   client.starting.ok(ABOUT);
   await started;
   assert.deepEqual(S.engine.value, { s: "ready" });
-  assert.equal(S.about.value.dofile, "0.1.0");
+  assert.equal(S.about.value!.dofile, "0.1.0");
   assert.equal(S.dialog.value, null, "the dialog closed by itself");
   assert.deepEqual(client.calls.at(-1), ["memory", undefined]);
 });
@@ -194,7 +228,7 @@ test("an empty or partial cache asks; the lock lost while cached() is pending st
 
   Object.assign(S.engine, { value: { s: "none" } });
   S.dialog.value = null;
-  const answer = later();
+  const answer = later<boolean>();
   setUp({ cached: answer });
   const opening = engine.open();
   await sleep(5);
@@ -224,7 +258,7 @@ test("tab lock: without it the tab is blocked and asks; taking over steals the l
   assert.deepEqual(S.engine.value, { s: "other-tab" });
 });
 
-async function readyEngine(opts) {
+async function readyEngine(opts?: Parameters<typeof setUp>[0]) {
   setUp({ cached: true, ...opts });
   await engine.open();
   client.downloading.ok({ cached: true });
@@ -235,12 +269,12 @@ async function readyEngine(opts) {
 
 test("a run: the streamed log grows one item and the result's log replaces it; graphs, lastRun, results and the after-run calls", async () => {
   await readyEngine();
-  const head = { kind: "selection", path: "a.do", lines: [11, 14], fresh_locals: false };
+  const head: RunHead = { kind: "selection", path: "a.do", lines: [11, 14], fresh_locals: false };
   const done = runCode("x", head);
   assert.equal(S.engine.value.s, "running");
   const { options, done: answer } = client.runs[0];
-  options.onLog(". display 1\n");
-  options.onLog("1\n");
+  options.onLog!(". display 1\n");
+  options.onLog!("1\n");
   const texts = () => S.log.value.filter(i => i.t === "text");
   assert.equal(texts().length, 1);
   assert.equal(texts()[0].text, ". display 1\n1\n");
@@ -253,22 +287,22 @@ test("a run: the streamed log grows one item and the result's log replaces it; g
   assert.equal(texts()[0].streaming, false);
   assert.deepEqual(S.graphs.value.map(g => [g.n, g.command, g.line, g.theme]), [[1, "scatter y x", 2, "light"]]);
   assert.deepEqual(S.log.value.at(-1), { t: "graph", n: 1 });
-  assert.deepEqual(S.lastRun.value, { ...head, rc: 111, line: 13, seconds: S.lastRun.value.seconds }, "the error line in the file");
+  assert.deepEqual(S.lastRun.value, { ...head, rc: 111, line: 13, seconds: S.lastRun.value!.seconds }, "the error line in the file");
   assert.deepEqual([...S.fresh.value], ["out.png"]);
   assert.deepEqual(client.calls.slice(-4).map(c => c[0]), ["describe", "browse", "macros", "memory"]);
   assert.deepEqual(S.data.value, { op: "describe" });
   assert.equal(S.engine.value.s, "ready");
   // the next run in the same session is not the first
   runCode("y", { kind: "file", path: "a.do", fresh_locals: true });
-  assert.equal(S.log.value.filter(i => i.t === "runhead").at(-1).first, false);
+  assert.equal(S.log.value.filter(i => i.t === "runhead").at(-1)!.first, false);
   client.runs[1].done.ok(result());
 });
 
 test("a reset cuts a run: `starting` first, the reset banner, results cleared; the cut run keeps what streamed and says why", async () => {
   await readyEngine();
-  S.results.value = { e: {}, r: {}, e_changed: true, r_changed: false };
+  S.results.value = { e: {}, r: {}, e_changed: true, r_changed: false } as Results;
   const done = runCode("loop", { kind: "file", path: "a.do", fresh_locals: true });
-  client.runs[0].options.onLog("pass 1\n");
+  client.runs[0].options.onLog!("pass 1\n");
   client.restart("the engine crashed", "crash");
   assert.equal(S.engine.value.s, "starting");
   assert.deepEqual(S.banners.value, [{ b: "reset", reason: "the engine crashed", kind: "crash" }]);
@@ -277,16 +311,16 @@ test("a reset cuts a run: `starting` first, the reset banner, results cleared; t
     log: "", results: null, kind: "crash" }));
   await done;
   assert.equal(S.engine.value.s, "starting", "the cut run left the state to the restart");
-  assert.equal(S.log.value.find(i => i.t === "text").text, "pass 1\n");
-  assert.match(S.log.value.at(-1).text, /session reset: the engine crashed/);
+  assert.equal(S.log.value.find(i => i.t === "text")!.text, "pass 1\n");
+  assert.match(S.log.value.at(-1)!.text!, /session reset: the engine crashed/);
   assert.equal(S.results.value, null);
-  assert.equal(S.lastRun.value.rc, 9998, "the cut run is the last run");
+  assert.equal(S.lastRun.value!.rc, 9998, "the cut run is the last run");
   client.starting.ok(ABOUT);
   await sleep(5);
   assert.equal(S.engine.value.s, "ready");
   // the new engine has no locals yet: its first run says so, although the cut run ended after the reset began
   runCode("display 1", { kind: "selection", path: "a.do", lines: [1, 1], fresh_locals: false });
-  assert.equal(S.log.value.filter(i => i.t === "runhead").at(-1).first, true);
+  assert.equal(S.log.value.filter(i => i.t === "runhead").at(-1)!.first, true);
   client.runs[1].done.ok(result());
 });
 
@@ -302,13 +336,13 @@ test("Break: `breaking` with the deadline, then `waiting` on Don't reset; the ru
   client.runs[0].done.ok(result({ rc: 1, log: "--Break--\nr(1);\n" }));
   await done;
   assert.equal(S.engine.value.s, "ready");
-  assert.equal(S.lastRun.value.rc, 1);
+  assert.equal(S.lastRun.value!.rc, 1);
 });
 
 // SPEC section 7, test 13: keepFiles answers at once with persisted(), and again when persist() is answered; the page's
 // signal gets each answer
 test("a false persisted() reaches the `persisted` signal, and persist()'s answer follows it", async () => {
-  const asked = later();
+  const asked = later<boolean>();
   const storage = { persisted: async () => false, persist: () => asked };
   S.persisted.value = null;
   await keep(storage);
@@ -326,7 +360,7 @@ test("losing the tab lock clears what the old engine left; after a take-over the
   const done = runCode("x", { kind: "file", path: "a.do", fresh_locals: true });
   client.runs[0].done.ok(result({ results: { e: {}, r: {}, e_changed: true, r_changed: false } }));
   await done;
-  const left = ["results", "macros", "data", "rows", "memory", "about", "lastRun"];
+  const left = ["results", "macros", "data", "rows", "memory", "about", "lastRun"] as const;
   for (const k of left) assert.notEqual(S[k].value, null, k);
   engine.lost();
   for (const k of left) assert.equal(S[k].value, null, `${k} after the lock was lost`);
@@ -335,7 +369,7 @@ test("losing the tab lock clears what the old engine left; after a take-over the
   client.downloading.ok({ cached: true });
   await tick();
   assert.equal(S.engine.value.s, "starting");
-  for (const k of ["results", "data", "rows", "macros", "lastRun"]) assert.equal(S[k].value, null, `${k} after the take-over`);
+  for (const k of ["results", "data", "rows", "macros", "lastRun"] as const) assert.equal(S[k].value, null, `${k} after the take-over`);
 });
 
 test("a crash during the first start: ready once, no reset banner and no \"Engine reset\" (no engine had been ready)", async () => {
@@ -396,7 +430,7 @@ test("an updated site fails with reason \"updated\", from download() at once or 
   assert.equal(client.starts, 0, "no start after an updated download");
   await started;
 
-  const fail = more => {
+  const fail = (more: object) => {
     client.downloading = later(); client.starting = later();
     started = engine.start();
     client.downloading.ok({ cached: true });
@@ -441,9 +475,9 @@ test("a failed start's message is plain words for every reason, with no develope
       await started;
       const st = S.engine.value;
       assert.equal(st.s, kind);
-      assert.doesNotMatch(st.message, dev, `${kind} ${reason}`);
+      assert.doesNotMatch(st.message!, dev, `${kind} ${reason}`);
       assert.equal(st.detail, cause);
-      assert.match(String(warn.mock.calls.at(-1).arguments[0]), /npm run snapshot/);
+      assert.match(String(warn.mock.calls.at(-1)!.arguments[0]), /npm run snapshot/);
     }
   } finally {
     warn.mock.restore();
@@ -472,14 +506,14 @@ test("say(): what is said in one tick is heard together; a reset says \"Engine r
 });
 
 test("the page's store is blocked until the tab lock answers", async () => {
-  const { store } = await import("../src/app/store.js");
+  const { store } = await import("../src/app/store.ts");
   assert.equal(store.blocked, true);
   await assert.rejects(store.write("a.do", new Uint8Array(1)), /another tab/);
 });
 
 test("runCode while a run is on does nothing; a queued run is dropped by Not now and by a failed start", async () => {
   await readyEngine();
-  const head = { kind: "file", path: "a.do", fresh_locals: true };
+  const head: RunHead = { kind: "file", path: "a.do", fresh_locals: true };
   const first = runCode("a", head);
   assert.equal(await runCode("b", head), null);
   assert.equal(client.runs.length, 1);
@@ -519,7 +553,7 @@ test("runCode while a run is on does nothing; a queued run is dropped by Not now
 test("Clear log during a run keeps the run's text item, so its log still arrives; the graph numbers start again", async () => {
   await readyEngine();
   const done = runCode("x", { kind: "file", path: "a.do", fresh_locals: true });
-  client.runs[0].options.onLog("1\n");
+  client.runs[0].options.onLog!("1\n");
   clearLog();
   assert.deepEqual(S.log.value.map(i => i.t), ["text"]);
   client.runs[0].done.ok(result({ log: "1\n2\n", images: ["PNG"], graph_commands: ["scatter y x"], graph_lines: [1] }));
@@ -531,14 +565,14 @@ test("Clear log during a run keeps the run's text item, so its log still arrives
 test("a run whose op failed in the worker (run-failed) is not a reset: the data is asked again, and no reset is said", async () => {
   await readyEngine();
   await heard();
-  S.results.value = { e: {}, r: {}, e_changed: true, r_changed: false };
+  S.results.value = { e: {}, r: {}, e_changed: true, r_changed: false } as Results;
   const before = client.calls.length;
   const done = runCode("x", { kind: "file", path: "a.do", fresh_locals: true });
-  client.runs[0].options.onLog("partial\n");
+  client.runs[0].options.onLog!("partial\n");
   client.runs[0].done.ok(result({ rc: 9998, error: "no memory for the result", log: "", results: null, kind: "run-failed" }));
   await done;
-  assert.equal(S.log.value.find(i => i.t === "text").text, "partial\n");
-  assert.equal(S.log.value.at(-1).text, "no memory for the result");
+  assert.equal(S.log.value.find(i => i.t === "text")!.text, "partial\n");
+  assert.equal(S.log.value.at(-1)!.text, "no memory for the result");
   assert.notEqual(S.results.value, null, "the results are not cleared");
   assert.deepEqual(client.calls.slice(before).map(c => c[0]), ["describe", "browse", "macros", "memory"]);
   assert.doesNotMatch(await heard(), /reset/);
@@ -552,22 +586,22 @@ test("a run's graphs keep the theme the run was sent, not the one at its end", a
   S.theme.value = "dark";
   client.runs[0].done.ok(result({ images: ["PNG"], graph_commands: ["scatter y x"], graph_lines: [1] }));
   await done;
-  assert.equal(S.graphs.value.at(-1).theme, "light");
+  assert.equal(S.graphs.value.at(-1)!.theme, "light");
 });
 
 test("each run's text item keeps how it ended (rc, line, skipped, store_error) and the files unsaved when it started", async () => {
   await readyEngine();
   S.tabs.value = [{ path: "a.do", kind: "text", dirty: false }, { path: "clean.do", kind: "text", dirty: true }];
-  const head = { kind: "selection", path: "a.do", lines: [5, 9], fresh_locals: false };
+  const head: RunHead = { kind: "selection", path: "a.do", lines: [5, 9], fresh_locals: false };
   const done = runCode("x", head);
-  assert.deepEqual(S.log.value.find(i => i.t === "text").unsaved, ["clean.do"]);
+  assert.deepEqual(S.log.value.find(i => i.t === "text")!.unsaved, ["clean.do"]);
   client.runs[0].done.ok(result({ rc: 1, error_line: 2, skipped: ["gone/out.csv"], store_error: "quota" }));
   await done;
-  const end = S.log.value.find(i => i.t === "text").end;
+  const end = S.log.value.find(i => i.t === "text")!.end;
   assert.deepEqual({ ...end, seconds: 0 }, { ...head, rc: 1, line: 6, seconds: 0, skipped: ["gone/out.csv"], store_error: "quota" });
   assert.equal(S.lastRun.value, end, "lastRun is the same record");
   runCode("y", { kind: "file", path: "a.do", fresh_locals: true });
-  assert.equal(S.log.value.filter(i => i.t === "text")[0].end.rc, 1, "an older run keeps its own");
+  assert.equal(S.log.value.filter(i => i.t === "text")[0].end!.rc, 1, "an older run keeps its own");
   client.runs[1].done.ok(result());
 });
 
@@ -584,7 +618,7 @@ test("runCommand: added to history (not twice in a row), run as a command with t
   const again = runCommand("summarize");
   assert.deepEqual(S.history.value, ["summarize"]);
   client.runs[1].done.ok(result());
-  assert.equal((await again.done).rc, 0, "done resolves with the result");
+  assert.equal((await again.done)!.rc, 0, "done resolves with the result");
   const empty = runCommand("   ");
   assert.equal(empty.accepted, false);
   assert.equal(await empty.done, null);
@@ -659,13 +693,13 @@ test("addFileGraph: a .png gets the next number after the run's graphs; graphs k
 test("the storage banner: once per visit, when persisted() is false and the files change", async () => {
   setUp();
   S.persisted.value = true;
-  store.onChange();
+  store.onChange!();
   assert.deepEqual(S.banners.value, []);
   S.persisted.value = false;
-  store.onChange();
+  store.onChange!();
   assert.deepEqual(S.banners.value, [{ b: "storage" }]);
   S.dismiss({ b: "storage" });
-  store.onChange();
+  store.onChange!();
   await afterRun([{ name: "out.csv", status: "created", bytes: 1 }]);
   assert.deepEqual(S.banners.value, [], "once per visit");
   setUp();   // a new visit
@@ -737,7 +771,7 @@ test("Download all: a store that cannot make the zip adds one banner (a second f
     assert.deepEqual(S.banners.value, [{ b: "download-failed" }], "replaced, not stacked");
     // a download that works: the zip goes to the browser and the banner goes
     let clicked = 0;
-    globalThis.document = { createElement: () => ({ click: () => { clicked++; }, remove() {} }), body: { append() {} } };
+    globalThis.document = { createElement: () => ({ click: () => { clicked++; }, remove() {} }), body: { append() {} } } as unknown as Document;
     store.zip = async () => new File(["zip"], "dofile.zip");
     assert.equal(await downloadAll(), true);
     assert.equal(clicked, 1);
@@ -749,8 +783,8 @@ test("Download all: a store that cannot make the zip adds one banner (a second f
 });
 
 test("the theme button cycles System, Light, Dark; applyTheme keeps <html data-theme> and localStorage in step", () => {
-  const root = { dataset: {} };
-  const off = applyTheme(root);
+  const root = { dataset: {} as DOMStringMap };
+  const off = applyTheme(root as HTMLElement);
   assert.equal(root.dataset.theme, undefined);
   cycleTheme();
   assert.deepEqual([S.theme.value, root.dataset.theme, stored.get("dofile.theme")], ["light", "light", "light"]);
@@ -779,7 +813,7 @@ test("setDirty sets one tab's dot; decodeText takes strict UTF-8 only", () => {
 
 test("A1: a tab that loses the lock while open() lists the files starts no engine; \"Use dofile in this tab\" still works", async () => {
   setUp({ cached: true });
-  const listed = later();
+  const listed = later<FileInfo[]>();
   store.list = () => listed;
   const opening = engine.open();
   await tick();
@@ -801,7 +835,7 @@ test("A1: a take-over whose lock is taken back while it waits for the lock start
   setUp({ free: false, cached: true });
   await engine.open();
   assert.deepEqual(S.engine.value, { s: "other-tab" });
-  const granted = later();
+  const granted = later<boolean>();
   lock.take = async o => { lock.asked.push(o ?? {}); return o?.steal ? granted : false; };
   const taking = engine.takeOver();
   await tick();
@@ -861,7 +895,7 @@ test("C1: a run cut by losing the tab lock does not set lastRun", async () => {
   client.runs[0].done.ok(result({ rc: 9998, error: "session reset: another tab took over", log: "", results: null, kind: "stopped" }));
   await done;
   assert.equal(S.lastRun.value, null, "not after the other-tab clear");
-  assert.equal(S.log.value.find(i => i.t === "text").end.rc, 9998, "the log keeps how it ended");
+  assert.equal(S.log.value.find(i => i.t === "text")!.end!.rc, 9998, "the log keeps how it ended");
 });
 
 test("C2: \"Not now\" during the download aborts it: no start follows", async () => {
@@ -870,7 +904,7 @@ test("C2: \"Not now\" during the download aborts it: no start follows", async ()
   const started = engine.start();
   assert.equal(S.engine.value.s, "downloading");
   engine.decline();
-  assert.equal(client.signal.aborted, true);
+  assert.equal(client.signal!.aborted, true);
   client.downloading.ok({ cached: true });   // too late: the abort rejected it
   await started;
   await tick();
@@ -881,11 +915,11 @@ test("C2: \"Not now\" during the download aborts it: no start follows", async ()
 test("the phone keyboard: watchViewport sets data-keyboard and --vv-height/--vv-top while the visual viewport is clearly shorter, not when zoomed or off the phone", () => {
   // a visualViewport as iOS Safari reports it: the layout viewport stays 844 px tall when the keyboard opens
   const vv = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 });
-  const vars = new Map();
-  const root = { dataset: {}, style: { setProperty: (k, v) => vars.set(k, v), removeProperty: k => vars.delete(k) } };
+  const vars = new Map<string, string>();
+  const root = { dataset: {} as DOMStringMap, style: { setProperty: (k: string, v: string) => vars.set(k, v), removeProperty: (k: string) => vars.delete(k) } };
   let phone = true;
-  const { update, stop } = watchViewport({ vv, root, layoutHeight: () => 844, enabled: () => phone });
-  const move = (height, offsetTop = 0, scale = 1) => { Object.assign(vv, { height, offsetTop, scale }); vv.dispatchEvent(new Event("resize")); };
+  const { update, stop } = watchViewport({ vv: vv as VisualViewport, root: root as unknown as HTMLElement, layoutHeight: () => 844, enabled: () => phone });
+  const move = (height: number, offsetTop = 0, scale = 1) => { Object.assign(vv, { height, offsetTop, scale }); vv.dispatchEvent(new Event("resize")); };
   assert.equal("keyboard" in root.dataset, false, "closed at the start");
   assert.equal(vars.size, 0);
 
@@ -911,17 +945,17 @@ test("the phone keyboard: watchViewport sets data-keyboard and --vv-height/--vv-
   stop();
   phone = true; move(508);     // no longer listening
   assert.equal("keyboard" in root.dataset, false);
-  assert.deepEqual(watchViewport({ vv: null, root }).update(), undefined, "no visualViewport: nothing to do");
+  assert.deepEqual(watchViewport({ vv: null, root: root as unknown as HTMLElement }).update(), undefined, "no visualViewport: nothing to do");
 });
 
 test("the phone keyboard where the browser shrinks the layout viewport: open while a text field has the focus and the page is well below its tallest at this width; not on a rotation or without focus", () => {
   // an older Android browser: the layout and visual viewports shrink together, so they never differ
   let h = 800, w = 390, focused = false;
   const vv = Object.assign(new EventTarget(), { height: h, offsetTop: 0, scale: 1 });
-  const vars = new Map();
-  const root = { dataset: {}, style: { setProperty: (k, v) => vars.set(k, v), removeProperty: k => vars.delete(k) } };
-  const { stop } = watchViewport({ vv, root, layoutHeight: () => h, layoutWidth: () => w, typing: () => focused });
-  const resize = (height, width = w) => { h = height; w = width; vv.height = height; vv.dispatchEvent(new Event("resize")); };
+  const vars = new Map<string, string>();
+  const root = { dataset: {} as DOMStringMap, style: { setProperty: (k: string, v: string) => vars.set(k, v), removeProperty: (k: string) => vars.delete(k) } };
+  const { stop } = watchViewport({ vv: vv as VisualViewport, root: root as unknown as HTMLElement, layoutHeight: () => h, layoutWidth: () => w, typing: () => focused });
+  const resize = (height: number, width = w) => { h = height; w = width; vv.height = height; vv.dispatchEvent(new Event("resize")); };
 
   focused = true;
   resize(800 - KEYBOARD + 10);   // the toolbar hides or shows: not a keyboard

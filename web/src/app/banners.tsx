@@ -10,8 +10,8 @@
 // `phone: "every"`: on a phone every view's slot draws it (the phone's Data and Results views have a slot, "output", for
 // these only), so it is seen whichever view is shown; the hidden views are display: none, so it is read and tabbed once.
 import type { ComponentType } from "preact";
-import { banners, isPhone } from "./state.js";
-import type { Banner, BannerName } from "./types";
+import { banners, isPhone } from "./state.ts";
+import type { Banner, BannerName } from "./types.ts";
 import { DownloadFailedBanner, EditorStateBanners, LogStateBanners, MemoryBanner, ResetBanner, StorageBanner } from "./states/banners";
 import { NotTextBanner } from "./files/banners";
 import { SaveFailedBanner } from "./editor/banners";

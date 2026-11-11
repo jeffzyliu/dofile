@@ -16,8 +16,8 @@
 //    (files.js adds it, one at a time, and removes it when a later download works). 4d may restyle or reword it with the
 //    other storage states (OQ-16). No role="alert": files.js says it once in the live region.
 import type { BannerOf } from "../banners";
-import { dismiss } from "../state.js";
-import { downloadAll } from "../files.js";
+import { dismiss } from "../state.ts";
+import { downloadAll } from "../files.ts";
 import { Banner } from "../ui/Live";
 
 export const EditorStateBanners = () => null;

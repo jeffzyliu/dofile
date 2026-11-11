@@ -11,6 +11,31 @@
 //  - The site-packages tree is saved beside the snapshot and written back first.
 //  - This Pyodide build ignores INITIAL_MEMORY (the heap starts at 30 MiB): grow it to the image's size first.
 
+import type { BrotliWasmType } from "brotli-wasm";
+import type { PyodideAPI, PyodideConfig } from "pyodide";
+import type { SnapshotFile } from "./types.ts";
+
+// Pyodide's Emscripten module, with what this file uses that Pyodide's types leave out: patchAsm's library log and replay,
+// and the loader's own functions
+type PyodideModule = Awaited<ReturnType<NonNullable<PyodideConfig["createPyodideModule"]>>>;
+/** One library load, as patchAsm's log records it (dso.json). */
+export interface DsoRecord {
+  libName: string; handle: number; memoryBase: number; memorySize: number; tableBase: number;
+  global: boolean; nodelete: boolean; allowUndefined: boolean;
+}
+export type AsmModule = PyodideModule & {
+  growMemory(size: number): void; _malloc(size: number): number;
+  loadDynamicLibrary(name: string, flags: { global: boolean; nodelete: boolean; allowUndefined: boolean }, localScope: object | null): unknown;
+  LDSO: PyodideModule["LDSO"] & { loadedLibsByHandle: Record<number, unknown> };
+  __dsoLog?: DsoRecord[]; __dsoReplay?: (DsoRecord & { used?: boolean })[] | null;
+};
+/** A Pyodide with its module: the snapshot code reaches into it. */
+export type SnapshotPy = PyodideAPI & { _module: AsmModule };
+/** The patched pyodide.asm.mjs's default export. */
+export type CreateModule = (settings: Parameters<NonNullable<PyodideConfig["createPyodideModule"]>>[0]) => Promise<AsmModule>;
+/** The site-packages index: each file's path and size, in the order of the blob. */
+export type BundleIndex = { path: string; size: number }[];
+
 // the loader code in pyodide.asm.mjs that gets replaced
 const ALLOC =
   "var memoryBase=metadata.memorySize?alignMemory(getMemory(metadata.memorySize+memAlign),memAlign):0;" +
@@ -31,10 +56,10 @@ const SKIPS = [
 
 // A snapshot that cannot be used (damaged, cut short, made for another Pyodide): worker.js passes the name on, and the page
 // decides from it, not from the text.
-const snapshotError = message => Object.assign(new Error(message), { name: "SnapshotError" });
+const snapshotError = (message: string) => Object.assign(new Error(message), { name: "SnapshotError" });
 
 // pyodide.asm.mjs's text -> the same with the library log and the re-link. Throws if Pyodide's loader looks different.
-export function patchAsm(src, { noTrampoline = false } = {}) {
+export function patchAsm(src: string, { noTrampoline = false } = {}): string {
   for (const [from, to] of [[ALLOC, ALLOC_PATCHED], ...SKIPS, ...(noTrampoline ? [NO_TRAMPOLINE] : [])]) {
     if (!src.includes(from)) throw snapshotError("pyodide.asm.mjs is not the version the snapshot patch was written for");
     src = src.replace(from, to);
@@ -54,11 +79,11 @@ const NO_TRAMPOLINE = ["let isIOS=globalThis.navigator&&(", "let isIOS=true||glo
 // The errors that mean the browser will not give us storage: full, blocked, private mode, or no Cache API at all. The
 // engine can start without the cache, and says so. Any other error from the Cache API is a bug and is not swallowed.
 const STORAGE_REFUSALS = new Set(["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI", "UnknownError"]);   // UnknownError: Chrome's damaged cache storage
-export const isStorageRefusal = e => STORAGE_REFUSALS.has(e?.name);
+export const isStorageRefusal = (e: any): boolean => STORAGE_REFUSALS.has(e?.name);
 
 // The Cache that holds one build's start files: the snapshot, the runtime, and what else the build's list names. The page
 // fills it (client.js, download) and the worker reads it. A rebuild has a new `built`; the older builds are dropped.
-export async function openCache(caches, built) {
+export async function openCache(caches: CacheStorage, built: number): Promise<Cache> {
   const name = `dofile-snapshot-${built}`;
   for (const other of await caches.keys()) if (other.startsWith("dofile-snapshot-") && other !== name) await caches.delete(other);
   return caches.open(name);
@@ -66,8 +91,8 @@ export async function openCache(caches, built) {
 
 // loadPyodide options that go with a snapshot being made: two JS objects are still held (a fetch Response and its
 // arrayBuffer method, left by micropip's download of openpyxl), and nothing uses them again, so they are stored as null
-export const makeOptions = create => ({ _makeSnapshot: true, createPyodideModule: create });
-export const makeSnapshot = py => {
+export const makeOptions = (create: CreateModule): PyodideConfig => ({ _makeSnapshot: true, createPyodideModule: create });
+export const makeSnapshot = (py: SnapshotPy): Uint8Array => {
   // Pyodide's check insists its loadedPackages object is still {}
   for (const k of Object.keys(py.loadedPackages)) delete py.loadedPackages[k];
   return py.makeMemorySnapshot({ serializer: () => null });
@@ -78,7 +103,7 @@ export const makeSnapshot = py => {
 // carried each of them twice (30 MB, 4.4 MB compressed). The restore links the libraries from the filesystem and never
 // reads these buffers. Zero each one that is byte-identical to its file (a buffer that differs is left alone, whatever it
 // is now), so it compresses to nothing. Returns {zeroed, bytes, kept}. Call it before makeSnapshot.
-export function zeroLibraryCopies(py) {
+export function zeroLibraryCopies(py: SnapshotPy): { zeroed: number; bytes: number; kept: number } {
   const m = py._module;
   let zeroed = 0, bytes = 0, kept = 0;
   for (const r of m.__dsoLog ?? []) {
@@ -94,8 +119,8 @@ export function zeroLibraryCopies(py) {
 }
 
 // What to save next to the snapshot: the library log and the site-packages tree (an index and one blob).
-export function bundle(py, site) {
-  const files = [], walk = dir => {
+export function bundle(py: SnapshotPy, site: string): { dso: DsoRecord[] | undefined; index: BundleIndex; blob: Uint8Array } {
+  const files: string[] = [], walk = (dir: string) => {
     for (const name of py.FS.readdir(dir)) {
       if (name === "." || name === "..") continue;
       const full = `${dir}/${name}`, st = py.FS.stat(full);
@@ -104,7 +129,7 @@ export function bundle(py, site) {
     }
   };
   walk(site);
-  const index = [], parts = [];
+  const index: BundleIndex = [], parts: Uint8Array[] = [];
   for (const path of files) { const data = py.FS.readFile(path); index.push({ path, size: data.length }); parts.push(data); }
   const blob = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
@@ -114,9 +139,11 @@ export function bundle(py, site) {
 
 // loadPyodide options for a restore. `create` is the patched module's default export; `saved` is {snapshot, dso, index,
 // blob} as written by the build script. `lap(name)` is called after each step, for timing.
-export function restoreOptions(create, { snapshot, dso, index, blob }, lap = () => {}) {
+export function restoreOptions(create: CreateModule,
+  { snapshot, dso, index, blob }: { snapshot: Uint8Array; dso: DsoRecord[]; index: BundleIndex; blob: Uint8Array },
+  lap: (name: string) => void = () => {}): PyodideConfig {
   const e = new Uint32Array(snapshot.buffer, snapshot.byteOffset, 3), image = snapshot.length - e[1];
-  const createPyodideModule = async cfg => {
+  const createPyodideModule = async (cfg: Parameters<CreateModule>[0]) => {
     const m = await create(cfg);
     lap("start the wasm module");
     m.growMemory(image);
@@ -155,9 +182,9 @@ export function restoreOptions(create, { snapshot, dso, index, blob }, lap = () 
 
 // Decode `input` (brotli) into a new Uint8Array of exactly `rawSize` bytes, in steps, so the peak memory is about the
 // output plus one step (a one-shot decode holds the output in wasm memory and again as a copy).
-export function inflate(brotli, input, rawSize, { inStep = 2 << 20, outStep = 4 << 20 } = {}) {
+export function inflate(brotli: BrotliWasmType, input: Uint8Array, rawSize: number, { inStep = 2 << 20, outStep = 4 << 20 } = {}): Uint8Array {
   const out = new Uint8Array(rawSize), stream = new brotli.DecompressStream(), Code = brotli.BrotliStreamResultCode;
-  let at = 0, code;
+  let at = 0, code: number | undefined;
   for (let inAt = 0; inAt < input.length || code === undefined; inAt += inStep) {
     const chunk = input.subarray(inAt, inAt + inStep);
     let used = 0;
@@ -178,13 +205,13 @@ export function inflate(brotli, input, rawSize, { inStep = 2 << 20, outStep = 4 
 // The browser's own brotli decoder (DecompressionStream("brotli")), where there is one. brotli-wasm decoded at about 9 MB/s
 // on an iPhone (the 229 MB took 25 s); `inflateNative` is the same result with the native decoder.
 export function hasNativeBrotli() {
-  try { new DecompressionStream("brotli"); return true; } catch { return false; }
+  try { new DecompressionStream("brotli" as CompressionFormat); return true; } catch { return false; }
 }
 
 // Like `inflate`: `input` (brotli) into a new Uint8Array of exactly `rawSize` bytes, read from the stream into one buffer.
-export async function inflateNative(input, rawSize) {
+export async function inflateNative(input: Uint8Array<ArrayBuffer>, rawSize: number): Promise<Uint8Array> {
   const out = new Uint8Array(rawSize);
-  const reader = new Blob([input]).stream().pipeThrough(new DecompressionStream("brotli")).getReader();
+  const reader = new Blob([input]).stream().pipeThrough(new DecompressionStream("brotli" as CompressionFormat)).getReader();
   let at = 0;
   for (let r; !(r = await reader.read()).done;) {
     if (at + r.value.length > rawSize) throw snapshotError(`snapshot: the decompressed data is larger than the ${rawSize} bytes expected`);
@@ -195,12 +222,9 @@ export async function inflateNative(input, rawSize) {
   return out;
 }
 
-/** @typedef {import("./types").SnapshotFile} SnapshotFile */
-
 // `file` is a manifest entry {raw, size} (SnapshotFile). A host that applied its own Content-Encoding hands over the bytes already
 // decoded (length === raw): use them as they are.
-/** @param {any} brotli @param {Uint8Array} bytes @param {SnapshotFile} file @returns {Uint8Array} */
-export function unpack(brotli, bytes, file) {
+export function unpack(brotli: BrotliWasmType, bytes: Uint8Array, file: Pick<SnapshotFile, "raw" | "size">): Uint8Array {
   if (bytes.length === file.raw) return bytes;
   if (bytes.length !== file.size) throw snapshotError(`snapshot: a file is ${bytes.length} bytes, the manifest says ${file.size}; run \`npm run snapshot\` again`);
   return inflate(brotli, bytes, file.raw);
@@ -208,12 +232,11 @@ export function unpack(brotli, bytes, file) {
 
 // `unpack`, with the native decoder when `native` is set and it works; any failure of it falls back to brotli-wasm, which
 // then gives the error if the file really is damaged. Returns [bytes, "native" | "wasm" | "none" (already decoded)].
-/** @param {any} brotli @param {Uint8Array} bytes @param {SnapshotFile} file @param {boolean} native
- *  @returns {Promise<[Uint8Array, "native" | "wasm" | "none"]>} */
-export async function unpackAsync(brotli, bytes, file, native) {
+export async function unpackAsync(brotli: BrotliWasmType, bytes: Uint8Array<ArrayBuffer>, file: Pick<SnapshotFile, "raw" | "size">,
+  native: boolean): Promise<[Uint8Array, "native" | "wasm" | "none"]> {
   if (native && bytes.length === file.size && bytes.length !== file.raw) {
     try { return [await inflateNative(bytes, file.raw), "native"]; }
-    catch (e) { console.warn(`[dofile] native brotli failed (${e?.message ?? e}); using brotli-wasm`); }
+    catch (e: any) { console.warn(`[dofile] native brotli failed (${e?.message ?? e}); using brotli-wasm`); }
   }
   return [unpack(brotli, bytes, file), bytes.length === file.raw ? "none" : "wasm"];
 }

@@ -8,8 +8,8 @@
 // starts again on the data-autofocus button. A dialog that another replaces (other-tab over a clash) is unmounted with no
 // answer: its view treats that as Cancel (an effect's cleanup that answers Cancel unless it has answered).
 import type { ComponentType } from "preact";
-import { dialog } from "./state.js";
-import type { Dialog, DialogName } from "./types";
+import { dialog } from "./state.ts";
+import type { Dialog, DialogName } from "./types.ts";
 import { DownloadDialog, OtherTabDialog } from "./states/DownloadDialog";
 import { ResetDialog } from "./states/ResetDialog";
 import { ClashDialog, CloseTabDialog, DeleteAllDialog, DeleteDialog } from "./files/dialogs";

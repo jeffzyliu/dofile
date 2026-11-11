@@ -1,4 +1,3 @@
-// @ts-check
 // The engine controller: the one wrapper around EngineClient (client.js). It owns the `engine` signal and builds the
 // states of docs/design/SPEC.md, section 5, from what the client reports: onStatus (the start-up stages), onRestart
 // (a reset), resetAt (Break's deadline), a download() rejection (an AbortError means "Stop download") and a start()
@@ -10,24 +9,20 @@
 // The page's order at load (main.tsx): the tab lock, then keepFiles(), then the store, then download() and start():
 //   connectEngine({ client, store, lock, snapshot, manual });  const lock = tabLock({ onLost: lost });  open();
 // Views call the actions below; they never call the client themselves, except through run.js.
-import { RC_RESET } from "../engine/client.js";
-import * as S from "./state.js";
-import { keep, refresh } from "./files.js";
-import { editorCommands } from "./editor/commands.js";
+import { RC_RESET } from "../engine/client.ts";
+import * as S from "./state.ts";
+import { keep, refresh } from "./files.ts";
+import { editorCommands } from "./editor/commands.ts";
+import type { EngineClient } from "../engine/client.ts";
+import type { About, ClientError, OpResults, ResetKind, RunResult, StatusText } from "../engine/types.ts";
+import type { EngineStateName, FailReason, RunHead, Stage } from "./types.ts";
 
-/** @typedef {import("./types").Stage} Stage @typedef {import("./types").RunHead} RunHead
- *  @typedef {import("./types").FailReason} FailReason
- *  @typedef {import("../engine/types").RunResult} RunResult @typedef {import("../engine/types").About} About
- *  @typedef {import("../engine/types").ClientError} ClientError
- *  @typedef {import("../engine/client.js").EngineClient} EngineClient */
-
-/** @type {Record<import("../engine/types").StatusText, Stage>} */
-export const STAGE_OF = {
+export const STAGE_OF: Record<StatusText, Stage> = {
   "downloading the engine": "download", "unpacking the engine": "unpack", "loading Python": "python",
   "loading your files": "files", "loading packages": "packages", "starting the engine": "engine",
 };
 /** The stages a start goes through, in order (OQ-11): the snapshot start, or ?snapshot=0. */
-export const stagesOf = (/** @type {boolean} */ snapshot) => /** @type {Stage[]} */ (snapshot
+export const stagesOf = (snapshot: boolean): Stage[] => (snapshot
   ? ["download", "unpack", "python", "files", "engine"] : ["download", "python", "files", "packages", "engine"]);
 
 /** The message of a start that failed with reason "updated". 4d's "Reload the page" keys on the reason, not on these words. */
@@ -35,7 +30,7 @@ export const UPDATED = "dofile has a newer version on this site: reload the page
 
 /** What a failed start tells the visitor (`message`), by reason: what happened and what they can do, in plain words. The
  *  developer's cause (a file name, a byte count, `npm run snapshot`) is `detail`, and goes to the console. */
-export const FAILED = /** @type {Record<FailReason, string>} */ ({
+export const FAILED: Record<FailReason, string> = ({
   "no-wasm": "This browser can't run the engine: it has no WebAssembly support. Try another browser.",
   download: "The engine didn't download completely. Check your connection, then try again.",
   memory: "There wasn't enough memory to start the engine. Close other tabs, then try again.",
@@ -45,25 +40,22 @@ export const FAILED = /** @type {Record<FailReason, string>} */ ({
 /** The message of `failed-twice`, whatever the reason: it is not started again, so only a reload helps. */
 export const FAILED_TWICE = "The engine failed twice while starting, so it won't try again by itself. Reload the page to try again.";
 
-/** @type {{ client: EngineClient, store: { blocked: boolean }, lock: { take(o?: { steal?: boolean }): Promise<unknown> },
- *  snapshot: boolean, manual: boolean, storage?: any }} */
-let deps;
-/** @type {AbortController | null} */
-let downloading = null;   // the download in progress: "Stop download" aborts it
+let deps: { client: EngineClient, store: { blocked: boolean }, lock: { take(o?: { steal?: boolean }): Promise<unknown> },
+  snapshot: boolean, manual: boolean, storage?: any };
+let downloading: AbortController | null = null;   // the download in progress: "Stop download" aborts it
 let stageAt = 0;          // when the current start-up stage began (Date.now())
 // Each start() and each reset takes the next number; ready() and failed() act only for the latest. A reset during a start
 // answers both the start() and the reset's `started` with the new worker's start (client.js), which would else count twice.
 let attempt = 0;
 let hadEngine = false;    // the engine now in use was ready once: a reset then loses its data (the banner, "Engine reset")
-/** @type {Promise<void> | null} */
-let taking = null;        // takeOver() in progress: a second press waits for it, never steals the lock twice
+let taking: Promise<void> | null = null;        // takeOver() in progress: a second press waits for it, never steals the lock twice
 // Counts the times this tab lost the tab lock (otherTab()). owned() and takeOver() read it before each await and stop if
 // it changed meanwhile: a tab that has just lost the lock must not unblock the store, close the dialog or start a worker.
 let lockGen = 0;
 
 /** Wire the controller to the page's client, store and tab lock. `snapshot`: the snapshot start (not ?snapshot=0).
  *  `manual`: ?test=manual, no start until the test calls start(). `storage`: navigator.storage (the tests give theirs). */
-export function connectEngine(/** @type {typeof deps} */ d) {
+export function connectEngine(d: typeof deps) {
   deps = d;
   d.client.onStatus = onStatus;
   d.client.onRestart = onRestart;
@@ -135,7 +127,7 @@ export function takeOver() {
 // ---- the download prompt and the start ----
 
 /** Show the download prompt (`asking`). forRun: Run or the command line asked for it ("Download the engine to run code"). */
-export function ask(/** @type {boolean} */ forRun) {
+export function ask(forRun: boolean) {
   S.engine.value = { s: "asking", forRun };
   S.dialog.value = { d: "download", forRun };
 }
@@ -170,7 +162,7 @@ export async function start() {
     } });
   } catch (e) {
     if (downloading !== ac) return;   // the tab lost the lock meanwhile
-    const err = /** @type {ClientError} */ (e);
+    const err = (e as ClientError);
     if (err?.name === "AbortError") {
       downloading = null;
       decline();
@@ -194,7 +186,7 @@ export async function start() {
 
 // `starting`, at its first stage: the snapshot start reads the cache first ("download"), ?snapshot=0 starts Python.
 // `announce`: say the stage. Not after a reset: there the first stage reads the cache, and "Download the engine" would mislead.
-function starting(/** @type {Partial<Record<Stage, number>>} */ done = {}, announce = true) {
+function starting(done: Partial<Record<Stage, number>> = {}, announce = true) {
   stageAt = Date.now();
   const stage = deps.snapshot ? "download" : "python";
   S.engine.value = { s: "starting", stage, t0: stageAt, done };
@@ -202,13 +194,12 @@ function starting(/** @type {Partial<Record<Stage, number>>} */ done = {}, annou
 }
 
 /** What the live region says at each stage (S 2's stage list). */
-export const stageWords = /** @type {Record<Stage, string>} */ ({
+export const stageWords: Record<Stage, string> = ({
   download: "Download the engine", unpack: "Unpack the engine", python: "Start Python", files: "Load your files",
   packages: "Load packages", engine: "Start the engine",
 });
 
-/** @param {import("../engine/types").StatusText} text */
-function onStatus(text) {
+function onStatus(text: StatusText) {
   const st = S.engine.value, stage = STAGE_OF[text];
   if (st.s !== "starting" || !stage || stage === st.stage) return;
   const now = Date.now();
@@ -219,8 +210,7 @@ function onStatus(text) {
   S.say(stageWords[stage]);
 }
 
-/** @param {About} a */
-function ready(a) {
+function ready(a: About) {
   S.about.value = a;
   hadEngine = true;
   S.engine.value = { s: "ready" };   // run.js then asks for `memory`
@@ -231,11 +221,10 @@ function ready(a) {
   S.say("Engine ready");
 }
 
-/** Why a start failed, from the error's kind, reason and name. @param {ClientError} e @returns {FailReason} */
-const reasonOf = e => (e?.kind === "updated" || e?.name === "UpdatedError" ? "updated" : e?.reason ?? "unknown");
+/** Why a start failed, from the error's kind, reason and name. */
+const reasonOf = (e: ClientError): FailReason => (e?.kind === "updated" || e?.name === "UpdatedError" ? "updated" : e?.reason ?? "unknown");
 
-/** @param {ClientError} e */
-function failed(e) {
+function failed(e: ClientError) {
   if (e?.kind === "stopped") return;   // another tab took over, or a second start: that one says what happens
   const detail = String(e?.message ?? e), reason = reasonOf(e), twice = e?.kind === "failed-twice";
   console.warn(`[dofile] the engine didn't start (${reason}): ${detail}`);
@@ -249,9 +238,8 @@ function failed(e) {
 
 /** A reset (rc 9998): Break ran out of time, the worker crashed, Reset, "Reset now". Called by the client before the cut
  *  run's promise resolves, so run.js finds `starting` and leaves the state alone. The banner and "Engine reset" only when
- *  the engine being replaced had been ready: a crash during a start loses nothing.
- *  @param {string} reason @param {Promise<About>} started @param {import("../engine/types").ResetKind} kind */
-function onRestart(reason, started, kind) {
+ *  the engine being replaced had been ready: a crash during a start loses nothing. */
+function onRestart(reason: string, started: Promise<About>, kind: ResetKind) {
   if (hadEngine) {
     S.addBanner({ b: "reset", reason, kind });
     S.say("Engine reset");
@@ -264,13 +252,11 @@ function onRestart(reason, started, kind) {
 
 // ---- runs and Break (run.js calls run(); the toolbar calls the rest) ----
 
-/** Run `code` (the engine must be `ready`): `running` until the result, then `ready`, unless a reset came first.
- *  @param {string} code @param {RunHead} head @param {{ onLog?: (text: string) => void }} [o]
- *  @returns {Promise<RunResult>} */
-export async function run(code, head, { onLog } = {}) {
+/** Run `code` (the engine must be `ready`): `running` until the result, then `ready`, unless a reset came first. */
+export async function run(code: string, head: RunHead, { onLog }: { onLog?: (text: string) => void } = {}): Promise<RunResult> {
   S.engine.value = { s: "running", run: head, t0: Date.now() };
   const r = await deps.client.run(code, { onLog, fresh_locals: head.fresh_locals, plot_theme: S.resolvedTheme.value });
-  const s = /** @type {import("./types").EngineStateName} */ (S.engine.value.s);   // a reset may have come meanwhile
+  const s = (S.engine.value.s as EngineStateName);   // a reset may have come meanwhile
   if (s === "running" || s === "breaking" || s === "waiting") S.engine.value = { s: "ready" };
   return r;
 }
@@ -305,11 +291,9 @@ export function reset() {
 }
 
 /** An engine op other than run (describe, browse, matrix, macros, memory, describe_file): the views' way to ask the
- *  engine (step 4c). Rejects with the client's error (kind "no-engine" with no worker, "reset" when a reset cut it).
- *  @template {keyof import("../engine/types").OpResults} K @param {K} op @param {object} [args]
- *  @returns {Promise<import("../engine/types").OpResults[K]>} */
-export function call(op, args) { return deps.client.call(op, args); }
+ *  engine (step 4c). Rejects with the client's error (kind "no-engine" with no worker, "reset" when a reset cut it). */
+export function call<K extends keyof OpResults>(op: K, args?: object): Promise<OpResults[K]> { return deps.client.call(op, args); }
 
 /** Whether a result is the client's own rc 9998, with no log of its own: a run cut (a reset, another tab, no engine) or,
  *  with kind "run-failed", a run whose op failed in the worker (the worker stays). */
-export const fromClient = (/** @type {RunResult} */ r) => r.rc === RC_RESET && "kind" in r;
+export const fromClient = (r: RunResult) => r.rc === RC_RESET && "kind" in r;

@@ -4,17 +4,18 @@
 //   pandas: also load it, which the page does not (only for checking `export sasxport`: check-snapshot.mjs --pandas)
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { PyodideAPI } from "pyodide";
 
 const repo = fileURLToPath(new URL("../..", import.meta.url));
 export const extraWheelsDir = `${repo}web/wheels`;
 
-export const newestWheel = dir => readdirSync(dir).filter(f => f.endsWith(".whl")).sort().at(-1);
+export const newestWheel = (dir: string) => readdirSync(dir).filter(f => f.endsWith(".whl")).sort().at(-1);
 
-export async function installEngine(py, { dist = `${repo}dist`, pandas = false } = {}) {
+export async function installEngine(py: PyodideAPI, { dist = `${repo}dist`, pandas = false } = {}): Promise<string> {
   await py.loadPackage(pandas ? ["micropip", "pandas"] : "micropip", { messageCallback: () => {} });
-  const names = [];
-  const put = (dir, name) => { py.FS.writeFile(`/tmp/${name}`, readFileSync(`${dir}/${name}`)); names.push(name); };
-  const wheel = newestWheel(dist);
+  const names: string[] = [];
+  const put = (dir: string, name: string) => { py.FS.writeFile(`/tmp/${name}`, readFileSync(`${dir}/${name}`)); names.push(name); };
+  const wheel = newestWheel(dist)!;
   put(dist, wheel);
   for (const f of readdirSync(extraWheelsDir).filter(f => f.endsWith(".whl"))) put(extraWheelsDir, f);
   await py.runPythonAsync(`import micropip; await micropip.install(${JSON.stringify(names.map(n => `emfs:/tmp/${n}`))})`);

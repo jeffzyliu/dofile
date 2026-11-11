@@ -18,7 +18,7 @@
     "contrast": "node ../docs/design/contrast.mjs",
     "fonts": "node ../docs/design/fonts.mjs",
     "pretest": "npm run wheel",
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.ts\"",
     "e2e": "npm run snapshot && npm run build && playwright test",
     "cf:dev": "npm run snapshot && npm run build && wrangler dev --ip 0.0.0.0",
     "deploy": "npm run snapshot && npm run build && wrangler deploy"
@@ -37,6 +37,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
     "fake-indexeddb": "^6.2.7",
     "typescript": "^7.0.2",
     "vite": "^8.3.6",
