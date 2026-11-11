@@ -6,9 +6,14 @@ import type { FullConfig } from "@playwright/test";
 export default async function globalSetup(config: FullConfig) {
   const base = config.projects[0]?.use.baseURL ?? "http://localhost:4173";
   const mine = readFileSync(new URL("../dist/start-files.json", import.meta.url), "utf8");
-  const served = await fetch(`${base}/start-files.json`).then(r => (r.ok ? r.text() : `status ${r.status}`), e => String(e));
+  const served = await fetch(`${base}/start-files.json`).then(
+    (r) => (r.ok ? r.text() : `status ${r.status}`),
+    (e) => String(e),
+  );
   if (served !== mine) {
-    throw new Error(`${base} does not serve this folder's build (web/dist): another preview server is on that port, or it serves ` +
-      "an older build. Stop the other server (or run `npm run build` here), then try again.");
+    throw new Error(
+      `${base} does not serve this folder's build (web/dist): another preview server is on that port, or it serves ` +
+        "an older build. Stop the other server (or run `npm run build` here), then try again.",
+    );
   }
 }

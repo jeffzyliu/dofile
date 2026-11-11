@@ -1,14 +1,23 @@
 // inflate and unpack (src/engine/snapshot.ts): the brotli decoding of the snapshot's two big files, with the same
 // brotli-wasm module the worker loads. No snapshot needs to be built for these.
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-import zlib from "node:zlib";
 import crypto from "node:crypto";
-import { hasNativeBrotli, inflate, inflateNative, isStorageRefusal, unpack, unpackAsync } from "../src/engine/snapshot.ts";
+import { createRequire } from "node:module";
+import { test } from "node:test";
+import zlib from "node:zlib";
+import {
+  hasNativeBrotli,
+  inflate,
+  inflateNative,
+  isStorageRefusal,
+  unpack,
+  unpackAsync,
+} from "../src/engine/snapshot.ts";
 
 const brotli = createRequire(import.meta.url)("brotli-wasm");
-const compress = (data: Uint8Array, quality = 5) => new Uint8Array(zlib.brotliCompressSync(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality } }));
+const compress = (data: Uint8Array, quality = 5) =>
+  new Uint8Array(zlib.brotliCompressSync(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality } }));
 
 // incompressible, repetitive and zero-filled parts, longer than the decoder's input and output steps
 const random = crypto.randomBytes(3_000_000);
@@ -38,7 +47,9 @@ test("unpack decodes a file, passes through one a host already decoded, and chec
 });
 
 // the browser's own decoder (DecompressionStream("brotli")); skipped where the runtime has none
-test("inflateNative and unpackAsync give the same bytes as brotli-wasm, and a damaged file falls back to the wasm error", { skip: !hasNativeBrotli() && "no native brotli here" }, async () => {
+test("inflateNative and unpackAsync give the same bytes as brotli-wasm, and a damaged file falls back to the wasm error", {
+  skip: !hasNativeBrotli() && "no native brotli here",
+}, async () => {
   const out = await inflateNative(packed, data.length);
   assert.equal(Buffer.compare(Buffer.from(out.buffer, out.byteOffset, out.length), data), 0);
   await assert.rejects(inflateNative(packed.subarray(0, packed.length - 1000), data.length));
@@ -57,7 +68,16 @@ test("inflateNative and unpackAsync give the same bytes as brotli-wasm, and a da
 
 test("only the browser refusing storage is carried on from; every other cache error is a bug and is not swallowed", () => {
   const named = (name: string, msg = "x") => Object.assign(new Error(msg), { name });
-  for (const name of ["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI", "UnknownError"]) assert.equal(isStorageRefusal(named(name)), true, name);
-  for (const e of [new TypeError("Request scheme 'blob' is unsupported"), named("InvalidStateError"), named("AbortError"), new Error("boom"), undefined, null, "QuotaExceededError"] as any[])
+  for (const name of ["QuotaExceededError", "SecurityError", "NotAllowedError", "NoCacheAPI", "UnknownError"])
+    assert.equal(isStorageRefusal(named(name)), true, name);
+  for (const e of [
+    new TypeError("Request scheme 'blob' is unsupported"),
+    named("InvalidStateError"),
+    named("AbortError"),
+    new Error("boom"),
+    undefined,
+    null,
+    "QuotaExceededError",
+  ] as any[])
     assert.equal(isStorageRefusal(e), false, String(e?.name ?? e));
 });

@@ -14,7 +14,9 @@ import { Placeholder } from "../ui/Icon";
 import type { MenuItem } from "../ui/Menu";
 
 export const CommandLine = () => (
-  <div class="cmdline"><Placeholder step="4b">The command line.</Placeholder></div>
+  <div class="cmdline">
+    <Placeholder step="4b">The command line.</Placeholder>
+  </div>
 );
 
 export const LogActions = () => null;

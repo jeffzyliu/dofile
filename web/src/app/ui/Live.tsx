@@ -9,7 +9,11 @@ import type { ComponentChildren, Ref } from "preact";
 import { announce, holdToast, toast } from "../state.ts";
 import { Icon } from "./Icon";
 
-export const LiveRegion = () => <div class="visually-hidden" role="status" aria-live="polite">{announce.value}</div>;
+export const LiveRegion = () => (
+  <div class="visually-hidden" role="status" aria-live="polite">
+    {announce.value}
+  </div>
+);
 
 export function ToastHost() {
   const text = toast.value;
@@ -17,7 +21,8 @@ export function ToastHost() {
   return (
     <div class="toasts" aria-hidden="true">
       <div class="toast" onPointerEnter={() => holdToast(true)} onPointerLeave={() => holdToast(false)}>
-        <Icon name="check" />{text}
+        <Icon name="check" />
+        {text}
       </div>
     </div>
   );
@@ -25,16 +30,24 @@ export function ToastHost() {
 
 export interface BannerProps {
   kind?: "info" | "warn" | "error";
-  role?: "alert" | "status";        // "alert" for a failure the user must hear at once (S 6)
-  children: ComponentChildren;      // the sentence; its first words in <b> as drawn
-  actions?: ComponentChildren;      // buttons under it
-  focusable?: boolean;              // tabindex=-1, for a banner that takes the focus (S 9b)
+  role?: "alert" | "status"; // "alert" for a failure the user must hear at once (S 6)
+  children: ComponentChildren; // the sentence; its first words in <b> as drawn
+  actions?: ComponentChildren; // buttons under it
+  focusable?: boolean; // tabindex=-1, for a banner that takes the focus (S 9b)
   bannerRef?: Ref<HTMLDivElement>;
 }
 
 export const Banner = ({ kind = "info", role, children, actions, focusable, bannerRef }: BannerProps) => (
-  <div ref={bannerRef} class={`banner${kind === "info" ? "" : ` ${kind}`}`} role={role} tabIndex={focusable ? -1 : undefined}>
+  <div
+    ref={bannerRef}
+    class={`banner${kind === "info" ? "" : ` ${kind}`}`}
+    role={role}
+    tabIndex={focusable ? -1 : undefined}
+  >
     {kind !== "info" && <Icon name="warn" />}
-    <div>{children}{actions && <div class="actions">{actions}</div>}</div>
+    <div>
+      {children}
+      {actions && <div class="actions">{actions}</div>}
+    </div>
   </div>
 );

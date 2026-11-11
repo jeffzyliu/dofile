@@ -7,12 +7,17 @@ export type IconName = "play" | "stop" | "down" | "right" | "more" | "theme" | "
 export const Icon = ({ name }: { name: IconName }) => <span class={`ico i-${name}`} aria-hidden="true" />;
 
 /** True on a Mac (and iPhone, iPad): key chips say ⌘ there, Ctrl elsewhere. */
-export const isMac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? "") || /Mac OS X/.test(globalThis.navigator?.userAgent ?? "");
+export const isMac =
+  /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? "") ||
+  /Mac OS X/.test(globalThis.navigator?.userAgent ?? "");
 
 /** A key chip on a button: `<Key mod k="↩" />` is "⌘ ↩" on a Mac, "Ctrl ↩" elsewhere. A disabled button shows none
  *  (SPEC 1, Glyphs): leave it out there. Hidden from screen readers; the button's aria-keyshortcuts says the key. */
-export const Key = ({ k, mod = false }: { k: string; mod?: boolean }) =>
-  <span class="key" aria-hidden="true">{mod ? `${isMac ? "⌘" : "Ctrl"} ${k}` : k}</span>;
+export const Key = ({ k, mod = false }: { k: string; mod?: boolean }) => (
+  <span class="key" aria-hidden="true">
+    {mod ? `${isMac ? "⌘" : "Ctrl"} ${k}` : k}
+  </span>
+);
 
 /** aria-keyshortcuts for Ctrl/Cmd + key: "Meta+Enter" on a Mac, "Control+Enter" elsewhere. */
 export const modShortcut = (key: string) => `${isMac ? "Meta" : "Control"}+${key}`;
@@ -25,11 +30,19 @@ export const modShortcut = (key: string) => `${isMac ? "Meta" : "Control"}+${key
  *    <button class="btn stop"><Labels at={i} labels={["Break", "Reset", "Stopping…", "Reset now"]} /></button> */
 export const Labels = ({ labels, at }: { labels: ComponentChildren[]; at: number }) => (
   <span class="labels">
-    {labels.map((l, i) => <span key={i} class="label" aria-hidden={i === at ? undefined : "true"}>{l}</span>)}
+    {labels.map((l, i) => (
+      <span key={i} class="label" aria-hidden={i === at ? undefined : "true"}>
+        {l}
+      </span>
+    ))}
   </span>
 );
 
 /** A marked place in the layout that a step 4 part fills. It shows what goes there, so the shell can be seen and tested
  *  before the part is built. Remove it with the part's first commit. */
-export const Placeholder = ({ step, children }: { step: string; children: ComponentChildren }) =>
-  <div class="placeholder" data-placeholder={step}><b>Step {step}</b>{children}</div>;
+export const Placeholder = ({ step, children }: { step: string; children: ComponentChildren }) => (
+  <div class="placeholder" data-placeholder={step}>
+    <b>Step {step}</b>
+    {children}
+  </div>
+);

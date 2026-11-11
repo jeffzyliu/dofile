@@ -4,17 +4,18 @@
 // each change calls store.onChange, which lists the store again here. docs/design/SPEC.md, sections 3.1 and 7.
 // It also performs two effects of the engine's state machine (app/engine.ts calls them): own(), when the tab lock is this
 // tab's, and block(), when another tab took it. The store starts blocked (app/store.ts).
-import * as S from "./state.ts";
-import { filesWriter as W } from "./state.ts";
+
 import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo } from "../engine/types.ts";
+import * as S from "./state.ts";
+import { filesWriter as W } from "./state.ts";
 
-type Store = { list(): Promise<FileInfo[]>, zip(): Promise<File>, onChange: null | (() => void), blocked: boolean };
+type Store = { list(): Promise<FileInfo[]>; zip(): Promise<File>; onChange: null | (() => void); blocked: boolean };
 type Storage = Parameters<typeof keepFiles>[0];
 
 let store: Store | null = null;
-let storage: Storage;   // navigator.storage, or the tests' own
-let warned = false;   // the storage banner was added in this visit
+let storage: Storage; // navigator.storage, or the tests' own
+let warned = false; // the storage banner was added in this visit
 
 /** The store the page uses (main.tsx), and the browser's storage manager (the tests give theirs). The store's changes
  *  list it again. */
@@ -22,7 +23,10 @@ export function connectFiles(s: Store, manager: Storage = globalThis.navigator?.
   store = s;
   storage = manager;
   warned = false;
-  s.onChange = () => { changed(); refresh(); };
+  s.onChange = () => {
+    changed();
+    refresh();
+  };
 }
 
 /** The effect `own-files`: the tab lock is this tab's. The store is unblocked, the browser is asked to keep the files,
@@ -59,12 +63,14 @@ export async function refresh() {
 
 /** Ask the browser once to keep the files; `persisted` gets what persisted() says now, and again when persist() answers. */
 export function keep(manager: Storage = globalThis.navigator?.storage) {
-  return keepFiles(manager, kept => { W.persisted.value = kept; });
+  return keepFiles(manager, (kept) => {
+    W.persisted.value = kept;
+  });
 }
 
 /** After a run: `fresh` is what it created or changed, and the list is read again. */
 export function afterRun(changes: FileChange[] | undefined) {
-  W.fresh.value = new Set((changes ?? []).filter(c => c.status !== "removed").map(c => c.name));
+  W.fresh.value = new Set((changes ?? []).filter((c) => c.status !== "removed").map((c) => c.name));
   if (changes?.length) changed();
   return refresh();
 }
@@ -78,7 +84,7 @@ export function afterRun(changes: FileChange[] | undefined) {
 export async function downloadAll(): Promise<boolean> {
   if (!store) return false;
   try {
-    if (!(await store.list()).some(f => !f.dir)) return false;   // nothing to download: no empty zip
+    if (!(await store.list()).some((f) => !f.dir)) return false; // nothing to download: no empty zip
     saveAs(await store.zip());
     S.dismiss({ b: "download-failed" });
     return true;

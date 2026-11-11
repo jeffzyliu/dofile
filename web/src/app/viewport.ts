@@ -20,24 +20,43 @@
 export const KEYBOARD = 120;
 
 /** Whether `el` takes typing: a text input, a textarea, or editable content (CodeMirror). */
-const isTextField = (el: Element | null | undefined) => Boolean(el?.matches?.(
-  "input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=button], [type=submit], [type=reset]), textarea, [contenteditable]:not([contenteditable=false])"));
+const isTextField = (el: Element | null | undefined) =>
+  Boolean(
+    el?.matches?.(
+      "input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=button], [type=submit], [type=reset]), textarea, [contenteditable]:not([contenteditable=false])",
+    ),
+  );
 
 /** Start watching. `enabled()` says whether to act (the phone layout); call the returned `update()` when it changes. */
-export function watchViewport({ vv = globalThis.visualViewport, root = globalThis.document?.documentElement,
-  layoutHeight = () => root.clientHeight, layoutWidth = () => root.clientWidth,
-  typing = () => isTextField(globalThis.document?.activeElement), enabled = () => true }: { vv?: VisualViewport | null, root?: HTMLElement,
-  layoutHeight?: () => number, layoutWidth?: () => number, typing?: () => boolean, enabled?: () => boolean } = {}):
-  { update: () => void, stop: () => void } {
+export function watchViewport({
+  vv = globalThis.visualViewport,
+  root = globalThis.document?.documentElement,
+  layoutHeight = () => root.clientHeight,
+  layoutWidth = () => root.clientWidth,
+  typing = () => isTextField(globalThis.document?.activeElement),
+  enabled = () => true,
+}: {
+  vv?: VisualViewport | null;
+  root?: HTMLElement;
+  layoutHeight?: () => number;
+  layoutWidth?: () => number;
+  typing?: () => boolean;
+  enabled?: () => boolean;
+} = {}): { update: () => void; stop: () => void } {
   if (!vv || !root) return { update: () => {}, stop: () => {} };
-  let width = 0, tallest = 0;   // the tallest layout viewport seen at this width
+  let width = 0,
+    tallest = 0; // the tallest layout viewport seen at this width
   const update = () => {
-    const h = layoutHeight(), w = layoutWidth();
-    if (w !== width) { width = w; tallest = 0; }
+    const h = layoutHeight(),
+      w = layoutWidth();
+    if (w !== width) {
+      width = w;
+      tallest = 0;
+    }
     tallest = Math.max(tallest, h);
     const unzoomed = Math.abs(vv.scale - 1) < 0.01;
-    const covered = h - vv.height > KEYBOARD;                // the keyboard covers the layout viewport (the default)
-    const shrunk = typing() && tallest - h > KEYBOARD;       // or the browser shrank the layout viewport for it
+    const covered = h - vv.height > KEYBOARD; // the keyboard covers the layout viewport (the default)
+    const shrunk = typing() && tallest - h > KEYBOARD; // or the browser shrank the layout viewport for it
     const open = enabled() && unzoomed && (covered || shrunk);
     if (open) {
       root.style.setProperty("--vv-height", `${vv.height}px`);
@@ -57,10 +76,13 @@ export function watchViewport({ vv = globalThis.visualViewport, root = globalThi
   root.addEventListener?.("focusin", later);
   root.addEventListener?.("focusout", later);
   update();
-  return { update, stop: () => {
-    vv.removeEventListener("resize", update);
-    vv.removeEventListener("scroll", update);
-    root.removeEventListener?.("focusin", later);
-    root.removeEventListener?.("focusout", later);
-  } };
+  return {
+    update,
+    stop: () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      root.removeEventListener?.("focusin", later);
+      root.removeEventListener?.("focusout", later);
+    },
+  };
 }

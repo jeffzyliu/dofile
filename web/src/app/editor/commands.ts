@@ -27,9 +27,13 @@ export const editorCommands = {
   runSelection() {},
   /** Save `path` (default: the active tab) with store.write; Ctrl/Cmd+S, the Save button, the close-tab dialog's Save.
    *  Resolves true once saved, false when not (no such tab, the store refused: the save-failed banner says why). */
-  save(_path?: string): Promise<boolean> { return Promise.resolve(false); },
+  save(_path?: string): Promise<boolean> {
+    return Promise.resolve(false);
+  },
   /** Put the focus in the editor (after the engine's dialog closes by itself, "Go to line"). */
-  focus() { ((globalThis.document?.querySelector("[data-editor]") ?? null) as HTMLElement | null)?.focus(); },
+  focus() {
+    ((globalThis.document?.querySelector("[data-editor]") ?? null) as HTMLElement | null)?.focus();
+  },
 
   /** 4a: a text file was opened (its tab is in `tabs`; `text` is its strict UTF-8 decoding): make its editor state. */
   open(_path: string, _text: string) {},

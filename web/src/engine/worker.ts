@@ -9,24 +9,45 @@
 // stage begins and {id, log} chunks while a run prints. client.ts is the page's side. Python's side: src/dofile/browser.py.
 // The handlers are three objects, one per set of ops (LifecycleOps, ReadOps, JournalOps): a new op must choose its set,
 // here and in types.ts.
-import { loadPyodide } from "pyodide";
-import { hasNativeBrotli, isStorageRefusal, openCache, restoreOptions, unpackAsync } from "./snapshot.ts";
-import { openStore } from "./store.ts";
+
 import type { BrotliWasmType } from "brotli-wasm";
-import type { AppliedRun, FileStore, RunChange } from "./store.ts";
+import { loadPyodide } from "pyodide";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
-import type { BootArgs, DescribeArgs, FileChange, FileInfo, LifecycleOps, JournalOps, MountArgs, ReadOps, RunOptions, SnapshotFile, SnapshotFiles,
-  Stage, Startup, ToWorker } from "./types.ts";
+import { hasNativeBrotli, isStorageRefusal, openCache, restoreOptions, unpackAsync } from "./snapshot.ts";
+import type { AppliedRun, FileStore, RunChange } from "./store.ts";
+import { openStore } from "./store.ts";
+import type {
+  BootArgs,
+  DescribeArgs,
+  FileChange,
+  FileInfo,
+  JournalOps,
+  LifecycleOps,
+  MountArgs,
+  ReadOps,
+  RunOptions,
+  SnapshotFile,
+  SnapshotFiles,
+  Stage,
+  Startup,
+  ToWorker,
+} from "./types.ts";
 
 /** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in for it (test/node-worker.ts). */
 type WorkerStore = Pick<FileStore, "takeAll" | "applyRun">;
 declare global {
-  var dofileStore: WorkerStore | undefined;   // the Node tests give the page's store (test/node-worker.ts)
+  var dofileStore: WorkerStore | undefined; // the Node tests give the page's store (test/node-worker.ts)
 }
 /** dofile.browser (src/dofile/browser.py) through Pyodide: JSON text in and out. */
 interface Browser {
   start(root: string): string;
-  run(code: string, images: boolean, freshLocals: boolean, plotTheme: string | undefined, onOutput: (text: string) => void): string;
+  run(
+    code: string,
+    images: boolean,
+    freshLocals: boolean,
+    plotTheme: string | undefined,
+    onOutput: (text: string) => void,
+  ): string;
   describe(vars: string | undefined, offset: number, limit: number | undefined): string;
   describe_file(path: string): string;
   matrix(name: string): string;
@@ -34,25 +55,30 @@ interface Browser {
   browse(vars: string | undefined, offset: number, limit: number): string;
   memory(): string;
 }
-type Io = { stdout: (line: string) => void, stderr: (line: string) => void };
+type Io = { stdout: (line: string) => void; stderr: (line: string) => void };
 // This worker's global scope. The page's types are the DOM's, where `self` is a Window, which has no postMessage(message, transfer).
 declare const self: Window & typeof globalThis & { postMessage(message: unknown, transfer: Transferable[]): void };
 
-const ROOT = "/work", HIDDEN = ".dofile";
-let py: SnapshotPy, browser: Browser, interrupt: Int32Array | null = null, fromSnapshot = false;
+const ROOT = "/work",
+  HIDDEN = ".dofile";
+let py: SnapshotPy,
+  browser: Browser,
+  interrupt: Int32Array | null = null,
+  fromSnapshot = false;
 let queue = Promise.resolve();
-let store: WorkerStore | null = null, storeError = "";   // the file store, or why there is none
+let store: WorkerStore | null = null,
+  storeError = ""; // the file store, or why there is none
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
-let unsaved = new Map<string, { status: FileChange["status"], dir: boolean }>();
+let unsaved = new Map<string, { status: FileChange["status"]; dir: boolean }>();
 
 /** Tell the page a start-up stage began. */
 const stage = (id: Stage) => self.postMessage({ stage: id });
-const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);   // `path` is `top` or under it
+const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`); // `path` is `top` or under it
 
 // An error for the page: { message, name }. Emscripten's file system errors carry only a number.
-function describe(e: any): { message: string, name: string } {
+function describe(e: any): { message: string; name: string } {
   if (e?.errno != null) {
-    const code = Object.keys(py?.ERRNO_CODES ?? {}).find(k => py.ERRNO_CODES[k] === e.errno);
+    const code = Object.keys(py?.ERRNO_CODES ?? {}).find((k) => py.ERRNO_CODES[k] === e.errno);
     return { message: `file system error ${code ?? e.errno}`, name: "ErrnoError" };
   }
   const message = e?.message ?? (typeof e === "object" ? JSON.stringify(e) : e);
@@ -71,7 +97,9 @@ function inRoot(path: string): string {
 function walk(dir: string, out: FileInfo[] = []): FileInfo[] {
   for (const name of py.FS.readdir(dir)) {
     if (name === "." || name === ".." || (dir === ROOT && name === HIDDEN)) continue;
-    const full = `${dir}/${name}`, st = py.FS.stat(full), isDir = py.FS.isDir(st.mode);
+    const full = `${dir}/${name}`,
+      st = py.FS.stat(full),
+      isDir = py.FS.isDir(st.mode);
     out.push({ path: full.slice(ROOT.length + 1), dir: isDir, size: isDir ? 0 : st.size, mtime: st.mtime.getTime() });
     if (isDir) walk(full, out);
   }
@@ -87,13 +115,14 @@ function removeTree(full: string): void {
 }
 
 // records of the store ({ infos, data }, as takeAll and applyRun give them) into /work
-function putRecords({ infos, data }: { infos: FileInfo[], data: [IDBValidKey, ArrayBuffer][] }) {
-  const mtimes = new Map(infos.map(i => [i.path, i.mtime]));
+function putRecords({ infos, data }: { infos: FileInfo[]; data: [IDBValidKey, ArrayBuffer][] }) {
+  const mtimes = new Map(infos.map((i) => [i.path, i.mtime]));
   for (const i of infos) if (i.dir) py.FS.mkdirTree(`${ROOT}/${i.path}`);
   for (const [path, bytes] of data) {
-    const full = `${ROOT}/${path}`, mtime = mtimes.get(path as string) ?? Date.now();
+    const full = `${ROOT}/${path}`,
+      mtime = mtimes.get(path as string) ?? Date.now();
     py.FS.mkdirTree(py.PATH.dirname(full));
-    py.FS.writeFile(full, new Uint8Array(bytes), { canOwn: true });   // the bytes just read: no second copy
+    py.FS.writeFile(full, new Uint8Array(bytes), { canOwn: true }); // the bytes just read: no second copy
     py.FS.utime(full, mtime, mtime);
   }
 }
@@ -102,7 +131,7 @@ function putRecords({ infos, data }: { infos: FileInfo[], data: [IDBValidKey, Ar
 // empty, the start's summary says why (startup.storeError), and every run that writes a file says so too (store_error).
 async function copyStore() {
   try {
-    store = self.dofileStore ?? openStore();   // dofileStore: the Node tests give the page's store (test/node-worker.ts)
+    store = self.dofileStore ?? openStore(); // dofileStore: the Node tests give the page's store (test/node-worker.ts)
     putRecords(await store.takeAll());
   } catch (e) {
     store = null;
@@ -116,7 +145,7 @@ async function copyStore() {
 function takePageVersion({ resync }: AppliedRun) {
   for (const path of resync.paths) {
     if (exists(`${ROOT}/${path}`)) removeTree(`${ROOT}/${path}`);
-    forget(path);   // /work has the store's version there now: a run's refused write to it is not owed any more
+    forget(path); // /work has the store's version there now: a run's refused write to it is not owed any more
   }
   // Where the store has a folder (above each record it gives, and at each folder the page made), /work may have a file:
   // a run's that the store refused. mkdirTree would pass over it (it ignores EEXIST) and the write under it would fail.
@@ -131,7 +160,8 @@ function takePageVersion({ resync }: AppliedRun) {
 function foldersAt(path: string, self: boolean) {
   const parts = path.split("/");
   for (let n = 1; n <= parts.length - (self ? 0 : 1); n++) {
-    const p = parts.slice(0, n).join("/"), full = `${ROOT}/${p}`;
+    const p = parts.slice(0, n).join("/"),
+      full = `${ROOT}/${p}`;
     if (exists(full) && !py.FS.isDir(py.FS.stat(full).mode)) {
       py.FS.unlink(full);
       forget(p);
@@ -147,18 +177,30 @@ function foldersAt(path: string, self: boolean) {
 // Why the two: the wait in `run` makes the time enough for any write of one byte or more (it gets a time later than any
 // time in `before`, or, for a time in the future, another one). A truncation is not stamped by MEMFS (its setattr takes
 // no time with a size, and a write of 0 bytes sets none), so a run that empties a file changes only its size.
-async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[], skipped: string[], store_error?: string }> {
-  const was = new Map(before.map(f => [f.path, f])), now = new Set<string>(), changes: RunChange[] = [];
+async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipped: string[]; store_error?: string }> {
+  const was = new Map(before.map((f) => [f.path, f])),
+    now = new Set<string>(),
+    changes: RunChange[] = [];
   for (const f of walk(ROOT)) {
     now.add(f.path);
-    const old = was.get(f.path), failed = unsaved.get(f.path);
-    const what = failed ? (failed.status === "created" ? "created" : "modified")
-      : !old ? "created" : old.dir !== f.dir || (!f.dir && (old.size !== f.size || old.mtime !== f.mtime)) ? "modified" : null;
+    const old = was.get(f.path),
+      failed = unsaved.get(f.path);
+    const what = failed
+      ? failed.status === "created"
+        ? "created"
+        : "modified"
+      : !old
+        ? "created"
+        : old.dir !== f.dir || (!f.dir && (old.size !== f.size || old.mtime !== f.mtime))
+          ? "modified"
+          : null;
     if (what) changes.push({ ...f, status: what, data: f.dir ? undefined : py.FS.readFile(`${ROOT}/${f.path}`) });
   }
   for (const f of before) if (!now.has(f.path) && !unsaved.has(f.path)) changes.push({ ...f, status: "removed" });
-  for (const [path, failed] of unsaved) {   // gone now; if the store never had it, there is nothing to delete
-    if (!now.has(path) && failed.status !== "created") changes.push({ path, dir: failed.dir, size: 0, mtime: 0, status: "removed" });
+  for (const [path, failed] of unsaved) {
+    // gone now; if the store never had it, there is nothing to delete
+    if (!now.has(path) && failed.status !== "created")
+      changes.push({ path, dir: failed.dir, size: 0, mtime: 0, status: "removed" });
   }
   if (!changes.length) return { files: [], skipped: [] };
   if (!store) return { files: [], skipped: [], store_error: storeError };
@@ -166,14 +208,18 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[], skipp
   try {
     saved = await store.applyRun(changes);
   } catch (e) {
-    unsaved = new Map(changes.map(c => [c.path, { status: c.status, dir: c.dir }]));
+    unsaved = new Map(changes.map((c) => [c.path, { status: c.status, dir: c.dir }]));
     return { files: [], skipped: [], store_error: describe(e).message };
   }
   unsaved = new Map();
   try {
     takePageVersion(saved);
   } catch (e) {
-    return { files: saved.files, skipped: saved.skipped, store_error: `the engine's folder could not take your changes: ${describe(e).message}` };
+    return {
+      files: saved.files,
+      skipped: saved.skipped,
+      store_error: `the engine's folder could not take your changes: ${describe(e).message}`,
+    };
   }
   return { files: saved.files, skipped: saved.skipped };
 }
@@ -183,9 +229,11 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[], skipp
 //          for it (and then finds the journal that mount's copy emptied, or the rows written since).
 //   boot:  the packages, the dofile wheel and the engine. It runs outside the queue, so `sync`, `files` and `read` are
 //          answered while it loads; the ops that need the engine (run, describe, matrix) wait for it.
-let bootDone: { ok: () => void, err: (e: unknown) => void };
-const booted = new Promise<void>((ok, err) => { bootDone = { ok, err }; });
-booted.catch(() => {});   // the error reaches the page through boot's own answer
+let bootDone: { ok: () => void; err: (e: unknown) => void };
+const booted = new Promise<void>((ok, err) => {
+  bootDone = { ok, err };
+});
+booted.catch(() => {}); // the error reaches the page through boot's own answer
 
 // The files of a snapshot (scripts/make-snapshot.mjs) at `base`, an http(s) or file: URL ending in "/". The patched
 // pyodide.asm.mjs comes from there too: Pyodide's own loader has no hook for linking libraries again.
@@ -194,25 +242,34 @@ booted.catch(() => {});   // the error reaches the page through boot's own answe
 // with its index.html and status 200 must not end up in the cache).
 async function fetchBytes(url: string, cache?: Cache): Promise<Uint8Array<ArrayBuffer>> {
   if (url.startsWith("file:")) {
-    const fsName = "node:fs/promises";   // Node only (the tests); a variable so the bundler leaves it alone
+    const fsName = "node:fs/promises"; // Node only (the tests); a variable so the bundler leaves it alone
     return new Uint8Array(await (await import(/* @vite-ignore */ fsName)).readFile(new URL(url)));
   }
   const hit = await cache?.match(url);
   if (hit) return new Uint8Array(await hit.arrayBuffer());
   // watchFetch's error names the URL already
-  const res = await fetch(url).catch(e => { throw e?.name === "DownloadError" ? e : failedDownload(`${url}: ${e?.message ?? e}`); });
+  const res = await fetch(url).catch((e) => {
+    throw e?.name === "DownloadError" ? e : failedDownload(`${url}: ${e?.message ?? e}`);
+  });
   if (!res.ok) throw failedDownload(`${url}: ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }
-const fetchJSON = async (url: string, cache?: Cache) => JSON.parse(new TextDecoder().decode(await fetchBytes(url, cache)));
+const fetchJSON = async (url: string, cache?: Cache) =>
+  JSON.parse(new TextDecoder().decode(await fetchBytes(url, cache)));
 
 // The Cache holding this build's start files (snapshot.ts, openCache): the page's download() fills it; this worker only
 // reads it.
 async function snapshotCache(built: number, refused: (e: any) => void): Promise<Cache | undefined> {
-  if (typeof caches === "undefined") { refused(Object.assign(new Error("there is no Cache API here (not a secure context?)"), { name: "NoCacheAPI" })); return undefined; }
+  if (typeof caches === "undefined") {
+    refused(Object.assign(new Error("there is no Cache API here (not a secure context?)"), { name: "NoCacheAPI" }));
+    return undefined;
+  }
   try {
     return await openCache(caches, built);
-  } catch (e) { refused(e); return undefined; }   // a refusal (private mode, blocked storage) is reported; anything else is thrown
+  } catch (e) {
+    refused(e);
+    return undefined;
+  } // a refusal (private mode, blocked storage) is reported; anything else is thrown
 }
 
 // a .wasm is compiled from its answer as it arrives, which browsers do only for this type
@@ -227,10 +284,12 @@ function asWasm(res: Response, url: string): Response {
 //    goes to the network, and the answer is not stored (see fetchBytes);
 //  - a fetch that fails rejects `failed`: Pyodide's loader only logs a failed .wasm and then waits for ever.
 // Returns { failed, restore }: restore() puts the real fetch back.
-function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>, restore: () => void } {
+function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>; restore: () => void } {
   const real = self.fetch;
   let fail!: (error: Error) => void;
-  const failed = new Promise<never>((_, err) => { fail = err; });
+  const failed = new Promise<never>((_, err) => {
+    fail = err;
+  });
   failed.catch(() => {});
   self.fetch = async (input: any, init?: RequestInit) => {
     const url = String(input?.url ?? input);
@@ -248,12 +307,22 @@ function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>
     if (!res.ok) fail(failedDownload(`${url}: ${res.status}`));
     return asWasm(res, url);
   };
-  return { failed, restore: () => { self.fetch = real; } };
+  return {
+    failed,
+    restore: () => {
+      self.fetch = real;
+    },
+  };
 }
 
 // The patched loader, as a module. In a browser it is imported from the cached bytes (a blob: URL), so the start does
 // not fetch it a second time; if the browser will not import that, from its own URL.
-async function importLoader(url: string, cache: Cache | undefined, isFile: boolean, version: number): Promise<CreateModule> {
+async function importLoader(
+  url: string,
+  cache: Cache | undefined,
+  isFile: boolean,
+  version: number,
+): Promise<CreateModule> {
   if (isFile) return (await import(/* @vite-ignore */ `${url}?v=${version}`)).default;
   const blob = URL.createObjectURL(new Blob([await fetchBytes(url, cache)], { type: "text/javascript" }));
   try {
@@ -270,7 +339,7 @@ async function importLoader(url: string, cache: Cache | undefined, isFile: boole
 // own entry is the one that works (the browser entry fetches its wasm by URL, which Node's fetch cannot do for files).
 async function loadBrotli(): Promise<BrotliWasmType> {
   if (typeof process !== "undefined" && process.versions?.node) {
-    const mod = "node:module";   // a variable so the bundler leaves it alone
+    const mod = "node:module"; // a variable so the bundler leaves it alone
     return (await import(/* @vite-ignore */ mod)).createRequire(import.meta.url)("brotli-wasm");
   }
   return (await import("brotli-wasm")).default;
@@ -278,23 +347,36 @@ async function loadBrotli(): Promise<BrotliWasmType> {
 
 // `built` and `files` come from the build's list (start-files.json), which the page read and checked against its own build
 // before it made this worker: no manifest is fetched here.
-async function loadFromSnapshot(base: string, built: number, files: SnapshotFiles, indexURL: string | undefined, io: Io,
-  brotliMode: string | undefined) {
+async function loadFromSnapshot(
+  base: string,
+  built: number,
+  files: SnapshotFiles,
+  indexURL: string | undefined,
+  io: Io,
+  brotliMode: string | undefined,
+) {
   const t0 = performance.now();
   let last = t0;
-  const laps: string[] = [], secs: [string, number][] = [];   // laps: text for the console; secs: [name, seconds] for the page's summary
-  const notCached: string[] = [];   // why there is no Cache to read, if there is none (reported with the timings, and in the console)
-  const isFile = base.startsWith("file:");   // Node, the tests: no Cache API by design
+  const laps: string[] = [],
+    secs: [string, number][] = []; // laps: text for the console; secs: [name, seconds] for the page's summary
+  const notCached: string[] = []; // why there is no Cache to read, if there is none (reported with the timings, and in the console)
+  const isFile = base.startsWith("file:"); // Node, the tests: no Cache API by design
   const refused = (e: any, url?: string) => {
-    if (!isStorageRefusal(e)) throw e;   // not the browser saying no: a bug, shown as the start's error
+    if (!isStorageRefusal(e)) throw e; // not the browser saying no: a bug, shown as the start's error
     const why = `${e.name + ": "}${e.message}${url ? ` (${url.split("/").pop()})` : ""}`;
-    if (!isFile) { notCached.push(why); console.warn(`[dofile] snapshot not cached: ${why}`); }
+    if (!isFile) {
+      notCached.push(why);
+      console.warn(`[dofile] snapshot not cached: ${why}`);
+    }
   };
   const lap = (what: string) => {
-    const t = performance.now(), s = (t - last) / 1000;
-    laps.push(`${what} ${s.toFixed(2)}s`); secs.push([what, s]); last = t;
+    const t = performance.now(),
+      s = (t - last) / 1000;
+    laps.push(`${what} ${s.toFixed(2)}s`);
+    secs.push([what, s]);
+    last = t;
   };
-  stage("download");   // or reading it from the cache, when the page's download() or an earlier visit filled it
+  stage("download"); // or reading it from the cache, when the page's download() or an earlier visit filled it
   const { snapshot: snapFile, bundle: bundleFile } = files;
   const cache = isFile ? undefined : await snapshotCache(built, refused);
   const hadCache = Boolean(cache) && Boolean(await cache!.match(`${base}${snapFile.name}`));
@@ -303,8 +385,11 @@ async function loadFromSnapshot(base: string, built: number, files: SnapshotFile
   try {
     // The two big files are kept in the cache as they were sent, compressed (about 42 MB, not 229), and decompressed here.
     const [snapPacked, dso, index, bundlePacked, create, brotli] = await Promise.all([
-      fetchBytes(`${base}${snapFile.name}`, cache), fetchJSON(`${base}dso.json`, cache), fetchJSON(`${base}files.json`, cache),
-      fetchBytes(`${base}${bundleFile.name}`, cache), importLoader(`${base}pyodide.asm.patched.mjs`, cache, isFile, built),
+      fetchBytes(`${base}${snapFile.name}`, cache),
+      fetchJSON(`${base}dso.json`, cache),
+      fetchJSON(`${base}files.json`, cache),
+      fetchBytes(`${base}${bundleFile.name}`, cache),
+      importLoader(`${base}pyodide.asm.patched.mjs`, cache, isFile, built),
       loadBrotli(),
     ]);
     lap(hadCache ? "read from cache" : "download");
@@ -312,33 +397,48 @@ async function loadFromSnapshot(base: string, built: number, files: SnapshotFile
     // The browser's own brotli decoder when it has one (brotli-wasm took 25 s for the 229 MB on an iPhone); `?brotli=wasm` in
     // the page's URL forces brotli-wasm, to compare. In Node (the tests) the wasm decoder stays, so they run what the build checks.
     const native = !isFile && brotliMode !== "wasm" && hasNativeBrotli();
-    const timed = async (file: SnapshotFile, packed: Uint8Array<ArrayBuffer>): Promise<[Uint8Array, number, "native" | "wasm" | "none"]> => {
+    const timed = async (
+      file: SnapshotFile,
+      packed: Uint8Array<ArrayBuffer>,
+    ): Promise<[Uint8Array, number, "native" | "wasm" | "none"]> => {
       const t = performance.now();
       try {
         const [out, decoder] = await unpackAsync(brotli, packed, file, native);
         return [out, since(t), decoder];
       } catch (e) {
-        await cache?.delete(`${base}${file.name}`).catch(() => {});   // a damaged or wrong file: the next start fetches it again
+        await cache?.delete(`${base}${file.name}`).catch(() => {}); // a damaged or wrong file: the next start fetches it again
         throw e;
       }
     };
     const [snapshot, heapS, decoder] = await timed(snapFile, snapPacked);
     const [blob, sitePackagesS] = await timed(bundleFile, bundlePacked);
     lap("decompress");
-    console.info(`[dofile] unpack with ${decoder}: heap ${heapS.toFixed(2)}s (${(snapFile.raw / 1e6 / heapS).toFixed(0)} MB/s out), ` +
-      `site-packages ${sitePackagesS.toFixed(2)}s (${(bundleFile.raw / 1e6 / sitePackagesS).toFixed(0)} MB/s out), ` +
-      `native brotli available ${hasNativeBrotli()}, hardwareConcurrency ${navigator.hardwareConcurrency}, deviceMemory ${(navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? "n/a"}`);
+    console.info(
+      `[dofile] unpack with ${decoder}: heap ${heapS.toFixed(2)}s (${(snapFile.raw / 1e6 / heapS).toFixed(0)} MB/s out), ` +
+        `site-packages ${sitePackagesS.toFixed(2)}s (${(bundleFile.raw / 1e6 / sitePackagesS).toFixed(0)} MB/s out), ` +
+        `native brotli available ${hasNativeBrotli()}, hardwareConcurrency ${navigator.hardwareConcurrency}, deviceMemory ${(navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? "n/a"}`,
+    );
     stage("python");
     const options = restoreOptions(create, { snapshot, dso, index, blob }, lap);
-    const loaded = await Promise.race([loadPyodide({ indexURL, ...options, ...io }), fetches.failed]) as SnapshotPy;
+    const loaded = (await Promise.race([loadPyodide({ indexURL, ...options, ...io }), fetches.failed])) as SnapshotPy;
     lap("copy the heap");
-    console.info(`[dofile] snapshot start: ${laps.join(", ")}, total ${((performance.now() - t0) / 1000).toFixed(2)}s` +
-      (notCached.length ? `, NOT CACHED: ${[...new Set(notCached)].join("; ")}` : ""));
+    console.info(
+      `[dofile] snapshot start: ${laps.join(", ")}, total ${((performance.now() - t0) / 1000).toFixed(2)}s` +
+        (notCached.length ? `, NOT CACHED: ${[...new Set(notCached)].join("; ")}` : ""),
+    );
     // For the page's status line: the first lap is the download (or the read from the cache), "decompress" is the unpack,
     // every lap after it (the wasm module, site-packages, re-linking the libraries, the heap) is the restore.
     const [[fetched, fetchS], [, unpackS], ...rest] = secs;
-    const summary = { fetched, fetchS, unpackS, heapS, sitePackagesS, decoder, restoreS: rest.reduce((a, [, s]) => a + s, 0),
-      notCached: [...new Set(notCached)] };
+    const summary = {
+      fetched,
+      fetchS,
+      unpackS,
+      heapS,
+      sitePackagesS,
+      decoder,
+      restoreS: rest.reduce((a, [, s]) => a + s, 0),
+      notCached: [...new Set(notCached)],
+    };
     return { loaded, summary };
   } finally {
     fetches.restore();
@@ -363,8 +463,8 @@ type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A :
 // The ops that change the engine: the transport sends them from start() and run() only.
 const lifecycle: Handlers<LifecycleOps> = {
   async mount({ indexURL, snapshot, built, files, brotli: brotliMode }: MountArgs) {
-    if (!snapshot) stage("python");   // a snapshot start names its own steps (loadFromSnapshot)
-    const io: Io = { stdout: l => console.log(l), stderr: l => console.warn(l) };
+    if (!snapshot) stage("python"); // a snapshot start names its own steps (loadFromSnapshot)
+    const io: Io = { stdout: (l) => console.log(l), stderr: (l) => console.warn(l) };
     fromSnapshot = Boolean(snapshot);
     const tRuntime = performance.now();
     if (snapshot) {
@@ -372,9 +472,9 @@ const lifecycle: Handlers<LifecycleOps> = {
       py = loaded;
       Object.assign(startup, { mode: "snapshot", ...summary });
     } else {
-      const fetches = watchFetch();   // a failed fetch ends the start with its error
+      const fetches = watchFetch(); // a failed fetch ends the start with its error
       try {
-        py = await Promise.race([loadPyodide({ indexURL, ...io }), fetches.failed]) as SnapshotPy;
+        py = (await Promise.race([loadPyodide({ indexURL, ...io }), fetches.failed])) as SnapshotPy;
       } finally {
         fetches.restore();
       }
@@ -392,17 +492,20 @@ const lifecycle: Handlers<LifecycleOps> = {
   // Int32Array on a SharedArrayBuffer, or null
   async boot({ wheel, extraWheels = [], interruptBuffer }: BootArgs) {
     const tPackages = performance.now();
-    if (!fromSnapshot) {   // a snapshot has the packages and the wheel in it already
+    if (!fromSnapshot) {
+      // a snapshot has the packages and the wheel in it already
       stage("packages");
       // no pandas: pyreadstat reads SAS transport and SPSS without it; only export sasxport needs it (about 5 MB more
       // to download and 2 s on a cold start, docs/pyodide-snapshot.md, "Packages added"), so that command is not available here
       await py.loadPackage("micropip", { messageCallback: () => {} });
-      const names = await Promise.all([wheel, ...extraWheels].map(async w => {
-        const name = typeof w === "string" ? w.split("/").at(-1) : w.name;
-        const bytes = typeof w === "string" ? await fetchBytes(w) : w.bytes;
-        py.FS.writeFile(`/tmp/${name}`, bytes);
-        return `emfs:/tmp/${name}`;
-      }));
+      const names = await Promise.all(
+        [wheel, ...extraWheels].map(async (w) => {
+          const name = typeof w === "string" ? w.split("/").at(-1) : w.name;
+          const bytes = typeof w === "string" ? await fetchBytes(w) : w.bytes;
+          py.FS.writeFile(`/tmp/${name}`, bytes);
+          return `emfs:/tmp/${name}`;
+        }),
+      );
       py.globals.set("wheel_urls", py.toPy(names));
       await py.runPythonAsync(`import micropip; await micropip.install(list(wheel_urls))`);
     }
@@ -419,23 +522,31 @@ const lifecycle: Handlers<LifecycleOps> = {
   // While the run prints, {id, log} chunks go to the page (browser.py calls on_output with the log as it grows).
   async run({ code, fresh_locals, plot_theme }: { code: string } & RunOptions, id: number) {
     await booted;
-    if (interrupt) interrupt[0] = 0;   // a Break pressed while idle must not stop this run
+    if (interrupt) interrupt[0] = 0; // a Break pressed while idle must not stop this run
     const before = walk(ROOT);
     // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets a
     // later time than any file had before: saveRun then tells any write of one byte or more by the time, a same-size
     // rewrite too (a truncation, which MEMFS does not stamp, it tells by the size). A time after now (a file from a clock
     // that was ahead) is left out: any rewrite changes it anyway.
-    const now = Date.now(), newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
-    while (Date.now() <= newest) { /* one clock step (up to 100 ms with a clamped clock) */ }
+    const now = Date.now(),
+      newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
+    while (Date.now() <= newest) {
+      /* one clock step (up to 100 ms with a clamped clock) */
+    }
     const t0 = performance.now();
     // Positional: a plain Pyodide call passes no keyword arguments; undefined (not null) is Python's None.
-    const result = JSON.parse(browser.run(code, true, fresh_locals === true, plot_theme ?? undefined, text => self.postMessage({ id, log: text })));
+    const result = JSON.parse(
+      browser.run(code, true, fresh_locals === true, plot_theme ?? undefined, (text) =>
+        self.postMessage({ id, log: text }),
+      ),
+    );
     const t1 = performance.now();
     Object.assign(result, await saveRun(before));
     // where the run's time went, for the page's status line (the Python side gave engine and encode); save: writing the
     // run's files to the store
     const k = result.timing;
-    if (k) result.timing = { ...k, parse: (t1 - t0) / 1000 - k.engine - k.encode, save: (performance.now() - t1) / 1000 };
+    if (k)
+      result.timing = { ...k, parse: (t1 - t0) / 1000 - k.engine - k.encode, save: (performance.now() - t1) / 1000 };
     return result;
   },
 };
@@ -443,7 +554,9 @@ const lifecycle: Handlers<LifecycleOps> = {
 // The ops declared to change nothing (types.ts, ReadOps): anyone may send one.
 const read: Handlers<ReadOps> = {
   // undefined becomes Python's None (null would become JsNull)
-  describe: async ({ vars, offset = 0, limit }: DescribeArgs) => (await booted, JSON.parse(browser.describe(vars, offset, limit))),
+  describe: async ({ vars, offset = 0, limit }: DescribeArgs) => (
+    await booted, JSON.parse(browser.describe(vars, offset, limit))
+  ),
   matrix: async ({ name }: { name: string }) => (await booted, JSON.parse(browser.matrix(name))),
   // a .dta in /work, without loading it; `path` as the page names it, inside the working folder
   async describe_file({ path }: { path: string }) {
@@ -453,7 +566,9 @@ const read: Handlers<ReadOps> = {
   },
   macros: async () => (await booted, JSON.parse(browser.macros())),
   // the first rows of the data: 50 from the top unless the page says otherwise
-  browse: async ({ vars, offset, limit }: DescribeArgs) => (await booted, JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50))),
+  browse: async ({ vars, offset, limit }: DescribeArgs) => (
+    await booted, JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50))
+  ),
   // data_bytes from the engine; heap_bytes is the size of this worker's WebAssembly memory
   memory: async () => (await booted, { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length }),
   // `files` and `read` are views of /work, for the tests: the page lists and reads the store
@@ -478,7 +593,7 @@ const answer = async ({ id, op, args }: ToWorker) => {
   try {
     if (!ops[op]) throw new Error(`unknown op ${op}`);
     const result = await (ops[op] as (args: unknown, id: number) => unknown)(args ?? {}, id);
-    self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []);   // a file: moved, not copied
+    self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []); // a file: moved, not copied
   } catch (e) {
     const { message, name } = describe(e);
     self.postMessage({ id, error: message, name });
@@ -487,10 +602,20 @@ const answer = async ({ id, op, args }: ToWorker) => {
 
 // answers: FromWorker
 self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
-  if (data.op === "boot") {   // outside the queue, so `sync`, `files` and `read` are answered while the engine loads
+  if (data.op === "boot") {
+    // outside the queue, so `sync`, `files` and `read` are answered while the engine loads
     const { id } = data;
-    Promise.resolve(lifecycle.boot(data.args, id)).then(about => { bootDone.ok(); self.postMessage({ id, result: about }); },
-      e => { bootDone.err(e); const { message, name } = describe(e); self.postMessage({ id, error: message, name }); });
+    Promise.resolve(lifecycle.boot(data.args, id)).then(
+      (about) => {
+        bootDone.ok();
+        self.postMessage({ id, result: about });
+      },
+      (e) => {
+        bootDone.err(e);
+        const { message, name } = describe(e);
+        self.postMessage({ id, error: message, name });
+      },
+    );
     return;
   }
   queue = queue.then(() => answer(data));

@@ -12,5 +12,7 @@ import { Placeholder } from "../ui/Icon";
 export const FilesHead = () => null;
 
 export const FilesBody = () => (
-  <Placeholder step="4a">The file tree, the dropzone ("Drop files or folders", Upload, New .do file) and Download all (.zip).</Placeholder>
+  <Placeholder step="4a">
+    The file tree, the dropzone ("Drop files or folders", Upload, New .do file) and Download all (.zip).
+  </Placeholder>
 );

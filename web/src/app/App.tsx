@@ -82,42 +82,43 @@
 // state (ui/Icon.tsx Labels: every label in one cell); keep it so when adding to them, with short labels, since the
 // widest sets the width. The toolbar's buttons share one height (tokens.css --control), a pane head's controls another
 // (--control-sm); e2e/shell.spec.ts measures both.
-import type { ComponentChildren } from "preact";
+
 import { signal } from "@preact/signals";
-import {
-    activeTab,
-    engine,
-    files,
-    hasFiles,
-    isPhone,
-    layout,
-    outputTab,
-    phoneTab,
-    saved,
-    split,
-    tabs,
-    theme
-} from "./state.ts";
-import type { OutputTab, PhoneTab } from "./types.ts";
-import { THEME_ARIA, THEME_LABEL, cycleTheme } from "./theme.ts";
-import { downloadAll } from "./files.ts";
-import { clearLog } from "./run.ts";
-import { ABOUT, LANDING_URL } from "./env";
+import type { ComponentChildren } from "preact";
 import { BannerSlot } from "./banners";
 import { DialogHost } from "./dialogs";
-import { askReset } from "./states/ResetDialog";
-import { FilesBody, FilesHead } from "./files/FilesPane";
-import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
-import { FileBar } from "./files/FileBar";
 import { editorCommands } from "./editor/commands.ts";
 import { Editor } from "./editor/Editor";
 import { PhoneRun, RunControls } from "./editor/RunControls";
 import { StatusBar } from "./editor/StatusBar";
+import { ABOUT, LANDING_URL } from "./env";
+import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
+import { FileBar } from "./files/FileBar";
+import { FilesBody, FilesHead } from "./files/FilesPane";
+import { downloadAll } from "./files.ts";
+import { CommandLine, LogActions, logMenuItems, PhoneStrip } from "./log/CommandLine";
 import { LogView } from "./log/LogView";
-import { CommandLine, LogActions, PhoneStrip, logMenuItems } from "./log/CommandLine";
-import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
 import { DtaView } from "./output/DtaView";
 import { FullSize } from "./output/FullSize";
+import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
+import { clearLog } from "./run.ts";
+import {
+  activeTab,
+  engine,
+  files,
+  hasFiles,
+  isPhone,
+  layout,
+  outputTab,
+  phoneTab,
+  saved,
+  split,
+  tabs,
+  theme,
+} from "./state.ts";
+import { askReset } from "./states/ResetDialog";
+import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
+import type { OutputTab, PhoneTab } from "./types.ts";
 import { Icon } from "./ui/Icon";
 import { LiveRegion, ToastHost } from "./ui/Live";
 import { MenuButton, MenuHost, type MenuItem } from "./ui/Menu";
@@ -129,7 +130,13 @@ const engineUp = () => ["ready", "running", "breaking", "waiting"].includes(engi
 
 /** S 12: the desktop's ⋯ menu ("More actions"). */
 const moreItems = (): MenuItem[] => [
-  { label: "Download all (.zip)", disabled: !hasFiles.value, onSelect: () => { downloadAll(); } },
+  {
+    label: "Download all (.zip)",
+    disabled: !hasFiles.value,
+    onSelect: () => {
+      downloadAll();
+    },
+  },
   { label: "Clear log", onSelect: clearLog },
   { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
   "rule",
@@ -139,10 +146,29 @@ const moreItems = (): MenuItem[] => [
 /** The phone's ⋯ menu: Save and the theme (OQ-14); on the Log view the Log head's Find and Download log (4b's
  *  logMenuItems), since the phone hides that head; then the desktop's items. Theme cycles and keeps the menu open. */
 const phoneMoreItems = (): MenuItem[] => [
-  { label: "Save", onSelect: () => { editorCommands.save(); } },
-  { label: <span>Theme: <Icon name="theme" /> {THEME_LABEL[theme.value]}</span>, onSelect: cycleTheme, keepOpen: true },
+  {
+    label: "Save",
+    onSelect: () => {
+      editorCommands.save();
+    },
+  },
+  {
+    label: (
+      <span>
+        Theme: <Icon name="theme" /> {THEME_LABEL[theme.value]}
+      </span>
+    ),
+    onSelect: cycleTheme,
+    keepOpen: true,
+  },
   ...(phoneTab.value === "log" ? logMenuItems() : []),
-  { label: "Download all (.zip)", disabled: !hasFiles.value, onSelect: () => { downloadAll(); } },
+  {
+    label: "Download all (.zip)",
+    disabled: !hasFiles.value,
+    onSelect: () => {
+      downloadAll();
+    },
+  },
   { label: "Clear log", onSelect: clearLog },
   { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
   "rule",
@@ -153,13 +179,18 @@ const phoneMoreItems = (): MenuItem[] => [
 const Toolbar = () => (
   <header class="toolbar">
     <h1 class="visually-hidden">dofile editor</h1>
-    <a class="wordmark" href={LANDING_URL}>do<span>file</span></a>
+    <a class="wordmark" href={LANDING_URL}>
+      do<span>file</span>
+    </a>
     <RunControls />
     <span class="spacer" />
     <button type="button" class="theme" aria-label={THEME_ARIA[theme.value]} onClick={cycleTheme}>
-      <Icon name="theme" /><span class="theme-word">{THEME_LABEL[theme.value]}</span>
+      <Icon name="theme" />
+      <span class="theme-word">{THEME_LABEL[theme.value]}</span>
     </button>
-    <MenuButton label="More actions" items={moreItems}><Icon name="more" /></MenuButton>
+    <MenuButton label="More actions" items={moreItems}>
+      <Icon name="more" />
+    </MenuButton>
   </header>
 );
 
@@ -169,7 +200,9 @@ const VIEW_TITLE = { files: "Files", log: "Log", data: "Data", results: "Results
 const PhoneTopBar = () => (
   <header class="toolbar topbar">
     <h1 class="title">{phoneTab.value === "editor" ? <FileSwitcher /> : VIEW_TITLE[phoneTab.value]}</h1>
-    <MenuButton label="More actions" items={phoneMoreItems}><Icon name="more" /></MenuButton>
+    <MenuButton label="More actions" items={phoneMoreItems}>
+      <Icon name="more" />
+    </MenuButton>
     <PhoneRun />
   </header>
 );
@@ -177,9 +210,9 @@ const PhoneTopBar = () => (
 // ---- the panes ----
 
 interface PaneProps {
-  view: PhoneTab;        // the phone view it is
+  view: PhoneTab; // the phone view it is
   class: string;
-  label: string;         // its region's name
+  label: string; // its region's name
   children: ComponentChildren;
   id?: string;
   tabIndex?: number;
@@ -207,10 +240,12 @@ let filesToggle: HTMLButtonElement | null = null;
 function foldFiles(open: boolean) {
   filesOpen.value = open;
   if (!open) filesToggle?.focus();
-  else setTimeout(() => {   // after the render that shows the pane
-    const pane = document.getElementById("files-pane");
-    (pane?.querySelector<HTMLElement>('[tabindex="0"], button:not([disabled]), [href], input') ?? pane)?.focus();
-  });
+  else
+    setTimeout(() => {
+      // after the render that shows the pane
+      const pane = document.getElementById("files-pane");
+      (pane?.querySelector<HTMLElement>('[tabindex="0"], button:not([disabled]), [href], input') ?? pane)?.focus();
+    });
 }
 
 /** Esc in the unfolded file list folds it, unless something in the list used that Esc (a rename, 4a: preventDefault). */
@@ -223,11 +258,20 @@ function onFilesKey(e: KeyboardEvent) {
 /** The Editor head's "Files" button (and the count of files), which unfolds the file list at 700 to 1199 px (app.css
  *  hides it elsewhere); it looks pressed while the list is open. */
 function FilesToggle() {
-  const n = files.value.filter(f => !f.dir).length;
+  const n = files.value.filter((f) => !f.dir).length;
   return (
-    <button type="button" class="fold-toggle" ref={el => { filesToggle = el; }} aria-expanded={filesOpen.value}
-      aria-controls="files-pane" onClick={() => foldFiles(!filesOpen.value)}>
-      <Icon name="file" />Files{n > 0 && <span class="count">{n}</span>}
+    <button
+      type="button"
+      class="fold-toggle"
+      ref={(el) => {
+        filesToggle = el;
+      }}
+      aria-expanded={filesOpen.value}
+      aria-controls="files-pane"
+      onClick={() => foldFiles(!filesOpen.value)}
+    >
+      <Icon name="file" />
+      Files{n > 0 && <span class="count">{n}</span>}
     </button>
   );
 }
@@ -238,7 +282,11 @@ function setSplit(on: boolean) {
   if (on && outputTab.value === "log") outputTab.value = "graph";
 }
 
-const OUTPUT_TABS = [{ id: "graph", label: "Graph" }, { id: "data", label: "Data" }, { id: "results", label: "Results" }] as const;
+const OUTPUT_TABS = [
+  { id: "graph", label: "Graph" },
+  { id: "data", label: "Data" },
+  { id: "results", label: "Results" },
+] as const;
 const UNSPLIT_TABS = [{ id: "log", label: "Log" }, ...OUTPUT_TABS] as const;
 
 const OutputPanel = ({ tab }: { tab: Exclude<OutputTab, "log"> }) =>
@@ -253,16 +301,38 @@ function LogPane() {
   return (
     <Pane view="log" class="log-pane" label={unsplit ? "Output" : "Log"}>
       <div class="pane-head">
-        {unsplit
-          ? <Tablist label="Output" idPrefix="out" tabs={[...UNSPLIT_TABS]} value={tab} onChange={t => { outputTab.value = t; }} />
-          : <span class="pane-title">Log</span>}
+        {unsplit ? (
+          <Tablist
+            label="Output"
+            idPrefix="out"
+            tabs={[...UNSPLIT_TABS]}
+            value={tab}
+            onChange={(t) => {
+              outputTab.value = t;
+            }}
+          />
+        ) : (
+          <span class="pane-title">Log</span>
+        )}
         <span class="spacer" />
         <LogActions />
-        <button type="button" class="head-link" onClick={() => setSplit(!split.value)}>{split.value ? "Unsplit" : "Split"}</button>
+        <button type="button" class="head-link" onClick={() => setSplit(!split.value)}>
+          {split.value ? "Unsplit" : "Split"}
+        </button>
       </div>
       <BannerSlot place="log" />
-      <div class="pane-body log-body" hidden={unsplit && tab !== "log"} {...(unsplit ? tabpanelProps("out", "log") : {})}><LogView /></div>
-      {unsplit && tab !== "log" && <div class="pane-body" {...tabpanelProps("out", tab)}><OutputPanel tab={tab} /></div>}
+      <div
+        class="pane-body log-body"
+        hidden={unsplit && tab !== "log"}
+        {...(unsplit ? tabpanelProps("out", "log") : {})}
+      >
+        <LogView />
+      </div>
+      {unsplit && tab !== "log" && (
+        <div class="pane-body" {...tabpanelProps("out", tab)}>
+          <OutputPanel tab={tab} />
+        </div>
+      )}
       <CommandLine />
     </Pane>
   );
@@ -276,9 +346,19 @@ function OutputPane() {
   return (
     <section class="pane out-pane" aria-label="Graph, data and results">
       <div class="pane-head">
-        <Tablist label="Output" idPrefix="out" tabs={[...OUTPUT_TABS]} value={tab} onChange={t => { outputTab.value = t; }} />
+        <Tablist
+          label="Output"
+          idPrefix="out"
+          tabs={[...OUTPUT_TABS]}
+          value={tab}
+          onChange={(t) => {
+            outputTab.value = t;
+          }}
+        />
       </div>
-      <div class="pane-body" {...tabpanelProps("out", tab)}><OutputPanel tab={tab} /></div>
+      <div class="pane-body" {...tabpanelProps("out", tab)}>
+        <OutputPanel tab={tab} />
+      </div>
     </section>
   );
 }
@@ -298,37 +378,65 @@ const PhoneOutputViews = () => (
   </>
 );
 
-const VIEWS = (["files", "editor", "log", "data", "results"] as const)
-  .map(id => ({ id, label: id[0].toUpperCase() + id.slice(1), marker: <i aria-hidden="true" /> }));
+const VIEWS = (["files", "editor", "log", "data", "results"] as const).map((id) => ({
+  id,
+  label: id[0].toUpperCase() + id.slice(1),
+  marker: <i aria-hidden="true" />,
+}));
 
 /** The phone's bottom tab bar, "Views". */
 const PhoneViews = () => (
   <nav class="views" aria-label="Views">
-    <Tablist label="Views" idPrefix="views" class="tabbar" tabClass="view" tabs={VIEWS} value={phoneTab.value}
-      onChange={t => { phoneTab.value = t; }} />
+    <Tablist
+      label="Views"
+      idPrefix="views"
+      class="tabbar"
+      tabClass="view"
+      tabs={VIEWS}
+      value={phoneTab.value}
+      onChange={(t) => {
+        phoneTab.value = t;
+      }}
+    />
   </nav>
 );
 
 export function App() {
   const phone = isPhone.value;
-  const dta = tabs.value.find(t => t.path === activeTab.value)?.kind === "dta" ? activeTab.value : null;
+  const dta = tabs.value.find((t) => t.path === activeTab.value)?.kind === "dta" ? activeTab.value : null;
   return (
     <div class="app" data-layout={layout.value}>
       {phone ? <PhoneTopBar /> : <Toolbar />}
       {phone && <PhoneStrip />}
       {/* no data-files on a phone: there the file list is a view, never folded */}
-      <main class="main" data-files={phone ? undefined : filesOpen.value ? "open" : "folded"} data-split={split.value ? "split" : "unsplit"}>
+      <main
+        class="main"
+        data-files={phone ? undefined : filesOpen.value ? "open" : "folded"}
+        data-split={split.value ? "split" : "unsplit"}
+      >
         <Pane view="files" class="files-pane" label="Files" id="files-pane" tabIndex={-1} onKeyDown={onFilesKey}>
-          <div class="pane-head"><span class="pane-title">Files</span><span class="spacer" /><FilesHead /></div>
+          <div class="pane-head">
+            <span class="pane-title">Files</span>
+            <span class="spacer" />
+            <FilesHead />
+          </div>
           <BannerSlot place="files" />
-          <div class="pane-body"><FilesBody /></div>
+          <div class="pane-body">
+            <FilesBody />
+          </div>
         </Pane>
         <Pane view="editor" class="editor-pane" label="Editor">
-          <div class="pane-head"><FilesToggle /><EditorTabs /><span class="spacer" /></div>
+          <div class="pane-head">
+            <FilesToggle />
+            <EditorTabs />
+            <span class="spacer" />
+          </div>
           <BannerSlot place="editor" />
           <div class="pane-body">
             <FileBar />
-            <div class="editor-slot" hidden={dta !== null}><Editor /></div>
+            <div class="editor-slot" hidden={dta !== null}>
+              <Editor />
+            </div>
             {dta !== null && <DtaView path={dta} />}
           </div>
         </Pane>

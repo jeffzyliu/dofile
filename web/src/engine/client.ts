@@ -22,21 +22,44 @@
 //   "no-engine"     query() or run() with no live worker.
 //   "op"            the worker answered the call with an error; `name` is the worker's error name.
 // download() rejects with an AbortError (the signal's reason when that is one) when its signal aborts.
-import { isStorageRefusal, openCache } from "./snapshot.ts";
+
 import type { Ending, Reply } from "./machine.ts";
+import { isStorageRefusal, openCache } from "./snapshot.ts";
 import type { FileStore } from "./store.ts";
-import type { About, Build, ClientError, Downloaded, FromWorker, MountArgs, Op, Ops, Progress, ReadOps, RunResult, StartFiles, Startup,
-  Wheel } from "./types.ts";
+import type {
+  About,
+  Build,
+  ClientError,
+  Downloaded,
+  FromWorker,
+  MountArgs,
+  Op,
+  Ops,
+  Progress,
+  ReadOps,
+  RunResult,
+  StartFiles,
+  Startup,
+  Wheel,
+} from "./types.ts";
 
 /** One file of the build's list of start files. */
 type StartFile = StartFiles["files"][number];
 /** A call waiting for the worker's answer. */
-type Pending = { resolve: (value: any) => void, reject: (error: ClientError) => void, onLog?: (text: string) => void };
+type Pending = { resolve: (value: any) => void; reject: (error: ClientError) => void; onLog?: (text: string) => void };
 /** The live worker's record: its number, its calls, its interrupt buffer. `ended`: what end() rejected its calls with. */
-type Live = { n: number, worker: Worker, pending: Map<number, Pending>, interrupt: Int32Array<SharedArrayBuffer> | null, ended: ClientError | null };
+type Live = {
+  n: number;
+  worker: Worker;
+  pending: Map<number, Pending>;
+  interrupt: Int32Array<SharedArrayBuffer> | null;
+  ended: ClientError | null;
+};
 
 /** Read ops only: safe at any time, from anywhere. */
-export interface Reader { query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> }
+export interface Reader {
+  query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]>;
+}
 /** What changes the engine. Only the effect performer holds this. */
 export interface Lifecycle {
   start(n: number, build: Build | null, reply: Reply<"start-worker">): void;
@@ -47,20 +70,24 @@ export interface Lifecycle {
 /** The build's files, before a worker exists. */
 export interface Builds {
   cached(): Promise<boolean>;
-  download(o: { onProgress?: (p: Progress) => void, signal?: AbortSignal }): Promise<Downloaded>;
-  build(): Promise<Build | null>;        // the list, fetched fresh and checked (checkBuild); null for the normal start
+  download(o: { onProgress?: (p: Progress) => void; signal?: AbortSignal }): Promise<Downloaded>;
+  build(): Promise<Build | null>; // the list, fetched fresh and checked (checkBuild); null for the normal start
   forgetDownload(): Promise<void>;
 }
 
-const fail = (message: string, kind: ClientError["kind"], more: Partial<ClientError> = {}): ClientError => Object.assign(new Error(message), { kind, ...more });
+const fail = (message: string, kind: ClientError["kind"], more: Partial<ClientError> = {}): ClientError =>
+  Object.assign(new Error(message), { kind, ...more });
 // what download() rejects with when the caller's signal aborted: an AbortError, whatever reason the caller gave
-const aborted = (signal: AbortSignal) => (signal.reason?.name === "AbortError" ? signal.reason
-  : new DOMException(String(signal.reason?.message ?? signal.reason ?? "aborted"), "AbortError"));
+const aborted = (signal: AbortSignal) =>
+  signal.reason?.name === "AbortError"
+    ? signal.reason
+    : new DOMException(String(signal.reason?.message ?? signal.reason ?? "aborted"), "AbortError");
 
 // why a start failed or a worker crashed, from the worker's error
-function reasonOf({ name, message }: { name?: string, message: string }): "download" | "memory" | "unknown" {
+function reasonOf({ name, message }: { name?: string; message: string }): "download" | "memory" | "unknown" {
   if (name === "DownloadError") return "download";
-  if (name === "RangeError" || /out of memory|MemoryError|could not allocate|allocation failed/i.test(message)) return "memory";
+  if (name === "RangeError" || /out of memory|MemoryError|could not allocate|allocation failed/i.test(message))
+    return "memory";
   return "unknown";
 }
 
@@ -95,22 +122,57 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download(), build() and
   //   cached() need it
   // fetch, caches, wasm: the browser's, unless the tests give their own
-  constructor({ createWorker, wheel, extraWheels = [], buildId, indexURL, snapshot, brotli,
-    store = null, startFiles = undefined,
-    fetch = (...a) => globalThis.fetch(...a), caches = globalThis.caches, wasm = globalThis.WebAssembly }: {
-    createWorker: () => Worker, wheel: Wheel, extraWheels?: Wheel[],
-    buildId?: string, indexURL?: string, snapshot?: string, brotli?: string,
-    store?: Pick<FileStore, "attach"> | null, startFiles?: string | (StartFiles & { base?: string }), fetch?: typeof globalThis.fetch,
-    caches?: CacheStorage | null, wasm?: object | null }) {
-    Object.assign(this, { createWorker, wheel, extraWheels, buildId, indexURL, snapshot, brotli, store, startFiles, fetch, caches, wasm });
+  constructor({
+    createWorker,
+    wheel,
+    extraWheels = [],
+    buildId,
+    indexURL,
+    snapshot,
+    brotli,
+    store = null,
+    startFiles = undefined,
+    fetch = (...a) => globalThis.fetch(...a),
+    caches = globalThis.caches,
+    wasm = globalThis.WebAssembly,
+  }: {
+    createWorker: () => Worker;
+    wheel: Wheel;
+    extraWheels?: Wheel[];
+    buildId?: string;
+    indexURL?: string;
+    snapshot?: string;
+    brotli?: string;
+    store?: Pick<FileStore, "attach"> | null;
+    startFiles?: string | (StartFiles & { base?: string });
+    fetch?: typeof globalThis.fetch;
+    caches?: CacheStorage | null;
+    wasm?: object | null;
+  }) {
+    Object.assign(this, {
+      createWorker,
+      wheel,
+      extraWheels,
+      buildId,
+      indexURL,
+      snapshot,
+      brotli,
+      store,
+      startFiles,
+      fetch,
+      caches,
+      wasm,
+    });
     this.nextId = 0;
-    this.storeError = null;   // after a start: why the worker could not copy the files, if it could not
-    this.about = null;     // what boot answered, after a start
-    this.startup = null;   // where the last start's time went (worker.ts, `startup`)
+    this.storeError = null; // after a start: why the worker could not copy the files, if it could not
+    this.about = null; // what boot answered, after a start
+    this.startup = null; // where the last start's time went (worker.ts, `startup`)
   }
 
   /** The live worker, or null. */
-  get worker(): Worker | null { return this.#live?.worker ?? null; }
+  get worker(): Worker | null {
+    return this.#live?.worker ?? null;
+  }
 
   // ---- Builds: the build's list and its files in the Cache ----
 
@@ -124,7 +186,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     try {
       const res = await this.fetch(this.startFiles, { cache: "no-cache", signal });
       if (!res.ok) throw new Error(`${res.status}`);
-      return { base: this.startFiles, ...await res.json() };
+      return { base: this.startFiles, ...(await res.json()) };
     } catch (e: any) {
       if (signal?.aborted) throw aborted(signal);
       throw fail(`${this.startFiles}: ${e?.message ?? e}`, "failed", { reason: "download" });
@@ -137,16 +199,20 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // "updated". A page without an id (some Node tests) skips it.
   checkBuild(list: StartFiles): void {
     if (this.buildId && list.buildId !== this.buildId) {
-      throw fail(`dofile was updated: reload the page (the site's start files are of the build ${String(list.buildId).slice(0, 12)}, ` +
-        `this page of ${this.buildId.slice(0, 12)}; in development: \`npm run snapshot\` if the snapshot is stale (the dev server's ` +
-        "console says), else restart the dev server)", "updated");
+      throw fail(
+        `dofile was updated: reload the page (the site's start files are of the build ${String(list.buildId).slice(0, 12)}, ` +
+          `this page of ${this.buildId.slice(0, 12)}; in development: \`npm run snapshot\` if the snapshot is stale (the dev server's ` +
+          "console says), else restart the dev server)",
+        "updated",
+      );
     }
   }
 
   // What `mount` needs of a list, after the checks: a list of another build is "updated", whatever it lacks; a build with
   // no snapshot rejects with kind "failed", reason "unknown".
   #buildOf(list: StartFiles): Build {
-    const none = () => fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
+    const none = () =>
+      fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
     if (!list.built) throw none();
     this.checkBuild(list);
     if (!list.snapshot) throw none();
@@ -170,7 +236,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (!this.snapshot || !this.caches) return false;
       const list = await this.startList();
       const name = `dofile-snapshot-${list.built}`;
-      if (!list.built || !(await this.caches.has(name))) return false;   // has() first: open() would make an empty one
+      if (!list.built || !(await this.caches.has(name))) return false; // has() first: open() would make an empty one
       const cache = await this.caches.open(name);
       for (const f of list.files) if (f.download && !(await cache.match(new URL(f.path, list.base).href))) return false;
       return true;
@@ -183,7 +249,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // fresh. The page calls it when a start failed twice for a reason the files may be at fault for. Never rejects.
   async forgetDownload(): Promise<void> {
     try {
-      for (const name of (await this.caches?.keys()) ?? []) if (name.startsWith("dofile-snapshot-")) await this.caches!.delete(name);
+      for (const name of (await this.caches?.keys()) ?? [])
+        if (name.startsWith("dofile-snapshot-")) await this.caches!.delete(name);
     } catch (e: any) {
       console.warn(`[dofile] could not delete the downloaded start files: ${e?.message ?? e}`);
     }
@@ -200,8 +267,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // Resolves with { cached: true, received, total, build }, or { cached: false, why, build } when there is nothing to fill
   // (no snapshot start, no Cache API, storage refused): the worker then downloads by itself, uncounted. `build`: what
   // `mount` needs of the list just checked (null: the normal start), so the start that follows fetches no list.
-  async download({ onProgress = (_progress) => {}, signal = undefined }: { onProgress?: (progress: Progress) => void, signal?: AbortSignal } = {}):
-    Promise<Downloaded> {
+  async download({
+    onProgress = (_progress) => {},
+    signal = undefined,
+  }: {
+    onProgress?: (progress: Progress) => void;
+    signal?: AbortSignal;
+  } = {}): Promise<Downloaded> {
     if (!this.snapshot) return { cached: false, why: "the normal start loads from the CDN", build: null };
     if (signal?.aborted) throw aborted(signal);
     const list = await this.startList(signal);
@@ -214,47 +286,56 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };
       throw fail(String(e?.message ?? e), "failed", { reason: "unknown" });
     }
-    const total = list.compressed, got = new Map<StartFile, number>();
-    let received = list.files.reduce((n, f) => n + (f.download ? 0 : f.compressed), 0), last = -1;
-    const count = (f: StartFile, bytes: number) => {   // `bytes` of this file are here, decoded
+    const total = list.compressed,
+      got = new Map<StartFile, number>();
+    let received = list.files.reduce((n, f) => n + (f.download ? 0 : f.compressed), 0),
+      last = -1;
+    const count = (f: StartFile, bytes: number) => {
+      // `bytes` of this file are here, decoded
       const scaled = Math.round(Math.min(bytes / (f.size || 1), 1) * f.compressed);
       received += scaled - (got.get(f) ?? 0);
       got.set(f, scaled);
-      if (received !== last) onProgress({ received: last = received, total });
+      if (received !== last) onProgress({ received: (last = received), total });
     };
     onProgress({ received, total });
-    const stop = new AbortController(), abort = () => stop.abort(signal!.reason);
+    const stop = new AbortController(),
+      abort = () => stop.abort(signal!.reason);
     if (signal?.aborted) abort();
     signal?.addEventListener("abort", abort);
     const one = async (f: StartFile) => {
       const url = new URL(f.path, list.base).href;
-      if (await cache.match(url)) return count(f, f.size);   // kept from an earlier try
-      const res = await this.fetch(url, { signal: stop.signal, cache: "no-cache" });   // not an older build's file from the HTTP cache
+      if (await cache.match(url)) return count(f, f.size); // kept from an earlier try
+      const res = await this.fetch(url, { signal: stop.signal, cache: "no-cache" }); // not an older build's file from the HTTP cache
       if (!res.ok) throw fail(`${url}: ${res.status}`, "failed", { reason: "download" });
-      const chunks: Uint8Array<ArrayBuffer>[] = [], reader = res.body!.getReader();
+      const chunks: Uint8Array<ArrayBuffer>[] = [],
+        reader = res.body!.getReader();
       let n = 0;
       for (;;) {
         const { done, value } = await reader.read();
-        stop.signal.throwIfAborted();   // a browser may still hand over what it had buffered: an aborted file is not kept
+        stop.signal.throwIfAborted(); // a browser may still hand over what it had buffered: an aborted file is not kept
         if (done) break;
         chunks.push(value);
-        count(f, n += value.length);
+        count(f, (n += value.length));
       }
       // a short answer, an error page sent with status 200, a file of another build: not what the list names
-      if (n !== f.size) throw fail(`${url}: ${n} bytes arrived, the build's list says ${f.size}`, "failed", { reason: "download" });
+      if (n !== f.size)
+        throw fail(`${url}: ${n} bytes arrived, the build's list says ${f.size}`, "failed", { reason: "download" });
       // the type matters for the .wasm: the engine compiles it from this answer as it reads it
-      const type = f.path.endsWith(".wasm") ? "application/wasm" : res.headers.get("Content-Type") ?? "application/octet-stream";
+      const type = f.path.endsWith(".wasm")
+        ? "application/wasm"
+        : (res.headers.get("Content-Type") ?? "application/octet-stream");
       await cache.put(url, new Response(new Blob(chunks), { headers: { "Content-Type": type } }));
     };
-    const failed = (e: any): never => {   // one file's error ends the others; a failure of the network is a failed download
-      if (signal?.aborted) throw aborted(signal);   // the caller's reason may be anything, a string too
+    const failed = (e: any): never => {
+      // one file's error ends the others; a failure of the network is a failed download
+      if (signal?.aborted) throw aborted(signal); // the caller's reason may be anything, a string too
       stop.abort(e);
       throw e?.kind || isStorageRefusal(e) ? e : fail(String(e?.message ?? e), "failed", { reason: "download" });
     };
     try {
-      await Promise.all(list.files.filter(f => f.download).map(f => one(f).catch(failed)));
+      await Promise.all(list.files.filter((f) => f.download).map((f) => one(f).catch(failed)));
     } catch (e: any) {
-      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };   // the browser would not keep a file
+      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build }; // the browser would not keep a file
       throw e;
     } finally {
       signal?.removeEventListener("abort", abort);
@@ -273,15 +354,21 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // With a worker still live it throws: the machine always ends a worker before it starts another.
   start(n: number, build: Build | null, reply: Reply<"start-worker">): void {
     if (this.#live) throw new Error(`start(${n}): worker ${this.#live.n} is still live`);
-    if (!this.wasm) return reply({ type: "start-failed", reason: "no-wasm", detail: "this browser has no WebAssembly support" });
+    if (!this.wasm)
+      return reply({ type: "start-failed", reason: "no-wasm", detail: "this browser has no WebAssembly support" });
     let worker: Worker;
     try {
       worker = this.createWorker();
     } catch (e: any) {
       return reply({ type: "start-failed", reason: "unknown", detail: String(e?.message ?? e) });
     }
-    const live: Live = { n, worker, pending: new Map(), ended: null,
-      interrupt: typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4)) };
+    const live: Live = {
+      n,
+      worker,
+      pending: new Map(),
+      ended: null,
+      interrupt: typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4)),
+    };
     this.#live = live;
     // A message for a call that end() has dropped finds nothing in `pending`. A stage or an error of a worker that was
     // ended is still said: its reply carries that worker's ticket, and the machine drops what is out of date.
@@ -289,7 +376,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if ("stage" in data) return reply({ type: "stage", stage: data.stage });
       const p = live.pending.get(data.id);
       if (!p) return;
-      if ("log" in data) return p.onLog?.(data.log);   // a chunk of a running run's log: the call stays pending
+      if ("log" in data) return p.onLog?.(data.log); // a chunk of a running run's log: the call stays pending
       live.pending.delete(data.id);
       if ("error" in data) p.reject(fail(data.error, "op", { name: data.name ?? "Error" }));
       else p.resolve(data.result);
@@ -305,34 +392,51 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // row says: that is `crashed` with cause "storage", so that a new worker copies the store as it is now.
     const sync = () => {
       this.#send(live, "sync", undefined).catch((e: ClientError) => {
-        if (e.kind === "op") console.warn(`[dofile] the engine's folder could not take a change to your files: ${e.message}`);
+        if (e.kind === "op")
+          console.warn(`[dofile] the engine's folder could not take a change to your files: ${e.message}`);
       });
     };
-    const onClosed = () => reply({ type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
+    const onClosed = () =>
+      reply({ type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" });
     this.store?.attach(sync, { onClosed });
-    const mount: MountArgs = build && this.snapshot ? { indexURL: this.indexURL, brotli: this.brotli, snapshot: this.snapshot, built: build.built, files: build.files }
-      : { indexURL: this.indexURL, brotli: this.brotli };
+    const mount: MountArgs =
+      build && this.snapshot
+        ? {
+            indexURL: this.indexURL,
+            brotli: this.brotli,
+            snapshot: this.snapshot,
+            built: build.built,
+            files: build.files,
+          }
+        : { indexURL: this.indexURL, brotli: this.brotli };
     // Two steps (see worker.ts), then where the start's time went. Every step goes through this worker's own record: one
     // that resumes after end() rejects with what end() said, and reaches no other worker.
     const steps = async () => {
       await this.#send(live, "mount", mount);
-      const about = await this.#send(live, "boot", { wheel: this.wheel, extraWheels: this.extraWheels, interruptBuffer: live.interrupt });
-      const startup = await this.#send(live, "startup", undefined);   // where the start's time went: the page shows it in its status line
+      const about = await this.#send(live, "boot", {
+        wheel: this.wheel,
+        extraWheels: this.extraWheels,
+        interruptBuffer: live.interrupt,
+      });
+      const startup = await this.#send(live, "startup", undefined); // where the start's time went: the page shows it in its status line
       return { about, startup };
     };
-    steps().then(({ about, startup }) => {
-      if (live.ended) return;   // ended just as its last step was answered: it says nothing more
-      this.about = about;
-      this.startup = startup;
-      this.storeError = startup?.storeError ?? null;
-      // A worker with no store cannot read the journal, so the page's changes cannot reach it: the store is detached, and
-      // writes no row that no worker would clear. The start's storeError has said the files are not saved.
-      if (this.storeError) this.store?.attach(null);
-      reply({ type: "started" });
-    }, (e: ClientError) => {
-      // "op": mount, boot or startup failed in the worker. Any other kind: the worker was ended, and whoever ended it knows.
-      if (e.kind === "op") reply({ type: "start-failed", reason: reasonOf(e), detail: e.message });
-    });
+    steps().then(
+      ({ about, startup }) => {
+        if (live.ended) return; // ended just as its last step was answered: it says nothing more
+        this.about = about;
+        this.startup = startup;
+        this.storeError = startup?.storeError ?? null;
+        // A worker with no store cannot read the journal, so the page's changes cannot reach it: the store is detached, and
+        // writes no row that no worker would clear. The start's storeError has said the files are not saved.
+        if (this.storeError) this.store?.attach(null);
+        reply({ type: "started" });
+      },
+      (e: ClientError) => {
+        // "op": mount, boot or startup failed in the worker. Any other kind: the worker was ended, and whoever ended it knows.
+        if (e.kind === "op") reply({ type: "start-failed", reason: reasonOf(e), detail: e.message });
+      },
+    );
   }
 
   // End worker `n`: it is terminated, the store is detached from it, and every call of it that is pending rejects with a
@@ -364,7 +468,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // when a run starts). Nothing to do without a SharedArrayBuffer: the machine resets instead (machine.ts, BREAK).
   interrupt(n: number): void {
     const live = this.#live;
-    if (live?.n === n && live.interrupt) Atomics.store(live.interrupt, 0, 2);   // SIGINT
+    if (live?.n === n && live.interrupt) Atomics.store(live.interrupt, 0, 2); // SIGINT
   }
 
   // ---- Reader: the read ops. Anyone may ask. ----
@@ -378,12 +482,17 @@ export class EngineClient implements Reader, Lifecycle, Builds {
 
   // THE ONE PLACE the worker is posted to. The call is kept in the worker's own record until it is answered or the
   // worker is ended; on a record that has ended it rejects at once with what end() said.
-  #send<K extends Op>(live: Live, op: K, args: Ops[K]["args"] | undefined, onLog?: (text: string) => void): Promise<Ops[K]["result"]> {
+  #send<K extends Op>(
+    live: Live,
+    op: K,
+    args: Ops[K]["args"] | undefined,
+    onLog?: (text: string) => void,
+  ): Promise<Ops[K]["result"]> {
     return new Promise((resolve, reject) => {
       if (live.ended) return reject(live.ended);
       const id = ++this.nextId;
       live.pending.set(id, { resolve, reject, onLog });
-      live.worker.postMessage({ id, op, args });   // a ToWorker message
+      live.worker.postMessage({ id, op, args }); // a ToWorker message
     });
   }
 }

@@ -11,6 +11,12 @@
 //  - ResultsTab: `results`, `macros`; View a matrix with engine.ts call("matrix", { name }); empty state S 18.
 import { Placeholder } from "../ui/Icon";
 
-export const GraphTab = () => <Placeholder step="4c">The Graph tab: the latest graph, thumbnails, Open full size, Export PNG.</Placeholder>;
-export const DataTab = () => <Placeholder step="4c">The Data tab: facts, Filter variables, the variables table, Browse.</Placeholder>;
-export const ResultsTab = () => <Placeholder step="4c">The Results tab: e(), r(), locals and globals; the matrix view.</Placeholder>;
+export const GraphTab = () => (
+  <Placeholder step="4c">The Graph tab: the latest graph, thumbnails, Open full size, Export PNG.</Placeholder>
+);
+export const DataTab = () => (
+  <Placeholder step="4c">The Data tab: facts, Filter variables, the variables table, Browse.</Placeholder>
+);
+export const ResultsTab = () => (
+  <Placeholder step="4c">The Results tab: e(), r(), locals and globals; the matrix view.</Placeholder>
+);

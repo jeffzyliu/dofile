@@ -10,11 +10,18 @@
 // `phone: "every"`: on a phone every view's slot draws it (the phone's Data and Results views have a slot, "output", for
 // these only), so it is seen whichever view is shown; the hidden views are display: none, so it is read and tabbed once.
 import type { ComponentType } from "preact";
-import { banners, isPhone } from "./state.ts";
-import type { Banner, BannerName } from "./types.ts";
-import { DownloadFailedBanner, EditorStateBanners, LogStateBanners, MemoryBanner, ResetBanner, StorageBanner } from "./states/banners";
-import { NotTextBanner } from "./files/banners";
 import { SaveFailedBanner } from "./editor/banners";
+import { NotTextBanner } from "./files/banners";
+import { banners, isPhone } from "./state.ts";
+import {
+  DownloadFailedBanner,
+  EditorStateBanners,
+  LogStateBanners,
+  MemoryBanner,
+  ResetBanner,
+  StorageBanner,
+} from "./states/banners";
+import type { Banner, BannerName } from "./types.ts";
 
 export type BannerOf<K extends BannerName> = Extract<Banner, { b: K }>;
 export type Place = "files" | "editor" | "log" | "output";
@@ -23,18 +30,20 @@ const VIEWS: { [K in BannerName]: { place: Place; phone?: "every"; view: Compone
   reset: { place: "log", view: ResetBanner },
   memory: { place: "log", view: MemoryBanner },
   storage: { place: "editor", view: StorageBanner },
-  "download-failed": { place: "editor", phone: "every", view: DownloadFailedBanner },   // "Download all" is on every view's ⋯
+  "download-failed": { place: "editor", phone: "every", view: DownloadFailedBanner }, // "Download all" is on every view's ⋯
   "not-text": { place: "files", view: NotTextBanner },
   "save-failed": { place: "editor", view: SaveFailedBanner },
 };
 
 export function BannerSlot({ place }: { place: Place }) {
-  const mine = banners.value.filter(b => VIEWS[b.b].place === place || (isPhone.value && VIEWS[b.b].phone === "every"));
+  const mine = banners.value.filter(
+    (b) => VIEWS[b.b].place === place || (isPhone.value && VIEWS[b.b].phone === "every"),
+  );
   return (
     <div class="banners" data-place={place}>
       {place === "editor" && <EditorStateBanners />}
       {place === "log" && <LogStateBanners />}
-      {mine.map(b => {
+      {mine.map((b) => {
         const View = VIEWS[b.b].view as ComponentType<{ banner: Banner }>;
         return <View key={`${b.b}:${"path" in b ? b.path : ""}`} banner={b} />;
       })}

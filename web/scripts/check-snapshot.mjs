@@ -7,25 +7,40 @@
 // --timeout seconds (default 300), reported as a failure "timeout". The cases that are slow in Pyodide start first.
 // Options: --cases a,b,c (only those compat cases; no conformance), --only conformance|compat, --dir, --normal, --pandas (with --normal: load pandas, as the page does not).
 // Exit code 1 if anything differs, times out or crashes. Over 30 minutes for everything. Needs a built snapshot.
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import { installEngine } from "./install-engine.ts";
-import { bootFromSnapshot, NATIVE_CHECKS, defaultDir } from "./snapshot-node.ts";
+import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "./snapshot-node.ts";
 
 const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const dir = resolve(arg("--dir", defaultDir));
 const repo = fileURLToPath(new URL("../..", import.meta.url));
 // Slow in Pyodide (docs/browser-engine.md, "Open investigation"): started first, so a long tail does not hide the rest.
-const PYODIDE_SLOW = ["0408_mata_moptimize", "1907_models", "1918_models3", "1904_timeseries", "1910_programming", "1914_panel",
-  "1915_timeseries", "1919_other_suites2", "1920_models4", "1921_graphics_look", "1908_models2", "1909_other_suites",
-  "1916_multilevel", "1902_multilevel"];
+const PYODIDE_SLOW = [
+  "0408_mata_moptimize",
+  "1907_models",
+  "1918_models3",
+  "1904_timeseries",
+  "1910_programming",
+  "1914_panel",
+  "1915_timeseries",
+  "1919_other_suites2",
+  "1920_models4",
+  "1921_graphics_look",
+  "1908_models2",
+  "1909_other_suites",
+  "1916_multilevel",
+  "1902_multilevel",
+];
 
 async function boot() {
-  if (args.includes("--normal")) {   // the baseline: Pyodide booted and the wheel installed the way the page does without a snapshot
+  if (args.includes("--normal")) {
+    // the baseline: Pyodide booted and the wheel installed the way the page does without a snapshot
     const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });
     const wheel = await installEngine(py, { pandas: args.includes("--pandas") });
     return { py, manifest: { wheel: `${wheel} (normal boot, no snapshot)` } };
@@ -35,7 +50,8 @@ async function boot() {
 
 // ---- a child process: one share of the work ------------------------------------------------------------------------
 if (args.includes("--child")) {
-  const kind = arg("--child"), mine = arg("--case", "").split(",").filter(Boolean);
+  const kind = arg("--child"),
+    mine = arg("--case", "").split(",").filter(Boolean);
   const { py, manifest } = await boot();
   // what browser.start() does for the page: numpy.linalg must raise LinAlgError (src/dofile/linalgshim.py); --no-shim: the old baseline
   if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
@@ -48,8 +64,10 @@ if (args.includes("--child")) {
     const data = `${repo}/tests/conformance/data`;
     py.FS.mkdirTree("/conf");
     py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests/conformance` }, "/conf");
-    for (const f of py.FS.readdir("/conf/data")) if (f !== "." && f !== "..") py.FS.writeFile(`/work/${f}`, py.FS.readFile(`/conf/data/${f}`));
-    result = JSON.parse(py.runPython(`
+    for (const f of py.FS.readdir("/conf/data"))
+      if (f !== "." && f !== "..") py.FS.writeFile(`/work/${f}`, py.FS.readFile(`/conf/data/${f}`));
+    result = JSON.parse(
+      py.runPython(`
 import json, re
 from pathlib import Path
 from dofile.engine import Engine
@@ -73,16 +91,22 @@ for p in sorted(Path("/conf/probe").glob("*.do")):
     if r.images and r.images[0][:4] != b"\\x89PNG": problems.append(f"probe {p.name}: image is not a PNG")
 r = Engine("/work").run('clear\\nset obs 50\\ngen x = _n\\ngen y = sqrt(x)\\nscatter y x\\ngraph export s.png, replace')
 if r.rc or not Path("/work/s.png").exists() or Path("/work/s.png").stat().st_size < 1000: problems.append(f"graph export: rc {r.rc}")
-json.dumps({"checks": ok, "probes": probes, "problems": problems})`));
+json.dumps({"checks": ok, "probes": probes, "problems": problems})`),
+    );
     say(`${result.checks} corpus checks as expected, ${result.probes} probes, ${result.problems.length} problems`);
     for (const [label, expr, want] of NATIVE_CHECKS) {
       try {
         const got = py.runPython(expr);
-        if (want !== null && Math.abs(got - want) > 1e-6 * Math.max(1, Math.abs(want))) result.problems.push(`native ${label}: ${got}, expected ${want}`);
-      } catch (e) { result.problems.push(`native ${label}: ${String(e.message).trim().split("\n").at(-1).slice(0, 120)}`); }
+        if (want !== null && Math.abs(got - want) > 1e-6 * Math.max(1, Math.abs(want)))
+          result.problems.push(`native ${label}: ${got}, expected ${want}`);
+      } catch (e) {
+        result.problems.push(`native ${label}: ${String(e.message).trim().split("\n").at(-1).slice(0, 120)}`);
+      }
     }
-    say(`${NATIVE_CHECKS.length} native-library calls, ${result.problems.filter(p => p.startsWith("native")).length} problems`);
-    result.problems.forEach(p => say("  PROBLEM", p));
+    say(
+      `${NATIVE_CHECKS.length} native-library calls, ${result.problems.filter((p) => p.startsWith("native")).length} problems`,
+    );
+    result.problems.forEach((p) => say("  PROBLEM", p));
     result.failed = result.problems.length;
   } else {
     py.FS.mkdirTree("/od");
@@ -114,9 +138,19 @@ def run_case(case):
       const r = JSON.parse(py.runPython(`run_case(${JSON.stringify(c)})`));
       results.push(r);
       say(`${r.ok ? "ok  " : "FAIL"} ${r.case} (${r.s} s)`);
-      if (!r.ok) say(r.why.split("\n").map(l => "     " + l).join("\n"));
+      if (!r.ok)
+        say(
+          r.why
+            .split("\n")
+            .map((l) => "     " + l)
+            .join("\n"),
+        );
     }
-    result = { cases: results.length, failed: results.filter(r => !r.ok).length, failures: results.filter(r => !r.ok).map(r => r.case) };
+    result = {
+      cases: results.length,
+      failed: results.filter((r) => !r.ok).length,
+      failures: results.filter((r) => !r.ok).map((r) => r.case),
+    };
     say(`${results.length - result.failed} of ${results.length} cases match Stata 14`);
   }
   console.log("RESULT " + JSON.stringify({ kind, ...result }));
@@ -124,33 +158,63 @@ def run_case(case):
 }
 
 // ---- the parent: start the children, collect their results -------------------------------------------------------------
-const shards = Number(arg("--shards", 4)), timeoutS = Number(arg("--timeout", 300));
-const only = arg("--only", null), wanted = arg("--cases", null)?.split(",");
-const passArgs = ["--dir", dir, ...(args.includes("--normal") ? ["--normal"] : []), ...(args.includes("--pandas") ? ["--pandas"] : []), ...(args.includes("--no-shim") ? ["--no-shim"] : [])];
+const shards = Number(arg("--shards", 4)),
+  timeoutS = Number(arg("--timeout", 300));
+const only = arg("--only", null),
+  wanted = arg("--cases", null)?.split(",");
+const passArgs = [
+  "--dir",
+  dir,
+  ...(args.includes("--normal") ? ["--normal"] : []),
+  ...(args.includes("--pandas") ? ["--pandas"] : []),
+  ...(args.includes("--no-shim") ? ["--no-shim"] : []),
+];
 const t0 = performance.now();
 
 // Runs one child; stdout lines are echoed, the RESULT line is parsed. A child over `limitS` seconds is killed.
-const runChild = (childArgs, limitS) => new Promise(done => {
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", ...childArgs, ...passArgs],
-    { stdio: ["ignore", "pipe", "inherit"] });
-  let out = "", result = null, timedOut = false;
-  const timer = limitS ? setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, limitS * 1000) : null;
-  child.stdout.on("data", d => {
-    out += d;
-    let i;
-    while ((i = out.indexOf("\n")) >= 0) {
-      const line = out.slice(0, i); out = out.slice(i + 1);
-      if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7)); else console.log(line);
-    }
+const runChild = (childArgs, limitS) =>
+  new Promise((done) => {
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", ...childArgs, ...passArgs], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    let out = "",
+      result = null,
+      timedOut = false;
+    const timer = limitS
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill("SIGKILL");
+        }, limitS * 1000)
+      : null;
+    child.stdout.on("data", (d) => {
+      out += d;
+      let i;
+      while ((i = out.indexOf("\n")) >= 0) {
+        const line = out.slice(0, i);
+        out = out.slice(i + 1);
+        if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7));
+        else console.log(line);
+      }
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      done({ code, result, timedOut });
+    });
   });
-  child.on("exit", code => { clearTimeout(timer); done({ code, result, timedOut }); });
-});
 
-const allCases = readdirSync(`${repo}/tests_opendta/compat/do`).filter(f => f.endsWith(".do")).map(f => f.slice(0, -3))
-  .filter(c => existsSync(`${repo}/tests_opendta/compat/expected/${c}.log`)).sort();
-for (const c of wanted ?? []) if (!allCases.includes(c)) { console.error(`unknown compat case: ${c}`); process.exit(2); }
+const allCases = readdirSync(`${repo}/tests_opendta/compat/do`)
+  .filter((f) => f.endsWith(".do"))
+  .map((f) => f.slice(0, -3))
+  .filter((c) => existsSync(`${repo}/tests_opendta/compat/expected/${c}.log`))
+  .sort();
+for (const c of wanted ?? [])
+  if (!allCases.includes(c)) {
+    console.error(`unknown compat case: ${c}`);
+    process.exit(2);
+  }
 const cases = (wanted ?? allCases).sort((a, b) => {
-  const ra = PYODIDE_SLOW.indexOf(a), rb = PYODIDE_SLOW.indexOf(b);
+  const ra = PYODIDE_SLOW.indexOf(a),
+    rb = PYODIDE_SLOW.indexOf(b);
   return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
 });
 
@@ -159,34 +223,47 @@ const cases = (wanted ?? allCases).sort((a, b) => {
 // purpose (5 MB, docs/pyodide-snapshot.md). Expected like a strict xfail: a difference is accepted, and one that now passes is
 // reported. `--normal --pandas` loads pandas and expects no difference at all: run it for these two cases after an engine change.
 const EXPECTED_DIFFER = args.includes("--pandas") ? [] : ["1701_datamgmt_options", "1911_datamgmt"];
-const problems = [], timeouts = [], crashed = [], passed = [];
+const problems = [],
+  timeouts = [],
+  crashed = [],
+  passed = [];
 let ran = 0;
-const conformance = only === "conformance" || (!only && !wanted)
-  ? runChild(["conformance"], 0).then(r => {
-      if (r.code !== 0 || !r.result) crashed.push("conformance");
-      else if (r.result.failed) problems.push("conformance");
-    })
-  : Promise.resolve();
+const conformance =
+  only === "conformance" || (!only && !wanted)
+    ? runChild(["conformance"], 0).then((r) => {
+        if (r.code !== 0 || !r.result) crashed.push("conformance");
+        else if (r.result.failed) problems.push("conformance");
+      })
+    : Promise.resolve();
 const queue = only === "conformance" ? [] : [...cases];
 const worker = async () => {
-  for (let c; (c = queue.shift());) {
+  for (let c; (c = queue.shift()); ) {
     const started = performance.now();
     const r = await runChild(["compat", "--case", c], timeoutS);
     ran++;
-    if (r.timedOut) { timeouts.push(c); console.log(`[${c}] TIMEOUT after ${timeoutS} s (killed)`); }
-    else if (r.code !== 0 || !r.result) { crashed.push(c); console.log(`[${c}] crashed (exit ${r.code}) after ${((performance.now() - started) / 1000).toFixed(0)} s`); }
-    else if (r.result.failed) problems.push(c);
+    if (r.timedOut) {
+      timeouts.push(c);
+      console.log(`[${c}] TIMEOUT after ${timeoutS} s (killed)`);
+    } else if (r.code !== 0 || !r.result) {
+      crashed.push(c);
+      console.log(`[${c}] crashed (exit ${r.code}) after ${((performance.now() - started) / 1000).toFixed(0)} s`);
+    } else if (r.result.failed) problems.push(c);
     else passed.push(c);
   }
 };
 await Promise.all([conformance, ...Array.from({ length: shards }, worker)]);
-const expectedDiffer = problems.filter(c => EXPECTED_DIFFER.includes(c));
-problems.splice(0, problems.length, ...problems.filter(c => !EXPECTED_DIFFER.includes(c)));
-const nowPass = passed.filter(c => EXPECTED_DIFFER.includes(c));   // the package arrived: take it off the list
-console.log(`\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${ran} compat cases run (limit ${timeoutS} s each), ` +
-  `${problems.length} differ, ${timeouts.length} timed out, ${crashed.length} crashed`);
+const expectedDiffer = problems.filter((c) => EXPECTED_DIFFER.includes(c));
+problems.splice(0, problems.length, ...problems.filter((c) => !EXPECTED_DIFFER.includes(c)));
+const nowPass = passed.filter((c) => EXPECTED_DIFFER.includes(c)); // the package arrived: take it off the list
+console.log(
+  `\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${ran} compat cases run (limit ${timeoutS} s each), ` +
+    `${problems.length} differ, ${timeouts.length} timed out, ${crashed.length} crashed`,
+);
 if (expectedDiffer.length) console.log(`  differ as expected (missing package): ${expectedDiffer.join(", ")}`);
-if (nowPass.length) { console.log(`  expected to differ but pass: ${nowPass.join(", ")} (remove from EXPECTED_DIFFER)`); problems.push(...nowPass); }
+if (nowPass.length) {
+  console.log(`  expected to differ but pass: ${nowPass.join(", ")} (remove from EXPECTED_DIFFER)`);
+  problems.push(...nowPass);
+}
 if (problems.length) console.log(`  differ: ${problems.join(", ")}`);
 if (timeouts.length) console.log(`  timed out: ${timeouts.join(", ")}`);
 if (crashed.length) console.log(`  crashed: ${crashed.join(", ")}`);

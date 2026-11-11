@@ -2,102 +2,270 @@
    places them. Widths: desktop B from 1200 px; 700 to 1199 px the same with the file list folded away; the phone under
    700 px. */
 
-:root { color-scheme: light dark; }
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
-[hidden] { display: none !important; }   /* over the components' own display */
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+[hidden] {
+  display: none !important;
+} /* over the components' own display */
 
 /* The page itself never scrolls or bounces; only panes scroll. .app is fixed to the window, so the document has no
    height of its own to scroll, whatever made an iPhone scroll the page a few px before (likely the 100dvh grid in the
    flow against Safari's toolbars and the tab bar's safe-area padding; an emulated iPhone does not show it). While a
    phone's keyboard is open (app/viewport.ts sets data-keyboard and the --vv-* variables) .app fills only the area above
    the keyboard, and the tab bar is hidden, so the command line sits right on the keyboard. */
-html, body { overflow: hidden; overscroll-behavior: none; }
-.app { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
-:root[data-keyboard] .app { bottom: auto; top: var(--vv-top, 0px); height: var(--vv-height, 100%); }
-:root[data-keyboard] .app[data-layout="phone"] .views { display: none; }
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+}
+:root[data-keyboard] .app {
+  bottom: auto;
+  top: var(--vv-top, 0px);
+  height: var(--vv-height, 100%);
+}
+:root[data-keyboard] .app[data-layout="phone"] .views {
+  display: none;
+}
 /* a phone zooms in on a focused text field under 16 px (iOS Safari): every field the visitor types in is 16 px or more
    there, 4b's command line and CodeMirror editor included (SPEC 8) */
 @media (max-width: 699.98px) {
-  :root :is(input:not([type=checkbox], [type=radio], [type=range], [type=file]), textarea, select,
-            [contenteditable]:not([contenteditable=false])) { font-size: max(16px, 1em); }
-  .cmdline .placeholder { font-size: 16px; }   /* the command line's stand-in, at the size its field will have */
+  :root
+    :is(
+      input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]),
+      textarea,
+      select,
+      [contenteditable]:not([contenteditable="false"])
+    ) {
+    font-size: max(16px, 1em);
+  }
+  .cmdline .placeholder {
+    font-size: 16px;
+  } /* the command line's stand-in, at the size its field will have */
 }
 
 /* The toolbar keeps one size: each button holds all its labels (RunControls.tsx), and in other-tab the run buttons keep
    their place unseen (SPEC 5: none). It is one row and never wider than the window: if it cannot fit (a large default
    font) it scrolls sideways instead of widening the page. */
-:root[data-engine^="other-tab"] .run-ctl { visibility: hidden; }
-.toolbar { min-width: 0; overflow-x: auto; }
+:root[data-engine^="other-tab"] .run-ctl {
+  visibility: hidden;
+}
+.toolbar {
+  min-width: 0;
+  overflow-x: auto;
+}
 /* Below 56em (896 px at the default font size; an em query follows the visitor's font size) the widest toolbar does not
    fit: the theme button shows its icon only (its aria-label says the rest), and Run selection and Save drop their key
    chips (aria-keyshortcuts still names the keys). Run keeps its chip, the one that says how to run. */
 @media (max-width: 55.99em) {
-  .toolbar .theme-word { display: none; }
-  .toolbar .run-ctl:not(.primary) .key { display: none; }
+  .toolbar .theme-word {
+    display: none;
+  }
+  .toolbar .run-ctl:not(.primary) .key {
+    display: none;
+  }
 }
 
 /* desktop B: 230 px | the editor (at least 400) | the right column (up to 660) */
-.main { display: grid; grid-template-columns: 230px minmax(400px, 1fr) minmax(0, 660px); gap: var(--s2); padding: var(--s2);
-        min-height: 0; min-width: 0; }
-.main > .pane, .out { min-height: 0; }
-.out { display: grid; grid-template-rows: 1.35fr 1fr; gap: var(--s2); min-width: 0; }
-.main[data-split="unsplit"] .out { grid-template-rows: 1fr; }
-.pane-body { display: flex; flex-direction: column; }
-.pane-body > * { min-height: 0; }
-.log-body { overflow: auto; }
-.log-body .log { overflow: visible; }   /* the body scrolls; wide tables sideways too */
-.banners:empty { display: none; }
-.banners > .banner:first-child { margin-top: var(--s2); }
-.editor-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.editor-host:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); outline: 2px solid transparent; }
+.main {
+  display: grid;
+  grid-template-columns: 230px minmax(400px, 1fr) minmax(0, 660px);
+  gap: var(--s2);
+  padding: var(--s2);
+  min-height: 0;
+  min-width: 0;
+}
+.main > .pane,
+.out {
+  min-height: 0;
+}
+.out {
+  display: grid;
+  grid-template-rows: 1.35fr 1fr;
+  gap: var(--s2);
+  min-width: 0;
+}
+.main[data-split="unsplit"] .out {
+  grid-template-rows: 1fr;
+}
+.pane-body {
+  display: flex;
+  flex-direction: column;
+}
+.pane-body > * {
+  min-height: 0;
+}
+.log-body {
+  overflow: auto;
+}
+.log-body .log {
+  overflow: visible;
+} /* the body scrolls; wide tables sideways too */
+.banners:empty {
+  display: none;
+}
+.banners > .banner:first-child {
+  margin-top: var(--s2);
+}
+.editor-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.editor-host:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  outline: 2px solid transparent;
+}
 
 /* the folded file list (700 to 1199 px): the Editor head's "Files" button (with the count of files) unfolds it, and
    looks pressed while it is open */
-.fold-toggle { display: none; align-items: center; gap: 6px; margin-right: var(--s1); height: var(--control-sm); padding: 0 8px; white-space: nowrap;
-               font-size: var(--text-sm); color: var(--ink); background: var(--surface); border: 1px solid var(--border-strong);
-               border-radius: var(--radius); }
-.fold-toggle .ico { color: var(--muted); }
-.fold-toggle .count { color: var(--muted); font-variant-numeric: tabular-nums; }
-.fold-toggle[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent); }
-.fold-toggle[aria-expanded="true"] .ico { color: var(--accent); }
-@media (hover: hover) { .fold-toggle[aria-expanded="false"]:hover { background: var(--surface-2); } }
-@media (forced-colors: active) {   /* the pressed look is a fill, which forced colors drop: a system-colored edge */
-  .fold-toggle[aria-expanded="true"] { forced-color-adjust: none; border-color: Highlight; color: CanvasText; background: Canvas; }
+.fold-toggle {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-right: var(--s1);
+  height: var(--control-sm);
+  padding: 0 8px;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
 }
-.files-pane:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); outline: 2px solid transparent; }
+.fold-toggle .ico {
+  color: var(--muted);
+}
+.fold-toggle .count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.fold-toggle[aria-expanded="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.fold-toggle[aria-expanded="true"] .ico {
+  color: var(--accent);
+}
+@media (hover: hover) {
+  .fold-toggle[aria-expanded="false"]:hover {
+    background: var(--surface-2);
+  }
+}
+@media (forced-colors: active) {
+  /* the pressed look is a fill, which forced colors drop: a system-colored edge */
+  .fold-toggle[aria-expanded="true"] {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    color: CanvasText;
+    background: Canvas;
+  }
+}
+.files-pane:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  outline: 2px solid transparent;
+}
 @media (max-width: 1199.98px) {
-  .main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .main[data-files="folded"] .files-pane { display: none; }
-  .main[data-files="open"] { grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr); }
-  .fold-toggle { display: inline-flex; }
+  .main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .main[data-files="folded"] .files-pane {
+    display: none;
+  }
+  .main[data-files="open"] {
+    grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .fold-toggle {
+    display: inline-flex;
+  }
 }
 
 /* the phone: top bar, one view, the tab bar (PH, WP) */
-.app[data-layout="phone"] { grid-template-rows: auto auto 1fr auto; }
-.app[data-layout="phone"] .main { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
-                                  padding: 0; gap: 0; grid-row: 3; }
+.app[data-layout="phone"] {
+  grid-template-rows: auto auto 1fr auto;
+}
+.app[data-layout="phone"] .main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0;
+  gap: 0;
+  grid-row: 3;
+}
 /* every pane in the one cell, one shown at a time (App.tsx Pane); .out adds no box, so it never covers a view */
-.app[data-layout="phone"] .out { display: contents; }
-.app[data-layout="phone"] .main > .pane, .app[data-layout="phone"] .out > .pane { grid-area: 1 / 1; }
-.app[data-layout="phone"] .pane { border: 0; border-radius: 0; }
+.app[data-layout="phone"] .out {
+  display: contents;
+}
+.app[data-layout="phone"] .main > .pane,
+.app[data-layout="phone"] .out > .pane {
+  grid-area: 1 / 1;
+}
+.app[data-layout="phone"] .pane {
+  border: 0;
+  border-radius: 0;
+}
 .app[data-layout="phone"] .editor-pane > .pane-head,
-.app[data-layout="phone"] .log-pane > .pane-head { display: none; }   /* the top bar names the view */
-.app[data-layout="phone"] .views { grid-row: 4; }
+.app[data-layout="phone"] .log-pane > .pane-head {
+  display: none;
+} /* the top bar names the view */
+.app[data-layout="phone"] .views {
+  grid-row: 4;
+}
 
 /* a step 4 part not built yet (app/ui/Icon.tsx Placeholder) */
-.placeholder { margin: var(--s3); padding: var(--s3); border: 1.5px dashed var(--border-strong); border-radius: var(--radius);
-               color: var(--muted); font-size: var(--text-sm); }
-.placeholder b { display: block; color: var(--ink); font-weight: var(--w-bold-ui); }
-.cmdline .placeholder { margin: 0; padding: var(--s1) var(--s2); flex: 1; }
-.cmdline .placeholder b { display: inline; margin-right: var(--s2); }
+.placeholder {
+  margin: var(--s3);
+  padding: var(--s3);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.placeholder b {
+  display: block;
+  color: var(--ink);
+  font-weight: var(--w-bold-ui);
+}
+.cmdline .placeholder {
+  margin: 0;
+  padding: var(--s1) var(--s2);
+  flex: 1;
+}
+.cmdline .placeholder b {
+  display: inline;
+  margin-right: var(--s2);
+}
 
 /* the editor's place in the Editor pane: hidden, not unmounted, while a .dta tab shows its view (App.tsx) */
-.editor-slot { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.editor-slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 /* the toast on a phone: above the command line and the tab bar, not over them. While the keyboard is open (viewport.ts)
    the toast is fixed to the layout viewport, whose bottom is behind the keyboard: it goes by the visible area instead,
    above the command line at that area's foot (the tab bar is hidden then). */
-.app[data-layout="phone"] .toasts { bottom: calc(var(--s7) * 2 + var(--s2)); }
+.app[data-layout="phone"] .toasts {
+  bottom: calc(var(--s7) * 2 + var(--s2));
+}
 :root[data-keyboard] .app[data-layout="phone"] .toasts {
-  bottom: auto; top: calc(var(--vv-top) + var(--vv-height) - var(--s7) - var(--s2)); transform: translate(-50%, -100%); }
+  bottom: auto;
+  top: calc(var(--vv-top) + var(--vv-height) - var(--s7) - var(--s2));
+  transform: translate(-50%, -100%);
+}

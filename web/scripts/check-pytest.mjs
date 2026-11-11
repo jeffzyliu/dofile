@@ -9,10 +9,11 @@
 // that make sense without subprocesses (WEB_TESTS). The baseline is the same plugin on CPython:
 //   uv run python web/scripts/pytest_report.py OUT.json FILE -q -p no:cacheprovider
 // and `node scripts/compare-pytest.mjs BASELINE_DIR DIR` lists the differences.
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
+
 import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolve, basename } from "node:path";
 import { loadPyodide } from "pyodide";
 import { installEngine } from "./install-engine.ts";
 
@@ -30,8 +31,16 @@ if (args.includes("--child")) {
   const file = arg("--child");
   // --ios: Pyodide's loader tests navigator.userAgent for iPhone/iPad and then creates no WebAssembly trampoline function
   // (getPyEMTrampolinePtr); this makes Node look like that, to run the suite the way an iPhone runs the engine
-  if (args.includes("--ios")) Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)", platform: "iPhone", maxTouchPoints: 5 } });
-  const py = await loadPyodide({ stdout: s => console.log(s), stderr: s => console.log(s) });
+  if (args.includes("--ios"))
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)",
+        platform: "iPhone",
+        maxTouchPoints: 5,
+      },
+    });
+  const py = await loadPyodide({ stdout: (s) => console.log(s), stderr: (s) => console.log(s) });
   await py.loadPackage(["pytest", "numpy", "scipy", "matplotlib"], { messageCallback: () => {} });
   const wheel = await installEngine(py);
   for (const d of ["tests_opendta", "tests"]) {
@@ -40,7 +49,7 @@ if (args.includes("--child")) {
   }
   py.FS.mkdirTree("/work");
   py.FS.writeFile("/tmp/pytest_report.py", readFileSync(`${repo}/web/scripts/pytest_report.py`));
-  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");   // as browser.start() does
+  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()"); // as browser.start() does
   py.globals.set("FILE", file);
   py.globals.set("OUT", "/tmp/result.json");
   py.runPython(`
@@ -50,36 +59,72 @@ import pytest_report
 pytest_report.run(OUT, ["/repo/" + FILE, "-q", "-p", "no:cacheprovider", "--rootdir=/repo", "-o", "addopts="])`);
   mkdirSync(out, { recursive: true });
   // the table is one entry shorter when Pyodide created no trampoline (an iPhone user agent): proof of which mode ran
-  const result = { ...JSON.parse(py.FS.readFile("/tmp/result.json", { encoding: "utf8" })), wasmTableLength: py._module.wasmTable.length, ios: args.includes("--ios") };
+  const result = {
+    ...JSON.parse(py.FS.readFile("/tmp/result.json", { encoding: "utf8" })),
+    wasmTableLength: py._module.wasmTable.length,
+    ios: args.includes("--ios"),
+  };
   writeFileSync(`${out}/${basename(file)}.json`, JSON.stringify(result));
   process.exit(0);
 }
 
 // ---- the parent ------------------------------------------------------------------------------------------------------
-const shards = Number(arg("--shards", 4)), timeoutS = Number(arg("--timeout", 900));
+const shards = Number(arg("--shards", 4)),
+  timeoutS = Number(arg("--timeout", 900));
 const files = arg("--paths", null)?.split(",") ?? [
-  ...readdirSync(`${repo}/tests_opendta/tests`).filter(f => /^test_.*\.py$/.test(f)).sort().map(f => `tests_opendta/tests/${f}`),
-  ...WEB_TESTS];
-for (const f of files) if (!existsSync(`${repo}/${f}`)) { console.error(`no such file: ${f}`); process.exit(2); }
+  ...readdirSync(`${repo}/tests_opendta/tests`)
+    .filter((f) => /^test_.*\.py$/.test(f))
+    .sort()
+    .map((f) => `tests_opendta/tests/${f}`),
+  ...WEB_TESTS,
+];
+for (const f of files)
+  if (!existsSync(`${repo}/${f}`)) {
+    console.error(`no such file: ${f}`);
+    process.exit(2);
+  }
 mkdirSync(out, { recursive: true });
-const t0 = performance.now(), timeouts = [], crashed = [];
+const t0 = performance.now(),
+  timeouts = [],
+  crashed = [];
 const queue = [...files];
-const runOne = file => new Promise(done => {
-  const started = performance.now();
-  rmSync(`${out}/${basename(file)}.json`, { force: true });   // a result left by an earlier run would hide a crash
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", file, "--out", out,
-    ...(args.includes("--no-shim") ? ["--no-shim"] : []), ...(args.includes("--ios") ? ["--ios"] : [])], { stdio: ["ignore", "ignore", "ignore"] });
-  const timer = setTimeout(() => { timeouts.push(file); child.kill("SIGKILL"); }, timeoutS * 1000);
-  child.on("exit", code => {
-    clearTimeout(timer);
-    const s = ((performance.now() - started) / 1000).toFixed(0);
-    if (!timeouts.includes(file) && !existsSync(`${out}/${basename(file)}.json`)) crashed.push(file);
-    console.log(`${timeouts.includes(file) ? "TIMEOUT" : code === 0 ? "done   " : "exit " + code} ${file} (${s} s)`);
-    done();
+const runOne = (file) =>
+  new Promise((done) => {
+    const started = performance.now();
+    rmSync(`${out}/${basename(file)}.json`, { force: true }); // a result left by an earlier run would hide a crash
+    const child = spawn(
+      process.execPath,
+      [
+        fileURLToPath(import.meta.url),
+        "--child",
+        file,
+        "--out",
+        out,
+        ...(args.includes("--no-shim") ? ["--no-shim"] : []),
+        ...(args.includes("--ios") ? ["--ios"] : []),
+      ],
+      { stdio: ["ignore", "ignore", "ignore"] },
+    );
+    const timer = setTimeout(() => {
+      timeouts.push(file);
+      child.kill("SIGKILL");
+    }, timeoutS * 1000);
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      const s = ((performance.now() - started) / 1000).toFixed(0);
+      if (!timeouts.includes(file) && !existsSync(`${out}/${basename(file)}.json`)) crashed.push(file);
+      console.log(`${timeouts.includes(file) ? "TIMEOUT" : code === 0 ? "done   " : "exit " + code} ${file} (${s} s)`);
+      done();
+    });
   });
-});
-await Promise.all(Array.from({ length: shards }, async () => { for (let f; (f = queue.shift());) await runOne(f); }));
-console.log(`\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${files.length} files, ${timeouts.length} timed out, ${crashed.length} without a result`);
+await Promise.all(
+  Array.from({ length: shards }, async () => {
+    for (let f; (f = queue.shift()); ) await runOne(f);
+  }),
+);
+console.log(
+  `\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${files.length} files, ${timeouts.length} timed out, ${crashed.length} without a result`,
+);
 if (timeouts.length) console.log(`  timed out: ${timeouts.join(", ")}`);
 if (crashed.length) console.log(`  no result: ${crashed.join(", ")}`);
 process.exit(timeouts.length || crashed.length ? 1 : 0);

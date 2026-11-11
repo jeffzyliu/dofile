@@ -16,8 +16,8 @@
 //    (files.ts adds it, one at a time, and removes it when a later download works). 4d may restyle or reword it with the
 //    other storage states (OQ-16). No role="alert": files.ts says it once in the live region.
 import type { BannerOf } from "../banners";
-import { dismiss } from "../state.ts";
 import { downloadAll } from "../files.ts";
+import { dismiss } from "../state.ts";
 import { Banner } from "../ui/Live";
 
 export const EditorStateBanners = () => null;
@@ -27,10 +27,25 @@ export const StorageBanner = (_: { banner: BannerOf<"storage"> }) => null;
 export const MemoryBanner = (_: { banner: BannerOf<"memory"> }) => null;
 
 export const DownloadFailedBanner = ({ banner }: { banner: BannerOf<"download-failed"> }) => (
-  <Banner kind="error" actions={<>
-    <button type="button" class="btn" onClick={() => { downloadAll(); }}>Try again</button>
-    <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>Dismiss</button>
-  </>}>
+  <Banner
+    kind="error"
+    actions={
+      <>
+        <button
+          type="button"
+          class="btn"
+          onClick={() => {
+            downloadAll();
+          }}
+        >
+          Try again
+        </button>
+        <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
+          Dismiss
+        </button>
+      </>
+    }
+  >
     <b>Your files couldn't be downloaded:</b> this browser didn't open the storage where dofile keeps them.
   </Banner>
 );

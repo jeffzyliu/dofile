@@ -6,8 +6,8 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
-import { buildId, readManifest, staleness, type BuildInputs } from "./build-id.ts";
 import type { SnapshotManifest, StartFiles } from "../src/engine/types.ts";
+import { type BuildInputs, buildId, readManifest, staleness } from "./build-id.ts";
 
 // Pyodide's own files that the snapshot start needs; vite.config.ts copies them from the npm package into public/pyodide/
 export const RUNTIME_FILES = ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
@@ -38,19 +38,34 @@ function compressedSize(bytes: Uint8Array): number {
 //              and the rest of assets/).
 // The snapshot's manifest.json is read here, at build time, and is not a start file: the start never fetches it.
 // (A .ts file because a test imports it: test/build-id.test.ts.)
-type List = Omit<StartFiles, "built" | "buildId" | "snapshot"> & { built: number | null; buildId: string | null; snapshot: StartFiles["snapshot"] | null };
-export function listStartFiles(dir: string, { stamp = undefined, manifest = readManifest() }: { stamp?: string, manifest?: SnapshotManifest | null } = {}): List {
+type List = Omit<StartFiles, "built" | "buildId" | "snapshot"> & {
+  built: number | null;
+  buildId: string | null;
+  snapshot: StartFiles["snapshot"] | null;
+};
+export function listStartFiles(
+  dir: string,
+  { stamp = undefined, manifest = readManifest() }: { stamp?: string; manifest?: SnapshotManifest | null } = {},
+): List {
   const files: List["files"] = [];
   const add = (path: string, download: boolean) => {
     const bytes = readFileSync(`${dir}/${path}`);
     files.push({ path, size: bytes.length, compressed: compressedSize(bytes), download });
   };
-  let built: number | null = null, id: string | null = null, snapshot: List["snapshot"] = null;
+  let built: number | null = null,
+    id: string | null = null,
+    snapshot: List["snapshot"] = null;
   if (manifest) {
     built = manifest.built ?? null;
     id = stamp ? buildId(stamp, manifest) : null;
     snapshot = manifest.files ?? null;
-    for (const name of [manifest.files?.snapshot.name, manifest.files?.bundle.name, "dso.json", "files.json", "pyodide.asm.patched.mjs"]) {
+    for (const name of [
+      manifest.files?.snapshot.name,
+      manifest.files?.bundle.name,
+      "dso.json",
+      "files.json",
+      "pyodide.asm.patched.mjs",
+    ]) {
       if (name && existsSync(`${dir}/snapshot/${name}`)) add(`snapshot/${name}`, true);
     }
   }
@@ -58,7 +73,8 @@ export function listStartFiles(dir: string, { stamp = undefined, manifest = read
   if (existsSync(`${dir}/index.html`)) add("index.html", false);
   if (existsSync(`${dir}/assets`)) {
     for (const name of readdirSync(`${dir}/assets`, { recursive: true }).map(String).sort()) {
-      if (statSync(`${dir}/assets/${name}`).isFile()) add(`assets/${name.replaceAll("\\", "/")}`, name.endsWith(".wasm"));
+      if (statSync(`${dir}/assets/${name}`).isFile())
+        add(`assets/${name.replaceAll("\\", "/")}`, name.endsWith(".wasm"));
     }
   }
   const sum = (key: "size" | "compressed") => files.reduce((n, f) => n + f[key], 0);
@@ -75,10 +91,18 @@ const META = /\s*<meta name="dofile-engine-bytes" content="\d+">/g;
 // without the number would show a prompt without a size), and if the snapshot is not of `inputs`, what the page is built
 // from (scripts/build-id.ts, staleness). With no snapshot the list says so (built: null) and the build goes on, as the
 // page then fails with "no snapshot in this build". Returns the list.
-export function writeStartFiles(dir: string, { stamp, inputs, manifest = readManifest() }: { stamp: string, inputs: BuildInputs, manifest?: SnapshotManifest | null }): List {
+export function writeStartFiles(
+  dir: string,
+  {
+    stamp,
+    inputs,
+    manifest = readManifest(),
+  }: { stamp: string; inputs: BuildInputs; manifest?: SnapshotManifest | null },
+): List {
   const stale = manifest && staleness(manifest, inputs);
   if (stale) throw new Error(`start-files: ${stale}`);
-  const list = listStartFiles(dir, { stamp, manifest }), entry = list.files.find(f => f.path === "index.html");
+  const list = listStartFiles(dir, { stamp, manifest }),
+    entry = list.files.find((f) => f.path === "index.html");
   const html = entry ? readFileSync(`${dir}/index.html`, "utf8").replace(META, "") : "";
   if (!html.includes("</head>")) throw new Error(`start-files: no index.html with a <head> in ${dir}`);
   const rest = { size: list.size - entry!.size, compressed: list.compressed - entry!.compressed };
@@ -95,7 +119,7 @@ export function writeStartFiles(dir: string, { stamp, inputs, manifest = readMan
   Object.assign(list, { size: rest.size + text.length, compressed: total });
   writeFileSync(`${dir}/index.html`, text);
   writeFileSync(`${dir}/start-files.json`, JSON.stringify(list));
-  rmSync(`${dir}/snapshot/manifest.json`, { force: true });   // the build's record, not a file of the site
+  rmSync(`${dir}/snapshot/manifest.json`, { force: true }); // the build's record, not a file of the site
   return list;
 }
 
@@ -103,13 +127,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const list = listStartFiles(resolve(process.argv[2] ?? fileURLToPath(new URL("../dist", import.meta.url))));
   const mb = (n: number) => (n / 1e6).toFixed(2).padStart(7);
   console.log("on disk  sent (MB)  fetched by download()");
-  for (const f of list.files) console.log(`${mb(f.size)}  ${mb(f.compressed)}   ${f.download ? "yes" : "no "}  ${f.path}`);
+  for (const f of list.files)
+    console.log(`${mb(f.size)}  ${mb(f.compressed)}   ${f.download ? "yes" : "no "}  ${f.path}`);
   const part = (label: string, keep: (f: List["files"][number]) => boolean) => {
     const some = list.files.filter(keep);
-    console.log(`${mb(some.reduce((n, f) => n + f.size, 0))}  ${mb(some.reduce((n, f) => n + f.compressed, 0))}        ${label}`);
+    console.log(
+      `${mb(some.reduce((n, f) => n + f.size, 0))}  ${mb(some.reduce((n, f) => n + f.compressed, 0))}        ${label}`,
+    );
   };
-  part("snapshot", f => f.path.startsWith("snapshot/"));
-  part("runtime", f => f.path.startsWith("pyodide/"));
-  part("page", f => !f.path.startsWith("snapshot/") && !f.path.startsWith("pyodide/"));
+  part("snapshot", (f) => f.path.startsWith("snapshot/"));
+  part("runtime", (f) => f.path.startsWith("pyodide/"));
+  part("page", (f) => !f.path.startsWith("snapshot/") && !f.path.startsWith("pyodide/"));
   console.log(`${mb(list.size)}  ${mb(list.compressed)}        total (built ${list.built})`);
 }

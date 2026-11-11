@@ -7,6 +7,8 @@ import { Placeholder } from "../ui/Icon";
 
 export const Editor = () => (
   <div class="editor-host" data-editor tabIndex={-1}>
-    <Placeholder step="4b">The editor (CodeMirror 6), one state per open tab, with the run and error line marks.</Placeholder>
+    <Placeholder step="4b">
+      The editor (CodeMirror 6), one state per open tab, with the run and error line marks.
+    </Placeholder>
   </div>
 );

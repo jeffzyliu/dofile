@@ -8,23 +8,36 @@
 // request, there is nothing to hold and take() is true: every such tab owns the engine.
 export const LOCK = "dofile-engine";
 
-export function tabLock({ locks = globalThis.navigator?.locks, name = LOCK, onLost = () => {} }: {
-  locks?: Pick<LockManager, "request"> | null; name?: string; onLost?: (e: unknown) => void } = {}) {
-  const take = ({ steal = false } = {}) => new Promise<boolean>(ok => {
-    if (!locks) return ok(true);
-    let held = false;
-    const refused = (e: any) => { console.warn(`[dofile] no tab lock: ${e?.message ?? e}`); ok(true); };
-    try {
-      locks.request(name, steal ? { steal: true } : { ifAvailable: true }, lock => {
-        if (!lock) return ok(false);
-        held = true;
+export function tabLock({
+  locks = globalThis.navigator?.locks,
+  name = LOCK,
+  onLost = () => {},
+}: {
+  locks?: Pick<LockManager, "request"> | null;
+  name?: string;
+  onLost?: (e: unknown) => void;
+} = {}) {
+  const take = ({ steal = false } = {}) =>
+    new Promise<boolean>((ok) => {
+      if (!locks) return ok(true);
+      let held = false;
+      const refused = (e: any) => {
+        console.warn(`[dofile] no tab lock: ${e?.message ?? e}`);
         ok(true);
-        return new Promise(() => {});   // never released by this tab
-      }).catch(e => (held ? onLost(e) : refused(e)));   // a stolen lock rejects the holder's request with AbortError
-    } catch (e) {
-      refused(e);
-    }
-  });
+      };
+      try {
+        locks
+          .request(name, steal ? { steal: true } : { ifAvailable: true }, (lock) => {
+            if (!lock) return ok(false);
+            held = true;
+            ok(true);
+            return new Promise(() => {}); // never released by this tab
+          })
+          .catch((e) => (held ? onLost(e) : refused(e))); // a stolen lock rejects the holder's request with AbortError
+      } catch (e) {
+        refused(e);
+      }
+    });
   return { take };
 }
 
@@ -33,15 +46,29 @@ export function tabLock({ locks = globalThis.navigator?.locks, name = LOCK, onLo
 // twice: at once with what persisted() says now, and again when persist() has been answered. Returns the first answer.
 // A persisted() that fails answers null; keepFiles never rejects.
 const asked = new WeakSet();
-export async function keepFiles(storage: Pick<StorageManager, "persist" | "persisted"> | null | undefined = globalThis.navigator?.storage,
-  onAnswer: (kept: boolean | null) => void = () => {}): Promise<boolean | null> {
-  if (!storage?.persist) { onAnswer(null); return null; }
-  const state = () => Promise.resolve().then(() => storage.persisted()).then(Boolean, () => null);   // an error: not known
+export async function keepFiles(
+  storage: Pick<StorageManager, "persist" | "persisted"> | null | undefined = globalThis.navigator?.storage,
+  onAnswer: (kept: boolean | null) => void = () => {},
+): Promise<boolean | null> {
+  if (!storage?.persist) {
+    onAnswer(null);
+    return null;
+  }
+  const state = () =>
+    Promise.resolve()
+      .then(() => storage.persisted())
+      .then(Boolean, () => null); // an error: not known
   const now = await state();
   onAnswer(now);
   if (!asked.has(storage)) {
     asked.add(storage);
-    Promise.resolve().then(() => storage.persist()).catch(() => { /* refused: persisted() says so */ }).then(state).then(onAnswer, () => {});
+    Promise.resolve()
+      .then(() => storage.persist())
+      .catch(() => {
+        /* refused: persisted() says so */
+      })
+      .then(state)
+      .then(onAnswer, () => {});
   }
   return now;
 }

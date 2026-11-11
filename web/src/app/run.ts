@@ -14,29 +14,40 @@
 // `log` replaces that item's text, never adds to it: the stream can stop short of the log with no marker (the log cap,
 // the sandbox notes added after the run). A result the machine made itself (rc 9998: a reset, or a run whose op failed in
 // the worker) has no log of its own, so what streamed in stays, with the reason as a note.
-import * as S from "./state.ts";
-import { runWriter as W } from "./state.ts";
+
+import type { BrowseRows, RunResult } from "../engine/types.ts";
 import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
-import type { BrowseRows, RunResult } from "../engine/types.ts";
+import * as S from "./state.ts";
+import { runWriter as W } from "./state.ts";
 import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
 
-export const MAX_GRAPHS = 20;   // the graphs a session keeps (OQ-21); the oldest go first
+export const MAX_GRAPHS = 20; // the graphs a session keeps (OQ-21); the oldest go first
 
 /** The run in progress: its number, how it was started, what streamed in, and its promise. */
-type Current = { id: number, head: RunHead, theme: "light" | "dark", t0: number, streamed: string,
-  promise: Promise<RunResult>, done: (result: RunResult) => void };
+type Current = {
+  id: number;
+  head: RunHead;
+  theme: "light" | "dark";
+  t0: number;
+  streamed: string;
+  promise: Promise<RunResult>;
+  done: (result: RunResult) => void;
+};
 
-let runs = 0;          // runs so far in this page: each run's items carry its number
-let sessionRuns = 0;   // runs since the engine started: the first one's run-head says "(first run: none yet)"
-let graphCount = 0;    // graphs drawn since the log was cleared: their numbers
+let runs = 0; // runs so far in this page: each run's items carry its number
+let sessionRuns = 0; // runs since the engine started: the first one's run-head says "(first run: none yet)"
+let graphCount = 0; // graphs drawn since the log was cleared: their numbers
 let current: Current | null = null;
 
 /** What the engine controller calls (main.tsx: connectRun(handlers)). */
 export const handlers: engine.RunHandlers = { began, log: streamed, ended, engineReady, engineGone };
 
 /** Ask the engine controller for a run. `done`: the run's promise when it started now, else null at once. */
-function request(code: string, head: RunHead): { how: "started" | "queued" | "refused", done: Promise<RunResult | null> } {
+function request(
+  code: string,
+  head: RunHead,
+): { how: "started" | "queued" | "refused"; done: Promise<RunResult | null> } {
   const how = engine.run(code, head);
   return { how, done: how === "started" && current ? current.promise : Promise.resolve(null) };
 }
@@ -54,7 +65,7 @@ export function runCode(code: string, head: RunHead): Promise<RunResult | null> 
  *  in a row), also when the run ends in an error, and the command line clears its field. In any other state (the page
  *  load, a start or a run in progress, no engine that can start) it is refused: not in `history`, and the text stays in
  *  the field. An empty command is refused. `done`: runCode's promise (the result, or null when nothing ran now). */
-export function runCommand(text: string): { accepted: boolean, done: Promise<RunResult | null> } {
+export function runCommand(text: string): { accepted: boolean; done: Promise<RunResult | null> } {
   const command = text.trim();
   if (!command) return { accepted: false, done: Promise.resolve(null) };
   const { how, done } = request(command, { kind: "command", fresh_locals: false });
@@ -66,14 +77,16 @@ export function runCommand(text: string): { accepted: boolean, done: Promise<Run
 /** A run started (the effect `send-run`): its items go into the log. `theme`: what the run is sent as plot_theme. */
 function began(head: RunHead, theme: "light" | "dark") {
   const id = ++runs;
-  if (head.kind !== "command" && S.layout.value === "phone") S.phoneTab.value = "log";   // Run opens the Log tab
+  if (head.kind !== "command" && S.layout.value === "phone") S.phoneTab.value = "log"; // Run opens the Log tab
   const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: sessionRuns === 0 }];
-  sessionRuns++;   // now, not after the run: a reset that cuts it starts the count again, and the next run is first
-  const unsaved = S.tabs.value.filter(t => t.dirty).map(t => t.path);   // for S 15's note under a nested do
+  sessionRuns++; // now, not after the run: a reset that cuts it starts the count again, and the next run is first
+  const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for S 15's note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");
   let done!: (result: RunResult) => void;
-  const promise = new Promise<RunResult>(ok => { done = ok; });
+  const promise = new Promise<RunResult>((ok) => {
+    done = ok;
+  });
   current = { id, head, theme, t0: performance.now(), streamed: "", promise, done };
 }
 
@@ -90,9 +103,10 @@ function ended(r: RunResult) {
   const run = current;
   if (!run) return;
   current = null;
-  const { id, head } = run, seconds = (performance.now() - run.t0) / 1000;
-  const own = engine.fromClient(r);                 // no log of its own
-  const reset = own && r.kind !== "run-failed";     // the engine is gone (or another tab has it); run-failed keeps it
+  const { id, head } = run,
+    seconds = (performance.now() - run.t0) / 1000;
+  const own = engine.fromClient(r); // no log of its own
+  const reset = own && r.kind !== "run-failed"; // the engine is gone (or another tab has it); run-failed keeps it
 
   const offset = head.kind === "selection" && head.lines ? head.lines[0] - 1 : 0;
   const line = r.error_line == null ? null : r.error_line + offset;
@@ -106,16 +120,30 @@ function ended(r: RunResult) {
   // and a quick take-over may already have started a new engine
   if (!(own && r.kind === "stopped")) W.lastRun.value = end;
   if (r.results) W.results.value = r.results;
-  S.say(r.rc === 0 ? "Run finished" : r.rc === 1 ? "Run stopped by Break"
-    : reset ? (r.kind === "stopped" ? "Run ended: another tab took over" : "Run ended: the engine was reset")
-    : own ? "Run failed: the engine could not finish it"
-    : `Run finished: error r(${r.rc})${line ? ` at line ${line}` : ""}`);
+  S.say(
+    r.rc === 0
+      ? "Run finished"
+      : r.rc === 1
+        ? "Run stopped by Break"
+        : reset
+          ? r.kind === "stopped"
+            ? "Run ended: another tab took over"
+            : "Run ended: the engine was reset"
+          : own
+            ? "Run failed: the engine could not finish it"
+            : `Run finished: error r(${r.rc})${line ? ` at line ${line}` : ""}`,
+  );
   Promise.all([afterRun(r.files), reset ? null : refreshData()]).then(() => run.done(r));
 }
 
 /** An engine is ready (the effect `engine-ready`): its memory. */
 function engineReady() {
-  engine.call("memory").then(m => { W.memory.value = m; }, () => {});
+  engine.call("memory").then(
+    (m) => {
+      W.memory.value = m;
+    },
+    () => {},
+  );
 }
 
 /** The engine is gone (the effect `engine-gone`): a reset, or another tab has it. Nothing of it is in memory. */
@@ -129,14 +157,23 @@ function engineGone() {
 
 /** The text item of run `id`: still streaming, or (with `end`) the run has ended. */
 function setText(id: number, text: string, end: LastRun | undefined = undefined) {
-  W.log.value = W.log.value.map(i => (i.t === "text" && i.run === id ? { ...i, text, streaming: !end, ...(end ? { end } : {}) } : i));
+  W.log.value = W.log.value.map((i) =>
+    i.t === "text" && i.run === id ? { ...i, text, streaming: !end, ...(end ? { end } : {}) } : i,
+  );
 }
 
 function addGraphs(r: RunResult, id: number, theme: "light" | "dark") {
   if (!r.images.length) return;
-  const added: Graph[] = r.images.map((png, i) => ({ n: ++graphCount, png, theme, from: "run", run: id,
-    command: r.graph_commands[i], line: r.graph_lines[i] ?? null }));
-  W.log.value = [...W.log.value, ...added.map(g => ({ t: "graph", n: g.n }) as LogItem)];
+  const added: Graph[] = r.images.map((png, i) => ({
+    n: ++graphCount,
+    png,
+    theme,
+    from: "run",
+    run: id,
+    command: r.graph_commands[i],
+    line: r.graph_lines[i] ?? null,
+  }));
+  W.log.value = [...W.log.value, ...added.map((g) => ({ t: "graph", n: g.n }) as LogItem)];
   keepGraphs(added);
 }
 
@@ -144,7 +181,7 @@ function addGraphs(r: RunResult, id: number, theme: "light" | "dark") {
  *  own; `theme` is the page's at the time. The same file opened again replaces its entry (the new image, the same `n`,
  *  the same place) and selects it; one that has dropped out of the last 20 is added again. `png`: base64. */
 export function addFileGraph(path: string, png: string): Graph {
-  const i = W.graphs.value.findIndex(g => g.from === "file" && g.path === path);
+  const i = W.graphs.value.findIndex((g) => g.from === "file" && g.path === path);
   if (i >= 0) {
     const g: Graph = { ...W.graphs.value[i], png, theme: S.resolvedTheme.value };
     W.graphs.value = W.graphs.value.map((x, j) => (j === i ? g : x));
@@ -158,7 +195,7 @@ export function addFileGraph(path: string, png: string): Graph {
 
 function keepGraphs(added: Graph[]) {
   W.graphs.value = [...W.graphs.value, ...added].slice(-MAX_GRAPHS);
-  S.graphIndex.value = W.graphs.value.length - 1;   // the latest graph is the one shown
+  S.graphIndex.value = W.graphs.value.length - 1; // the latest graph is the one shown
 }
 
 /** The data, its first rows, the macros and the memory, after a run (and whenever a view needs them fresh). With no
@@ -166,7 +203,11 @@ function keepGraphs(added: Graph[]) {
 export async function refreshData() {
   try {
     const [data, rows, macros, memory] = await Promise.all([
-      engine.call("describe"), engine.call("browse", { limit: 50 }), engine.call("macros"), engine.call("memory")]);
+      engine.call("describe"),
+      engine.call("browse", { limit: 50 }),
+      engine.call("macros"),
+      engine.call("memory"),
+    ]);
     W.data.value = data;
     W.rows.value = rows;
     W.macros.value = macros;
@@ -185,7 +226,7 @@ export async function moreRows(count = 50): Promise<boolean> {
   try {
     next = await engine.call("browse", { offset: from.offset + from.rows.length, limit: count });
   } catch {
-    return false;   // no engine, or it was reset meanwhile
+    return false; // no engine, or it was reset meanwhile
   }
   if (W.rows.value !== from || "error" in next || !next.rows.length) return false;
   // rows of other data (a run ended, and its refreshData() has not answered yet) do not continue these
@@ -196,7 +237,7 @@ export async function moreRows(count = 50): Promise<boolean> {
 
 /** "Clear log": the log and the graphs, not the data. A run in progress keeps its text item, so its log still arrives. */
 export function clearLog() {
-  W.log.value = W.log.value.filter(i => i.t === "text" && i.streaming);
+  W.log.value = W.log.value.filter((i) => i.t === "text" && i.streaming);
   W.graphs.value = [];
   S.graphIndex.value = 0;
   graphCount = 0;

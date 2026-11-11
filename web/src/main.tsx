@@ -12,20 +12,20 @@
 // app/engine.ts's open() starts.
 import "./styles/ui.css";
 import "./styles/app.css";
-import { render } from "preact";
 import { effect } from "@preact/signals";
-import { EngineClient } from "./engine/client.ts";
-import { tabLock } from "./engine/tab.ts";
-import * as S from "./app/state.ts";
+import { render } from "preact";
+import { App } from "./app/App";
+import { selection } from "./app/editor/commands.ts";
 import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
+import { brotli, snapshotStart, testMode } from "./app/env";
 import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
-import { selection } from "./app/editor/commands.ts";
+import * as S from "./app/state.ts";
+import { store } from "./app/store.ts";
 import { applyTheme } from "./app/theme.ts";
 import { watchViewport } from "./app/viewport.ts";
-import { store } from "./app/store.ts";
-import { brotli, snapshotStart, testMode } from "./app/env";
-import { App } from "./app/App";
+import { EngineClient } from "./engine/client.ts";
+import { tabLock } from "./engine/tab.ts";
 
 const here = (path: string) => new URL(`${import.meta.env.BASE_URL}${path}`, location.href).href;
 
@@ -37,7 +37,7 @@ const client = new EngineClient({
   // the snapshot start takes Pyodide's runtime from the page's own origin (public/pyodide/); ?snapshot=0 uses the CDN
   indexURL: snapshotStart ? here("pyodide/") : __PYODIDE__,
   store,
-  startFiles: here("start-files.json"),   // the build's list of start files, for cached(), download() and build(): the one statement of the build
+  startFiles: here("start-files.json"), // the build's list of start files, for cached(), download() and build(): the one statement of the build
   // the memory snapshot `npm run snapshot` builds; no fallback when it is missing or stale: the engine is `failed`, with the cause
   snapshot: snapshotStart ? here("snapshot/") : undefined,
   brotli,
@@ -46,16 +46,25 @@ const client = new EngineClient({
 applyTheme();
 // the layout follows the width: the phone's under 700 px (SPEC section 2)
 const narrow = matchMedia("(max-width: 699.98px)");
-const fit = () => { S.layout.value = narrow.matches ? "phone" : "desktop"; };
+const fit = () => {
+  S.layout.value = narrow.matches ? "phone" : "desktop";
+};
 fit();
 narrow.addEventListener("change", fit);
 // a phone's on-screen keyboard: .app sized to the area above it (app/viewport.ts)
 const viewport = watchViewport({ enabled: () => S.isPhone.value });
-effect(() => { S.isPhone.value; viewport.update(); });
+effect(() => {
+  S.isPhone.value;
+  viewport.update();
+});
 // the engine's state on <html>, for the tests and for CSS that needs it
-effect(() => { document.documentElement.dataset.engine = S.engine.value.s; });   // one of the machine's sixteen names
+effect(() => {
+  document.documentElement.dataset.engine = S.engine.value.s;
+}); // one of the machine's sixteen names
 // leaving with unsaved edits gets the browser's own warning (SPEC 3.2)
-addEventListener("beforeunload", e => { if (S.tabs.value.some(t => t.dirty)) e.preventDefault(); });
+addEventListener("beforeunload", (e) => {
+  if (S.tabs.value.some((t) => t.dirty)) e.preventDefault();
+});
 
 connectFiles(store);
 connectRun(handlers);
@@ -69,11 +78,21 @@ connectEngine({ client, lock: tabLock({ onLost: lost }), snapshot: snapshotStart
 // test calls start(). Without the flag the object does not exist. The store is blocked until the tab lock answers: wait
 // for `!store.blocked` before writing.
 if (testMode !== null) {
-  Object.assign(window, { __dofile: {
-    engine: client, store, start, persisted: () => S.persisted.value, engineBytes: S.engineBytes, state: S,
-    run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
-    breakRun, reset, selection, drops,
-  } });
+  Object.assign(window, {
+    __dofile: {
+      engine: client,
+      store,
+      start,
+      persisted: () => S.persisted.value,
+      engineBytes: S.engineBytes,
+      state: S,
+      run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
+      breakRun,
+      reset,
+      selection,
+      drops,
+    },
+  });
 }
 
 render(<App />, document.getElementById("app")!);

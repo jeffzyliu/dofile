@@ -5,18 +5,20 @@
 // scripts/build-id.ts, inputs()). Rebuild after changing the dofile wheel, a wheel in web/wheels/ or the pyodide version: a build
 // refuses a stale snapshot, and in development the page says "updated" (scripts/build-id.ts, staleness). Needs the network once
 // (micropip fetches openpyxl from PyPI); numpy and the rest come from node_modules/pyodide.
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
-import { installEngine } from "./install-engine.ts";
+import { bundle, inflate, makeOptions, makeSnapshot, patchAsm, zeroLibraryCopies } from "../src/engine/snapshot.ts";
 import { inputs } from "./build-id.ts";
-import { patchAsm, makeOptions, makeSnapshot, bundle, inflate, zeroLibraryCopies } from "../src/engine/snapshot.ts";
+import { installEngine } from "./install-engine.ts";
 
 const here = new URL("..", import.meta.url);
-const OUT = process.env.SNAPSHOT_OUT ? `${process.env.SNAPSHOT_OUT.replace(/\/*$/, "")}/` : fileURLToPath(new URL("public/snapshot/", here));
+const OUT = process.env.SNAPSHOT_OUT
+  ? `${process.env.SNAPSHOT_OUT.replace(/\/*$/, "")}/`
+  : fileURLToPath(new URL("public/snapshot/", here));
 // Python runs with PYTHONOPTIMIZE=2 by default: docstrings and `assert` statements are left out of everything imported or
 // compiled in it, in the snapshot and after the restore (the flag is part of the heap). Smaller heap. SNAPSHOT_STRIP_DOCS=0
 // builds without it.
@@ -26,17 +28,24 @@ const record = inputs();
 const pyodideDir = new URL("node_modules/pyodide/", here);
 
 const t0 = performance.now();
-const lap = what => console.log(`${((performance.now() - t0) / 1000).toFixed(1).padStart(5)} s  ${what}`);
+const lap = (what) => console.log(`${((performance.now() - t0) / 1000).toFixed(1).padStart(5)} s  ${what}`);
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 const patched = `${OUT}pyodide.asm.patched.mjs`;
-writeFileSync(patched, patchAsm(readFileSync(new URL("pyodide.asm.mjs", pyodideDir), "utf8"), { noTrampoline: process.env.SNAPSHOT_TRAMPOLINE !== "1" }));
+writeFileSync(
+  patched,
+  patchAsm(readFileSync(new URL("pyodide.asm.mjs", pyodideDir), "utf8"), {
+    noTrampoline: process.env.SNAPSHOT_TRAMPOLINE !== "1",
+  }),
+);
 const create = (await import(patched)).default;
 
 const py = await loadPyodide({ ...makeOptions(create), ...(stripDocs ? { env: { PYTHONOPTIMIZE: "2" } } : {}) });
-lap(`Pyodide started${stripDocs ? ` (docstrings and asserts stripped: sys.flags.optimize = ${py.runPython("import sys; sys.flags.optimize")})` : ""}`);
-await installEngine(py);   // the dofile wheel and the wheels of web/wheels/ (pyreadstat)
+lap(
+  `Pyodide started${stripDocs ? ` (docstrings and asserts stripped: sys.flags.optimize = ${py.runPython("import sys; sys.flags.optimize")})` : ""}`,
+);
+await installEngine(py); // the dofile wheel and the wheels of web/wheels/ (pyreadstat)
 lap("dofile and its dependencies installed");
 
 // import what a first run needs, and run a program in a throwaway engine so the lazily imported modules are loaded too
@@ -67,9 +76,13 @@ lap("imports done, program run");
 
 const saved = bundle(py, "/lib/python3.14/site-packages");
 const copies = zeroLibraryCopies(py);
-lap(`zeroed ${copies.zeroed} copies of native libraries in the heap (${(copies.bytes / 1e6).toFixed(1)} MB; ${copies.kept} left as they were)`);
+lap(
+  `zeroed ${copies.zeroed} copies of native libraries in the heap (${(copies.bytes / 1e6).toFixed(1)} MB; ${copies.kept} left as they were)`,
+);
 const snapshot = makeSnapshot(py);
-lap(`snapshot ${(snapshot.length / 1e6).toFixed(0)} MB, ${saved.index.length} files ${(saved.blob.length / 1e6).toFixed(0)} MB, ${saved.dso.length} libraries`);
+lap(
+  `snapshot ${(snapshot.length / 1e6).toFixed(0)} MB, ${saved.index.length} files ${(saved.blob.length / 1e6).toFixed(0)} MB, ${saved.dso.length} libraries`,
+);
 
 // Only the compressed files are written, and the page stores them compressed too. They end in .bin, not .br: servers
 // (vite preview, many hosts) send a .br file with Content-Encoding: br, the browser decodes it, and the cache would hold
@@ -77,16 +90,32 @@ lap(`snapshot ${(snapshot.length / 1e6).toFixed(0)} MB, ${saved.index.length} fi
 // (the two files in parallel); SNAPSHOT_QUALITY=5 makes a build in seconds that is about 25% bigger, for development.
 const quality = Number(process.env.SNAPSHOT_QUALITY ?? 11);
 const brotliCompress = promisify(zlib.brotliCompress);
-const compress = data => brotliCompress(data, { params: {
-  [zlib.constants.BROTLI_PARAM_QUALITY]: quality, [zlib.constants.BROTLI_PARAM_LGWIN]: 24, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } });
+const compress = (data) =>
+  brotliCompress(data, {
+    params: {
+      [zlib.constants.BROTLI_PARAM_QUALITY]: quality,
+      [zlib.constants.BROTLI_PARAM_LGWIN]: 24,
+      [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length,
+    },
+  });
 const [snapshotBr, bundleBr] = await Promise.all([compress(snapshot), compress(saved.blob)]);
-lap(`compressed with brotli quality ${quality}: snapshot ${(snapshotBr.length / 1e6).toFixed(1)} MB, bundle ${(bundleBr.length / 1e6).toFixed(1)} MB`);
+lap(
+  `compressed with brotli quality ${quality}: snapshot ${(snapshotBr.length / 1e6).toFixed(1)} MB, bundle ${(bundleBr.length / 1e6).toFixed(1)} MB`,
+);
 
 // Decode both with the decoder the page uses and compare, so a bad build fails here, not in a user's browser.
 const brotli = createRequire(import.meta.url)("brotli-wasm");
-for (const [name, packed, original] of [["snapshot", snapshotBr, snapshot], ["bundle", bundleBr, saved.blob]]) {
+for (const [name, packed, original] of [
+  ["snapshot", snapshotBr, snapshot],
+  ["bundle", bundleBr, saved.blob],
+]) {
   const back = inflate(brotli, new Uint8Array(packed), original.length);
-  if (Buffer.compare(Buffer.from(back.buffer, back.byteOffset, back.length), Buffer.from(original.buffer, original.byteOffset, original.length)) !== 0) {
+  if (
+    Buffer.compare(
+      Buffer.from(back.buffer, back.byteOffset, back.length),
+      Buffer.from(original.buffer, original.byteOffset, original.length),
+    ) !== 0
+  ) {
     throw new Error(`the decoded ${name} differs from the original`);
   }
 }
@@ -96,10 +125,16 @@ writeFileSync(`${OUT}heap.brotli.bin`, snapshotBr);
 writeFileSync(`${OUT}site-packages.brotli.bin`, bundleBr);
 writeFileSync(`${OUT}dso.json`, JSON.stringify(saved.dso));
 writeFileSync(`${OUT}files.json`, JSON.stringify(saved.index));
-writeFileSync(`${OUT}manifest.json`, JSON.stringify({
-  ...record,   // wheel, wheelHash, extraWheels, pyodide: a build compares them with its own (scripts/build-id.ts, staleness)
-  built: Date.now(), optimize: stripDocs ? 2 : 0,
-  files: { snapshot: { name: "heap.brotli.bin", raw: snapshot.length, size: snapshotBr.length },
-    bundle: { name: "site-packages.brotli.bin", raw: saved.blob.length, size: bundleBr.length } },
-}));
+writeFileSync(
+  `${OUT}manifest.json`,
+  JSON.stringify({
+    ...record, // wheel, wheelHash, extraWheels, pyodide: a build compares them with its own (scripts/build-id.ts, staleness)
+    built: Date.now(),
+    optimize: stripDocs ? 2 : 0,
+    files: {
+      snapshot: { name: "heap.brotli.bin", raw: snapshot.length, size: snapshotBr.length },
+      bundle: { name: "site-packages.brotli.bin", raw: saved.blob.length, size: bundleBr.length },
+    },
+  }),
+);
 lap(`written to ${OUT} (${((snapshotBr.length + bundleBr.length) / 1e6).toFixed(1)} MB compressed)`);

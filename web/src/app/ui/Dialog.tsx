@@ -19,14 +19,22 @@ import { useId, useLayoutEffect, useRef } from "preact/hooks";
 export interface DialogProps {
   title: ComponentChildren;
   children?: ComponentChildren;
-  actions?: ComponentChildren;          // the buttons, in the drawn order: the primary one last (right; first on a phone)
-  role?: "dialog" | "alertdialog";      // alertdialog: a question about something destructive, or an alert
-  onCancel?: () => void;                // Esc; leave out for a blocking dialog
+  actions?: ComponentChildren; // the buttons, in the drawn order: the primary one last (right; first on a phone)
+  role?: "dialog" | "alertdialog"; // alertdialog: a question about something destructive, or an alert
+  onCancel?: () => void; // Esc; leave out for a blocking dialog
   class?: string;
-  describedBy?: string;                 // id of the sentence that says what the dialog is about (default: none)
+  describedBy?: string; // id of the sentence that says what the dialog is about (default: none)
 }
 
-export function Dialog({ title, children, actions, role = "dialog", onCancel, class: cls = "", describedBy }: DialogProps) {
+export function Dialog({
+  title,
+  children,
+  actions,
+  role = "dialog",
+  onCancel,
+  class: cls = "",
+  describedBy,
+}: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const closing = useRef(false);
@@ -37,7 +45,10 @@ export function Dialog({ title, children, actions, role = "dialog", onCancel, cl
     const d = ref.current!;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!d.open) d.showModal();
-    (d.querySelector<HTMLElement>("[data-autofocus]") ?? d.querySelector<HTMLElement>("button:not([disabled]), [href], input"))?.focus();
+    (
+      d.querySelector<HTMLElement>("[data-autofocus]") ??
+      d.querySelector<HTMLElement>("button:not([disabled]), [href], input")
+    )?.focus();
     return () => {
       closing.current = true;
       if (d.open) d.close();
@@ -59,8 +70,15 @@ export function Dialog({ title, children, actions, role = "dialog", onCancel, cl
   };
 
   return (
-    <dialog ref={ref} class={`dialog ${cls}`} role={role === "alertdialog" ? "alertdialog" : undefined}
-      aria-labelledby={titleId} aria-describedby={describedBy} onCancel={onCancelEvent} onClose={onClose}>
+    <dialog
+      ref={ref}
+      class={`dialog ${cls}`}
+      role={role === "alertdialog" ? "alertdialog" : undefined}
+      aria-labelledby={titleId}
+      aria-describedby={describedBy}
+      onCancel={onCancelEvent}
+      onClose={onClose}
+    >
       <h2 id={titleId}>{title}</h2>
       {children}
       {actions && <div class="actions">{actions}</div>}

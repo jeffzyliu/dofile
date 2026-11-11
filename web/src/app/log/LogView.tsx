@@ -9,9 +9,24 @@ export function LogView() {
   return (
     <pre class="log" role="log" aria-label="Log">
       {log.value.map((item, i) => {
-        if (item.t === "text" || item.t === "note") return <span key={i} class={item.t === "note" ? "note" : undefined}>{item.text}</span>;
-        if (item.t === "runhead") return <span key={i} class="runhead">{item.run.kind === "file" ? "Run" : "Run selection"}</span>;
-        if (item.t === "graph") return <span key={i} class="glink">graph {item.n}</span>;
+        if (item.t === "text" || item.t === "note")
+          return (
+            <span key={i} class={item.t === "note" ? "note" : undefined}>
+              {item.text}
+            </span>
+          );
+        if (item.t === "runhead")
+          return (
+            <span key={i} class="runhead">
+              {item.run.kind === "file" ? "Run" : "Run selection"}
+            </span>
+          );
+        if (item.t === "graph")
+          return (
+            <span key={i} class="glink">
+              graph {item.n}
+            </span>
+          );
         return null;
       })}
     </pre>

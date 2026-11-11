@@ -9,15 +9,24 @@ import type { PyodideAPI } from "pyodide";
 const repo = fileURLToPath(new URL("../..", import.meta.url));
 export const extraWheelsDir = `${repo}web/wheels`;
 
-export const newestWheel = (dir: string) => readdirSync(dir).filter(f => f.endsWith(".whl")).sort().at(-1);
+export const newestWheel = (dir: string) =>
+  readdirSync(dir)
+    .filter((f) => f.endsWith(".whl"))
+    .sort()
+    .at(-1);
 
 export async function installEngine(py: PyodideAPI, { dist = `${repo}dist`, pandas = false } = {}): Promise<string> {
   await py.loadPackage(pandas ? ["micropip", "pandas"] : "micropip", { messageCallback: () => {} });
   const names: string[] = [];
-  const put = (dir: string, name: string) => { py.FS.writeFile(`/tmp/${name}`, readFileSync(`${dir}/${name}`)); names.push(name); };
+  const put = (dir: string, name: string) => {
+    py.FS.writeFile(`/tmp/${name}`, readFileSync(`${dir}/${name}`));
+    names.push(name);
+  };
   const wheel = newestWheel(dist)!;
   put(dist, wheel);
-  for (const f of readdirSync(extraWheelsDir).filter(f => f.endsWith(".whl"))) put(extraWheelsDir, f);
-  await py.runPythonAsync(`import micropip; await micropip.install(${JSON.stringify(names.map(n => `emfs:/tmp/${n}`))})`);
+  for (const f of readdirSync(extraWheelsDir).filter((f) => f.endsWith(".whl"))) put(extraWheelsDir, f);
+  await py.runPythonAsync(
+    `import micropip; await micropip.install(${JSON.stringify(names.map((n) => `emfs:/tmp/${n}`))})`,
+  );
   return wheel;
 }
