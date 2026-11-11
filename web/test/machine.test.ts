@@ -77,6 +77,7 @@ const result = (rc: number): RunResult => ({
   error_line: null,
   graph_commands: [],
   graph_lines: [],
+  graph_themes: [],
 });
 
 // What the machine makes itself, written out here a second time.
@@ -94,6 +95,7 @@ const CUT = (error: string, kind: CutKind): RunResult => ({
   error_line: null,
   graph_commands: [],
   graph_lines: [],
+  graph_themes: [],
   kind,
 });
 const NO_ISOLATION =

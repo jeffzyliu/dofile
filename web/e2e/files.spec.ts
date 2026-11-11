@@ -46,6 +46,12 @@ const setDirty = (page: Page, path: string) =>
 const openTabs = (page: Page) =>
   page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.tabs.value.map((t) => t.path));
 
+/** Open the file actions menu: the Files head's "File actions"; on a phone the top bar's ⋯ on the Files view. */
+async function fileActions(page: Page, phone: boolean) {
+  await page.getByRole("button", { name: phone ? "More actions" : "File actions" }).click();
+  return page.getByRole("menu", { name: phone ? "More actions" : "File actions" });
+}
+
 test("the tree: folders first with their levels, sizes, folding by keyboard; Enter opens a file in a tab", async ({
   page,
 }) => {
@@ -175,6 +181,7 @@ test("rename in place: F2; a name in use keeps the field open with the reason; E
 
 test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the default; a folder's menu; Delete all files asks with the count", async ({
   page,
+  isMobile,
 }) => {
   await setUp(page, { "a.do": "1\n", "b.do": "2\n", "data/c.do": "3\n" });
   await row(page, /^b\.do/).focus();
@@ -203,22 +210,29 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
     "Delete…",
   ]);
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "File actions" }).click();
-  const head = page.getByRole("menu", { name: "File actions" });
-  await expect(head.getByRole("menuitem")).toHaveText([
-    "New .do file",
-    "New folder",
-    "Upload a folder",
-    "Download all (.zip)",
-    "Delete all files…",
-  ]);
+  // the file actions: the Files head's menu; on a phone that head is hidden and they are in the top bar's ⋯ on the Files view
+  const head = await fileActions(page, isMobile);
+  if (isMobile) {
+    await expect(page.locator(".files-pane > .pane-head")).toBeHidden();
+    for (const name of ["New .do file", "New folder", "Upload a folder", "Delete all files…"])
+      await expect(head.getByRole("menuitem", { name })).toBeVisible();
+    await expect(head.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveCount(1); // the ⋯'s own, not twice
+  } else {
+    await expect(head.getByRole("menuitem")).toHaveText([
+      "New .do file",
+      "New folder",
+      "Upload a folder",
+      "Download all (.zip)",
+      "Delete all files…",
+    ]);
+  }
   await head.getByRole("menuitem", { name: "Delete all files…" }).click();
   const all = page.getByRole("alertdialog", { name: "Delete all 2 files?" });
   await expect(all).toContainText("This removes every file dofile keeps in this browser. It can't be undone.");
   await expect(all.getByRole("button", { name: "Cancel" })).toBeFocused();
   await all.getByRole("button", { name: "Delete all" }).click();
   await expect(tree(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "File actions" }).click();
+  await fileActions(page, isMobile);
   await expect(page.getByRole("menuitem", { name: "Delete all files…" })).toHaveAttribute("aria-disabled", "true");
 });
 
@@ -332,7 +346,7 @@ test("Upload a folder keeps its folders (Chromium: Playwright gives a folder to 
   await expect(row(page, /^w\.csv/)).toHaveAttribute("aria-level", "3");
 });
 
-test("a drop on the Files pane: the pane is the drop target while a drag is over it, and the files are uploaded", async ({
+test("a drop anywhere on the page: the Files pane is marked while a drag is over the page, and the files are uploaded", async ({
   page,
 }) => {
   test.setTimeout(30_000);
@@ -346,7 +360,7 @@ test("a drop on the Files pane: the pane is the drop target while a drag is over
         w.__dt = new DataTransfer();
         w.__dt.items.add(new File(["display 1\n"], "dropped.do", { type: "text/plain" }));
       }
-      const target = document.querySelector(".files-pane .dropzone")!;
+      const target = document.querySelector(".editor-pane")!; // not the Files pane: a drop anywhere uploads
       target.dispatchEvent(new DragEvent(type, { dataTransfer: w.__dt, bubbles: true, cancelable: true }));
     }, type);
   await fire("dragenter");

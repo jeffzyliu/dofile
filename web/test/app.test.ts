@@ -100,6 +100,7 @@ const result = (more: object = {}) =>
     error_line: null,
     graph_commands: [],
     graph_lines: [],
+    graph_themes: [],
     files: [],
     ...more,
   }) as unknown as RunResult;
@@ -1480,6 +1481,26 @@ test("addFileGraph: the same .png opened again replaces its entry (new image, sa
   assert.equal(again.n, a.n);
   assert.equal(S.graphIndex.value, 0, "the reopened one is shown");
   assert.equal(S.graphs.value[S.graphIndex.value], again);
+});
+
+test("a run's graphs take the theme the engine drew each one in (light when its command names a color)", async () => {
+  await readyEngine();
+  S.theme.value = "dark";
+  const done = runCode("x", FILE);
+  client.run1.done.ok(
+    result({
+      images: ["A", "B"],
+      graph_commands: ["scatter y x", "scatter y x, mcolor(black)"],
+      graph_lines: [1, 2],
+      graph_themes: ["dark", "light"],
+    }),
+  );
+  await done;
+  assert.deepEqual(
+    S.graphs.value.map((g) => g.theme),
+    ["dark", "light"],
+  );
+  S.theme.value = "system";
 });
 
 test("addFileGraph: a .png gets the next number after the run's graphs; graphs keep the last 20, so look one up by n", async () => {

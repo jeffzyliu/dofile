@@ -149,6 +149,7 @@ export interface RunResult {
   // nested do-file, or rc 0
   graph_commands: string[]; // the command that drew each entry of `images`, same order
   graph_lines: (number | null)[]; // 1-based line of that command in the text sent; same order
+  graph_themes: ("light" | "dark")[]; // how each image was drawn: light whatever plot_theme says when its command names a color
   files?: FileChange[]; // what the after-run difference wrote to the store
   store_error?: string; // the store refused that write
   skipped?: string[]; // a run's files under a folder the page removed or renamed during the run

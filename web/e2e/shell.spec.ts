@@ -362,6 +362,7 @@ test("the folded file list: the Files button says what it does and how many file
   await expect(files).toHaveAttribute("aria-expanded", "true");
   await expect(pane).toBeVisible();
   await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("#files-pane")))).toBe(true);
+  await expect(pane.getByRole("tree").locator('[tabindex="0"]')).toBeFocused(); // the tree's row, not the head's menu
   await page.keyboard.press("Escape");
   await expect(pane).toBeHidden();
   await expect(files).toHaveAttribute("aria-expanded", "false");

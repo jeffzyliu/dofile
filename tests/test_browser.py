@@ -75,6 +75,7 @@ print(json.dumps(got))
     assert bad["rc"] == 111 and bad["error_line"] == 3
     assert graphs["graph_commands"] == ["scatter y y", "line y y"] and len(graphs["images"]) == 2
     assert graphs["graph_lines"] == [1, 2]
+    assert graphs["graph_themes"] == ["dark", "dark"]
     assert "".join(chunks).startswith(". display 1")
 
 

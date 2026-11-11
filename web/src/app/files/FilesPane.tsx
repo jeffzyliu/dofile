@@ -15,9 +15,9 @@
 //    folds the list at 700 to 1199 px leaves it), leaving the field renames when the name can be used. A name in use
 //    ("clean.do already exists here.") or one that cannot be used keeps the field open, marked aria-invalid, with the
 //    reason under it. "New .do file" makes `untitled.do` and opens it in inline rename (OQ-21), then in the editor.
-//  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the Files pane (the
-//    pane gets the accent outline while a drag is over it: data-drop, OQ-16). A drop elsewhere on the page does
-//    nothing (the browser would otherwise leave the page to show the file). actions.ts upload() asks each clash.
+//  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the page (SPEC 3.1; the
+//    Files pane gets the accent outline while a drag with files is over the page: data-drop, OQ-16; with the list
+//    folded away the files are uploaded all the same, and the toast says so). actions.ts upload() asks each clash.
 // Files change through the store (actions.ts), never through the worker; a change lists the store again (files.ts).
 import { signal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
@@ -147,7 +147,8 @@ const askDelete = (path: string) => {
   dialog.value = { d: "delete", paths: [path] };
 };
 
-/** The head menu "File actions" (S 13's caption). Exported for the phone's ⋯, should the shell put it there. */
+/** The head menu "File actions" (S 13's caption). On a phone the Files head is hidden and App.tsx puts these in the top
+ *  bar's ⋯ while the Files view is shown (less "Download all", which the ⋯ has itself). */
 export const fileMenuItems = (): MenuItem[] => [
   { label: "New .do file", onSelect: makeDoFile },
   { label: "New folder", onSelect: makeFolder },
@@ -374,7 +375,9 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
   );
 }
 
-/** The drop target: the whole Files pane (the closest .files-pane), outlined while a drag with files is over it. */
+/** A drop of files anywhere on the page uploads them (SPEC 3.1). The Files pane (the closest .files-pane) is outlined
+ *  while a drag with files is over the page (OQ-16); with the list folded away or on another phone view the upload still
+ *  happens, and the toast says so. */
 function useDrop(ref: { current: HTMLElement | null }) {
   useEffect(() => {
     const pane = ref.current?.closest<HTMLElement>(".files-pane");
@@ -408,23 +411,15 @@ function useDrop(ref: { current: HTMLElement | null }) {
       mark(false);
       send(fromDrop(entriesOf(e.dataTransfer))); // the entries are taken now: the items are gone after this handler
     };
-    // elsewhere on the page a drop of files does nothing, rather than the browser leaving the page to show the file
-    const elsewhere = (e: DragEvent) => {
-      if (withFiles(e)) e.preventDefault();
-    };
-    pane.addEventListener("dragenter", enter);
-    pane.addEventListener("dragover", over);
-    pane.addEventListener("dragleave", leave);
-    pane.addEventListener("drop", drop);
-    addEventListener("dragover", elsewhere);
-    addEventListener("drop", elsewhere);
+    addEventListener("dragenter", enter);
+    addEventListener("dragover", over);
+    addEventListener("dragleave", leave);
+    addEventListener("drop", drop);
     return () => {
-      pane.removeEventListener("dragenter", enter);
-      pane.removeEventListener("dragover", over);
-      pane.removeEventListener("dragleave", leave);
-      pane.removeEventListener("drop", drop);
-      removeEventListener("dragover", elsewhere);
-      removeEventListener("drop", elsewhere);
+      removeEventListener("dragenter", enter);
+      removeEventListener("dragover", over);
+      removeEventListener("dragleave", leave);
+      removeEventListener("drop", drop);
       mark(false);
     };
   }, []);

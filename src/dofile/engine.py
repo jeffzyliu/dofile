@@ -98,6 +98,7 @@ class Result:
     )
     graph_commands: list[str] = field(default_factory=list)  # the command that drew each entry of `images`
     graph_lines: list[int | None] = field(default_factory=list)  # and its first line in the code run (None: unknown)
+    graph_themes: list[str] = field(default_factory=list)  # "light" or "dark": how each entry of `images` was drawn
 
 
 def to_json(v: Any) -> Any:
@@ -312,10 +313,62 @@ def clear_break() -> None:
     brk.clear()
 
 
+def _color_option() -> re.Pattern:
+    """Matches a color option in a graph command's text, `mcolor(`, `lco(`, `color(`: every option of OpenDTA's layer
+    table that ends in "color", in each abbreviation the engine accepts. `color(` also finds a title's `color()`."""
+    from ._vendor.opendta.graphics.opts import LAYER_OPTS
+
+    names = {
+        full[:n] for full, least in LAYER_OPTS.items() if full.endswith("color") for n in range(least, len(full) + 1)
+    }
+    longest_first = "|".join(sorted(names, key=len, reverse=True))
+    return re.compile(rf"\b(?:{longest_first})\s*\(")
+
+
+def _has_color(value) -> bool:
+    """Whether a graph's description holds a color anywhere: a key that ends in "color" with a value."""
+    if isinstance(value, dict):
+        return any((str(k).endswith("color") and bool(v)) or _has_color(v) for k, v in value.items())
+    if isinstance(value, (list, tuple)):  # lists of numbers (the data) hold none: only look inside containers
+        return any(_has_color(v) for v in value if isinstance(v, (dict, list, tuple)))
+    return False
+
+
+def _names_color(g, command: str) -> bool:
+    """Whether the command that drew graph `g` chose a color itself (`mcolor(black)`, `lcolor(navy)`). Such a color is
+    picked for a light background and can vanish on a dark one, so the graph is drawn light whatever the theme. The
+    engine sees the command as written, so: a color option in its text counts; when the text holds a macro (the options
+    may be inside it), any color in the graph's description counts, also one OpenDTA set itself (a reference line). A
+    graph drawn inside a program is judged by the line that called the program."""
+    global _COLOR_OPTION
+    if _COLOR_OPTION is None:
+        _COLOR_OPTION = _color_option()
+    if _COLOR_OPTION.search(command):
+        return True
+    if "`" not in command and "$" not in command:
+        return False
+    return any(
+        _has_color(part)
+        for graph in _graphs(g)
+        for part in (graph.opts, graph.data, [ly.style for p in graph.panels for ly in p.layers])
+    )
+
+
+def _graphs(g):
+    """A graph and the graphs combined in it."""
+    yield g
+    for child in getattr(g, "children", []):
+        if hasattr(child, "panels"):
+            yield from _graphs(child)
+
+
+_COLOR_OPTION: re.Pattern | None = None
+
+
 def _png(g, theme: str | None = None) -> bytes | None:
     """The graph as a PNG. theme="dark": every graph whose scheme maps to OpenDTA's color scheme (the default,
     s2color or s1color named, or an unknown name) is drawn in OpenDTA's dark scheme (dark background, light text, axes
-    and grid); the mono schemes and the dark one are drawn as they are."""
+    and grid); the mono schemes and the dark one are drawn as they are. Engine.run passes no theme for a graph whose command names a color."""
     import io
 
     from ._vendor.opendta.graphics import render, scheme
@@ -512,7 +565,13 @@ class Engine:
         log = self._capture.text  # built once: it joins up to 2 MB
         failed = _failed_command(log) if rc else None
         shown = list(zip(store.drawn, store.commands))[-MAX_IMAGES:] if images else []
-        drawn = [(png, cmd) for png, cmd in ((_png(g, plot_theme), cmd) for g, cmd in shown) if png]
+        # a graph whose command names a color is drawn light whatever the theme (_names_color)
+        themes = [None if plot_theme == "dark" and _names_color(g, cmd[0]) else plot_theme for g, cmd in shown]
+        drawn = [
+            (png, cmd, "dark" if theme == "dark" else "light")
+            for png, cmd, theme in ((_png(g, theme), cmd, theme) for (g, cmd), theme in zip(shown, themes))
+            if png
+        ]
         d = self.session.data
         result = Result(
             _annotate_refusals(log),
@@ -523,10 +582,11 @@ class Engine:
             d.nobs,
             len(d.names),
             len(store.drawn),
-            [png for png, _ in drawn],
+            [png for png, _, _ in drawn],
             error_line=self._error_line() if rc else None,
-            graph_commands=[text for _, (text, _) in drawn],
-            graph_lines=[line for _, (_, line) in drawn],
+            graph_commands=[text for _, (text, _), _ in drawn],
+            graph_lines=[line for _, (_, line), _ in drawn],
+            graph_themes=[theme for _, _, theme in drawn],
         )
         store.clear_drawn()  # don't keep graphs alive past the call
         self._frames.clear()

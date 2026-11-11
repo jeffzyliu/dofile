@@ -17,7 +17,9 @@
 //  area above it, the tab bar is hidden, and the toast sits above the command line there (viewport.ts, app.css). Text
 //  fields are 16 px or more on a phone (app.css), so iOS does not zoom in on focus: 4b's command line and editor too.
 //
-// Each step 4 part edits only its own files; this file only places them and is not edited in step 4. Per part: the files,
+// Each step 4 part edits only its own files; this file only places them (two changes were made here when 4a was joined,
+// on the maintainer's word: the phone's ⋯ holds 4a's fileMenuItems on the Files view, whose head app.css hides on a
+// phone, and the unfolded file list gives the focus to the tree's row). Per part: the files,
 // the signals it writes (state.ts), what it calls, and the slots here it fills. Every part reads any signal.
 // Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8):
 //  - `engine` has the machine's sixteen state names (types.ts EngineState): the page load is `checking-lock`, then
@@ -94,7 +96,7 @@ import { StatusBar } from "./editor/StatusBar";
 import { ABOUT, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
-import { FilesBody, FilesHead } from "./files/FilesPane";
+import { FilesBody, FilesHead, fileMenuItems } from "./files/FilesPane";
 import { downloadAll } from "./files.ts";
 import { CommandLine, LogActions, logMenuItems, PhoneStrip } from "./log/CommandLine";
 import { LogView } from "./log/LogView";
@@ -144,7 +146,9 @@ const moreItems = (): MenuItem[] => [
 ];
 
 /** The phone's ⋯ menu: Save and the theme (OQ-14); on the Log view the Log head's Find and Download log (4b's
- *  logMenuItems), since the phone hides that head; then the desktop's items. Theme cycles and keeps the menu open. */
+ *  logMenuItems) and on the Files view the Files head's "File actions" (4a's fileMenuItems), since the phone hides
+ *  those heads; then the desktop's items. Theme cycles and keeps the menu open. */
+const isDownloadAll = (i: MenuItem) => i !== "rule" && i.label === "Download all (.zip)"; // the ⋯ has its own
 const phoneMoreItems = (): MenuItem[] => [
   {
     label: "Save",
@@ -162,6 +166,7 @@ const phoneMoreItems = (): MenuItem[] => [
     keepOpen: true,
   },
   ...(phoneTab.value === "log" ? logMenuItems() : []),
+  ...(phoneTab.value === "files" ? [...fileMenuItems().filter((i) => !isDownloadAll(i)), "rule" as const] : []),
   {
     label: "Download all (.zip)",
     disabled: !hasFiles.value,
@@ -244,7 +249,11 @@ function foldFiles(open: boolean) {
     setTimeout(() => {
       // after the render that shows the pane
       const pane = document.getElementById("files-pane");
-      (pane?.querySelector<HTMLElement>('[tabindex="0"], button:not([disabled]), [href], input') ?? pane)?.focus();
+      (
+        pane?.querySelector<HTMLElement>('[role="tree"] [tabindex="0"]') ??
+        pane?.querySelector<HTMLElement>("button:not([disabled]), [href], input") ??
+        pane
+      )?.focus();
     });
 }
 

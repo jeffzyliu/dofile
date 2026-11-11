@@ -15,6 +15,14 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   to 3.14): the lint gates; `npm test` (212 pass); e2e (74 passed, 22 skipped); `uv run poe ci` (1443 passed, 13 skipped, 3
   xfailed); the design checks. The branch `prototype1-step3` and its worktree are no longer needed. **Next: step 4, parts 4a
   and 4c first.** The bullets below about steps 3 and 3.5 are the record of that work as it stood on the branch.
+- **Step 4 is built on one branch, `prototype1-step4`, with one pull request at the end** (a merge to `main` deploys the
+  page, so the parts are not merged one by one). **4a and 4c are built and joined on it** (4c, then 4a rebased on it),
+  with these decisions of 2026-11-11: on a phone the Files head is hidden and the file actions are in the top bar's ⋯;
+  the unfolded file list gives the focus to the tree's row; a drop of files anywhere on the page uploads them; a graph
+  whose command names a color is drawn light in the dark theme (`RunResult.graph_themes`). Checked on the branch:
+  `uv run poe lint`, `npm run check`, `npm run lint:strict`; `uv run poe test` (1347 passed, 13 skipped, 3 xfailed);
+  `npm test` (243 pass, none skipped); the e2e suite (126 passed, 26 skipped). **Next: 4b and 4d, when the maintainer
+  says so.** The draft words of 4a and 4c wait for the maintainer's approval (SPEC section 8, "As built").
 - **Steps 0, 1 and 2 are merged into `main`**. Checked on `main` after step 2 merged: `uv run poe test` (1346
   passed), `npm run check`, `npm test` (98 tests), `npm run e2e` (56 passed).
 - **Step 3.5 is done: the engine code made clear and auditable** (TypeScript everywhere, one state machine, one build
@@ -177,9 +185,9 @@ Decided in the step 2 review:
     from the page's origin, the cache-first fetch during the start).
   - Not fixed in step 3: between 700 px and about 855 px wide at a 20 px default font size, the toolbar scrolls sideways
     instead of fitting (its compact form starts below 56em).
-- **Step 4a:** on a phone the Files view shows the pane head "FILES" right under the top bar's "Files" title. The
-  maintainer does not want both. Decide where the file actions (`FilesHead`) go on a phone, then drop or restyle that head;
-  it needs a change in the shell (`App.tsx` or `app.css`), so propose it to the maintainer.
+- **Step 4a:** on a phone the Files view showed the pane head "FILES" right under the top bar's "Files" title. Decided
+  and done (2026-11-11): the head is hidden on a phone and the file actions are in the top bar's ⋯ on the Files view
+  (`App.tsx` `phoneMoreItems`, `app.css`). Also decided: a drop of files anywhere on the page uploads them.
 - **Step 4b:** a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
   and give it no error mark. Put each "graph n" link after the echo on line `graph_lines[i]`, not by matching the text.
   From the second review of step 3: the toast's offset on a phone (`app.css` puts it above the command line and the tab
@@ -195,8 +203,9 @@ Decided in the step 2 review:
   link until the landing page exists: check the button once it does (and that the e2e tab-lock test's request still
   matches the page's path).
 - **Step 4c:**
-  - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decide whether to
-    draw such a graph light, or accept it.
+  - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decided
+    (2026-11-11): such a graph is drawn light. `engine.py` `_names_color` looks for a color option in the command's text
+    (and, when the text holds a macro, for any color in the graph); `RunResult.graph_themes` tells the page.
   - Three graphs from one loop share one label and alt text (`graph_commands` is the unexpanded command). Add the graph
     number to the alt text.
   - `browse` returns string cells whole (a strL can be thousands of characters with newlines). Cut long cells in the grid.

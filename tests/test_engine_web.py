@@ -338,6 +338,28 @@ def test_dark_plot_theme_changes_only_the_inline_images(eng, tmp_path):
     assert _corner(mono.images[0]) > 0.9
 
 
+def test_a_graph_whose_command_names_a_color_is_drawn_light_in_the_dark_theme(eng):
+    lines = [
+        "scatter y x",  # no color named: dark
+        "scatter y x, mcolor(black)",  # a color option: light
+        "scatter y x, mco(navy)",  # abbreviated, as far as the engine accepts it
+        'scatter y x, title("t", color(red))',  # a title's color
+        "local opts lcolor(navy)",
+        "line y x, `opts'",  # the option is inside a macro: the graph itself holds a color
+    ]
+    code = "\n".join(lines)
+    r = eng.run(code, images=True, plot_theme="dark")
+    assert r.rc == 0
+    assert r.graph_themes == ["dark", "light", "light", "light", "light"]
+    assert [_corner(png) > 0.9 for png in r.images] == [False, True, True, True, True]
+    assert eng.run("local n 1\nscatter y x if x > `n'", images=True, plot_theme="dark").graph_themes == [
+        "dark"
+    ]  # a macro, no color
+    light = eng.run("scatter y x\nscatter y x, mcolor(black)", images=True, plot_theme="light")
+    assert light.graph_themes == ["light", "light"]
+    assert eng.run("scatter y x", images=True).graph_themes == ["light"]  # no theme asked for
+
+
 # -- describe_file ------------------------------------------------------------------------------------------------------
 
 

@@ -174,7 +174,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Empty** (`S 16`): "No graphs yet" / "Graphs drawn by a run appear here, for example `scatter wage educ`. A .png from the
   file list opens here too."
 - **Calls:** `RunResult.images` (base64 PNG, the last 5 a run drew at most; `new_graphs` counts all). Every run sends
-  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors. Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
+  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors. A graph whose command names a color itself (`mcolor(black)`, `lcolor(navy)`) is drawn light in both themes, since such a color is picked for a light background (decided 2026-11-11); `RunResult.graph_themes` says how each image was drawn, and the card follows it. Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
 
 ### 3.8 Data tab and Browse (P1, step 4c)
 - **Tab** (`P/Data`): facts ("500 obs", "3 vars", "from data/wages.dta", "6 KB in memory"); the field "Filter variables"; a
@@ -633,6 +633,8 @@ interface RunResult {
   graph_commands: string[];                      // new (OQ-3): the command that drew each entry of `images`, same order
   graph_lines: (number | null)[];                // new (OQ-3): 1-based line of that command in the text sent (the calling
                                                  // line for a program, the `do` line for a nested file); same order
+  graph_themes: ("light" | "dark")[];            // new (step 4): how each image was drawn; "light" whatever plot_theme
+                                                 // says when the graph's command names a color (mcolor(black)); same order
   files?: FileChange[];                          // new: what the after-run difference wrote to the store
   store_error?: string;                          // new: the store refused that write
   skipped?: string[];                            // new: files the run made or changed strictly under a folder the page
@@ -647,7 +649,7 @@ interface FileChange { name: string; status: "created" | "modified" | "removed";
 type CutKind = "break" | "crash" | "user" | "stopped" | "run-failed";   // why the machine cut a run (a reset, another tab, a failed op)
 // A run cut by a reset resolves, from the state machine (cutResult), as { rc: 9998, error: "session reset: <reason>. Data in memory is gone;
 // your files are kept.", error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [],
-// error_line: null, graph_commands: [], graph_lines: [], kind }.
+// error_line: null, graph_commands: [], graph_lines: [], graph_themes: [], kind }.
 interface Variable { name: string; type: string; format: string; label: string | null; value_label: string | null }
 type DataSummary = { nobs: number; nvars: number; matched: number; offset: number; variables: Variable[]; more: number;
                      filename: string | null } | { error: string };
@@ -916,7 +918,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
     are written first, then each clash is asked; what the clash dialog shows beyond the `dialog` value is
     `clashNow()`, its answer `answerClash()`), both tested in Node (`web/test/files-ui.test.ts`). `FilesPane.tsx` exports
-    `fileMenuItems()` (the head menu) for a phone ⋯. "Restore the sample" is not in the head menu until step 5's sample
+    `fileMenuItems()` (the head menu); on a phone the Files pane's head is hidden (the top bar already says "Files") and
+    `App.tsx` puts those items in the top bar's ⋯ while the Files view is shown, as it does the Log head's (decided
+    2026-11-11). A drop of files anywhere on the page uploads them (3.1); the Files pane is outlined meanwhile (OQ-16).
+    When the folded list is opened (700 to 1199 px) the focus goes to the tree's row in the tab order. "Restore the sample" is not in the head menu until step 5's sample
     exists (OQ-13 puts it above "Delete all files…"). A new folder is `folder` (`folder-2`, ...) in inline rename. The
     phone's `FileSwitcher` is one button as wide as the title in every state ("Editor" with no open file, so the top
     bar's boxes never move); its menu lists the open files, then "Close <name>" (the phone has no ×) and "Show all

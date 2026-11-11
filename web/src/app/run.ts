@@ -167,7 +167,7 @@ function addGraphs(r: RunResult, id: number, theme: "light" | "dark") {
   const added: Graph[] = r.images.map((png, i) => ({
     n: ++graphCount,
     png,
-    theme,
+    theme: r.graph_themes?.[i] ?? theme, // the engine draws a graph light when its command names a color
     from: "run",
     run: id,
     command: r.graph_commands[i],

@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-260-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-280-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -28,7 +28,7 @@ as of 2026-11-11, and drift as tests are added; the file lists are the source of
   `scripts/patches/`.
 - Safe expression evaluation: Stata expressions cannot reach Python.
 
-**2. Engine features added for the web demo** (`test_engine_web.py`, 32)
+**2. Engine features added for the web demo** (`test_engine_web.py`, 33)
 - Output streaming (`on_output`): batching, caps, truncation, failing receivers.
 - Error line numbers, including nested, included and earlier-run programs.
 - Which command made each graph, and the dark plot theme.
@@ -95,16 +95,16 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 260 tests)
+## Web (about 280 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 227)
+### Unit and integration (`node --test`, `web/test/`, 243)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
 
 | File | Count | Function |
 |---|---|---|
-| `app.test.ts` | 54 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, toasts; banners; theme; the phone keyboard. |
+| `app.test.ts` | 55 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, toasts; banners; theme; the phone keyboard. |
 | `files.test.ts` | 35 | Store and engine worker together: the journal, what a run changed, a worker that cannot open its store. |
 | `machine.test.ts` | 30 | State machine: the transition table, SPEC section 5 matching the code, invariants (stale events change nothing, one ticket issued once, one live worker), the race scenarios. |
 | `files-ui.test.ts` | 15 | The file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) on the page's store over fake-indexeddb: the tree's rows and names, opening each kind of file (SPEC 3.11), closing, renaming and deleting with open tabs, a folder's .zip, upload and its name clashes. |
@@ -118,9 +118,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 35 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 38 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 140 cases, of which 114 run and 26 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 152 cases, of which 126 run and 26 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list).
@@ -130,7 +130,7 @@ rename on the iPhone, which has no folded list).
   (the phone's file switcher), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
   open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
   clashes (Enter, Esc, "Do the same"), the unsaved-edits clash, a non-UTF-8 file's banner, a folder upload (Chromium),
-  a drop on the Files pane.
+  a drop anywhere on the page, the phone's file actions in the top bar's ⋯.
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
 - `engine.spec.ts` (3): runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start.
@@ -177,7 +177,7 @@ rename on the iPhone, which has no folded list).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (31 that run); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (34 that run); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
