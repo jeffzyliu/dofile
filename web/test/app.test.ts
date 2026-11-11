@@ -180,13 +180,29 @@ test("Stop download declines; Run then asks for a run, and runs once the engine 
   assert.equal(client.runs[0].options.fresh_locals, true);
 });
 
-test("a failed download goes on to start(); a failed start is `failed` with its cause, a second failure `failed-twice`", async () => {
+test("a failed download is `failed` (reason download) with no start; a failed start is `failed` with its cause, a second failure `failed-twice`", async () => {
   setUp();
   await engine.open();
   let started = engine.start();
-  client.downloading.no(Object.assign(new Error("offline"), { kind: "failed", reason: "download" }));
+  client.downloading.no(Object.assign(new Error("https://dofile.test/snapshot/heap.bin: 503"), { kind: "failed", reason: "download" }));
+  await started;
+  assert.equal(S.engine.value.s, "failed", "no offline start: a failed download ends there");
+  assert.equal(S.engine.value.reason, "download");
+  assert.equal(S.engine.value.message, engine.FAILED.download, "plain words for the visitor");
+  assert.equal(S.engine.value.detail, "https://dofile.test/snapshot/heap.bin: 503", "the cause, for a developer");
+  assert.equal(client.starts, 0, "start() is not called: no worker is made");
+  // whatever reason download() gives (a Cache that breaks, a build with no snapshot), the download failed
+  client.downloading = later();
+  started = engine.start();
+  client.downloading.no(Object.assign(new Error("the cache is broken"), { kind: "failed", reason: "unknown" }));
+  await started;
+  assert.deepEqual([S.engine.value.s, S.engine.value.reason, client.starts], ["failed", "download", 0]);
+
+  client.downloading = later();
+  started = engine.start();
+  client.downloading.ok({ cached: true });
   await tick();
-  assert.equal(S.engine.value.s, "starting", "start() reads what is cached");
+  assert.equal(S.engine.value.s, "starting");
   client.starting.no(Object.assign(new Error("no snapshot at /snapshot/"), { kind: "failed", reason: "download", name: "DownloadError" }));
   await started;
   assert.equal(S.engine.value.s, "failed");
@@ -417,7 +433,7 @@ test("start() runs only from none, asking, declined or failed; a second take-ove
   assert.equal(lock.asked.filter(o => o.steal).length, 1);
 });
 
-test("an updated site fails with reason \"updated\", from download() at once or from the worker's UpdatedError, in plain words; no message names ?snapshot=0", async () => {
+test("an updated site fails with reason \"updated\", from download() at once or from start() (kind updated), in plain words; no message names ?snapshot=0", async () => {
   setUp();
   await engine.open();
   let started = engine.start();
@@ -437,8 +453,8 @@ test("an updated site fails with reason \"updated\", from download() at once or 
     client.starting.no(Object.assign(new Error("it failed"), { kind: "failed", reason: "unknown", ...more }));
     return started;
   };
-  const stale = "the snapshot was built from a different build of dofile.whl than this page has: run `npm run snapshot` again";
-  await fail({ name: "UpdatedError", message: stale });
+  const stale = "dofile was updated: reload the page (the site's start files are of the wheel 0123456789ab, this page of ba9876543210; in development: `npm run snapshot`)";
+  await fail({ kind: "updated", message: stale });   // start()'s checkBuild, as on a restart
   assert.equal(S.engine.value.reason, "updated");
   assert.equal(S.engine.value.message, engine.UPDATED, "the plain words");
   assert.equal(S.engine.value.detail, stale, "the cause, for a developer");
@@ -454,7 +470,7 @@ test("an updated site fails with reason \"updated\", from download() at once or 
 
   setUp({ snapshot: false });
   await engine.open();
-  await fail({ name: "UpdatedError", message: stale });
+  await fail({ kind: "updated", message: stale });
   assert.deepEqual([S.engine.value.message, S.engine.value.detail], [engine.UPDATED, stale], "the same on the normal start");
 });
 

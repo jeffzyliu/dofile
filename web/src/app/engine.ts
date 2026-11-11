@@ -146,9 +146,9 @@ export function stopDownload() { downloading?.abort(); }
 const STARTABLE = new Set(["none", "asking", "declined", "failed"]);
 
 /** "Download 48 MB", "Try again", and every start the page makes: download() fills the cache, then start(). A download
- *  that fails other than by "Stop download" goes on to start(), which reads what is cached (offline, say) or fails
- *  itself; one that finds the site updated (kind "updated") is `failed` with reason "updated" at once. In any other
- *  state (a start or a run in progress, `failed-twice`, `other-tab`) it does nothing. */
+ *  that fails other than by "Stop download" is `failed` with reason "download" (no start, no worker); one that finds the
+ *  site updated (kind "updated") is `failed` with reason "updated". There is no offline start. In any other state (a
+ *  start or a run in progress, `failed-twice`, `other-tab`) it does nothing. */
 export async function start() {
   if (!STARTABLE.has(S.engine.value.s)) return;
   downloading?.abort();
@@ -169,13 +169,12 @@ export async function start() {
       S.say("Download stopped");
       return;
     }
-    if (err?.kind === "updated") {   // the page is older than the site: no start can work, only a reload
-      downloading = null;
-      attempt++;
-      failed(err);
-      return;
-    }
-    console.warn(`[dofile] download: ${err?.message ?? e}`);
+    // The page is older than the site ("updated": only a reload helps), or the download failed: no start can work.
+    downloading = null;
+    attempt++;
+    failed(err?.kind === "updated" ? err
+      : Object.assign(new Error(String(err?.message ?? e)), { kind: "failed", reason: "download", name: err?.name ?? "Error" }) as ClientError);
+    return;
   }
   if (downloading !== ac) return;
   downloading = null;
@@ -222,7 +221,7 @@ function ready(a: About) {
 }
 
 /** Why a start failed, from the error's kind, reason and name. */
-const reasonOf = (e: ClientError): FailReason => (e?.kind === "updated" || e?.name === "UpdatedError" ? "updated" : e?.reason ?? "unknown");
+const reasonOf = (e: ClientError): FailReason => (e?.kind === "updated" ? "updated" : e?.reason ?? "unknown");
 
 function failed(e: ClientError) {
   if (e?.kind === "stopped") return;   // another tab took over, or a second start: that one says what happens

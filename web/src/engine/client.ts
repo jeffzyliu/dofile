@@ -6,11 +6,11 @@
 //
 // Errors. Every error this client rejects with has a `kind`:
 //   "failed"        start() could not start the engine. `reason`: "no-wasm" | "download" | "memory" | "unknown"; `name` is
-//                   the worker's error name ("UpdatedError": the site was updated since the page loaded, reload;
-//                   "DownloadError": a start file did not arrive; "SnapshotError": the snapshot is damaged or unusable).
-//                   Also download(), with reason "download", when a file did not arrive as the build's list says.
+//                   the worker's error name ("DownloadError": a start file did not arrive; "SnapshotError": the snapshot is
+//                   damaged or unusable). Also download(), and start() before it makes a worker, with reason "download" when
+//                   the build's list or a file did not arrive as the list says.
 //   "failed-twice"  the worker failed twice before a start finished; it is not started again. `reason` as above.
-//   "updated"       download(): the site was updated since the page loaded; reload.
+//   "updated"       download() or start(): the build's list is of another build than the page (checkBuild); reload.
 //   "reset"         the call was cut by a restart. `reset`: "break" | "crash" | "user".
 //   "stopped"       the call was cut by stop(), or by a second start().
 //   "no-engine"     call() with no worker.
@@ -22,8 +22,8 @@
 // resolves with an rc 9998 result of kind "run-failed" and the worker's message as `error`. That worker is not restarted.
 import { isStorageRefusal, openCache } from "./snapshot.ts";
 import type { FileStore } from "./store.ts";
-import type { About, ClientError, CutKind, Downloaded, OpResults, PendingRow, Progress, ResetKind, RunOptions, RunResult, StartFiles,
-  Startup, StatusText } from "./types.ts";
+import type { About, ClientError, CutKind, Downloaded, MountArgs, OpResults, PendingRow, Progress, ResetKind, RunOptions, RunResult,
+  StartFiles, Startup, StatusText } from "./types.ts";
 
 /** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
 type Wheel = string | { name: string, bytes: Uint8Array };
@@ -91,12 +91,13 @@ export class EngineClient {
 
   // createWorker: () => a Worker (in the page: new Worker(new URL("./worker.ts", import.meta.url), {type: "module"}))
   // snapshot: the URL (ending in "/") of a snapshot built by scripts/make-snapshot.mjs, to start from instead of
-  // installing the packages; the worker refuses one that was built for another wheel.
+  // installing the packages. Its build (`built`, its two big files) comes from startFiles, which a snapshot start needs.
   // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.js), to compare them
   // extraWheels: more wheels installed after the dofile one (web/wheels/: pyreadstat), each a URL or {name, bytes} like `wheel`
-  // wheelHash: SHA-256 of the wheel; a snapshot whose manifest has another one was built from other code and is refused
+  // wheelHash: SHA-256 of the wheel; a build's list with another one is of other code and is refused (checkBuild)
   // store: the page's FileStore (store.js). While a worker exists, the store sends it each change the page makes.
-  // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download() needs it
+  // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download() and a
+  //   snapshot start() need it
   // onRestart(reason, started, kind): a new worker was started; kind is "break" (Break ran out of time, or the page
   //   cannot ask a run to stop), "crash" (the worker failed) or "user" (restart() was called); `started` is its start().
   //   It is called at once, before the cut run's promise resolves with rc 9998.
@@ -130,7 +131,8 @@ export class EngineClient {
     this.startup = null;   // where the last start's time went (worker.js, `startup`)
   }
 
-  // The build's list of start files: { built, wheelHash, files: [{ path, size, compressed, download }], size, compressed }.
+  // The build's list of start files: { built, wheelHash, snapshot, files: [{ path, size, compressed, download }], size,
+  // compressed } (scripts/start-files.mjs).
   // `path` is relative to the list's own URL; `size` is the file on disk and `compressed` what a host sends; `download`
   // marks the files download() fetches (the rest came with the page).
   // A list that cannot be fetched or read (offline, a host's error page) rejects with kind "failed", reason "download".
@@ -146,9 +148,19 @@ export class EngineClient {
     }
   }
 
+  // The one comparison of the page's build with the list's: the SHA-256 of the dofile wheel. A list of another build (the
+  // site was updated since the page loaded; in development, a snapshot older than the wheel) throws kind "updated".
+  // A page without a hash (some Node tests) skips it.
+  checkBuild(list: StartFiles): void {
+    if (this.wheelHash && list.wheelHash !== this.wheelHash) {
+      throw fail(`dofile was updated: reload the page (the site's start files are of the wheel ${String(list.wheelHash).slice(0, 12)}, ` +
+        `this page of ${this.wheelHash.slice(0, 12)}; in development: \`npm run snapshot\`)`, "updated");
+    }
+  }
+
   // Whether every file the build's list marks `download` is in the Cache `dofile-snapshot-<built>` of the list's build: the
   // page then starts without asking. False when it cannot tell (no snapshot start, no Cache API, the list cannot be fetched,
-  // offline too: the worker cannot start offline anyway, it fetches manifest.json fresh). Never rejects; writes nothing.
+  // offline too: no start works offline, since start() fetches the list). Never rejects; writes nothing.
   async cached(): Promise<boolean> {
     try {
       if (!this.snapshot || !this.caches) return false;
@@ -189,7 +201,7 @@ export class EngineClient {
     if (signal?.aborted) throw aborted(signal);
     const list = await this.startList(signal);
     if (!list.built) throw fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
-    if (this.wheelHash && list.wheelHash && list.wheelHash !== this.wheelHash) throw fail("dofile was updated: reload the page", "updated");
+    this.checkBuild(list);
     if (!this.caches) return { cached: false, why: "there is no Cache API here (not a secure context?)" };
     let cache: Cache;
     try {
@@ -246,11 +258,28 @@ export class EngineClient {
     return { cached: true, received, total };
   }
 
-  // Start a worker and the engine in it. A worker that is still there (a second start()) is ended first. If the start
-  // fails, the worker is ended, the store stops sending to it, and start() rejects (kind "failed" or "failed-twice").
+  // Start a worker and the engine in it. A worker that is still there (a second start()) is ended first. A snapshot start
+  // first fetches the build's list, fresh, and checks it (checkBuild): a list that does not arrive (kind "failed", reason
+  // "download") or is of another build (kind "updated") makes no worker. If the start fails, the worker is ended, the store
+  // stops sending to it, and start() rejects (kind "failed", "failed-twice" or "updated").
   async start(): Promise<About> {
     if (this.worker) this.end(fail(lost("the engine was started again"), "stopped"), null);
     if (!this.wasm) throw fail("this browser has no WebAssembly support", "failed", { reason: "no-wasm" });
+    // A stop() or another start() while the list is fetched takes the next number: this start then makes no worker.
+    const gen = this.gen = (this.gen ?? 0) + 1;
+    let mountArgs: MountArgs = { indexURL: this.indexURL, brotli: this.brotli };
+    if (this.snapshot) {   // the build's list, fresh: the worker gets the build's identity from it, and fetches no manifest
+      try {
+        const list = await this.startList();
+        if (!list.built) throw fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
+        this.checkBuild(list);   // first, as in download(): a list of another build is "updated", whatever it lacks
+        if (!list.snapshot) throw fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
+        mountArgs = { ...mountArgs, snapshot: this.snapshot, built: list.built, files: list.snapshot };
+      } catch (e) {
+        if (gen === this.gen) { this.store?.attach(null); throw e; }
+      }
+      if (gen !== this.gen) throw fail("the start was stopped before its worker existed", "stopped");
+    }
     this.interrupt = typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4));
     let worker: Worker;
     try {
@@ -295,14 +324,13 @@ export class EngineClient {
     };
     const onClosed = () => crashed("the browser closed the file storage", "the browser closed the file storage", "Error");
     this.store?.attach(send, { onClosed });
-    // Two steps (see worker.js). Calls the page makes after start() begins queue behind "mount" in the worker, so they
-    // can be made at once: they are answered before the engine has loaded.
+    // Two steps (see worker.js). Calls the page makes once the worker exists queue behind "mount" in the worker: they are
+    // answered before the engine has loaded. (A snapshot start makes the worker only after the list has arrived; a call
+    // before that rejects with kind "no-engine".)
     // If a restart happens during a step (mount, boot or startup), that step's answer is the new start()'s result and this
     // one ends with it.
-    const gen = this.gen = (this.gen ?? 0) + 1;
-    const wheelName = typeof this.wheel === "string" ? this.wheel.split("/").at(-1) : this.wheel.name;
     try {
-      const mounted = await this.call("mount", { indexURL: this.indexURL, snapshot: this.snapshot, wheelName, wheelHash: this.wheelHash, brotli: this.brotli });
+      const mounted = await this.call("mount", mountArgs);
       if (gen !== this.gen) return mounted as unknown as About;   // end() answered this step with the new start()
       const about = await this.call("boot", { wheel: this.wheel, extraWheels: this.extraWheels, interruptBuffer: this.interrupt });
       if (gen !== this.gen) return about;

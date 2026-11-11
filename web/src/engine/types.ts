@@ -11,6 +11,12 @@ export type StatusText = "downloading the engine" | "unpacking the engine" | "lo
 export type FromWorker = { id: number; result: unknown } | { id: number; error: string; name?: string } | { status: StatusText }
   | { id: number; log: string };   // a chunk of a running run's log
 
+/** `mount`'s arguments. A snapshot start has `snapshot` (the URL of its folder, ending in "/"), `built` (which names the
+ *  Cache, `dofile-snapshot-<built>`) and `files` (its two big files): all three from the build's list, start-files.json,
+ *  which the page has checked is of its own build. The worker fetches no manifest. `?snapshot=0` has none of the three. */
+export type MountArgs = { indexURL?: string; brotli?: string }
+  & ({ snapshot: string; built: number; files: SnapshotFiles } | { snapshot?: undefined; built?: undefined; files?: undefined });
+
 export interface About { dofile: string; engine: "OpenDTA"; engine_commit: string | null; engine_patches: string[]; stata_version: number }
 
 export interface Startup {                       // seconds; the fields depend on mode
@@ -82,9 +88,10 @@ export interface ClientError extends Error {
 export interface Progress { received: number; total: number }
 export type Downloaded = { cached: true; received: number; total: number } | { cached: false; why: string };
 
-/** The build's list of start files (start-files.json, scripts/start-files.mjs). */
+/** The build's list of start files (start-files.json, scripts/start-files.mjs): the one statement of the build. */
 export interface StartFiles {
   built: number; wheelHash: string; size: number; compressed: number;
+  snapshot: SnapshotFiles;                       // the snapshot's two big files, for `mount`
   files: { path: string; size: number; compressed: number; download: boolean }[];
 }
 
@@ -96,8 +103,11 @@ export interface PendingRow { op: "write" | "mkdir" | "remove" | "rename"; path:
 
 /** One big file of the snapshot: its name, its size decompressed (`raw`) and as stored (`size`, brotli). */
 export interface SnapshotFile { name: string; raw: number; size: number }
-/** public/snapshot/manifest.json: which build the snapshot belongs to. */
+/** The snapshot's two big files: the heap and the site-packages bundle. */
+export interface SnapshotFiles { snapshot: SnapshotFile; bundle: SnapshotFile }
+/** public/snapshot/manifest.json: which build the snapshot belongs to. A build artefact: scripts/start-files.mjs copies
+ *  `built`, `wheelHash` and `files` into start-files.json; the page and the worker never fetch it. */
 export interface SnapshotManifest {
   wheel: string; wheelHash: string; pyodide: string; built: number; optimize: 0 | 2;
-  files: { snapshot: SnapshotFile; bundle: SnapshotFile };
+  files: SnapshotFiles;
 }

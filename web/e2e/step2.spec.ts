@@ -10,7 +10,8 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { test, expect, startEngine } from "./fixtures";   // storage kept by default (fixtures.ts)
 
-type StartFiles = { built: number; wheelHash: string; compressed: number; files: { path: string; size: number; compressed: number; download: boolean }[] };
+type StartFiles = { built: number; wheelHash: string; compressed: number; files: { path: string; size: number; compressed: number; download: boolean }[];
+  snapshot: { snapshot: { name: string; raw: number; size: number }; bundle: { name: string; raw: number; size: number } } };
 type Progress = { received: number; total: number };
 type RunResult = { rc: number; log: string; images: string[] };
 type Handle = {
@@ -109,11 +110,15 @@ test("the page has no test hook unless the URL asks for it", async ({ page }) =>
   expect(await page.evaluate(() => typeof window.__dofile)).toBe("undefined");
 });
 
-test("download: the counts reach the total, abort keeps the finished files, and the start then uses the cached bytes", async ({ page, context, request, baseURL }) => {
+test("download: the counts reach the total, abort keeps the finished files, and the start then uses the cached bytes, with no manifest.json", async ({ page, context, request, baseURL }) => {
   const origin = new URL(baseURL!).origin;
   const list: StartFiles = await (await request.get("/start-files.json")).json();
   const wanted = list.files.filter(f => f.download).map(f => `/${f.path}`);
   expect(wanted.length).toBeGreaterThanOrEqual(8);   // the snapshot's five, the runtime's three, the brotli decoder
+  expect(list.files.map(f => f.path), "the snapshot's manifest is not a start file").not.toContain("snapshot/manifest.json");
+  expect(list.snapshot.snapshot.name).toBe(list.files.find(f => f.path.startsWith("snapshot/heap"))!.path.slice("snapshot/".length));
+  // The start takes the build's identity from the list: a request for the manifest would fail, and is looked for below.
+  await context.route("**/snapshot/manifest.json", route => route.abort());
   const urls = requests(context);
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
   await page.goto("/?test=manual");
@@ -167,6 +172,8 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   expect(await page.evaluate(() => window.__dofile.engine.startup?.fetched)).toBe("read from cache");
   const during = urls.slice(before).map(pathOf);
   for (const path of wanted) expect(during, `${path} was fetched again by the start`).not.toContain(path);
+  expect(urls.map(pathOf), "no request for the snapshot's manifest, at any point").not.toContain("/snapshot/manifest.json");
+  expect(during, "the start fetches the build's list, fresh").toContain("/start-files.json");
   expect(elsewhere(urls, origin)).toEqual([]);
 
   // and the engine it started works: native code, a graph, the file stored before it existed

@@ -11,7 +11,7 @@ import { openStore } from "./store.ts";
 import type { BrotliWasmType } from "brotli-wasm";
 import type { AppliedRun, FileStore, RunChange } from "./store.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
-import type { DescribeArgs, FileChange, FileInfo, Op, RunOptions, SnapshotFile, SnapshotManifest, StatusText, Startup, ToWorker }
+import type { DescribeArgs, FileChange, FileInfo, MountArgs, Op, RunOptions, SnapshotFile, SnapshotFiles, StatusText, Startup, ToWorker }
   from "./types.ts";
 
 /** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in for it (test/node-worker.ts). */
@@ -58,8 +58,6 @@ function describe(e: any): { message: string, name: string } {
   return { message: String(message), name: e?.name ?? "Error" };
 }
 const failedDownload = (message: string) => Object.assign(new Error(message), { name: "DownloadError" });
-// the page's code and the snapshot (or its files) are of different builds: the site was updated since the page loaded
-const updated = (message: string) => Object.assign(new Error(message), { name: "UpdatedError" });
 
 // a path from the page, relative to /work; it may not leave it
 function inRoot(path: string): string {
@@ -285,7 +283,9 @@ async function loadBrotli(): Promise<BrotliWasmType> {
   return (await import("brotli-wasm")).default;
 }
 
-async function loadFromSnapshot(base: string, indexURL: string | undefined, wheelName: string, wheelHash: string | undefined, io: Io,
+// `built` and `files` come from the build's list (start-files.json), which the page read and checked against its own build
+// before it made this worker: no manifest is fetched here.
+async function loadFromSnapshot(base: string, built: number, files: SnapshotFiles, indexURL: string | undefined, io: Io,
   brotliMode: string | undefined) {
   const t0 = performance.now();
   let last = t0;
@@ -302,23 +302,8 @@ async function loadFromSnapshot(base: string, indexURL: string | undefined, whee
     laps.push(`${what} ${s.toFixed(2)}s`); secs.push([what, s]); last = t;
   };
   status("downloading the engine");   // or reading it from the cache, when the page's download() or an earlier visit filled it
-  // the manifest is the one file that must be fresh: it says which build the cached files belong to
-  const manifest: SnapshotManifest = await (isFile ? fetchJSON(`${base}manifest.json`)
-    : fetch(`${base}manifest.json`, { cache: "no-cache" }).then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-  ).catch(e => {
-    throw failedDownload(`no snapshot at ${base}: run \`npm run snapshot\` in web/ (${e?.message ?? e})`);
-  });
-  if (manifest.wheel !== wheelName) {
-    throw updated(`the snapshot is for ${manifest.wheel} but the page has ${wheelName}: run \`npm run snapshot\` again`);
-  }
-  if (!manifest.files) throw updated("the snapshot is in an older format: run `npm run snapshot` again");
-  // The wheel's name stays the same while its code changes, so the name alone cannot tell a stale snapshot (it holds the old
-  // dofile code). A page without a hash (the Node tests) skips this.
-  if (wheelHash && manifest.wheelHash !== wheelHash) {
-    throw updated(`the snapshot was built from a different build of ${wheelName} than this page has: run \`npm run snapshot\` again`);
-  }
-  const { snapshot: snapFile, bundle: bundleFile } = manifest.files;
-  const cache = isFile ? undefined : await snapshotCache(manifest.built, refused);
+  const { snapshot: snapFile, bundle: bundleFile } = files;
+  const cache = isFile ? undefined : await snapshotCache(built, refused);
   const hadCache = Boolean(cache) && Boolean(await cache!.match(`${base}${snapFile.name}`));
   // from here to the end of the start, fetches read the cache first
   const fetches = isFile ? { failed: new Promise(() => {}), restore() {} } : watchFetch({ cache });
@@ -326,7 +311,7 @@ async function loadFromSnapshot(base: string, indexURL: string | undefined, whee
     // The two big files are kept in the cache as they were sent, compressed (about 42 MB, not 229), and decompressed here.
     const [snapPacked, dso, index, bundlePacked, create, brotli] = await Promise.all([
       fetchBytes(`${base}${snapFile.name}`, cache), fetchJSON(`${base}dso.json`, cache), fetchJSON(`${base}files.json`, cache),
-      fetchBytes(`${base}${bundleFile.name}`, cache), importLoader(`${base}pyodide.asm.patched.mjs`, cache, isFile, manifest.built),
+      fetchBytes(`${base}${bundleFile.name}`, cache), importLoader(`${base}pyodide.asm.patched.mjs`, cache, isFile, built),
       loadBrotli(),
     ]);
     lap(hadCache ? "read from cache" : "download");
@@ -380,14 +365,13 @@ function forget(path: string) {
 }
 
 const ops = {
-  async mount({ indexURL, snapshot, wheelName, wheelHash, brotli: brotliMode }:
-    { indexURL?: string, snapshot?: string, wheelName: string, wheelHash?: string, brotli?: string }) {
+  async mount({ indexURL, snapshot, built, files, brotli: brotliMode }: MountArgs) {
     if (!snapshot) status("loading Python");   // a snapshot start names its own steps (loadFromSnapshot)
     const io: Io = { stdout: l => console.log(l), stderr: l => console.warn(l) };
     fromSnapshot = Boolean(snapshot);
     const tRuntime = performance.now();
     if (snapshot) {
-      const { loaded, summary } = await loadFromSnapshot(snapshot, indexURL, wheelName, wheelHash, io, brotliMode);
+      const { loaded, summary } = await loadFromSnapshot(snapshot, built, files, indexURL, io, brotliMode);
       py = loaded;
       Object.assign(startup, { mode: "snapshot", ...summary });
     } else {

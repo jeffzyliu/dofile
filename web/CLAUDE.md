@@ -81,10 +81,11 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   everything while it starts (a cache-first `fetch`, the loader from a `blob:` URL): `docs/pyodide-snapshot.md`, "The start
   since prototype 1". `download()` is the Cache's only writer (it checks each file's size against the list); the worker
   never writes it.
-- **Errors from `client.js` carry a `kind`** (its header lists them); the worker answers `{id, error, name}`. Keep both when
+- **Errors from `client.ts` carry a `kind`** (its header lists them); the worker answers `{id, error, name}`. Keep both when
   adding a failure path: the page decides what to show from them, not from the text. A snapshot that cannot be used
-  throws a named error (`DownloadError`, `UpdatedError`, `SnapshotError`): `app/engine.js` decides by that name
-  (`UpdatedError` is reason "updated"), never by the text.
+  throws a named error in the worker (`DownloadError`, `SnapshotError`): `app/engine.ts` decides by that name, never by
+  the text. Another build of the site is `kind: "updated"`, from the client's `checkBuild` (in `download()` and in a
+  snapshot `start()`, before any worker is made); the worker fetches no `manifest.json` and compares no build.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`). A chunk that imports the worker's entry made
   iOS Safari run the entry twice (a `V.loadPackage` error with a snapshot start); see `docs/pyodide-snapshot.md`, "Debugging an
   iPhone 13".

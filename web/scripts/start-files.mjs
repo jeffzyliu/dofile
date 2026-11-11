@@ -18,27 +18,31 @@ function compressedSize(bytes) {
 }
 
 // `dir`: the folder the page is served from (dist/ after a build; public/ in dev, which has no page files).
-// Returns { built, wheelHash, files: [{ path, size, compressed, download }], size, compressed }:
+// Returns { built, wheelHash, snapshot, files: [{ path, size, compressed, download }], size, compressed }, the one statement
+// of the build: the page reads it, and gives the worker what it needs from it (client.js, start; the worker reads no manifest):
 //   built      the snapshot's build time (its manifest), which names the Cache the files are kept in; null: no snapshot
 //   wheelHash  SHA-256 of the dofile wheel the snapshot was built from: a page with another wheel is of an older build
+//   snapshot   the snapshot's two big files, { snapshot, bundle }, each { name, raw, size } (raw: decompressed; size: as
+//              stored, brotli), as in its manifest; null: no snapshot
 //   path       relative to the page
 //   size       bytes on disk, which is what a fetch counts
 //   compressed bytes a host sends
 //   download   true: download() fetches it into the Cache before the engine starts (the snapshot, the runtime, and the
 //              brotli decoder's .wasm, which the worker loads as it starts). false: it came with the page (index.html
-//              and the rest of assets/), or the start always fetches it fresh (the manifest).
+//              and the rest of assets/).
+// The snapshot's manifest.json is read here, at build time, and is not a start file: the start never fetches it.
 export function listStartFiles(dir) {
   const files = [];
   const add = (path, download) => {
     const bytes = readFileSync(`${dir}/${path}`);
     files.push({ path, size: bytes.length, compressed: compressedSize(bytes), download });
   };
-  let built = null, wheelHash = null;
+  let built = null, wheelHash = null, snapshot = null;
   if (existsSync(`${dir}/snapshot/manifest.json`)) {
     const manifest = JSON.parse(readFileSync(`${dir}/snapshot/manifest.json`, "utf8"));
     built = manifest.built ?? null;
     wheelHash = manifest.wheelHash ?? null;
-    add("snapshot/manifest.json", false);
+    snapshot = manifest.files ?? null;
     for (const name of [manifest.files?.snapshot.name, manifest.files?.bundle.name, "dso.json", "files.json", "pyodide.asm.patched.mjs"]) {
       if (name && existsSync(`${dir}/snapshot/${name}`)) add(`snapshot/${name}`, true);
     }
@@ -51,7 +55,7 @@ export function listStartFiles(dir) {
     }
   }
   const sum = key => files.reduce((n, f) => n + f[key], 0);
-  return { built, wheelHash, files, size: sum("size"), compressed: sum("compressed") };
+  return { built, wheelHash, snapshot, files, size: sum("size"), compressed: sum("compressed") };
 }
 
 // The page reads the download size from its own HTML, so the prompt has the number at load, offline too

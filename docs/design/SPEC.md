@@ -318,7 +318,7 @@ run one at a time in a queue, except `boot`. A file's bytes are transferred, not
 
 | Op | Args | Result | Errors | Needs | Owner after the file-store change |
 |---|---|---|---|---|---|
-| `mount` | `{indexURL, snapshot?, wheelName, wheelHash?, brotli?}` | none | no or stale snapshot (names `npm run snapshot`); a failed fetch | nothing | Worker. Loads Python, then copies the store into `/work` (no IDBFS). |
+| `mount` | `MountArgs`: `{indexURL?, brotli?}`, and for a snapshot start `{snapshot, built, files}` (the folder's URL; from `start-files.json`: the build id and the two big files, `{snapshot, bundle}`, each `{name, raw, size}`) | none | a failed fetch; a damaged file | nothing | Worker. Loads Python, then copies the store into `/work` (no IDBFS). It fetches no manifest: the page has checked the list's build (`checkBuild`) before it made the worker. |
 | `boot` | `{wheel, extraWheels, interruptBuffer}` | `About` | install or import failure | `mount` | Worker, outside the queue. |
 | `startup` | none | `Startup` | | `mount` | Worker. |
 | `run` | `{code, fresh_locals?, plot_theme?}` | `RunResult`; while it runs, `{id, log}` chunks | never rejects, except `busy` (rc 9998 comes from the client on a restart, on `stop()`, after the worker failed twice, with no worker, and when the run op failed in the worker: `kind: "run-failed"`, the worker stays) | engine | Worker. Then writes the run's difference to the store (section 7). |
@@ -345,20 +345,26 @@ callback (`run(code, {onLog, ...})`) and never settles the pending call.
 As built in step 2:
 - `download()` resolves `{cached: true, received, total}`, or `{cached: false, why}` (no Cache API, storage refused,
   `?snapshot=0`). On abort it rejects with an `AbortError` (the signal's reason when that is one) and no `kind`; every other
-  failure is a client error with a `kind` (an unreachable list: `failed`/`download`). It checks `wheelHash` before fetching
-  anything, fetches with `cache: "no-cache"`, and never caches a file whose byte count is not the listed size.
+  failure is a client error with a `kind` (an unreachable list: `failed`/`download`). It checks the list's build
+  (`checkBuild`, below) before fetching anything, fetches with `cache: "no-cache"`, and never caches a file whose byte count
+  is not the listed size.
   `download()` is the Cache's only writer: the worker only reads it, so a `start()` without `download()` fetches uncached.
-  The page calls `download()` before every start the user triggers (and goes on to `start()` if it fails, so an offline start
-  reads what is cached); `restart()` reads what is cached. `engineBytes()` reads the page's meta tag; `startList()` fetches
-  the list.
+  The page calls `download()` before every start the user triggers; if it fails (other than by "Stop download") the engine
+  is `failed` and `start()` is not called. There is no offline start. `restart()` reads what is cached, after the same fresh fetch of the list as any snapshot `start()`. `engineBytes()`
+  reads the page's meta tag; `startList()` fetches the list.
+- **One statement of the build:** `start-files.json`. `checkBuild(list)` is the one comparison of the page's build with
+  it (the wheel's SHA-256, compiled into the page); another build throws `kind: "updated"`. `download()` calls it, and so does
+  a snapshot `start()`, which fetches the list fresh before it makes a worker and passes `built` and the two big files in
+  `mount`'s arguments. The snapshot's `manifest.json` is a build artefact (read by `scripts/start-files.mjs` and the build
+  scripts); the page and the worker never fetch it.
 - `cached()` (step 3) resolves `true` when every file the list marks `download` is in `dofile-snapshot-<built>` (checked with
   `caches.has`, then `match`: it creates and deletes nothing), else `false`, and never rejects: `false` with no snapshot start,
-  no Cache API, or a list that cannot be fetched. Offline it is `false` (the worker cannot start offline anyway: it fetches
-  `manifest.json` fresh). `forgetDownload()` (step 3) deletes every `dofile-snapshot-*` Cache, logging any error; the
+  no Cache API, or a list that cannot be fetched (offline, say). `forgetDownload()` (step 3) deletes every `dofile-snapshot-*` Cache, logging any error; the
   controller calls it after a `failed-twice` whose reason is not `memory` or `no-wasm`.
 - `start()` ends any worker that exists first. A rejected `mount`, `boot` or `startup` ends the worker and detaches the store.
   A crash restarts once; a second error before a start finishes rejects `start()` with `kind: "failed-twice"`. A restart
-  during `mount`, `boot` or `startup` hands the pending start to the new worker. When the browser closes the database (site
+  during `mount`, `boot` or `startup` hands the pending start to the new worker. A `stop()`, a `restart()` or a second
+  `start()` while a snapshot start still fetches the list makes that first start reject with `kind: "stopped"`; it makes no worker. When the browser closes the database (site
   data cleared), the worker is restarted (`kind: "crash"`, "the browser closed the file storage"), under the same guard.
 - `stop(reason)` ends the worker for good (the tab lost the lock). `resetAt` is the time (epoch ms) the Break timer resets the
   engine, else null. A second `breakRun()` keeps the first deadline. Without `SharedArrayBuffer`, `breakRun()` restarts at once.
@@ -372,10 +378,9 @@ As built in step 2:
   with no `pending` row.
 - **Errors** are `Error`s with `kind`: `"failed"` (`start()` could not start, or a file did not arrive as listed; with
   `reason`: `"no-wasm" | "download" | "memory" | "unknown"`, and the worker's `name`), `"failed-twice"` (with `reason`),
-  `"updated"` ("dofile was updated: reload the page"), `"reset"` (a call cut by a restart; `reset` holds the restart kind),
-  `"stopped"` (cut by `stop()` or a second `start()`), `"no-engine"`, `"busy"`, `"op"` (the worker answered with an error;
-  `name`). The worker answers `{id, error, name}`. A snapshot of another build fails with `kind: "failed"`, `name:
-  "UpdatedError"`.
+  `"updated"` (from `download()` or `start()`: "dofile was updated: reload the page", then the cause), `"reset"` (a call cut
+  by a restart; `reset` holds the restart kind), `"stopped"` (cut by `stop()` or a second `start()`), `"no-engine"`, `"busy"`,
+  `"op"` (the worker answered with an error; `name`). The worker answers `{id, error, name}`.
 - **Status texts:** the snapshot start posts "downloading the engine" (again after `download()`: then it is a cache read),
   "unpacking the engine", "loading Python", "loading your files", "starting the engine". `?snapshot=0` posts "loading
   Python", "loading your files", "loading packages", "starting the engine". A failed fetch during the start ends it with a
@@ -710,9 +715,9 @@ export const announce: Signal<string>;           // the hidden live region: thro
   what a run sends as `plot_theme`), `graphFull`. Kept in localStorage: `dofile.theme`, `dofile.split`. Whether
   to ask before the download is read from the Cache, not stored.
 - **Engine controller choices.** It decides from an error's `kind`, `reason` and `name`, never its text. A `download()`
-  failure other than "Stop download" goes on to `start()` (section 6), so `downloading` reaches `failed` through
-  `start()`'s rejection; but `kind: "updated"` from `download()` is `failed` with reason "updated" at once, and so is a
-  start that fails with the worker's `UpdatedError`: 4d offers "Reload the page", keyed on the reason. The message of
+  failure other than "Stop download" is `failed` with reason "download" at once, with no `start()` and no worker (step
+  3.5 B; section 6); `kind: "updated"`, from `download()` or `start()`, is `failed` with reason "updated": 4d offers
+  "Reload the page", keyed on the reason. The message of
   reason "updated" says in plain words that the site has a newer version and the page must be reloaded (`UPDATED`), with
   no cause. The visitor's `message` is one fixed sentence per reason (`FAILED` in `engine.js`; `FAILED_TWICE` for
   `failed-twice`): what happened and what to do (try again, reload the page, close other tabs, another browser), with no

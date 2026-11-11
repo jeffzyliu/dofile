@@ -56,7 +56,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 |---|---|---|
 | 0 | Checkpoint: step 3 committed on `prototype1-step3` | done |
 | A | Convert to TypeScript, no behaviour change | done |
-| B | One build identity; no offline; a failed download is `failed` | not started |
+| B | One build identity; no offline; a failed download is `failed` | done |
 | C | The state machine in one file; the contracts enforced | not started |
 | D | The journal as the only channel; mtime only | not started |
 | E | Docs: SPEC sections 5 to 8, `web/CLAUDE.md`, `web-engine-data-flow.md` revised to the code as built | not started |

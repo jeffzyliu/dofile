@@ -32,7 +32,7 @@ const client = new EngineClient({
   // the snapshot start takes Pyodide's runtime from the page's own origin (public/pyodide/); ?snapshot=0 uses the CDN
   indexURL: snapshotStart ? here("pyodide/") : __PYODIDE__,
   store,
-  startFiles: here("start-files.json"),   // the build's list of start files, for download()
+  startFiles: here("start-files.json"),   // the build's list of start files, for download() and start(): the one statement of the build
   // the memory snapshot `npm run snapshot` builds; no fallback when it is missing or stale: the engine is `failed`, with the cause
   snapshot: snapshotStart ? here("snapshot/") : undefined,
   brotli,

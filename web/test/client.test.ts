@@ -42,7 +42,8 @@ const FILES: Record<string, [Uint8Array<ArrayBuffer>, string]> = {   // path -> 
   "pyodide/pyodide.asm.wasm": [content(8_000, 2), "application/octet-stream"],   // a host that does not know the type
   "snapshot/dso.json": [content(600, 3), "application/json"],
 };
-const LIST = { built: 777, size: 19_100, compressed: 13_300, files: [
+const LIST = { built: 777, size: 19_100, compressed: 13_300,
+  snapshot: { snapshot: { name: "heap.bin", raw: 40_000, size: 10_000 }, bundle: { name: "bundle.bin", raw: 900, size: 300 } }, files: [
   { path: "index.html", size: 500, compressed: 200, download: false },   // came with the page
   { path: "snapshot/heap.bin", size: 10_000, compressed: 10_000, download: true },
   { path: "pyodide/pyodide.asm.wasm", size: 8_000, compressed: 3_000, download: true },
@@ -207,7 +208,7 @@ test("forgetDownload(): every dofile-snapshot-* Cache is deleted, nothing else; 
 test("download: a list from another build than the page says so before anything is fetched", async () => {
   const caches = fakeCaches(), { fetch, calls } = fakeFetch();
   const eng = client(fetch, caches, { wheelHash: "the page's wheel", startFiles: { base: `${BASE}start-files.json`, ...LIST, wheelHash: "a newer wheel" } });
-  await assert.rejects(eng.download(), { kind: "updated", message: "dofile was updated: reload the page" });
+  await assert.rejects(eng.download(), { kind: "updated", message: /^dofile was updated: reload the page \(.*npm run snapshot/ });
   assert.deepEqual(calls, []);
   assert.deepEqual(await cached(caches), []);
   // the same wheel: fine
@@ -525,6 +526,76 @@ test("download: an abort with a reason of the caller's own still rejects as an A
     await assert.rejects(client(fakeFetch().fetch, fakeCaches(), { startFiles: `${BASE}start-files.json` }).download({ signal: early.signal }),
       (e: any) => e?.name === "AbortError" && !e.kind, `early: ${reason}`);
   }
+});
+
+// ---- the snapshot start: the build's identity from the list, in mount's arguments ----
+
+// A fetch that answers only the list, with `wheelHash` (or fails as offline, or waits for `hold`); `calls`: what was asked.
+function listFetch({ wheelHash = "w", offline = false, hold }: { wheelHash?: string, offline?: boolean, hold?: Promise<void> } = {}) {
+  const calls: [string, RequestCache | undefined][] = [];
+  const fetch = async (url: string, init: RequestInit = {}) => {
+    calls.push([url, init.cache]);
+    await hold;
+    if (offline) throw new TypeError("Failed to fetch");
+    return url === `${BASE}start-files.json` ? Response.json({ ...LIST, wheelHash }) : new Response("no", { status: 404 });
+  };
+  return { fetch: fetch as typeof globalThis.fetch, calls };
+}
+const snapshotStart = (fetch: typeof globalThis.fetch, store = fakeStore()) => scripted((m, post) => { starts(m, post); },
+  { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, wheelHash: "w", fetch, store, indexURL: "https://cdn.test/" });
+
+test("start (snapshot): the list, fetched fresh, gives mount the build id and the two big files; only the list is fetched, no manifest", async () => {
+  const { fetch, calls } = listFetch(), sent: Message[] = [];
+  const { eng, workers } = scripted((m, post) => { sent.push(m); starts(m, post); },
+    { snapshot: `${BASE}snapshot/`, startFiles: `${BASE}start-files.json`, wheelHash: "w", fetch, indexURL: "https://cdn.test/", brotli: "wasm" });
+  await eng.start();
+  assert.equal(workers.length, 1);
+  assert.deepEqual(sent.find(m => m.op === "mount")!.args,
+    { indexURL: "https://cdn.test/", brotli: "wasm", snapshot: `${BASE}snapshot/`, built: 777, files: LIST.snapshot });
+  assert.deepEqual(calls, [[`${BASE}start-files.json`, "no-cache"]], "the page fetches the list, fresh, and nothing else");
+  // ?snapshot=0: no list, no snapshot arguments
+  const normal = scripted((m, post) => { sent.push(m); starts(m, post); }, { fetch: listFetch().fetch, indexURL: "https://cdn.test/" });
+  await normal.eng.start();
+  assert.deepEqual(sent.filter(m => m.op === "mount").at(-1)!.args, { indexURL: "https://cdn.test/", brotli: undefined });
+});
+
+test("start (snapshot): a list of another build rejects with kind updated, and no worker is made", async () => {
+  const store = fakeStore();
+  store.attach((() => {}) as unknown as FileStore["post"]);   // as after a restart's end(): still attached to the old worker's sender
+  const { eng, workers } = snapshotStart(listFetch({ wheelHash: "a newer wheel" }).fetch, store);
+  await assert.rejects(eng.start(), { kind: "updated", message: /^dofile was updated: reload the page/ });
+  assert.equal(workers.length, 0, "no worker");
+  assert.equal(eng.worker, null);
+  assert.equal(store.post, null, "the store sends nothing");
+});
+
+test("start (snapshot): a list that does not arrive rejects (kind failed, reason download), and no worker is made", async () => {
+  const { eng, workers } = snapshotStart(listFetch({ offline: true }).fetch);
+  await assert.rejects(eng.start(), { kind: "failed", reason: "download" });
+  assert.equal(workers.length, 0);
+  const none = scripted(starts, { snapshot: `${BASE}snapshot/`, fetch: listFetch().fetch });   // a snapshot start with no list
+  await assert.rejects(none.eng.start(), { kind: "failed", reason: "unknown", message: /no snapshot in this build/ });
+  assert.equal(none.workers.length, 0);
+});
+
+test("start (snapshot): stop() or a second start() while the list is fetched: the first start makes no worker", async () => {
+  let open!: () => void;
+  const hold = new Promise<void>(ok => { open = ok; });
+  const stopped = snapshotStart(listFetch({ hold }).fetch);
+  const first = stopped.eng.start();
+  stopped.eng.stop("another tab took over");
+  open();
+  await assert.rejects(first, { kind: "stopped" });
+  assert.equal(stopped.workers.length, 0, "a tab that lost the lock starts no worker");
+
+  let open2!: () => void;
+  const hold2 = new Promise<void>(ok => { open2 = ok; });
+  const twice = snapshotStart(listFetch({ hold: hold2 }).fetch);
+  const a = twice.eng.start(), b = twice.eng.start();
+  open2();
+  await assert.rejects(a, { kind: "stopped" });
+  await b;
+  assert.equal(twice.workers.length, 1, "one worker, the second start's");
 });
 
 test("start: a worker that cannot be made fails with kind failed, reason unknown", async () => {
