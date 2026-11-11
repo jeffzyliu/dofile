@@ -1,12 +1,13 @@
-// The page's handle on the engine worker (worker.js): download(), start(), call(op, args), run(code, options), breakRun(),
-// keepWaiting(), restart(reason), stop(reason).
+// The page's handle on the engine worker (worker.js): cached(), download(), forgetDownload(), start(), call(op, args),
+// run(code, options), breakRun(), keepWaiting(), restart(reason), stop(reason).
 // Break works like the MCP server's: the interrupt buffer asks the engine to stop at the next safe point (rc 1, data
 // kept). If it hasn't stopped after graceMs, the worker is replaced (rc 9998: data in memory is gone, files stay), unless
 // keepWaiting() was called first. Without a SharedArrayBuffer (a page that isn't cross-origin isolated) Break can only restart.
 //
 // Errors. Every error this client rejects with has a `kind`:
 //   "failed"        start() could not start the engine. `reason`: "no-wasm" | "download" | "memory" | "unknown"; `name` is
-//                   the worker's error name ("UpdatedError": the site was updated since the page loaded, reload).
+//                   the worker's error name ("UpdatedError": the site was updated since the page loaded, reload;
+//                   "DownloadError": a start file did not arrive; "SnapshotError": the snapshot is damaged or unusable).
 //                   Also download(), with reason "download", when a file did not arrive as the build's list says.
 //   "failed-twice"  the worker failed twice before a start finished; it is not started again. `reason` as above.
 //   "updated"       download(): the site was updated since the page loaded; reload.
@@ -20,6 +21,12 @@
 // restart), "stopped", "failed-twice" or "no-engine"; a run whose op failed in the worker (no memory for its result, say)
 // resolves with an rc 9998 result of kind "run-failed" and the worker's message as `error`. That worker is not restarted.
 import { isStorageRefusal, openCache } from "./snapshot.js";
+/** @typedef {import("./types").RunResult} RunResult @typedef {import("./types").About} About
+ *  @typedef {import("./types").Startup} Startup @typedef {import("./types").OpResults} OpResults
+ *  @typedef {import("./types").Downloaded} Downloaded @typedef {import("./types").Progress} Progress
+ *  @typedef {import("./types").StartFiles} StartFiles @typedef {import("./types").CutKind} CutKind
+ *  @typedef {import("./types").ResetKind} ResetKind @typedef {import("./types").RunOptions} RunOptions
+ *  @typedef {import("./types").StatusText} StatusText @typedef {import("./types").ClientError} ClientError */
 
 export const RC_RESET = 9998;
 
@@ -30,6 +37,7 @@ const aborted = signal => (signal.reason?.name === "AbortError" ? signal.reason
 const lost = what => `session reset: ${what}. Data in memory is gone; your files are kept.`;
 
 // what a run that was cut resolves with: every RunResult field and no timing, plus `kind` (why)
+/** @type {(error: string, kind: CutKind) => RunResult} */
 const resetResult = (error, kind) => ({ rc: RC_RESET, error, error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0,
   images: [], error_line: null, graph_commands: [], graph_lines: [], kind });
 
@@ -42,6 +50,7 @@ function reasonOf({ name, message }) {
 
 // The download size for the prompt, in bytes as a host sends them: the build writes it into the page
 // (<meta name="dofile-engine-bytes">, vite.config.ts), so it is there at load, offline too. null: not a built page.
+/** @returns {number | null} */
 export function engineBytes(doc = globalThis.document) {
   const bytes = Number(doc?.querySelector('meta[name="dofile-engine-bytes"]')?.getAttribute("content"));
   return bytes > 0 ? bytes : null;
@@ -62,26 +71,48 @@ export class EngineClient {
   // onFileError(error, op, path): a change the page made to the store could not be put into the engine's folder; the
   //   folder then has the store's version, unless that failed too (the next start has it).
   // fetch, caches, wasm: the browser's, unless the tests give their own
+  /** @param {{ createWorker: () => Worker, wheel: string | { name: string, bytes: Uint8Array }, extraWheels?: any[],
+   *    wheelHash?: string, indexURL: string, snapshot?: string, brotli?: string, graceMs?: number,
+   *    onStatus?: (status: StatusText) => void,
+   *    onRestart?: (reason: string, started: Promise<About>, kind: ResetKind) => void,
+   *    onFileError?: (error: ClientError, op: string, path: string) => void,
+   *    store?: any, startFiles?: string | object, fetch?: typeof globalThis.fetch, caches?: CacheStorage,
+   *    wasm?: object }} options */
   constructor({ createWorker, wheel, extraWheels = /** @type {any[]} */ ([]), wheelHash, indexURL, snapshot, brotli, graceMs = 5000,
     onStatus = (_status) => {}, onRestart = (_reason, _started, _kind) => {}, onFileError = (_error, _op, _path) => {},
     store = /** @type {any} */ (null), startFiles = /** @type {any} */ (undefined),
     fetch = (...a) => globalThis.fetch(...a), caches = globalThis.caches, wasm = globalThis.WebAssembly }) {
     Object.assign(this, { createWorker, wheel, extraWheels, wheelHash, indexURL, snapshot, brotli, graceMs, onStatus, onRestart, onFileError,
       store, startFiles, fetch, caches, wasm });
+    // the callbacks, for the page's types; the engine controller (app/engine.js) sets its own after construction
+    /** @type {(status: StatusText) => void} */
+    this.onStatus = onStatus;
+    /** @type {(reason: string, started: Promise<About>, kind: ResetKind) => void} */
+    this.onRestart = onRestart;
     this.nextId = 0;
     this.pending = new Map();
+    /** @type {Promise<RunResult> | null} */
     this.running = null;
     this.errorRestarts = 0;
+    /** @type {Worker | null} */
     this.worker = null;
+    /** @type {any} */
     this.breakTimer = null;
+    /** @type {number | null} */
     this.resetAt = null;   // while Break counts down: the time (Date.now()) the engine is reset at
+    /** @type {string | null} */
     this.storeError = null;   // after a start: why the worker could not copy the files, if it could not
+    /** @type {About | null} */
+    this.about = null;     // what boot answered, after a start
+    /** @type {Startup | null} */
+    this.startup = null;   // where the last start's time went (worker.js, `startup`)
   }
 
   // The build's list of start files: { built, wheelHash, files: [{ path, size, compressed, download }], size, compressed }.
   // `path` is relative to the list's own URL; `size` is the file on disk and `compressed` what a host sends; `download`
   // marks the files download() fetches (the rest came with the page).
   // A list that cannot be fetched or read (offline, a host's error page) rejects with kind "failed", reason "download".
+  /** @param {AbortSignal} [signal] @returns {Promise<StartFiles & { base: string }>} */
   async startList(signal = undefined) {
     if (typeof this.startFiles !== "string") return { base: globalThis.location?.href, ...this.startFiles };
     try {
@@ -91,6 +122,34 @@ export class EngineClient {
     } catch (e) {
       if (signal?.aborted) throw aborted(signal);
       throw fail(`${this.startFiles}: ${e?.message ?? e}`, "failed", { reason: "download" });
+    }
+  }
+
+  // Whether every file the build's list marks `download` is in the Cache `dofile-snapshot-<built>` of the list's build: the
+  // page then starts without asking. False when it cannot tell (no snapshot start, no Cache API, the list cannot be fetched,
+  // offline too: the worker cannot start offline anyway, it fetches manifest.json fresh). Never rejects; writes nothing.
+  /** @returns {Promise<boolean>} */
+  async cached() {
+    try {
+      if (!this.snapshot || !this.caches) return false;
+      const list = await this.startList();
+      const name = `dofile-snapshot-${list.built}`;
+      if (!list.built || !(await this.caches.has(name))) return false;   // has() first: open() would make an empty one
+      const cache = await this.caches.open(name);
+      for (const f of list.files) if (f.download && !(await cache.match(new URL(f.path, list.base).href))) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Delete the start files download() kept (every `dofile-snapshot-*` Cache), so that the next page load downloads them
+  // fresh. The page calls it when a start failed twice for a reason the files may be at fault for. Never rejects.
+  async forgetDownload() {
+    try {
+      for (const name of (await this.caches?.keys()) ?? []) if (name.startsWith("dofile-snapshot-")) await this.caches.delete(name);
+    } catch (e) {
+      console.warn(`[dofile] could not delete the downloaded start files: ${e?.message ?? e}`);
     }
   }
 
@@ -104,6 +163,7 @@ export class EngineClient {
   // Cache that fails other than by refusing storage rejects with kind "failed", reason "unknown".
   // Resolves with { cached: true, received, total }, or { cached: false, why } when there is nothing to fill (no snapshot
   // start, no Cache API, storage refused): start() then downloads by itself, uncounted.
+  /** @param {{ onProgress?: (progress: Progress) => void, signal?: AbortSignal }} [options] @returns {Promise<Downloaded>} */
   async download({ onProgress = (_progress) => {}, signal = /** @type {any} */ (undefined) } = {}) {
     if (!this.snapshot) return { cached: false, why: "the normal start loads from the CDN" };
     if (signal?.aborted) throw aborted(signal);
@@ -168,6 +228,7 @@ export class EngineClient {
 
   // Start a worker and the engine in it. A worker that is still there (a second start()) is ended first. If the start
   // fails, the worker is ended, the store stops sending to it, and start() rejects (kind "failed" or "failed-twice").
+  /** @returns {Promise<About>} */
   async start() {
     if (this.worker) this.end(fail(lost("the engine was started again"), "stopped"), null);
     if (!this.wasm) throw fail("this browser has no WebAssembly support", "failed", { reason: "no-wasm" });
@@ -244,6 +305,8 @@ export class EngineClient {
     }
   }
 
+  /** @template {keyof OpResults} K @param {K} op @param {object} [args] @param {Transferable[]} [transfer] @param {object} [extra]
+   *  @returns {Promise<OpResults[K]>} */
   call(op, args = {}, transfer = [], extra = {}) {
     return new Promise((resolve, reject) => {
       if (!this.worker) return reject(fail("the engine is not running", "no-engine"));
@@ -257,6 +320,7 @@ export class EngineClient {
   // prints. The chunks are a preview: when the result comes, its `log` replaces them.
   // One run at a time: a second run() while one is in progress rejects (kind "busy"). With no worker it resolves with an
   // rc 9998 result (kind "no-engine").
+  /** @param {string} code @param {RunOptions & { onLog?: (text: string) => void }} [options] @returns {Promise<RunResult>} */
   run(code, { onLog = undefined, fresh_locals = undefined, plot_theme = undefined } = {}) {
     if (this.running) return Promise.reject(fail("a run is in progress", "busy"));
     if (!this.worker) return Promise.resolve(resetResult(lost("the engine is not running"), "no-engine"));
@@ -319,6 +383,7 @@ export class EngineClient {
   // Reset, and "Reset now": a new worker. A run in progress ends with rc 9998, other calls fail (kind "reset"). The files
   // come back from the store; the run that was cut wrote nothing to it. kind: "user" unless the client restarts by
   // itself ("break", "crash"). onRestart is called before this returns, so before the cut run's promise resolves.
+  /** @param {string} reason @param {ResetKind} [kind] @returns {Promise<About>} */
   async restart(reason, kind = "user") {
     if (kind !== "crash") this.errorRestarts = 0;
     let begin;
@@ -330,6 +395,7 @@ export class EngineClient {
   }
 
   // End the worker and start no new one (another tab took over). start() makes one again.
+  /** @param {string} reason */
   stop(reason) {
     this.gen = (this.gen ?? 0) + 1;
     this.errorRestarts = 0;

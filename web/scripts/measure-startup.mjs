@@ -9,7 +9,9 @@
 // caching for the hashed assets, the isolation headers, and the snapshot's .bin files as they are (already compressed).
 // `vite preview` does none of that and gives other numbers (docs/pyodide-snapshot.md). Pyodide's runtime and packages come from
 // the real jsDelivr CDN, throttled with the rest, so the unthrottled rows depend on this machine's connection.
-// The time is the page's own "ready in X s" (from the page's start to the engine being ready), as in the docs' table.
+// The time is from the page's start (performance.now() = 0) to <html data-engine="ready">, as in the docs' table: an init
+// script notes the moment the attribute changes. When the page asks first (the download prompt: nothing cached, and always with
+// ?snapshot=0), the same script presses Download at once through the test hook's start().
 import { createServer } from "node:http";
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { brotliCompressSync, constants } from "node:zlib";
@@ -70,23 +72,35 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 // ---- the measurements --------------------------------------------------------------------------------------------------------
 const browser = await chromium.launch();
+// In the page, before its own scripts: the moment <html data-engine> becomes ready, failed or failed-twice; Download pressed
+// at once when the page asks
+const watchEngine = () => {
+  new MutationObserver(() => {
+    const s = document.documentElement.dataset.engine;
+    if (s === "asking") window.__dofile.start();
+    if ((s === "ready" || s === "failed" || s === "failed-twice") && !window.__engineAt) window.__engineAt = { s, at: performance.now() };
+  }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-engine"] });   // <html> may not exist yet
+};
 const readyIn = async page => {
-  await page.locator("#status").filter({ hasText: /ready in [\d.]+ s|did not start/ }).waitFor({ timeout: 300_000 });
-  const text = (await page.locator("#status").textContent()) ?? "";
-  const m = text.match(/ready in ([\d.]+) s/);
-  if (!m) throw new Error(text);
-  return Number(m[1]);
+  await page.waitForFunction(() => window.__engineAt, null, { timeout: 300_000 });
+  const { s, at } = await page.evaluate(() => window.__engineAt);
+  if (s !== "ready") {
+    const why = await page.evaluate(() => window.__dofile?.state.engine.value.message ?? "");
+    throw new Error(`the engine did not start (${s}): ${why}`);
+  }
+  return Number((at / 1000).toFixed(2));
 };
 
 async function visit(mode, net) {
   const ctx = await browser.newContext();   // a new context: nothing cached
+  await ctx.addInitScript(watchEngine);
   const page = await ctx.newPage();
   const cdp = await ctx.newCDPSession(page);
   await cdp.send("Network.enable");
   if (net.mbps) await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: net.latency, downloadThroughput: net.mbps * 125_000, uploadThroughput: net.mbps * 125_000 });
   const notes = [];   // the snapshot start's own breakdown ("download 12.0s, decompress 0.6s, ..."), from the worker's console
   page.on("console", m => { if (m.text().includes("[dofile] snapshot start")) notes.push(m.text().replace("[dofile] snapshot start: ", "")); });
-  const url = `${base}/${mode === "snapshot" ? "" : "?snapshot=0"}`;   // the snapshot is the page's default
+  const url = `${base}/?test${mode === "snapshot" ? "" : "&snapshot=0"}`;   // the snapshot is the page's default; ?test: its state, for a failure's message
   served.bytes = 0;
   await page.goto(url);
   const cold = await readyIn(page);

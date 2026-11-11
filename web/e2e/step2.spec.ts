@@ -1,22 +1,32 @@
 // Prototype 1, step 2, in real browsers: what Node cannot check (docs/design/SPEC.md, section 7, tests 9 and 10). The tab
 // lock between two pages; the counted download into the Cache, and a start that then uses those bytes; no request to
-// another origin; the store's zip. The page is still the proof of concept: these tests reach the client and the store
-// through the page's test hook, and move to the real page's flows in step 6.
-// The hook (main.ts), which the real page must keep for them: with ?test in the URL, window.__dofile =
-// { engine, store, start, persisted, engineBytes }; with ?test=manual the page starts no engine until start() is called.
-import { test, expect, type BrowserContext, type Page } from "@playwright/test";
+// another origin; the store's zip. Since step 3 the page is the app shell: these tests reach the client, the store and
+// the state through the page's test hook, and click the shell's own dialogs (the download prompt, the take-over). They
+// move to the flows' tests in step 6.
+// The hook (main.tsx): with ?test in the URL, window.__dofile = { engine (the EngineClient), store, start (the
+// controller's download then start), persisted, engineBytes, state (the signals of src/app/state.js), run (a run through
+// the controller), breakRun and reset (the engine controller's) }; with ?test=manual the page starts no engine until
+// start() is called. The store is blocked until the tab lock answers.
+import type { BrowserContext, Page } from "@playwright/test";
+import { test, expect, startEngine } from "./fixtures";   // storage kept by default (fixtures.ts)
 
 type StartFiles = { built: number; wheelHash: string; compressed: number; files: { path: string; size: number; compressed: number; download: boolean }[] };
 type Progress = { received: number; total: number };
+type RunResult = { rc: number; log: string; images: string[] };
 type Handle = {
-  engine: { worker: unknown; start(): Promise<unknown>; run(code: string): Promise<{ rc: number; log: string }>; download(o?: { onProgress?: (p: Progress) => void; signal?: AbortSignal }): Promise<{ cached: boolean; received: number; total: number; why?: string }> };
-  store: { list(): Promise<{ path: string }[]>; write(path: string, data: Uint8Array): Promise<unknown>; zip(): Promise<File> };
-  start(): Promise<void>; persisted(): boolean | null | undefined; engineBytes: number | null;
+  engine: { worker: unknown; cached(): Promise<boolean>; startup: { mode: string; fetched?: string } | null; start(): Promise<unknown>; run(code: string): Promise<RunResult>;
+    download(o?: { onProgress?: (p: Progress) => void; signal?: AbortSignal }): Promise<{ cached: boolean; received: number; total: number; why?: string }> };
+  store: { blocked: boolean; list(): Promise<{ path: string }[]>; write(path: string, data: Uint8Array): Promise<unknown>; zip(): Promise<File> };
+  start(): Promise<void>; persisted(): boolean | null | undefined; engineBytes: number | null; run(code: string): Promise<RunResult | null>;
+  state: { engine: { value: { s: string; message?: string; detail?: string } }; files: { value: { path: string }[] }; graphs: { value: unknown[] } };
 };
 declare global { interface Window { __dofile: Handle; __persistCalls?: number } }
 
-const PAUSED = /dofile is open in another tab: this tab is paused/;
-const ready = (page: Page) => expect(page.locator("#status")).toHaveText(/ready in [\d.]+ s \(snapshot\)/, { timeout: 300_000 });
+const SAMPLE = "clear\nset obs 200\nset seed 1\ngenerate x = rnormal()\ngenerate y = 1 + 2*x + rnormal()\nregress y x, robust\nscatter y x\n";
+
+const state = (page: Page) => page.evaluate(() => document.documentElement.dataset.engine);
+const ready = (page: Page) => expect.poll(() => state(page), { timeout: 300_000 }).toBe("ready");
+const paths = (page: Page) => page.evaluate(() => window.__dofile.state.files.value.map(f => f.path).sort());
 
 // every request the pages of this context make, their workers' included
 function requests(context: BrowserContext) {
@@ -27,12 +37,19 @@ function requests(context: BrowserContext) {
 const elsewhere = (urls: string[], origin: string) => urls.filter(u => !u.startsWith(`${origin}/`) && !u.startsWith(`blob:${origin}/`) && !u.startsWith("data:"));
 const pathOf = (url: string) => new URL(url).pathname;   // a start file by its path on the server: its URL can carry a ?v=
 
+// the sample through the page's run controller: a regression and a graph
 async function runSample(page: Page) {
-  await page.locator("#run").click();
-  await expect(page.locator("#status")).toHaveText(/^rc 0 in/, { timeout: 120_000 });
-  await expect(page.locator("#graphs img")).toHaveCount(1);
+  const r = await page.evaluate(async code => {
+    const r = await window.__dofile.run(code);
+    return r && { rc: r.rc, images: r.images.length, graphs: window.__dofile.state.graphs.value.length };
+  }, SAMPLE);
+  expect(r?.rc).toBe(0);
+  expect(r?.images).toBe(1);
+  expect(r?.graphs).toBeGreaterThan(0);
 }
 
+test.describe(() => {
+test.use({ persisted: false });   // this test checks the browser's own persist() and persisted()
 test("the default start asks nothing of another origin; persist() is asked once; the download size is in the page; the zip is made in the page", async ({ page, context, request, baseURL }) => {
   const urls = requests(context);
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
@@ -43,10 +60,20 @@ test("the default start asks nothing of another origin; persist() is asked once;
     storage.persist = () => { window.__persistCalls!++; return real(); };
   });
   await page.goto("/?test");
+  // a first visit: the prompt, with the size from the build; Download starts the engine
+  const list: StartFiles = await (await request.get("/start-files.json")).json();
+  const prompt = page.getByRole("dialog", { name: "Download the engine?" });
+  await expect(prompt).toBeVisible();
+  const size = `${Math.round(list.compressed / 1e6)} MB`;
+  await expect(prompt).toContainText(`about ${size}`);
+  await prompt.getByRole("button", { name: `Download ${size}` }).click();
   await ready(page);
+  await expect(prompt).toBeHidden();
+  await expect(page.locator("[data-editor]"), "the dialog closed by itself and the focus went to the editor").toBeFocused();
   await runSample(page);
   expect(urls.some(u => u.endsWith("/pyodide/pyodide.asm.wasm")), "the runtime came from the page's own origin").toBe(true);
   expect(elsewhere(urls, new URL(baseURL!).origin)).toEqual([]);
+  expect(await page.evaluate(() => window.__dofile.engine.cached()), "the start files are all in the Cache now").toBe(true);
 
   // storage.persist() was asked, once, and the page has what persisted() says (null: the browser has no such API).
   // Firefox asks the user and leaves persist() unanswered: the page has the state all the same.
@@ -57,26 +84,27 @@ test("the default start asks nothing of another origin; persist() is asked once;
   expect(kept.calls).toBe(kept.now === null ? null : 1);
 
   // the download size is written into the page by the build: the list's total, with no request for it
-  const list: StartFiles = await (await request.get("/start-files.json")).json();
   expect(list.compressed).toBeGreaterThan(30e6);
   expect(await page.evaluate(() => window.__dofile.engineBytes)).toBe(list.compressed);
   expect(await page.locator('meta[name="dofile-engine-bytes"]').getAttribute("content")).toBe(String(list.compressed));
   expect(list.wheelHash).toMatch(/^[0-9a-f]{64}$/);
 
   // "Download all (.zip)": from the store, no Python
-  await page.locator("#upload").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello\n") });
-  await expect(page.locator("#files")).toContainText("notes.txt");
+  await page.evaluate(() => window.__dofile.store.write("notes.txt", new TextEncoder().encode("hello\n")));
+  await expect.poll(() => paths(page)).toContain("notes.txt");
   const zip = await page.evaluate(async () => {
     const z = await window.__dofile.store.zip();
     return { name: z.name, type: z.type, size: z.size, head: [...new Uint8Array(await z.slice(0, 4).arrayBuffer())] };
   });
   expect(zip.name).toMatch(/^dofile-\d{4}-\d\d-\d\d\.zip$/);
   expect(zip.head).toEqual([0x50, 0x4b, 3, 4]);
-  expect(zip.size).toBeGreaterThan(200);
+  expect(zip.size).toBeGreaterThan(100);
+});
 });
 
 test("the page has no test hook unless the URL asks for it", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("dialog", { name: "Download the engine?" }).getByRole("button", { name: /^Download/ }).click();
   await ready(page);
   expect(await page.evaluate(() => typeof window.__dofile)).toBe("undefined");
 });
@@ -89,12 +117,13 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   const urls = requests(context);
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
   await page.goto("/?test=manual");
-  await page.waitForFunction(() => window.__dofile);
+  await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked);   // the tab lock answered
 
   // files work with no engine at all, and are in the folder the engine later runs in
-  await page.locator("#upload").setInputFiles({ name: "early.do", mimeType: "text/plain", buffer: Buffer.from('display "EARLY " 6*7\n') });
-  await expect(page.locator("#files")).toContainText("early.do");
+  await page.evaluate(() => window.__dofile.store.write("early.do", new TextEncoder().encode('display "EARLY " 6*7\n')));
+  await expect.poll(() => paths(page)).toContain("early.do");
   expect(await page.evaluate(() => window.__dofile.engine.worker)).toBeNull();
+  expect(await state(page)).toBe("none");
 
   // a first try, stopped a third of the way in
   const first = await page.evaluate(async () => {
@@ -135,19 +164,14 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   const before = urls.length;
   await page.evaluate(() => { window.__dofile.start(); });
   await ready(page);
-  await expect(page.locator("#status")).toContainText("read from cache");
+  expect(await page.evaluate(() => window.__dofile.engine.startup?.fetched)).toBe("read from cache");
   const during = urls.slice(before).map(pathOf);
   for (const path of wanted) expect(during, `${path} was fetched again by the start`).not.toContain(path);
   expect(elsewhere(urls, origin)).toEqual([]);
 
-  // and the engine it started works: native code, a graph, the file uploaded before it existed
+  // and the engine it started works: native code, a graph, the file stored before it existed
   await runSample(page);
-  await page.evaluate(() => {
-    const v = (window as unknown as { __editor: import("@codemirror/view").EditorView }).__editor;
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: "do early.do" } });
-  });
-  await page.locator("#run").click();
-  await expect(page.locator("#log")).toContainText("EARLY 42", { timeout: 120_000 });
+  expect(await page.evaluate(async () => (await window.__dofile.run("do early.do"))?.log)).toContain("EARLY 42");
 });
 
 // A cached file that is not what the manifest says (damaged, or cut short) must not stay: the start says so and drops it,
@@ -157,7 +181,7 @@ test("a damaged file in the cache fails the start once and is fetched again by t
   const heap = list.files.find(f => f.path.startsWith("snapshot/heap"))!.path;
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
   await page.goto("/?test=manual");
-  await page.waitForFunction(() => window.__dofile);
+  await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked);   // the tab lock answered
   const cached = () => page.evaluate(async ([path, built]) =>
     Boolean(await (await caches.open(`dofile-snapshot-${built}`)).match(new URL(path as string, location.href).href)), [heap, list.built] as const);
   await page.evaluate(async ([path, built]) => {
@@ -165,7 +189,10 @@ test("a damaged file in the cache fails the start once and is fetched again by t
   }, [heap, list.built] as const);
   expect(await cached()).toBe(true);
   await page.evaluate(() => { window.__dofile.start(); });
-  await expect(page.locator("#status")).toContainText(/the engine did not start: snapshot: a file is 10 bytes, the manifest says \d+/, { timeout: 120_000 });
+  // the cause is the detail, for a developer; the message is plain words for the visitor
+  await expect.poll(() => page.evaluate(() => { const s = window.__dofile.state.engine.value; return s.s === "failed" ? s.detail : s.s; }),
+    { timeout: 120_000 }).toMatch(/snapshot: a file is 10 bytes, the manifest says \d+/);
+  expect(await page.evaluate(() => window.__dofile.state.engine.value.message)).toBe("Something went wrong while starting the engine. Try again, or reload the page.");
   expect(await cached()).toBe(false);
   expect(await page.evaluate(() => window.__dofile.engine.worker), "the worker that could not start is ended").toBeNull();
   await page.evaluate(() => { window.__dofile.start(); });
@@ -179,7 +206,7 @@ test("a damaged file in the cache fails the start once and is fetched again by t
 test("a start without download() works and writes nothing to the Cache", async ({ page }) => {
   page.on("pageerror", e => console.log(`page error: ${e.message}`));
   await page.goto("/?test=manual");
-  await page.waitForFunction(() => window.__dofile);
+  await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked);   // the tab lock answered
   const kept = await page.evaluate(async () => {
     for (const name of await caches.keys()) await caches.delete(name);
     await window.__dofile.engine.start();
@@ -194,39 +221,51 @@ test("a start without download() works and writes nothing to the Cache", async (
 test("tab lock: a second tab gets no engine and writes nothing; taking over ends the first tab's engine", async ({ page, context }) => {
   page.on("pageerror", e => console.log(`first tab error: ${e.message}`));
   await page.goto("/?test");
+  await startEngine(page);
   await ready(page);
-  await page.locator("#upload").setInputFiles({ name: "first-tab.do", mimeType: "text/plain", buffer: Buffer.from("display 1\n") });
-  await expect(page.locator("#files")).toContainText("first-tab.do");
+  await page.evaluate(() => window.__dofile.store.write("first-tab.do", new TextEncoder().encode("display 1\n")));
+  await expect.poll(() => paths(page)).toEqual(["first-tab.do"]);
 
-  // a second tab; its question ("Use dofile in this tab?") is answered no
+  // a second tab: blocked, with the take-over dialog
   const second = await context.newPage();
   second.on("pageerror", e => console.log(`second tab error: ${e.message}`));
-  const asked: string[] = [];
-  let takeOver = false;
-  second.on("dialog", d => { asked.push(d.message()); takeOver ? d.accept() : d.dismiss(); });
   await second.goto("/?test");
-  await expect(second.locator("#status")).toHaveText(PAUSED);
-  expect(asked).toHaveLength(1);
-  expect(asked[0]).toContain("dofile is open in another tab");
+  const otherTab = (p: Page) => p.getByRole("alertdialog", { name: "dofile is open in another tab" });
+  await expect(otherTab(second)).toBeVisible();
+  expect(await state(second)).toBe("other-tab");
+  // two buttons; "Close editor" has the first focus, so a stray Enter does not take over
+  await expect(otherTab(second).getByRole("button")).toHaveText(["Close editor", "Use dofile in this tab"]);
+  await expect(otherTab(second)).toContainText("The other tab keeps its data until you take over here.");
+  await expect(otherTab(second).getByRole("button", { name: "Close editor" })).toBeFocused();
   expect(await second.evaluate(() => window.__dofile.engine.worker)).toBeNull();   // no engine
-  await expect(second.locator("#run")).toBeDisabled();
+  await expect(second.locator(".toolbar").getByRole("button", { name: /^Run/ })).toHaveCount(0);
   const refused = await second.evaluate(() => window.__dofile.store.write("second-tab.do", new Uint8Array([49])).then(() => "written", e => (e as Error).message));
   expect(refused).toContain("open in another tab");
+  // Esc does not dismiss it
+  await second.keyboard.press("Escape");
+  await expect(otherTab(second)).toBeVisible();
   // the first tab is untouched: its engine runs, and its files are as they were
   await runSample(page);
-  expect((await page.evaluate(() => window.__dofile.store.list())).map(f => f.path).sort()).toEqual(["first-tab.do", "main.do"]);
+  expect((await page.evaluate(() => window.__dofile.store.list())).map(f => f.path).sort()).toEqual(["first-tab.do"]);
 
-  // "Use dofile in this tab": the second tab takes the lock; the first one ends its worker and says so
-  takeOver = true;
-  await second.reload();
-  await expect(page.locator("#status")).toHaveText(PAUSED, { timeout: 30_000 });
+  // "Use dofile in this tab": the second tab takes the lock; the first one ends its worker and shows the same dialog
+  await otherTab(second).getByRole("button", { name: "Use dofile in this tab" }).click();
+  await expect(otherTab(page)).toBeVisible({ timeout: 30_000 });
+  expect(await state(page)).toBe("other-tab");
   expect(await page.evaluate(() => window.__dofile.engine.worker)).toBeNull();
-  await expect(page.locator("#run")).toBeDisabled();
+  await expect.poll(() => state(second)).not.toMatch(/^(other-tab|none)$/);   // it has taken over and decided
+  await startEngine(second);   // the first tab filled the Cache, so it starts; a browser that kept nothing asks
   await ready(second);
-  await expect(second.locator("#files")).toContainText("first-tab.do");   // the same files
+  await expect(otherTab(second)).toBeHidden();
+  await expect.poll(() => paths(second)).toEqual(["first-tab.do"]);   // the same files
   await runSample(second);
   // the tab that lost the lock writes nothing now
   const late = await page.evaluate(() => window.__dofile.store.write("late.do", new Uint8Array([49])).then(() => "written", e => (e as Error).message));
   expect(late).toContain("open in another tab");
-  expect((await second.evaluate(() => window.__dofile.store.list())).map(f => f.path).sort()).toEqual(["first-tab.do", "main.do"]);
+  expect((await second.evaluate(() => window.__dofile.store.list())).map(f => f.path).sort()).toEqual(["first-tab.do"]);
+
+  // "Close editor" leaves for the landing page (step 5 builds it: only the request is checked here)
+  const leaving = page.waitForRequest(r => r.isNavigationRequest() && new URL(r.url()).pathname.endsWith("/landing.html"));
+  await otherTab(page).getByRole("button", { name: "Close editor" }).click();
+  await leaving;
 });

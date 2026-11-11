@@ -28,10 +28,13 @@
      comments are told apart by color. */
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --text-xs: 11.5px;  --text-sm: 12.5px;  --text-row: 13px;  --text-md: 14px;  --text-lg: 16px;  --text-xl: 22px;  --text-2xl: 30px;
+  /* in rem, so they follow the browser's font-size setting (DS-5); at the default 16 px: 11.5, 12.5, 13, 14, 16, 22, 30 px.
+     Spacing stays in px. At a 20 px default the log's 80 columns are wider than its pane and scroll sideways. */
+  --text-xs: .71875rem;  --text-sm: .78125rem;  --text-row: .8125rem;  --text-md: .875rem;  --text-lg: 1rem;  --text-xl: 1.375rem;
+  --text-2xl: 1.875rem;
   /* --text-row: file rows, menus, banners, buttons, group rows */
-  --code: 13px;       /* editor */
-  --log: 12.5px;      /* log: 80 columns fit in about 600 px */
+  --code: .8125rem;   /* editor: 13 px */
+  --log: .78125rem;   /* log: 12.5 px; 80 columns fit in about 600 px */
   --leading: 1.5;
   /* the only weights loaded: Sans 400/600, Mono 400/700; bold is a different number in each font */
   --w-bold-ui: 600;  --w-bold-mono: 700;
@@ -40,12 +43,20 @@
   /* spacing (4 px steps), radius, borders */
   --s1: 4px;  --s2: 8px;  --s3: 12px;  --s4: 16px;  --s5: 24px;  --s6: 32px;  --s7: 48px;
   --radius-sm: 3px;  --radius: 4px;  --radius-lg: 8px;
+  /* control heights, in rem so they grow with the visitor's font size: the toolbar's buttons, and a pane head's */
+  --control: 2rem;  --control-sm: 1.625rem;
   --bar: 3px;          /* the marker bar on a line or row's left edge: open file, running line, error line, picked row */
   --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --disabled-opacity: .45;
   --shadow-menu: 0 8px 24px rgb(0 0 0 / .16);
   --shadow-dialog: 0 10px 30px rgb(0 0 0 / .18);
   --scrim: rgb(0 0 0 / .32);   /* black in both themes (ink is light in dark mode) */
+  /* motion (DS-8): reduced motion turns the animations that use them off (ui.css) */
+  --dur-fast: .16s;    /* the toast coming in */
+  --dur: .25s;
+  /* stacking (DS-8): menu under toast under dialog. Native dialogs and popovers sit in the browser's top layer above all
+     of these; the scale orders what is not there (a menu where the popover API is missing, the toast). */
+  --z-menu: 10;  --z-toast: 20;  --z-dialog: 30;
 
   /* light */
   --bg: #f7f7f5;           /* page */

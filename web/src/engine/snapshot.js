@@ -29,10 +29,14 @@ const SKIPS = [
   ['var init=moduleExports["__wasm_call_ctors"];if(init){', 'var init=moduleExports["__wasm_call_ctors"];if(init&&!__rec){'],
 ];
 
+// A snapshot that cannot be used (damaged, cut short, made for another Pyodide): worker.js passes the name on, and the page
+// decides from it, not from the text.
+const snapshotError = message => Object.assign(new Error(message), { name: "SnapshotError" });
+
 // pyodide.asm.mjs's text -> the same with the library log and the re-link. Throws if Pyodide's loader looks different.
 export function patchAsm(src, { noTrampoline = false } = {}) {
   for (const [from, to] of [[ALLOC, ALLOC_PATCHED], ...SKIPS, ...(noTrampoline ? [NO_TRAMPOLINE] : [])]) {
-    if (!src.includes(from)) throw new Error("pyodide.asm.mjs is not the version the snapshot patch was written for");
+    if (!src.includes(from)) throw snapshotError("pyodide.asm.mjs is not the version the snapshot patch was written for");
     src = src.replace(from, to);
   }
   return src;
@@ -127,7 +131,7 @@ export function restoreOptions(create, { snapshot, dso, index, blob }, lap = () 
     // start-up allocations could land on another library's range. Reserve the whole span first.
     const lo = Math.min(...dso.map(r => r.memoryBase)), hi = Math.max(...dso.map(r => r.memoryBase + r.memorySize));
     const reserved = m._malloc(hi);
-    if (reserved > lo) throw new Error(`snapshot: cannot reserve ${lo}..${hi}, malloc returned ${reserved}`);
+    if (reserved > lo) throw snapshotError(`snapshot: cannot reserve ${lo}..${hi}, malloc returned ${reserved}`);
     m.__dsoReplay = dso.map(r => ({ ...r }));
     // Each dlopen gets a scope object (`global ? null : {}`) that collects the exports of the library's local dependencies,
     // and the library finds the symbols it needs there (scipy's LAPACK wrapper finds dsytrf_ in its dependency). Without
@@ -159,15 +163,15 @@ export function inflate(brotli, input, rawSize, { inStep = 2 << 20, outStep = 4 
     let used = 0;
     do {
       const r = stream.decompress(chunk.subarray(used), outStep);
-      if (at + r.buf.length > rawSize) throw new Error(`snapshot: the decompressed data is larger than the ${rawSize} bytes expected`);
+      if (at + r.buf.length > rawSize) throw snapshotError(`snapshot: the decompressed data is larger than the ${rawSize} bytes expected`);
       out.set(r.buf, at);
       at += r.buf.length;
       used += r.input_offset;
       code = r.code;
     } while (code === Code.NeedsMoreOutput);
-    if (code !== Code.NeedsMoreInput && code !== Code.ResultSuccess) throw new Error(`snapshot: brotli decompression failed (code ${code})`);
+    if (code !== Code.NeedsMoreInput && code !== Code.ResultSuccess) throw snapshotError(`snapshot: brotli decompression failed (code ${code})`);
   }
-  if (code !== Code.ResultSuccess || at !== rawSize) throw new Error(`snapshot: decompressed ${at} bytes of ${rawSize} expected (a truncated or damaged file)`);
+  if (code !== Code.ResultSuccess || at !== rawSize) throw snapshotError(`snapshot: decompressed ${at} bytes of ${rawSize} expected (a truncated or damaged file)`);
   return out;
 }
 
@@ -183,24 +187,29 @@ export async function inflateNative(input, rawSize) {
   const reader = new Blob([input]).stream().pipeThrough(new DecompressionStream("brotli")).getReader();
   let at = 0;
   for (let r; !(r = await reader.read()).done;) {
-    if (at + r.value.length > rawSize) throw new Error(`snapshot: the decompressed data is larger than the ${rawSize} bytes expected`);
+    if (at + r.value.length > rawSize) throw snapshotError(`snapshot: the decompressed data is larger than the ${rawSize} bytes expected`);
     out.set(r.value, at);
     at += r.value.length;
   }
-  if (at !== rawSize) throw new Error(`snapshot: decompressed ${at} bytes of ${rawSize} expected (a truncated or damaged file)`);
+  if (at !== rawSize) throw snapshotError(`snapshot: decompressed ${at} bytes of ${rawSize} expected (a truncated or damaged file)`);
   return out;
 }
 
-// `file` is a manifest entry {raw, size}. A host that applied its own Content-Encoding hands over the bytes already
+/** @typedef {import("./types").SnapshotFile} SnapshotFile */
+
+// `file` is a manifest entry {raw, size} (SnapshotFile). A host that applied its own Content-Encoding hands over the bytes already
 // decoded (length === raw): use them as they are.
+/** @param {any} brotli @param {Uint8Array} bytes @param {SnapshotFile} file @returns {Uint8Array} */
 export function unpack(brotli, bytes, file) {
   if (bytes.length === file.raw) return bytes;
-  if (bytes.length !== file.size) throw new Error(`snapshot: a file is ${bytes.length} bytes, the manifest says ${file.size}; run \`npm run snapshot\` again`);
+  if (bytes.length !== file.size) throw snapshotError(`snapshot: a file is ${bytes.length} bytes, the manifest says ${file.size}; run \`npm run snapshot\` again`);
   return inflate(brotli, bytes, file.raw);
 }
 
 // `unpack`, with the native decoder when `native` is set and it works; any failure of it falls back to brotli-wasm, which
 // then gives the error if the file really is damaged. Returns [bytes, "native" | "wasm" | "none" (already decoded)].
+/** @param {any} brotli @param {Uint8Array} bytes @param {SnapshotFile} file @param {boolean} native
+ *  @returns {Promise<[Uint8Array, "native" | "wasm" | "none"]>} */
 export async function unpackAsync(brotli, bytes, file, native) {
   if (native && bytes.length === file.size && bytes.length !== file.raw) {
     try { return [await inflateNative(bytes, file.raw), "native"]; }

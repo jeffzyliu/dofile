@@ -1,4 +1,4 @@
-/* Components for the high-fidelity mockups, on the tokens. These become the page's CSS in steps 6 and 8. */
+/* Components, on the tokens: the editor page (web/, with its layout in app.css) and the design pages (docs/design/) both use them. */
 @import url(./tokens.css);
 
 * { box-sizing: border-box; }
@@ -70,8 +70,17 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .btn.icon .ico { font-size: 15px; }
 .btn .dot { width: 6px; height: 6px; color: var(--accent); }
 .btn.primary .dot { color: var(--on-accent); }
+/* every toolbar control is one height, with or without a key chip; ⋯ is square */
+.toolbar :is(.btn, .theme) { height: var(--control); padding-block: 0; }
+.toolbar .btn.icon { width: var(--control); justify-content: center; }
 .focus { box-shadow: var(--focus); }
 .spacer { flex: 1; }
+/* a control's labels in one cell (app/ui/Icon.tsx Labels): it keeps the size of its widest label, so a change of state
+   moves nothing around it; only the current label is seen and named */
+.labels { display: inline-grid; }
+.labels > .label { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                   font-variant-numeric: tabular-nums; }
+.labels > .label[aria-hidden] { visibility: hidden; }
 /* a key label: UI font (its ⌘ comes from the system font; other systems show Ctrl), a chip that reads at a glance */
 .key { font: 400 var(--text-xs)/1 var(--font-ui); padding: 3px 5px 2px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
        color: var(--muted); background: var(--surface-2); letter-spacing: .02em; margin-left: 2px; }
@@ -103,9 +112,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
           display: inline-grid; place-items: center; }
 .tab .x:hover, .tab .x.hover { background: var(--border); color: var(--ink); }
 /* links in a pane head: the accent color, so they don't read as captions */
-.head-link { color: var(--accent); font-size: var(--text-sm); padding: 3px var(--s1); white-space: nowrap; border-radius: var(--radius); }
+.head-link { display: inline-flex; align-items: center; height: var(--control-sm); color: var(--accent); font-size: var(--text-sm);
+             padding: 0 var(--s1); white-space: nowrap; border-radius: var(--radius); }
 .head-link:hover { text-decoration: underline; }
-.head-link.icon { color: var(--muted); padding: 3px 5px; }
+.head-link.icon { color: var(--muted); padding: 0 5px; }
 .head-link.icon:hover { color: var(--ink); background: var(--border); text-decoration: none; }
 
 /* files: one row per file or folder; --d is the depth. Each level indents 16 px and draws a faint guide line. */
@@ -316,6 +326,24 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .dialog p { margin: 0 0 var(--s3); color: var(--ink); }
 .dialog .actions { display: flex; gap: var(--s2); justify-content: flex-end; margin-top: var(--s4); flex-wrap: wrap; }
 .dialog code { font-size: var(--code); background: var(--surface-2); padding: 1px 4px; border-radius: var(--radius-sm); }
+.dialog .meta { font-size: var(--text-sm); color: var(--muted); }
+/* the page's dialogs are native <dialog>s opened modal: the browser draws the scrim as ::backdrop */
+dialog.dialog { color: var(--ink); width: min(460px, calc(100vw - 2 * var(--s4))); max-width: none; }
+dialog.dialog::backdrop { background: var(--scrim); }
+/* a bottom sheet on a phone (S 8): from the bottom edge, the buttons full width in thumb reach, the primary on top */
+.sheet, dialog.dialog.sheet { margin: auto 0 0; width: 100%; max-width: none; border-width: 1px 0 0; border-radius: 14px 14px 0 0;
+         padding: var(--s4) var(--s4) calc(30px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -8px 24px rgb(0 0 0 / .14); }
+.sheet .actions { flex-direction: column-reverse; align-items: stretch; }
+.sheet .actions .btn { justify-content: center; font-size: 15px; padding: 12px 16px; }
+.sheet .actions .spacer { display: none; }
+@media (max-width: 699.98px) {
+  dialog.dialog { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - var(--s6)); border-width: 1px 0 0;
+                  border-radius: 14px 14px 0 0; padding: var(--s4) var(--s4) calc(30px + env(safe-area-inset-bottom, 0px));
+                  box-shadow: 0 -8px 24px rgb(0 0 0 / .14); }
+  dialog.dialog .actions { flex-direction: column-reverse; align-items: stretch; }
+  dialog.dialog .actions .btn { justify-content: center; font-size: 15px; padding: 12px 16px; }
+  dialog.dialog .actions .spacer { display: none; }
+}
 .check { display: flex; align-items: center; gap: var(--s2); font-size: var(--text-sm); color: var(--muted); }
 .check input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
 .check .box { width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
@@ -330,6 +358,25 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .menu [role=menuitem] .aside { margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
 .menu .danger { color: var(--error); }
 .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 2px; }
+.menu a[role=menuitem] { color: inherit; text-decoration: none; }
+.menu [role=menuitem][aria-disabled=true] { opacity: var(--disabled-opacity); cursor: default; background: none; }
+/* the page's open menu (app/ui/Menu.tsx): placed by script at its trigger, in the top layer where the popover API is */
+.menu.floating { position: fixed; inset: auto; margin: 0; z-index: var(--z-menu); color: var(--ink); }
+
+/* the phone's top bar and its tab bar "Views" (PH, WP; DS-7) */
+.topbar { padding: 6px var(--s3); }
+.topbar .title { flex: 1; min-width: 0; margin: 0; font: var(--w-bold-ui) 15px/1.3 var(--font-ui); white-space: nowrap; overflow: hidden;
+                 text-overflow: ellipsis; }
+.topbar .btn.primary, .topbar .btn.stop { font-size: 15px; padding: 10px 18px; height: auto; }   /* the phone's Run: bigger */
+/* Break on a phone: Run's place, another shape (a pill) and color, so it can't be taken for Run */
+.btn.pill { border-radius: 999px; padding: 10px 16px; }
+.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--surface); border-top: 1px solid var(--border);
+          padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px)); font-size: var(--text-xs); text-align: center; }
+.tabbar [role=tab] { color: var(--muted); padding: 0 0 2px; min-height: 44px; display: flex; flex-direction: column;
+                     align-items: center; justify-content: flex-start; text-align: center; }
+.tabbar [role=tab] i { display: block; width: 22px; height: 3px; border-radius: 2px; margin: 0 auto 6px; background: transparent; }
+.tabbar [role=tab][aria-selected=true] { color: var(--accent); font-weight: var(--w-bold-ui); }
+.tabbar [role=tab][aria-selected=true] i { background: var(--accent); }
 
 /* progress: a determinate bar (role=progressbar) and the start-up stages as a list */
 .progress { height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-strong); overflow: hidden; }
@@ -351,13 +398,13 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* toast: a short confirmation that asks nothing of the user ("Saved analysis.do", "Copied", "3 files uploaded").
    No buttons: anything to act on or to read twice is a banner. It never takes focus; the page's hidden live region says
    the same words. One at a time (a new one replaces it), bottom center above the status bar, 4 s, longer while hovered. */
-.toasts { position: fixed; left: 50%; bottom: calc(var(--s6) + var(--s2)); transform: translateX(-50%); z-index: 10;
+.toasts { position: fixed; left: 50%; bottom: calc(var(--s6) + var(--s2)); transform: translateX(-50%); z-index: var(--z-toast);
           pointer-events: none; }
 .toast { display: inline-flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--radius-lg);
          background: var(--ink); color: var(--surface); font-size: var(--text-row); box-shadow: var(--shadow-menu);
          pointer-events: auto; white-space: nowrap; }
 .toast .ico { font-size: 14px; }
-@media (prefers-reduced-motion: no-preference) { .toast { animation: toast-in .16s ease-out; } }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: toast-in var(--dur-fast) ease-out; } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 
 /* empty states inside a tab */
@@ -380,5 +427,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   .rs .val.focus, .focus { outline: 2px solid Highlight; }
   .toast { border: 1px solid CanvasText; }
   .grid th.picked { border-bottom: var(--bar) solid Highlight; }
+  .tabbar [role=tab][aria-selected=true] i { forced-color-adjust: none; background: Highlight; }
+  dialog.dialog { border: 1px solid CanvasText; }
   .menu [role=menuitem]:is(:hover, .hover) { outline: 2px solid Highlight; outline-offset: -2px; }
 }

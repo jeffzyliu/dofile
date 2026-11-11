@@ -80,6 +80,7 @@ export class FileStore {
     /** @type {null | ((op: string, args: object, transfer: Transferable[]) => void)} */
     this.post = null;      // sends the op to the worker; null while there is no worker
     this.blocked = false;  // true in a tab that does not own the files (the tab lock): it writes nothing
+    /** @type {null | (() => void)} */
     this.onChange = () => {};   // called after every change this page made
     this.onClosed = null;   // the engine client's: called when the browser closed the database under us
     this.journal = true;    // false: the worker has no store of its own, so it would never delete a `pending` row
@@ -131,12 +132,13 @@ export class FileStore {
 
   // ---- the page's API ----
 
-  /** @returns {Promise<{ path: string, dir: boolean, size: number, mtime: number }[]>} */
+  /** @returns {Promise<import("./types").FileInfo[]>} */
   async list() {   // reads `info` only
     return this.tx(["info"], "readonly", t => req(t.objectStore("info").getAll()));
   }
 
   /** @returns {Promise<Uint8Array<ArrayBuffer>>} */
+  /** @param {string} path */
   async read(path) {
     cleanPath(path);
     const bytes = await this.tx(["data"], "readonly", t => req(t.objectStore("data").get(path)));
@@ -144,6 +146,7 @@ export class FileStore {
     return new Uint8Array(bytes);
   }
 
+  /** @param {string} path @param {Uint8Array} data @returns {Promise<import("./types").FileInfo>} */
   async write(path, data) {
     cleanPath(path);
     const bytes = exact(data);   // our own copy: the caller keeps its array, and this one can be moved to the worker
@@ -157,12 +160,14 @@ export class FileStore {
     return info;
   }
 
+  /** @param {string} path @returns {Promise<void>} */
   async mkdir(path) {
     cleanPath(path);
     await this.change("mkdir", { path }, t => makeParents(t, `${path}/`));
   }
 
   // a file, or a folder with everything under it
+  /** @param {string} from @param {string} to @returns {Promise<void>} */
   async rename(from, to) {
     cleanPath(from);
     cleanPath(to);
@@ -186,6 +191,7 @@ export class FileStore {
   }
 
   // the same; a path that is not there is not an error
+  /** @param {string} path @returns {Promise<void>} */
   async remove(path) {
     cleanPath(path);
     await this.change("remove", { path }, t => {
@@ -194,6 +200,7 @@ export class FileStore {
   }
 
   // "Download all (.zip)": every file with its folders, made here with no engine. A File, named with the date.
+  /** @returns {Promise<File>} */
   async zip() {
     const [infos, keys, values] = await this.tx(["info", "data"], "readonly", t => Promise.all([
       req(t.objectStore("info").getAll()), req(t.objectStore("data").getAllKeys()), req(t.objectStore("data").getAll())]));

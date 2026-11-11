@@ -99,7 +99,7 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
 - Status and next steps: `docs/phase1-plan.md` (done), `docs/phase2-plan.md` (web demo; the history and gaps are in
   `docs/phase2-history.md`, `docs/browser-engine.md` and `docs/lazy-matplotlib.md`), `docs/phase3-plan.md` (hosted multi-user MCP
   server). `docs/prototype1-plan.md` (the build plan and status for prototype 1 of the web demo: read it first when picking that
-  work up). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
+  work up; its active task is `docs/prototype1-step3.5-plan.md`, and `docs/web-engine-data-flow.md` explains the web engine's data flow). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
   `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`.
 - Web demo design (moodboard, flows, wireframes, mockups): `docs/design/`. `docs/design/SPEC.md` is the build spec for the web
   demo's pages; `docs/design/README.md` holds the brief, the rules and every round of feedback (the plan keeps only a summary of

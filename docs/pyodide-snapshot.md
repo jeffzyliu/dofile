@@ -1,7 +1,8 @@
 # Starting the web demo from a Pyodide memory snapshot
 
-Status (2026-11-09): built, measured and checked; **the demo's default start** (`?snapshot=0` is the normal boot; a missing
-or stale snapshot is an error that names `?snapshot=0`, not a silent fallback). It was opt-in with `?snapshot=1` until then,
+Status (2026-11-09): built, measured and checked; **the demo's default start** (`?snapshot=0` is the normal boot, a diagnostic mode
+for developers; a missing or stale snapshot is an error that gives its cause, not a silent fallback, and nothing the page
+shows names `?snapshot=0`). It was opt-in with `?snapshot=1` until then,
 and an old `?snapshot=1` link still starts from the snapshot. The default build is 39.9 MB
 (brotli 11, docstrings and asserts stripped). A return visit starts in 1.2 s against 4.5–9.2 s for the normal boot; a first
 visit takes 1.7 s unthrottled, 5.1 s at 100 Mbps and 13.9 s at 30 Mbps (normal boot: 5.8, 6.9, 13.9 s). It passes the conformance corpus, 95 of 97 Stata 14
@@ -90,7 +91,7 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
 | `web/scripts/make-snapshot.mjs` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes, almost all of it brotli quality 11, or seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
 | `web/src/engine/snapshot.js` | the loader patch, the library log, the restore options, and the brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's own decoder, with brotli-wasm as the fallback); used by the script and the worker |
 | `web/src/engine/worker.js` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went. Since 2026-11-10 (prototype 1, step 2) the start reads everything through one Cache: see "The start since prototype 1" below |
-| `web/src/engine/client.js`, `main.ts` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`, and the status says `(snapshot)` with the start's breakdown |
+| `web/src/engine/client.js`, `main.tsx` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`. Where the start's time went: the client's `startup` (the worker's `startup` op) and the worker's console line `[dofile] snapshot start: …`; the page's status line showed it until prototype 1, step 3 |
 | `web/spike/snapshot.mjs` | the standalone spike, with its own timing comparison (removed on 2026-11-10; in git history at commit `10e0f1c`) |
 | `docs/img/make-startup-times.mjs` | draws the chart below |
 
@@ -118,7 +119,7 @@ graph drawn after a restore is byte-identical to one from a normal boot (checked
   different hash is refused (the Node tests, which pass none, skip the check). Found 2026-11-08: a snapshot older than
   `browser.py` kept running the old code and broke the page's new run-timing display until it was rebuilt. `uv build
   --wheel` is reproducible (the same hash after a rebuild and after touching a source file), so a rebuild without a code
-  change does not make a snapshot stale. Test: "a snapshot from a different build of the wheel is refused" in `web/e2e/poc.spec.ts`.
+  change does not make a snapshot stale. Test: "a snapshot from a different build of the wheel is refused" in `web/e2e/shell.spec.ts` (in `poc.spec.ts` until prototype 1, step 3).
 - The snapshot is taken after one program has run in a throwaway engine, so the lazily imported modules (graphs,
   commands) are already loaded. The page's real `Engine` is created after the restore, as before.
 
@@ -141,7 +142,7 @@ they differ.
   `fetch` with one that looks in the Cache first (`watchFetch`); a miss goes to the network. The worker never writes the
   Cache: `download()` is its one writer, and it keeps only a file with the byte count of the build's list (a host that
   answers a missing file with its `index.html` and status 200 would otherwise poison the cache). The start works with or
-  without `download()`; without it nothing is cached. The proof-of-concept page calls `download()` before each start. A cached `.wasm` is given the type
+  without `download()`; without it nothing is cached. The page calls `download()` before each start it makes (`src/app/engine.js`). A cached `.wasm` is given the type
   `application/wasm`, because Pyodide compiles it with `instantiateStreaming` and has no fallback; a fetch that fails ends
   the start with an error (Pyodide's loader would only log it and wait for ever).
 - **The patched loader is imported from a `blob:` URL** made from the cached bytes, so the start does not fetch it a second
@@ -254,10 +255,10 @@ decompresses it (0.6 s). Sizes below are compressed MB, measured unless marked; 
 
 | Optimization | Status | Notes |
 |---|---|---|
-| The engine starts at page load, in the background | **Done** | `engine.start()` in `main.ts`; only Run and Reset wait |
+| The engine starts at page load, in the background | **Done** | `start()` in `src/app/engine.js`, after the tab lock (a first visit asks first); only Run and Reset wait |
 | Decompress in steps into one buffer per file | **Done** | the memory peak stays near the decompressed size; not a speed gain |
 | One snapshot that starts on iOS | **Done** | built without Pyodide's trampoline, [below](#the-trampoline) |
-| Starting from the snapshot at all | **Done, the default** (`?snapshot=0` = normal boot) | no fallback to the normal boot when the snapshot is missing, stale or fails: the page says why and names `?snapshot=0`, so CI cannot pass by quietly booting the old way. A crash on a low-memory phone (peak about 1.25 GB against 0.7 GB for the normal boot) is only checked on one iPhone 13 |
+| Starting from the snapshot at all | **Done, the default** (`?snapshot=0` = normal boot) | no fallback to the normal boot when the snapshot is missing, stale or fails: the page says why (a stale one: reload the page), so CI cannot pass by quietly booting the old way; it does not name `?snapshot=0` (since prototype 1, step 3). An automatic fallback is a possible later step, not built. A crash on a low-memory phone (peak about 1.25 GB against 0.7 GB for the normal boot) is only checked on one iPhone 13 |
 | Keep the files decompressed in the browser's storage | **Rejected** | 0.3–0.7 s faster per start, 229 MB stored instead of 40 |
 | Normal boot: import matplotlib only at the first graph | **Done already** | `browser.start()` imports numpy and scipy (1.8 s in Node); matplotlib and PIL come with the first graph (0.82 s) |
 | Normal boot: import scipy lazily | **Not done** | it is imported in `browser.start()` |
@@ -356,7 +357,8 @@ runs each, no repeats under controlled conditions: an indication, not a benchmar
   snapshot has it loaded). On the phone a run took 2–3 s in snapshot mode every time and 0.1–1 s on the normal boot, until
   the snapshot was rebuilt: then 0.1–0.2 s. The slow runs came with a snapshot older than the code, but the cause was not
   established (the run breakdown, below, had not shipped when it happened).
-- **The status line says where the time went.** A snapshot start: `[download|read from cache X s, unpack X s (heap, site-packages,
+- **The status line said where the time went** (the proof-of-concept page, until prototype 1, step 3; since then the
+  same numbers are in the client's `startup`, the worker's `[dofile] snapshot start` console line, and a run's `timing`). A snapshot start: `[download|read from cache X s, unpack X s (heap, site-packages,
   decoder native|wasm), restore X s, files X s, engine X s; not cached]`. A normal boot: `[runtime, files, packages, engine]`.
   A run: `rc 0 in X s (engine, encode, json, save, other)`, where engine includes drawing the graphs and `save` is the write
   of the files the run changed to the file store in IndexedDB (until 2026-11-10: of `/work` through Emscripten's IDBFS). The start's numbers are collected in the worker (`startup`); the run's come from `browser.run`
@@ -422,7 +424,8 @@ on desktop never. It took long because several unrelated things looked alike. Wh
   decompresses, and **everything in the browser's caches adds up to between 10 and 80 MB** (about 40 MB; this is the
   check that found the `.br` problem); the status line shows the start's breakdown and, after a Run, the run's; a manifest
   with another wheel hash is refused. Skipped without a snapshot. All 6 e2e tests pass in each of the four browser profiles
-  (24 in all, 2026-11-08).
+  (24 in all, 2026-11-08). Since prototype 1, step 3 the snapshot cases run through the page's test hook: the cached start and the stored size in
+  `web/e2e/engine.spec.ts`, the stale manifest and `?snapshot=0` in `web/e2e/shell.spec.ts`.
 - The test file now ends every worker it starts in an `after` hook. Before, a failing assertion skipped the
   `terminate()` at the end of its test and `npm test` hung with the worker alive.
 

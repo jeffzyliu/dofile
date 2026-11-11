@@ -9,13 +9,42 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 
 ## Where things stand (2026-11-10)
 
-- **Steps 0, 1 and 2 are merged into `main`** (not pushed). Each was reviewed (step 2 twice) and its fixes are in. Step 3
-  starts from `main`.
-- `docs/design/SPEC.md` is the build spec. Its open questions (section 10) were decided on 2026-11-10. Sections 6 and 7 now
-  describe steps 1 and 2 as built (the "As built in step 2" list).
-- Checked on `main` after step 2 merged: `uv run poe test` (1346 passed), `npm run check`, `npm test` (98 tests, all pass with
-  a current snapshot), `npm run e2e` (56 passed: Chromium, Firefox, WebKit, iPhone profile).
-- **Next:** step 3, alone. Read "Known work found in steps 1 and 2" below first: it lists the joins step 3 owns.
+- **Steps 0, 1 and 2 are merged into `main`** (not pushed). Checked on `main` after step 2 merged: `uv run poe test` (1346
+  passed), `npm run check`, `npm test` (98 tests), `npm run e2e` (56 passed).
+- **The active task is step 3.5: the engine code made clear and auditable** (TypeScript everywhere, one state machine,
+  one build identity, the journal as the only channel). Its plan and status: [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md).
+  Read it next. How the engine code works before that step: [web-engine-data-flow.md](web-engine-data-flow.md).
+- **Step 3 (the app shell) is built, reviewed twice, and edited from the maintainer's notes. It is committed on its branch
+  as a checkpoint and not merged: the merge waits for the maintainer's approval of steps 3 and 3.5.** The work is in the worktree
+  `.claude/worktrees/agent-adc4512780de518ed`, branch `prototype1-step3` (made from `main` at `c014141`). What the step 4
+  agents write against: `docs/design/SPEC.md` section 8 ("As built in step 3") and the header of `web/src/app/App.tsx`.
+- Checked on the branch after the last edits: `npm run check`; `npm test` (140 tests, all pass, none skipped); `SNAPSHOT_QUALITY=5 npm run e2e`
+  (74 passed, 22 skipped: the 16 fixme cases of `e2e/poc.spec.ts`, and the two iPhone-only checks, the page scroll and the toast's place, in the three desktop profiles); `npm run axe`, `contrast`, `tabwalk`, `fonts`. Nothing under the root `src/` or `tests/` changed, so
+  `uv run poe test` was not run again.
+- The last edits: the other-tab dialog has "Close editor" (focused; it goes to the landing page, a dead link until step 5)
+  and "Use dofile in this tab"; `App.tsx` holds the whole layout again, each phone piece next to its desktop one
+  (`Phone.tsx` and `Toolbar.tsx` are gone); the viewport meta no longer sets `interactive-widget`, so Android keeps its
+  default (only the visual viewport shrinks for the keyboard, as on iOS) and `app/viewport.js` serves both, with a
+  fallback for a browser that shrinks the layout viewport; the phone toast goes above the keyboard; a failed "Download
+  all" shows the banner `download-failed` with "Try again"; a failed start's `message` is plain words for the visitor
+  and its `detail` the developer's cause. Then (round 5): that banner shows on every phone view; the phone's Files view
+  is no longer blank (`data-files` folded it away); shorter state labels on Run and Break ("Starting…", "Stopped",
+  "Break (reset)"; the phone's "Run 6–7"), so the buttons are narrower; one height for the toolbar's buttons and one for a pane
+  head's controls; the phone ⋯'s "Theme: ◐ System" cycles the theme and keeps the menu open. Round 6: the
+  `dofile.downloaded` flag is gone; at load the page asks unless `client.cached()` finds this build's start files all in
+  the Cache, and a `failed-twice` (not memory or no-wasm) deletes them (`client.forgetDownload()`).
+- **Next, in this order:**
+  1. Step 3.5 (its plan's steps A to E), on the same branch. The maintainer reviewed the engine code's design on
+     2026-11-10; that plan holds the decisions. It changes the internals of `web/src/app/engine.js`, `run.js` and
+     `web/src/engine/`; the contracts in SPEC section 8 are what step 4 relies on.
+  2. The merge of steps 3 and 3.5, once the maintainer approves them.
+  3. Step 4 (4a and 4c first).
+- **To try on a real iPhone** (none of this can be tested here; the e2e iPhone profile is an emulation with no real
+  keyboard, toolbars or touch scrolling): the page does not scroll or bounce; with the keyboard open the command line sits
+  right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard
+  while it is open. An Android phone (Chrome, Firefox) should behave the same now.
+- **Open points:** the toast's offset on a phone is set against the placeholder command line, not 4b's real one (step
+  4b); the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
 
 ## Decisions (2026-11-10)
 
@@ -45,6 +74,15 @@ The reasons are in `phase2-plan.md` (decisions 1, 3 and 7); the detail a builder
    drafts the missing words and the maintainer approves them (OQ-10, OQ-16, OQ-18).
 9. **Tabled:** the Safari 7-day storage note (re-verify after the prototype, step 7); keyboard shortcuts beyond the design's.
 10. **Cleanup:** `web/spike/` and `eval/` are deleted (in git history at `10e0f1c`).
+11. **`?snapshot=0` is not named by the page** (step 3, second review). It still works as the normal boot, a diagnostic mode
+    for developers documented in `web/CLAUDE.md` and `docs/pyodide-snapshot.md`, but no message the page shows names it. A
+    stale snapshot is reason "updated": the page says the site has a newer version and must be reloaded. An automatic
+    fallback to the normal boot when the snapshot fails is a possible later step, not built.
+12. **Words decided for step 4a** (step 3, second review): the close-tab dialog ("Save changes to clean.do?": Save, Don't
+    save, Cancel) and the Delete-all dialog ("Delete all 12 files?"), in SPEC 3.10. A failed "Download all" gives no toast
+    (a toast only confirms): it shows the banner `download-failed` with "Try again" (built in step 3; 4d may restyle or
+    reword it, OQ-16). A command that does not run stays in the
+    command line and is not added to the history (SPEC 3.5, 8).
 
 ## Steps
 
@@ -56,7 +94,8 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 0b | Doc restructure (`CLAUDE.md` and plan splits), cleanup, `ui.css` into `web/`, the deploy size check | general-purpose | Sonnet, medium | with 0a | done |
 | 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, medium | parallel with 2 | done |
 | 2 | The file store with its `pending` journal, the self-hosted runtime, a build-written list of the start files with their sizes, download with byte counts and abort (resumed per file), Break as wait / reset now, the zip made in the page, the tab lock, `storage.persist()`, relaying the streamed log and the new ops; Node tests (spec section 7) | general-purpose, worktree | Fable, high | parallel with 1 | done |
-| 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | not started |
+| 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | to review |
+| 3.5 | The engine code made clear and auditable: TypeScript everywhere, one explicit state machine, one build identity (no offline start), the journal as the only channel. Plan: `prototype1-step3.5-plan.md` | general-purpose, one step at a time | Opus, high | after 3, before the merge | not started |
 | 4a | File tree, editor tabs, upload and name clash, row menus | general-purpose, worktree | Opus, medium | after 3, with 4c | not started |
 | 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | not started |
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | not started |
@@ -110,8 +149,8 @@ Decided in the step 2 review:
   - `engineBytes` is not a build constant: step 2's build writes `start-files.json` (each start file, its size on disk and its
     compressed size). The page reads `compressed` from it.
   - The engine controller builds the states of section 5 from `onStatus`, `onRestart(reason, started)`, `resetAt`, a
-    `download()` rejection (`AbortError` means declined) and `start()` rejecting with "failed twice". The `dofile.downloaded`
-    flag is the controller's, not the client's.
+    `download()` rejection (`AbortError` means declined) and `start()` rejecting with "failed twice". Whether to ask
+    at load comes from the Cache (`client.cached()`), not a flag (round 6).
   - Wire `main.ts` in this order: `tabLock`, then `keepFiles()`, then `store.*` (set `store.blocked` when the lock is lost),
     then `client.download()` and `client.start()`. Leave out the proof-of-concept page's `?start=manual`, `window.__dofile`
     and its `confirm()` take-over (or keep them for tests only).
@@ -120,8 +159,25 @@ Decided in the step 2 review:
   - Add `graph_lines: []` to the client's rc 9998 result (`graph_lines` was added after step 2 was built).
   - Docs left stale by step 2: `web/CLAUDE.md` and `docs/pyodide-snapshot.md` (the loader from a `blob:` URL, the runtime
     from the page's origin, the cache-first fetch during the start).
+  - Not fixed in step 3: between 700 px and about 855 px wide at a 20 px default font size, the toolbar scrolls sideways
+    instead of fitting (its compact form starts below 56em).
+- **Step 4a:** on a phone the Files view shows the pane head "FILES" right under the top bar's "Files" title. The
+  maintainer does not want both. Decide where the file actions (`FilesHead`) go on a phone, then drop or restyle that head;
+  it needs a change in the shell (`App.tsx` or `app.css`), so propose it to the maintainer.
 - **Step 4b:** a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
   and give it no error mark. Put each "graph n" link after the echo on line `graph_lines[i]`, not by matching the text.
+  From the second review of step 3: the toast's offset on a phone (`app.css` puts it above the command line and the tab
+  bar, and with the keyboard open above the command line at the visible area's foot; set both against 4b's real command
+  line, which shows on the Log view only, and the strip; `e2e/shell.spec.ts` checks the place). The command line clears
+  its field only when `runCommand(text).accepted` (SPEC 8).
+- **Step 4d:** a failed "Download all" shows the banner `download-failed` above the editor ("Your files couldn't be
+  downloaded: …" / "Try again", "Dismiss"), built in step 3 in `states/banners.tsx`; `files.js` adds it (one at a time)
+  and removes it when a later download works. Restyle or reword it with the other storage states if needed (OQ-16).
+  It sits above the editor on desktop; on a phone every view draws it (`banners.tsx`, `phone: "every"`), so it is seen
+  whichever view "Download all" was started from.
+- **Step 5:** the other-tab dialog's "Close editor" goes to `LANDING_URL` (`web/src/app/env.ts`, `landing.html`), a dead
+  link until the landing page exists: check the button once it does (and that the e2e tab-lock test's request still
+  matches the page's path).
 - **Step 4c:**
   - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decide whether to
     draw such a graph light, or accept it.
@@ -129,3 +185,5 @@ Decided in the step 2 review:
     number to the alt text.
   - `browse` returns string cells whole (a strL can be thousands of characters with newlines). Cut long cells in the grid.
 - **Step 6:** one Playwright test of a streamed run in a real browser (step 1 checked streaming in Node `worker_threads` only).
+  From the second review of step 3: check Tab out of the open ⋯ menu at phone width too (`e2e/shell.spec.ts` checks it on
+  desktop only). New specs import `test` from `e2e/fixtures.ts` (storage kept, no storage banner unless turned off).

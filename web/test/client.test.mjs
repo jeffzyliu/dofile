@@ -13,6 +13,7 @@ function fakeCaches({ refuse = false } = {}) {
   return {
     all,
     async keys() { return [...all.keys()]; },
+    async has(name) { return all.has(name); },
     async delete(name) { return all.delete(name); },
     async open(name) {
       if (!all.has(name)) all.set(name, new Map());
@@ -155,6 +156,45 @@ test("download: a file that is not the size the build's list says is refused and
   const good = fakeFetch(), eng = client(good.fetch, caches);
   assert.equal((await eng.download()).cached, true);
   assert.deepEqual(await cached(caches), ["pyodide/pyodide.asm.wasm", "snapshot/dso.json", "snapshot/heap.bin"]);
+});
+
+test("cached(): true only when every download file of the list's build is in its Cache; it writes nothing", async () => {
+  const caches = fakeCaches(), { fetch } = fakeFetch();
+  assert.equal(await client(fetch, caches).cached(), false, "an empty Cache Storage");
+  assert.deepEqual([...caches.all.keys()], [], "no empty cache was made");
+  // another build's complete cache does not count, and is not deleted
+  const other = await caches.open("dofile-snapshot-1");
+  for (const path of Object.keys(FILES)) await other.put(BASE + path, new Response("x"));
+  assert.equal(await client(fetch, caches).cached(), false, "another build's cache");
+  assert.deepEqual([...caches.all.keys()], ["dofile-snapshot-1"]);
+  // partly filled (a stopped download): false; complete: true
+  const mine = await caches.open("dofile-snapshot-777");
+  await mine.put(`${BASE}snapshot/heap.bin`, new Response("x"));
+  assert.equal(await client(fetch, caches).cached(), false, "a partial cache");
+  await client(fetch, caches).download();
+  assert.equal(await client(fetch, caches).cached(), true, "a complete cache");
+  // the list as a URL, fetched; when it cannot be fetched (offline): false
+  assert.equal(await client(fetch, caches, { startFiles: `${BASE}start-files.json` }).cached(), true);
+  const offline = async () => { throw new TypeError("fetch failed"); };
+  assert.equal(await client(offline, caches, { startFiles: `${BASE}start-files.json` }).cached(), false, "offline");
+  // no Cache API, or no snapshot start (?snapshot=0)
+  assert.equal(await client(fetch, null).cached(), false, "no Cache API");
+  assert.equal(await client(fetch, caches, { snapshot: undefined }).cached(), false, "no snapshot start");
+});
+
+test("forgetDownload(): every dofile-snapshot-* Cache is deleted, nothing else; it never rejects", async () => {
+  const caches = fakeCaches(), { fetch } = fakeFetch();
+  await client(fetch, caches).download();
+  await caches.open("dofile-snapshot-1");
+  await caches.open("someone-else");
+  await client(fetch, caches).forgetDownload();
+  assert.deepEqual([...caches.all.keys()], ["someone-else"]);
+  assert.equal(await client(fetch, caches).cached(), false);
+  await client(fetch, null).forgetDownload();   // no Cache API: nothing to do
+  const broken = { ...caches, keys: async () => { throw new DOMException("damaged", "UnknownError"); } };
+  const warn = console.warn;
+  console.warn = () => {};
+  try { await client(fetch, broken).forgetDownload(); } finally { console.warn = warn; }
 });
 
 test("download: a list from another build than the page says so before anything is fetched", async () => {

@@ -19,6 +19,10 @@ let upTo = 0;
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
 let unsaved = new Map();
 
+/** @typedef {import("./types").ToWorker} ToWorker @typedef {import("./types").FromWorker} FromWorker
+ *  @typedef {import("./types").StatusText} StatusText @typedef {import("./types").SnapshotManifest} SnapshotManifest */
+
+/** @param {StatusText} text */
 const status = text => self.postMessage({ status: text });
 const within = (path, top) => path === top || path.startsWith(`${top}/`);   // `path` is `top` or under it
 
@@ -276,6 +280,7 @@ async function loadFromSnapshot(base, indexURL, wheelName, wheelHash, io, brotli
   };
   status("downloading the engine");   // or reading it from the cache, when the page's download() or an earlier visit filled it
   // the manifest is the one file that must be fresh: it says which build the cached files belong to
+  /** @type {SnapshotManifest} */
   const manifest = await (isFile ? fetchJSON(`${base}manifest.json`)
     : fetch(`${base}manifest.json`, { cache: "no-cache" }).then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
   ).catch(e => {
@@ -483,6 +488,7 @@ const answer = async (id, op, args) => {
   }
 };
 
+/** @param {MessageEvent<ToWorker>} message (answers: FromWorker) */
 self.onmessage = ({ data: { id, op, args } }) => {
   if (op === "boot") {   // outside the queue, so file ops are answered while the engine loads
     ops.boot(args ?? {}).then(about => { bootDone.ok(); self.postMessage({ id, result: about }); },
