@@ -112,12 +112,15 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   or example datasets; write from documented behavior. No GPL/AGPL code or dependencies. The Stata reference logs
   stay out of distributions (excluded from the sdist in `pyproject.toml`).
 - `legacy/` holds the 2020 OpenStata repos (gitignored); leave it alone.
+- **`main` is protected: never push to it.** Every change is a pull request from a branch that is up to date with `main`; `ci ok`,
+  `web ok` and `lint ok` must pass. Merge with a merge commit, never squash or rebase (`.git-blame-ignore-revs` names two
+  commits by hash). A merge to `main` deploys the web page to Cloudflare (`deploy.yml`).
 - Status and next steps: `docs/phase1-plan.md` (done), `docs/phase2-plan.md` (web demo; the history and gaps are in
   `docs/phase2-history.md`, `docs/browser-engine.md` and `docs/lazy-matplotlib.md`), `docs/phase3-plan.md` (hosted multi-user MCP
   server). `docs/prototype1-plan.md` (the build plan and status for prototype 1 of the web demo: read it first when picking that
-  work up; its active task is `docs/prototype1-step3.5-plan.md`, and `docs/web-engine-data-flow.md` explains the web engine's data flow). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
-  `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`. Formatting and linting (Biome, ruff; added on the branch
-  `prototype1-step3` after step 3.5, before the merge): `docs/formatting-proposal.md`.
+  work up; steps 0 to 3.5 are merged and step 4 is next; `docs/prototype1-step3.5-plan.md` is the record of step 3.5, and `docs/web-engine-data-flow.md` explains the web engine's data flow). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
+  `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`. Formatting and linting (Biome, ruff; merged with
+  step 3.5 by pull request #13): `docs/formatting-proposal.md`.
 - Web demo design (moodboard, flows, wireframes, mockups): `docs/design/`. `docs/design/SPEC.md` is the build spec for the web
   demo's pages; `docs/design/README.md` holds the brief, the rules and every round of feedback (the plan keeps only a summary of
   the decisions). Renders are not committed; each folder's README has the command.

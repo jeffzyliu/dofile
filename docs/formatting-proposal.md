@@ -1,7 +1,7 @@
 # Formatting and linting: Biome for the web code, ruff for the Python code
 
-Status: **decided (2026-11-11), being done on the branch `prototype1-step3`**, on top of prototype 1 step 3.5 and before the
-merge and step 4. The first version of this file proposed to wait for the merge and to use a width of 160; the measurements
+Status: **decided and done (2026-11-11), merged by pull request #13**; it was done on the branch `prototype1-step3`, on top of
+prototype 1 step 3.5 and before the merge and step 4. The first version of this file proposed to wait for the merge and to use a width of 160; the measurements
 below changed both.
 
 ## Why

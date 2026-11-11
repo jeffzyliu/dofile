@@ -4,9 +4,10 @@ The task proposal the maintainer approved on 2026-11-10, after reading the engin
 ([web-engine-data-flow.md](web-engine-data-flow.md)). It sits between step 3 (the app shell) and step 4 of
 [prototype1-plan.md](prototype1-plan.md). Update the status table here at the end of every session.
 
-To pick up: steps A to E are done and wait for the maintainer's approval and the merge. Read this file, then `web/CLAUDE.md`,
+Steps A to E are done and were merged into `main` with step 3 by pull request #13 (`aff60a5`, 2026-11-11); this file is now
+a record. To pick up the code: read this file, then `web/CLAUDE.md`,
 then `web-engine-data-flow.md` (how the code works **as built**; its Part 3 lists what is still open), then run
-`git status` and `git log --oneline -5` in the worktree. The "Why" and step sections below are the plan as written, a
+`git status` and `git log --oneline -5`. The "Why" and step sections below are the plan as written, a
 record of what each step was meant to do.
 
 ## Why
@@ -26,8 +27,8 @@ and plainly so. Today:
 
 ## Where the work is
 
-- Worktree `.claude/worktrees/agent-adc4512780de518ed`, branch `prototype1-step3`. Step 3 is committed there as a
-  checkpoint and **is not merged**. Nothing merges into `main` until the maintainer approves step 3 and step 3.5.
+- It was done in the worktree `.claude/worktrees/agent-adc4512780de518ed`, branch `prototype1-step3`, and is merged (pull
+  request #13). The worktree is no longer needed.
 - Work on that branch, one commit per step below, so each step is a diff the maintainer can review. Agents do not
   commit unless told to. No attribution lines in commit messages.
 - Do not change what the step 4 parts rely on without saying so: SPEC section 8 ("As built in step 3") and the header
