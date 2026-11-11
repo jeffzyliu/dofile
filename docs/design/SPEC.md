@@ -927,6 +927,18 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `graphIndex`, `graphFull`, `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
     run.ts `moreRows()`, which appends (run.ts is the one writer of `rows`). Calls
     `call("matrix" | "describe_file", ...)`, `moreRows()`, `runCommand` (Load), `showToast` ("Copied").
+    As built (step 4c): `tabs.tsx` only re-exports the three tabs, one file each (`GraphTab.tsx`, `DataTab.tsx`,
+    `ResultsTab.tsx`); the logic with no DOM is `format.ts` (tested in Node, `test/output.test.ts`), the clipboard and PNG
+    helpers `clip.ts`, and the views' own state `view.ts` (module signals: the filter text, the focused name and value,
+    the folds, the open matrices, the cells shown whole, what `describe_file` said of each .dta). Details where the
+    sections above are silent: "graph n of N" counts by the graph's number `n` (the log's links) against the newest
+    graph's number; the alt text is "Graph: scatter wage educ", and "Graph 2: scatter wage educ" when another kept graph
+    has the same command; the card of a dark plot is dark (`--graph-card-dark`, OQ-21); the full-size view is a fixed
+    overlay (not a native modal dialog, whose top layer would hide the toast) with its own focus trap; picking the picked
+    name again clears it; a Browse cell over 60 characters, or with a line break, is cut to one line (a break shows as ↵)
+    and shows whole when pressed; the r() scalars start open when e() has no scalars; an open matrix closes when another
+    run replaces the results; Load says "Loaded wages.dta" (or "Couldn't load wages.dta: r(601)") in a toast when it
+    ends; a matrix grid shows 100 rows and 30 columns at most (Copy has all).
   - **4d** `states/DownloadDialog.tsx` (the prompt and "dofile is open in another tab", built as far as the start and the
     tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, a dead link until step 5),
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state

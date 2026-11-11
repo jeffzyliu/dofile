@@ -269,3 +269,268 @@ body {
   top: calc(var(--vv-top) + var(--vv-height) - var(--s7) - var(--s2));
   transform: translate(-50%, -100%);
 }
+
+/* Step 4c: graph, data, results (app/output/). Used here and nowhere else: the Output tabs, the full-size graph view and
+   a .dta file's tab. The classes of ui.css (.graph-card, .thumb, .facts, .t, .grid, .rs, .empty ...) are used as drawn. */
+
+/* a plot drawn dark (plot_theme "dark") sits on a dark card: OQ-21, the card follows the plot's theme. The colour is
+   OpenDTA's dark scheme's background (graphics/scheme.py "opendta_dark"), so the card melts into the picture's edge. */
+:root {
+  --graph-card-dark: #1e2227;
+}
+.graph-card[data-theme="dark"] {
+  background: var(--graph-card-dark);
+}
+
+/* the tabs scroll inside their pane (the pane body does not scroll) */
+.out-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.scroll-x,
+.grid-wrap {
+  overflow-x: auto;
+}
+.grid-wrap {
+  padding: 0 var(--s3) var(--s3);
+}
+.rs .mat .grid-wrap {
+  padding: 0;
+}
+.note {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.note code {
+  color: var(--ink);
+}
+
+.subhead h3 {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  margin: 0;
+} /* Browse is a heading that looks like the sub-head it is */
+
+/* a button that looks like a link: "Show 50 more", a matrix's View and Hide */
+.link-btn {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.link-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+  text-decoration: none;
+}
+
+/* Data: the filter field, text cells, a cut cell */
+input.filter {
+  display: block;
+  width: calc(100% - 2 * var(--s3));
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+input.filter::placeholder {
+  color: var(--muted);
+}
+.grid td.str {
+  text-align: left;
+}
+.grid td.open {
+  white-space: pre-wrap;
+  max-width: 60ch;
+}
+.cell-cut {
+  font: inherit;
+  text-align: inherit;
+}
+.cell-cut.open {
+  display: block;
+  max-height: 16em;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Graph: the foot (thumbnails, title, links) wraps in a narrow pane */
+.graph-foot {
+  flex-wrap: wrap;
+}
+.thumbs {
+  display: flex;
+  gap: var(--s2);
+  margin: 0;
+  border: 0;
+  padding: 3px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.thumb {
+  flex: none;
+  padding: 0;
+}
+.foot-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the full-size graph view: over the whole page, under the toast and the menus (tokens.css, stacking) */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--ink);
+}
+.viewer:focus-visible {
+  box-shadow: none;
+  outline: none;
+} /* it holds the focus for the keys and shows no ring around the page */
+.vhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+.vtitle {
+  font-weight: var(--w-bold-ui);
+}
+.vsaid {
+  color: var(--ok);
+}
+.vbody {
+  flex: 1;
+  display: flex;
+  gap: var(--s3);
+  padding: var(--s3);
+  min-height: 0;
+}
+.vbody .graph-card {
+  flex: 1;
+  min-width: 0;
+}
+.strip {
+  width: 76px;
+  overflow-y: auto;
+}
+.strip .thumbs {
+  flex-direction: column;
+  overflow-x: visible;
+}
+.strip .thumb {
+  width: 66px;
+  height: 48px;
+}
+.vfoot {
+  display: none;
+}
+/* the phone's full-screen graph (WP 6): the strip under the picture, Previous and Next at the foot */
+@media (max-width: 699.98px) {
+  .vbody {
+    flex-direction: column;
+  }
+  .strip {
+    width: auto;
+    overflow-y: visible;
+    overflow-x: auto;
+  }
+  .strip .thumbs {
+    flex-direction: row;
+    justify-content: center;
+  }
+  .vfoot {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s2);
+    padding: var(--s2) var(--s3);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .vfoot .btn {
+    justify-content: center;
+    min-height: 44px;
+  }
+  .vclose .key {
+    display: none;
+  } /* a phone has no Esc */
+}
+
+/* a .dta file's tab: two bars, then the variables (P/.dta) */
+.dta-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dta-view .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.dta-view .bar b {
+  color: var(--ink);
+}
+.dta-view .bar .cmd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: var(--log) / 1.4 var(--font-mono);
+  color: var(--ink);
+}
+.dta-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* a finger: rows and the controls in them are 44 px (SPEC section 1) */
+@media (pointer: coarse) {
+  .rs .row td,
+  .rs .grp td,
+  .t td {
+    height: 44px;
+  }
+  .rs .val {
+    display: block;
+    padding-block: 11px;
+  }
+  .rs .fold,
+  .t .var,
+  .link-btn {
+    padding-block: 11px;
+  }
+}
+
+/* forced colors: the marks that are fills or shadows get a system colour (the ring of a focused value is ui.css's) */
+@media (forced-colors: active) {
+  .thumb.on {
+    outline: 2px solid Highlight;
+  }
+  .grid td.picked {
+    border-bottom: 1px solid Highlight;
+  }
+  .rs .focusrow td:first-child {
+    border-left: var(--bar) solid Highlight;
+  }
+}

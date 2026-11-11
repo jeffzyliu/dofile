@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-240-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-255-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -95,9 +95,9 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 240 tests)
+## Web (about 255 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 212)
+### Unit and integration (`node --test`, `web/test/`, 227)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
@@ -111,14 +111,15 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `store.test.ts` | 15 | IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock. |
 | `snapshot-native.test.ts` | 14 | Native library calls from an engine restored from the memory snapshot (skipped, as one test, without a current snapshot). |
 | `engine.test.ts` | 13 | The engine in Pyodide under Node: runs, results, graphs, Break, a worker that fails to load. |
+| `output.test.ts` | 15 | The Output tabs' logic (`app/output/format.ts`): numbers to 8 digits and the exponent form, missing values, matrix as tab-separated text, the Results sections and groups (defaults, system globals, no Functions group), a long Browse cell cut short, a graph's label and alt text with its number when a command is shared, sizes. |
 | `imports.test.ts` | 12 | Architecture rules enforced by scanning source: import layering, single writers, single instances, one `postMessage` site. |
 | `snapshot.test.ts` | 5 | Snapshot inflate and unpack. |
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 24 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 27 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 96 cases, of which 74 run and 22 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 108 cases, of which 86 run and 22 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6, and the two iPhone-only checks in the three desktop
 profiles).
 
@@ -126,6 +127,7 @@ profiles).
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
 - `engine.spec.ts` (3): runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start.
+- `output.spec.ts` (3, step 4c): the three empty states and the reset wording; a .dta tab with no engine (two bars, Copy, no table); and one test with an engine that runs code through the hook and checks the Graph tab (alt text with the graph number, foot, thumbnails), the full-size view (← → Esc, focus back, Tab kept inside, Copy image, Export PNG; on the phone, Previous, Next and Close), the Data tab (facts, filter, arrow keys, picking a name and the column scroll, Show 50 more, a cut cell shown whole, nothing written to the log), the Results tab (sections, copied values with every digit, Ctrl/Cmd+C, a matrix viewed, copied and hidden, closed by the next run) and a .dta tab with an engine (variables, `describe_file` leaves the data, Load). The clipboard is a recorder in every page.
 
 ## Conformance corpus: value and limits
 
@@ -168,7 +170,7 @@ profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (20 that run); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (23 that run); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
