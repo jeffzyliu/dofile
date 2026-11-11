@@ -7,15 +7,20 @@ Status column and the "Where things stand" section at the end of every session.
 To pick up after a break: read this file, then `docs/design/SPEC.md` (the build spec), then run `git status` and
 `git log --oneline -5`.
 
-## Where things stand (2026-11-10)
+## Where things stand (2026-11-11)
 
-- **Steps 0, 1 and 2 are merged into `main`** (not pushed). Checked on `main` after step 2 merged: `uv run poe test` (1346
+- **Steps 3 and 3.5 are merged into `main`**, with the formatting and linting work, by pull request #13 (the merge commit
+  `aff60a5`, 2026-11-11). `main` is pushed and protected (root `CLAUDE.md`, Rules): every change is a pull request, merged
+  with a merge commit, and a merge deploys the page. Checked before the merge, locally and in CI (Ubuntu and macOS, Python 3.12
+  to 3.14): the lint gates; `npm test` (212 pass); e2e (74 passed, 22 skipped); `uv run poe ci` (1443 passed, 13 skipped, 3
+  xfailed); the design checks. The branch `prototype1-step3` and its worktree are no longer needed. **Next: step 4, parts 4a
+  and 4c first.** The bullets below about steps 3 and 3.5 are the record of that work as it stood on the branch.
+- **Steps 0, 1 and 2 are merged into `main`**. Checked on `main` after step 2 merged: `uv run poe test` (1346
   passed), `npm run check`, `npm test` (98 tests), `npm run e2e` (56 passed).
 - **Step 3.5 is done: the engine code made clear and auditable** (TypeScript everywhere, one state machine, one build
-  identity, the journal as the only channel; steps A to E, committed on the branch up to D, E's documents in the worktree).
+  identity, the journal as the only channel; steps A to E; merged by pull request #13).
   Its plan and status: [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md). How the engine code works as built, and what
-  is still open: [web-engine-data-flow.md](web-engine-data-flow.md). **Next: the maintainer's approval of steps 3 and 3.5 and the
-  merge, then step 4.**
+  is still open: [web-engine-data-flow.md](web-engine-data-flow.md).
 - **Formatting and linting were added on the branch after step 3.5 and before the merge:** Biome for `web/`, ruff for dofile's own
   Python, width 120. Two commits are layout only (`.git-blame-ignore-revs` lists them); the lint fixes change no behavior; the gates
   are `npm run check` (Biome, then `tsc`), `npm run lint:strict`, `uv run poe lint` and a CI job for each. Decisions, rules turned
@@ -23,9 +28,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   `npm run check`, `uv run poe lint`; `npm test` (212 tests, all pass, none skipped); `SNAPSHOT_QUALITY=5 npm run e2e` (74
   passed, 22 skipped, as before); `uv run poe ci` (1443 passed, 13 skipped, 3 xfailed). The design checks (`npm run axe`,
   `contrast`, `tabwalk`, `fonts`) pass too: 0 violations in 36 runs, 0 contrast failures, 0 hidden focus stops, 0 font problems.
-- **Step 3 (the app shell) is built, reviewed twice, and edited from the maintainer's notes. It is committed on its branch
-  as a checkpoint and not merged: the merge waits for the maintainer's approval of steps 3 and 3.5.** The work is in the worktree
-  `.claude/worktrees/agent-adc4512780de518ed`, branch `prototype1-step3` (made from `main` at `c014141`). What the step 4
+- **Step 3 (the app shell) is built, reviewed twice, edited from the maintainer's notes, and merged by pull request #13.**
+  It was built on the branch `prototype1-step3` (made from `main` at `c014141`). What the step 4
   agents write against: `docs/design/SPEC.md` section 8 ("As built in step 3") and the header of `web/src/app/App.tsx`.
 - Checked on the branch after step 3.5 E: `npm run check`; `npm test` (212 tests, all pass, none skipped); step E changes no page code, so the e2e and design checks were not rerun for it, and the counts below are the last recorded: `SNAPSHOT_QUALITY=5 npm run e2e`
   (74 passed, 22 skipped: the 16 fixme cases of `e2e/poc.spec.ts`, and the two iPhone-only checks, the page scroll and the toast's place, in the three desktop profiles); `npm run axe`, `contrast`, `tabwalk`, `fonts`. Nothing under the root `src/` or `tests/` changed, so
@@ -43,11 +47,9 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   `dofile.downloaded` flag is gone; at load the page asks unless `client.cached()` finds this build's start files all in
   the Cache, and a `failed-twice` (not memory or no-wasm) deletes them (`client.forgetDownload()`).
 - **Next, in this order:**
-  1. The maintainer's approval of steps 3 and 3.5 (done on the branch: step 3.5's steps A to E; the plan holds the
-     decisions). Step 3.5 changed the internals of `web/src/app/engine.ts`, `run.ts` and `web/src/engine/`; the contracts in
-     SPEC sections 5 to 8 are what step 4 relies on.
-  2. The merge of steps 3 and 3.5.
-  3. Step 4 (4a and 4c first).
+  1. Step 4: 4a and 4c first, then 4b and 4d. Step 3.5 changed the internals of `web/src/app/engine.ts`, `run.ts` and
+     `web/src/engine/`; the contracts in SPEC sections 5 to 8 are what step 4 relies on.
+  2. Step 5 (it can run beside step 4), then step 6 for each merged part and the review in 6r.
 - **To try on a real iPhone** (none of this can be tested here; the e2e iPhone profile is an emulation with no real
   keyboard, toolbars or touch scrolling): the page does not scroll or bounce; with the keyboard open the command line sits
   right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard
@@ -108,7 +110,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 0b | Doc restructure (`CLAUDE.md` and plan splits), cleanup, `ui.css` into `web/`, the deploy size check | general-purpose | Sonnet, medium | with 0a | done |
 | 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, medium | parallel with 2 | done |
 | 2 | The file store with its `pending` journal, the self-hosted runtime, a build-written list of the start files with their sizes, download with byte counts and abort (resumed per file), Break as wait / reset now, the zip made in the page, the tab lock, `storage.persist()`, relaying the streamed log and the new ops; Node tests (spec section 7) | general-purpose, worktree | Fable, high | parallel with 1 | done |
-| 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | to review |
+| 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | done |
 | 3.5 | The engine code made clear and auditable: TypeScript everywhere, one explicit state machine, one build identity (no offline start), the journal as the only channel. Plan: `prototype1-step3.5-plan.md` | general-purpose, one step at a time | Opus, high | after 3, before the merge | done |
 | 4a | File tree, editor tabs, upload and name clash, row menus | general-purpose, worktree | Opus, medium | after 3, with 4c | not started |
 | 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | not started |
