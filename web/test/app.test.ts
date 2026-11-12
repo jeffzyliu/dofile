@@ -62,7 +62,7 @@ const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/f
 const { startEngine } = await import("../src/app/start.ts");
 const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");
 const { decodeText } = await import("../src/app/files/open.ts");
-const { watchViewport, KEYBOARD } = await import("../src/app/viewport.ts");
+const { watchViewport, KEYBOARD, KB_MODES, kbModeOf, PREDICT, HOLD } = await import("../src/app/viewport.ts");
 
 /** The engine's state, which must be `name`: that member of EngineState, with its own fields. */
 function state<N extends EngineStateName>(name: N): Extract<EngineState, { s: N }> {
@@ -2066,6 +2066,180 @@ test("the phone keyboard where the browser shrinks the layout viewport: open whi
   resize(390 - KEYBOARD - 50, 800); // then the keyboard in landscape
   assert.equal("keyboard" in root.dataset, true);
   stop();
+});
+
+// The keyboard experiment's strategies (?kb=…, app/viewport.ts; docs/phone-keyboard-experiment.md). The default, "top",
+// is what the two tests above drive.
+/** A watched page for the strategies: a visualViewport as iOS Safari reports it (the layout viewport stays 844 px
+ *  tall), a root that takes focusin, a clock and timers run by hand, and the calls to scroll the page back. */
+function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
+  const vv = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 });
+  const vars = new Map<string, string>();
+  const root = Object.assign(new EventTarget(), {
+    dataset: {} as DOMStringMap,
+    style: { setProperty: (k: string, v: string) => vars.set(k, v), removeProperty: (k: string) => vars.delete(k) },
+  });
+  let clock = 0,
+    scrolled = false;
+  const timers: { at: number; fn: () => void }[] = [];
+  const seen = { phone, unpans: 0, caretAt: null as number | null }; // what the page's callbacks read and count
+  const page = {
+    vv,
+    vars,
+    root,
+    seen,
+    open: () => "keyboard" in root.dataset,
+    move(height: number, offsetTop = 0, scale = 1) {
+      Object.assign(vv, { height, offsetTop, scale });
+      vv.dispatchEvent(new Event("resize"));
+    },
+    pan(offsetTop: number, scrollY = false) {
+      vv.offsetTop = offsetTop;
+      scrolled = scrollY;
+      vv.dispatchEvent(new Event("scroll"));
+    },
+    /** a focusin on `el`, as the page gets it (the event's target is the field) */
+    focus(el: object) {
+      const e = new Event("focusin");
+      Object.defineProperty(e, "target", { value: el });
+      root.dispatchEvent(e);
+    },
+    /** move the clock on by `ms` and run the timers due */
+    tick(ms = 0) {
+      clock += ms;
+      for (const t of timers.splice(0).sort((a, b) => a.at - b.at))
+        if (t.at <= clock) t.fn();
+        else timers.push(t);
+    },
+    ...watchViewport({
+      vv: vv as VisualViewport,
+      root: root as unknown as HTMLElement,
+      layoutHeight: () => 844,
+      layoutWidth: () => 390,
+      enabled: () => seen.phone,
+      mode,
+      now: () => clock,
+      scrollTop: () => {
+        seen.unpans++;
+        vv.offsetTop = 0;
+        scrolled = false;
+      },
+      panned: () => scrolled,
+      caret: () => seen.caretAt,
+      later: (fn, ms = 0) => timers.push({ at: clock + ms, fn }),
+    }),
+  };
+  return page;
+}
+/** A text field as the focus handlers see it: an input, or CodeMirror's content inside its scroller. */
+const fieldEl = (scroller: { scrollTop: number } | null = null) => ({
+  matches: () => true,
+  closest: (sel: string) => (sel === ".cm-scroller" ? scroller : null),
+});
+const notField = { matches: () => false, closest: () => null };
+
+test("the keyboard experiment's flag: ?kb= names one of six strategies; none, an empty or an unknown value is the default, top", () => {
+  assert.deepEqual([...KB_MODES], ["top", "transform", "height", "unpan", "pre", "focus"]);
+  for (const m of KB_MODES) assert.equal(kbModeOf(new URLSearchParams(`?kb=${m}&kblog`)), m);
+  for (const q of ["", "?kblog", "?kb=", "?kb=TOP", "?kb=bottom", "?test&slide"])
+    assert.equal(kbModeOf(new URLSearchParams(q)), "top", q);
+});
+
+test("the keyboard experiment: transform and focus follow the pan as top does; height keeps .app at the top and never scrolls the page", () => {
+  for (const mode of ["top", "transform", "focus"] as const) {
+    const p = keyboardPage(mode);
+    p.move(508);
+    p.pan(120);
+    assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "120px"], mode);
+    p.focus(fieldEl()); // no prediction outside pre
+    p.tick(HOLD);
+    p.move(844);
+    assert.equal(p.open(), false, mode);
+    assert.equal(p.vars.size, 0, mode);
+    assert.equal(p.seen.unpans, 0, mode);
+  }
+  const p = keyboardPage("height");
+  p.move(508, 0);
+  p.pan(120, true);
+  assert.equal(p.open(), true);
+  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"]);
+  assert.equal(p.seen.unpans, 0, "height leaves the pan alone");
+  p.move(844);
+  assert.equal(p.vars.size, 0);
+});
+
+test("the keyboard experiment: unpan keeps .app at the top and scrolls the page back while the keyboard is open and the page is panned, not otherwise", () => {
+  const p = keyboardPage("unpan");
+  p.pan(0, true); // no keyboard: a scroll is left alone
+  assert.equal(p.seen.unpans, 0);
+  p.pan(0);
+  p.move(508); // the keyboard, no pan
+  assert.equal(p.seen.unpans, 0);
+  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"]);
+  p.pan(120); // Safari pans the visible area to the field
+  assert.equal(p.seen.unpans, 1);
+  assert.equal(p.vars.get("--vv-top"), "0px");
+  p.pan(0, true); // the page itself scrolled
+  assert.equal(p.seen.unpans, 2);
+  p.move(422, 200, 2); // a pinch: no keyboard, nothing set, nothing scrolled
+  assert.equal(p.open(), false);
+  assert.equal(p.seen.unpans, 2);
+  p.seen.phone = false;
+  p.move(508, 120);
+  assert.equal(p.seen.unpans, 2, "off the phone");
+  p.stop();
+});
+
+test("the keyboard experiment: pre sets the area above a predicted keyboard on a field's focus, puts an editor's caret above it, holds it until the keyboard comes, and drops it without one", () => {
+  const p = keyboardPage("pre");
+  const predicted = Math.round(844 * PREDICT);
+  p.focus(notField); // not a text field
+  assert.equal(p.open(), false);
+  // CodeMirror's content, the caret at 700 px: the scroller moves it 24 px above the predicted keyboard
+  const scroller = { scrollTop: 50 };
+  p.seen.caretAt = 700;
+  p.focus(fieldEl(scroller));
+  assert.equal(p.open(), true, "at once, in the focusin");
+  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], [`${predicted}px`, "0px"]);
+  assert.equal(scroller.scrollTop, 50 + 700 - (predicted - 24));
+  p.tick(); // the focus handler's update before the keyboard: the prediction holds
+  p.pan(0); // a scroll event before the keyboard: still held
+  assert.equal(p.open(), true);
+  p.move(508, 100); // the keyboard opens, panned: the real height, at the top, scrolled back
+  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"]);
+  assert.equal(p.seen.unpans, 1);
+  p.tick(HOLD); // the hold's timer finds the keyboard open: nothing changes
+  assert.equal(p.vars.get("--vv-height"), "508px");
+  p.move(844);
+  assert.equal(p.open(), false);
+  assert.equal(p.vars.size, 0);
+  // the next focus predicts the height seen at this width; a caret already above it is not scrolled
+  p.seen.caretAt = 300;
+  p.focus(fieldEl(scroller));
+  assert.equal(p.vars.get("--vv-height"), "508px");
+  assert.equal(scroller.scrollTop, 50 + 700 - (predicted - 24));
+  // no keyboard comes (a hardware keyboard): the prediction goes after HOLD ms
+  p.tick(HOLD - 1);
+  assert.equal(p.open(), true);
+  p.tick(1);
+  assert.equal(p.open(), false);
+  assert.equal(p.vars.size, 0);
+  // an input (no scroller), and a focus with the keyboard already open, set nothing new
+  p.seen.caretAt = 800;
+  p.focus(fieldEl());
+  assert.equal(p.vars.get("--vv-height"), "508px");
+  p.move(500);
+  p.focus(fieldEl());
+  assert.equal(p.vars.get("--vv-height"), "500px");
+  p.move(844);
+  // off the phone: nothing
+  p.seen.phone = false;
+  p.focus(fieldEl());
+  assert.equal(p.open(), false);
+  p.stop();
+  p.seen.phone = true;
+  p.focus(fieldEl()); // no longer listening
+  assert.equal(p.open(), false);
 });
 
 // ---- the review of the step 4 join ----

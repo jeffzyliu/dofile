@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-430-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-440-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -143,6 +143,13 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
   (at 1440 px in sight, with the full sentence for screen readers and as its title, no link or tab stop; none at
   1199 px, the bar's height the same; at 1200 px, with the longest last run, memory and "Files may be cleared", no
   overflow and nothing cut in seven engine states; none on the iPhone, which has no status bar).
+- `keyboard.spec.ts` (4): the phone keyboard experiment (`?kb=`, `?slide`, `?kblog`), in every profile at 390 by 844 px,
+  with viewport.ts's attributes set by script (no profile has a real keyboard): for no flag, `top`, an unknown value and
+  each strategy, `<html data-kb>` (none for the default), `.app` as the visible area (by a transform only under
+  `transform`), the tab bar hidden, the command line at its foot and the toast above it, and `.app` filling the window once
+  the keyboard closes; the full-size graph view covering the visible area under `top` and `transform` (a transformed
+  `.app` holds it); `pre`'s predicted area set in the command line's focus and gone after the hold; the `?kblog` overlay
+  (the strategy's name, a focus listed, `pointer-events: none` with what is under it reached), and none without the flag.
 - `files.spec.ts` (14): the file tree by keyboard, arrow, Home, End and Delete keys with Alt, Ctrl or Cmd left to the browser (the tree, a tablist, the open-file tabs, a menu button and an open menu keep the focus and do not prevent the event), opening files in tabs, closing a tab with and without unsaved edits
   (a Save that fails keeps the tab open with the save-failed banner; Save saves through 4b's editor and closes the tab; the phone's file switcher; the focus after Save and after "Don't save", in one move to the tab now selected or, on a phone, the editor, and after Delete on the last tab), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
   open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
