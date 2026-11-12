@@ -7,13 +7,13 @@
   <title>Commands: dofile</title>
   <meta name="description" content="The commands the dofile engine has.">
   <script>try { const t = localStorage.getItem("dofile.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
-  <!-- the two lists below are filled in by the build from src/stata/commands.json (scripts/site-pages.ts) -->
+  <!-- served at /commands/. The two lists below are filled in by the build from src/stata/commands.json (scripts/site-pages.ts) -->
 </head>
 <body class="site commands">
 <header class="top">
-  <a class="wordmark" href="landing.html">do<span>file</span></a>
+  <a class="wordmark" href="/">do<span>file</span></a>
   <span class="spacer"></span>
-  <nav aria-label="Site"><a href="commands.html" aria-current="page">Commands</a><a href="https://github.com/jeffzyliu/dofile">GitHub</a>
+  <nav aria-label="Site"><a href="/commands/" aria-current="page">Commands</a><a href="https://github.com/jeffzyliu/dofile">GitHub</a>
     <button type="button" class="theme" id="theme" hidden aria-label="Theme: follows the system. Press for light, then dark."><span class="ico i-theme"></span><span class="label-text">System</span></button></nav>
 </header>
 
@@ -47,7 +47,7 @@
     </ul>
   </section>
   <p class="none" id="none" hidden>No command starts with or contains that.</p>
-  <p class="small"><a href="landing.html">Back to the start</a> · <a href="./">Open the editor</a></p>
+  <p class="small"><a href="/">Back to the start</a> · <a href="{{editor-url}}">Open the editor</a></p>
 </main>
 
 <footer>

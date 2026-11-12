@@ -2,11 +2,12 @@
 // listens on the port, which can be the preview server of another checkout or worktree, with another build.
 import { readFileSync } from "node:fs";
 import type { FullConfig } from "@playwright/test";
+import { EDITOR_BASE } from "../scripts/urls.ts";
 
 export default async function globalSetup(config: FullConfig) {
-  const base = config.projects[0]?.use.baseURL ?? "http://localhost:4173";
-  const mine = readFileSync(new URL("../dist/start-files.json", import.meta.url), "utf8");
-  const served = await fetch(`${base}/start-files.json`).then(
+  const base = config.projects[0]?.use.baseURL ?? `http://localhost:4173${EDITOR_BASE}`; // the editor's address
+  const mine = readFileSync(new URL(`../dist${EDITOR_BASE}start-files.json`, import.meta.url), "utf8");
+  const served = await fetch(new URL("start-files.json", base)).then(
     (r) => (r.ok ? r.text() : `status ${r.status}`),
     (e) => String(e),
   );

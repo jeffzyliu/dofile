@@ -24,7 +24,7 @@ type Hook = {
 
 /** Open the page with no engine and write `files` (text, or bytes as an array of numbers) into the store. */
 async function setUp(page: Page, files: Record<string, string | number[]>) {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => (window as unknown as { __dofile: Hook }).__dofile.store.blocked === false);
   await page.evaluate(async (files) => {
     const { store } = (window as unknown as { __dofile: Hook }).__dofile;

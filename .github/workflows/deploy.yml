@@ -50,7 +50,7 @@ jobs:
       - if: steps.fresh.outputs.ok != 'true'
         run: npm run snapshot   # needs the network once: micropip fetches openpyxl from PyPI
 
-      - run: npm run build   # vite build copies public/ (wheel, snapshot, _headers) into dist/
+      - run: npm run build   # the editor into dist/app/ (with public/: wheels, runtime, snapshot), then the static pages and dist/_headers
       # Cloudflare Workers static assets refuse a file over 25 MiB. The brotli-11 snapshot is built only in this workflow
       # (CI builds it at quality 5), so this is the one place the real file sizes show up: fail here, before wrangler does.
       - name: Check asset sizes

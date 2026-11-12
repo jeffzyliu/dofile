@@ -53,7 +53,7 @@ test("the editor never rewrites a file it didn't change", async ({ page }) => {
     dialogs.push(d.message());
     d.type() === "prompt" ? d.accept("main.do") : d.accept();
   });
-  await page.goto("/");
+  await page.goto("./");
   await ready(page);
   const row = (name: string) => page.locator("#files li", { hasText: name });
   const download = async (name: string) => {
@@ -102,7 +102,7 @@ test("Save is explicit: Run doesn't save, a switch or closing the page warns abo
     dialogs.push({ type: d.type(), message: d.message() });
     answer === "accept" ? d.accept() : d.dismiss();
   });
-  await page.goto("/");
+  await page.goto("./");
   await ready(page);
   const row = (name: string) => page.locator("#files li", { hasText: name });
   const download = async (name: string) => {
@@ -137,7 +137,7 @@ test("Save is explicit: Run doesn't save, a switch or closing the page warns abo
 
 test("Save writes the file; Discard opens the other file", async ({ page }) => {
   page.on("dialog", (d) => d.accept());
-  await page.goto("/");
+  await page.goto("./");
   await ready(page);
   const row = (name: string) => page.locator("#files li", { hasText: name });
   await page
@@ -159,7 +159,7 @@ test("Save writes the file; Discard opens the other file", async ({ page }) => {
 // The editor half of the proof of concept's first test ("the page runs .do code on uploaded files, breaks, and keeps
 // files"), kept for step 6: Run does not save, Save does, and a reload brings the saved text back into the editor.
 test("Run doesn't save; Save writes the file, and a reload brings the editor's text back", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
   await ready(page);
   await run(page, 'display "N=" _N');
   // Run doesn't save: the edit is still unsaved. Save, then reload: the editor's text comes back from IndexedDB

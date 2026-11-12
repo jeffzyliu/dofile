@@ -6,7 +6,7 @@
 // "dofile is open in another tab" (WS 6): "Close editor" (the first focus: taking over ends the other tab's engine and
 // the data in its memory, so a stray Enter must not do it) and "Use dofile in this tab". WS 6 draws "Close this tab",
 // but a page may close only a tab a script opened, so the button leaves the editor for the landing page instead.
-// That page is step 5's: until it exists, LANDING_URL is a dead link (step 5 checks this button).
+// LANDING_URL is the landing page, the site's root (e2e/landing.spec.ts checks this button).
 // While a take-over is in progress the engine is `other-tab-taking` (a few milliseconds): the machine ignores a second
 // press of "Use dofile in this tab". 4d may mark the button aria-disabled then, with the same label.
 

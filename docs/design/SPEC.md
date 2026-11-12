@@ -59,11 +59,11 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
 
 ## 2. Pages and layout
 
-| Page | Content | Step |
-|---|---|---|
-| Editor | The app; its own Vite entry. | 3, 4 |
-| Landing | `L`: static HTML that shows at once. Nav: Commands, GitHub, the theme button. "Open the editor →". | 5 |
-| Commands | A static list made from `web/src/stata/commands.json`; no links to help pages (`R` round 1). Not drawn: OQ-18. | 5 |
+| Page | URL | Content | Step |
+|---|---|---|---|
+| Landing | `/` | `L`: static HTML that shows at once. Nav: Commands, GitHub, the theme button. "Open the editor →". | 5 |
+| Commands | `/commands/` | A static list made from `web/src/stata/commands.json`; no links to help pages (`R` round 1). Not drawn: OQ-18. | 5 |
+| Editor | `/app/` | The app, a single-page app under its own path (one setting: `web/scripts/urls.ts`, section 8 "URLs"); its own Vite build. | 3, 4 |
 
 **Desktop B, split** (`E`, 1440 x 900): toolbar; columns `230px | 1fr | 660px` with `--s2` gaps; status bar. The right column
 is two panes: Log above (`1.35fr`, the command line at its foot) and, below (`1fr`), a tablist "Output": Graph, Data, Results
@@ -1210,7 +1210,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     reset now:** the data in memory is lost; your files are kept." Memory banner with no measured size: "**Memory is near
     its limit of about 2 GB.**" (then the drawn sentences). Progress rows: "Downloading the engine",
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
-    of M". OQ-18: "Browsers that work" goes to `landing.html#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
+    of M". OQ-18: "Browsers that work" goes to `/#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
     step 5 built listing the browsers that run dofile, opened in a new tab. OQ-10, the
     notes (`noteFor(rc, error)` in `words.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
     error, where `error` is the error the run ended with, its last error line that is not `r(N);`, not one an earlier
@@ -1336,22 +1336,67 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 
 ### As built in step 5 (landing, commands, sample; branch `prototype1-step5`)
 
-- **Pages and URLs.** Three entries of one Vite build, each static HTML at the site's top level: `index.html` (the editor,
-  the site's root `/`), `landing.html` and `commands.html` (`build.rollupOptions.input` in `vite.config.ts`). `appType: "mpa"`
-  makes a path that is not a file a 404 in `npm run dev` and `npm run preview` (Vite's single-page fallback answered the
-  editor for a missing `.html`, so "Close editor" and "Browsers that work" could not have been told from a dead link by their
-  URL). The deployed host (Cloudflare Workers static assets) serves the three pages; its `html_handling` may redirect
-  `/landing.html` to `/landing` (relative links in the pages work from either). Links between the pages are relative
-  (`landing.html`, `commands.html`, `./` for the editor); the editor's `LANDING_URL` (`env.ts`) is `${BASE_URL}landing.html`.
-  **To make the landing page the root:** move `index.html` to another name, give it a new entry key, point the landing page's
-  "Open the editor" at it, and change the e2e `goto("/")` calls; nothing else knows the editor's path.
+- **URLs** (decided by the maintainer in the review of step 5): the landing page is the site's root, `/`; the commands page is
+  `/commands/`; the editor is a single-page app under `/app/` (`/app/?test` and the other flags as before). Every address,
+  in `npm run dev`, `npm run preview` (and the e2e tests) and on the host (Cloudflare Workers static assets, `wrangler.jsonc`):
+
+  | Address | Serves |
+  |---|---|
+  | `/` | the landing page (`dist/index.html`, from `web/landing.html`); `/#browsers` its "Browsers that work"; `/index.html` redirects to `/` |
+  | `/commands/` | the commands page (`dist/commands/index.html`, from `web/commands.html`); `/commands`, `/commands.html` and `/commands/index.html` redirect to it |
+  | `/app/`, `/app/?test`, ... | the editor (`dist/app/index.html`, from `web/index.html`); `/app`, `/app.html` and `/app/index.html` redirect to `/app/`, the query kept |
+  | `/app/assets/…`, `/app/snapshot/…`, `/app/pyodide/…`, `/app/start-files.json`, `/app/*.whl` | the editor's files |
+  | `/assets/…` | the two static pages' own script, stylesheet and fonts |
+  | anything else (`/landing.html`, `/nope.html`, `/nope/`, `/app/nope.html`, `/_headers`) | 404, never a page in its place |
+
+  `/commands/` and not `/commands.html`: a folder's index is served at the same address, with no redirect, by the dev server,
+  `vite preview` and Cloudflare's `html_handling: "auto-trailing-slash"`; the redirects above are what `wrangler dev` (local
+  workerd) did with this `dist/`, and the dev and preview servers do the same (`slash` in `vite.config.ts`). `/landing.html`
+  was never deployed (step 5 is the first to build it), so it is a 404, not redirected. Headers: the cross-origin isolation the editor's Break needs (`COOP: same-origin`, `COEP: require-corp`) on
+  `/app/*` only (`dist/_headers`, written by the site's build); the static pages get none. The dev server sends them on every
+  response (Biome's checker panel is a frame and needs them). Links: the static pages name each other by absolute path (`/`,
+  `/commands/`) and the editor by `{{editor-url}}`, which the build fills; the editor names the landing page by
+  `LANDING_URL` (`app/env.ts`, from the build's `__SITE_URL__`) and `BROWSERS_URL` (`${LANDING_URL}#browsers`); its own files
+  by `import.meta.env.BASE_URL` (`main.tsx`), so the worker, the wheels, `pyodide/`, `snapshot/`, `start-files.json` and the
+  paths in it (relative to the list) all follow the base.
+- **Checked on `wrangler dev`** (local workerd, Cloudflare's runtime on this machine, not the edge), with `dist/` built on the
+  quality-11 snapshot as `deploy.yml` builds it (no file over 21 MB): every address in the table, its status, redirect and
+  headers, and in Chromium the landing page's and the commands page's scripts, and the editor at `/app/?test` starting from
+  the snapshot, cross-origin isolated, and running code. **Not checked, for the first deploy:** the edge itself (its
+  compression and caching, `deploy.yml`'s upload). Look at `/`, `/commands/`, `/app/` (in the console `crossOriginIsolated` is
+  true; the download size on the prompt and on the landing page agree), `/app` and `/commands` redirecting, "Browsers that
+  work" from the editor opening `/#browsers`, and a missing page giving a 404.
+- **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/app/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base` and
+  its output folder (`dist/app/`); `EDITOR_URL` (default `EDITOR_BASE`; `DOFILE_EDITOR_URL`) is what the static pages link
+  to; `SITE_URL` (`/`; `DOFILE_SITE_URL`) is the landing page, from the editor. `vite.config.ts`, `playwright.config.ts`
+  (its `baseURL` ends in the base, so a relative `goto("?test")` is the editor and `goto("/")` the landing page),
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.mjs` read it; a test checks that nothing else
+  spells `/app/`. **Another path on the same origin:** change `EDITOR_BASE`; nothing else. **Its own subdomain later**
+  (`app.<domain>`): build the editor with `DOFILE_EDITOR_BASE=/ DOFILE_SITE_URL=https://<domain>/` and the static pages with
+  `DOFILE_EDITOR_URL=https://app.<domain>/`, as two folders deployed as two Workers (today `npm run build` writes both into
+  one `dist/`: give the editor's build its own `--outDir` and the site's `_headers` the editor's rules, `headersFile("/")`,
+  in the editor's Worker, which then needs `/*` isolated and its own `not_found_handling`). What does not follow the editor to
+  a new origin, because the browser keeps it per origin: the visitors' files (IndexedDB `dofile`; they must "Download all
+  (.zip)" on the old address and upload them on the new), the downloaded engine (the Cache `dofile-snapshot-<built>`: a first
+  visit's download again), the tab lock (`dofile-engine`, per origin), the sample's mark (everyone gets the sample again) and the
+  theme choice (`dofile.theme`: the landing page and the editor no longer share it). Moving the path on one origin keeps the
+  files, the tab lock and the theme (all per origin), but the Cache's entries are keyed by their full URL, so a visitor whose
+  engine was cached at `/snapshot/…` downloads it once more at `/app/snapshot/…`.
+- **Builds.** `npm run build` = the wheel, then `vite build` (the editor: empties `dist/`, writes `dist/app/` with its
+  `public/` files and `start-files.json`, which lists only `dist/app/`), then `vite build --mode site` (the static pages:
+  `publicDir: false`, no module-preload polyfill, so they load nothing of the editor's; their download size read from
+  `dist/app/start-files.json`, which must exist; the pages moved to `index.html` and `commands/index.html`; `_headers`).
+  `vite preview` serves all of `dist/` at `/` with the isolation headers under `/app/` and the folder redirects, as the
+  host does. The dev server is the editor's (base `/app/`) with a middleware for `/` and `/commands/` (their scripts are then
+  served from under `/app/`, a dev-only detail).
 - **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
-  the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `landing.ts`; `commands.ts` and
-  `filter.ts`, the filter). These import nothing from `src/app/`: no signals, no store, no tab lock, so reading the landing
-  page never touches the editor's files. `web/scripts/site-pages.ts` fills the pages at build time (a plugin in
-  `vite.config.ts`): `{{version}}` (the package's version, `0.1.0.dev1`, OQ-20), `{{engine-mb}}` (`Math.round` of the
-  compressed total in MB, the editor prompt's number: in dev at once, in a build in `closeBundle`, after `writeStartFiles`),
-  and the commands list.
+  the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `theme.ts`, the theme button's words,
+  the editor's (a test compares them); `landing.ts`; `commands.ts` and `filter.ts`, the filter). These import nothing but
+  `src/site/` and the stylesheets, and nothing imports them (`test/imports.test.ts`): no signals, no store, no tab lock, so
+  reading the landing page never touches the editor's files. `web/scripts/site-pages.ts` fills the pages at build time (a
+  plugin in `vite.config.ts`): `{{version}}` (the package's version, `0.1.0.dev1`, OQ-20), `{{engine-mb}}` (`Math.round` of
+  the compressed total in MB, the editor prompt's number: in dev from `public/`, in a build from the editor's
+  `start-files.json`), `{{editor-url}}` (section 8, "URLs") and the commands list.
 - **Landing page** as drawn (`L`): desktop two columns, the phone's hero, both banner drawings and `welcome.do` hidden from
   screen readers with a plain copy that holds no link; Copy buttons that name what they copy ("Copied" beside the button for
   2 s, the live region says "Copied to the clipboard" once); " from a public CDN" and " from a CDN" are gone; "48 MB" is the

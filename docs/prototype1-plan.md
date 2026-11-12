@@ -19,8 +19,9 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   the landing page (`web/landing.html`), the commands page (`web/commands.html`), the sample project (`web/sample/`, loaded on a
   first visit, "Restore the sample" in the file menu), and the clean-room check of all text (the record at the end of this
   file). What was built, the URLs, the words the sources do not give and the decisions left open are in SPEC section 8, "As
-  built in step 5". **Decisions for the maintainer:** (1) the editor stays the site's root `/`, with the landing page at
-  `/landing.html` (easy to swap: SPEC 8, step 5); (2) the commands page has names and no descriptions; (3) the sample's first
+  built in step 5". **Decided by the maintainer after the review:** the landing page is the site's root `/`, the commands page
+  `/commands/`, the editor a single-page app under `/app/`, its location one setting (`web/scripts/urls.ts`) so that it can move
+  to its own subdomain later (SPEC 8, "URLs", says how and what stays at the old origin). **Decisions for the maintainer:** (2) the commands page has names and no descriptions; (3) the sample's first
   load is off under `?test` unless the URL has `?sample`; (4) writing the sample on a first visit does not bring the storage banner (S 19)
   (`files.ts` ignores the changes made while it seeds); the visitor's own first change does; (5) the draft
   words listed in SPEC 8 and the "Browsers that work" section.
@@ -306,7 +307,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | to review (built on `prototype1-step4`, pull request #17) |
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | to review (built on `prototype1-step4`, pull request #17) |
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (built on `prototype1-step4`, pull request #17; the draft words in SPEC section 8, "Step 4d: draft words"; the review decisions and open questions in "Step 4: decisions and open questions" above) |
-| 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4) |
+| 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4; reviewed once, its findings fixed; the landing page moved to `/` and the editor to `/app/`; open for the maintainer: the words listed in SPEC section 8 "As built in step 5", the first deploy's checks in SPEC 8 "URLs") |
 | 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | not started |
 | 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | not started |
 | 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started |
@@ -411,7 +412,7 @@ Decided in the step 2 review:
   It sits above the editor on desktop; on a phone every view draws it (`banners.tsx`, `phone: "every"`), so it is seen
   whichever view "Download all" was started from.
 - **Step 5 (done, to review):** the other-tab dialog's "Close editor" and the banner's "Browsers that work" go to
-  `landing.html` and `landing.html#browsers`, which now exist; the e2e tab-lock test (`step2.spec.ts`) checks the request and
+  the landing page, `/` and `/#browsers` (`/landing.html` until the editor moved to `/app/`); the e2e tab-lock test (`step2.spec.ts`) checks the request and
   that the landing page's section answers; `e2e/landing.spec.ts` checks both links ("Step 4: decisions and open questions", C 6).
 - **Step 4c:**
   - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decided

@@ -11,7 +11,7 @@
     "check-pytest": "npm run wheel && node scripts/check-pytest.mjs",
     "check-numeric": "npm run wheel && node scripts/check-numeric.mjs",
     "dev": "npm run wheel && vite --host",
-    "build": "npm run wheel && vite build",
+    "build": "npm run wheel && vite build && vite build --mode site",
     "preview": "vite preview --host",
     "format": "biome check --write",
     "lint": "biome lint",

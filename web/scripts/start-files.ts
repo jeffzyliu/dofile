@@ -1,13 +1,15 @@
 // The list of every file the snapshot start loads, with its size on disk and its compressed size (SPEC.md, OQ-12 a).
 // vite.config.ts writes it as dist/start-files.json after a build (and serves it in dev); the page's download prompt
 // and progress bar take their numbers from it (src/engine/client.ts, download).
-//   node scripts/start-files.ts [dir]      prints the list for a built page (default: dist); with no build stamp, no build id
+//   node scripts/start-files.ts [dir]      prints the list for a built editor (default: dist/<EDITOR_BASE>, dist/app/); with no
+//                                          build stamp, no build id
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import type { SnapshotManifest, StartFiles } from "../src/engine/types.ts";
 import { type BuildInputs, buildId, readManifest, staleness } from "./build-id.ts";
+import { EDITOR_BASE } from "./urls.ts";
 
 // Pyodide's own files that the snapshot start needs; vite.config.ts copies them from the npm package into public/pyodide/
 export const RUNTIME_FILES = ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
@@ -19,7 +21,8 @@ function compressedSize(bytes: Uint8Array): number {
   return Math.min(packed, bytes.length);
 }
 
-// `dir`: the folder the page is served from (dist/ after a build; public/ in dev, which has no page files).
+// `dir`: the folder the editor is served from (dist/app/ after a build: only the editor's files, not the landing and commands
+// pages'; public/ in dev, which has no page files). Paths in the list are relative to it, as the page reads them.
 // `stamp`: the build's stamp (vite.config.ts, made once per build or dev-server start); none: no build id.
 // `manifest`: the snapshot's build record, public/snapshot/manifest.json (it is not deployed: the build removes it from
 // dist/); null: no snapshot.
@@ -124,7 +127,9 @@ export function writeStartFiles(
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const list = listStartFiles(resolve(process.argv[2] ?? fileURLToPath(new URL("../dist", import.meta.url))));
+  const list = listStartFiles(
+    resolve(process.argv[2] ?? fileURLToPath(new URL(`../dist${EDITOR_BASE}`, import.meta.url))),
+  );
   const mb = (n: number) => (n / 1e6).toFixed(2).padStart(7);
   console.log("on disk  sent (MB)  fetched by download()");
   for (const f of list.files)

@@ -3,6 +3,7 @@
 // is in the file menu and asks before it replaces a file that differs. The first-visit load is off under `?test` unless the
 // URL also has `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
 import type { Page } from "@playwright/test";
+import { EDITOR_BASE } from "../scripts/urls.ts";
 import { expect, startEngine, test } from "./fixtures";
 
 // the test hook (window.__dofile) is untyped here: the specs of step 4 declare theirs per file
@@ -36,7 +37,7 @@ const ALL = ["analysis.do", "data/wages.dta", "helpers.do"];
 test("a first visit lists the sample and opens its main do-file; a later visit does not write it again", async ({
   page,
 }) => {
-  await page.goto("/?test=manual&sample");
+  await page.goto("?test=manual&sample");
   await unblocked(page);
   await expect.poll(() => stored(page)).toEqual(ALL);
   await expect.poll(() => page.evaluate(() => (window as any).__dofile.state.activeTab.value)).toBe("analysis.do");
@@ -60,12 +61,12 @@ test("a first visit lists the sample and opens its main do-file; a later visit d
 });
 
 test("never over a visitor's own files, and not under ?test alone", async ({ page }) => {
-  await page.goto("/?test=manual"); // no ?sample: nothing is written
+  await page.goto("?test=manual"); // no ?sample: nothing is written
   await unblocked(page);
   await page.waitForTimeout(500);
   expect(await stored(page)).toEqual([]);
   await put(page, "mine.do", "display 1\n");
-  await page.goto("/?test=manual&sample"); // not empty: the sample stays out
+  await page.goto("?test=manual&sample"); // not empty: the sample stays out
   await unblocked(page);
   await page.waitForTimeout(500);
   expect(await stored(page)).toEqual(["mine.do"]);
@@ -74,7 +75,7 @@ test("never over a visitor's own files, and not under ?test alone", async ({ pag
 test("Restore the sample: what is missing comes back with a toast; a changed file is asked about first (Cancel keeps it, Replace restores it); other files stay", async ({
   page,
 }) => {
-  await page.goto("/?test=manual&sample");
+  await page.goto("?test=manual&sample");
   await unblocked(page);
   await expect.poll(() => stored(page)).toEqual(ALL);
   await put(page, "mine.do", "display 1\n");
@@ -111,7 +112,8 @@ test("Restore the sample: what is missing comes back with a toast; a changed fil
 });
 
 test("the sample runs in the real engine to a table and a graph", async ({ page }) => {
-  await page.goto("/?test&sample");
+  await page.goto("?test&sample");
+  expect(new URL(page.url()).pathname).toBe(EDITOR_BASE); // the editor at its own path, under the landing page
   await unblocked(page);
   await expect.poll(() => stored(page)).toEqual(ALL);
   await startEngine(page);
@@ -133,7 +135,7 @@ test("the sample runs in the real engine to a table and a graph", async ({ page 
 test.describe("where the browser does not keep storage", () => {
   test.use({ persisted: false }); // the browser's own answers: persisted() is false in a test browser
   test("the sample's first write brings no storage banner; the visitor's own change does", async ({ page }) => {
-    await page.goto("/?test=manual&sample");
+    await page.goto("?test=manual&sample");
     await unblocked(page);
     await expect.poll(() => stored(page)).toEqual(ALL);
     await page.waitForTimeout(500);

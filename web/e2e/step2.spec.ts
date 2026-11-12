@@ -107,9 +107,9 @@ test.describe(() => {
         return real();
       };
     });
-    await page.goto("/?test");
+    await page.goto("?test");
     // a first visit: the prompt, with the size from the build; Download starts the engine
-    const list: StartFiles = await (await request.get("/start-files.json")).json();
+    const list: StartFiles = await (await request.get("start-files.json")).json();
     const prompt = page.getByRole("dialog", { name: "Download the engine?" });
     await expect(prompt).toBeVisible();
     const size = `${Math.round(list.compressed / 1e6)} MB`;
@@ -163,7 +163,7 @@ test.describe(() => {
 });
 
 test("the page has no test hook unless the URL asks for it", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("./");
   await page
     .getByRole("dialog", { name: "Download the engine?" })
     .getByRole("button", { name: /^Download/ })
@@ -179,8 +179,9 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   baseURL,
 }) => {
   const origin = new URL(baseURL!).origin;
-  const list: StartFiles = await (await request.get("/start-files.json")).json();
-  const wanted = list.files.filter((f) => f.download).map((f) => `/${f.path}`);
+  const list: StartFiles = await (await request.get("start-files.json")).json();
+  const at = (path: string) => new URL(path, baseURL).pathname; // a path of the list, on the server (under the editor's base)
+  const wanted = list.files.filter((f) => f.download).map((f) => at(f.path));
   expect(wanted.length).toBeGreaterThanOrEqual(8); // the snapshot's five, the runtime's three, the brotli decoder
   expect(
     list.files.map((f) => f.path),
@@ -194,7 +195,7 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   await context.route("**/snapshot/manifest.json", (route) => route.abort());
   const urls = requests(context);
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked); // the tab lock answered
 
   // files work with no engine at all, and are in the folder the engine later runs in
@@ -272,10 +273,10 @@ test("download: the counts reach the total, abort keeps the finished files, and 
   const during = urls.slice(before).map(pathOf);
   for (const path of wanted) expect(during, `${path} was fetched again by the start`).not.toContain(path);
   expect(urls.map(pathOf), "no request for the snapshot's manifest, at any point").not.toContain(
-    "/snapshot/manifest.json",
+    at("snapshot/manifest.json"),
   );
   expect(
-    during.filter((path) => path === "/start-files.json"),
+    during.filter((path) => path === at("start-files.json")),
     "the download fetches the build's list, fresh, and the start that follows reuses it: one fetch",
   ).toHaveLength(1);
   expect(await page.evaluate(() => window.__dofile.drops()), "no event was dropped on the way").toEqual([]);
@@ -292,10 +293,10 @@ test("a damaged file in the cache fails the start once and is fetched again by t
   page,
   request,
 }) => {
-  const list: StartFiles = await (await request.get("/start-files.json")).json();
+  const list: StartFiles = await (await request.get("start-files.json")).json();
   const heap = list.files.find((f) => f.path.startsWith("snapshot/heap"))!.path;
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked); // the tab lock answered
   const cached = () =>
     page.evaluate(
@@ -351,7 +352,7 @@ test("a damaged file in the cache fails the start once and is fetched again by t
 // a first start (as a browser may evict it), then Reset.
 test("a restart whose files are no longer in the Cache works and writes nothing to it", async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked); // the tab lock answered
   await page.evaluate(() => {
     window.__dofile.start();
@@ -378,7 +379,7 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
   context,
 }) => {
   page.on("pageerror", (e) => console.log(`first tab error: ${e.message}`));
-  await page.goto("/?test");
+  await page.goto("?test");
   await startEngine(page);
   await ready(page);
   await page.evaluate(() => window.__dofile.store.write("first-tab.do", new TextEncoder().encode("display 1\n")));
@@ -387,7 +388,7 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
   // a second tab: blocked, with the take-over dialog
   const second = await context.newPage();
   second.on("pageerror", (e) => console.log(`second tab error: ${e.message}`));
-  await second.goto("/?test");
+  await second.goto("?test");
   const otherTab = (p: Page) => p.getByRole("alertdialog", { name: "dofile is open in another tab" });
   await expect(otherTab(second)).toBeVisible();
   expect(await state(second)).toBe("other-tab-idle");
@@ -435,9 +436,7 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
   ]);
 
   // "Close editor" leaves for the landing page, and the landing page is what answers (e2e/landing.spec.ts too)
-  const leaving = page.waitForRequest(
-    (r) => r.isNavigationRequest() && new URL(r.url()).pathname.endsWith("/landing.html"),
-  );
+  const leaving = page.waitForRequest((r) => r.isNavigationRequest() && new URL(r.url()).pathname === "/");
   await otherTab(page).getByRole("button", { name: "Close editor" }).click();
   await leaving;
   await expect(page.getByRole("heading", { level: 2, name: "Browsers that work" })).toBeVisible();

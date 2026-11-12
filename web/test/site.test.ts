@@ -13,8 +13,11 @@ import {
   engineMB,
   fillCommands,
   fillTokens,
+  headersFile,
   OWN_PREFIXES,
+  sitePageFor,
 } from "../scripts/site-pages.ts";
+import { EDITOR_BASE, EDITOR_URL, SITE_URL } from "../scripts/urls.ts";
 import { countText, filterNames } from "../src/site/filter.ts";
 import data from "../src/stata/commands.json" with { type: "json" };
 
@@ -58,26 +61,70 @@ test("the six prefixes the interpreter handles itself are the highlighter's (lan
 });
 
 test("commands.html and landing.html: no placeholder is left once filled, and every placeholder is one the build knows", () => {
-  const commands = fillCommands(
-    fillTokens(web("commands.html"), { version: "9.9.9", engineMB: "50" }),
-    data as CommandData,
-    ["shell", "webuse"],
-  );
+  const tokens = { version: "9.9.9", engineMB: "50", editorURL: "/app/" };
+  const commands = fillCommands(fillTokens(web("commands.html"), tokens), data as CommandData, ["shell", "webuse"]);
   assert.doesNotMatch(commands, /\{\{|<!--COMMANDS-->|<!--PREFIXES-->/);
-  const landing = fillTokens(web("landing.html"), { version: "9.9.9", engineMB: "50" });
+  const landing = fillTokens(web("landing.html"), tokens);
   assert.doesNotMatch(landing, /\{\{/);
   assert.match(landing, /about 50 MB/);
-  const known = new Set(["version", "engine-mb", "command-count", "denied"]);
+  const known = new Set(["version", "engine-mb", "editor-url", "command-count", "denied"]);
   for (const f of ["landing.html", "commands.html"])
     for (const m of web(f).matchAll(/\{\{([^}]*)\}\}/g)) assert.ok(known.has(m[1]), `${f}: unknown {{${m[1]}}}`);
 });
 
-test("the landing page's links: the editor is ./ , the commands page and the section the editor's banner links to exist", () => {
-  const landing = web("landing.html");
-  assert.match(landing, /<a class="btn primary try" href=".\/">Open the editor/);
-  assert.match(landing, /href="commands.html"/);
-  assert.match(landing, /<section class="browsers" id="browsers"/);
-  assert.match(web("src/app/env.ts"), /landing\.html/);
+test("the pages' links: the editor's address from the build, the site's pages by absolute path, the section the editor's banner links to", () => {
+  for (const f of ["landing.html", "commands.html"]) {
+    const html = web(f);
+    const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+    for (const h of hrefs)
+      assert.ok(
+        ["/", "/commands/", "{{editor-url}}"].includes(h) || h.startsWith("https://"),
+        `${f}: ${h} (the site's pages are / and /commands/; the editor's address is the build's)`,
+      );
+    assert.ok(hrefs.includes("{{editor-url}}"), `${f} links to the editor`);
+  }
+  assert.match(web("landing.html"), /<section class="browsers" id="browsers"/);
+  assert.match(web("src/app/env.ts"), /LANDING_URL = __SITE_URL__/);
+  assert.match(web("src/app/states/banners.tsx"), /BROWSERS_URL = `\$\{LANDING_URL\}#browsers`/);
+});
+
+test("where each page is served, and the headers file: isolation on the editor's path only", () => {
+  assert.equal(sitePageFor("/"), "landing.html");
+  assert.equal(sitePageFor("/index.html"), "landing.html");
+  assert.equal(sitePageFor("/commands/"), "commands.html");
+  assert.equal(sitePageFor("/commands/index.html"), "commands.html");
+  for (const p of ["/commands", "/commands.html", "/landing.html", "/app/", "/nope/"])
+    assert.equal(sitePageFor(p), null, p);
+  const h = headersFile("/app/");
+  assert.match(
+    h,
+    /^\/app\/\*\n {2}Cross-Origin-Opener-Policy: same-origin\n {2}Cross-Origin-Embedder-Policy: require-corp$/m,
+  );
+  assert.doesNotMatch(h, /^\/\*$/m, "no rule for the whole site");
+  assert.match(headersFile("/"), /^\/\*$/m, "an editor at the root of its own origin: every path");
+});
+
+test("the editor's location is one setting: scripts/urls.ts, read by the config, the e2e config and the scripts", () => {
+  assert.equal(EDITOR_BASE, "/app/");
+  assert.equal(EDITOR_URL, EDITOR_BASE);
+  assert.equal(SITE_URL, "/");
+  for (const f of [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "e2e/global-setup.ts",
+    "scripts/start-files.ts",
+    "scripts/measure-startup.mjs",
+  ])
+    assert.match(web(f), /from "\.{1,2}\/(scripts\/)?urls\.ts"/, f);
+  // nothing else spells the editor's path
+  for (const f of [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "src/main.tsx",
+    "src/app/env.ts",
+    "src/app/states/banners.tsx",
+  ])
+    assert.doesNotMatch(web(f), /["'`]\/app\//, f);
 });
 
 test("the filter keeps the names that contain what was typed, ignoring case and outer spaces", () => {

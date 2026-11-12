@@ -30,7 +30,7 @@ const inEditor = (page: Page) => page.evaluate(() => Boolean(document.activeElem
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await expect.poll(() => engineIs(page)).toBe("none");
 });
 
@@ -369,7 +369,7 @@ test("the storage, reset, memory and download-failed banners", async ({ page }) 
 test("Reset asks only with data in memory (described again after a run); Cancel keeps it; Reset clears it and the banner says so", async ({
   page,
 }) => {
-  await page.goto("/?test");
+  await page.goto("?test");
   await startEngine(page);
   await expect.poll(() => engineIs(page), { timeout: 300_000 }).toBe("ready");
   const more = async () => {

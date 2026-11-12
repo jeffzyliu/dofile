@@ -135,8 +135,8 @@ they differ.
   to another origin (a browser test checks it). `?snapshot=0` keeps the CDN.
 - **The page can download first, counting bytes.** `client.download()` fetches every start file into the Cache
   `dofile-snapshot-<built>` before a worker exists. The build writes the list of those files, with each one's size on disk
-  and compressed size, as `dist/start-files.json`, and the compressed total into `dist/index.html`
-  (`web/scripts/start-files.ts`): 48.5 MB on 2026-11-10 (snapshot 42.1, runtime 5.75, page 0.68). A file whose byte count
+  and compressed size, as `dist/start-files.json`, and the compressed total into `dist/index.html` (since step 5,
+  `dist/app/`: the editor is served under `/app/`, SPEC section 8, "URLs") (`web/scripts/start-files.ts`): 48.5 MB on 2026-11-10 (snapshot 42.1, runtime 5.75, page 0.68). A file whose byte count
   is not the list's is not kept.
 - **The worker reads that Cache for everything.** `loadPyodide` has options for the lock file and the standard library but
   none for the `.wasm`: it fetches `indexURL + "pyodide.asm.wasm"` itself. So while the engine starts, the worker replaces

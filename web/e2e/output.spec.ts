@@ -61,7 +61,7 @@ async function run(page: Page, code: string) {
 }
 
 test("the empty states, and the reset wording of the Data tab", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   if (!phone(page)) {
     await showTab(page, "graph");
@@ -80,7 +80,7 @@ test("the empty states, and the reset wording of the Data tab", async ({ page })
 });
 
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
   await page.evaluate(async () => {
     window.__dofile.state.theme.value = "dark";
@@ -97,7 +97,7 @@ test("a .png from the files is on the light card in the dark theme: its colors a
 });
 
 test("a .dta tab whose name a command can't hold says so, and Load and Copy are off", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
   await page.evaluate(async () => {
     await window.__dofile.store.write("a`b'.dta", new Uint8Array(16));
@@ -116,7 +116,7 @@ test("a .dta tab whose name a command can't hold says so, and Load and Copy are 
 });
 
 test("a .dta tab with no engine shows its two bars, copies the use command, and no table", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
   await page.evaluate(() => window.__dofile.store.write("data/wages.dta", new Uint8Array(2048)));
@@ -142,7 +142,7 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
 });
 
 test("the Graph, Data and Results tabs and a .dta tab, after a run through the hook", async ({ page }) => {
-  await page.goto("/?test");
+  await page.goto("?test");
   await startEngine(page);
   await ready(page);
   const note = "abcdefghij".repeat(10); // 100 characters: more than Browse shows in a cell

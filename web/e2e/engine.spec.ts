@@ -58,7 +58,7 @@ test("runs .do code on stored files, breaks at a safe point with the data kept, 
   page,
 }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?test");
+  await page.goto("?test");
   await startEngine(page);
   await ready(page);
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
@@ -117,7 +117,7 @@ scatter lwage yrsed`,
 // leaves out: it must say so with rc 199 (ODT-32), not crash.
 test("legacy .xls and the ReadStat formats work: xlwt, xlrd and pyreadstat are installed", async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?test");
+  await page.goto("?test");
   await startEngine(page);
   await ready(page);
   await upload(page, "small.xpt");
@@ -170,7 +170,7 @@ test("the default start: from the memory snapshot, runs native code and a graph,
       if (m.text().includes("[dofile] snapshot start")) notes.push(m.text());
     });
     page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-    await page.goto("/?test");
+    await page.goto("?test");
     await startEngine(page);
     await ready(page);
     const r = await run(page, SAMPLE);

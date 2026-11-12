@@ -31,7 +31,7 @@ const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 const views = (page: Page) => page.getByRole("tablist", { name: "Views" });
 const view = (page: Page, name: string) => views(page).getByRole("tab", { name }).click();
 
-async function setUp(page: Page, files: Record<string, string>, url = "/?test=manual") {
+async function setUp(page: Page, files: Record<string, string>, url = "?test=manual") {
   await page.goto(url);
   await page.waitForFunction(() => window.__dofile?.store.blocked === false);
   await page.evaluate(async (files) => {
@@ -514,7 +514,7 @@ const styleOf = (page: Page, selector: string) =>
 test("the log's formatting: echoes bold, output normal, errors red and bold, hints and notes muted, in both themes", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   await page.evaluate(() => {
     const S = window.__dofile.state;
@@ -584,7 +584,7 @@ test("the log's formatting: echoes bold, output normal, errors red and bold, hin
 test("Find in the log: every match counted and numbered in the log's order, Enter and Shift+Enter, Esc gives the focus back", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   await page.evaluate(() => {
     const S = window.__dofile.state;
@@ -763,7 +763,7 @@ test("the error line comes back when its file is closed and opened again with th
 });
 
 test("the notes at a run's end wrap in the Log pane, so Go to line stays in view, at every width", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   await page.evaluate(() => {
     window.__dofile.state.runWriter.log.value = [
@@ -811,7 +811,7 @@ test("the notes at a run's end wrap in the Log pane, so Go to line stays in view
 test("the log: a command stopped by Break names no line; a phone's inline graph is on the card of its run's theme", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
   await page.evaluate((png) => {
@@ -853,7 +853,7 @@ test("the log: a command stopped by Break names no line; a phone's inline graph 
 });
 
 test("the log: under an error, the OQ-10 note where the engine's own words do not say it", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   // the engine's own text for these three errors (src/dofile/browser.py, as a run prints it)
   await page.evaluate(() => {
@@ -962,7 +962,7 @@ const CODE = [
 test("Run: the run-head, the graph after its echo, the error line marked, Go to line, the last run; Run selection keeps locals", async ({
   page,
 }) => {
-  await setUp(page, { "a.do": CODE }, "/?test");
+  await setUp(page, { "a.do": CODE }, "?test");
   await startEngine(page);
   await ready(page);
   await open(page, "a.do");
@@ -1024,7 +1024,7 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
 }) => {
   // a loop with no end, so Break always lands inside it, however long the test's steps before Break take on a busy
   // machine (a forvalues of fixed length ran out first once); Break ends it between passes
-  await setUp(page, { "loop.do": "clear\nwhile 1 {\n  quietly display 1\n}\ndisplay 1" }, "/?test");
+  await setUp(page, { "loop.do": "clear\nwhile 1 {\n  quietly display 1\n}\ndisplay 1" }, "?test");
   await startEngine(page);
   await ready(page);
   await open(page, "loop.do");
@@ -1068,7 +1068,7 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
 test("the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; a paste of one line, with or without its line break, is ordinary", async ({
   page,
 }) => {
-  await setUp(page, {}, "/?test");
+  await setUp(page, {}, "?test");
   await startEngine(page);
   await ready(page);
   if (isPhone(page)) await view(page, "Log");
@@ -1118,7 +1118,7 @@ test("the command line: Enter runs and clears, ↑ recalls; a paste of lines run
 test("the command line with no engine: pasted lines wait for the engine; Not now drops them, and a toast says so", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   if (isPhone(page)) await view(page, "Log");
   const field = page.getByRole("textbox", { name: "Command" });
@@ -1140,7 +1140,7 @@ test("the command line with no engine: pasted lines wait for the engine; Not now
 test("a run that rewrites open files: a clean tab shows the run's version, keeping its selection and undo; the same text changes nothing; one with edits keeps them, unsaved, with a banner to reload (on every phone view); a version that is not text keeps the tab's text with its banner, which a run that writes the editor's text takes away, which follows a rename and goes with the tab", async ({
   page,
 }) => {
-  await setUp(page, { "t.csv": "a\n9\n", "u.csv": "a\n9\n" }, "/?test");
+  await setUp(page, { "t.csv": "a\n9\n", "u.csv": "a\n9\n" }, "?test");
   await startEngine(page);
   await ready(page);
   await open(page, "u.csv");
@@ -1259,7 +1259,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
 test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites it: the run's version shown, no unsaved dot, no banner", async ({
   page,
 }) => {
-  await setUp(page, { "w.csv": "a\r\n9\r\n" }, "/?test");
+  await setUp(page, { "w.csv": "a\r\n9\r\n" }, "?test");
   await startEngine(page);
   await ready(page);
   await open(page, "w.csv");
@@ -1282,7 +1282,7 @@ test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites 
 test("a file's form follows the store's text the editor takes: a run's version (shown, or kept with edits) and Reload from the run; a do-file with a BOM fails in a nested do, runs from the editor, which sends no BOM, and runs in a nested do once saved", async ({
   page,
 }) => {
-  await setUp(page, { "w.csv": "a\n9\n", "x.csv": "a\n9\n", "b.do": "\uFEFFdisplay 40+2\r\n" }, "/?test");
+  await setUp(page, { "w.csv": "a\n9\n", "x.csv": "a\n9\n", "b.do": "\uFEFFdisplay 40+2\r\n" }, "?test");
   await startEngine(page);
   await ready(page);
   const dirty = (path: string) =>

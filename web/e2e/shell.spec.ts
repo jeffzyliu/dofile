@@ -38,7 +38,7 @@ const settled = (page: Page) =>
 test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; a run asks again, titled for a run, and Not now drops it", async ({
   page,
 }) => {
-  await page.goto("/?test");
+  await page.goto("?test");
   const prompt = page.getByRole("dialog", { name: "Download the engine?" });
   await expect(prompt).toBeVisible();
   await page.keyboard.press("Escape");
@@ -66,7 +66,7 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
 test("the layout: desktop panes or the phone's views; the theme button cycles and is kept; the ⋯ menu works by keyboard", async ({
   page,
 }) => {
-  await page.goto("/?test=manual"); // no engine: the shell alone
+  await page.goto("?test=manual"); // no engine: the shell alone
   const phone = (page.viewportSize()?.width ?? 0) < 700;
   if (phone) {
     const views = page.getByRole("tablist", { name: "Views" });
@@ -166,13 +166,13 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
   page,
   request,
 }) => {
-  const res = await request.get("/start-files.json");
+  const res = await request.get("start-files.json");
   expect(res.ok(), "no build: run npm run snapshot, then npm run build").toBe(true);
   const list = await res.json();
   expect(list.built, "no snapshot: run npm run snapshot, then npm run build").toBeTruthy();
   // the build's list is the one statement of the build: a list of another build id is a site updated since the page loaded
   await page.route("**/start-files.json", (route) => route.fulfill({ json: { ...list, buildId: "0".repeat(64) } }));
-  await page.goto("/?test");
+  await page.goto("?test");
   await startEngine(page);
   await expect
     .poll(
@@ -201,7 +201,7 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN), moved from poc.spec.ts.
 test("?snapshot=0: the normal boot still starts and runs the sample", async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?snapshot=0&test");
+  await page.goto("?snapshot=0&test");
   await startEngine(page);
   await expect.poll(() => state(page), { timeout: 300_000 }).toBe("ready");
   const r = await page.evaluate(async (code) => {
@@ -217,7 +217,7 @@ test("?snapshot=0: the normal boot still starts and runs the sample", async ({ p
 test("the toolbar does not move: its box and every button's box are the same in every engine state, with or without a selection or unsaved edits", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   const head = { kind: "file", fresh_locals: true };
   // the sixteen states of the engine's state machine (src/app/types.ts, EngineState)
@@ -288,7 +288,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
 
 // One height for the desktop toolbar's buttons (key chips or not), and one for the pane heads' controls.
 test("the desktop toolbar's buttons are all one height, and so are the pane heads' controls", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   for (const width of [1440, 1024]) {
     await page.setViewportSize({ width, height: 800 });
@@ -322,7 +322,7 @@ test("the desktop toolbar's buttons are all one height, and so are the pane head
 // One tree for every width: the editor's slot and the log are the same nodes after a change of layout (not mounted twice).
 test("the editor and the log are never mounted again when the layout changes", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 800 });
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.evaluate(() => {
     for (const el of document.querySelectorAll(".editor-slot, .log-body"))
       (el as HTMLElement & { tagged?: boolean }).tagged = true;
@@ -346,7 +346,7 @@ test("the folded file list: the Files button says what it does and how many file
   page,
 }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   const button = page.getByRole("button", { name: "Files", exact: true });
   const pane = page.getByRole("region", { name: "Files" });
   await expect(button).toBeVisible();
@@ -379,7 +379,7 @@ test("the folded file list: the Files button says what it does and how many file
 // top. app/viewport.ts's keyboard handling is tested in test/app.test.ts.
 test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) => {
   test.skip(!isMobile, "the iPhone profile");
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await settled(page);
   for (const view of ["files", "editor", "log", "data", "results"]) {
     await page.evaluate((v) => {
@@ -422,7 +422,7 @@ test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) 
 test("a failed Download all shows one banner with Try again, on every phone view; a download that works removes it", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await writeFile(page, "a.do");
   await page.waitForFunction(
     () => (window as unknown as { __dofile: FullHook }).__dofile.state.hasFiles.value === true,
@@ -474,7 +474,7 @@ test("phone: the toast is above the command line and the tab bar, and above the 
 }) => {
   test.skip(!isMobile, "the iPhone profile");
   await page.emulateMedia({ reducedMotion: "reduce" }); // the toast's place, not its way in
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   await page.evaluate(() => {
     const s = (window as unknown as { __dofile: { state: Signals & { showToast(t: string): void } } }).__dofile.state;
@@ -512,7 +512,7 @@ test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ m
   page,
   isMobile,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await writeFile(page, "a.do");
   // a run's log with a nested do of a file that has unsaved edits: its note says how to save
   await page.evaluate(() => {
@@ -591,7 +591,7 @@ test("the status bar's 'Not affiliated with StataCorp': in sight from 1200 px wi
   page,
   isMobile,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   const note = page.locator(".statusbar .affiliation");
   if (isMobile) {

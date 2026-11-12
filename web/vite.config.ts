@@ -1,12 +1,33 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Connect, defineConfig } from "vite";
+import { type Connect, defineConfig, type Plugin, type UserConfig } from "vite";
 import checker from "vite-plugin-checker";
 import { about, buildId, inputs as readInputs, staleness } from "./scripts/build-id.ts";
-import { deniedInBrowser, engineMB, fillCommands, fillTokens } from "./scripts/site-pages.ts";
+import {
+  deniedInBrowser,
+  engineMB,
+  fillCommands,
+  fillTokens,
+  headersFile,
+  SITE_FILES,
+  sitePageFor,
+} from "./scripts/site-pages.ts";
 import { engineBytesMeta, listStartFiles, RUNTIME_FILES, writeStartFiles } from "./scripts/start-files.ts";
+import { EDITOR_BASE, EDITOR_URL, SITE_URL } from "./scripts/urls.ts";
 import commandData from "./src/stata/commands.json" with { type: "json" };
+
+// Two builds make the site (`npm run build`), and one dev server serves it (docs/design/SPEC.md, section 8, "URLs"):
+//  - the editor (`vite build`): a single-page app under EDITOR_BASE (scripts/urls.ts; /app/ today), built into
+//    dist/<EDITOR_BASE> with its public/ files (the wheels, the runtime, the snapshot) and start-files.json. It empties
+//    dist/ first, so nothing of an older layout is left to deploy.
+//  - the landing and commands pages (`vite build --mode site`): static HTML at the site's root, dist/index.html and
+//    dist/commands/index.html, with their own two small scripts and stylesheet in dist/assets/, and dist/_headers. Built
+//    after the editor: they say the editor's download size, read from its start-files.json. Nothing of public/ and no
+//    script of the editor's.
+//  - `vite` (dev): the editor's config at EDITOR_BASE, plus the two static pages at / and /commands/ (a middleware).
+//  - `vite preview`: all of dist/ at /, with the isolation headers under EDITOR_BASE only, as dist/_headers says for the host.
 
 // What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in ../dist, `npm run wheel`), the extra
 // wheels (web/wheels/: pyreadstat built for Pyodide) and the Pyodide version, with their hashes.
@@ -41,7 +62,8 @@ for (const f of RUNTIME_FILES)
 // whenever the snapshot was rebuilt: a stale snapshot is then `updated` in the page (and said here), and one rebuilt to
 // these inputs while the server runs is accepted without a restart (same stamp, same inputs).
 const publicDir = fileURLToPath(new URL("./public", import.meta.url)),
-  distDir = fileURLToPath(new URL("./dist", import.meta.url));
+  siteDir = fileURLToPath(new URL("./dist", import.meta.url)), // the site's root: what the host serves
+  editorDir = fileURLToPath(new URL(`./dist${EDITOR_BASE}`, import.meta.url)); // the editor's build
 let devList = { key: "", json: "" };
 function devStartFiles() {
   let key = "";
@@ -64,111 +86,208 @@ function devStartFiles() {
 }
 
 // SharedArrayBuffer (the Break button) needs cross-origin isolation. The headers go on every response, 304s included:
-// WebKit refuses a worker script whose cached 304 reply lacks COEP. The static host must do the same.
+// WebKit refuses a worker script whose cached 304 reply lacks COEP. The static host must do the same (dist/_headers, for the
+// editor's path). The dev server sends them everywhere (the checker's panel, a frame, needs them too); preview, like the host,
+// only under EDITOR_BASE.
 const isolate: Connect.NextHandleFunction = (_req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   next();
 };
+const isolateEditor: Connect.NextHandleFunction = (req, res, next) =>
+  (req.url ?? "").startsWith(EDITOR_BASE) ? isolate(req, res, next) : next();
 
-// The landing and commands pages (step 5): static HTML, sibling entries of the editor's page. The version, the download
-// size and the commands list are filled in here (scripts/site-pages.ts). In a build the size is known only once the bundle
-// is written (the start-files step below), so closeBundle fills it into dist/.
-const SITE_PAGES = ["landing.html", "commands.html"];
-const sitePage = (path: string) => SITE_PAGES.find((p) => path.endsWith(`/${p}`));
-const fillSite = (html: string, name: string) =>
-  name === "commands.html"
-    ? fillCommands(fillTokens(html, { version: about(inputs).dofile }), commandData, deniedInBrowser())
-    : fillTokens(html, { version: about(inputs).dofile });
+// A folder's other addresses go to the folder, the query kept, as the host does (Cloudflare's html_handling
+// "auto-trailing-slash", seen in `wrangler dev`): /app, /app.html and /app/index.html to /app/; /commands, /commands.html and
+// /commands/index.html to /commands/; /index.html to /.
+const FOLDERS = [EDITOR_BASE, "/commands/"].filter((f) => f !== "/").map((f) => f.slice(0, -1));
+const slash: Connect.NextHandleFunction = (req, res, next) => {
+  const url = new URL(req.url ?? "/", "http://x");
+  const p = url.pathname;
+  const to = p.endsWith("/index.html")
+    ? p.slice(0, -"index.html".length)
+    : FOLDERS.find((f) => p === f || p === `${f}.html`)?.concat("/");
+  if (!to) return next();
+  res.writeHead(307, { Location: `${to}${url.search}` }).end();
+};
 
-export default defineConfig({
-  // No fallback to the editor for a path that is not a file: a link to a page that does not exist is a 404, in `dev` and in
-  // `preview` as on the host (the editor is the page at /; the site was never a single-page app)
-  appType: "mpa",
-  build: {
-    rollupOptions: {
-      input: {
-        index: fileURLToPath(new URL("./index.html", import.meta.url)),
-        landing: fileURLToPath(new URL("./landing.html", import.meta.url)),
-        commands: fileURLToPath(new URL("./commands.html", import.meta.url)),
-      },
+// The landing and commands pages: the version, the download size, the editor's address and the commands list
+// (scripts/site-pages.ts). `path` is the page's source path in web/ ("/landing.html").
+const fillSite = (html: string, path: string, engineBytes: number) => {
+  const tokens = { version: about(inputs).dofile, engineMB: engineMB(engineBytes), editorURL: EDITOR_URL };
+  const filled = fillTokens(html, tokens);
+  return path.endsWith("/commands.html") ? fillCommands(filled, commandData, deniedInBrowser()) : filled;
+};
+const isSitePage = (path: string) => Object.keys(SITE_FILES).some((p) => path.endsWith(`/${p}`));
+
+/** The editor's built list, for the site's build: the download size its pages state. */
+function editorList(): { compressed: number } {
+  const file = `${editorDir}start-files.json`;
+  if (!existsSync(file)) throw new Error(`site: no ${file}; build the editor first (\`npm run build\` does both)`);
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
+// The dev server's static pages: / and /commands/ from web/landing.html and web/commands.html, filled and transformed as
+// a build does (their scripts are served from under EDITOR_BASE by the dev server, which a build does not do). The pages'
+// source files are not served as pages under EDITOR_BASE.
+const siteDev: Plugin = {
+  name: "site-dev",
+  apply: "serve",
+  configureServer(server) {
+    server.middlewares.use(slash);
+    if (EDITOR_BASE === "/") return; // the editor at the root of its own origin: the static pages are another site's
+    server.middlewares.use(async (req, res, next) => {
+      const path = new URL(req.url ?? "/", "http://x").pathname;
+      if (Object.keys(SITE_FILES).some((p) => path === `${EDITOR_BASE}${p}`)) {
+        res.statusCode = 404;
+        return void res.end();
+      }
+      const page = sitePageFor(path);
+      if (!page) return next();
+      try {
+        const html = readFileSync(fileURLToPath(new URL(`./${page}`, import.meta.url)), "utf8");
+        res.setHeader("Content-Type", "text/html");
+        res.end(await server.transformIndexHtml(`/${page}`, html, req.originalUrl));
+      } catch (e) {
+        next(e);
+      }
+    });
+  },
+};
+
+const sitePages: Plugin = {
+  name: "site-pages",
+  transformIndexHtml: {
+    order: "pre",
+    handler(html, ctx) {
+      if (!isSitePage(ctx.path)) return html;
+      return fillSite(html, ctx.path, ctx.server ? JSON.parse(devStartFiles()).compressed : editorList().compressed);
     },
   },
-  define: {
-    __WHEEL__: JSON.stringify(wheel),
-    __EXTRA_WHEELS__: JSON.stringify(extraWheels),
-    __BUILD_ID__: JSON.stringify(buildId(stamp, inputs)), // start-files.json must carry the same (client.ts, checkBuild)
-    __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
-    __ABOUT__: JSON.stringify(about(inputs)), // the version, the engine's commit, the Stata version: app/env.ts ABOUT
+};
+
+// the site's build: each page to the path it is served at, and the headers file
+const siteFiles: Plugin = {
+  name: "site-files",
+  apply: "build",
+  closeBundle(error?: Error) {
+    if (error) return;
+    for (const [source, served] of Object.entries(SITE_FILES)) {
+      mkdirSync(dirname(`${siteDir}/${served}`), { recursive: true });
+      renameSync(`${siteDir}/${source}`, `${siteDir}/${served}`);
+    }
+    writeFileSync(`${siteDir}/_headers`, headersFile(EDITOR_BASE));
+  },
+};
+
+// The landing and commands pages' build (`vite build --mode site`), and the server of the whole of dist/ (`vite preview`).
+const site = (): UserConfig => ({
+  appType: "mpa", // a path that is no file is a 404: never the editor in its place
+  base: "/",
+  publicDir: false, // the editor's public files (snapshot, runtime, wheels) are its own build's, under EDITOR_BASE
+  build: {
+    outDir: siteDir,
+    emptyOutDir: false, // dist/ holds the editor's build already
+    modulePreload: { polyfill: false }, // no script but the pages' own
+    rollupOptions: {
+      input: Object.fromEntries(
+        Object.keys(SITE_FILES).map((p) => [
+          p.replace(/\.html$/, ""),
+          fileURLToPath(new URL(`./${p}`, import.meta.url)),
+        ]),
+      ),
+    },
   },
   plugins: [
+    sitePages,
+    siteFiles,
     {
-      name: "cross-origin-isolation",
-      enforce: "pre", // before the checker below, which is "pre" too: the headers must be on its pages as well
-      configureServer: (server) => {
-        server.middlewares.use(isolate);
-      },
+      name: "site-preview",
       configurePreviewServer: (server) => {
-        server.middlewares.use(isolate);
-      },
-    },
-    // Biome's linter (biome.json), while the dev server runs and in a build. In development it runs again on each change:
-    // an error opens a panel over the page, a warning is only listed (the badge in the corner, and the terminal). A build
-    // fails on an error and not on a warning; CI and `npm run deploy` refuse warnings too (`npm run lint:strict`).
-    // Formatting is not checked here: `npm run check` and CI do that. Its panel is a frame from /__checker/, which the
-    // isolated page refuses unless it has the isolation headers: so cross-origin-isolation comes first.
-    checker({
-      biome: { command: "lint", watchPath: ["src", "test", "e2e", "scripts"], dev: { logLevel: ["error", "warning"] } },
-      overlay: { initialIsOpen: "error" },
-    }),
-    {
-      name: "site-pages",
-      transformIndexHtml: {
-        order: "pre",
-        handler(html, ctx) {
-          const name = sitePage(ctx.path);
-          if (!name) return html;
-          const filled = fillSite(html, name);
-          // dev: the size is known now; a build leaves {{engine-mb}} for closeBundle
-          return ctx.server
-            ? fillTokens(filled, { engineMB: engineMB(JSON.parse(devStartFiles()).compressed) })
-            : filled;
-        },
-      },
-    },
-    {
-      name: "start-files-dev",
-      apply: "serve",
-      configureServer: (server) => {
-        server.middlewares.use("/start-files.json", (_req, res) => {
-          res.setHeader("Content-Type", "application/json");
-          res.end(devStartFiles());
+        server.middlewares.use(slash);
+        server.middlewares.use(isolateEditor);
+        // dist/_headers is the host's setting, not a file of the site (the host does not serve it either)
+        server.middlewares.use("/_headers", (_req, res) => {
+          res.statusCode = 404;
+          res.end();
         });
-      },
-      // the download size, in the page as in a build (there the total has the page's own files too)
-      transformIndexHtml: (html, ctx) =>
-        sitePage(ctx.path)
-          ? html
-          : html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).compressed)}\n</head>`),
-    },
-    {
-      name: "start-files",
-      apply: "build",
-      // dist/ is complete: the page's files have their final names and sizes. An error here fails the build.
-      closeBundle(error?: Error) {
-        if (error) return;
-        const list = writeStartFiles(distDir, { stamp, inputs });
-        // the landing and commands pages say the download size as the editor's prompt does
-        for (const name of SITE_PAGES) {
-          const file = `${distDir}/${name}`;
-          writeFileSync(file, fillTokens(readFileSync(file, "utf8"), { engineMB: engineMB(list.compressed) }));
-        }
       },
     },
   ],
-  optimizeDeps: { exclude: ["pyodide", "brotli-wasm"] }, // both load a wasm file by URL, which pre-bundling breaks
-  // One file for the worker: no chunks. A chunk (brotli-wasm's, loaded only for a snapshot) imports the bundler's helpers from the
-  // worker's entry file, and iOS Safari then runs the entry a second time as another module; the second copy sets onmessage
-  // again, so every later message reaches a copy that never got "mount" ("undefined is not an object (evaluating 'V.loadPackage')").
-  worker: { format: "es", rollupOptions: { output: { inlineDynamicImports: true } } },
 });
+
+// The editor's build and the dev server.
+const editor = (command: "build" | "serve"): UserConfig => {
+  if (command === "build") rmSync(siteDir, { recursive: true, force: true }); // a build starts from an empty dist/
+  return {
+    // No fallback to the editor for a path that is not a file: a missing page is a 404 (the editor is a single-page app only
+    // in that it is one page; it has no routes of its own)
+    appType: "mpa",
+    base: EDITOR_BASE,
+    build: { outDir: editorDir, emptyOutDir: true },
+    define: {
+      __WHEEL__: JSON.stringify(wheel),
+      __EXTRA_WHEELS__: JSON.stringify(extraWheels),
+      __BUILD_ID__: JSON.stringify(buildId(stamp, inputs)), // start-files.json must carry the same (client.ts, checkBuild)
+      __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
+      __ABOUT__: JSON.stringify(about(inputs)), // the version, the engine's commit, the Stata version: app/env.ts ABOUT
+      __SITE_URL__: JSON.stringify(SITE_URL), // the landing page, from the editor: app/env.ts LANDING_URL
+    },
+    plugins: [
+      {
+        name: "cross-origin-isolation",
+        enforce: "pre", // before the checker below, which is "pre" too: the headers must be on its pages as well
+        configureServer: (server) => {
+          server.middlewares.use(isolate);
+        },
+      },
+      // Biome's linter (biome.json), while the dev server runs and in a build. In development it runs again on each change:
+      // an error opens a panel over the page, a warning is only listed (the badge in the corner, and the terminal). A build
+      // fails on an error and not on a warning; CI and `npm run deploy` refuse warnings too (`npm run lint:strict`).
+      // Formatting is not checked here: `npm run check` and CI do that. Its panel is a frame from the dev server, which the
+      // isolated page refuses unless it has the isolation headers: so cross-origin-isolation comes first.
+      checker({
+        biome: {
+          command: "lint",
+          watchPath: ["src", "test", "e2e", "scripts"],
+          dev: { logLevel: ["error", "warning"] },
+        },
+        overlay: { initialIsOpen: "error" },
+      }),
+      siteDev,
+      sitePages,
+      {
+        name: "start-files-dev",
+        apply: "serve",
+        configureServer: (server) => {
+          server.middlewares.use(`${EDITOR_BASE}start-files.json`, (_req, res) => {
+            res.setHeader("Content-Type", "application/json");
+            res.end(devStartFiles());
+          });
+        },
+        // the download size, in the page as in a build (there the total has the page's own files too)
+        transformIndexHtml: (html, ctx) =>
+          isSitePage(ctx.path)
+            ? html
+            : html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).compressed)}\n</head>`),
+      },
+      {
+        name: "start-files",
+        apply: "build",
+        // the editor's folder is complete: its files have their final names and sizes. An error here fails the build.
+        closeBundle(error?: Error) {
+          if (!error) writeStartFiles(editorDir, { stamp, inputs });
+        },
+      },
+    ],
+    optimizeDeps: { exclude: ["pyodide", "brotli-wasm"] }, // both load a wasm file by URL, which pre-bundling breaks
+    // One file for the worker: no chunks. A chunk (brotli-wasm's, loaded only for a snapshot) imports the bundler's helpers from the
+    // worker's entry file, and iOS Safari then runs the entry a second time as another module; the second copy sets onmessage
+    // again, so every later message reaches a copy that never got "mount" ("undefined is not an object (evaluating 'V.loadPackage')").
+    worker: { format: "es", rollupOptions: { output: { inlineDynamicImports: true } } },
+  };
+};
+
+export default defineConfig(({ command, mode, isPreview }) =>
+  isPreview || mode === "site" ? site() : editor(command),
+);

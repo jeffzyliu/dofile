@@ -40,8 +40,7 @@ import {
   twiceWords,
 } from "./words.ts";
 
-/** Where "Browsers that work" (S 6) goes (OQ-18, a proposal): the landing page's section of that name, which step 5
- *  builds (a dead link until then, like LANDING_URL). */
+/** Where "Browsers that work" (S 6) goes (OQ-18, a proposal): the landing page's section of that name (`/#browsers`). */
 export const BROWSERS_URL = `${LANDING_URL}#browsers`;
 
 const aboutMB = engineBytes ? `about ${Math.round(engineBytes / 1e6)} MB` : null;

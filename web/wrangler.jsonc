@@ -1,7 +1,17 @@
 {
-  // Static-assets-only Worker: Cloudflare serves dist/ (npm run build) with the headers from dist/_headers.
+  // Static-assets-only Worker: Cloudflare serves dist/ (npm run build): the landing page at /, the commands page at
+  // /commands/, the editor under /app/ (scripts/urls.ts), with the headers from dist/_headers (the isolation headers on
+  // /app/* only; the site's build writes the file).
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dofile",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./dist" }
+  "assets": {
+    "directory": "./dist",
+    // Cloudflare's default, written out: /commands and /app go to /commands/ and /app/ (their index.html), and a file
+    // x.html is served at /x (so /x.html redirects there). The site's own links use the folder forms.
+    "html_handling": "auto-trailing-slash",
+    // A path that is no file is a 404, never a page in its place (not "single-page-application": it applies to the whole
+    // site and would answer every missing page with the editor or the landing page).
+    "not_found_handling": "none"
+  }
 }

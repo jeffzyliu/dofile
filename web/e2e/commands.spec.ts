@@ -15,7 +15,7 @@ const total = Object.keys(data.commands).length;
 const names = (page: Page) => page.locator("#names li:not([hidden])");
 
 test("the page lists every command of the engine's registry, once, in columns", async ({ page }) => {
-  await page.goto("/commands.html");
+  await page.goto("/commands/");
   await expect(page.getByRole("heading", { level: 1, name: "Commands" })).toBeVisible();
   await expect(page.locator("#names li")).toHaveCount(total);
   const shown = await page.locator("#names li").evaluateAll((lis) => lis.map((l) => (l as HTMLElement).dataset.name));
@@ -37,7 +37,7 @@ test("the page lists every command of the engine's registry, once, in columns", 
 });
 
 test("the filter keeps the names that contain the text, says how many, and brings the list back", async ({ page }) => {
-  await page.goto("/commands.html");
+  await page.goto("/commands/");
   const field = page.getByRole("searchbox", { name: "Filter" });
   await expect(field).toBeVisible();
   await field.fill("regress");
@@ -67,7 +67,7 @@ test("the filter keeps the names that contain the text, says how many, and bring
 });
 
 test("the page has no link to a help page, and its text names no Stata manual or help file", async ({ page }) => {
-  await page.goto("/commands.html");
+  await page.goto("/commands/");
   const hrefs = await page.locator("a").evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href));
   for (const h of hrefs) expect(new URL(h).hostname).toMatch(/^(localhost|github\.com)$/);
   expect(await page.locator("main").textContent()).not.toMatch(/stata\.com|\.sthlp|\bmanual\b/i);
