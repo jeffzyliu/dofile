@@ -727,8 +727,14 @@ test("Clear log asks first: Cancel and Esc keep the log and the graphs, Clear lo
     expect(await page.evaluate(() => window.__dofile.state.graphs.value.length)).toBe(1);
   };
   const openAsk = async () => {
-    await opener.click();
-    if (phone) await page.getByRole("menuitem", { name: "Clear log…" }).click();
+    // by keyboard on the desktop: Safari gives a clicked button no focus, so a click would leave the dialog no opener
+    if (phone) {
+      await opener.click();
+      await page.getByRole("menuitem", { name: "Clear log…" }).click();
+    } else {
+      await opener.focus();
+      await page.keyboard.press("Enter");
+    }
     await expect(ask).toContainText("This removes the log and the graphs. Your data and your files stay.");
     await expect(ask.getByRole("button", { name: "Cancel" })).toBeFocused();
   };
