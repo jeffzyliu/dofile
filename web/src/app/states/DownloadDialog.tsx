@@ -152,7 +152,7 @@ function ProgressDialog() {
 }
 
 export function OtherTabDialog(_: { dialog: DialogOf<"other-tab"> }) {
-  const taking = engine.value.s === "other-tab-taking";
+  const inProgress = engine.value.s === "other-tab-taking";
   return (
     <Dialog
       title="dofile is open in another tab"
@@ -173,9 +173,9 @@ export function OtherTabDialog(_: { dialog: DialogOf<"other-tab"> }) {
           <button
             type="button"
             class="btn primary"
-            aria-disabled={taking ? "true" : undefined}
+            aria-disabled={inProgress ? "true" : undefined}
             onClick={() => {
-              if (!taking) eng.takeOver();
+              eng.takeOver(); // a second press while in progress: the machine ignores it
             }}
           >
             Use dofile in this tab
