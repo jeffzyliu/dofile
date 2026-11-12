@@ -1166,19 +1166,25 @@ test("a file's form follows the store's text the editor takes: a run's version (
   expect(await stored(page, "x.csv")).toBe("a\r\n9\r\nmine!");
   await expect(page.locator(".banner", { hasText: "The run changed x.csv." })).toHaveCount(0);
 
-  // Reload from the run takes the store's text in its form: a run gives x.csv the banner again, then the store's
-  // version changes once more behind the editor (written here as another writer would, "\n"); Reload, edit and Save: "\n"
+  // Reload from the run takes the store's text in its form: a run gives x.csv the banner again with a "\n" version, then
+  // the store's version changes once more behind the editor (written here as another writer would: a BOM and "\r\n");
+  // Reload, edit and Save: the BOM and "\r\n"
   await page.keyboard.type("?");
-  const r2 = await page.evaluate((code) => window.__dofile.run(code), `local cr = char(13)\n${crlf("x.csv")}`);
+  const r2 = await page.evaluate(
+    (code) => window.__dofile.run(code),
+    "clear\nset obs 1\ngenerate a = 7\nexport delimited using x.csv, replace",
+  );
   expect(r2?.rc, r2?.log).toBe(0);
   await ready(page);
-  await page.evaluate(() => window.__dofile.store.write("x.csv", new TextEncoder().encode("a\n5\n")));
+  await page.evaluate(() => window.__dofile.store.write("x.csv", new TextEncoder().encode("\uFEFFa\r\n5\r\n")));
   const banner = page.locator(".banner:visible", { hasText: "The run changed x.csv." });
   await banner.getByRole("button", { name: "Reload from the run" }).click();
   if (isPhone(page)) await view(page, "Editor");
   await expect(content).toHaveText(/^a\s*5\s*$/);
   await save("x.csv", "6");
-  expect(await stored(page, "x.csv")).toBe("a\n5\n6");
+  const raw = await page.evaluate(async () => [...(await window.__dofile.store.read("x.csv"))]);
+  expect(raw.slice(0, 3)).toEqual([0xef, 0xbb, 0xbf]);
+  expect(Buffer.from(raw.slice(3)).toString("utf8")).toBe("a\r\n5\r\n6");
 
   // a do-file with a BOM: Run sends the editor's text, which has none (the engine reads a BOM as part of the first command)
   await open(page, "b.do");

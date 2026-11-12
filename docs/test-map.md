@@ -172,7 +172,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
   shown the run's new rows keeps its selection, and one undo takes the change back; a `.dta` saved over the open file
   keeps its text, unsaved, with the not-text banner and no reload, and a run that then writes the editor's text makes the tab clean and takes the banner away; the banner follows a rename and goes with the tab); a clean tab of a `.csv` with `\r\n` breaks that a run rewrites shows the run's version, with no dot and no banner; a
   file's form follows what the editor takes from the store (a run's `\r\n` version, shown or kept with edits, saved
-  with `\r\n`; "Reload from the run" of a `\n` version, saved with `\n`), and a do-file with a BOM runs from the
+  with `\r\n`; "Reload from the run" of a version with a BOM and `\r\n` after a run's `\n` one, saved with both), and a do-file with a BOM runs from the
   editor (Run sends no BOM). The Break test's loop is `while 1`, so Break always lands inside it.
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
