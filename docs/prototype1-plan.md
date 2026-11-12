@@ -242,7 +242,7 @@ Reviewed after the merge: see Post-merge review.
     fixed; on a phone the toast is lower on the views with no command line.)
 11. In `#delimit ;` mode two commands on one line are echoed as the whole line twice, and the second echo can be matched
     to a later identical line, which puts a graph's link in the wrong place.
-12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.)
+12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.) The code is removed: `MemoryBanner`, its registry entry, `{ b: "memory" }`, `memoryHead` and their tests; the `memory` signal stays.)
 13. On a real iPhone: that the on-screen keyboard opens again when a dialog gives the focus back to the command line (the
     focus now comes back in a timer); the iPhone checks of step 3 ("To try on a real iPhone", above); and step 3.5's
     open items (`web-engine-data-flow.md`, Part 3).

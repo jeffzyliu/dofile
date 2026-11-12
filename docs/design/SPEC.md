@@ -237,7 +237,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
   the warning icon. Above the editor: no engine (`S 5`), did not start (`S 6`), failed twice (`S 7`), storage (`S 19`: "**This
   browser may clear your files** when it needs space. Download all to keep a copy." / "Download all (.zip)", "Dismiss"; when
   `persisted()` is false, once per visit after files change). Above the log: running (`E?r`), stopping (`S 9`), waiting
-  (`S 9b`), Break resets (`S 11`), reset (`P/Notices`), memory (drawn in `P/Notices`, not in prototype 1: no limit is measured, OQ-8). In the Files pane: not UTF-8.
+  (`S 9b`), Break resets (`S 11`), reset (`P/Notices`). The memory banner is not built (no limit is measured, OQ-8; the code was removed in the post-merge review). In the Files pane: not UTF-8.
 - **Toast** (`DS`; no mockup): a confirmation with no buttons ("Saved analysis.do", "Copied", "3 files uploaded"), or an
   error that needs no action from the visitor (a copy the browser refused, a matrix that could not be read, a load that
   failed with its rc: "Couldn't load wages.dta: r(601)"; decided 2026-11-11); inverted colors, bottom center above the
@@ -815,7 +815,7 @@ interface Graph { n: number; png: string; theme: "light" | "dark"; from: "run" |
 type Dialog = null | { d: "download"; forRun: boolean } | { d: "clash"; path: string; index: number; total: number }
             | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "reset" }
             | { d: "close-tab"; path: string } | { d: "other-tab" };
-type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user" } | { b: "memory" } | { b: "storage" }
+type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user" } | { b: "storage" }
             | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
             | { b: "run-changed"; path: string };
 
@@ -1144,7 +1144,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **4d** `states/DownloadDialog.tsx` (the prompt and "dofile is open in another tab", built as far as the start and the
     tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, the landing page since step 5),
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
-    banners above the editor and the log, and the reset and storage banners (the unused memory banner view is still in the file); `DownloadFailedBanner` was built in
+    banners above the editor and the log, and the reset and storage banners (the unused memory banner view was removed in the post-merge review); `DownloadFailedBanner` was built in
     step 3, "Try again" (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d
     reworded it: "Step 4d: draft words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
     `ask()` (the declined banner's "Download the engine" leads back to `asking`, section 5), `decline`,
@@ -1193,7 +1193,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     reads "The engine is being reset now:" instead of "In 0 s"), waiting (takes
     the focus), the reset banner ("Run the file again" is on while the engine is `ready` and a text tab is active, runs the active
     tab, and dismisses the banner: C 3 of the plan's list). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "next error",
-    the memory banner (not in prototype 1: no limit is measured, OQ-8; its unused view is to be removed in the post-merge review, C 12 of the plan's list). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
+    the memory banner (not in prototype 1: no limit is measured, OQ-8; its unused view was removed in the post-merge review, C 12 of the plan's list). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
     **Step 4d: draft words**, for the maintainer to approve (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
     Reset banner by kind: user "You reset the engine." / break "The engine was reset: the code did not stop at Break."
     (the reason, a cause in parentheses cut off) or, with no cross-origin isolation, "Break reset the engine." "This page
@@ -1201,7 +1201,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     "Running analysis.do", "Running a command". The failed banner: "The engine didn't start." then the engine's
     `message` for the reason (`FAILED` in `engine.ts`), then "Your files are safe: you can still edit and download them."
     The declined banner's "(about 48 MB)" is the build's size. Failed twice: "The engine stopped after failing twice (out of memory)." (the parenthesis only for reason memory) "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe." `DownloadFailedBanner` (OQ-16, storage unavailable): "Your files couldn't be downloaded. This browser wouldn't open the storage where dofile keeps your files. Try again, or reload the page." / Try again, Dismiss. Stopping banner at 0 s: "**The engine is being
-    reset now:** the data in memory is lost; your files are kept."  The memory banner is not in prototype 1: no limit is measured (OQ-8). Progress rows: "Downloading the engine",
+    reset now:** the data in memory is lost; your files are kept."  The memory banner is not in prototype 1: no limit is measured (OQ-8); its code is removed. Progress rows: "Downloading the engine",
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
     of M". OQ-18: "Browsers that work" goes to `/#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
     step 5 built listing the browsers that run dofile, opened in a new tab. OQ-10, the

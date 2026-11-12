@@ -84,10 +84,6 @@ export async function resetDecision(
 export const resetIn = (left: number): string =>
   left > 0 ? `In ${left} s the engine is reset:` : "The engine is being reset now:";
 
-/** The memory banner's first sentence (P/Notices); with no measured size it names none. DRAFT (no number). */
-export const memoryHead = (heapBytes: number | null | undefined): string =>
-  heapBytes ? `Memory ${(heapBytes / 1e9).toFixed(1)} GB of about 2 GB.` : "Memory is near its limit of about 2 GB.";
-
 /** The reset banner (P/Notices, OQ-9): `head` in bold, then `rest`. `reason` is the machine's, the developer's words for what
  *  happened ("the engine crashed (<cause>)"); the visitor sees it with a cause in parentheses cut off. DRAFT (OQ-9, OQ-19c). */
 export function resetWords(kind: ResetKind, reason: string, isolated: boolean): { head: string; rest: string } {

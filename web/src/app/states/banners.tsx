@@ -2,7 +2,7 @@
 // ui/Live.tsx's <Banner>.
 //  - EditorStateBanners: above the editor, from `engine` alone (not in `banners`): no engine (`declined`, S 5), did not
 //    start (`failed`, S 6, role alert), failed twice (S 7, role alert). The action follows the `reason` (words.ts
-//    failedActions), never the text: no-wasm "Browsers that work"; download and memory "Try again"; updated "Reload the
+//    failedActions), never the text: no-wasm "Browsers that work"; download "Try again"; updated "Reload the
 //    page"; unknown both. "Download all (.zip)" is off while the store has no file (`hasFiles`).
 //  - LogStateBanners: above the log, from `engine` and `isolated`: running (E?r; with no cross-origin isolation S 11 says
 //    what Break does instead), stopping (S 9, once the Break has been pending 1 s, takes the focus on "Don't reset: wait
@@ -10,7 +10,7 @@
 //    running banner is a warning, as S 11 draws it.
 //  - ResetBanner { b: "reset", reason, kind } above the log (P/Notices): "Run the file again" (editorCommands.runFile,
 //    on while the engine is ready and a text file is open), "Dismiss". engine.ts adds it on a reset.
-//  - StorageBanner { b: "storage" } above the editor (S 19). MemoryBanner { b: "memory" }: nothing adds it in P1 (OQ-8).
+//  - StorageBanner { b: "storage" } above the editor (S 19).
 //  - DownloadFailedBanner { b: "download-failed" } above the editor (on a phone on every view; no role="alert": files.ts
 //    says it once in the live region).
 // A banner with controls hands the focus on when it goes with the focus inside it (focus.ts useFocusOnLeave); a banner that
@@ -22,7 +22,7 @@ import { editorCommands } from "../editor/commands.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
-import { activeTab, dismiss, engine, engineBytes, hasFiles, isolated, memory, tabs } from "../state.ts";
+import { activeTab, dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
 import { Banner } from "../ui/Live";
 import { useNow } from "./clock.ts";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
@@ -31,7 +31,6 @@ import {
   FILES_SAFE,
   failedActions,
   GRACE_S,
-  memoryHead,
   resetIn,
   resetWords,
   runningWhat,
@@ -286,17 +285,6 @@ export function StorageBanner({ banner }: { banner: BannerOf<"storage"> }) {
       }
     >
       <b>This browser may clear your files</b> when it needs space. Download all to keep a copy.
-    </Banner>
-  );
-}
-
-/** Not added in P1 (OQ-8: no limit is measured); drawn as the spec words it, "about 2 GB" being its guess. P/Notices draws
- *  it with no action, so it has none: its owner (step 7) removes it when memory goes down. */
-export function MemoryBanner(_: { banner: BannerOf<"memory"> }) {
-  return (
-    <Banner kind="warn">
-      <b>{memoryHead(memory.value?.heap_bytes)}</b> A bigger dataset may reset the engine. <code>compress</code> or{" "}
-      <code>keep</code> fewer variables to save memory.
     </Banner>
   );
 }
