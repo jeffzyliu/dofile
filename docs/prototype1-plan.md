@@ -9,8 +9,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 
 ## Where things stand (2026-11-12)
 
-- **Fix round 2 (2026-11-12), built on six branches, none merged or pushed** (the session that built them could not push to
-  GitHub; the branches were handed to the maintainer as a git bundle). Each is made from `main` at `bc8a942`:
+- **Fix round 2 (2026-11-12), built on six branches, none merged.** Each is made from `main` at `bc8a942`:
   `claude/post-merge-small-fixes` (step 4's C 4, C 8 and C 12, arrow keys with Alt, Ctrl or Cmd left to the browser, dead
   toast CSS, the two flaky e2e tests); `claude/clear-log-confirm` ("Clear log" asks first); `claude/phone-command-input`
   (autocorrect off as an attribute, typed curly quotes straightened, a Run button on the phone's command line);
@@ -23,10 +22,13 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   load the engine's packages from the CDN fail where that host is blocked, as they do on `main` there); the e2e suite in
   Chromium only, at desktop size and in the iPhone profile's size, with no engine (the snapshot could not be built
   there): 161 cases pass against 146 on `main`, and every failure is a test that needs the engine or
-  `shell.spec.ts`'s "the toolbar does not move", which failed 3 runs of 8 on `main` in the same setup. **Not run
-  anywhere yet:** Firefox, WebKit, and every test that starts the engine (among the new ones: the phone Run button's
-  test, the last part of the no-engine command line test, the `?snapshot=0` test's new failure message). CI's first run
-  on a pull request is their first run. A fresh-context review went over four of the branches and its findings are
+  `shell.spec.ts`'s "the toolbar does not move", which failed 3 runs of 8 on `main` in the same setup. Then, with the
+  snapshot built (the CDN allowed, `NODE_USE_ENV_PROXY=1` for Node's fetch): `npm test` (344 pass, 1 skipped) and the
+  e2e suite in Chromium at both sizes (214 pass, 16 skipped, none fail). CI on the joined branch's pull request (#28)
+  ran all four profiles: 424 pass and 2 fail, both in Firefox, the two curly-quote typing tests, where Playwright's
+  insertText() arrives as a composition that the page leaves alone on purpose; those tests now type another way in
+  Firefox. Not tried on a real phone. The six are pull requests #22 to #27, and
+  this branch is the draft #28. A fresh-context review went over four of the branches and its findings are
   fixed on them; `claude/remove-queued-run` and `claude/phone-keyboard-experiment` have had no such review.
 - **The post-merge review is prepared, not decided.** Lists B and C of steps 4 and 5 were checked against the code item by
   item, each with a recommended answer; so were the later UI work, step 6's scope and the icebox's accessibility items.
