@@ -306,6 +306,10 @@ function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) 
         type="search"
         aria-label="Find in the log"
         placeholder="Find in the log"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck={false}
         value={findText.value}
         ref={(el) => {
           if (el && findFocus) {

@@ -25,6 +25,7 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { stata } from "../../stata/language.ts";
+import { isTypedInput, straighten } from "../../stata/straighten.ts";
 import { extOf } from "../files/tree.ts";
 import { classify } from "../log/classify.ts";
 import { CSV_COLORS, csvFields } from "./csv.ts";
@@ -108,11 +109,40 @@ function logDecorations(state: EditorState): DecorationSet {
   return b.finish();
 }
 
+/** In a Stata buffer, typed curly quotes (a phone's Smart Punctuation) become straight ones. `beforeinput`'s type says
+ *  whether the keyboard typed the text or replaced a word (never a paste or a drop, which CodeMirror's own handlers take),
+ *  and a change that replaces text with a curly quote in it is left alone. CodeMirror's content already says
+ *  autocorrect="off", spellcheck="false", autocapitalize="off" and writingsuggestions="false". */
+const straightTyping: Extension = (() => {
+  let kind = "";
+  return [
+    EditorView.domEventHandlers({
+      beforeinput: (e) => {
+        kind = e.inputType;
+        return false;
+      },
+    }),
+    EditorView.inputHandler.of((view, from, to, text) => {
+      const typed = isTypedInput(kind);
+      kind = "";
+      const fixed = straighten(text);
+      const old = view.state.sliceDoc(from, to);
+      if (!typed || fixed === text || straighten(old) !== old) return false;
+      view.dispatch({
+        changes: { from, to, insert: fixed },
+        selection: { anchor: from + fixed.length },
+        userEvent: "input.type",
+      });
+      return true;
+    }),
+  ];
+})();
+
 /** The language of a file, by its extension: Stata for .do and .ado, the column colors for .csv and .tsv, the log
  *  tokenizer for .log, CodeMirror's packages for .md and .json; plain text for the rest. */
 export function languageOf(path: string): Extension {
   const ext = extOf(path);
-  if (ext === ".do" || ext === ".ado") return [stata, syntaxHighlighting(stataStyle)];
+  if (ext === ".do" || ext === ".ado") return [stata, syntaxHighlighting(stataStyle), straightTyping];
   if (ext === ".csv") return csvColumns(",");
   if (ext === ".tsv") return csvColumns("\t");
   if (ext === ".log") return logKinds;

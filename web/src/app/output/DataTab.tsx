@@ -67,6 +67,9 @@ function Variables({ d }: { d: Summary }) {
         aria-label="Filter variables"
         placeholder="Filter variables"
         autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck={false}
         value={filterText.value}
         onInput={(e) => {
           filterText.value = (e.target as HTMLInputElement).value;
