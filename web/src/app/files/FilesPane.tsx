@@ -20,7 +20,7 @@
 //    folded away the files are uploaded all the same, and the toast says so). actions.ts upload() asks each clash. The
 //    page's listeners take a drag with files in the capture phase and stop it there, so nothing under them (4b's
 //    CodeMirror, which would paste a dropped file's text) sees it; a drop while a dialog is open, or while another tab
-//    has the files (the store is blocked), uploads nothing.
+//    has the files (the store is blocked), uploads nothing. A drag that began in the page (a graph image) is no upload.
 // Files change through the store (actions.ts), never through the worker; a change lists the store again (files.ts).
 import { signal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
@@ -383,12 +383,23 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
  *  while a drag with files is over the page (OQ-16); with the list folded away or on another phone view the upload still
  *  happens, and the toast says so. The listeners are the window's, in the capture phase: a drag with files stops there,
  *  so no element under them handles it too (CodeMirror pastes a dropped file's text). While a dialog is open or the store
- *  is blocked a drop uploads nothing (the browser still does not open the file). */
+ *  is blocked a drop uploads nothing (the browser still does not open the file). A drag that began in the page (a graph
+ *  image, which Chromium and WebKit mark as carrying a file) is not an upload. */
 function useDrop(ref: { current: HTMLElement | null }) {
   useEffect(() => {
     const pane = ref.current?.closest<HTMLElement>(".files-pane");
     if (!pane) return;
-    const withFiles = (e: DragEvent) => Boolean(e.dataTransfer?.types.includes("Files"));
+    // A drag that began in the page is never an upload: Chromium and WebKit list "Files" for an image dragged from it (a
+    // graph on its card or full size). dragend ends it; a drop, or the mouse moving again (no mouse events fire during a drag), also
+    // does, in case the dragged element was removed before its dragend.
+    let inPage = false;
+    const started = () => {
+      inPage = true;
+    };
+    const ended = () => {
+      inPage = false;
+    };
+    const withFiles = (e: DragEvent) => !inPage && Boolean(e.dataTransfer?.types.includes("Files"));
     let depth = 0; // dragenter and dragleave fire for each element inside: count them
     const mark = (on: boolean) => {
       if (on) pane.dataset.drop = "";
@@ -413,7 +424,10 @@ function useDrop(ref: { current: HTMLElement | null }) {
       if (!depth) mark(false);
     };
     const drop = (e: DragEvent) => {
-      if (!withFiles(e) || !e.dataTransfer) return;
+      if (!withFiles(e) || !e.dataTransfer) {
+        ended();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       depth = 0;
@@ -421,15 +435,18 @@ function useDrop(ref: { current: HTMLElement | null }) {
       if (taken()) return;
       send(fromDrop(entriesOf(e.dataTransfer))); // the entries are taken now: the items are gone after this handler
     };
-    addEventListener("dragenter", enter, true);
-    addEventListener("dragover", over, true);
-    addEventListener("dragleave", leave, true);
-    addEventListener("drop", drop, true);
+    const on = [
+      ["dragstart", started],
+      ["dragend", ended],
+      ["mousemove", ended],
+      ["dragenter", enter],
+      ["dragover", over],
+      ["dragleave", leave],
+      ["drop", drop],
+    ] as [string, EventListener][];
+    for (const [type, fn] of on) addEventListener(type, fn, true);
     return () => {
-      removeEventListener("dragenter", enter, true);
-      removeEventListener("dragover", over, true);
-      removeEventListener("dragleave", leave, true);
-      removeEventListener("drop", drop, true);
+      for (const [type, fn] of on) removeEventListener(type, fn, true);
       mark(false);
     };
   }, []);

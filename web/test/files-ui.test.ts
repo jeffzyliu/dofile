@@ -525,6 +525,43 @@ test("after Do the same with Replace, a clash over an open file with unsaved edi
   assert.deepEqual(await Promise.all(["a", "b", "c"].map((n) => textOf(`${n}.do`))), ["new a", "old b", "new c"]);
 });
 
+test("after Esc, or Do the same with Keep mine, a clash over a file with unsaved edits is not asked: it is kept", async () => {
+  for (const first of ["stop", { replace: false, same: true }] as ClashAnswer[]) {
+    await reset({ "a.do": "old a", "b.do": "old b" });
+    await openFile("b.do");
+    S.setDirty("b.do", true);
+    const { seen, stop } = answering([first, { replace: true, same: false }]);
+    const done = await A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+    stop();
+    assert.deepEqual(
+      seen.map((x) => (x.dialog as { path: string }).path),
+      ["a.do"],
+      `${JSON.stringify(first)}: one question`,
+    );
+    assert.deepEqual(done, ["y.do"]);
+    assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
+    assert.equal(S.dialog.value, null);
+  }
+});
+
+test("another dialog put in the place of a clash, with an unsaved file's clash after it: the upload ends at once and the next one runs", {
+  timeout: 10_000, // the bug this guards against left the upload waiting for ever
+}, async () => {
+  await reset({ "a.do": "old a", "b.do": "old b" });
+  await openFile("b.do");
+  S.setDirty("b.do", true);
+  const done = A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  await until(() => clashOf() === "a.do", "the clash is asked");
+  S.dialog.value = { d: "other-tab" }; // another tab took the engine
+  assert.deepEqual(await done, ["y.do"], "it does not wait for the other dialog to ask about b.do");
+  assert.deepEqual(S.dialog.value, { d: "other-tab" });
+  assert.deepEqual(await A.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload runs");
+  S.dialog.value = null;
+  await sleep(30);
+  assert.equal(S.dialog.value, null, "no clash is asked once the other dialog has closed");
+  assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
+});
+
 test("upload: a name with a control character is refused and counted", async () => {
   const warn = console.warn;
   console.warn = () => {};
@@ -569,4 +606,23 @@ test("rename: a .dta tab renamed to .csv opens again as text in its place; an un
   S.setDirty("c.do", true);
   await A.renameEntry("c.do", "c.dta");
   assert.deepEqual(S.tabs.value.at(-1), { path: "c.dta", kind: "text", dirty: true }, "the editor keeps the edits");
+});
+
+test("rename: a .dta tab renamed to .png closes, and the Graph tab and the full-size view are left alone (a phone too)", async () => {
+  for (const layout of ["desktop", "phone"] as const) {
+    await reset({ "a.do": "1", "w.dta": "x" });
+    S.layout.value = layout;
+    for (const p of ["a.do", "w.dta"]) await openFile(p);
+    const graphs = S.graphs.value.length;
+    await A.renameEntry("w.dta", "w.png");
+    assert.deepEqual(
+      S.tabs.value.map((t) => t.path),
+      ["a.do"],
+      layout,
+    );
+    assert.equal(S.activeTab.value, "a.do");
+    assert.equal(S.graphs.value.length, graphs, "the .png is not opened");
+    assert.equal(S.outputTab.value, "data");
+    assert.equal(S.graphFull.value, false);
+  }
 });

@@ -172,7 +172,8 @@ test("rename in place: F2; a name in use keeps the field open with the reason; E
   await page.keyboard.type("b");
   await page.keyboard.press("Enter");
   await expect(field).toHaveAttribute("aria-invalid", "true");
-  await expect(page.getByText("b.do already exists here.")).toBeVisible();
+  // in the tree: the live region says the same words 50 ms later (state.ts say), and two matches fail the locator
+  await expect(tree(page).getByText("b.do already exists here.")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(field).toBeHidden();
   await expect(row(page, /^a\.do/)).toBeFocused();
@@ -422,4 +423,40 @@ test("a drop anywhere on the page: the Files pane is marked while a drag is over
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(row(page, /^x\.do/)).toBeVisible(); // the capture-phase drop above was uploaded
   await expect(row(page, /^later\.do/)).toHaveCount(0);
+});
+
+test("a drag that began in the page (a graph image, which Chromium and WebKit list as Files) uploads nothing; after its end a drop of files does", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  await setUp(page, {});
+  const pane = page.locator(".files-pane");
+  // synthetic events, made in the page: `type` on the editor pane, with a DataTransfer that holds a file
+  const fire = (type: string, name = "in-page.do") =>
+    page.evaluate(
+      ([type, name]) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File(["display 1\n"], name, { type: "text/plain" }));
+        const target = document.querySelector(
+          type === "dragstart" || type === "dragend" ? ".files-pane" : ".editor-pane",
+        )!;
+        target.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      },
+      [type, name],
+    );
+  await fire("dragstart"); // a drag starts in the page
+  await fire("dragenter");
+  await expect(pane).not.toHaveAttribute("data-drop");
+  await fire("drop");
+  await fire("dragend");
+  await fire("dragenter", "outside.do"); // a drag from outside the page
+  await expect(pane).toHaveAttribute("data-drop", "");
+  await fire("drop", "outside.do");
+  await expect(row(page, /^outside\.do/)).toBeVisible();
+  await fire("dragstart");
+  await page.mouse.move(10, 10); // its dragend never came (the dragged element was removed): the mouse moving ends it
+  await page.mouse.move(20, 20);
+  await fire("drop", "later.do");
+  await expect(row(page, /^later\.do/)).toBeVisible();
+  await expect(row(page, /^in-page\.do/)).toHaveCount(0);
 });

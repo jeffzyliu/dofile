@@ -211,7 +211,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Dialog | Drawn | Content and rules |
 |---|---|---|
 | Download prompt, progress | `S 1`, `S 8`; `S 2`, `S 3` | Section 5. Download is the default (Enter) on purpose (UX-037). The bar is `role="progressbar"` with `aria-valuetext`; screen readers hear the stages, not the megabytes. |
-| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is always asked, even after "Do the same". |
+| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is asked even after "Do the same" with Replace (not after Esc, or "Do the same" with Keep mine: keeping it loses nothing). |
 | Delete (4a) | `P/Notices` | "Delete clean.do?" / "It's kept only in this browser; there is no undo." / Cancel (focused), Delete. `DS` words it differently: OQ-19. |
 | Reset | `S 14` | `role="alertdialog"`. "Reset the engine?" / "The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset. Not asked with no data in memory and no results. |
 | Upload report | `P/Upload report` | Drawn with P2 content only. P1: the toast "3 files uploaded" (OQ-19). |
@@ -926,12 +926,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     are written first, then each clash is asked; what the clash dialog shows beyond the `dialog` value is
     `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
     open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
-    is asked even after "Do the same"), both tested in Node
+    is asked even after "Do the same" with Replace, never after Esc), both tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
-    its place, unless it has unsaved edits. After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
+    its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
     now selected, else the tree's row, else the editor. The commands built from a path (Import here, Load in 4c) come
     from `web/src/stata/quote.ts` `fileCommand` (3.11). The page's drop listeners are the window's, in the capture phase,
-    so 4b's CodeMirror never sees a file drop. `FilesPane.tsx` exports
+    so 4b's CodeMirror never sees a file drop; a drag that began in the page (a graph image, which Chromium and WebKit
+    list as carrying a file) is not an upload. `FilesPane.tsx` exports
     `fileMenuItems()` (the head menu); on a phone the Files pane's head is hidden (the top bar already says "Files") and
     `App.tsx` puts those items in the top bar's ⋯ while the Files view is shown, as it does the Log head's (decided
     2026-11-11). A drop of files anywhere on the page uploads them (3.1); the Files pane is outlined meanwhile (OQ-16).

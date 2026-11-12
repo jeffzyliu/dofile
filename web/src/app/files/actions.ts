@@ -7,7 +7,8 @@
 //    ({ d: "clash", path, index, total }); what the dialog shows beyond those is `clashNow()`. The dialog answers with
 //    answerClash(). Esc, or another dialog put in the clash's place with no answer, keeps yours for every clash left. Uploads run one at a
 //    time (a second waits for the first to end), and a clash waits while another dialog is open: it never replaces one.
-//    A clash over an open file with unsaved edits is always asked, even after "Do the same".
+//    A clash over an open file with unsaved edits is asked even after "Do the same" with Replace (never after Esc or
+//    Keep mine for the rest: keeping it loses nothing).
 import { effect } from "@preact/signals-core";
 import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
@@ -53,13 +54,18 @@ function closeUnder(top: string) {
 
 // ---- rename, new, delete, download ----
 
-/** How a file opens by its name: a .dta tab, or the editor (open.ts says which text files the editor takes). */
-const kindOf = (path: string) => (extOf(path) === ".dta" ? "dta" : "text");
+/** How a file opens by its name: a .dta tab, the editor (open.ts says which text files the editor takes), or no tab (a
+ *  .png goes to the Graph tab). */
+const kindOf = (path: string) => {
+  const ext = extOf(path);
+  return ext === ".dta" ? "dta" : ext === ".png" ? null : "text";
+};
 
 /** Rename (or move) `from` to `to` in the store; the tabs of it and of everything under it follow (`tabs` first, then
  *  editorCommands.renamed for each open file). A tab whose new name opens another way (a .dta renamed to .csv, a text
  *  file to .dta) is opened again as its new name says, in its place, unless it has unsaved edits (the editor keeps
- *  them). Rejects as the store does (`to` exists, ...). */
+ *  them); one whose new name opens in no tab (a .png) just closes, and the Graph tab is left alone. Rejects as the store
+ *  does (`to` exists, ...). */
 export async function renameEntry(from: string, to: string): Promise<void> {
   if (from === to) return;
   await store.rename(from, to);
@@ -70,7 +76,10 @@ export async function renameEntry(from: string, to: string): Promise<void> {
   for (const p of moved) editorCommands.renamed(p, movedPath(p, from, to));
   for (const p of moved.map((p) => movedPath(p, from, to))) {
     const tab = tabs.value.find((t) => t.path === p);
-    if (tab && !tab.dirty && tab.kind !== kindOf(p)) await reopenAs(p);
+    const kind = kindOf(p);
+    if (!tab || tab.dirty || tab.kind === kind) continue;
+    if (kind === null) closeTab(p);
+    else await reopenAs(p);
   }
 }
 
@@ -246,8 +255,10 @@ async function uploadNow(items: Incoming[]): Promise<string[]> {
   let shown: Dialog = null; // the last clash dialog this upload opened
   for (const [i, it] of clashes.entries()) {
     let replace: boolean | null = sticky;
+    // an open file with unsaved edits is asked before "Do the same" replaces it; keeping it (Esc, Keep mine for the
+    // rest) needs no question
     const unsaved = tabs.value.some((t) => t.path === it.path && t.dirty);
-    if (replace === null || unsaved) {
+    if (replace === null || (replace === true && unsaved)) {
       const mine = before.get(it.path)!;
       while (dialog.value !== null) await noDialog(); // never over another dialog
       now = {

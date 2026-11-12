@@ -20,12 +20,12 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   with these decisions of 2026-11-11: on a phone the Files head is hidden and the file actions are in the top bar's ⋯;
   the unfolded file list gives the focus to the tree's row; a drop of files anywhere on the page uploads them; a graph
   is drawn in the run's theme whatever colors its command names (a rule that drew such a graph light was built and
-  removed the same day: the 4c note below); a toast may also report an
-  error that needs no action (SPEC 3.10). A review's findings are fixed (one upload at a time, a clash never over
-  another dialog, paths in commands through `web/src/stata/quote.ts`, the focus after a tab
-  closes). Checked on the branch:
-  `uv run poe lint`, `npm run check`, `npm run lint:strict`; `uv run poe test` (1349 passed, 13 skipped, 3 xfailed);
-  `npm test` (249 pass, none skipped); the e2e suite (134 passed, 26 skipped). **Next: 4b and 4d, when the maintainer
+  removed the same day: the 4c note below); a toast may also report an error that needs no action (SPEC 3.10). Two
+  reviews' findings are fixed (one upload at a time, a clash never over another dialog and an unsaved file's clash not
+  asked after Esc, paths in commands through `web/src/stata/quote.ts`, the focus after a tab closes, a .dta renamed to
+  .png closes its tab, a drag that began in the page is no upload). Checked on the branch:
+  `uv run poe lint`, `npm run check`, `npm run lint:strict`; `uv run poe test` (1346 passed, 13 skipped, 3 xfailed);
+  `npm test` (252 pass, none skipped); the e2e suite (138 passed, 26 skipped). **Next: 4b and 4d, when the maintainer
   says so.** The draft words of 4a and 4c wait for the maintainer's approval (SPEC section 8, "As built").
 - **Steps 0, 1 and 2 are merged into `main`**. Checked on `main` after step 2 merged: `uv run poe test` (1346
   passed), `npm run check`, `npm test` (98 tests), `npm run e2e` (56 passed).

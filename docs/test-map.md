@@ -97,7 +97,7 @@ These test the Stata-language engine itself. Grouping is by file name.
 
 ## Web (about 280 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 249)
+### Unit and integration (`node --test`, `web/test/`, 252)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
@@ -107,7 +107,7 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `app.test.ts` | 55 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, toasts; banners; theme; the phone keyboard. |
 | `files.test.ts` | 35 | Store and engine worker together: the journal, what a run changed, a worker that cannot open its store. |
 | `machine.test.ts` | 30 | State machine: the transition table, SPEC section 5 matching the code, invariants (stale events change nothing, one ticket issued once, one live worker), the race scenarios. |
-| `files-ui.test.ts` | 22 | The file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) on the page's store over fake-indexeddb: the tree's rows and names, opening each kind of file (SPEC 3.11), closing, renaming and deleting with open tabs (a rename that changes how a file opens), a folder's .zip, upload and its name clashes (a second upload waits for the first, a clash waits for another dialog to close, another dialog put in its place answers as Esc, an unsaved file is always asked, a name with a control character is refused); a path in the `use` and `import delimited` commands (`src/stata/quote.ts`: `$`, compound quotes, the names a command can't hold). |
+| `files-ui.test.ts` | 25 | The file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) on the page's store over fake-indexeddb: the tree's rows and names, opening each kind of file (SPEC 3.11), closing, renaming and deleting with open tabs (a rename that changes how a file opens; a .dta renamed to .png closes its tab), a folder's .zip, upload and its name clashes (a second upload waits for the first, a clash waits for another dialog to close, another dialog put in its place answers as Esc, an unsaved file is asked after "Do the same" with Replace and not after Esc or Keep mine, nor when another dialog took the clash's place, a name with a control character is refused); a path in the `use` and `import delimited` commands (`src/stata/quote.ts`: `$`, compound quotes, the names a command can't hold). |
 | `client.test.ts` | 27 | Engine client and worker transport: downloading start files into the Cache (size checks, abort, build mismatch), start and end rules, error kinds, interrupt. |
 | `store.test.ts` | 15 | IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock. |
 | `snapshot-native.test.ts` | 14 | Native library calls from an engine restored from the memory snapshot (skipped, as one test, without a current snapshot). |
@@ -118,20 +118,20 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 40 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 41 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 160 cases, of which 134 run and 26 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 164 cases, of which 138 run and 26 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list).
 
 - `shell.spec.ts` (11): desktop and phone layout, toolbar stability, panes never remounted, banners, toast position.
-- `files.spec.ts` (11): the file tree by keyboard, opening files in tabs, closing a tab with and without unsaved edits
+- `files.spec.ts` (12): the file tree by keyboard, opening files in tabs, closing a tab with and without unsaved edits
   (the phone's file switcher; the focus after "Don't save" and after Delete on the last tab), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
   open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
   clashes (Enter, Esc, "Do the same", a clash dialog that another dialog replaces answers as Esc), the unsaved-edits
   clash, a non-UTF-8 file's banner, a folder upload (Chromium), a drop anywhere on the page (taken in the capture phase;
-  none while a dialog is open), the phone's file actions in the top bar's ⋯.
+  none while a dialog is open; none for a drag that began in the page), the phone's file actions in the top bar's ⋯.
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
 - `engine.spec.ts` (3): runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start.
