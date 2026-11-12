@@ -59,8 +59,9 @@ async function ready(page: Page) {
 
 // ---- no engine ----
 
-test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast, a failed save shows a banner", async ({
+test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast, a failed save shows a banner; its focus ring shows in forced colors", async ({
   page,
+  browserName,
 }) => {
   await setUp(page, { "a.do": "display 1\n" });
   await open(page, "a.do");
@@ -82,15 +83,26 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   // the [data-editor] element is the editor's content, and focus() puts the focus there
   await expect(page.locator("[data-editor]")).toHaveCount(1);
   await expect(page.locator("[data-editor]")).toHaveClass(/cm-content/);
-  // the focused editor's ring is also an outline, which forced colors keep (they drop the box-shadow)
-  await page.emulateMedia({ forcedColors: "active" });
-  expect(
-    await page.locator(".cm-editor").evaluate((el) => {
+  // the focused editor's ring is a box-shadow and a transparent outline: forced colors drop the shadow and give the
+  // outline a system color, so the ring still shows there (WebKit matches the media query but forces no colors)
+  const ring = () =>
+    page.locator(".cm-editor").evaluate((el) => {
       const s = getComputedStyle(el);
-      return [el.classList.contains("cm-focused"), s.outlineStyle, s.outlineWidth];
-    }),
-  ).toEqual([true, "solid", "2px"]);
-  await page.emulateMedia({ forcedColors: "none" });
+      return {
+        focused: el.classList.contains("cm-focused"),
+        outline: `${s.outlineStyle} ${s.outlineWidth}`,
+        color: s.outlineColor,
+        shadow: s.boxShadow,
+      };
+    });
+  expect(await ring()).toMatchObject({ focused: true, outline: "solid 2px", color: "rgba(0, 0, 0, 0)" });
+  if (browserName !== "webkit") {
+    await page.emulateMedia({ forcedColors: "active" });
+    const forced = await ring();
+    expect(forced).toMatchObject({ focused: true, outline: "solid 2px", shadow: "none" });
+    expect(forced.color).not.toBe("rgba(0, 0, 0, 0)");
+    await page.emulateMedia({ forcedColors: "none" });
+  }
 
   // a store that refuses: the banner above the editor, with Download; the dot stays
   await page.evaluate(() => {
@@ -332,17 +344,18 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
   ]);
   const current = () =>
     log.locator("mark.on").evaluate((m) => m.closest(".head, .runhead, .note, .echo")?.className ?? "out");
-  expect(await current()).toBe("head");
+  await expect.poll(current).toBe("head");
   await field.press("Enter");
   await expect(count).toHaveText("2 of 5");
-  expect(await current()).toBe("runhead");
+  await expect.poll(current).toBe("runhead");
   await field.press("Enter");
-  expect(await current()).toBe("echo");
+  await expect(count).toHaveText("3 of 5");
+  await expect.poll(current).toBe("echo");
   await field.press("Shift+Enter");
   await field.press("Shift+Enter");
   await field.press("Shift+Enter");
   await expect(count).toHaveText("5 of 5");
-  expect(await current()).toBe("note");
+  await expect.poll(current).toBe("note");
   await field.fill("nothing like it");
   await expect(count).toHaveText("none");
   // Esc closes it, and the focus goes back to what opened it (the Find button; on a phone the ⋯ button)
@@ -418,6 +431,91 @@ test("the error line keeps to its text when the tab is left and shown again", as
   await page.keyboard.press("Backspace");
   await expect(page.locator(".cm-line").nth(4)).toHaveText("line 4");
   await expect(err).toHaveCount(0);
+});
+
+test("the error line comes back when its file is closed and opened again with the same text", async ({ page }) => {
+  await setUp(page, { "a.do": "line 1\nline 2\nline 3\n", "b.do": "other\n" });
+  await open(page, "b.do");
+  await open(page, "a.do");
+  await page.evaluate(() => {
+    window.__dofile.state.runWriter.lastRun.value = {
+      kind: "file",
+      path: "a.do",
+      fresh_locals: true,
+      rc: 111,
+      line: 2,
+      seconds: 0.1,
+    };
+  });
+  const err = page.locator(".cm-line.cm-err-line");
+  await expect(err).toHaveText("line 2");
+  const close = async (name: string) => {
+    if (isPhone(page)) {
+      await view(page, "Editor");
+      await page.getByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}.*Open files`) }).click();
+      await page.getByRole("menuitem", { name: `Close ${name}` }).click();
+    } else {
+      await page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name }).focus();
+      await page.keyboard.press("Delete");
+    }
+    await expect
+      .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: { path: string }) => t.path)))
+      .not.toContain(name);
+  };
+  await close("a.do");
+  await open(page, "a.do");
+  await expect(err).toHaveText("line 2");
+  // closed, then changed on disk: opened with other text, no mark
+  await close("a.do");
+  await page.evaluate(() => window.__dofile.store.write("a.do", new TextEncoder().encode("new 1\nline 1\nline 2\n")));
+  await open(page, "a.do");
+  await expect(page.locator(".cm-line").first()).toHaveText("new 1");
+  await expect(err).toHaveCount(0);
+});
+
+test("the notes at a run's end wrap in the Log pane, so Go to line stays in view, at every width", async ({ page }) => {
+  await page.goto("/?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  await page.evaluate(() => {
+    window.__dofile.state.runWriter.log.value = [
+      { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: false },
+      {
+        t: "text",
+        run: 1,
+        text: ". forvalues i = 1/100000 {\n  2.   sleep 10\n  3. }\n--Break--\nr(1);\n",
+        end: { kind: "file", path: "a.do", fresh_locals: true, rc: 1, line: 17, seconds: 2 },
+      },
+      { t: "text", run: 2, text: ". display 1\n1\n" },
+    ];
+  });
+  const widths = isPhone(page) ? [page.viewportSize()!.width] : [1440, 1200, 900, 700];
+  for (const width of widths) {
+    if (!isPhone(page)) await page.setViewportSize({ width, height: 800 });
+    else await view(page, "Log");
+    const log = page.getByRole("log", { name: "Log" });
+    const go = log.getByRole("button", { name: "Go to line 17" });
+    await expect(go).toBeVisible();
+    const fits = await log.evaluate((pre) => {
+      const box = pre.parentElement!.getBoundingClientRect();
+      const note = [...pre.querySelectorAll(".note")]
+        .find((n) => n.textContent!.startsWith("Stopped by Break"))!
+        .getBoundingClientRect();
+      const link = [...pre.querySelectorAll("button.jump")]
+        .find((b) => b.textContent === "Go to line 17")!
+        .getBoundingClientRect();
+      const next = pre.querySelectorAll(".echo")[3].getBoundingClientRect(); // the next run's `. display 1`
+      return {
+        note: note.right <= box.right + 0.5,
+        link: link.right <= box.right + 0.5 && link.left >= box.left,
+        noBlankLine: next.top - note.bottom < next.height / 2,
+      };
+    });
+    expect(fits, `at ${width} px`).toEqual({ note: true, link: true, noBlankLine: true });
+    // the next run's text starts on its own line, right under the note
+    await expect(log).toContainText(
+      "Stopped by Break before line 17. The data is as the last complete command left it.  Go to line 17\n. display 1",
+    );
+  }
 });
 
 test("the log: a command stopped by Break names no line; a phone's inline graph is on the card of its run's theme", async ({

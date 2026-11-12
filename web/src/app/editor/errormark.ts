@@ -4,6 +4,8 @@
 //  - cleared when a new run of that same file starts, when the engine is reset or restarted (run.ts clears `lastRun`:
 //    the effect engine-gone), and when the marked line is deleted;
 //  - it moves with edits (editor/cm.ts maps it through the changes);
+//  - a file closed with its mark and no unsaved edits has it again when it is opened with the same text (Editor.tsx
+//    keeps the line it was on); closed with unsaved edits, or opened with other text, it has none;
 //  - a command-line command and a run of another file leave it alone.
 // Plain TypeScript with no DOM (only @codemirror/state's types), tested in Node (test/editor.test.ts). Editor.tsx applies
 // what these answer.

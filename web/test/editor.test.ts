@@ -305,6 +305,217 @@ test("echoLines: capture noisily do shows its file's echoes, which are passed ov
   assert.equal(log[at.get(4)!]?.text, ". display 8");
 });
 
+// More of the engine's own logs (run through dofile's engine). sub.do holds `display 1`; outer.do holds `forvalues i =
+// 1/2 {`, `do sub.do`, `}` and `display 1`. Where the walk cannot know which echo is a line's, it finds none (the link
+// goes to the run's end): wrong is worse than late.
+const nestedLog = (...lines: string[]) => `${lines.join("\n")}\n`;
+const SUB = [". display 1", "1", "", ". ", "end of do-file", ""];
+
+test("echoLines: a do-file run from a loop, then a line its file holds too: the main file's echo, after the loop's runs", () => {
+  const log = classify(
+    nestedLog(
+      ". forvalues i = 1/2 {",
+      "  2.   do sub.do",
+      "  3. }",
+      "",
+      ...SUB,
+      ...SUB,
+      ". display 1",
+      "1",
+      "",
+      ". display 2",
+      "2",
+      "",
+    ),
+  );
+  const at = echoLines(log, "forvalues i = 1/2 {\n  do sub.do\n}\ndisplay 1\ndisplay 2");
+  assert.equal(log[at.get(3)!]?.text, "  3. }");
+  assert.equal(at.get(4), 16, "not 4 or 10, the echoes of sub.do's own `display 1`");
+  assert.equal(at.get(5), 19);
+});
+
+test("echoLines: a do-file run from a program: a later line its file holds is not taken for the program's echo", () => {
+  const log = classify(
+    nestedLog(
+      ". program define zp",
+      "  1.   do sub.do",
+      "  2. end",
+      "",
+      ". zp",
+      "",
+      ...SUB,
+      ". display 1",
+      "1",
+      "",
+      ". display 2",
+      "2",
+      "",
+    ),
+  );
+  const at = echoLines(log, "program define zp\n  do sub.do\nend\nzp\ndisplay 1\ndisplay 2");
+  assert.equal(at.get(5), 12, "not 6, sub.do's `display 1`");
+  assert.equal(at.get(6), 15);
+  assert.ok([undefined, 4].includes(at.get(4)), "`zp` may not be known (sub.do's echoes follow it), never wrong");
+  // a program that runs a do-file, defined and not called, then a do at the top: that do still opens its file
+  const top = classify(
+    nestedLog(
+      ". program define zp",
+      "  1.   do sub.do",
+      "  2. end",
+      "",
+      ". do sub.do",
+      "",
+      ...SUB,
+      ". display 1",
+      "1",
+      "",
+    ),
+  );
+  const t = echoLines(top, "program define zp\n  do sub.do\nend\ndo sub.do\ndisplay 1");
+  assert.equal(t.get(4), 4);
+  assert.equal(t.get(5), 12);
+});
+
+test("echoLines: a do-file that runs a do-file from a loop is passed over whole", () => {
+  const log = classify(
+    nestedLog(
+      ". do outer.do",
+      "",
+      ". forvalues i = 1/2 {",
+      "  2.   do sub.do",
+      "  3. }",
+      "",
+      ...SUB,
+      ...SUB,
+      ". display 1",
+      "1",
+      "",
+      ". ",
+      "end of do-file",
+      "",
+      ". display 1",
+      "1",
+      "",
+      ". display 2",
+      "2",
+      "",
+    ),
+  );
+  const at = echoLines(log, "do outer.do\ndisplay 1\ndisplay 2");
+  assert.equal(at.get(2), 24, "not 18, outer.do's own `display 1`");
+  assert.equal(at.get(3), 27);
+});
+
+test("echoLines: `n` is noisily too (cap n do shows its file's echoes); include and noi do", () => {
+  let log = classify(nestedLog(". cap n do sub.do", "", ...SUB, ". display 1", "1", "", ". display 2", "2", ""));
+  let at = echoLines(log, "cap n do sub.do\ndisplay 1\ndisplay 2");
+  assert.equal(at.get(2), 8);
+  assert.equal(at.get(3), 11);
+  assert.equal(nestedTarget("cap n: do clean"), "clean.do");
+  log = classify(
+    nestedLog(
+      ". include sub.do",
+      "",
+      ...SUB,
+      ". display 2",
+      "2",
+      "",
+      ". noi do sub.do",
+      "",
+      ...SUB,
+      ". display 2",
+      "2",
+      "",
+    ),
+  );
+  at = echoLines(log, "include sub.do\ndisplay 2\nnoi do sub.do\ndisplay 2");
+  assert.deepEqual([...at.values()], [0, 8, 11, 19]);
+});
+
+test("echoLines: a quietly or capture block echoes nothing inside; a line there is not taken for a later line's echo", () => {
+  const log = classify(nestedLog(". display 5", "5", "", ". quietly {", "", ". display 5", "5", ""));
+  const at = echoLines(log, "display 5\nquietly {\ndisplay 5\n}\ndisplay 5");
+  assert.equal(at.has(3), false);
+  assert.equal(at.get(5), 5);
+  // capture { } too; noisily { } and if { } echo their lines
+  const both = classify(
+    nestedLog(
+      ". capture {",
+      "",
+      ". noisily {",
+      ". display 6",
+      "6",
+      ". }",
+      "",
+      ". if 1 {",
+      ". display 7",
+      "7",
+      ". }",
+      "",
+      ". display 5",
+      "5",
+      "",
+      ". display 6",
+      "6",
+      "",
+      ". display 7",
+      "7",
+      "",
+    ),
+  );
+  const b = echoLines(
+    both,
+    "capture {\ndisplay 5\n}\nnoisily {\ndisplay 6\n}\nif 1 {\ndisplay 7\n}\ndisplay 5\ndisplay 6\ndisplay 7",
+  );
+  assert.equal(b.has(2), false);
+  assert.equal(b.get(5), 3);
+  assert.equal(b.get(8), 8);
+  assert.deepEqual([b.get(10), b.get(11), b.get(12)], [12, 15, 18]);
+  // in a loop or a program the block's lines are echoed as they are read; in an `if` block they are not
+  const read = classify(
+    nestedLog(
+      ". forvalues i = 1/1 {",
+      "  2. quietly {",
+      "  3. display 5",
+      "  4. }",
+      "  5. }",
+      "",
+      ". program define zq2",
+      "  1. quietly {",
+      "  2. display 6",
+      "  3. }",
+      "  4. end",
+      "",
+      ". if 1 {",
+      ". quietly {",
+      ". }",
+      "",
+      ". display 8",
+      "8",
+      "",
+    ),
+  );
+  const r = echoLines(
+    read,
+    "forvalues i = 1/1 {\nquietly {\ndisplay 5\n}\n}\nprogram define zq2\nquietly {\ndisplay 6\n}\nend\nif 1 {\nquietly {\ndisplay 7\n}\n}\ndisplay 8",
+  );
+  assert.deepEqual([r.get(3), r.get(8), r.has(13), r.has(14), r.get(15), r.get(16)], [2, 8, false, false, 14, 16]);
+});
+
+test("echoLines: a line in a /* */ comment is not taken for the echo of the same line after it; a comment's continued line is", () => {
+  const log = classify(nestedLog(". display 1", "1", "", ". display 2 /* start", "> more */", "2", ""));
+  const at = echoLines(log, "/* a block\ndisplay 1\n*/\ndisplay 1\ndisplay 2 /* start\nmore */");
+  assert.equal(at.has(2), false);
+  assert.equal(at.get(4), 0);
+  assert.equal(at.get(5), 3);
+  assert.equal(at.get(6), 4, "the comment's line echoed as a continued line");
+});
+
+test("inBlocks: a local or global's braces open no block", () => {
+  assert.deepEqual(inBlocks(["local open {", "do sub.do", "global close }", "x"]), [false, false, false, false]);
+  assert.deepEqual(inBlocks(["forvalues i = 1/2 {", "  local b }", "  x", "}", "y"]), [false, true, true, true, false]);
+});
+
 test("nestedTarget and unsavedTarget: the file a do or include runs, and the open file with unsaved edits it is", () => {
   assert.equal(nestedTarget("capture noisily do clean.do"), "clean.do");
   assert.equal(nestedTarget("qui: do clean"), "clean.do");
@@ -374,25 +585,44 @@ test("pasted lines run in turn and stop at the first refused, not run, or failed
   assert.equal(inTurnWords(await runInTurn(["a", "b"], s.runOne)), null);
 });
 
-test("pasted lines stop before a block's line or a /// line, which is not sent, and the toast says to use the editor", async () => {
+test("pasted lines stop before a block's, a comment's or a /// line, which is not sent, and the toast says to use the editor", async () => {
   assert.equal(opensBlock("forvalues i = 1/3 {"), true);
   assert.equal(opensBlock("if x > 1 {  "), true);
   assert.equal(opensBlock("regress y x /// controls"), true);
   assert.equal(opensBlock("display ${x}"), false);
   assert.equal(opensBlock("}"), false);
+  // a comment that goes on to the next lines, a program and a mata block: their lines are not commands one by one
+  assert.equal(opensBlock("/* the old way"), true);
+  assert.equal(opensBlock("summarize x /* the old way"), true);
+  assert.equal(opensBlock("/* a note */ summarize x"), false);
+  assert.equal(opensBlock('display "/* not a comment"'), false);
+  assert.equal(opensBlock("program define tidy"), true);
+  assert.equal(opensBlock("capture program define tidy, rclass"), true);
+  assert.equal(opensBlock("capture program drop tidy"), false);
+  assert.equal(opensBlock("mata"), true);
+  assert.equal(opensBlock("mata:"), true);
+  assert.equal(opensBlock("mata: x = 1"), false);
   const s = script({});
   const r = await runInTurn(["clear", "forvalues i = 1/3 {", "display `i'", "}"], s.runOne);
   assert.deepEqual(r, { total: 4, ran: 1, stop: { line: 2, why: "block" } });
   assert.deepEqual(s.ran, ["clear"]);
   assert.equal(
     inTurnWords(r),
-    "3 of 4 pasted lines not run: line 2 starts a block or a /// command; run those from the editor",
+    "3 of 4 pasted lines not run: line 2 starts a block, a comment or a /// command; run those from the editor",
   );
   // the block's line is the last one: still said, since it did not run
   assert.equal(
     inTurnWords(await runInTurn(["regress y x ///"], script({}).runOne)),
-    "1 of 1 pasted lines not run: line 1 starts a block or a /// command; run those from the editor",
+    "1 of 1 pasted lines not run: line 1 starts a block, a comment or a /// command; run those from the editor",
   );
+  // a commented-out command is not run: the lines stop at the comment's first line
+  const c = script({});
+  assert.deepEqual(await runInTurn(["/*", "drop _all", "*/"], c.runOne), {
+    total: 3,
+    ran: 0,
+    stop: { line: 1, why: "block" },
+  });
+  assert.deepEqual(c.ran, []);
 });
 
 test("Find's matches: every occurrence, case ignored, none for an empty query", () => {

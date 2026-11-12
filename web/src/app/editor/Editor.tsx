@@ -192,10 +192,20 @@ function followErrors() {
   untracked(() => markErrors(onLastRun(r)));
 }
 function markErrors({ clear, set }: MarkChange) {
+  if (clear === "all") closedMarks.clear();
+  else if (clear) closedMarks.delete(clear);
   for (const path of states.keys())
     if (clear === "all" || clear === path) update(path, { effects: setErrorLine.of(null) });
   const st = set ? current(set.path) : undefined;
   if (set && st && set.line <= st.doc.lines) update(set.path, { effects: setErrorLine.of(set.line) });
+}
+// The marks of files closed with one and no unsaved edits (errormark.ts): the line it was on, and the text it was on,
+// so it comes back only on that same text.
+const closedMarks = new Map<string, { line: number; text: string }>();
+/** The line the error mark is on in `st`, or null. */
+function errorLineOf(st: EditorState): number | null {
+  const it = st.field(lineMarksField, false)?.err.iter();
+  return it?.value ? st.doc.lineAt(it.from).number : null;
 }
 
 // ---- save ----
@@ -222,7 +232,11 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
 // ---- what 4a calls ----
 
 function open(path: string, text: string) {
-  states.set(path, stateFor(path, text));
+  const fresh = stateFor(path, text);
+  states.set(path, fresh);
+  const kept = closedMarks.get(path);
+  closedMarks.delete(path);
+  if (kept && kept.text === text && kept.line <= fresh.doc.lines) update(path, { effects: setErrorLine.of(kept.line) });
   savedText.set(path, text);
   scrolled.delete(path);
   if (activeTab.value === path) show(path);
@@ -267,6 +281,11 @@ function renamed(from: string, to: string) {
 }
 
 function closed(path: string) {
+  const st = current(path);
+  const line = st ? errorLineOf(st) : null;
+  const saved = savedText.get(path);
+  if (st && line !== null && saved !== undefined && st.doc.toString() === saved)
+    closedMarks.set(path, { line, text: saved });
   states.delete(path);
   savedText.delete(path);
   scrolled.delete(path);

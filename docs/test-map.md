@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-320-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-360-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -95,9 +95,9 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 350 tests)
+## Web (about 360 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 282)
+### Unit and integration (`node --test`, `web/test/`, 289)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
@@ -112,7 +112,7 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `store.test.ts` | 15 | IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock. |
 | `snapshot-native.test.ts` | 14 | Native library calls from an engine restored from the memory snapshot (skipped, as one test, without a current snapshot). |
 | `engine.test.ts` | 13 | The engine in Pyodide under Node: runs, results, graphs, Break, a worker that fails to load. |
-| `editor.test.ts` | 19 | The editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/csv.ts` and `words.ts`): the .log tokenizer (echoes, a loop's body and continued lines, a list row that is output, the error's message and `r(N);`, Break, a nested do-file's end, the hint and its bold words and help link, the path shim's note, a log file's head, and the same lines after an echo as output), Download log's text, where each code line is echoed (blank lines, block comments, a loop, `///`, the same text twice, nested do-files; from the engine's own logs: a do-file run from a loop or an `if 0` block, a mata block and `#delimit`, `capture noisily do` and `quietly do`; which lines are inside blocks), the file a `do` names (with prefixes) and the unsaved file it is, pasted lines (an ordinary paste; the lines joined to the field's text; in turn, the next after the one before; stopping at a refused, dropped or failed line, Break too, and before a block's or a `///` line; the toast's words), Find's matches, a .csv's columns, the run-head, last-run, time and memory words; one line pasted with its line break is an ordinary paste; the error mark's rule (`editor/errormark.ts`: set by the file's last run, cleared by a new run of that file, a reset or the line's deletion, left by a command or another file's run). |
+| `editor.test.ts` | 26 | The editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/csv.ts` and `words.ts`): the .log tokenizer (echoes, a loop's body and continued lines, a list row that is output, the error's message and `r(N);`, Break, a nested do-file's end, the hint and its bold words and help link, the path shim's note, a log file's head, and the same lines after an echo as output), Download log's text, where each code line is echoed (blank lines, block comments, a loop, `///`, the same text twice, nested do-files; from the engine's own logs: a do-file run from a loop or an `if 0` block, a mata block and `#delimit`, `capture noisily do` and `quietly do`; a do-file run from a loop or a program followed by a line its file holds too, a do-file that runs a do-file from a loop, `cap n do`, `include` and `noi do`, the silent body of a `quietly { }` or `capture { }` and the echoed one in a loop, a program or `noisily { }`, a line in a `/* */` comment equal to the next one; which lines are inside blocks, and a local's braces), the file a `do` names (with prefixes) and the unsaved file it is, pasted lines (an ordinary paste; the lines joined to the field's text; in turn, the next after the one before; stopping at a refused, dropped or failed line, Break too, and before a block's, a `/*` comment's, a lone `program define` or `mata`, or a `///` line; the toast's words), Find's matches, a .csv's columns, the run-head, last-run, time and memory words; one line pasted with its line break is an ordinary paste; the error mark's rule (`editor/errormark.ts`: set by the file's last run, cleared by a new run of that file, a reset or the line's deletion, left by a command or another file's run). |
 | `output.test.ts` | 14 | The Output tabs' logic (`app/output/format.ts`): numbers to 8 digits and the exponent form, missing values, matrix as tab-separated text, the Results sections and groups (defaults, system globals, no Functions group), a long Browse cell cut short, a graph's label and alt text with its number when a command is shared, sizes. |
 | `states.test.ts` | 9 | Step 4d's plain logic (`app/states/words.ts`): Reset asked only with data or results, always during a run, and after a run only once the memory is described again (a run that made data and no results is asked about; a description that fails asks; a run a reset cut asks nothing), the stopping countdown at 0 s, the memory banner with no size, the times, the reset banner's words by kind, the running banner's name of a run, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile, which the engine's own line says). |
 | `imports.test.ts` | 12 | Architecture rules enforced by scanning source: import layering, single writers, single instances, one `postMessage` site; no old state flag outside the machine (step 4b's `editor/clock.ts` may read `breaking`'s `resetAt`). |
@@ -120,9 +120,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 68 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 70 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 272 cases, of which 241 run and 31 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 280 cases, of which 249 run and 31 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -137,8 +137,8 @@ view; the phone ⋯'s Save in the three desktop profiles).
   clash, a non-UTF-8 file's banner, a folder upload (Chromium), a drop anywhere on the page (taken in the capture phase;
   none while a dialog is open; none for a drag that began in the page), the phone's file actions in the top bar's ⋯.
 - `states.spec.ts` (13, step 4d): the prompt, Not now and the declined banner (the real machine in `none`; the focus back on the editor after Not now; "in the editor" is `activeElement.closest("[data-editor]")`, so it holds for 4b's CodeMirror); the progress dialog's downloading and stage rows with times (the `engine` signal set through the hook); the take-over button's `aria-disabled` and `.off`, and a press then reaches no machine (no drop); the failed banner for each reason and failed twice; Download all off with an empty store and on after a write; Reset during a run asks (no data or results yet); the focus handed to the editor, or More actions on a phone's Log view, when a stopping or reset banner goes with the focus in it; from the stopping to the waiting banner the focus goes straight across, never through the editor; running, stopping, waiting banners; storage, reset, memory and download-failed banners; a dialog whose opener has left the page (the stopping banner's button, then the other-tab dialog) gives the focus to the editor or More actions; with a .dta tab active a banner's hand-off goes to that tab in one move (desktop); and one test with an engine: Reset's dialog (Cancel, Esc), Reset, the reset banner, a reset with nothing to lose that asks nothing, a Reset at the end of a run that made data and no results, before its data is described, that asks, and the reset banner's "Run the file again" with 4b's editor.
-- `editor.spec.ts` (14, step 4b): with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
-  its toast, the focused editor's outline (kept in forced colors), a failed save's banner and its Download, a rename of
+- `editor.spec.ts` (16, step 4b): with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
+  its toast, the focused editor's ring (an outline that forced colors give a system color while they drop the box-shadow; Chromium and Firefox, since WebKit forces no colors), a failed save's banner and its Download, a rename of
   the open file that keeps its text and edits; a .csv's
   columns and a .log's lines in the editor, the Stata tokens, .md and .json tokens, a file dropped on the editor (uploaded, the text
   unchanged), the editor's 16 px on a phone; the log's formatting as computed styles in light and dark (echo bold, output
@@ -146,7 +146,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
   run-head, Download log without the head, run-head or notes; Find in the log (every match counted and numbered in
   the log's order, Enter and Shift+Enter, "none", the Log tab shown first when unsplit, Esc back to the Find button or
   the phone's ⋯); the error line that keeps to its text across a tab switch, and its rule (a command and another file's run leave it; a
-  run of the file, a reset and the line's deletion clear it); the OQ-10 notes under an error (and none for the tempfile,
+  run of the file, a reset and the line's deletion clear it), and back when its file is closed and opened again with the same text (not with other text); the notes at a run's end wrapping in the Log pane with Go to line in view (1440, 1200, 900 and 700 px, and the phone); the OQ-10 notes under an error (and none for the tempfile,
   whose note the engine prints); the phone ⋯'s Save off on a .dta tab; a command's Break note with no line, and a
   phone's inline graph on its run's card; pasted lines with no engine (queued, then "Not now": the toast). With an
   engine: a .dta tab (Save off; the focus on its tab when the engine's prompt closes by itself); Run (the run-head, the

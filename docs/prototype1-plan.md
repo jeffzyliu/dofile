@@ -84,6 +84,15 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   `uv run poe lint`; `npm test` (282 pass, none skipped); `uv run poe test` (1346 passed, 13 skipped, 3 xfailed); the
   e2e suite (241 passed, 31 skipped); nothing under `src/dofile/` or `tests/` differs from `main`. The design checks
   (`axe`, `tabwalk`, `contrast`, `fonts`) were not run: they check the mockups in `docs/design/`, which did not change.
+- **A second review of 4b's fixes, fixed on the joined branch** (2026-11-11): the echo walk (`log/align.ts`) no longer
+  puts a graph's link at another line's echo after a `do` run from a loop or a program, or from a do-file that runs one
+  (where it cannot know, the link goes to the run's end); `n` is `noisily`; a `quietly { }` or `capture { }` body and a
+  `/* */` comment's inside are never taken as echoes; a local's braces open no block; the walk is linear (a log of 16,000
+  lines with 10,000 unannounced nested echoes: about 400 ms before, 5 ms after) and the log keeps its answer per run.
+  Pasted lines also stop before a `/*` comment that goes on, a lone `program define` and a lone `mata`. The notes at a
+  run's end wrap in the Log pane, so "Go to line" stays in view. A file closed with its error mark and no unsaved edits
+  has it again when opened with the same text. Known, left: in `#delimit ;` mode two commands on one line are echoed as
+  the whole line twice, and the second echo could be matched to a later identical line.
 - **Open points:** the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
 
 ## Decisions (2026-11-10)

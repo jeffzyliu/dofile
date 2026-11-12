@@ -972,9 +972,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     of each line of the code sent: the echoes are walked beside the code, an echo that is not the code's next line is
     passed over, so a graph's link goes after the echo of line `graph_lines[i]`, and at the run's end when it is not found;
     a nested do-file is passed over whole when its `do` or `include` is a line outside any block (`{ }`, a program, a mata
-    block) and shows its echoes (no prefix, or `noisily` the last of `capture`, `quietly`, `noisily`); a `do` inside a block
-    opens nothing; a top-level echo that is not the next line is looked for further down, so the walk gets back in step
-    after a mata block; the code is kept by the run's head, `editor/commands.ts` `codeOf`), `log/paste.ts` (the command line's pasted lines),
+    block) and shows its echoes (no prefix, or `noisily`, abbreviated to `n` too, the last of `capture`, `quietly`,
+    `noisily`); a `do` inside a block opens nothing, and after it, or after a nested file's end, a top-level echo is taken
+    only when no `end of do-file` comes before the next `do` (else the walk cannot know whose echo it is: a link in the
+    wrong place is worse than one at the run's end); a top-level echo that is not the next line is looked for further
+    down, so the walk gets back in step after a mata block; lines never echoed are passed over (a `/* */` comment's inside,
+    the body of a `quietly { }` or `capture { }` outside a loop or a program), and a local's or global's braces open no
+    block; the code is indexed by text, so the walk is linear, and the log keeps each run's answer; the code is kept by the
+    run's head, `editor/commands.ts` `codeOf`), `log/paste.ts` (the command line's pasted lines),
     `log/find.ts`, `editor/csv.ts` (a .csv's columns), `editor/words.ts` (the run-head, last-run, time and memory words).
     `editor/cm.ts` has the CodeMirror pieces (the languages by extension, the line marks as a state field mapped through
     edits, the drop guard) and `editor/clock.ts` the 100 ms clock of the timers (it reads `breaking`'s `resetAt`, the one
@@ -986,7 +991,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     place to change it; the joining agent's, for the maintainer to approve): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
     of that same file starts, when the engine is reset or restarted (`lastRun` becomes null), and when the marked line is
-    deleted; it moves with edits; a command from the command line and a run of another file leave it. **A run that
+    deleted; it moves with edits; a command from the command line and a run of another file leave it; a file closed with
+    its mark and no unsaved edits has it again when it is opened with the same text (closed with edits, or opened with
+    other text, it has none). **A run that
     rewrites an open file** (files.ts `afterRun`, from the run's `files`): a text tab with no unsaved edits shows the run's
     version (`editorCommands.reload`); one with edits keeps them, takes the run's version as its saved text
     (`editorCommands.ranOver`, so the tab stays unsaved and Save then replaces the run's version knowingly; the dot clears
@@ -1000,7 +1007,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     Decisions where this spec is silent: a whole-file run marks no running
     lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
     N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
-    by Break. The data is as the last complete command left it.", no line); on a phone, a tap on the Break pill also shows
+    by Break. The data is as the last complete command left it.", no line); the notes at a run's end (Break's with its
+    "Go to line", OQ-10's, the files not kept) wrap in the Log pane at every width; on a phone, a tap on the Break pill also shows
     the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's); a phone's
     inline graph is on the card of its run's theme; Run with no text tab open runs nothing and
     says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
@@ -1019,7 +1027,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     other breaks, the field's text before and after the cursor joins the first and
     last lines, empty lines are left out, and the lines run one after the other, each once the one before has ended; they
     stop at the first that is refused, that was queued for an engine that then did not start, or that ends with any rc
-    but 0 (Break too), and before a line that ends with `{` or holds `///` (not sent: a block runs from the editor); a
+    but 0 (Break too), and before a line that cannot run alone (not sent: it runs from the editor): one that ends with
+    `{`, holds `///`, opens a `/*` comment it does not close (a pasted `/*`, `drop _all`, `*/` runs nothing), or is
+    `program define` or `mata` on its own (`mata: x = 1` runs); a
     toast says how many were not run, and a refused line goes back into the field. The next line starts in a microtask
     after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
@@ -1027,8 +1037,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     list." (the empty editor); "No file is open to run" (toast); "Opening" (status bar, the page load); the save-failed
     banner ("analysis.do couldn't be saved: <reason>. Your edits are still in the editor; download them to keep a copy."
     / Download, Dismiss); the pasted lines' toasts ("2 of 4 pasted lines not run: line 2 ended with r(111)", "… not run:
-    the engine can't take a command now", "… not run: line 1 didn't run", "… not run: line 2 starts a block or a ///
-    command; run those from the editor"); "Stopped by Break before line N. …", and for a command "Stopped by Break. The
+    the engine can't take a command now", "… not run: line 1 didn't run", "… not run: line 2 starts a block, a comment or
+    a /// command; run those from the editor"); "Stopped by Break before line N. …", and for a command "Stopped by Break. The
     data is as the last complete command left it."; "Not
     kept: a.dta, b.dta. Its folder was renamed or deleted during the run."; "The files this run wrote couldn't be kept in
     this browser: <reason>"; the last-run words above; the strip's "Last run 0.38 s" and "before line 17 · 18.4 s";

@@ -989,6 +989,12 @@ input.filter::placeholder {
   font: var(--text-xs) / 1.6 var(--font-ui);
   color: var(--muted);
 }
+/* the notes at a run's end (Break's with its Go to line, OQ-10's, the files not kept): they wrap in the pane */
+.log .endnote {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* the command line's height on a phone, which the toast is placed against: above it and the tab bar (8 + 44 + 8 px and
    its edge, and the safe area), and with the keyboard open above it at the visible area's foot */
 .app[data-layout="phone"] {

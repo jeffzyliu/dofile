@@ -7,10 +7,12 @@
 //  - the lines stop at the first one that is not run (refused: a start or a run in progress; or accepted while there is
 //    no engine and then dropped, by "Not now" say) or that ends with an error (any rc but 0, Break's rc 1 too). The rest
 //    are not run, and the page says how many in a toast; a refused line goes back into the field, as a typed one stays;
-//  - a block (`forvalues i = 1/3 {` ... `}`) or a command continued with `///` cannot run this way, one line at a time:
-//    the lines stop before a line that ends with `{` or holds `///` (it is not sent), and the toast says to run it from
-//    the editor.
+//  - a block (`forvalues i = 1/3 {` ... `}`, `program define` ... `end`, `mata` ... `end`), a comment that goes on to
+//    the next lines (`/*` ... `*/`) or a command continued with `///` cannot run this way, one line at a time (a pasted
+//    `/*`, `drop _all`, `*/` would run `drop _all`): the lines stop before the line that opens it (it is not sent), and
+//    the toast says to run it from the editor.
 // Plain TypeScript, no DOM: tested in Node (test/editor.test.ts). log/CommandLine.tsx gives runInTurn the real runner.
+import { opensEndBlock } from "./align.ts";
 
 /** The lines a paste runs, or null when the pasted text has no line break (an ordinary paste). */
 export function pastedLines(before: string, pasted: string, after: string): string[] | null {
@@ -30,8 +32,26 @@ export interface InTurn {
   stop: null | { line: number; why: "refused" | "not-run" | "error" | "block"; rc?: number }; // line: 1-based, of the paste
 }
 
-/** Whether a line opens a block (`{` at its end) or goes on to the next line (`///`): it cannot run on its own. */
-export const opensBlock = (line: string) => /\{\s*$/.test(line) || line.includes("///");
+/** Whether a `/*` comment is still open at the end of `line` (strings left out). */
+function opensComment(line: string): boolean {
+  const text = line.replace(/`"[\s\S]*?"'/g, "").replace(/"[^"]*"/g, "");
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text.startsWith("/*", i)) {
+      depth++;
+      i++;
+    } else if (depth && text.startsWith("*/", i)) {
+      depth--;
+      i++;
+    } else if (!depth && text.startsWith("//", i)) break;
+  }
+  return depth > 0;
+}
+
+/** Whether a line cannot run on its own: it opens a block (`{` at its end, `program define`, `mata`), a comment that
+ *  goes on (`/*` with no `*/ `) or goes on to the next line (`; ///`). */
+export const opensBlock = (line: string) =>
+  /\{\s*$/.test(line) || line.includes("///") || opensEndBlock(line) || opensComment(line);
 
 /** Run `lines` one after the other through `runOne`, as the module's header says. */
 export async function runInTurn(lines: readonly string[], runOne: RunOne): Promise<InTurn> {
@@ -56,6 +76,6 @@ export function inTurnWords(r: InTurn): string | null {
   if (r.stop.why === "error") return `${lines} not run: line ${r.stop.line} ended with r(${r.stop.rc})`;
   if (r.stop.why === "refused") return `${lines} not run: the engine can't take a command now`;
   if (r.stop.why === "block")
-    return `${lines} not run: line ${r.stop.line} starts a block or a /// command; run those from the editor`;
+    return `${lines} not run: line ${r.stop.line} starts a block, a comment or a /// command; run those from the editor`;
   return `${lines} not run: line ${r.stop.line} didn't run`;
 }

@@ -43,6 +43,15 @@ const linesOf = (item: TextItem) => {
   kinds.set(item, l);
   return l;
 };
+// each text item's echo of each code line (log/align.ts), worked out once for its code
+const aligned = new WeakMap<TextItem, { code: string; echoes: Map<number, number> }>();
+const echoesOf = (item: TextItem, lines: LogLine[], code: string) => {
+  const known = aligned.get(item);
+  if (known?.code === code) return known.echoes;
+  const echoes = echoLines(lines, code);
+  aligned.set(item, { code, echoes });
+  return echoes;
+};
 
 const ART = [
   "     ██            ▄█▀▀  ▄▄  ██",
@@ -141,7 +150,7 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
 
   // the code it sent: kept by the editor (commands.ts codeOf); a command is its one echo
   const code = head ? codeOf.get(head) : lines.find((l) => l.kind === "echo")?.text.replace(/^\. ?/, "");
-  const echoes = code === undefined ? new Map<number, number>() : echoLines(lines, code);
+  const echoes = code === undefined ? new Map<number, number>() : echoesOf(item, lines, code);
   for (const g of graphs.value.filter((x) => x.from === "run" && x.run === item.run)) {
     const at = g.line != null ? echoes.get(g.line) : undefined;
     put(at === undefined ? last : commandEnd(lines, at), <GraphLink key={`g${g.n}`} g={g} />);
@@ -215,16 +224,20 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
     }
   });
 
+  // the notes at the run's end are blocks that wrap (.endnote), so a long one and its "Go to line" stay in the pane; each
+  // ends with its line break, which a block's last line does not show, so the log's text keeps its lines
   if (end?.rc === 1)
     out.push(
-      <span key="break" class="note">
-        {end.line !== null && end.kind !== "command"
-          ? `Stopped by Break before line ${end.line}. The data is as the last complete command left it.`
-          : "Stopped by Break. The data is as the last complete command left it."}
+      <span key="break" class="endnote">
+        <span class="note">
+          {end.line !== null && end.kind !== "command"
+            ? `Stopped by Break before line ${end.line}. The data is as the last complete command left it.`
+            : "Stopped by Break. The data is as the last complete command left it."}
+        </span>
+        {jump !== null && "  "}
+        {jump !== null && <Jump line={jump} path={end.path} />}
+        {"\n"}
       </span>,
-      jump !== null ? "  " : "",
-      jump !== null ? <Jump key="jump" line={jump} path={end.path} /> : null,
-      "\n",
     );
   else if (jump !== null && rcAt < 0) out.push(<Jump key="jump" line={jump} path={end!.path} />, "\n");
   // OQ-10's notes (4d's states/words.ts), under the error: the error is the run's first error line that is not r(N);
@@ -232,24 +245,24 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
   const note = error ? noteFor(end!.rc, error.text) : null;
   if (note)
     out.push(
-      <span key="oq10" class="note">
+      <span key="oq10" class="note endnote">
         {note}
+        {"\n"}
       </span>,
-      "\n",
     );
   if (end?.skipped?.length)
     out.push(
-      <span key="skipped" class="note">
+      <span key="skipped" class="note endnote">
         {`Not kept: ${end.skipped.join(", ")}. Its folder was renamed or deleted during the run.`}
+        {"\n"}
       </span>,
-      "\n",
     );
   if (end?.store_error)
     out.push(
-      <span key="store" class="note">
+      <span key="store" class="note endnote">
         {`The files this run wrote couldn't be kept in this browser: ${end.store_error}`}
+        {"\n"}
       </span>,
-      "\n",
     );
   return out;
 }
