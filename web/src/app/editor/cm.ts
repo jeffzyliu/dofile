@@ -132,6 +132,7 @@ const straightTyping: Extension = (() => {
         changes: { from, to, insert: fixed },
         selection: { anchor: from + fixed.length },
         userEvent: "input.type",
+        scrollIntoView: true, // as CodeMirror's own insert does
       });
       return true;
     }),
