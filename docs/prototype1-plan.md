@@ -31,11 +31,28 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     `?kblog` overlay covers the top bar and the top third of the screen, which the sitting observes
     (`web/src/app/kblog.ts`); `?kb=pre` also shrinks the page on a focus set by script, where no keyboard opens;
     `?slide` does nothing under `height`, `unpan` and `pre`.
-  - **A tentative direction for #26 from the maintainer (2026-11-12, not decided, not built):** with no engine nothing
-    on the page offers to run. The toolbar's Run and the command line's Run become "Start engine"; Ctrl/Cmd+Enter does
-    the same; the command line is disabled with the hint "Download the engine to run code" (its text is kept, not
-    cleared); Run selection, Load, Import and the log's `help` links are off and say why when pressed. Open points: a
-    second tab, where starting means taking the engine over; the toolbar's width; the hint's contrast.
+  - **#26 now holds "Start engine" (2026-11-12), three commits over `main`, head `a02106e`; not approved, not
+    merged.** The maintainer approved the design ("i approve your recommendations for 26"): with no engine nothing on
+    the page offers to run. The toolbar's Run and the command line's buttons read "Start engine"; Ctrl/Cmd+Enter does
+    the same; the command line is off with the hint "Start the engine to run code" and keeps its text; Run selection,
+    Load, Import and the log's `help` links are off and say why in a toast. Widths, in the maintainer's words: "navbar
+    button should be wide enough, but let the mobile command line button expand. we want it to be as small as it can
+    in every situation". The state table is in `docs/web-page-flows.md` section 2 and `web/src/app/start.ts`. A
+    fresh-context review of the second commit found nothing blocking; its four findings are fixed in the third
+    commit, which no second agent has reviewed. Checked by the builder: `npm run check`, `npm test` (344), the e2e
+    suite in Chromium at desktop and phone size (218 pass, 16 skipped); the full suite in Firefox and WebKit is CI's.
+    For the maintainer: the off controls (Load, Import, help links at 0.45 opacity) measure 2.2 to 3.8 to 1, under
+    4.5 (WCAG exempts disabled controls); a multi-line paste while an engine exists and is not ready is now refused
+    whole with the field untouched; a held Enter is ignored in every dialog; the declined banner's button reads
+    "Start engine"; a retry from a failed start downloads with no prompt, as "Try again" does.
+  - **#27 is untouched on GitHub** (the maintainer: "don't edit upstream 27 yet"). A local rebase over #25's content
+    exists (`52eff98`, in the worktree `.claude/worktrees/agent-a7686150cd5732d1d`), with a dev server on port 5273
+    for the iPhone sitting.
+  - **#30 `claude/landing-ui-fixes` (2026-11-12), green in CI, not approved, not reviewed by a second agent:** the
+    landing page's logo (line breaks between the banner's rows inside a `<pre>` doubled their spacing), the theme
+    switch's word kept on a phone with an icon each for System, Light and Dark, Copy buttons 26 px high that turn to
+    "Copied", and the two panels scroll sideways. #26 and #30 both change the test map's counts: recount at the
+    second one's rebase.
   - **CI, once:** on #28, WebKit hung 10 minutes in `e2e/editor.spec.ts` "Ctrl/Cmd+Enter that the engine does not
     take…" on its first `page.goto("?test")`. The re-run passed with the same code; the cause is unknown.
 - **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
