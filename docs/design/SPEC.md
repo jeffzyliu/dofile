@@ -161,7 +161,15 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Head links:** "Download log" saves the log as text. "Find", and the flows' "next error", have no drawn behavior: OQ-16.
 - **Command line** (`.cmdline`; at the foot of the Log pane, above the tab bar on a phone): prompt ".", an input
   `aria-label="Command"` with placeholder "Type a command · ↑ ↓ for earlier ones" (phone: "Type a command"), and "Run
-  command". Enter runs; ↑ ↓ recall earlier commands; it waits while a run is on (`WP 2`). A command that does not run (the
+  command" (on a phone a compact icon button at the right end, the Run triangle with the accessible name "Run command": a
+  tap runs the text as Enter does and the field keeps the focus, so the keyboard stays open; it is `aria-disabled`, not
+  `disabled`, while the field is empty, since a tap on a disabled button would take the focus away). The field asks the
+  phone's keyboard for plain typing: `autocomplete`, `autocapitalize` and `autocorrect` "off", `spellcheck` false,
+  `enterkeyhint` "go", and `data-1p-ignore` and `data-lpignore` against password managers; the other text fields (Find,
+  Filter variables, the rename field) and CodeMirror's content say off too. A curly quote (U+2018, U+2019, U+201C,
+  U+201D) or an em dash (U+2014) that the keyboard's Smart Punctuation makes of typed text becomes `'`, `"` or `--`
+  (`src/stata/straighten.ts`), in the command line and in a .do or .ado buffer; never in a paste or a drop, in the en
+  dash, or in text already there. Enter runs; ↑ ↓ recall earlier commands; it waits while a run is on (`WP 2`). A command that does not run (the
   engine can't take it now: it is asking, downloading, starting, failed or in another tab; or a run is on) stays in the
   field and is not added to the history. One that runs, or is queued
   while there is no engine (the prompt opens), is cleared from the field and added to the history, also when it ends in an
@@ -1077,7 +1085,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     field over the log ("Find in the log", "2 of 5", Enter and Shift+Enter, Esc closes; every match is counted and
     numbered in the log's order; on the desktop with the Output pane unsplit, Find shows the Log tab first; Esc and Close
     give the focus back to the Find button, on a phone to the ⋯ button); Download log saves
-    `dofile.log`; the phone has no "Run command" button (PH draws none); on a phone the command line has a fixed height
+    `dofile.log`; the phone's "Run command" is a 44 px icon button (`.send`) that keeps the field's focus (`pointerdown` and `mousedown` cancelled, the click refocuses the field; `aria-disabled` while the field is empty); on a phone the command line has a fixed height
     (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (taken as 61 px and the safe
     area, from ui.css's `.tabbar`: a figure, not a measure); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` are highlighted with CodeMirror's
     `@codemirror/lang-markdown` (its `markdownLanguage` alone: `markdown()` would bring the HTML, CSS and JavaScript

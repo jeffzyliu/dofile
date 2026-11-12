@@ -1,6 +1,8 @@
 // The Log pane's foot and head actions, and the phone's strip (docs/design/SPEC.md, sections 3.5 and 3.6).
 //  - CommandLine (.cmdline): prompt ".", the input aria-label="Command" (placeholder "Type a command · ↑ ↓ for earlier
-//    ones"; phone: "Type a command"), "Run command" (not on a phone, as PH draws it: the keyboard's Enter runs). Enter
+//    ones"; phone: "Type a command"), "Run command" (a text button; on a phone a compact icon button, .send, that keeps
+//    the field's focus so the keyboard stays open, and has aria-disabled while the field is empty). Typed curly quotes
+//    and the em dash become ' " and -- (stata/straighten.ts; a paste is left as pasted). Enter
 //    runs through run.ts's runCommand(text): when it answers `accepted` (it runs, or is queued while there is no engine)
 //    the field clears; when refused (the page load, a start or a run in progress) the text stays. ↑ ↓ recall `history`,
 //    and ↓ past the newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
@@ -19,6 +21,7 @@
 import { signal } from "@preact/signals-core";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
+import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
 import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
@@ -77,6 +80,22 @@ export function CommandLine() {
       } else field.value = list[recall];
     }
   };
+  // Typed text only (not a paste or a drop, and not what is already in the field): a phone's Smart Punctuation makes
+  // curly quotes and dashes of what was typed, which Stata-syntax code cannot use (stata/straighten.ts).
+  const onInput = (e: Event) => {
+    const el = e.currentTarget as HTMLInputElement;
+    const ie = e as InputEvent;
+    const data = ie.data ?? ie.dataTransfer?.getData("text/plain") ?? "";
+    const fixed =
+      isTypedInput(ie.inputType) && data ? straightenInserted(el.value, el.selectionStart ?? 0, data) : null;
+    if (fixed) {
+      el.value = fixed.value;
+      el.setSelectionRange(fixed.caret, fixed.caret);
+    }
+    field.value = el.value;
+    recall = -1;
+  };
+  const keepFocus = (e: Event) => e.preventDefault();
   const onPaste = (e: ClipboardEvent) => {
     const el = e.currentTarget as HTMLInputElement;
     const text = e.clipboardData?.getData("text/plain") ?? "";
@@ -104,17 +123,37 @@ export function CommandLine() {
         placeholder={phone ? "Type a command" : "Type a command · ↑ ↓ for earlier ones"}
         autocomplete="off"
         autocapitalize="off"
+        autocorrect="off"
         spellcheck={false}
         enterKeyHint="go"
+        inputMode="text"
+        data-1p-ignore
+        data-lpignore="true"
+        data-form-type="other"
         value={field.value}
-        onInput={(e) => {
-          field.value = (e.target as HTMLInputElement).value;
-          recall = -1;
-        }}
+        onInput={onInput}
         onKeyDown={onKey}
         onPaste={onPaste}
       />
-      {!phone && (
+      {phone ? (
+        // A tap must not take the focus from the field, or the keyboard closes: mousedown and pointerdown are cancelled
+        // (a pressed button then takes no focus), and the click gives the focus back as a fallback. aria-disabled, not
+        // disabled: a tap on a disabled button lands on the page and closes the keyboard.
+        <button
+          type="button"
+          class="send"
+          aria-label="Run command"
+          aria-disabled={field.value.trim() ? undefined : "true"}
+          onPointerDown={keepFocus}
+          onMouseDown={keepFocus}
+          onClick={() => {
+            if (field.value.trim()) submit();
+            input.current?.focus({ preventScroll: true });
+          }}
+        >
+          <Icon name="play" />
+        </button>
+      ) : (
         <button type="button" class="btn" onClick={submit}>
           Run command
         </button>
