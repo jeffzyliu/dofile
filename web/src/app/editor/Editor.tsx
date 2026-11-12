@@ -13,12 +13,14 @@
 //    editor's text, which has "\n" only, is written with "\r\n" for a "\r\n" file (fileText); the save-failed banner's
 //    Download too (textOf). The texts compared (the dot, a run's version) stay in the editor's "\n" form.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
-//    is the one that applies. With no text tab shown, Run says so in a toast and runs nothing. The code of each run is
+//    is the one that applies (Ctrl or Cmd on every platform, as Save). With no text tab shown, Run says so in a toast and runs nothing. The code of each run is
 //    kept by its head (commands.ts codeOf) for the log's graph links.
 //  - Line marks (cm.ts): the running lines of a selection run (a whole-file run marks none: every line would be marked),
 //    and the error line of the file's last run (not for Break's rc 1, whose line is the command that did not start).
 //    Both move with their text while it is edited.
-//  - Ctrl/Cmd+S saves the active tab wherever the focus is (the browser's own Save page is never wanted here).
+//  - Ctrl/Cmd+S saves the active tab wherever the focus is, the editor too (the browser's own Save page is never wanted
+//    here): one window listener, which takes Ctrl or Cmd on every platform. Not CodeMirror's "Mod-s", whose Mod is Cmd
+//    alone on Apple devices, where Ctrl+S in the editor was swallowed and saved nothing.
 //  - A file drop is the page's (4a's window listeners): CodeMirror is told it is handled (cm.ts leaveFileDrops).
 
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -65,21 +67,14 @@ const named = (path: string): Extension => [
   EditorView.contentAttributes.of({ "data-editor": "", "aria-label": `Editor: ${baseName(path)}` }),
 ];
 
+// Ctrl or Cmd, on every platform (CodeMirror's "Mod" is one of them: Cmd on Apple devices, Ctrl elsewhere)
+const runKey = () => {
+  runEither();
+  return true;
+};
 const keys = keymap.of([
-  {
-    key: "Mod-Enter",
-    run: () => {
-      runEither();
-      return true;
-    },
-  },
-  {
-    key: "Mod-s",
-    run: () => {
-      editorCommands.save();
-      return true;
-    },
-  },
+  { key: "Ctrl-Enter", run: runKey },
+  { key: "Meta-Enter", run: runKey },
 ]);
 
 const follow = EditorView.updateListener.of((u) => {
@@ -382,7 +377,7 @@ function focus() {
 function onKey(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "s") {
     e.preventDefault();
-    if (!view?.hasFocus) editorCommands.save(); // in the editor its own key binding has saved
+    editorCommands.save();
   }
 }
 

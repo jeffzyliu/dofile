@@ -986,8 +986,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     edits, the drop guard) and `editor/clock.ts` the 100 ms clock of the timers (it reads `breaking`'s `resetAt`, the one
     view file `test/imports.test.ts` allows to). The editor is one `EditorView`, mounted once, with one `EditorState` per
     open text tab; `data-editor` is on CodeMirror's content with a file shown and on the empty view without one. The unsaved
-    dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page; a
-    failed save adds the banner `save-failed`; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page, the
+    editor too, and Ctrl/Cmd+Enter runs, each with Ctrl or Cmd on every platform; a failed save adds the banner `save-failed`; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
     place to change it; the joining agent's, for the maintainer to approve): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run

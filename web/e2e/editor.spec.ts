@@ -80,6 +80,21 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(page.locator(".toast")).toHaveText("Saved a.do");
   expect(await stored(page, "a.do")).toBe("display 1\ndisplay 2");
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
+  // Ctrl+S and Cmd+S both save from the editor, on every platform (ControlOrMeta is the runner's OS's key, which an
+  // emulated iPhone on Linux does not take for its own)
+  for (const [key, text] of [
+    ["Control+s", "display 1\ndisplay 2!"],
+    ["Meta+s", "display 1\ndisplay 2!!"],
+  ]) {
+    await page.keyboard.insertText("!");
+    await page.keyboard.press(key);
+    await expect.poll(() => stored(page, "a.do")).toBe(text);
+    await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
+  }
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect.poll(() => stored(page, "a.do")).toBe("display 1\ndisplay 2");
   // the [data-editor] element is the editor's content, and focus() puts the focus there
   await expect(page.locator("[data-editor]")).toHaveCount(1);
   await expect(page.locator("[data-editor]")).toHaveClass(/cm-content/);
