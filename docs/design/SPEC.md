@@ -297,7 +297,7 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 
 | State | Status bar | Dialog or banner | Run | Break |
 |---|---|---|---|---|
-| `checking-lock`, `checking-cache` | "No engine yet" (the words of `none`, until step 4b chooses others) | none | "Run", disabled | disabled |
+| `checking-lock`, `checking-cache` | "**Opening**" (step 4b's word for the page load, a draft) | none | "Run", disabled | disabled |
 | `none` | "No engine yet" | none (`none` is seen only with `?test=manual`: no start until the test calls `start()`) | "Run", disabled | disabled |
 | `asking` | "No engine yet" | Blocking prompt `S 1` (phone `S 8`): "Download the engine?", its two paragraphs, "Not now", "Download 48 MB" (default) | "Run", disabled | disabled |
 | `declined` | "**No engine** · Run downloads it first" | `S 5`: "**The engine isn't downloaded.** You can open, edit, upload and download files; running code needs the engine (about 48 MB)." / "Download the engine" | enabled: it, and the command line, open the prompt titled "Download the engine to run code"; the run starts when the engine is ready | disabled |
@@ -959,6 +959,45 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `store.write`, `showToast`. On a phone the command line's field and the editor's text are 16 px or more, or iOS
     Safari zooms in when they take the focus: `app.css` sets every `input`, `textarea` and `[contenteditable]` (CodeMirror's
     `.cm-content`) to at least 16 px under 700 px; do not set a smaller size on them there.
+    **As built in step 4b:** the logic with no DOM is in plain `.ts` files tested in Node (`web/test/editor.test.ts`):
+    `log/classify.ts` (the .log tokenizer, OQ-4, used by the log and by a .log in the editor: an echo is `. cmd`, or a
+    loop body `  2. cmd` or a continued `> ` line right after an echo; the error is `r(N);`, `--Break--` and the line
+    right above the hint or above `r(N);`; the hint runs from `  → ` to `r(N);`; notes are the path shim's lines, the
+    tempfile note and a log file's head; the rest is output), `log/align.ts` (the echo of each line of the code sent: the
+    echoes are walked beside the code, an echo that is not the code's next line belongs to a nested do-file and is passed
+    over, so a graph's link goes after the echo of line `graph_lines[i]`, and at the run's end when it is not found; the
+    code is kept by the run's head, `editor/commands.ts` `codeOf`), `log/paste.ts` (the command line's pasted lines),
+    `log/find.ts`, `editor/csv.ts` (a .csv's columns), `editor/words.ts` (the run-head, last-run, time and memory words).
+    `editor/cm.ts` has the CodeMirror pieces (the languages by extension, the line marks as a state field mapped through
+    edits, the drop guard) and `editor/clock.ts` the 100 ms clock of the timers (it reads `breaking`'s `resetAt`, the one
+    view file `test/imports.test.ts` allows to). The editor is one `EditorView`, mounted once, with one `EditorState` per
+    open text tab; `data-editor` is on CodeMirror's content with a file shown and on the empty view without one. The unsaved
+    dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page; a
+    failed save adds the banner `save-failed`. Decisions where this spec is silent: a whole-file run marks no running
+    lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
+    N. The data is as the last complete command left it." with "Go to line N"; Run with no text tab open runs nothing and
+    says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
+    line out; the page load's status words are "Opening"; a selection's last run is "Last run: lines 6–7 · …" and a
+    command's "Last run: a command · …"; the phone's strip shows the state's words where it has no last run; Find is a
+    field over the log ("Find in the log", "2 of 5", Enter and Shift+Enter, Esc closes); Download log saves
+    `dofile.log`; the phone has no "Run command" button (PH draws none); on a phone the command line has a fixed height
+    (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (taken as 61 px and the safe
+    area, from ui.css's `.tabbar`: a figure, not a measure); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` open as plain text (their
+    CodeMirror packages are not installed). **Pasted lines** (the maintainer's decision: each line runs in turn): a paste
+    with no line break is an ordinary paste; with breaks, the field's text before and after the cursor joins the first and
+    last lines, empty lines are left out, and the lines run one after the other, each once the one before has ended; they
+    stop at the first that is refused, that was queued for an engine that then did not start, or that ends with any rc
+    but 0 (Break too); a toast says how many were not run, and a refused line goes back into the field. Load on a phone's
+    .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
+    nothing either. Words the spec does not give, drafts for the maintainer: "No file is open: open one from the file
+    list." (the empty editor); "No file is open to run" (toast); "Opening" (status bar, the page load); the save-failed
+    banner ("analysis.do couldn't be saved: <reason>. Your edits are still in the editor; download them to keep a copy."
+    / Download, Dismiss); the pasted lines' toasts ("2 of 4 pasted lines not run: line 2 ended with r(111)", "… not run:
+    the engine can't take a command now", "… not run: line 1 didn't run"); "Stopped by Break before line N. …"; "Not
+    kept: a.dta, b.dta. Its folder was renamed or deleted during the run."; "The files this run wrote couldn't be kept in
+    this browser: <reason>"; the last-run words above; the strip's "Last run 0.38 s" and "before line 17 · 18.4 s";
+    "Find in the log", "none", "Close"; the editor's name "Editor: analysis.do"; the inline graph's name "Graph: scatter
+    y x: open full size".
   - **4c** `output/tabs.tsx` (`GraphTab`, `DataTab`, `ResultsTab`; they may be mounted again when the layout changes, so
     their state lives in signals), `output/FullSize.tsx` (`FullSize`, placed once over the page for every width, open
     while `graphFull`), `output/DtaView.tsx` (`DtaView({path})`, a .dta tab, shown in the editor's place). Writes

@@ -238,11 +238,15 @@ function renamed(from: string, to: string) {
   states.set(to, next);
   savedText.set(to, savedText.get(from) ?? "");
   savedText.delete(from);
+  if (scrolled.has(from)) scrolled.set(to, scrolled.get(from)!);
+  scrolled.delete(from);
   if (shown.value === from && view) {
     shown.value = to;
     view.dispatch({ effects: language.reconfigure(named(to)) });
   }
   if (marked?.path === from) marked = { ...marked, path: to };
+  // 4a changes `activeTab` before it calls this: the editor then had no state for the new path and showed none
+  if (activeText() === to && shown.value !== to) show(to);
 }
 
 function closed(path: string) {

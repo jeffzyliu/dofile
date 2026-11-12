@@ -106,6 +106,24 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await page.keyboard.press("ControlOrMeta+s");
   await expect(banner).toHaveCount(0);
   expect(await stored(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
+
+  // a rename of the open file (F2 in the tree) keeps its text, its edits and the unsaved dot
+  await page.keyboard.type("\ndisplay 4");
+  if (isPhone(page)) await view(page, "Files");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^a\.do/ })
+    .focus();
+  await page.keyboard.press("F2");
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("b.do");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => [t.path, t.dirty])))
+    .toEqual([["b.do", true]]);
+  if (isPhone(page)) await view(page, "Editor");
+  await expect(content).toHaveAttribute("aria-label", "Editor: b.do");
+  await expect(content).toHaveText("display 1display 2display 3display 4");
 });
 
 test("the editor: a .csv's columns have their colors, a .log's lines their kinds; a file dropped on it uploads and leaves its text", async ({
@@ -320,7 +338,7 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("running");
   if (isPhone(page)) {
-    const pill = page.locator(".btn.stop.pill .label:not([aria-hidden]) .t");
+    const pill = page.locator(".btn.stop.pill .label:not([aria-hidden]) .pill-time");
     await expect(pill).toHaveText(/^\d+(\.\d)? s$/);
   } else await expect(page.locator(".statusbar")).toContainText(/Running · \d/);
   await page.waitForTimeout(800);
@@ -358,8 +376,8 @@ test("the command line: Enter runs and clears, ↑ recalls; a paste of lines run
       const dt = new DataTransfer();
       dt.setData("text/plain", text);
       let e: Event = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
-      if (!(e as ClipboardEvent).clipboardData) {
-        // a browser whose ClipboardEvent takes no clipboardData: a plain event that carries it
+      if ((e as ClipboardEvent).clipboardData?.getData("text/plain") !== text) {
+        // a browser whose made-up ClipboardEvent carries no data (Firefox): a plain event that carries it
         e = new Event("paste", { bubbles: true, cancelable: true });
         Object.defineProperty(e, "clipboardData", { value: dt });
       }
@@ -379,4 +397,26 @@ test("the command line: Enter runs and clears, ↑ recalls; a paste of lines run
   await expect(field).toHaveValue("");
   // with no line break the browser pastes as usual
   expect(await paste("display 5")).toBe(false);
+});
+
+test("the command line with no engine: pasted lines wait for the engine; Not now drops them, and a toast says so", async ({
+  page,
+}) => {
+  await page.goto("/?test=manual");
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  if (isPhone(page)) await view(page, "Log");
+  const field = page.getByRole("textbox", { name: "Command" });
+  await field.evaluate((el) => {
+    const e = new Event("paste", { bubbles: true, cancelable: true });
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "display 1\ndisplay 2");
+    Object.defineProperty(e, "clipboardData", { value: dt });
+    el.dispatchEvent(e);
+  });
+  // the first line is queued: the prompt opens for a run; the second waits for it
+  const prompt = page.getByRole("dialog");
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "Not now" }).click();
+  await expect(page.locator(".toast")).toHaveText("2 of 2 pasted lines not run: line 1 didn't run");
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 1"]);
 });

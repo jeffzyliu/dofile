@@ -71,8 +71,10 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   error and an empty `/work`; if only the worker fails to open the store, an upload shows in the file list but `use` on it gives
   rc 601 with no banner; a closed database keeps today's restart (the maintainer's ruling, 2026-11-11); the failed states show
   nothing until step 4d builds the banners.
-- **Open points:** the toast's offset on a phone is set against the placeholder command line, not 4b's real one (step
-  4b); the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
+- **4b is built on the branch `prototype1-step4b`** (from `prototype1-step4` at `2a0f672`), to review and join: the
+  editor, Run and Break, the log and its formatting, the run-head, the command line (pasted lines run in turn), the
+  status bar and the phone's strip. Its decisions and draft words: SPEC section 8, "As built in step 4b".
+- **Open points:** the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
 
 ## Decisions (2026-11-10)
 
@@ -126,7 +128,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | done |
 | 3.5 | The engine code made clear and auditable: TypeScript everywhere, one explicit state machine, one build identity (no offline start), the journal as the only channel. Plan: `prototype1-step3.5-plan.md` | general-purpose, one step at a time | Opus, high | after 3, before the merge | done |
 | 4a | File tree, editor tabs, upload and name clash, row menus | general-purpose, worktree | Opus, medium | after 3, with 4c | to review |
-| 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | not started |
+| 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | to review |
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | to review |
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (branch `prototype1-step4d`; the draft words are in SPEC section 8, "Step 4d: draft words"; the OQ-10 notes are written and tested but 4b's log must show them; the first review's fixes are in: Reset asks during a run, the focus after a banner goes, the take-over button's look; the second review's too: Reset describes the memory again after a run before it resets with no question, the focus goes from one banner to the next without passing through the editor, the e2e focus checks hold for CodeMirror; known gap: a dialog that opens as a banner holding the focus goes (another tab takes the lock during a Break) gives the focus back to nothing when it closes, which needs `ui/Dialog.tsx` or the machine; open for the maintainer: the phone's Break off the Log view, the running banner on every run, which file "Run the file again" runs, a failed start said twice, a shared Break grace constant) |
 | 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | not started |
@@ -193,12 +195,16 @@ Decided in the step 2 review:
 - **Step 4a:** on a phone the Files view showed the pane head "FILES" right under the top bar's "Files" title. Decided
   and done (2026-11-11): the head is hidden on a phone and the file actions are in the top bar's ⋯ on the Files view
   (`App.tsx` `phoneMoreItems`, `app.css`). Also decided: a drop of files anywhere on the page uploads them.
-- **Step 4b:** a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
+- **Step 4b** (built, to review): a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
   and give it no error mark. Put each "graph n" link after the echo on line `graph_lines[i]`, not by matching the text.
   From the second review of step 3: the toast's offset on a phone (`app.css` puts it above the command line and the tab
   bar, and with the keyboard open above the command line at the visible area's foot; set both against 4b's real command
   line, which shows on the Log view only, and the strip; `e2e/shell.spec.ts` checks the place). The command line clears
-  its field only when `runCommand(text).accepted` (SPEC 8).
+  its field only when `runCommand(text).accepted` (SPEC 8). All four done: the "stopped before line N" note with no
+  error mark; the links placed by `log/align.ts` from `graph_lines` (the echoes walked beside the code sent; the text
+  only keeps the two walks in step); the toast placed against the command line's fixed phone height (`--cmdline-h`,
+  app.css 4b block); the field cleared only when accepted. Left open: the old `.cmdline .placeholder` rules in app.css's
+  shell part are no longer used; the e2e checks of 4b are `e2e/editor.spec.ts`.
 - **Step 4d:** a failed "Download all" shows the banner `download-failed` above the editor ("Your files couldn't be
   downloaded: …" / "Try again", "Dismiss"), built in step 3 in `states/banners.tsx`; `files.js` adds it (one at a time)
   and removes it when a later download works. Restyle or reword it with the other storage states if needed (OQ-16).

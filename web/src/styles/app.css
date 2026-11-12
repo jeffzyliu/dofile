@@ -917,6 +917,15 @@ input.filter::placeholder {
   text-shadow: 1px 1px 0 var(--border-strong);
 }
 
+/* the phone's Break pill: its time after a rule (PH?r) */
+.pill-time {
+  margin-left: var(--s2);
+  padding-left: var(--s2);
+  border-left: 1px solid color-mix(in srgb, currentColor 50%, transparent);
+  font: 400 var(--text-sm) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
 /* the command line: the typed text in the ink color (ui.css draws the mockup's empty field muted) */
 .cmdline .field {
   color: var(--ink);

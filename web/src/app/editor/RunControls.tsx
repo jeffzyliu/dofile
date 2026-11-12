@@ -170,7 +170,7 @@ export function PhoneRun() {
       <>
         <Icon name="stop" />
         {l}
-        {l.startsWith("Break") && <span class="t">{time}</span>}
+        {l.startsWith("Break") && <span class="pill-time">{time}</span>}
       </>
     )),
     <>
@@ -179,7 +179,7 @@ export function PhoneRun() {
     </>,
     <>
       <Icon name="stop" />
-      Break (reset)<span class="t">{PILL_WIDEST}</span>
+      Break (reset)<span class="pill-time">{PILL_WIDEST}</span>
     </>, // the sizer: the widest the pill can be
   ];
   if (running) {
