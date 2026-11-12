@@ -349,6 +349,12 @@ Found in the UI fix round (2026-11-12), still open:
 - `overscroll-behavior-x: none` on the editor and the log also stops a trackpad back-swipe that starts over them.
 
 - `e2e/editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main`.
+  Changed (test code only): its `rename` helper now waits for the renamed row to have the focus before it returns, and the
+  F2 steps in `editor.spec.ts` wait for the rename field to have the focus before Ctrl+A. The suspected cause (the tree's
+  `focusRow` retrying every 50 ms and taking the focus from the editor, so the typed character is lost) is a suspicion
+  until Firefox runs confirm it. `shell.spec.ts`'s `?snapshot=0` test (a failure now and then in Firefox, cause unknown)
+  now waits until the state is not a starting state, asserts `ready` with the state's `reason` and `detail`, and prints
+  the page's console in the failure; no retries.
 
 ## Later UI work (the maintainer's ideas, 2026-11-12; not started)
 

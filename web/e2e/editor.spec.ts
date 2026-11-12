@@ -210,12 +210,14 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
     .getByRole("treeitem", { name: /^a\.do/ })
     .focus();
   await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "New name for a.do" })).toBeFocused();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type("b.do");
   await page.keyboard.press("Enter");
   await expect
     .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => [t.path, t.dirty])))
     .toEqual([["b.do", true]]);
+  await expect(page.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: /^b\.do/ })).toBeFocused();
   if (isPhone(page)) await view(page, "Editor");
   await expect(content).toHaveAttribute("aria-label", "Editor: b.do");
   await expect(content).toHaveText("display 1display 2display 3display 4");
@@ -275,6 +277,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
     .getByRole("treeitem", { name: /^c\.do/ })
     .focus();
   await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "New name for c.do" })).toBeFocused();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type("d.do");
   await page.keyboard.press("Enter");
@@ -322,6 +325,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
       .getByRole("treeitem", { name: new RegExp(`^${from.replace(".", "\\.")}`) })
       .focus();
     await page.keyboard.press("F2");
+    await expect(page.getByRole("textbox", { name: `New name for ${from}` })).toBeFocused();
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.type(to);
     await page.keyboard.press("Enter");
@@ -432,12 +436,20 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
       .getByRole("treeitem", { name: new RegExp(`^${from.replace(".", "\\.")}`) })
       .focus();
     await page.keyboard.press("F2");
+    await expect(page.getByRole("textbox", { name: `New name for ${from}` })).toBeFocused();
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.type(to);
     await page.keyboard.press("Enter");
     await expect
       .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => t.path)))
       .toEqual([to]);
+    // the rename is over when its row has the focus: the tree's focusRow keeps trying every 50 ms until the row is drawn,
+    // and a late try would take the focus from the editor that the test clicks next (and lose the character it types)
+    await expect(
+      page
+        .getByRole("tree", { name: "Files" })
+        .getByRole("treeitem", { name: new RegExp(`^${to.replace(".", "\\.")}`) }),
+    ).toBeFocused();
     if (isPhone(page)) await view(page, "Editor");
   };
   // a save that works and answers after the rename: the renamed tab is clean, and the toast names it

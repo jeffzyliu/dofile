@@ -200,10 +200,35 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
 
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN), moved from poc.spec.ts.
 test("?snapshot=0: the normal boot still starts and runs the sample", async ({ page }) => {
-  page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
+  // This test has failed now and then in Firefox, cause unknown: a failed start must say why (the state's reason and detail,
+  // and what the page logged) instead of waiting out the poll and reporting only that the state was not "ready".
+  const logged: string[] = [];
+  page.on("console", (m) => logged.push(`${m.type()}: ${m.text()}`));
+  page.on("pageerror", (e) => {
+    logged.push(`page error: ${e.message}`);
+    console.log(`page error: ${e.message}`);
+  });
+  const engineNow = () =>
+    page.evaluate(() => {
+      const { s, reason, detail, message } = (window as unknown as { __dofile: Hook }).__dofile.state.engine.value;
+      return { s, reason, detail, message };
+    });
+  const output = () => `the page's console (${logged.length} messages):\n${logged.join("\n")}`;
   await page.goto("?snapshot=0&test");
   await startEngine(page);
-  await expect.poll(() => state(page), { timeout: 300_000 }).toBe("ready");
+  const starting = /^(checking-|asking|downloading|starting-)/;
+  try {
+    await expect.poll(async () => starting.test((await engineNow()).s), { timeout: 300_000 }).toBe(false);
+  } catch (e) {
+    throw new Error(`the engine never left a starting state: ${JSON.stringify(await engineNow())}\n${output()}`, {
+      cause: e,
+    });
+  }
+  const now = await engineNow();
+  expect(
+    now.s,
+    `the engine is ${now.s}, reason ${now.reason}, detail ${now.detail}, message ${now.message}\n${output()}`,
+  ).toBe("ready");
   const r = await page.evaluate(async (code) => {
     const d = (window as unknown as { __dofile: Hook }).__dofile,
       r = await d.run(code);
