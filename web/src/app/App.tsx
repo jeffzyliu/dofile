@@ -74,7 +74,7 @@
 //      (run.ts is the one writer of `rows`), and no view calls `browse`. Calls engine.ts call(op, args) (matrix,
 //      describe_file: the read ops a view alone shows), run.ts moreRows() and runCommand(text) (Load), showToast ("Copied").
 //   4d states/DownloadDialog.tsx (the other-tab dialog's "Close editor" goes to env.ts LANDING_URL, step 5's page),
-//      states/ResetDialog.tsx (askReset), states/banners.tsx (the engine-state banners, reset, storage, memory, and
+//      states/ResetDialog.tsx (askReset), states/banners.tsx (the engine-state banners, reset, storage, and
 //      download-failed, built in step 3 and reworded by 4d). Writes `dialog` (reset; it closes download and
 //      other-tab), `banners` (only dismiss()). Calls engine.ts start (also "Try again"), ask() (the declined banner's
 //      "Download the engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,

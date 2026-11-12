@@ -227,7 +227,8 @@ Reviewed after the merge: see Post-merge review.
 3. "Run the file again" (the reset banner) runs the active text tab, not the file whose run the reset cut, and it is
    offered after a Reset the visitor asked for too.
 4. The Break grace of 5 s is written twice: the machine's `graceMs` and 4d's `GRACE_S` (`states/words.ts`), which the
-   banners' words count from.
+   banners' words count from. (Done: `BREAK_GRACE_MS` in `engine/types.ts` is the one place; `app/engine.ts` defaults `graceMs`
+   to it and `GRACE_S` is derived from it; the machine still takes the grace through `env`.)
 5. A failed start is announced twice to a screen reader: the live region's "The engine didn't start" and the failed
    banner, which has `role="alert"`.
 6. "Browsers that work" (`landing.html#browsers`) and the other-tab dialog's "Close editor" (`landing.html`) are dead
@@ -235,14 +236,15 @@ Reviewed after the merge: see Post-merge review.
    the page's path. (Step 5: they go to `/#browsers` and `/`, checked by `e2e/landing.spec.ts` and the tab-lock test.)
 7. A file a run deleted keeps its tab: it leaves the file list, the tab keeps its unsaved dot as it was, and Save writes
    the file again.
-8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog.
+8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog. (Done: with a dialog open it only keeps the browser's
+   Save page away and saves nothing; `editor/Editor.tsx` `onKey`, one e2e case in `editor.spec.ts`.)
 9. The editor has no find of its own (no Ctrl/Cmd+F binding); Find searches the log only.
 10. On a phone the toast sits above the command line and the tab bar on every view, so on the views with no command line
     (Files, Editor, Data, Results) it is a command line's height higher than it needs to be. (UI fix round, 2026-11-12:
     fixed; on a phone the toast is lower on the views with no command line.)
 11. In `#delimit ;` mode two commands on one line are echoed as the whole line twice, and the second echo can be matched
     to a later identical line, which puts a graph's link in the wrong place.
-12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.)
+12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.) The code is removed: `MemoryBanner`, its registry entry, `{ b: "memory" }`, `memoryHead` and their tests; the `memory` signal stays.)
 13. On a real iPhone: that the on-screen keyboard opens again when a dialog gives the focus back to the command line (the
     focus now comes back in a timer); the iPhone checks of step 3 ("To try on a real iPhone", above); and step 3.5's
     open items (`web-engine-data-flow.md`, Part 3).
@@ -314,7 +316,7 @@ Reviewed after the merge: see Post-merge review.
    on the real landing and commands pages only axe runs (`e2e/landing.spec.ts`, both themes).
 6. "Restore the sample" against a Save in progress of the same file (step 4's `saving` set in `editor/Editor.tsx`), read
    from the code, not tested: the store's writes run in the order they began. A Save that began first (Ctrl/Cmd+S behind
-   the open dialog, then Replace) ends first, and the restore's `reload` then shows the sample: the tab is clean and the store
+   the open dialog, then Replace: that first step can no longer happen, since C 8 makes Ctrl/Cmd+S do nothing with a dialog open) ends first, and the restore's `reload` then shows the sample: the tab is clean and the store
    holds the sample. A Save that begins while the restore's write is in progress ends after the `reload`: the store then holds
    the Save's text while the tab shows the sample with no unsaved dot (the Save sets the saved text to its own, and the dot
    only follows edits). A window of milliseconds; `reload` does not touch `saving`.
@@ -347,6 +349,12 @@ Found in the UI fix round (2026-11-12), still open:
 - `overscroll-behavior-x: none` on the editor and the log also stops a trackpad back-swipe that starts over them.
 
 - `e2e/editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main`.
+  Changed (test code only): its `rename` helper now waits for the renamed row to have the focus before it returns, and the
+  F2 steps in `editor.spec.ts` wait for the rename field to have the focus before Ctrl+A. The suspected cause (the tree's
+  `focusRow` retrying every 50 ms and taking the focus from the editor, so the typed character is lost) is a suspicion
+  until Firefox runs confirm it. `shell.spec.ts`'s `?snapshot=0` test (a failure now and then in Firefox, cause unknown)
+  now waits until the state is not a starting state, asserts `ready` with the state's `reason` and `detail`, and prints
+  the page's console in the failure; no retries.
 
 ## Later UI work (the maintainer's ideas, 2026-11-12; not started)
 

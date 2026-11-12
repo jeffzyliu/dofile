@@ -301,6 +301,70 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
   await expect(page.getByRole("menuitem", { name: "Delete all files…" })).toHaveAttribute("aria-disabled", "true");
 });
 
+/** Press arrow, Home, End and Delete keys with Alt, then Ctrl, then Cmd (Meta) held, as events made in the page on the element
+ *  that has the focus (a real Alt+Left could take a browser Back, which a test must not). A `keydown` listener on the
+ *  document records whether each was default-prevented, after the widget's own handlers have run. Returns what went wrong:
+ *  the keys that were prevented (the browser's Back is then swallowed) and the keys that moved the focus. */
+const modifierKeys = (page: Page) =>
+  page.evaluate(() => {
+    const prevented: string[] = [];
+    const moved: string[] = [];
+    let last = false;
+    const listen = (e: KeyboardEvent) => {
+      last = e.defaultPrevented;
+    };
+    document.addEventListener("keydown", listen);
+    for (const mod of ["altKey", "ctrlKey", "metaKey"]) {
+      for (const key of ["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", "Home", "End", "Delete"]) {
+        const before = document.activeElement;
+        last = false;
+        before?.dispatchEvent(new KeyboardEvent("keydown", { key, [mod]: true, bubbles: true, cancelable: true }));
+        if (last) prevented.push(`${mod}+${key}`);
+        if (document.activeElement !== before) moved.push(`${mod}+${key}`);
+        (before as HTMLElement | null)?.focus(); // the next key starts where this one did, whatever happened
+      }
+    }
+    document.removeEventListener("keydown", listen);
+    return { prevented, moved };
+  });
+
+test("arrow, Home, End and Delete keys with Alt, Ctrl or Cmd are left to the browser (Alt+Left is Back on Windows): the tree, a tablist, the open-file tabs and the menus keep the focus and leave the event alone", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n", "b.do": "2\n", "data/c.do": "3\n" });
+  const none = { prevented: [], moved: [] };
+  // the file tree: the middle row, so Up and Down would move
+  await row(page, /^a\.do/).focus();
+  expect(await modifierKeys(page)).toEqual(none);
+  await expect(row(page, /^a\.do/)).toBeFocused();
+  // a tablist (Tablist.tsx): the Output tabs on the desktop, the Views bar on a phone
+  const tablist = page.getByRole("tablist", { name: isPhone(page) ? "Views" : "Output" });
+  await tablist.getByRole("tab", { selected: true }).focus();
+  expect(await modifierKeys(page)).toEqual(none);
+  // the open-file tabs (the desktop only: a phone's switcher is a menu); Delete would close one
+  if (!isPhone(page)) {
+    for (const name of [/^a\.do/, /^b\.do/]) await row(page, name).click();
+    await expect.poll(() => openTabs(page)).toEqual(["a.do", "b.do"]);
+    await page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { selected: true }).focus();
+    expect(await modifierKeys(page)).toEqual(none);
+    expect(await openTabs(page)).toEqual(["a.do", "b.do"]);
+    await row(page, /^a\.do/).focus();
+  }
+  // the menu button (ArrowDown opens its menu) and the open menu (ArrowDown, Home and End move in it)
+  await page.getByRole("button", { name: "File actions" }).focus();
+  expect(await modifierKeys(page)).toEqual(none);
+  await expect(page.getByRole("menu", { name: "File actions" })).toHaveCount(0);
+  await row(page, /^a\.do/).focus();
+  await page.keyboard.press("Shift+F10");
+  const menu = page.getByRole("menu", { name: "Actions for a.do" });
+  await expect(menu.getByRole("menuitem", { name: "Open" })).toBeFocused();
+  expect(await modifierKeys(page)).toEqual(none);
+  await expect(menu.getByRole("menuitem", { name: "Open" })).toBeFocused();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+});
+
 // 700 to 1199 px the list is folded away, and Esc in it folds it (App.tsx): an Esc that cancels a rename must not.
 test("the folded file list: Esc in an inline rename cancels the rename and leaves the list open", async ({
   page,

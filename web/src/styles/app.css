@@ -252,15 +252,11 @@ body {
   flex-direction: column;
 }
 
-/* the toast on a phone: above the command line and the tab bar, not over them. While the keyboard is open (viewport.ts)
-   the toast is fixed to the layout viewport, whose bottom is behind the keyboard: it goes by the visible area instead,
-   above the command line at that area's foot (the tab bar is hidden then). */
-.app[data-layout="phone"] .toasts {
-  bottom: calc(var(--s7) * 2 + var(--s2));
-}
+/* the toast on a phone: above the command line and the tab bar, not over them (the places are set with the phone's
+   command line, below). While the keyboard is open (viewport.ts) the toast is fixed to the layout viewport, whose bottom
+   is behind the keyboard: it goes by the visible area instead, with its foot at the point `top` gives it. */
 :root[data-keyboard] .app[data-layout="phone"] .toasts {
   bottom: auto;
-  top: calc(var(--vv-top) + var(--vv-height) - var(--s7) - var(--s2));
   transform: translate(-50%, -100%);
 }
 

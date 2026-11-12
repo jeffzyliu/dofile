@@ -26,7 +26,8 @@
 //  - Ctrl/Cmd+S saves the active tab wherever the focus is, the editor too (the browser's own Save page is never wanted
 //    here): one window listener, which takes Ctrl or Cmd on every platform, and S on any keyboard layout (keys.ts
 //    isSaveKey); a held key saves once. Not CodeMirror's "Mod-s", whose Mod is Cmd alone on Apple devices, where Ctrl+S
-//    in the editor was swallowed and saved nothing. With a dialog open it saves the active tab behind it.
+//    in the editor was swallowed and saved nothing. With a dialog open it saves nothing (the browser's Save page is still kept
+//    away), so no Save begins behind a dialog that is about to decide what happens to the file.
 //  - A file drop is the page's (4a's window listeners): CodeMirror is told it is handled (cm.ts leaveFileDrops).
 
 import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
@@ -41,6 +42,7 @@ import {
   activeTab,
   addBanner,
   banners,
+  dialog,
   dismiss,
   engine,
   lastRun,
@@ -434,11 +436,11 @@ function focus() {
 }
 
 /** Ctrl/Cmd+S anywhere on the page saves the active tab, once while the key is held (each repeat is only kept from the
- *  browser's own Save page). */
+ *  browser's own Save page). With a dialog open it only keeps the browser's Save page away. */
 function onKey(e: KeyboardEvent) {
   if (!isSaveKey(e)) return;
   e.preventDefault();
-  if (e.repeat) return;
+  if (e.repeat || dialog.value) return;
   editorCommands.save();
 }
 
