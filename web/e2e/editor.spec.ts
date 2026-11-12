@@ -1064,8 +1064,23 @@ test("the phone's ⋯: Save is on for a text tab and off for a .dta tab", async 
   expect(await save()).toBe(true);
 });
 
+/** Text as a keyboard types it: an input of type `insertText`. Playwright's Firefox gives insertText() as a composition
+ *  (`insertCompositionText`), which the page leaves alone on purpose. So there the test says what a keyboard's
+ *  `beforeinput` says (the editor reads the kind of input from it) and the browser's own insertText command puts the
+ *  text in, which gives the field its `input` event of type `insertText`. */
+const typeText = (page: Page, browserName: string, text: string) =>
+  browserName === "firefox"
+    ? page.evaluate((t) => {
+        document.activeElement?.dispatchEvent(
+          new InputEvent("beforeinput", { inputType: "insertText", data: t, bubbles: true, cancelable: true }),
+        );
+        document.execCommand("insertText", false, t);
+      }, text)
+    : page.keyboard.insertText(text);
+
 test("the command line: no autocorrect, capitals or suggestions, one Run button on a phone and the text one elsewhere; typed curly quotes are straightened, pasted ones are not", async ({
   page,
+  browserName,
 }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
@@ -1086,19 +1101,19 @@ test("the command line: no autocorrect, capitals or suggestions, one Run button 
 
   // typing: Smart Punctuation's curly quotes and em dash become what was typed, and the caret stays after them
   await field.focus();
-  await page.keyboard.insertText("display ");
-  await page.keyboard.insertText("“");
-  await page.keyboard.insertText("hi");
-  await page.keyboard.insertText("”");
+  await typeText(page, browserName, "display ");
+  await typeText(page, browserName, "“");
+  await typeText(page, browserName, "hi");
+  await typeText(page, browserName, "”");
   await expect(field).toHaveValue('display "hi"');
   await field.fill("a b");
   await field.press("ArrowLeft");
   await field.press("ArrowLeft");
-  await page.keyboard.insertText("’");
-  await page.keyboard.insertText("c");
+  await typeText(page, browserName, "’");
+  await typeText(page, browserName, "c");
   await expect(field).toHaveValue("a'c b");
   await field.fill("");
-  await page.keyboard.insertText("x—y");
+  await typeText(page, browserName, "x—y");
   await expect(field).toHaveValue("x--y");
   // a paste, a drop and the en dash are left as they are, and so is the text already there
   await field.fill("");
@@ -1116,12 +1131,13 @@ test("the command line: no autocorrect, capitals or suggestions, one Run button 
   await fromInput("insertFromPaste", "“pasted”");
   await fromInput("insertFromDrop", " ’");
   await expect(field).toHaveValue("“pasted” ’");
-  await page.keyboard.insertText("–");
+  await typeText(page, browserName, "–");
   await expect(field).toHaveValue("“pasted” ’–");
 });
 
 test("the editor: typed curly quotes become straight ones in a .do file only, and a paste keeps its quotes", async ({
   page,
+  browserName,
 }) => {
   await setUp(page, { "a.do": "display 1\n", "n.md": "note\n" });
   const paste = (text: string) =>
@@ -1139,7 +1155,7 @@ test("the editor: typed curly quotes become straight ones in a .do file only, an
   const content = page.locator(".cm-content");
   await content.click();
   await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.insertText("display “it’s”");
+  await typeText(page, browserName, "display “it’s”");
   await expect(content).toContainText('display "it\'s"');
   await paste("“pasted”");
   await expect(content).toContainText("“pasted”");
@@ -1148,7 +1164,7 @@ test("the editor: typed curly quotes become straight ones in a .do file only, an
   await open(page, "n.md");
   await content.click();
   await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.insertText("“q”");
+  await typeText(page, browserName, "“q”");
   await expect(content).toContainText("“q”");
 });
 
