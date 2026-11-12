@@ -102,6 +102,7 @@ export function MenuButton({
       aria-expanded={open}
       onClick={() => (open ? closeMenu() : show("first"))}
       onKeyDown={(e) => {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
         if (e.key === "ArrowDown" || e.key === "ArrowUp") {
           e.preventDefault();
           show(e.key === "ArrowDown" ? "first" : "last");
@@ -159,10 +160,11 @@ export function MenuHost() {
       e.preventDefault();
       items[(n + items.length) % items.length]?.focus();
     };
-    if (e.key === "ArrowDown") go(i + 1);
-    else if (e.key === "ArrowUp") go(i - 1);
-    else if (e.key === "Home") go(0);
-    else if (e.key === "End") go(items.length - 1);
+    const plain = !(e.altKey || e.ctrlKey || e.metaKey); // Alt+Left is the browser's Back; Esc and Tab are as they were
+    if (plain && e.key === "ArrowDown") go(i + 1);
+    else if (plain && e.key === "ArrowUp") go(i - 1);
+    else if (plain && e.key === "Home") go(0);
+    else if (plain && e.key === "End") go(items.length - 1);
     else if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();

@@ -123,9 +123,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 105 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 106 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 420 cases, of which 389 run and 31 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 424 cases, of which 393 run and 31 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -140,7 +140,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
   (at 1440 px in sight, with the full sentence for screen readers and as its title, no link or tab stop; none at
   1199 px, the bar's height the same; at 1200 px, with the longest last run, memory and "Files may be cleared", no
   overflow and nothing cut in seven engine states; none on the iPhone, which has no status bar).
-- `files.spec.ts` (13): the file tree by keyboard, opening files in tabs, closing a tab with and without unsaved edits
+- `files.spec.ts` (14): the file tree by keyboard, arrow, Home, End and Delete keys with Alt, Ctrl or Cmd left to the browser (the tree, a tablist, the open-file tabs, a menu button and an open menu keep the focus and do not prevent the event), opening files in tabs, closing a tab with and without unsaved edits
   (a Save that fails keeps the tab open with the save-failed banner; Save saves through 4b's editor and closes the tab; the phone's file switcher; the focus after Save and after "Don't save", in one move to the tab now selected or, on a phone, the editor, and after Delete on the last tab), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
   open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
   clashes (Enter, Esc, "Do the same", a clash dialog that another dialog replaces answers as Esc; a clash dialog that follows another, answered "Keep mine", gives the focus back to the first one's opener, not the page), the unsaved-edits
@@ -228,7 +228,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (105, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (106, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.

@@ -28,6 +28,7 @@ export function Tablist<T extends string>({
   tabClass?: string;
 }) {
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back
     const i = tabs.findIndex((t) => t.id === value);
     const next = {
       ArrowRight: i + 1,

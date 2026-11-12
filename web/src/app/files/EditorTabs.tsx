@@ -55,6 +55,7 @@ export function EditorTabs() {
     if (askCloseTab(path) && keyboard) focusAfterClose();
   };
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back
     const next = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: list.length - 1 }[e.key];
     if (next !== undefined) {
       e.preventDefault();
