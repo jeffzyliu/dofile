@@ -33,6 +33,7 @@ import type {
 } from "../engine/machine.ts";
 import { initial, RC_RESET, transition } from "../engine/machine.ts";
 import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
+import { BREAK_GRACE_MS } from "../engine/types.ts";
 import { editorCommands } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
@@ -127,7 +128,7 @@ export function connectEngine({
   lock,
   snapshot,
   manual,
-  graceMs = 5000,
+  graceMs = BREAK_GRACE_MS,
   canInterrupt = typeof SharedArrayBuffer !== "undefined",
 }: {
   client: Reader & Lifecycle & Builds;

@@ -3,6 +3,10 @@
 
 // ---- what the state machine (machine.ts) and the page share ----
 
+/** How long Break waits before the engine is reset: the one place the 5 s is written. The controller (app/engine.ts) gives it
+ *  to the machine as `env.graceMs`, and the page's words count from it (app/states/words.ts GRACE_S). */
+export const BREAK_GRACE_MS = 5000;
+
 /** One start-up stage. The snapshot start has no "packages"; ?snapshot=0 has no "unpack" (OQ-11). */
 export type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
 /** Why the engine did not start: worked out from an error's `kind`, `reason` and `name` by whoever raises the event, never

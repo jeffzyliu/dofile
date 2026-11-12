@@ -227,7 +227,8 @@ Reviewed after the merge: see Post-merge review.
 3. "Run the file again" (the reset banner) runs the active text tab, not the file whose run the reset cut, and it is
    offered after a Reset the visitor asked for too.
 4. The Break grace of 5 s is written twice: the machine's `graceMs` and 4d's `GRACE_S` (`states/words.ts`), which the
-   banners' words count from.
+   banners' words count from. (Done: `BREAK_GRACE_MS` in `engine/types.ts` is the one place; `app/engine.ts` defaults `graceMs`
+   to it and `GRACE_S` is derived from it; the machine still takes the grace through `env`.)
 5. A failed start is announced twice to a screen reader: the live region's "The engine didn't start" and the failed
    banner, which has `role="alert"`.
 6. "Browsers that work" (`landing.html#browsers`) and the other-tab dialog's "Close editor" (`landing.html`) are dead
