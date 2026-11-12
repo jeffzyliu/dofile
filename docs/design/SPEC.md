@@ -997,8 +997,11 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     other text, it has none). **A run that
     rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`; the decision
     in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
-    tab of a `\r\n` file follows a run as any other; Save writes the editor's text, so a `\r\n` file saved from the
-    editor has `\n` breaks, as it always had): the same text
+    tab of a `\r\n` file follows a run as any other; Save keeps the file's line break, noted when its text is read
+    (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for a new or empty file and
+    for lone `\r`), and writes the editor's text with it (`fileText`), as does the save-failed banner's Download; a run
+    that becomes the saved version brings its own line break, one that writes the same rows with the other break leaves
+    the tab's): the same text
     again (a byte-identical rewrite, a `.log` open during every run) changes nothing; a text tab with no unsaved edits
     shows the run's version, changed in one transaction where the two differ, so the caret, the selection and the undo
     history are kept; one with edits keeps them and takes the run's version as its saved text (the tab stays unsaved, so

@@ -109,9 +109,10 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 - **A second review of the join, fixed** (2026-11-11): a dialog that follows another before that one has given the
   focus back (the next clash after "Keep mine", other-tab over a dialog) gives it back to the first one's opener, not
   to `<body>`, and `<body>` is never an opener; a clean tab of a file with `\r\n` breaks follows a run as any other (the
-  texts are compared with breaks as `\n`, `editor/ranover.ts`; Save writes the editor's text, so such a file saved from
-  the editor has `\n` breaks, as before); a run that writes the editor's own text over a version that was not text
-  takes the `run-changed` banner away; the close-tab dialog stays open while its Save writes, so the focus moves once.
+  texts are compared with breaks as `\n`, `editor/ranover.ts`; Save keeps the file's own line break: `\r\n` or `\n`,
+  noted when the file is read, the more common one in a mixed file, `\n` for a new or empty file); a run that writes
+  the editor's own text over a version that was not text takes the `run-changed` banner away; the close-tab dialog
+  stays open while its Save writes, so the focus moves once.
   For the maintainer's pass on a real iPhone: the focus now comes back from a dialog in a timer, so check that it
   reopens the on-screen keyboard where it went back to a text field (the command line). The four new or extended e2e
   tests failed on the code before these fixes (16 of 16 cases). Checked on the branch: `npm run check`, `npm run

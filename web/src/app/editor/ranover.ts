@@ -1,11 +1,25 @@
 // What a run's version of an open text file does to its tab (Editor.tsx ranOver; files.ts afterRun calls it), and the
 // text the editor compares: CodeMirror keeps every line break as "\n" (doc.toString()), so a file's text is compared
-// in that form, or a clean tab of a file with "\r\n" breaks would never equal its saved text. Save writes the editor's
-// text as it is, so a file saved from the editor has "\n" breaks (a "\r\n" file's breaks change on its first save).
-// Plain TypeScript, no DOM: tested in Node (test/editor.test.ts).
+// in that form, or a clean tab of a file with "\r\n" breaks would never equal its saved text. Each open file's line
+// break is noted when its text is read (lineBreakOf), and Save writes the editor's text with it (fileText), so a
+// "\r\n" file stays "\r\n"; a file with both kinds takes the more common one on its first Save. A new or empty file is
+// "\n". Plain TypeScript, no DOM: tested in Node (test/editor.test.ts).
 
 /** `text` with its line breaks as the editor holds them ("\r\n" and "\r" as "\n"). */
 export const editorText = (text: string) => text.replace(/\r\n?/g, "\n");
+
+export type LineBreak = "\r\n" | "\n";
+
+/** The line break a file's text uses: "\r\n" when it has more "\r\n" than lone "\n", else "\n" (a tie, an empty file, a
+ *  file with no line break). A lone "\r" (old Mac) is not counted, so a file of those is "\n". */
+export function lineBreakOf(text: string): LineBreak {
+  const crlf = text.match(/\r\n/g)?.length ?? 0;
+  const lf = (text.match(/\n/g)?.length ?? 0) - crlf;
+  return crlf > lf ? "\r\n" : "\n";
+}
+
+/** The editor's text (line breaks "\n") as the file is written, with the line break `br`. */
+export const fileText = (doc: string, br: LineBreak) => (br === "\n" ? doc : doc.replace(/\n/g, "\r\n"));
 
 /** What the tab does with a run's version:
  *  - same: the run wrote the saved text again; nothing changes;

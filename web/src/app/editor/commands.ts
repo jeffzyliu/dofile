@@ -2,8 +2,8 @@
 // controller (4b, step 3), the file tree and tabs (4a), the log's "Go to line" (4b) and the reset banner (4d). The editor
 // (Editor.tsx, CodeMirror 6) replaces each function when it mounts and keeps `selection` current; until then they do
 // nothing, so the shell runs without an editor and 4a can call them before 4b exists. Run sends the active tab's text
-// through run.ts's runCode() (docs/design/SPEC.md, section 4); Save writes it with store.write and shows the toast "Saved
-// <name>".
+// through run.ts's runCode() (docs/design/SPEC.md, section 4), its line breaks as "\n"; Save writes it with store.write,
+// with the file's own line break (editor/ranover.ts), and shows the toast "Saved <name>".
 //
 // Who does what with an open file:
 //  - 4a owns `tabs` and `activeTab` (state.ts): it adds a tab and makes it active, closes, renames and orders tabs. It reads

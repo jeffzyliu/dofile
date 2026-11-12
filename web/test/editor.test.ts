@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { ChangeSet, Text } from "@codemirror/state";
 import { CSV_COLORS, csvFields } from "../src/app/editor/csv.ts";
 import { lineDeleted, onLastRun, onRunStart } from "../src/app/editor/errormark.ts";
-import { editorText, followRun } from "../src/app/editor/ranover.ts";
+import { editorText, fileText, followRun, lineBreakOf } from "../src/app/editor/ranover.ts";
 import {
   jumpLine,
   lastRunWords,
@@ -820,4 +820,29 @@ test("a run's version of an open file (editor/ranover.ts): compared with line br
   assert.deepEqual(followRun("a\n", "a\n", null), { t: "kept", dirty: true });
   assert.deepEqual(followRun("a\n", null, "a\n"), { t: "kept", dirty: false });
   assert.deepEqual(followRun("a\n", null, "b\n"), { t: "kept", dirty: true });
+});
+
+test("a file's line break (editor/ranover.ts): noted when it opens, the more common one, \\n on a tie or with none; Save writes it back, byte for byte", () => {
+  assert.equal(lineBreakOf("a\r\nb\r\n"), "\r\n");
+  assert.equal(lineBreakOf("a\nb\n"), "\n");
+  // mixed: the more common one; a tie is "\n"
+  assert.equal(lineBreakOf("a\r\nb\r\nc\n"), "\r\n");
+  assert.equal(lineBreakOf("a\nb\nc\r\n"), "\n");
+  assert.equal(lineBreakOf("a\r\nb\n"), "\n");
+  // empty, or no line break at all: "\n"
+  assert.equal(lineBreakOf(""), "\n");
+  assert.equal(lineBreakOf("display 1"), "\n");
+  // a lone "\r" (old Mac) is not counted: such a file is "\n" (the editor holds its breaks as "\n" already)
+  assert.equal(lineBreakOf("a\rb\r"), "\n");
+  assert.equal(lineBreakOf("a\rb\rc\r\n"), "\r\n");
+  // writing back: the editor's text with the noted break
+  assert.equal(fileText("a\nb\n", "\r\n"), "a\r\nb\r\n");
+  assert.equal(fileText("a\nb\n", "\n"), "a\nb\n");
+  assert.equal(fileText("", "\r\n"), "");
+  // a mixed file becomes uniform on its first Save
+  const mixed = "a\r\nb\r\nc\n";
+  assert.equal(fileText(editorText(mixed), lineBreakOf(mixed)), "a\r\nb\r\nc\r\n");
+  // a round trip of a "\r\n" or "\n" text is byte-identical, with or without a final line break
+  for (const t of ["a\r\nb\r\n", "a\r\nb", "a\nb\n", "a\nb", "\r\n", "x"])
+    assert.equal(fileText(editorText(t), lineBreakOf(t)), t);
 });

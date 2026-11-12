@@ -9,6 +9,9 @@
 //    active, focus() goes to that tab, or its view's Load, outside `[data-editor]` (see focus()).
 //  - The unsaved dot: setDirty(path, text differs from the saved text) on each edit, so undoing back to the saved text
 //    clears it; a save clears it unless the text changed while it was being written.
+//  - Save keeps the file's line break (ranover.ts lineBreakOf, noted at open, reload and a run's new version): the
+//    editor's text, which has "\n" only, is written with "\r\n" for a "\r\n" file (fileText); the save-failed banner's
+//    Download too (textOf). The texts compared (the dot, a run's version) stay in the editor's "\n" form.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
 //    is the one that applies. With no text tab shown, Run says so in a toast and runs nothing. The code of each run is
 //    kept by its head (commands.ts codeOf) for the log's graph links.
@@ -40,13 +43,17 @@ import {
 } from "./cm.ts";
 import { codeOf, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
-import { editorText, followRun } from "./ranover.ts";
+import { editorText, fileText, followRun, type LineBreak, lineBreakOf } from "./ranover.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
 // what the store has of each, as last read or saved, with its line breaks as the editor holds them ("\n": ranover.ts
 // editorText), so a clean tab's document equals it; null when a run wrote something that is not text over it (the tab
 // is then unsaved until a save, whatever its text)
 const savedText = new Map<string, string | null>();
+// each open file's line break, which Save writes (ranover.ts lineBreakOf): noted when the editor takes the store's text
+// (open, reload, a run's version that becomes the saved one); a run that writes the same rows with the other break
+// changes nothing, so the tab keeps its own
+const breaks = new Map<string, LineBreak>();
 const scrolled = new Map<string, number>(); // where each was scrolled to
 const shown = signal<string | null>(null); // the path whose state the view shows, or null (the empty view)
 let view: EditorView | null = null;
@@ -103,8 +110,12 @@ const emptyState = EditorState.create({ doc: "", extensions: [EditorState.readOn
 /** The state of `path` as it is now: the view's while it is shown. */
 const current = (path: string) => (shown.value === path && view ? view.state : states.get(path));
 
-/** The editor's text of an open file, saved or not (the save-failed banner's Download), or null. */
-export const textOf = (path: string) => current(path)?.doc.toString() ?? null;
+/** The editor's text of an open file, saved or not, with the file's line break, as Save writes it (the save-failed
+ *  banner's Download), or null. */
+export function textOf(path: string) {
+  const st = current(path);
+  return st ? fileText(st.doc.toString(), breaks.get(path) ?? "\n") : null;
+}
 
 /** Show `path`'s state (or the empty view). The shown one's state is kept first. */
 function show(path: string | null) {
@@ -219,7 +230,7 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
   if (!path || !st) return false;
   const text = st.doc.toString();
   try {
-    await store.write(path, new TextEncoder().encode(text));
+    await store.write(path, new TextEncoder().encode(fileText(text, breaks.get(path) ?? "\n")));
   } catch (e) {
     const message = (e as Error)?.message ?? String(e);
     addBanner({ b: "save-failed", path, message });
@@ -243,6 +254,7 @@ function open(path: string, file: string) {
   closedMarks.delete(path);
   if (kept && kept.text === text && kept.line <= fresh.doc.lines) update(path, { effects: setErrorLine.of(kept.line) });
   savedText.set(path, text);
+  breaks.set(path, lineBreakOf(file));
   scrolled.delete(path);
   if (activeTab.value === path) show(path);
 }
@@ -253,6 +265,7 @@ function reload(path: string, file: string) {
   const fresh = stateFor(path, text);
   states.set(path, fresh);
   savedText.set(path, text);
+  breaks.set(path, lineBreakOf(file));
   if (shown.value === path && view) {
     view.setState(fresh);
     selection.value = null;
@@ -268,6 +281,9 @@ function ranOver(path: string, text: string | null): "same" | "shown" | "kept" {
   const r = followRun(st.doc.toString(), savedText.get(path) ?? null, text);
   if (r.t === "same") return "same"; // rewritten with the same text: nothing changes
   savedText.set(path, text === null ? null : editorText(text));
+  // the run's rows are now the saved ones: their line break with them (not when the run wrote the editor's own rows,
+  // which changes nothing the tab shows, or something that is not text)
+  if (text !== null && (r.t === "shown" || r.dirty)) breaks.set(path, lineBreakOf(text));
   // no unsaved edits: the run's text, changed in one transaction where the two differ, so the caret, the selection and
   // the undo history are kept
   if (r.t === "shown") update(path, { changes: { from: r.from, to: r.to, insert: r.insert } });
@@ -290,6 +306,8 @@ function renamed(from: string, to: string) {
   states.set(to, next);
   savedText.set(to, savedText.has(from) ? savedText.get(from)! : "");
   savedText.delete(from);
+  breaks.set(to, breaks.get(from) ?? "\n");
+  breaks.delete(from);
   // its banners follow it
   for (const b of banners.value)
     if ((b.b === "run-changed" || b.b === "save-failed") && b.path === from) {
@@ -315,6 +333,7 @@ function closed(path: string) {
     closedMarks.set(path, { line, text: saved });
   states.delete(path);
   savedText.delete(path);
+  breaks.delete(path);
   scrolled.delete(path);
   for (const b of banners.value) if ((b.b === "run-changed" || b.b === "save-failed") && b.path === path) dismiss(b);
   if (shown.value === path && view) {

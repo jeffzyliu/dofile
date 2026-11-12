@@ -148,6 +148,43 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(content).toHaveText("display 1display 2display 3display 4");
 });
 
+test("Save keeps a file's line breaks: a \\r\\n file edited and saved has \\r\\n throughout and is clean; a \\n file stays \\n", async ({
+  page,
+}) => {
+  await setUp(page, { "c.do": "display 1\r\ndisplay 2\r\n", "n.csv": "a\nb\n" });
+  const dirty = (path: string) =>
+    page.evaluate((p) => window.__dofile.state.tabs.value.find((t: { path: string }) => t.path === p)?.dirty, path);
+  const content = page.locator(".cm-content");
+
+  await open(page, "c.do");
+  expect(await dirty("c.do")).toBe(false);
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("display 3");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("display 4");
+  await expect.poll(() => dirty("c.do")).toBe(true);
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(page.locator(".toast")).toHaveText("Saved c.do");
+  expect(await stored(page, "c.do")).toBe("display 1\r\ndisplay 2\r\ndisplay 3\r\ndisplay 4");
+  await expect.poll(() => dirty("c.do")).toBe(false);
+  // the saved text is compared in the editor's form: an edit taken back is clean again
+  await page.keyboard.insertText("x");
+  await expect.poll(() => dirty("c.do")).toBe(true);
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => dirty("c.do")).toBe(false);
+
+  await open(page, "n.csv");
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("c");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(page.locator(".toast")).toHaveText("Saved n.csv");
+  expect(await stored(page, "n.csv")).toBe("a\nb\nc\n");
+  await expect.poll(() => dirty("n.csv")).toBe(false);
+});
+
 test("the editor: a .csv's columns have their colors, a .log's lines their kinds, .md and .json their tokens; a file dropped on it uploads and leaves its text", async ({
   page,
 }) => {

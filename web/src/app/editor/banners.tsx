@@ -1,8 +1,8 @@
 // The banner above the editor when a save fails (OQ-16): { b: "save-failed", path, message }, an error banner. The
 // editor's Save adds it (one per file; a later save of that file that works removes it) and says it in the live region.
 // Its words are drafts for the maintainer: "analysis.do couldn't be saved: <the store's reason>. Your edits are still in
-// the editor; download them to keep a copy." / "Download" (the editor's text, saved or not, as a file of that name),
-// "Dismiss". banners.tsx (in app/) places it.
+// the editor; download them to keep a copy." / "Download" (the editor's text, saved or not, with the file's line break,
+// as a file of that name), "Dismiss". banners.tsx (in app/) places it.
 import type { BannerOf } from "../banners";
 import { baseName } from "../files/tree.ts";
 import { saveAs, textInStore } from "../files.ts";
