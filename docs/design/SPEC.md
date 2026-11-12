@@ -177,7 +177,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Empty** (`S 16`): "No graphs yet" / "Graphs drawn by a run appear here, for example `scatter wage educ`. A .png from the
   file list opens here too."
 - **Calls:** `RunResult.images` (base64 PNG, the last 5 a run drew at most; `new_graphs` counts all). Every run sends
-  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors. A graph whose command names a color itself (`mcolor(black)`, `lcolor(navy)`) is drawn light in both themes, since such a color is picked for a light background (decided 2026-11-11): the command as the engine ran it, macros expanded, inside a program or a nested do-file too, text in quotes left out. `RunResult.graph_themes` says how each image was drawn, by its background (a scheme the graph keeps, `scheme(s1mono)`, says what it drew), and the card follows it; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
+  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors, and a graph is drawn in the run's theme whatever colors its command names (decided 2026-11-11: `docs/prototype1-plan.md`, 4c). The card of a run's graph follows the run's theme; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
 
 ### 3.8 Data tab and Browse (P1, step 4c)
 - **Tab** (`P/Data`): facts ("500 obs", "3 vars", "from data/wages.dta", "6 KB in memory"); the field "Filter variables"; a
@@ -642,9 +642,6 @@ interface RunResult {
   graph_commands: string[];                      // new (OQ-3): the command that drew each entry of `images`, same order
   graph_lines: (number | null)[];                // new (OQ-3): 1-based line of that command in the text sent (the calling
                                                  // line for a program, the `do` line for a nested file); same order
-  graph_themes: ("light" | "dark")[];            // new (step 4): how each image was drawn, by its background; "light"
-                                                 // whatever plot_theme says when the graph's command names a color
-                                                 // (mcolor(black)); a kept scheme (s1mono) as drawn; same order
   files?: FileChange[];                          // new: what the after-run difference wrote to the store
   store_error?: string;                          // new: the store refused that write
   skipped?: string[];                            // new: files the run made or changed strictly under a folder the page
@@ -659,7 +656,7 @@ interface FileChange { name: string; status: "created" | "modified" | "removed";
 type CutKind = "break" | "crash" | "user" | "stopped" | "run-failed";   // why the machine cut a run (a reset, another tab, a failed op)
 // A run cut by a reset resolves, from the state machine (cutResult), as { rc: 9998, error: "session reset: <reason>. Data in memory is gone;
 // your files are kept.", error_command: null, log: "", results: null, nobs: 0, nvars: 0, new_graphs: 0, images: [],
-// error_line: null, graph_commands: [], graph_lines: [], graph_themes: [], kind }.
+// error_line: null, graph_commands: [], graph_lines: [], kind }.
 interface Variable { name: string; type: string; format: string; label: string | null; value_label: string | null }
 type DataSummary = { nobs: number; nvars: number; matched: number; offset: number; variables: Variable[]; more: number;
                      filename: string | null } | { error: string };
@@ -973,7 +970,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the folds, the open matrices, the cells shown whole, what `describe_file` said of each .dta). Details where the
     sections above are silent: "graph n of N" counts by the graph's number `n` (the log's links) against the newest
     graph's number; the alt text is "Graph: scatter wage educ", and "Graph 2: scatter wage educ" when another kept graph
-    has the same command; the card of a plot drawn dark is dark (`--graph-card-dark`, OQ-21, from `graph_themes`), and a
+    has the same command; the card of a run's graph drawn dark is dark (`--graph-card-dark`, OQ-21: the run's theme), and a
     .png from the files is on the light card; the full-size view is a fixed overlay (not a native modal dialog, whose top
     layer would hide the toast) with its own focus trap, which leaves the keys to a native dialog opened over it, and a
     move to another graph is said through `say()` (the graph's alt text); the .dta bar's size is the tree's

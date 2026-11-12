@@ -19,9 +19,10 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   page, so the parts are not merged one by one). **4a and 4c are built and joined on it** (4c, then 4a rebased on it),
   with these decisions of 2026-11-11: on a phone the Files head is hidden and the file actions are in the top bar's ⋯;
   the unfolded file list gives the focus to the tree's row; a drop of files anywhere on the page uploads them; a graph
-  whose command names a color is drawn light in the dark theme (`RunResult.graph_themes`); a toast may also report an
+  is drawn in the run's theme whatever colors its command names (a rule that drew such a graph light was built and
+  removed the same day: the 4c note below); a toast may also report an
   error that needs no action (SPEC 3.10). A review's findings are fixed (one upload at a time, a clash never over
-  another dialog, paths in commands through `web/src/stata/quote.ts`, `graph_themes` as drawn, the focus after a tab
+  another dialog, paths in commands through `web/src/stata/quote.ts`, the focus after a tab
   closes). Checked on the branch:
   `uv run poe lint`, `npm run check`, `npm run lint:strict`; `uv run poe test` (1349 passed, 13 skipped, 3 xfailed);
   `npm test` (249 pass, none skipped); the e2e suite (134 passed, 26 skipped). **Next: 4b and 4d, when the maintainer
@@ -208,8 +209,12 @@ Decided in the step 2 review:
   matches the page's path).
 - **Step 4c:**
   - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decided
-    (2026-11-11): such a graph is drawn light. `engine.py` `_names_color` looks for a color option in the command's text
-    (and, when the text holds a macro, for any color in the graph); `RunResult.graph_themes` tells the page.
+    (2026-11-11): accepted as it is; a graph is drawn in the run's theme whatever colors its command names. A rule that
+    drew such a graph light was built and removed the same day: it needed changes to engine code shared with the CLI and
+    the MCP server (a wrapper around the interpreter's per-command step, a new result field) for a small gain, and the
+    visitor can switch the theme. A page-only version (the page asks for light graphs for a run whose text names a
+    color) is possible later if asked for. Known gap: a graph that keeps its own scheme (`scheme(s1mono)`) in the dark
+    theme is a light image on a dark card.
   - Three graphs from one loop share one label and alt text (`graph_commands` is the unexpanded command). Add the graph
     number to the alt text.
   - `browse` returns string cells whole (a strL can be thousands of characters with newlines). Cut long cells in the grid.

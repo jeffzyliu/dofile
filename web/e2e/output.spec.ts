@@ -370,20 +370,4 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await showTab(page, "data");
   await expect(page.locator(".facts")).toContainText("160 obs");
   await expect(page.locator(".facts")).toContainText("from wages.dta");
-
-  // ---- the card follows how each graph was drawn (RunResult.graph_themes) ----
-  await page.evaluate(() => {
-    window.__dofile.state.theme.value = "dark";
-  });
-  await run(page, "scatter wage educ, mcolor(black)\nscatter wage educ");
-  expect(
-    await page.evaluate(() => window.__dofile.state.graphs.value.slice(-2).map((g: { theme: string }) => g.theme)),
-  ).toEqual(["light", "dark"]); // the first names a color: drawn light in the dark theme
-  if (!phone(page)) {
-    await showTab(page, "graph");
-    const card = page.locator(".graph-wrap .graph-card");
-    await expect(card).toHaveAttribute("data-theme", "dark");
-    await page.locator(".graph-foot .thumb").nth(-2).click();
-    await expect(card).toHaveAttribute("data-theme", "light");
-  }
 });

@@ -50,9 +50,7 @@ def run(
     """Run Stata code like a do-file. JSON: rc, error, error_command, error_line (1-based line in `code` of the command
     that failed; null for rc 0 or an error inside a nested do-file), log, results (e() and r(), matrices by size: values
     come from matrix()), nobs, nvars, new_graphs, images (PNG, base64), graph_commands (the command that drew each image),
-    graph_lines (that command's first line in `code`, null if unknown), graph_themes ("light" or "dark": how each image
-    was drawn, by its background; a graph whose command names a color is drawn light whatever `plot_theme` says, and a
-    scheme the graph keeps, s1mono or s1rcolor, says what it drew), timing (seconds: engine, which includes drawing the graphs, and encode, the base64 of the images; the page shows them
+    graph_lines (that command's first line in `code`, null if unknown), timing (seconds: engine, which includes drawing the graphs, and encode, the base64 of the images; the page shows them
     to say where a slow run went). The page lists the working folder itself after each run.
     `fresh_locals`: clear the locals first (a whole-file run). `plot_theme`: "dark" draws the images dark.
     `on_output(text)`: a JS function given the log as it grows, at most every 0.1 s while a command writes (a JS null or
@@ -89,7 +87,6 @@ def run(
             "images": encoded,
             "graph_commands": r.graph_commands,
             "graph_lines": r.graph_lines,
-            "graph_themes": r.graph_themes,
             "timing": {"engine": t1 - t0, "encode": time.perf_counter() - t1},
         }
     )

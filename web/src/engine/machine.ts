@@ -257,7 +257,6 @@ export const cutResult = (error: string, kind: CutKind): RunResult => ({
   error_line: null,
   graph_commands: [],
   graph_lines: [],
-  graph_themes: [],
   kind,
 });
 

@@ -98,7 +98,6 @@ class Result:
     )
     graph_commands: list[str] = field(default_factory=list)  # the command that drew each entry of `images`
     graph_lines: list[int | None] = field(default_factory=list)  # and its first line in the code run (None: unknown)
-    graph_themes: list[str] = field(default_factory=list)  # "light" or "dark": how each entry of `images` was drawn
 
 
 def to_json(v: Any) -> Any:
@@ -280,8 +279,7 @@ def _install_tick() -> None:
 
 def _tracked_store():
     """OpenDTA's graph store, also recording each graph drawn (put), so a call can report its new graphs and the
-    command that drew each one, as (text, line) of the call's code (`command`, set by the Engine), and the graph command
-    itself as the engine ran it, macros expanded (`source`, also set by the Engine)."""
+    command that drew each one, as (text, line) (`command`, set by the Engine)."""
     from ._vendor.opendta.graphics.store import GraphStore
 
     class TrackedStore(GraphStore):
@@ -289,20 +287,16 @@ def _tracked_store():
             super().__init__()
             self.drawn: list = []
             self.commands: list[tuple[str, int | None]] = []
-            self.sources: list[str] = []  # the graph command itself, as run (macros expanded)
             self.command = lambda: ("", None)
-            self.source = lambda: ""
 
         def put(self, g, *, replace: bool) -> None:
             super().put(g, replace=replace)
             self.drawn.append(g)
             self.commands.append(self.command())
-            self.sources.append(self.source())
 
         def clear_drawn(self) -> None:
             self.drawn.clear()
             self.commands.clear()
-            self.sources.clear()
 
     return TrackedStore()
 
@@ -318,46 +312,10 @@ def clear_break() -> None:
     brk.clear()
 
 
-# Color options a graph command may name besides the layer table's (`mcolor`, `lcolor`, ...): an axis's labels, ticks and
-# grid lines (`xlabel(, labcolor(red) glcolor(gs8))`), a region's inner fill (`graphregion(ifcolor(white))`), each with
-# its shortest form. OpenDTA takes them in the command without an error.
-_MORE_COLOR_OPTS = {"labcolor": 4, "tlcolor": 3, "glcolor": 3, "ifcolor": 3}
-# a string: compound quotes, then plain double quotes (a title's text may say "color (red)")
-_QUOTED = re.compile(r'`"(?:[^"]|"(?!\'))*"\'|"[^"]*"')
-
-
-def _color_option() -> re.Pattern:
-    """Matches a color option in a graph command's text, `mcolor(`, `lco(`, `color(`: every option of OpenDTA's layer
-    table that ends in "color", and _MORE_COLOR_OPTS, in each abbreviation the engine accepts. `color(` also finds a
-    title's or a region's `color()`."""
-    from ._vendor.opendta.graphics.opts import LAYER_OPTS
-
-    table = {full: least for full, least in LAYER_OPTS.items() if full.endswith("color")} | _MORE_COLOR_OPTS
-    names = {full[:n] for full, least in table.items() for n in range(least, len(full) + 1)}
-    longest_first = "|".join(sorted(names, key=len, reverse=True))
-    return re.compile(rf"\b(?:{longest_first})\s*\(")
-
-
-def _names_color(command: str) -> bool:
-    """Whether a graph command chose a color itself (`mcolor(black)`, `lcolor(navy)`). Such a color is picked for a
-    light background and can vanish on a dark one, so the graph is drawn light whatever the theme. `command` is the
-    graph command as the engine ran it, its macros expanded (Engine._expanded): the command inside a program or a
-    nested do-file, and the options a macro held. Text in quotes is left out (a title may say "color (red)")."""
-    global _COLOR_OPTION
-    if _COLOR_OPTION is None:
-        _COLOR_OPTION = _color_option()
-    return bool(_COLOR_OPTION.search(_QUOTED.sub('""', command)))
-
-
-_COLOR_OPTION: re.Pattern | None = None
-
-
-def _png(g, theme: str | None = None) -> tuple[bytes, str] | None:
-    """The graph as a PNG, and how it was drawn: "dark" when its background is dark, else "light". theme="dark": every
-    graph whose scheme maps to OpenDTA's color scheme (the default, s2color or s1color named, or an unknown name) is drawn
-    in OpenDTA's dark scheme (dark background, light text, axes and grid); the mono schemes and the dark one are drawn as
-    they are, so a kept scheme says what it drew (s1mono: "light" under theme="dark"; s1rcolor: "dark" under any).
-    Engine.run passes no theme for a graph whose command names a color."""
+def _png(g, theme: str | None = None) -> bytes | None:
+    """The graph as a PNG. theme="dark": every graph whose scheme maps to OpenDTA's color scheme (the default,
+    s2color or s1color named, or an unknown name) is drawn in OpenDTA's dark scheme (dark background, light text, axes
+    and grid); the mono schemes and the dark one are drawn as they are."""
     import io
 
     from ._vendor.opendta.graphics import render, scheme
@@ -369,14 +327,12 @@ def _png(g, theme: str | None = None) -> tuple[bytes, str] | None:
     buf = io.BytesIO()
     try:
         fig = render.figure(g)
-        face = fig.get_facecolor()
-        fig.savefig(buf, format="png", dpi=100, facecolor=face)
+        fig.savefig(buf, format="png", dpi=100, facecolor=fig.get_facecolor())
     except Exception:  # noqa: BLE001 - a graph that cannot be drawn is just not shown inline
         return None
     finally:
         scheme.get = get
-    r, gr, b = face[:3]
-    return buf.getvalue(), "dark" if 0.2126 * r + 0.7152 * gr + 0.0722 * b < 0.5 else "light"
+    return buf.getvalue()
 
 
 class Engine:
@@ -403,7 +359,6 @@ class Engine:
             self.session.run("quietly set hints off")
         self.session._graphs = _tracked_store()  # the attribute OpenDTA's graphics.store.store() looks up
         self.session._graphs.command = self._graph_command
-        self.session._graphs.source = lambda: self._expanded[-1] if self._expanded else ""
         self.session.output.add_listener(self._tee)
         self._track_lines()
         _install_tick()
@@ -411,15 +366,13 @@ class Engine:
     def _track_lines(self) -> None:
         """Wrap the interpreter so a call knows which line of its code is running: `_frames` holds a (line, do
         depth) for each command being run, outermost first (a program's body adds a None marker); `_failure` is
-        the frames where the last error was raised. `_expanded` holds the text of each command being run as the engine
-        runs it, its macros expanded, outermost first: its last is the graph command drawing a graph."""
+        the frames where the last error was raised."""
         interp, s = self.session.interp, self.session
         self._frames: list = []
-        self._expanded: list[str] = []
         self._failure: tuple | None = None
         self._top: set[int] = set()  # id() of the LogicalLines of the code this call runs
         run_lines, run_one, run_program = interp.run_lines, interp._run_one, interp.run_program
-        execute, run_expanded = interp.execute, interp._execute_expanded
+        execute = interp.execute
 
         def lines_hook(lines, *a, **k):
             if not self._top:
@@ -451,19 +404,11 @@ class Engine:
             self._tee.tick(0 if top else STREAM_BEFORE_COMMAND)
             return execute(raw)
 
-        def expanded_hook(text):
-            self._expanded.append(text)
-            try:
-                return run_expanded(text)
-            finally:
-                self._expanded.pop()
-
-        interp.run_lines, interp._run_one, interp.run_program, interp.execute, interp._execute_expanded = (
+        interp.run_lines, interp._run_one, interp.run_program, interp.execute = (
             lines_hook,
             one_hook,
             program_hook,
             execute_hook,
-            expanded_hook,
         )
 
     def _note_failure(self, e: BaseException) -> None:
@@ -566,13 +511,8 @@ class Engine:
             self._tee.stop()
         log = self._capture.text  # built once: it joins up to 2 MB
         failed = _failed_command(log) if rc else None
-        shown = list(zip(store.drawn, store.commands, store.sources))[-MAX_IMAGES:] if images else []
-        # a graph whose command names a color is drawn light whatever the theme (_names_color); _png says how it drew
-        drawn = []  # (png, (text, line), theme)
-        for g, cmd, source in shown:
-            made = _png(g, None if plot_theme == "dark" and _names_color(source) else plot_theme)
-            if made:
-                drawn.append((made[0], cmd, made[1]))
+        shown = list(zip(store.drawn, store.commands))[-MAX_IMAGES:] if images else []
+        drawn = [(png, cmd) for png, cmd in ((_png(g, plot_theme), cmd) for g, cmd in shown) if png]
         d = self.session.data
         result = Result(
             _annotate_refusals(log),
@@ -583,11 +523,10 @@ class Engine:
             d.nobs,
             len(d.names),
             len(store.drawn),
-            [png for png, _, _ in drawn],
+            [png for png, _ in drawn],
             error_line=self._error_line() if rc else None,
-            graph_commands=[text for _, (text, _), _ in drawn],
-            graph_lines=[line for _, (_, line), _ in drawn],
-            graph_themes=[theme for _, _, theme in drawn],
+            graph_commands=[text for _, (text, _) in drawn],
+            graph_lines=[line for _, (_, line) in drawn],
         )
         store.clear_drawn()  # don't keep graphs alive past the call
         self._frames.clear()

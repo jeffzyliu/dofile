@@ -28,12 +28,10 @@ as of 2026-11-11, and drift as tests are added; the file lists are the source of
   `scripts/patches/`.
 - Safe expression evaluation: Stata expressions cannot reach Python.
 
-**2. Engine features added for the web demo** (`test_engine_web.py`, 35)
+**2. Engine features added for the web demo** (`test_engine_web.py`, 32)
 - Output streaming (`on_output`): batching, caps, truncation, failing receivers.
 - Error line numbers, including nested, included and earlier-run programs.
-- Which command made each graph, and the dark plot theme; `graph_themes`: a graph whose command names a color is drawn
-  light (the command as run, in a program or a nested do-file too, macros expanded, quoted text left out), and a kept
-  scheme (s1mono, s1rcolor) says what it drew.
+- Which command made each graph, and the dark plot theme.
 - `describe_file`, `fresh_locals`, memory size.
 
 **3. Interrupt and Break** (`test_break.py`, 3; also the timeout and cancel tests in `test_worker.py`)
@@ -137,7 +135,7 @@ rename on the iPhone, which has no folded list).
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
 - `engine.spec.ts` (3): runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start.
-- `output.spec.ts` (5, step 4c): the three empty states and the reset wording; a .png from the files on the light card in the dark theme; a .dta tab whose name a command can't hold (the reason, Load and Copy off); a .dta tab with no engine (two bars, Copy, no table); and one test with an engine that runs code through the hook and checks the Graph tab (alt text with the graph number, foot, thumbnails), the full-size view (← → Esc, focus back, Tab kept inside, Copy image, Export PNG; on the phone, Previous, Next and Close), the Data tab (facts, filter, arrow keys, picking a name and the column scroll, Show 50 more, a cut cell shown whole, nothing written to the log), the Results tab (sections, copied values with every digit, Ctrl/Cmd+C, a matrix viewed, copied and hidden, closed by the next run) a .dta tab with an engine (variables, `describe_file` leaves the data, Load), and the card's `data-theme` from `graph_themes` (a graph that names a color, drawn light in the dark theme). The full-size view's move is said in the live region. The clipboard is a recorder in every page.
+- `output.spec.ts` (5, step 4c): the three empty states and the reset wording; a .png from the files on the light card in the dark theme; a .dta tab whose name a command can't hold (the reason, Load and Copy off); a .dta tab with no engine (two bars, Copy, no table); and one test with an engine that runs code through the hook and checks the Graph tab (alt text with the graph number, foot, thumbnails), the full-size view (← → Esc, focus back, Tab kept inside, Copy image, Export PNG; on the phone, Previous, Next and Close), the Data tab (facts, filter, arrow keys, picking a name and the column scroll, Show 50 more, a cut cell shown whole, nothing written to the log), the Results tab (sections, copied values with every digit, Ctrl/Cmd+C, a matrix viewed, copied and hidden, closed by the next run) and a .dta tab with an engine (variables, `describe_file` leaves the data, Load). The full-size view's move is said in the live region. The clipboard is a recorder in every page.
 
 ## Conformance corpus: value and limits
 
