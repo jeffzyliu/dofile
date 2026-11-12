@@ -37,10 +37,11 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    - no tab, or a text tab with no editor state yet: the empty view ("No file is open", `[data-editor]` then);
    - a `.dta` tab: its tab in "Open files" when that is visible, else the first enabled button of its view (Load), else
      nothing;
-   - the Editor pane hidden (a phone on another view): the code calls `view.focus()` all the same. The browser does not
+   - the Editor pane hidden (a phone on another view): the code calls `view.focus()` (or the empty view's `focus()`) all
+     the same. The browser does not
      focus an element under `display: none`, so the focus does not move, and `focusStable` goes on to "More actions".
 4. **A dialog gives the focus back to its opener** (what had the focus when it opened). When the opener has left the
-   page, the dialog calls `focusStable()`. `<body>` is never an opener. A dialog that opens while another one is still
+   page, or it had none, the dialog calls `focusStable()`. `<body>` is never an opener. A dialog that opens while another one is still
    handing the focus back takes that one's opener as its own (`ui/Dialog.tsx`, the module variable `leaving`).
 5. **A view that takes the focus when it appears takes it in a layout effect:** a dialog (`ui/Dialog.tsx`), the
    stopping banner's "Don't reset: wait for it", and the waiting banner itself (`states/banners.tsx`). So a hand-off
@@ -133,7 +134,7 @@ sequenceDiagram
   participant F as states/focus.ts
   Note over SB: the focus is on Don't reset, taken in its layout effect
   O->>E: lock-lost
-  E->>E: one step, engine = other-tab-idle, effects end-worker, block-store, engine-gone, show-dialog, end-run
+  E->>E: one step, engine = other-tab-idle, effects cancel-break-timer, end-worker, block-store, engine-gone, show-dialog, end-run
   Note over SB,D: one microtask renders both
   SB->>F: layout cleanup, the focus is inside, queue a microtask
   D->>D: layout effect, opener = the banner button, or nothing if the banner went first
@@ -173,8 +174,9 @@ Dismiss on a banner that uses `useFocusOnLeave` (reset, storage, download-failed
 last two lines. With a `.dta` tab active, `editorCommands.focus()` puts the focus on that tab, so `focusStable` stops
 there and the focus moves once.
 
-The banners that hold no control (running, memory) do not use it. Neither do the editor's banners (`editor/banners.tsx`:
-save-failed, run-changed) or the Files pane's (`files/banners.tsx`: not-text).
+The banners that hold no control (running, memory) do not use it, nor does the declined banner, which calls
+`focusStable()` itself before it goes. Neither do the editor's banners (`editor/banners.tsx`: save-failed, run-changed) or
+the Files pane's (`files/banners.tsx`: not-text).
 
 ### A tab closes from the close-tab dialog
 
@@ -226,10 +228,10 @@ sequenceDiagram
 
 | Case | Desktop | Phone |
 |---|---|---|
-| A banner leaves, or a dialog's opener has left | the editor (or the `.dta` tab, or Load) | the editor on the Editor view; "More actions" on any other view |
+| A banner leaves, or a dialog's opener has left | the editor (or the `.dta` tab, or Load) | the editor (or a `.dta` tab's Load) on the Editor view; "More actions" on any other view |
 | Close-tab's Save or "Don't save" | the selected tab in "Open files" | the editor: "Open files" is not shown, and neither is the tree on the Editor view |
 | The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's timer gives the focus to its opener. A queued Run has just shown the Log view (`run.ts` `began`). |
-| A dialog opened from the phone's ⋯ (Reset, Delete all) | the ⋯ trigger | the ⋯ trigger |
+| A dialog opened from a menu (Reset, Delete all) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all | the ⋯ trigger, for both |
 | Find opened from the phone's ⋯ | (desktop: the Log head's Find button) | `openFind(null)` takes the focused element, the ⋯ button that `closeMenu` just focused |
 
 ### Tests that hold this
@@ -302,11 +304,13 @@ No Node test covers the focus. The rules hold only in a browser.
 | Control | Calls | When it can be pressed |
 |---|---|---|
 | Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready` and `declined`; `aria-disabled` (not `disabled`) in `running`, so a focused Run keeps the focus and a second Enter cannot reach Break; disabled in `breaking`, `waiting` and every other state ("Starting…" while downloading or starting, "Stopped" after a failed start). It is disabled in `none` too, which only `?test=manual` gives, though the machine would queue a run there. |
-| Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | as Run, and only with a selection |
+| Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | enabled in `ready` and `declined` with a selection; `disabled` in every other state, `running` too (not `aria-disabled`) |
 | Ctrl/Cmd+Enter in the editor | `runEither()`: Run selection with a selection, else Run | in any state: outside `ready`, `none` and `declined` the run is refused, with no message |
 | Break | `running`: `breakRun()` ("Break", or "Break (reset)" with no cross-origin isolation); `waiting`: "Reset now", `eng.reset()` with no question | disabled in `breaking` ("Stopping…") and when no run is on |
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
-| The command line, Load, Import, a hint's `help x` link | `runCommand(text)` | any time; the machine accepts or refuses |
+| "Run the file again" (the reset banner) | `editorCommands.runFile()`, then the banner is dismissed | enabled in `ready` with a text tab active |
+| The command line, a hint's `help x` link | `runCommand(text)` | any time; the machine accepts or refuses |
+| Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`, `none` and `declined` |
 
 The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` on `engine`, `followErrors` on
 `lastRun`. Both run inside a step.
@@ -330,7 +334,7 @@ stateDiagram-v2
   queued --> running: started, send-run
   queued --> dropped: drop-run
   running --> ended: run-ended or run-failed
-  running --> cut: reset, crash, Break timeout
+  running --> cut: reset, crash, Break timeout, Break with no SharedArrayBuffer
   running --> taken: lock-lost
   refused --> [*]
   dropped --> [*]
@@ -392,7 +396,7 @@ What a view may rely on, and when:
 | A signal effect on `lastRun` sees the new run | The log text is final, with `end`, and the graphs are added. `results` is still the old one (written next). |
 | A component renders after the step | The whole step: `engine`, the log, `graphs`, `lastRun`, `results`, and `fresh` (and the storage banner, when it is due), which `afterRun` writes before its first `await`. |
 | Later, as each answers | `data`, `rows`, `macros`, `memory` (`refreshData`); `files` and the open tabs (`afterRun`). |
-| `done` has settled | All of the above. An after-run read that failed leaves its signal as it was, and goes to the console. |
+| `done` has settled | All of the above. An after-run read that failed leaves its signal as it was. A failed file list, and an open tab's follow-up that throws, go to the console; `refreshData` drops its error. |
 
 `refreshData` sends its four reads synchronously inside the end step (`client.ts` `#send` posts at once). So they are
 ahead, in the worker's queue, of any run started after the step.
@@ -439,7 +443,8 @@ sequenceDiagram
 | `taken` | `done` gave kind `stopped` | up to and with it | "N of T pasted lines not run: another tab took over the engine during line L" |
 | none | every line ran | all | no toast |
 
-When the last line stops the run, nothing is left (`total - ran` is 0), and there is no toast: its error is in the log.
+When the last line ends with an error or is cut by another tab, nothing is left (`total - ran` is 0), and there is no
+toast: its error is in the log. A last line that is refused, not run or a block's leaves one line, and the toast shows.
 
 ### Invariants a change must keep
 
@@ -450,8 +455,9 @@ When the last line stops the run, nothing is left (`total - ran` is 0), and ther
   `Promise.allSettled`, so a failed read does not keep `done` open.
 - **No run starts during a step.** A view never calls `runCode` or `runCommand` inside a handler given to `connectRun`,
   or inside a signal effect on `engine` or `lastRun`. Both are written only during a step, so the call throws. A `log`
-  write from a step (`began`, `ended`) throws too. A streamed chunk is written outside a step, so a run started from an
-  effect on that write is refused instead. Start the next run after the step: in a microtask, or when `done` settles.
+  write from a step (`began`, `ended`) throws too. A streamed chunk and "Clear log" write `log` outside a step, where
+  the call does not throw: during a run it is refused, and after "Clear log" in `ready` the run starts. Start the next
+  run after the step: in a microtask, or when `done` settles.
 - **`ended` comes after the `engine` signal has its new state.** When the machine cut the run, it also comes after
   `engine-gone`.
 - **A cut of kind `stopped` writes no `lastRun`.** The tab no longer owns the engine, and a quick take-over may already
@@ -557,12 +563,12 @@ flowchart LR
 | **Save fails** | unchanged | unchanged | unchanged | stays on | unchanged | save-failed added (one per path); the live region says it | unchanged |
 | **Rename** (`renameEntry` → `renamed`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path | the same bytes under the new name |
 | **Rename across a `.do` name** | as Rename | as Rename | `a.txt` with a BOM renamed `a.do`: the next Save writes no BOM. `a.do` with a BOM, never saved here, renamed `a.txt`: the next Save keeps it. | kept | kept | moved | the same bytes |
-| **Rename to a name that opens another way** | a clean tab is closed and opened again in its place (as Close, then Open); a tab with edits stays as it is; a `.png` name closes the tab | | | | | | |
+| **Rename to a name that opens another way** | a clean tab is closed and opened again in its place (as Close, then Open); a tab with edits stays as it is; a `.png` name closes a clean tab | | | | | | |
 | **Close** (`closeTab` → `closed`) | dropped | dropped | dropped | the tab is gone | noted (line and text) when it had one and no unsaved edits | both dismissed | unchanged ("Don't save" loses the edits) |
 | **Upload and "Replace with uploaded"** (`reopen` → `reload`) | the uploaded text, a new state (undo history gone) | the same | `formOf` the upload | off | gone (new state) | run-changed dismissed; save-failed stays | the uploaded bytes. Not text: the tab closes. |
 | **A run writes the same text** (in the editor's form) | unchanged | unchanged | unchanged, even if the run wrote other line breaks | unchanged (a tab with edits stays unsaved) | unchanged | unchanged | the run's bytes |
 | **A run writes other text, tab clean** | the run's text, as one change where the two differ: caret, selection and undo kept | the run's text | `formOf` the run's text | off | mapped through the change | run-changed dismissed | the run's bytes |
-| **A run writes other text, tab unsaved** | kept | the run's text | `formOf` the run's text | on. When the run wrote exactly the editor's text: off, and the answer is "same". | unchanged | run-changed added (files.ts, on "kept"); when "same", dismissed | the run's bytes |
+| **A run writes other text, tab unsaved** | kept | the run's text | `formOf` the run's text; unchanged when the run wrote exactly the editor's text | on. When the run wrote exactly the editor's text: off, and the answer is "same". | unchanged | run-changed added (files.ts, on "kept"); when "same", dismissed | the run's bytes |
 | **A run writes something that is not text** | kept | null (`savedIsText` is false) | unchanged | on | unchanged | run-changed in its not-text words, with no "Reload from the run" | the run's bytes. A later run that writes the editor's text makes the tab clean and removes the banner. |
 | **A run deletes the file** | unchanged (`followOpen` skips `removed`) | unchanged | unchanged | unchanged | unchanged | unchanged | removed; the file leaves the list, and Save writes it again |
 | **"Reload from the run"** (`textInStore` → `reload`) | the store's text, a new state | the same | `formOf` it | off | gone | run-changed dismissed. When the store gives no text: only dismissed. | unchanged |
@@ -600,7 +606,6 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
   - "the error mark's rule (editor/errormark.ts): …"
 - `web/test/app.test.ts`:
   - "a run that rewrites an open file: the editor follows it (ranOver); the banner when it keeps the tab's text: …"
-  - "J5: …"
   - "setDirty sets one tab's dot; decodeText takes strict UTF-8 only"
 - `web/test/files-ui.test.ts`:
   - "openFile: a text file gets a tab, made active, before the editor is told; …"
@@ -750,7 +755,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
 
 - **Graph links.** Each graph of this run (`graphs` with `from: "run"` and this `run`) goes after
   `commandEnd(lines, echoes.get(g.line))`, the last `> ` line of that command. When the line has no echo, or the graph
-  has no line, it goes after the item's last line that has text. A graph drawn inside its run's text is not drawn
+  has no line, it goes after the item's last line (the one before the text's final line break, which may be blank). A graph drawn inside its run's text is not drawn
   again by its `{t: "graph"}` log item (`placed`).
 - **S 15's note.** The item keeps `unsaved`, the open files with unsaved edits when the run started (`run.ts`
   `began`). For each found echo, `nestedTarget` reads the echo's text with a leading `. ` removed. The note "Note:
@@ -758,7 +763,8 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
   the file: the same path, else the one unsaved file with that name. A loop's or program's body echo keeps its
   `  2. ` prefix, which `nestedTarget` does not read as a `do`, so only top-level echoes get the note.
 - **OQ-10's note.** When the run ended with rc above 1, `states/words.ts` `noteFor(end.rc, runError(lines))` picks
-  the note, which goes at the run's end, after Break's note and "Go to line".
+  the note, which goes at the run's end, after "Go to line" when that is there (Break's note is rc 1's, so never with
+  it).
 - **Caches.** `kinds` (each item's `classify`) and `aligned` (each item's echoes, kept with the code they were
   computed for) are `WeakMap`s keyed by the text item. `run.ts` replaces an item on every change (`setText` maps to a
   new object), so a streamed chunk is classified again, and an ended run is aligned once.
