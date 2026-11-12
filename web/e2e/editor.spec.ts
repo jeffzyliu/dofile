@@ -1400,7 +1400,7 @@ test("S 15's note under a nested do in a loop: one note, after the loop's echo o
 test("Ctrl/Cmd+Enter that the engine does not take says why in a toast and starts nothing; pressed when ready it runs, with no toast, and a held key runs once", async ({
   page,
 }) => {
-  await setUp(page, { "a.do": "display 1\n" }, "/?test");
+  await setUp(page, { "a.do": "display 1\n" }, "?test");
   await startEngine(page);
   await ready(page);
   await open(page, "a.do");
