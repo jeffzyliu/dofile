@@ -12,7 +12,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# A pull request that changes none of the files these tests cover (src/, tests/, tests_opendta/, scripts/,
+# A pull request that changes none of the files these tests cover (src/, tests/, tests_opendta/, scripts/, web/sample/,
 # pyproject.toml, uv.lock, .python-version, this workflow) skips the test
 # jobs but still starts the workflow, so the required check `ci ok` reports. (A workflow-level `paths` filter starts
 # nothing, and a required check that never reports blocks the merge forever.)
@@ -20,7 +20,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes none of: src/, tests/, tests_opendta/, scripts/, pyproject.toml, uv.lock, .python-version, this workflow
+      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes none of: src/, tests/, tests_opendta/, scripts/, web/sample/ (tests/test_sample_data.py), pyproject.toml, uv.lock, .python-version, this workflow
       python: ${{ steps.diff.outputs.python }}   # "false" only for a pull request that changes none of the above and no web/scripts/*.py: what ruff checks
     steps:
       - uses: actions/checkout@v7
@@ -35,7 +35,7 @@ jobs:
           python=true
           if [ "$EVENT" = pull_request ]; then
             files=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
-            hit=$(printf '%s\n' "$files" | grep -vE '\.md$' | grep -E '^(src|tests|tests_opendta|scripts)/|^(pyproject\.toml|uv\.lock|\.python-version|\.github/workflows/ci\.yml)$' || true)   # a markdown file never counts; files outside the pattern are not covered by these tests
+            hit=$(printf '%s\n' "$files" | grep -vE '\.md$' | grep -E '^(src|tests|tests_opendta|scripts|web/sample)/|^(pyproject\.toml|uv\.lock|\.python-version|\.github/workflows/ci\.yml)$' || true)   # a markdown file never counts; files outside the pattern are not covered by these tests
             [ -n "$hit" ] || code=false
             py=$(printf '%s\n' "$files" | grep -E '^web/scripts/.*\.py$' || true)   # ruff's files that the tests do not cover
             [ -n "$hit$py" ] || python=false

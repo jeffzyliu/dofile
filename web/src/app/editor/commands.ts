@@ -1,9 +1,9 @@
-// STEP 4b fills this in. What the other parts ask of the editor: the toolbar, the phone's top bar, the keyboard, the engine
+// What the other parts ask of the editor: the toolbar, the phone's top bar, the keyboard, the engine
 // controller (4b, step 3), the file tree and tabs (4a), the log's "Go to line" (4b) and the reset banner (4d). The editor
 // (Editor.tsx, CodeMirror 6) replaces each function when it mounts and keeps `selection` current; until then they do
 // nothing, so the shell runs without an editor and 4a can call them before 4b exists. Run sends the active tab's text
-// through run.ts's runCode() (docs/design/SPEC.md, section 4); Save writes it with store.write and shows the toast "Saved
-// <name>".
+// through run.ts's runCode() (docs/design/SPEC.md, section 4), its line breaks as "\n"; Save writes it with store.write,
+// with the file's own line break (editor/ranover.ts), and shows the toast "Saved <name>".
 //
 // Who does what with an open file:
 //  - 4a owns `tabs` and `activeTab` (state.ts): it adds a tab and makes it active, closes, renames and orders tabs. It reads
@@ -15,6 +15,12 @@
 // The editor fills `editorCommands` field by field when it mounts. Call through the object (`editorCommands.save(path)`),
 // never destructure it or keep a field (`const { save } = editorCommands`): the copy would keep the no-op.
 import { signal } from "@preact/signals-core";
+import type { RunHead } from "../types.ts";
+
+/** The code each run of the editor sent, by its head (the object run.ts keeps in the run-head item): the log puts each
+ *  graph's link after the echo of its line (log/align.ts), which needs the lines that were sent. Kept only as long as
+ *  the log keeps the run-head. */
+export const codeOf = new WeakMap<RunHead, string>();
 
 /** The selected lines of the active editor tab, 1-based and whole (OQ-21), or null with no selection. Run selection is
  *  enabled only with one; the phone's Run says "Run 6–7". Owner: the editor. */
@@ -30,7 +36,8 @@ export const editorCommands = {
   save(_path?: string): Promise<boolean> {
     return Promise.resolve(false);
   },
-  /** Put the focus in the editor (after the engine's dialog closes by itself, "Go to line"). */
+  /** Put the focus in the editor, at once (after the engine's dialog closes by itself; states/focus.ts focusStable, for a
+   *  banner or a dialog's opener that left; files/EditorTabs.tsx focusAfterClose). "Go to line" focuses CodeMirror itself. */
   focus() {
     ((globalThis.document?.querySelector("[data-editor]") ?? null) as HTMLElement | null)?.focus();
   },
@@ -40,6 +47,17 @@ export const editorCommands = {
   /** 4a: the store's copy of an open file was replaced (an upload over it, F 3.3, "Replace with uploaded"): show `text`;
    *  unsaved edits are dropped and the dot cleared. */
   reload(_path: string, _text: string) {},
+  /** files.ts afterRun: a run rewrote the open text file `path`; `text` is the store's version, or null when it is not
+   *  text (texts compared with line breaks as "\n": editor/ranover.ts). Answers what the editor did: "same" (the run
+   *  wrote the saved text again, or no such file is open: nothing; or it wrote the editor's own text over edits or a
+   *  version that is not text: the tab is clean again and its run-changed banner goes), "shown" (no unsaved edits: the
+   *  run's text is shown, changed in one transaction, so the caret, the selection and the undo history are kept), or
+   *  "kept" (unsaved edits, or a version that is not text: the editor keeps its text and takes the run's version as the
+   *  saved one, so the tab stays unsaved and Save replaces the run's version knowingly; files.ts then adds the banner
+   *  run-changed). Not `reload`, which is 4a's "Replace with uploaded". */
+  ranOver(_path: string, _text: string | null): "same" | "shown" | "kept" {
+    return "same";
+  },
   /** 4a: an open file was renamed or moved (a folder's rename calls it once for each open file under it): the editor
    *  keeps its text, edits and undo under the new path. 4a has already changed the tab's path. */
   renamed(_from: string, _to: string) {},

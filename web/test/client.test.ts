@@ -45,6 +45,12 @@ function fakeCaches({ refuse = false } = {}) {
           if (refuse) throw new DOMException("the quota has been exceeded", "QuotaExceededError");
           entries.set(url, response);
         },
+        async keys() {
+          return [...entries.keys()].map((url) => ({ url }));
+        },
+        async delete(request: string | { url: string }) {
+          return entries.delete(typeof request === "string" ? request : request.url);
+        },
       };
     },
   };
@@ -177,6 +183,37 @@ test("download: every start file goes into the Cache, the counts rise to the tot
     ["no-cache", "no-cache", "no-cache"],
     "each file is asked for fresh, not taken from the HTTP cache of an older build",
   );
+});
+
+test("download: an entry of the build's Cache that the list does not name (the same build at an older address) is dropped; the list's own are kept and not fetched again", async () => {
+  const caches = fakeCaches(),
+    { fetch, calls } = fakeFetch();
+  const cache = await caches.open("dofile-snapshot-777"); // the same build, cached when the editor was at the site's root
+  const old = ["https://dofile.test/snapshot/heap.bin", "https://dofile.test/pyodide/pyodide.asm.wasm"];
+  for (const url of old) await cache.put(url, new Response("the same build, at the old address"));
+  await cache.put(`${BASE}snapshot/dso.json`, new Response(FILES["snapshot/dso.json"][0])); // from an earlier try
+  const done = await client(fetch, caches).download();
+  assert.equal(done.cached, true);
+  assert.deepEqual(await cached(caches), ["pyodide/pyodide.asm.wasm", "snapshot/dso.json", "snapshot/heap.bin"]);
+  for (const url of old) assert.equal(await cache.match(url), undefined, `${url} is gone`);
+  assert.ok(!calls.includes(`${BASE}snapshot/dso.json`), "a file kept from an earlier try is not fetched again");
+});
+
+test("download: with a worker live, which may be reading the Cache, nothing is dropped from it", async () => {
+  const caches = fakeCaches(),
+    { fetch } = fakeFetch();
+  const cache = await caches.open("dofile-snapshot-777");
+  await cache.put("https://dofile.test/snapshot/heap.bin", new Response("the same build, at the old address"));
+  const { eng } = scripted(starts, {
+    snapshot: `${BASE}snapshot/`,
+    startFiles: { base: `${BASE}start-files.json`, ...LIST } as StartFiles & { base: string },
+    fetch: fetch as typeof globalThis.fetch,
+    caches: caches as unknown as CacheStorage,
+  });
+  await startWorker(eng);
+  assert.equal((await eng.download()).cached, true);
+  assert.ok(await cache.match("https://dofile.test/snapshot/heap.bin"), "kept while a worker is live");
+  eng.end(live(eng), { kind: "reset", reset: "user", reason: "session reset: reset by you." });
 });
 
 test("download: the list can be a URL (start-files.json), fetched fresh, and its paths are relative to it", async () => {

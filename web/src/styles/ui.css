@@ -825,8 +825,13 @@ button {
   border-left-color: var(--warn);
   background: var(--warn-soft);
 }
+/* the text's cell may be narrower than its buttons (the Files pane, 230 px): it wraps inside the banner, and so do they */
+.banner > div {
+  min-width: 0;
+}
 .banner .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--s2);
   margin-top: var(--s2);
 }

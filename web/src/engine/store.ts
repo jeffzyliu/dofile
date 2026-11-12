@@ -120,14 +120,14 @@ export class FileStore {
   declare opened: Promise<IDBDatabase> | undefined;
   declare sync: null | (() => void);
   declare blocked: boolean;
-  declare onChange: null | (() => void);
+  declare onChange: null | ((row: PendingRow) => void);
   declare onClosed: null | (() => void);
   constructor(factory: IDBFactory | null | undefined) {
     this.factory = factory;
     this.opened = undefined; // the open database, once asked for
     this.sync = null; // tells the live worker to take the journal; null while there is none
     this.blocked = false; // true in a tab that does not own the files (the tab lock): it writes nothing
-    this.onChange = () => {}; // called after every change this page made
+    this.onChange = () => {}; // called after every change this page made, with its journal row (what it changed)
     this.onClosed = null; // the engine client's: called when the browser closed the database under us
   }
 
@@ -191,7 +191,7 @@ export class FileStore {
     });
     sync?.();
     try {
-      this.onChange?.();
+      this.onChange?.(row);
     } catch (e) {
       console.warn(e);
     } // the change is made: a listener that throws does not undo it

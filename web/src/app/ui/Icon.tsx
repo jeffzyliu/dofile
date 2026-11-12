@@ -12,7 +12,8 @@ export const isMac =
   /Mac OS X/.test(globalThis.navigator?.userAgent ?? "");
 
 /** A key chip on a button: `<Key mod k="↩" />` is "⌘ ↩" on a Mac, "Ctrl ↩" elsewhere. A disabled button shows none
- *  (SPEC 1, Glyphs): leave it out there. Hidden from screen readers; the button's aria-keyshortcuts says the key. */
+ *  (SPEC 1, Glyphs): leave it out there. Hidden from screen readers; the button's aria-keyshortcuts says the key. The
+ *  phone layout hides every chip (app.css). */
 export const Key = ({ k, mod = false }: { k: string; mod?: boolean }) => (
   <span class="key" aria-hidden="true">
     {mod ? `${isMac ? "⌘" : "Ctrl"} ${k}` : k}

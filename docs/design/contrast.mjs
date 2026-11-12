@@ -39,6 +39,7 @@ const PAIRS = [
   ['error', 'surface', TEXT, 'error lines in the log, Break button, Delete in menus'],
   ['error', 'surface-2', TEXT, 'rc in the status bar'],
   ['error', 'error-soft', TEXT, 'the error line\'s number'],
+  ['error', 'accent-soft', TEXT, 'the inline rename\'s "already exists" on the open file\'s row'],
   ['surface', 'error', TEXT, 'Break while running'],
   ['on-accent', 'accent-hover', TEXT, 'primary button, hovered'],
   ['surface', 'error-hover', TEXT, 'Break while running, hovered'],

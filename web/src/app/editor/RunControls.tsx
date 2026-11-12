@@ -1,7 +1,8 @@
 // The toolbar's Run, Run selection, Break and Save (docs/design/SPEC.md, sections 3.4 and 5), and the phone's one Run
 // button that Break replaces while a run is on. Step 3 built what the engine states decide (enabled, disabled,
-// aria-disabled, the labels); STEP 4b finishes it: the running time on the phone's Break pill, and anything the editor
-// adds. The actions are editor/commands.ts's (the editor fills them in) and app/engine.ts's.
+// aria-disabled, the labels); step 4b added the running time on the phone's Break pill ("Break" "3.4 s", on Break and
+// "Break (reset)"; editor/words.ts pillTime, with the sizer PILL_WIDEST). The actions are editor/commands.ts's (the
+// editor fills them in) and app/engine.ts's.
 // Each button holds all its labels in one cell (ui/Icon.tsx Labels), so it keeps one size in every engine state, with or
 // without a selection or unsaved edits, and nothing in the toolbar moves (e2e/shell.spec.ts measures it). Keep it so: a
 // new label goes into the button's list, and the pill's time ("Break" "3.4 s") goes in with a sizer of its widest form.
@@ -9,9 +10,11 @@
 // `other-tab-idle` and `other-tab-taking` the buttons stay in place, hidden (app.css), so the bar keeps its height.
 
 import * as eng from "../engine.ts";
-import { activeTab, engine, isolated, tabs } from "../state.ts";
+import { activeTab, engine, isolated, phoneTab, tabs } from "../state.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
+import { since } from "./clock.ts";
 import { editorCommands, selection } from "./commands.ts";
+import { PILL_WIDEST, pillTime } from "./words.ts";
 
 // The play icon says Run and the stop icon says Break, so the state labels are short; the words a screen reader hears
 // start with the shown ones (NAME).
@@ -54,7 +57,9 @@ export function RunControls() {
   const run = runState(),
     brk = breakState(),
     sel = selection.value;
-  const dirty = tabs.value.find((t) => t.path === activeTab.value)?.dirty ?? false;
+  const tab = tabs.value.find((t) => t.path === activeTab.value);
+  const dirty = tab?.dirty ?? false;
+  const text = tab?.kind === "text"; // Save saves a text tab; a .dta tab has nothing to save
   const usable = !run.disabled && !run.busy;
   // new elements for each label (one vnode is not placed twice)
   const play = () => <Icon name="play" />,
@@ -120,12 +125,12 @@ export function RunControls() {
       <button
         type="button"
         class="btn run-ctl"
-        disabled={!activeTab.value}
-        aria-keyshortcuts={activeTab.value ? modShortcut("S") : undefined}
+        disabled={!text}
+        aria-keyshortcuts={text ? modShortcut("S") : undefined}
         onClick={() => editorCommands.save()}
       >
         <Labels
-          at={(activeTab.value ? 0 : 2) + (dirty ? 0 : 1)}
+          at={(text ? 0 : 2) + (dirty ? 0 : 1)}
           labels={[
             <>
               Save{dot()}
@@ -143,7 +148,8 @@ export function RunControls() {
 
 /** The phone's one button (PH, WP 1, WP 2): Run (or "Run 6–7" with a selection, named "Run lines 6–7"), and while a run
  *  is on, Break in its place as a pill. A tap in Break's first 600 ms is ignored, so a double tap on Run doesn't break
- *  the run. Both buttons carry every label either can show, so they have one width and the ⋯ beside them never moves. */
+ *  the run. A tap that counts also shows the Log view, where the Break's countdown and its outcome are (decided at the
+ *  step 4b review, from 4d's: its stopping banner is in the Log view's slot). Both buttons carry every label either can show, so they have one width and the ⋯ beside them never moves. */
 export function PhoneRun() {
   const st = engine.value;
   const running = st.s === "running" || st.s === "breaking" || st.s === "waiting";
@@ -151,6 +157,7 @@ export function PhoneRun() {
     brk = breakState(),
     sel = running ? null : selection.value;
   const range = sel && !run.disabled ? (sel[0] === sel[1] ? `${sel[0]}` : `${sel[0]}–${sel[1]}`) : null;
+  const time = running ? pillTime(since(st.t0)) : "";
   const all = [
     ...RUN.map((l) => (
       <>
@@ -166,12 +173,17 @@ export function PhoneRun() {
       <>
         <Icon name="stop" />
         {l}
+        {l.startsWith("Break") && <span class="pill-time">{time}</span>}
       </>
     )),
     <>
       <Icon name="play" />
       Run {range}
     </>,
+    <>
+      <Icon name="stop" />
+      Break (reset)<span class="pill-time">{PILL_WIDEST}</span>
+    </>, // the sizer: the widest the pill can be
   ];
   if (running) {
     return (
@@ -179,9 +191,11 @@ export function PhoneRun() {
         type="button"
         class={`btn stop${brk.live ? " live" : ""} pill run-ctl`}
         disabled={brk.disabled}
-        aria-label={NAME[brk.label]}
+        aria-label={NAME[brk.label] ?? brk.label}
         onClick={() => {
-          if (Date.now() - st.t0 >= 600) pressBreak();
+          if (Date.now() - st.t0 < 600) return;
+          pressBreak();
+          phoneTab.value = "log"; // Break's countdown, "wait for it" and the outcome show in the Log view
         }}
       >
         <Labels at={RUN.length + 1 + BREAK.indexOf(brk.label)} labels={all} />
@@ -197,7 +211,7 @@ export function PhoneRun() {
       aria-label={name}
       onClick={() => (sel ? editorCommands.runSelection() : editorCommands.runFile())}
     >
-      <Labels at={range ? all.length - 1 : RUN.indexOf(run.label)} labels={all} />
+      <Labels at={range ? all.length - 2 : RUN.indexOf(run.label)} labels={all} />
     </button>
   );
 }

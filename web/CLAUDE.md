@@ -4,7 +4,7 @@ Loaded when work touches `web/`, the web demo: the engine in Pyodide inside a We
 `CLAUDE.md` still applies. What each script and folder does, with times: `web/README.md`. The plan and decisions:
 `docs/phase2-plan.md`. The build plan and status of prototype 1: `docs/prototype1-plan.md` (read it first when picking that work up). The rework of the engine code (step 3.5, done
 and merged with step 3 by pull request #13): `docs/prototype1-step3.5-plan.md`; the state machine's design:
-`docs/prototype1-step3.5-c-design.md`. Biome was added after step 3.5, in the same pull request (`docs/formatting-proposal.md`). How data flows through the engine code, as built: `docs/web-engine-data-flow.md`.
+`docs/prototype1-step3.5-c-design.md`. Biome was added after step 3.5, in the same pull request (`docs/formatting-proposal.md`). How data flows through the engine code, as built: `docs/web-engine-data-flow.md`; the editor page's focus, runs, open files and log links: `docs/web-page-flows.md`.
 The build spec for the pages: `docs/design/SPEC.md` (section 5 holds the machine's transition matrix, which a test checks).
 
 ## Commands
@@ -13,8 +13,8 @@ Run from `web/` (`npm install` once). The wheel is rebuilt by the scripts that n
 
 ```bash
 npm test                  # the engine in Pyodide under Node, the file store, the client, the page's controllers (~70 s)
-npm run dev               # the page, on the LAN too
-npm run e2e               # builds the snapshot and the page, then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min)
+npm run dev               # the site on the LAN too: the landing page at /, the editor at /app/
+npm run e2e               # builds the snapshot and the page, then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min; E2E_PORT=4181 serves the build on another port than 4173, for a second worktree)
 npm run snapshot          # the Pyodide memory snapshot the page starts from; `npm run dev` needs it once, and again after a change to the engine
 npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide (~4 min; --normal: no snapshot; --cases a,b)
 npm run check-numeric     # e()/r() of all 98 Stata 14 programs at full precision (~4 min; the diff: header of scripts/compare_numeric.py)
@@ -22,7 +22,8 @@ npm run check-pytest [-- --ios]        # OpenDTA's unit tests inside Pyodide (~2
 npm run check             # Biome (format, import order, lint errors), then TypeScript
 npm run format            # Biome: fix the layout and the import order, apply the safe lint fixes
 npm run lint:strict       # Biome as CI runs it: warnings fail too (npm run lint: the findings only)
-npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
+npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/ (the mockups, from file: URLs)
+npm run sample            # the sample's data (uv run python sample/make_sample.py) and src/app/sample-files.ts
 ```
 
 ## Rules
@@ -36,8 +37,10 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   `// @ts-expect-error` covers one line: if Biome would split the statement under it, put a `// biome-ignore format:`
   line above. The tests that read source text (`test/imports.test.ts`) must not depend on how a line is wrapped.
 - **The page is Preact with signals, in `src/app/`** (`src/main.tsx` wires it). The state is one module of signals,
-  `src/app/state.ts` (SPEC section 8; types in `src/app/types.ts`); each signal has one owner and is exported
-  `ReadonlySignal`, so a view that assigns one fails `npm run check`. The controllers own most of them and are `.ts` files that
+  `src/app/state.ts` (SPEC section 8; types in `src/app/types.ts`); a signal with one owner is exported
+  `ReadonlySignal`, so a view that assigns one fails `npm run check`, and the others (`tabs`, `activeTab`, `dialog`,
+  `split`, `outputTab`, `phoneTab`, `graphIndex`, `graphFull`, `pickedVar`, `theme`, `layout`, `isolated`) are plain
+  signals that views write. The controllers own most of them and are `.ts` files that
   import no `.tsx`, tested in Node (`test/app.test.ts`): `engine.ts` (the only caller of the state machine, below; the tab
   lock; asking at load unless `client.cached()` finds this build's start files all in the Cache; there is no "downloaded"
   flag), `run.ts` (runs, the log, results, graphs, the after-run calls; it reads no engine state, the engine controller tells
@@ -121,8 +124,8 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   worker and writes nothing (`store.blocked`). Without Web Locks (plain HTTP on a LAN) every tab owns them.
 - **The snapshot start takes Pyodide's runtime from the page's own origin.** `vite.config.ts` copies three files from the
   `pyodide` npm package into `public/pyodide/` (gitignored). `?snapshot=0` keeps the CDN. The build writes
-  `dist/start-files.json` (every start file with its size on disk and its compressed size: `scripts/start-files.ts`) and
-  the compressed total into `dist/index.html` (`<meta name="dofile-engine-bytes">`, which the page reads as `engineBytes`:
+  `dist/app/start-files.json` (every start file with its size on disk and its compressed size: `scripts/start-files.ts`) and
+  the compressed total into `dist/app/index.html` (`<meta name="dofile-engine-bytes">`, which the page reads as `engineBytes`:
   the size is there before any request); it fails if it cannot. The page's `download()` fills the Cache `dofile-snapshot-<built>` from that list, and the worker reads the same Cache for
   everything while it starts (a cache-first `fetch`, the loader from a `blob:` URL): `docs/pyodide-snapshot.md`, "The start
   since prototype 1". `download()` is the Cache's only writer (it checks each file's size against the list); the worker
@@ -143,6 +146,32 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   upstream build; committed so CI and a fresh checkout need no Emscripten build, a choice rather than a limit; rebuild with
   `sh web/wheels/pyreadstat/build.sh`, see its README). `scripts/install-engine.ts` installs them in Node as `worker.ts` does
   in the page.
+
+- **The site's addresses: the landing page is `/`, the commands page `/commands/`, the editor a single-page app under
+  `/app/`.** The editor's location is ONE setting, `scripts/urls.ts` (`EDITOR_BASE`, and `EDITOR_URL`/`SITE_URL` for links
+  across origins); everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL`
+  (`app/env.ts`), and `test/site.test.ts` fails if another source (CSS and JSON too), script, e2e test, config, page or
+  workflow spells the editor's path after a quote, a backquote, `(` or `=`. Never write a root-absolute path to an editor file,
+  nor one joined from pieces. Another path on the same origin is a change of `EDITOR_BASE` alone (the tests compare with the
+  setting). Its own subdomain later is two builds into two folders (the editor with `DOFILE_EDITOR_BASE=/` and `--outDir`, the
+  pages with `DOFILE_EDITOR_URL`, `DOFILE_EDITOR_DIR` and `--outDir`; both builds follow `--outDir`, and the pages' build
+  refuses the editor's folder) plus hand edits to the Wrangler configs, `package.json`, `deploy.yml` and the e2e setup: the
+  exact list, and what does not follow the editor to a new origin (the stored files, the downloaded engine, the sample's mark,
+  the theme), is in `docs/design/SPEC.md`, section 8, "URLs". `npm run build` is two builds:
+  `vite build` (the editor into `dist/app/`, emptying `dist/` first) and `vite build --mode site` (the landing and commands
+  pages into `dist/index.html` and `dist/commands/index.html`, their own assets in `dist/assets/`, and `dist/_headers`, which
+  isolates `/app/*` only; `public/` has no `_headers`). `vite preview` serves all of `dist/` as the host does; the dev server
+  is the editor's with the two pages added at `/` and `/commands/`. The e2e `baseURL` ends in `/app/`: `goto("?test")` is the
+  editor, `goto("/")` the landing page. A missing page is a 404 everywhere (`appType: "mpa"`; `not_found_handling: "none"`).
+- **The landing and commands pages (step 5) are static HTML** (`landing.html`, `commands.html`; the editor is `index.html`).
+  Their code is `src/site/` and imports only `src/site/` and the stylesheets, CSS `@import`s included, and the editor's
+  `index.html` loads none of it (`test/imports.test.ts`): no signals, no store, no
+  tab lock, and no module-preload polyfill. The build fills `{{version}}`, `{{engine-mb}}`, `{{editor-url}}` and the commands list
+  into them (`scripts/site-pages.ts`; the commands come from `src/stata/commands.json`, `npm run commands`); an unknown token
+  fails `test/site.test.ts`, and the e2e tests check the served pages have none left. With scripts off both are complete (the
+  Copy, theme and filter controls are hidden until their script runs). The sample project is `sample/` (do-files, and `data/wages.dta` made by `sample/make_sample.py`
+  with a fixed seed); `npm run sample` rebuilds the data and the generated `src/app/sample-files.ts` that the page loads
+  (`src/app/sample.ts`; a test fails when that file is stale). Under `?test` the first-visit sample is off unless the URL has `?sample`.
 
 ## Python files the page runs (in `src/dofile/`, web demo only)
 

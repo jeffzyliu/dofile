@@ -211,12 +211,22 @@ type FakeStore = {
   onChange: null | (() => void);
   list: () => Promise<FileInfo[]>;
   zip?: () => Promise<Blob>;
+  read: (path: string) => Promise<Uint8Array>;
+  texts: Map<string, string>; // what read() gives; a test sets it
 };
-const fakeStore = (paths: string[] = []): FakeStore => ({
-  blocked: true,
-  onChange: null,
-  list: async () => paths.map((path) => ({ path, dir: false, size: 1, mtime: 1 })),
-});
+const fakeStore = (paths: string[] = []): FakeStore => {
+  const texts = new Map<string, string>();
+  return {
+    blocked: true,
+    onChange: null,
+    list: async () => paths.map((path) => ({ path, dir: false, size: 1, mtime: 1 })),
+    texts,
+    read: async (path) => {
+      if (!texts.has(path)) throw new Error(`${path} not found`);
+      return new TextEncoder().encode(texts.get(path));
+    },
+  };
+};
 const fakeLock = (free = true) => ({
   asked: [] as { steal?: boolean }[],
   async take(o: { steal?: boolean } = {}) {
@@ -264,7 +274,10 @@ function wire({
   store = fakeStore(files);
   lock = fakeLock(free);
   client.isCached = cached;
-  connectFiles(store as Parameters<typeof connectFiles>[0], { persist: async () => true, persisted: async () => true });
+  connectFiles(store as unknown as Parameters<typeof connectFiles>[0], {
+    persist: async () => true,
+    persisted: async () => true,
+  });
   engine.connectRun(handlers);
   engine.connectEngine({ client: transport ?? client, lock, snapshot, manual, graceMs, canInterrupt });
 }
@@ -564,7 +577,7 @@ test("Stop download declines; Run then asks for a run, and the run starts with t
   assert.deepEqual(S.engine.value, { s: "declined" });
   assert.equal(client.dl.signal.aborted, true);
   assert.equal(S.dialog.value, null);
-  assert.equal(await runCode("display 1", FILE), null);
+  const queuedRun = runCode("display 1", FILE); // settles once the run has run
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
   engine.start();
@@ -580,6 +593,8 @@ test("Stop download declines; Run then asks for a run, and the run starts with t
   assert.deepEqual([client.run1.args.code, client.run1.args.fresh_locals], ["display 1", true]);
   assert.deepEqual(client.calls.at(-1), ["memory", undefined], "engine-ready all the same");
   assert.equal(logItems().find((i) => i.t === "runhead")!.first, true);
+  client.run1.done.ok(result());
+  assert.equal((await queuedRun)?.rc, 0, "the queued run's promise settles with its result");
 });
 
 test("a failed download is `failed` (reason download) with no worker; a failed start is `failed` with its cause; a second crash is `failed-twice`", async () => {
@@ -1119,7 +1134,7 @@ test("the page's store is blocked until the tab lock answers", async () => {
   await assert.rejects(store.write("a.do", new Uint8Array(1)), /another tab/);
 });
 
-test("runCode while a run is on does nothing; a queued run is dropped by Not now and by a failed start", async () => {
+test("runCode while a run is on does nothing; a queued run is dropped by Not now and by a failed start, and its promise then settles with null", async () => {
   await readyEngine();
   const first = runCode("a", FILE);
   assert.equal(await runCode("b", FILE), null);
@@ -1130,9 +1145,14 @@ test("runCode while a run is on does nothing; a queued run is dropped by Not now
 
   await load(); // nothing cached: the prompt
   engine.decline();
-  assert.equal(await runCode("queued", FILE), null);
+  let pending: Promise<unknown> | null = runCode("queued", FILE);
+  let settled = false;
+  pending.then(() => (settled = true));
+  await Promise.resolve();
+  assert.equal(settled, false, "a queued run's promise waits for its fate");
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   engine.decline();
+  assert.equal(await pending, null, "Not now: dropped, null");
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
@@ -1141,11 +1161,13 @@ test("runCode while a run is on does nothing; a queued run is dropped by Not now
 
   await load();
   engine.decline();
-  await runCode("queued", FILE);
+  pending = runCode("queued", FILE);
   assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
   engine.start();
   await begin();
   client.worker.reply({ type: "start-failed", reason: "unknown", detail: "no" });
+  assert.equal(await pending, null, "the failed start: dropped, null");
+  pending = null;
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
@@ -1397,7 +1419,6 @@ test("runCommand: a command that does not run is refused (not in history, so the
   writable(S.history).value = [];
   const queued = runCommand("use wages");
   assert.equal(queued.accepted, true);
-  assert.equal(await queued.done, null, "nothing ran now");
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   assert.deepEqual(S.history.value, ["use wages"]);
   assert.equal(runCommand("summarize").accepted, false, "asking: refused");
@@ -1411,6 +1432,7 @@ test("runCommand: a command that does not run is refused (not in history, so the
     "the queued command ran once the engine was ready",
   );
   client.run1.done.ok(result());
+  assert.equal((await queued.done)?.rc, 0, "a queued command's done settles with its result once it has run");
   expectDrops([{ type: "run", row: "asking", why: "not-valid" }]);
 });
 
@@ -1482,6 +1504,25 @@ test("addFileGraph: the same .png opened again replaces its entry (new image, sa
   assert.equal(S.graphs.value[S.graphIndex.value], again);
 });
 
+test("a run's graphs take the run's theme, whatever colors their commands name", async () => {
+  await readyEngine();
+  S.theme.value = "dark";
+  const done = runCode("x", FILE);
+  client.run1.done.ok(
+    result({
+      images: ["A", "B"],
+      graph_commands: ["scatter y x", "scatter y x, mcolor(black)"],
+      graph_lines: [1, 2],
+    }),
+  );
+  await done;
+  assert.deepEqual(
+    S.graphs.value.map((g) => g.theme),
+    ["dark", "dark"],
+  );
+  S.theme.value = "system";
+});
+
 test("addFileGraph: a .png gets the next number after the run's graphs; graphs keep the last 20, so look one up by n", async () => {
   await readyEngine();
   const done = runCode("x", FILE);
@@ -1516,6 +1557,71 @@ test("the storage banner: once per visit, when persisted() is false and the file
   setUp(); // a new visit
   await afterRun([{ name: "out.csv", status: "created", bytes: 1 }]);
   assert.deepEqual(banners(), [{ b: "storage" }], "a run's files count too");
+});
+
+test("a run that rewrites an open file: the editor follows it (ranOver); the banner when it keeps the tab's text: edits, or a version that is not text; nothing for the same text", async () => {
+  setUp();
+  store.blocked = false;
+  const { editorCommands } = await import("../src/app/editor/commands.ts");
+  const calls: string[] = [];
+  const kept = { reload: editorCommands.reload, ranOver: editorCommands.ranOver };
+  // the editor's answers, as Editor.tsx gives them: the same text again, a clean tab shown, edits (or not text) kept
+  const answers: Record<string, "same" | "shown" | "kept"> = {
+    "t.csv": "shown",
+    "out.log": "kept",
+    "same.log": "same",
+    "bin.csv": "kept",
+  };
+  editorCommands.reload = (path, text) => calls.push(`reload ${path} ${text}`);
+  editorCommands.ranOver = (path, text) => {
+    calls.push(`ranOver ${path} ${text}`);
+    return answers[path];
+  };
+  const read = store.read;
+  store.read = async (path) => (path === "bin.csv" ? new Uint8Array([0x9e, 0xff, 0x00]) : read(path));
+  try {
+    writable(S.tabs).value = [
+      { path: "t.csv", kind: "text", dirty: false },
+      { path: "out.log", kind: "text", dirty: true },
+      { path: "same.log", kind: "text", dirty: true },
+      { path: "bin.csv", kind: "text", dirty: false },
+      { path: "d.dta", kind: "dta", dirty: false },
+    ];
+    for (const p of ["t.csv", "out.log", "same.log", "d.dta", "other.csv"]) store.texts.set(p, `new ${p}`);
+    await afterRun([
+      { name: "t.csv", status: "modified", bytes: 9 },
+      { name: "out.log", status: "modified", bytes: 9 },
+      { name: "same.log", status: "modified", bytes: 9 },
+      { name: "bin.csv", status: "modified", bytes: 3 },
+      { name: "d.dta", status: "modified", bytes: 9 },
+      { name: "other.csv", status: "created", bytes: 9 },
+      { name: "gone.do", status: "removed", bytes: 0 },
+    ]);
+    assert.deepEqual(calls.sort(), [
+      "ranOver bin.csv null", // not text: null, not left alone
+      "ranOver out.log new out.log",
+      "ranOver same.log new same.log",
+      "ranOver t.csv new t.csv",
+    ]);
+    assert.deepEqual(
+      banners()
+        .map((b) => b.path)
+        .sort(),
+      ["bin.csv", "out.log"],
+      "a banner where the editor kept its text; none for the same text or a clean tab shown",
+    );
+    // a store that cannot be read: nothing is known of the run's version, so nothing is done
+    calls.length = 0;
+    store.read = async () => {
+      throw new Error("the store failed");
+    };
+    await afterRun([{ name: "t.csv", status: "modified", bytes: 9 }]);
+    assert.deepEqual(calls, []);
+  } finally {
+    Object.assign(editorCommands, kept);
+    store.read = read;
+    writable(S.tabs).value = [];
+  }
 });
 
 test("showToast, holdToast; addBanner replaces one of a kind and path, dismiss removes it", async () => {
@@ -1590,7 +1696,7 @@ test("Download all: a store that cannot make the zip adds one banner (a second f
   try {
     assert.equal(await downloadAll(), false);
     assert.deepEqual(banners(), [{ b: "download-failed" }]);
-    assert.equal(S.toast.value, null, "a toast only confirms (SPEC 3.10)");
+    assert.equal(S.toast.value, null, "no toast: the failure offers Try again, so it is a banner (SPEC 3.10)");
     assert.equal(await heard(), "Your files couldn't be downloaded");
     assert.match(String(warn.mock.calls[0].arguments[0]), /the database is closed/);
     assert.equal(await downloadAll(), false); // "Try again", failing again
@@ -1647,6 +1753,7 @@ test("setDirty sets one tab's dot; decodeText takes strict UTF-8 only", () => {
   assert.equal(decodeText(new TextEncoder().encode("café\n")), "café\n");
   assert.equal(decodeText(Uint8Array.from([0x63, 0x61, 0x66, 0xe9])), null, "Latin-1 is not text");
   assert.equal(decodeText(Uint8Array.from([0xef, 0xbb, 0xbf, 0x61])), "a", "a leading BOM is dropped, as before");
+  assert.equal(decodeText(Uint8Array.from([0xef, 0xbb, 0xbf, 0x61]), true), "\uFEFFa", "or kept, for the editor");
 });
 
 // ---- the second review of step 3 ----
@@ -1888,4 +1995,63 @@ test("the phone keyboard where the browser shrinks the layout viewport: open whi
   resize(390 - KEYBOARD - 50, 800); // then the keyboard in landscape
   assert.equal("keyboard" in root.dataset, true);
   stop();
+});
+
+// ---- the review of the step 4 join ----
+
+test("J1: pasted lines: a line cut because another tab took the engine stops the rest; after a take-over and a later run, no leftover line runs", async () => {
+  const { runOne } = await import("../src/app/log/pasterun.ts");
+  const { runInTurn, inTurnWords } = await import("../src/app/log/paste.ts");
+  await readyEngine();
+  let ended: unknown = "not yet";
+  const pasted = runInTurn(["display 1", "erase results.csv"], runOne).then((r) => {
+    ended = r;
+    return r;
+  });
+  state("running");
+  assert.equal(client.run1.args.code, "display 1");
+  engine.lost(); // another tab takes the engine: the line's run is cut (rc 9998, kind "stopped"), and lastRun is not written
+  state("other-tab-idle");
+  await sleep(20);
+  // "Use dofile in this tab", the engine starts again, and the visitor runs something
+  engine.takeOver();
+  await tick();
+  await begin();
+  client.worker.reply({ type: "started" });
+  state("ready");
+  const next = runCommand("display 2");
+  assert.equal(next.accepted, true);
+  client.run1.done.ok(result());
+  await next.done;
+  await sleep(20);
+  const sent = client.workers.flatMap((w) => w.runs.map((r) => r.args.code));
+  assert.deepEqual(sent, ["display 1", "display 2"], "the leftover pasted line is never sent");
+  assert.deepEqual(ended, { total: 2, ran: 1, stop: { line: 1, why: "taken" } });
+  assert.equal(
+    inTurnWords(await pasted),
+    "1 of 2 pasted lines not run: another tab took over the engine during line 1",
+  );
+});
+
+test("J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)", async () => {
+  await readyEngine();
+  store.blocked = false;
+  const { editorCommands } = await import("../src/app/editor/commands.ts");
+  const kept = { ranOver: editorCommands.ranOver, reload: editorCommands.reload };
+  const fail = () => {
+    throw new Error("the editor failed");
+  };
+  Object.assign(editorCommands, { ranOver: fail, reload: fail });
+  try {
+    writable(S.tabs).value = [{ path: "t.csv", kind: "text", dirty: false }];
+    store.texts.set("t.csv", "new");
+    const done = runCode("x", FILE);
+    client.run1.done.ok(result({ files: [{ name: "t.csv", status: "modified", bytes: 3 }] }));
+    const settled = await Promise.race([done.then(() => "settled"), sleep(100).then(() => "pending")]);
+    assert.equal(settled, "settled");
+    state("ready");
+  } finally {
+    Object.assign(editorCommands, kept);
+    writable(S.tabs).value = [];
+  }
 });

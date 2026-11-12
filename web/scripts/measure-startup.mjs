@@ -1,5 +1,5 @@
 // Time until the web demo's engine is ready, normal boot vs memory snapshot, by network speed, for a first visit (new browser
-// context: cold caches) and a return visit (a reload in the same context: warm). Chromium, the built page (web/dist: run
+// context: cold caches) and a return visit (a reload in the same context: warm). Chromium, the built editor (web/dist/app: run
 // `npm run build` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes docs/img/startup-times.json,
 // which docs/img/make-startup-times.mjs draws.
 //
@@ -19,6 +19,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
 import { chromium } from "@playwright/test";
+import { EDITOR_BASE } from "./urls.ts";
 
 const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
@@ -35,7 +36,7 @@ const NETS = {
 const nets = arg("--nets", "unthrottled,100,30")
   .split(",")
   .map((k) => ({ key: k, ...NETS[k] }));
-if (!existsSync(join(dist, "index.html")))
+if (!existsSync(join(dist, EDITOR_BASE, "index.html")))
   throw new Error("no web/dist: run `npm run build` (after `npm run snapshot`)");
 
 // ---- the host ----------------------------------------------------------------------------------------------------------
@@ -81,7 +82,7 @@ const server = createServer((req, res) => {
   const { raw, br } = body(path);
   const useBr = br && /\bbr\b/.test(req.headers["accept-encoding"] ?? "");
   const payload = useBr ? br : raw;
-  const hashed = url.pathname.startsWith("/assets/");
+  const hashed = url.pathname.includes("/assets/");
   res.writeHead(200, {
     "Content-Type": TYPES[ext] ?? "application/octet-stream",
     "Content-Length": payload.length,
@@ -140,7 +141,7 @@ async function visit(mode, net) {
   page.on("console", (m) => {
     if (m.text().includes("[dofile] snapshot start")) notes.push(m.text().replace("[dofile] snapshot start: ", ""));
   });
-  const url = `${base}/?test${mode === "snapshot" ? "" : "&snapshot=0"}`; // the snapshot is the page's default; ?test: its state, for a failure's message
+  const url = `${base}${EDITOR_BASE}?test${mode === "snapshot" ? "" : "&snapshot=0"}`; // the snapshot is the page's default; ?test: its state, for a failure's message
   served.bytes = 0;
   await page.goto(url);
   const cold = await readyIn(page);
@@ -187,7 +188,7 @@ for (const m of modes)
     c.medianCold = median(c.cold);
     c.medianWarm = median(c.warm);
   }
-const list = JSON.parse(readFileSync(join(dist, "start-files.json"), "utf8")); // the snapshot's manifest.json is not deployed
+const list = JSON.parse(readFileSync(join(dist, EDITOR_BASE, "start-files.json"), "utf8")); // the snapshot's manifest.json is not deployed
 writeFileSync(
   out,
   JSON.stringify(

@@ -195,6 +195,46 @@ test("the import graph: engine/ never imports app/; no .ts file imports a .tsx; 
   }
 });
 
+test("the import graph: the landing and commands pages (src/site/) import nothing of the editor's, and the editor nothing of theirs", () => {
+  const site = SRC.filter((f) => f.startsWith("src/site/"));
+  assert.ok(site.length >= 4, "src/site/ has the pages' scripts");
+  for (const f of site) {
+    for (const i of importsOf(f)) {
+      assert.ok(i.file, `${f} imports the package "${i.from}": the pages load their own two small scripts only`);
+      assert.match(i.file, /^src\/(site|styles)\//, `${f} imports ${i.file}: only src/site/ and the stylesheets`);
+    }
+  }
+  for (const f of SRC.filter((f) => !f.startsWith("src/site/")))
+    for (const i of importsOf(f)) assert.ok(!i.file?.startsWith("src/site/"), `${f} imports ${i.file}`);
+  // the pages' HTML loads only their own entries
+  for (const page of ["landing.html", "commands.html"]) {
+    const scripts = [...readFileSync(join(web, page), "utf8").matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    assert.ok(scripts.length > 0, page);
+    for (const s of scripts) assert.match(s, /^\/src\/site\/[a-z-]+\.ts$/, `${page} loads ${s}`);
+  }
+  // and the editor's HTML loads nothing of theirs: no script and no stylesheet under src/site/
+  const editorHtml = readFileSync(join(web, "index.html"), "utf8");
+  const loads = [...editorHtml.matchAll(/<(?:script|link)[^>]*\b(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(loads.includes("/src/main.tsx"), "index.html loads the editor's entry");
+  for (const l of loads) assert.ok(!l.includes("/site/"), `index.html loads ${l}`);
+  // CSS: an @import or url() of a stylesheet in src/site/ only from src/site/; src/site/'s CSS only of src/site/ and src/styles/
+  const css = files("src", /\.css$/);
+  assert.ok(css.includes("src/site/site.css") && css.includes("src/styles/ui.css"), "the walk found the stylesheets");
+  for (const f of css) {
+    const text = readFileSync(join(web, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const refs = [...text.matchAll(/@import\s+(?:url\()?\s*["']?([^"')\s;]+)|url\(\s*["']?([^"')\s]+)/g)]
+      .map((m) => m[1] ?? m[2])
+      .filter((r) => !/^(data:|https?:|#)/.test(r));
+    for (const r of refs.filter((r) => r.endsWith(".css"))) {
+      const target = relative(web, resolve(web, dirname(f), r));
+      if (f.startsWith("src/site/")) assert.match(target, /^src\/(site|styles)\//, `${f} imports ${target}`);
+      else assert.ok(!target.startsWith("src/site/"), `${f} imports ${target}`);
+    }
+  }
+});
+
 test("TypeScript as Node runs it: only syntax that can be erased, and no JSDoc types", () => {
   const options = JSON.parse(readFileSync(join(web, "tsconfig.json"), "utf8")).compilerOptions;
   assert.deepEqual(
@@ -409,12 +449,19 @@ test("no counter or flag outside the machine decides a state: the old ones are g
   // What is left of those names. The machine's own: the `queued` field of its states, and `resetAt` of `breaking`, which
   // views read. The controller's handle on the Break timer, which decides no state. And in the worker, `was`, a local
   // name in saveRun for the files as they were before a run.
+  // And step 4b's clock (app/editor/clock.ts), which reads `resetAt` of `breaking` for the status bar's "resets in 4 s".
   assert.deepEqual(Object.keys(found).sort(), [
+    "src/app/editor/clock.ts",
     "src/app/engine.ts",
+    "src/app/states/banners.tsx", // reads `resetAt` of `breaking` for the Break countdown
     "src/app/types.ts",
     "src/engine/machine.ts",
     "src/engine/worker.ts",
   ]);
+  assert.equal(
+    count(source("src/app/editor/clock.ts", true), gone),
+    count(source("src/app/editor/clock.ts", true), /\bresetAt\b/),
+  );
   assert.equal(
     count(source("src/engine/worker.ts", true), gone),
     count(source("src/engine/worker.ts", true), /\bwas\b/),
@@ -422,6 +469,10 @@ test("no counter or flag outside the machine decides a state: the old ones are g
   assert.match(source("src/engine/worker.ts"), /const was = new Map\(before\.map/);
   assert.equal(count(source(ENGINE, true), gone), count(source(ENGINE, true), /\b(breakTimer|resetAt|queued)\b/));
   assert.equal(count(source("src/app/types.ts", true), gone), count(source("src/app/types.ts", true), /\bresetAt\b/));
+  assert.equal(
+    count(source("src/app/states/banners.tsx", true), gone),
+    count(source("src/app/states/banners.tsx", true), /\bresetAt\b/),
+  );
   assert.equal(
     count(source("src/engine/machine.ts", true), gone),
     count(source("src/engine/machine.ts", true), /\b(queued|resetAt)\b/),

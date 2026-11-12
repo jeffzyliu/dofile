@@ -61,7 +61,7 @@ flowchart LR
   PER -->|"start-worker, end-worker, send-run, interrupt"| LIFE
   PER -->|"start-break-timer, cancel-break-timer"| TM
   PER -->|"show-dialog, close-dialog, add-reset-banner, say"| SIG
-  PER -->|"send-run began and log, end-run, engine-ready, engine-gone"| RUN
+  PER -->|"send-run began and log, end-run, drop-run, engine-ready, engine-gone"| RUN
   PER -->|"warn"| CON
   RUN -->|"writes what a run leaves"| SIG
 
@@ -273,6 +273,7 @@ not events.
 | Break timer | `start-break-timer {n, ms}` | `setTimeout` | `break-timeout` |
 | Break timer | `cancel-break-timer` | `clearTimeout` | none |
 | `web/src/app/run.ts` | `end-run {result}` | hand the result over. Always the last effect of its step. | none |
+| `web/src/app/run.ts` | `drop-run` | settle the queued run's promise with null (the handler `dropped`): the run will not run. Added by `transition()` itself (`dropRun`), as the last effect of any step that lets go of the queued run without `send-run`: "Not now", "Stop download", a failed start, the lock lost (added after step 3.5, in step 4) | none |
 | `web/src/app/run.ts` | `engine-ready` | ask `memory` (today `web/src/app/run.ts:37-39`) | none |
 | `web/src/app/run.ts` | `engine-gone` | clear `results`, `macros`, `data`, `rows`, `memory`, `lastRun`, `sessionRuns` (today `web/src/app/run.ts:30-36`). This is the plan's "the engine was replaced". | none |
 | Signals (`web/src/app/state.ts`) | `show-dialog` | write `dialog` | none |

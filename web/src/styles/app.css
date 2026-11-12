@@ -52,9 +52,6 @@ body {
     ) {
     font-size: max(16px, 1em);
   }
-  .cmdline .placeholder {
-    font-size: 16px;
-  } /* the command line's stand-in, at the size its field will have */
 }
 
 /* The toolbar keeps one size: each button holds all its labels (RunControls.tsx), and in other-tab the run buttons keep
@@ -218,6 +215,7 @@ body {
   border: 0;
   border-radius: 0;
 }
+.app[data-layout="phone"] .files-pane > .pane-head,
 .app[data-layout="phone"] .editor-pane > .pane-head,
 .app[data-layout="phone"] .log-pane > .pane-head {
   display: none;
@@ -240,15 +238,6 @@ body {
   color: var(--ink);
   font-weight: var(--w-bold-ui);
 }
-.cmdline .placeholder {
-  margin: 0;
-  padding: var(--s1) var(--s2);
-  flex: 1;
-}
-.cmdline .placeholder b {
-  display: inline;
-  margin-right: var(--s2);
-}
 
 /* the editor's place in the Editor pane: hidden, not unmounted, while a .dta tab shows its view (App.tsx) */
 .editor-slot {
@@ -268,4 +257,828 @@ body {
   bottom: auto;
   top: calc(var(--vv-top) + var(--vv-height) - var(--s7) - var(--s2));
   transform: translate(-50%, -100%);
+}
+
+/* no key chips or key hints on a phone (the shortcuts still work with a keyboard): a chip (ui/Icon.tsx Key) is
+   aria-hidden, its control's aria-keyshortcuts says the key; a menu's key hint (ui/Menu.tsx key-hint: "Rename F2") is
+   only hidden from sight, so the item's name keeps it; the Results row's "↵ Copy" goes (a tap copies, and the toast
+   says "Copied"). The desktop's sizes do not change: the phone shows neither the toolbar nor its chips. */
+.app[data-layout="phone"] .key,
+.app[data-layout="phone"] .rs .act .hint {
+  display: none;
+}
+.app[data-layout="phone"] .menu .key-hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Step 4c: graph, data, results (app/output/). Used here and nowhere else: the Output tabs, the full-size graph view and
+   a .dta file's tab. The classes of ui.css (.graph-card, .thumb, .facts, .t, .grid, .rs, .empty ...) are used as drawn. */
+
+/* a plot drawn dark (plot_theme "dark") sits on a dark card: OQ-21, the card follows the plot's theme. The colour is
+   OpenDTA's dark scheme's background (graphics/scheme.py "opendta_dark"), so the card melts into the picture's edge. */
+.graph-card[data-theme="dark"] {
+  background: var(--graph-card-dark);
+}
+
+/* the tabs scroll inside their pane (the pane body does not scroll) */
+.out-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.out-scroll .scroll-x,
+.dta-view .scroll-x,
+.grid-wrap {
+  overflow-x: auto;
+}
+.grid-wrap {
+  padding: 0 var(--s3) var(--s3);
+}
+.rs .mat .grid-wrap {
+  padding: 0;
+}
+.out-scroll .note,
+.dta-view .note {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.out-scroll .note code,
+.dta-view .note code {
+  color: var(--ink);
+}
+
+.subhead h3 {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  margin: 0;
+} /* Browse is a heading that looks like the sub-head it is */
+
+/* a button that looks like a link: "Show 50 more", a matrix's View and Hide */
+.link-btn {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.link-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+  text-decoration: none;
+}
+
+/* Data: the filter field, text cells, a cut cell */
+input.filter {
+  display: block;
+  width: calc(100% - 2 * var(--s3));
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+input.filter::placeholder {
+  color: var(--muted);
+}
+.grid td.str {
+  text-align: left;
+}
+.grid td.open {
+  white-space: pre-wrap;
+  max-width: 60ch;
+}
+.cell-cut {
+  font: inherit;
+  text-align: inherit;
+}
+.cell-cut.open {
+  display: block;
+  max-height: 16em;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Graph: the foot (thumbnails, title, links) wraps in a narrow pane */
+.graph-foot {
+  flex-wrap: wrap;
+}
+.thumbs {
+  display: flex;
+  gap: var(--s2);
+  margin: 0;
+  border: 0;
+  padding: 3px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.thumb {
+  flex: none;
+  padding: 0;
+}
+.foot-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the full-size graph view: over the whole page, under the toast and the menus (tokens.css, stacking) */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--ink);
+}
+.viewer:focus-visible {
+  box-shadow: none;
+  outline: none;
+} /* it holds the focus for the keys and shows no ring around the page */
+.viewer .vhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+.viewer .vtitle {
+  font-weight: var(--w-bold-ui);
+}
+.viewer .vsaid {
+  color: var(--ok);
+}
+.viewer .vbody {
+  flex: 1;
+  display: flex;
+  gap: var(--s3);
+  padding: var(--s3);
+  min-height: 0;
+}
+.viewer .vbody .graph-card {
+  flex: 1;
+  min-width: 0;
+}
+.viewer .strip {
+  width: 76px;
+  overflow-y: auto;
+}
+.viewer .strip .thumbs {
+  flex-direction: column;
+  overflow-x: visible;
+}
+.viewer .strip .thumb {
+  width: 66px;
+  height: 48px;
+}
+.viewer .vfoot {
+  display: none;
+}
+/* the phone's full-screen graph (WP 6): the strip under the picture, Previous and Next at the foot */
+@media (max-width: 699.98px) {
+  .viewer .vbody {
+    flex-direction: column;
+  }
+  .viewer .strip {
+    width: auto;
+    overflow-y: visible;
+    overflow-x: auto;
+  }
+  .viewer .strip .thumbs {
+    flex-direction: row;
+    justify-content: center;
+  }
+  .viewer .vfoot {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s2);
+    padding: var(--s2) var(--s3);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .viewer .vfoot .btn {
+    justify-content: center;
+    min-height: 44px;
+  }
+  .viewer .vclose .key {
+    display: none;
+  } /* a phone has no Esc */
+}
+
+/* a .dta file's tab: two bars, then the variables (P/.dta) */
+.dta-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dta-view .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.dta-view .bar b {
+  color: var(--ink);
+}
+.dta-view .bar .cmd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: var(--log) / 1.4 var(--font-mono);
+  color: var(--ink);
+}
+.dta-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* a finger: rows and the controls in them are 44 px (SPEC section 1) */
+@media (pointer: coarse) {
+  .rs .row td,
+  .rs .grp td,
+  .out-scroll .t td,
+  .dta-view .t td {
+    height: 44px;
+  }
+  .rs .val {
+    display: block;
+    padding-block: 11px;
+  }
+  .rs .fold,
+  .t .var,
+  .link-btn {
+    padding-block: 11px;
+  }
+  .cell-cut {
+    min-height: 44px;
+  }
+}
+
+/* forced colors: the marks that are fills or shadows get a system colour (the ring of a focused value is ui.css's) */
+@media (forced-colors: active) {
+  .thumb.on {
+    outline: 2px solid Highlight;
+  }
+  .grid td.picked {
+    border-bottom: 1px solid Highlight;
+  }
+  .rs .focusrow td:first-child {
+    border-left: var(--bar) solid Highlight;
+  }
+}
+
+/* Step 4a: files and tabs (app/files/). The tree, the dropzone and the tabs are ui.css's; this block adds the inline
+   rename (DS-7), the link buttons of the dropzone, the drop target (OQ-16), the bars over a .csv, .tsv or .log
+   (.filebar; 4c's .dta bars may share it) and the phone's file switcher. */
+.files-body {
+  flex: 1;
+  overflow: auto;
+}
+.files li {
+  cursor: default;
+}
+.files li .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.files li .size {
+  flex: none;
+}
+/* the inline rename: the name becomes a field; a name that cannot be used keeps it open, with the reason under it */
+.files li.renaming {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.rename-field {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  margin: -2px 0;
+}
+.rename-field:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.rename-field[aria-invalid="true"] {
+  border-color: var(--error);
+}
+.rename-field[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 1px var(--error);
+}
+.rename-problem {
+  flex-basis: 100%;
+  white-space: normal;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--error);
+}
+/* Upload, New .do file, Download all: buttons that read as links */
+.files-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+.files-link:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  opacity: var(--disabled-opacity);
+}
+.dropzone .files-link {
+  margin-top: var(--s1);
+}
+/* a finger: the dropzone's and the foot's links are 44 px high (SPEC section 1) */
+@media (pointer: coarse) {
+  .files-link {
+    min-height: 44px;
+  }
+  .dropzone .files-link {
+    margin-top: 0;
+  }
+}
+/* the drop target: a drag with files over the Files pane */
+.files-pane[data-drop] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.files-pane[data-drop] .dropzone {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+/* the editor's tabs: the pane head scrolls them sideways rather than grow */
+.file-tabs {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.file-tabs .tab {
+  cursor: default;
+}
+/* the bars over a .csv, .tsv or .log (P/.csv, P/.log) */
+.filebar {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s3);
+  min-height: calc(var(--control) + var(--s2));
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  flex: none;
+}
+.filebar b {
+  color: var(--ink);
+}
+.filebar .what,
+.filebar .command {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filebar .command {
+  font: var(--code) / 1.4 var(--font-mono);
+  color: var(--ink);
+}
+/* in place of the command, the reason there is none (a name a command can't hold): it wraps */
+.filebar .why,
+.dta-view .bar .why {
+  min-width: 0;
+  color: var(--ink);
+}
+/* the phone's top bar title on the Editor view: the open file and ▾, as wide as the title in every state, so the top
+   bar's boxes never move; the title clips, so the focus ring is drawn inside */
+.file-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+}
+.file-switcher:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.file-switcher .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-switcher .dot,
+.switch-item .dot {
+  color: var(--accent);
+}
+.file-switcher .ico {
+  color: var(--muted);
+}
+.switch-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+@media (forced-colors: active) {
+  /* a system color is kept in forced colors, so no forced-color-adjust (it is inherited: the rows would lose theirs) */
+  .files-pane[data-drop],
+  .files-pane[data-drop] .dropzone {
+    border-color: Highlight;
+  }
+  .files-pane[data-drop] {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .rename-field {
+    border-color: Highlight;
+  }
+  .rename-field[aria-invalid="true"] {
+    border: 2px solid Mark;
+  }
+  .filebar {
+    border-bottom-color: CanvasText;
+  }
+}
+
+/* Step 4b: the editor, the log, the command line, the status bar and the phone's strip (app/editor/, app/log/). The log's
+   line kinds (.echo, .err, .hint, .note, .runhead, .head, .glink, .jump) and the editor's tokens (.k .s .c .m .num) are
+   ui.css's; this block styles CodeMirror on the tokens, the editor's line marks (ui.css draws them on .code .ln; here
+   on CodeMirror's lines), a .csv's columns and a .log's lines in the editor, the log's buttons, Find, the banner art,
+   the phone's strip, inline graphs and hint block, and the command line's height on a phone, which places the toast. */
+.editor-cm {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.editor-cm .cm-editor {
+  flex: 1;
+  min-height: 0;
+  font: var(--code) / 1.6 var(--font-mono);
+  color: var(--ink);
+  background: var(--surface);
+}
+.editor-cm .cm-editor.cm-focused {
+  outline: 2px solid transparent; /* shown in forced colors, where the box-shadow is not */
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.editor-cm .cm-scroller {
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+.editor-cm .cm-content {
+  padding: var(--s2) 0;
+  caret-color: var(--ink);
+}
+.editor-cm .cm-cursor {
+  border-left: 2px solid var(--ink);
+}
+.editor-cm .cm-gutters {
+  background: var(--surface);
+  color: var(--muted);
+  border: 0;
+}
+.editor-cm .cm-lineNumbers .cm-gutterElement {
+  min-width: 4ch;
+  padding: 0 1.5ch 0 10px;
+}
+.editor-cm .cm-activeLineGutter {
+  background: transparent;
+  color: var(--ink);
+}
+.editor-cm .cm-selectionBackground,
+.editor-cm .cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.editor-cm .cm-sel-line {
+  background: var(--accent-soft);
+}
+/* the lines a run is running: the accent bar and bold number; the error line: the red bar and tint, bold number */
+.editor-cm .cm-run-line {
+  box-shadow: inset var(--bar) 0 0 var(--accent);
+}
+.editor-cm .cm-gutterElement.cm-run-n {
+  color: var(--accent);
+  font-weight: var(--w-bold-mono);
+  box-shadow: inset var(--bar) 0 0 var(--accent);
+}
+.editor-cm .cm-err-line {
+  background: var(--error-soft);
+}
+.editor-cm .cm-gutterElement.cm-err-n {
+  color: var(--error);
+  font-weight: var(--w-bold-mono);
+  background: var(--error-soft);
+  box-shadow: inset var(--bar) 0 0 var(--error);
+}
+/* a .csv's columns (P/.csv) and a .log's lines (P/.log), in the editor */
+.csv-c0 {
+  color: var(--ink);
+}
+.csv-c1 {
+  color: var(--accent);
+}
+.csv-c2 {
+  color: var(--tok-string);
+}
+.csv-c3 {
+  color: var(--tok-macro);
+}
+.csv-c4 {
+  color: var(--warn);
+}
+.csv-d {
+  color: var(--muted);
+}
+.lg-echo {
+  font-weight: var(--w-bold-mono);
+}
+.lg-err {
+  color: var(--error);
+  font-weight: var(--w-bold-mono);
+}
+.lg-hint,
+.lg-note {
+  color: var(--muted);
+}
+/* no file open: the editor's place says so, and takes the focus the editor would */
+.editor-empty {
+  flex: 1;
+  padding: var(--s4) var(--s3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.editor-empty:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  outline: 2px solid transparent;
+}
+
+/* the log's buttons: the graph link, Go to line, a hint's help link */
+.log button.glink {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--accent);
+  background: var(--surface);
+  cursor: pointer;
+}
+.log button.jump,
+.log button.help-link,
+.phone-strip button.jump {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+.log button.help-link {
+  font-family: var(--font-mono);
+  font-size: inherit;
+}
+@media (hover: hover) {
+  .log button.glink:hover {
+    background: var(--accent-soft);
+  }
+}
+.log mark {
+  background: var(--warn-soft);
+  color: inherit;
+  border-radius: 2px;
+}
+.log mark.on {
+  outline: 2px solid var(--warn);
+}
+/* Find: a field over the log, kept in view while the log scrolls */
+.findbar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.findbar .field {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.findbar .count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 6ch;
+}
+/* the banner B2 (book+drop+skew): each line slanted, moved right by its height above the last, so the strokes join */
+.log .head .art {
+  line-height: 1.1;
+}
+.log .head .art > .art-skew {
+  display: block;
+  width: max-content;
+  transform: translateX(calc(var(--k) * 0.55em)) skewX(-12deg);
+}
+.art-ink {
+  color: var(--accent);
+}
+.art-drop {
+  text-shadow: 1px 1px 0 var(--border-strong);
+}
+
+/* the phone's Break pill: its time after a rule (PH?r) */
+.pill-time {
+  margin-left: var(--s2);
+  padding-left: var(--s2);
+  border-left: 1px solid color-mix(in srgb, currentColor 50%, transparent);
+  font: 400 var(--text-sm) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the command line: the typed text in the ink color (ui.css draws the mockup's empty field muted) */
+.cmdline .field {
+  color: var(--ink);
+  min-width: 0;
+}
+.cmdline .field::placeholder {
+  color: var(--muted);
+}
+.statusbar .last-run {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* "Not affiliated with StataCorp" (editor/StatusBar.tsx): one line, never cut; from 1200 px only, since under it the
+   bar has no room beside the longest last run (the phone has no status bar) */
+.statusbar .affiliation {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@media (max-width: 1199.98px) {
+  .statusbar .affiliation {
+    display: none;
+  }
+}
+
+/* the phone: the strip under the top bar, a graph in the log, the hint as a block, the wide-table note */
+.phone-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 5px var(--s3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.phone-strip b {
+  color: var(--ink);
+  font-weight: var(--w-bold-ui);
+}
+.phone-strip .rc-err {
+  color: var(--error);
+  font-weight: var(--w-bold-ui);
+}
+.log button.inline-graph {
+  display: block;
+  width: calc(100% - 2px);
+  max-width: 480px;
+  height: 150px;
+  margin: var(--s1) 0;
+  padding: var(--s1);
+  background: var(--graph-card);
+  border-radius: var(--radius);
+}
+.log button.inline-graph[data-theme="dark"] {
+  background: var(--graph-card-dark);
+}
+.log button.inline-graph img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.log .explain {
+  display: block;
+  white-space: normal;
+  max-width: 60ch;
+  margin: var(--s1) 0;
+  padding: var(--s2) var(--s3);
+  border-left: var(--bar) solid var(--error);
+  background: var(--error-soft);
+  border-radius: var(--radius);
+  font: var(--text-sm) / 1.45 var(--font-ui);
+  color: var(--ink);
+}
+.log .explain b {
+  font-weight: var(--w-bold-ui);
+}
+.log .hscroll {
+  display: block;
+  font: var(--text-xs) / 1.6 var(--font-ui);
+  color: var(--muted);
+}
+/* the notes at a run's end (Break's with its Go to line, OQ-10's, the files not kept): they wrap in the pane */
+.log .endnote {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* the command line's height on a phone, which the toast is placed against: above it and the tab bar (8 + 44 + 8 px and
+   its edge, and the safe area), and with the keyboard open above it at the visible area's foot */
+.app[data-layout="phone"] {
+  --cmdline-h: 3.25rem;
+}
+.app[data-layout="phone"] .cmdline {
+  height: var(--cmdline-h);
+  box-sizing: border-box;
+}
+.app[data-layout="phone"] .toasts {
+  bottom: calc(var(--cmdline-h) + 61px + env(safe-area-inset-bottom, 0px) + var(--s2));
+}
+:root[data-keyboard] .app[data-layout="phone"] .toasts {
+  top: calc(var(--vv-top) + var(--vv-height) - var(--cmdline-h) - var(--s2));
+}
+/* a phone zooms in on a focused text field under 16 px: the editor's text and its numbers too, so they stay in line */
+@media (max-width: 699.98px) {
+  .editor-cm .cm-editor {
+    font-size: max(16px, var(--code));
+  }
+}
+@media (forced-colors: active) {
+  .editor-cm .cm-run-line,
+  .editor-cm .cm-gutterElement.cm-run-n {
+    border-left: var(--bar) solid Highlight;
+  }
+  .editor-cm .cm-err-line,
+  .editor-cm .cm-gutterElement.cm-err-n {
+    forced-color-adjust: none;
+    background: Mark;
+    color: MarkText;
+  }
+  .log mark.on {
+    outline-color: Highlight;
+  }
+}
+
+/* Step 4d: dialogs and states (app/states/). The dialog, banner, progress and stage list are ui.css's; this block adds the
+   progress dialog's header row (the take-over button's disabled look is ui.css's `.btn.off`). */
+.dialog .row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+  font-size: var(--text-sm);
+}
+.dialog .row .spacer {
+  flex: 1;
+}
+.dialog .row > span:last-child {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.dialog .progress {
+  margin-bottom: var(--s2);
 }

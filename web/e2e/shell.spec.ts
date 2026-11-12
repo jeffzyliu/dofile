@@ -38,7 +38,7 @@ const settled = (page: Page) =>
 test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; a run asks again, titled for a run, and Not now drops it", async ({
   page,
 }) => {
-  await page.goto("/?test");
+  await page.goto("?test");
   const prompt = page.getByRole("dialog", { name: "Download the engine?" });
   await expect(prompt).toBeVisible();
   await page.keyboard.press("Escape");
@@ -57,16 +57,16 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
   const asked = page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.run('display "RAN"'));
   const forRun = page.getByRole("dialog", { name: "Download the engine to run code" });
   await expect(forRun).toBeVisible();
-  expect(await asked).toBeNull(); // nothing ran yet
   await forRun.getByRole("button", { name: "Not now" }).click();
   await expect(forRun).toBeHidden();
+  expect(await asked).toBeNull(); // the queued run was dropped: its promise settles with null
   expect(await state(page)).toBe("declined");
 });
 
 test("the layout: desktop panes or the phone's views; the theme button cycles and is kept; the ⋯ menu works by keyboard", async ({
   page,
 }) => {
-  await page.goto("/?test=manual"); // no engine: the shell alone
+  await page.goto("?test=manual"); // no engine: the shell alone
   const phone = (page.viewportSize()?.width ?? 0) < 700;
   if (phone) {
     const views = page.getByRole("tablist", { name: "Views" });
@@ -166,13 +166,13 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
   page,
   request,
 }) => {
-  const res = await request.get("/start-files.json");
+  const res = await request.get("start-files.json");
   expect(res.ok(), "no build: run npm run snapshot, then npm run build").toBe(true);
   const list = await res.json();
   expect(list.built, "no snapshot: run npm run snapshot, then npm run build").toBeTruthy();
   // the build's list is the one statement of the build: a list of another build id is a site updated since the page loaded
   await page.route("**/start-files.json", (route) => route.fulfill({ json: { ...list, buildId: "0".repeat(64) } }));
-  await page.goto("/?test");
+  await page.goto("?test");
   await startEngine(page);
   await expect
     .poll(
@@ -201,7 +201,7 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN), moved from poc.spec.ts.
 test("?snapshot=0: the normal boot still starts and runs the sample", async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
-  await page.goto("/?snapshot=0&test");
+  await page.goto("?snapshot=0&test");
   await startEngine(page);
   await expect.poll(() => state(page), { timeout: 300_000 }).toBe("ready");
   const r = await page.evaluate(async (code) => {
@@ -217,7 +217,7 @@ test("?snapshot=0: the normal boot still starts and runs the sample", async ({ p
 test("the toolbar does not move: its box and every button's box are the same in every engine state, with or without a selection or unsaved edits", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   const head = { kind: "file", fresh_locals: true };
   // the sixteen states of the engine's state machine (src/app/types.ts, EngineState)
@@ -288,7 +288,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
 
 // One height for the desktop toolbar's buttons (key chips or not), and one for the pane heads' controls.
 test("the desktop toolbar's buttons are all one height, and so are the pane heads' controls", async ({ page }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   for (const width of [1440, 1024]) {
     await page.setViewportSize({ width, height: 800 });
@@ -322,7 +322,7 @@ test("the desktop toolbar's buttons are all one height, and so are the pane head
 // One tree for every width: the editor's slot and the log are the same nodes after a change of layout (not mounted twice).
 test("the editor and the log are never mounted again when the layout changes", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 800 });
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.evaluate(() => {
     for (const el of document.querySelectorAll(".editor-slot, .log-body"))
       (el as HTMLElement & { tagged?: boolean }).tagged = true;
@@ -346,7 +346,7 @@ test("the folded file list: the Files button says what it does and how many file
   page,
 }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   const button = page.getByRole("button", { name: "Files", exact: true });
   const pane = page.getByRole("region", { name: "Files" });
   await expect(button).toBeVisible();
@@ -362,6 +362,7 @@ test("the folded file list: the Files button says what it does and how many file
   await expect(files).toHaveAttribute("aria-expanded", "true");
   await expect(pane).toBeVisible();
   await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("#files-pane")))).toBe(true);
+  await expect(pane.getByRole("tree").locator('[tabindex="0"]')).toBeFocused(); // the tree's row, not the head's menu
   await page.keyboard.press("Escape");
   await expect(pane).toBeHidden();
   await expect(files).toHaveAttribute("aria-expanded", "false");
@@ -378,7 +379,7 @@ test("the folded file list: the Files button says what it does and how many file
 // top. app/viewport.ts's keyboard handling is tested in test/app.test.ts.
 test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) => {
   test.skip(!isMobile, "the iPhone profile");
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await settled(page);
   for (const view of ["files", "editor", "log", "data", "results"]) {
     await page.evaluate((v) => {
@@ -421,7 +422,7 @@ test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) 
 test("a failed Download all shows one banner with Try again, on every phone view; a download that works removes it", async ({
   page,
 }) => {
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await writeFile(page, "a.do");
   await page.waitForFunction(
     () => (window as unknown as { __dofile: FullHook }).__dofile.state.hasFiles.value === true,
@@ -473,7 +474,7 @@ test("phone: the toast is above the command line and the tab bar, and above the 
 }) => {
   test.skip(!isMobile, "the iPhone profile");
   await page.emulateMedia({ reducedMotion: "reduce" }); // the toast's place, not its way in
-  await page.goto("/?test=manual");
+  await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   await page.evaluate(() => {
     const s = (window as unknown as { __dofile: { state: Signals & { showToast(t: string): void } } }).__dofile.state;
@@ -505,4 +506,151 @@ test("phone: the toast is above the command line and the tab bar, and above the 
   expect(open.cmdline!.bottom).toBeCloseTo(500, 0); // the command line sits at the visible area's foot
   expect(open.toast!.bottom).toBeLessThanOrEqual(open.cmdline!.top);
   expect(open.toast!.top).toBeGreaterThanOrEqual(100);
+});
+
+test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ menus, the Editor and Log views with a nested do's note), the shortcuts still stated; shown on the desktop", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto("?test=manual");
+  await writeFile(page, "a.do");
+  // a run's log with a nested do of a file that has unsaved edits: its note says how to save
+  await page.evaluate(() => {
+    const W = (window as any).__dofile.state.runWriter;
+    W.log.value = [{ t: "text", run: 1, text: ". do a.do\n\n. display 1\n1\n\nend of do-file\n", unsaved: ["a.do"] }];
+  });
+  // every text in sight that names a key: a text node in the page (.app) whose element and all its ancestors up to .app
+  // that have a box (not display: contents) are bigger than the 1 px of a visually hidden one, and which is not
+  // visibility: hidden (a toolbar label not shown)
+  const keysInSight = () =>
+    page.evaluate(() => {
+      const KEY = /⌘|\bCtrl\b|\bEsc\b|\bF\d{1,2}\b|↵|↩/;
+      const app = document.querySelector(".app")!;
+      const seen = (el: Element | null) => {
+        if (!el || getComputedStyle(el).visibility === "hidden") return false;
+        for (let e: Element | null = el; e && e !== app.parentElement; e = e.parentElement) {
+          if (getComputedStyle(e).display === "contents") continue; // no box of its own (the phone's .out)
+          const r = e.getBoundingClientRect();
+          if (r.width <= 1 || r.height <= 1) return false;
+        }
+        return true;
+      };
+      const out: string[] = [];
+      const walk = document.createTreeWalker(app, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode())
+        if (KEY.test(n.textContent ?? "") && seen(n.parentElement)) out.push((n.textContent ?? "").trim());
+      return out;
+    });
+  const note = /Save it \((⌘|Ctrl) S\) to run your edits\.$/;
+  const tree = page.getByRole("tree", { name: "Files" });
+  if (isMobile) {
+    const views = page.getByRole("tablist", { name: "Views" });
+    await views.getByRole("tab", { name: "Files" }).click();
+    await tree.getByRole("treeitem", { name: /^a\.do/ }).click();
+    await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: a.do");
+    expect(await keysInSight()).toEqual([]); // the top bar and the Editor view
+    // a file's menu: its Rename keeps "F2" in its name, out of sight
+    await views.getByRole("tab", { name: "Files" }).click();
+    await page.locator(".row-more").first().click();
+    const rename = page.getByRole("menuitem", { name: "Rename F2" });
+    await expect(rename).toBeVisible();
+    const f2 = await rename.locator("span", { hasText: /^F2$/ }).boundingBox();
+    expect(f2!.width).toBeLessThanOrEqual(1);
+    expect(await keysInSight()).toEqual([]);
+    await page.keyboard.press("Escape");
+    for (const view of ["Editor", "Log"]) {
+      await views.getByRole("tab", { name: view }).click();
+      expect(await keysInSight()).toEqual([]);
+      await page.getByRole("button", { name: "More actions" }).click();
+      await expect(page.getByRole("menu")).toBeVisible();
+      expect(await keysInSight()).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("menu")).toHaveCount(0);
+    }
+    // the nested do's note names the ⋯ menu's Save instead
+    await expect(page.getByRole("log", { name: "Log" })).toContainText(
+      "Note: a.do has unsaved edits in the editor; do runs the saved file. Save it (⋯ › Save) to run your edits.",
+    );
+  } else {
+    await tree.getByRole("treeitem", { name: /^a\.do/ }).click();
+    await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: a.do");
+    // the toolbar's Save shows its chip and states its key; the note names the key
+    const save = page.locator(".toolbar").getByRole("button", { name: "Save" });
+    await expect(save).toHaveAttribute("aria-keyshortcuts", /^(Meta|Control)\+S$/);
+    expect((await keysInSight()).some((t) => /^(⌘|Ctrl) S$/.test(t))).toBe(true);
+    expect((await keysInSight()).some((t) => note.test(t))).toBe(true);
+    // a file's menu shows "F2"
+    await tree.getByRole("treeitem", { name: /^a\.do/ }).click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Rename F2" })).toBeVisible();
+    expect(await keysInSight()).toContain("F2");
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("the status bar's 'Not affiliated with StataCorp': in sight from 1200 px with the full sentence for screen readers and as its title, no link and no tab stop; at 1200 px the bar holds it beside the longest last run and every state's words without overflowing; none under 1200 px or on a phone", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto("?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  const note = page.locator(".statusbar .affiliation");
+  if (isMobile) {
+    await expect(page.locator(".statusbar")).toHaveCount(0); // the phone has no status bar
+    await expect(note).toHaveCount(0);
+    await expect(page.getByText("Not affiliated with StataCorp")).toHaveCount(0);
+    return;
+  }
+  const full = "Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.";
+  const bar = page.locator(".statusbar");
+  const height = async () => (await bar.boundingBox())!.height;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(note).toBeVisible();
+  await expect(note.locator("[aria-hidden='true']")).toHaveText("Not affiliated with StataCorp");
+  await expect(note.locator("[aria-hidden='true']")).toHaveAttribute("title", full);
+  await expect(note.locator(".visually-hidden")).toHaveText(full);
+  expect(await note.locator("a, button, [tabindex]").count()).toBe(0);
+  const shown = await height();
+  // under 1200 px: none, and the bar keeps its height
+  await page.setViewportSize({ width: 1199, height: 900 });
+  await expect(note).toBeHidden();
+  expect(await height()).toBe(shown);
+
+  // at 1200 px: the longest last run, memory and "Files may be cleared", and each state's words: nothing overflows or
+  // wraps, the last run and the state's words are not cut
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.evaluate(() => {
+    const S = (window as any).__dofile.state;
+    S.persisted.value = false;
+    S.memory.value = { heap_bytes: 4_096e6, data_bytes: 0 };
+    S.lastRun.value = { kind: "file", path: "a.do", fresh_locals: true, rc: 9999, line: 9999, seconds: 3599 };
+  });
+  const t0 = Date.now() - 3_599_000;
+  const run = { kind: "selection", path: "a.do", lines: [1234, 5678], fresh_locals: false };
+  for (const st of [
+    { s: "ready" },
+    { s: "starting-worker", stage: "packages", t0, done: {} },
+    { s: "running", run, t0 },
+    { s: "breaking", run, t0, resetAt: Date.now() + 5000 },
+    { s: "waiting", run, t0 },
+    { s: "declined" },
+    { s: "failed-twice" },
+  ]) {
+    await page.evaluate((v) => ((window as any).__dofile.state.engine.value = v), st);
+    await expect(bar.locator("[data-state]")).toHaveAttribute("data-state", st.s);
+    await expect(note).toBeVisible();
+    const fit = await bar.evaluate((el) => {
+      const cut = (e: Element | null) => !!e && e.scrollWidth > e.clientWidth;
+      return {
+        overflow: el.scrollWidth > el.clientWidth,
+        state: cut(el.querySelector("[data-state]")),
+        lastRun: cut(el.querySelector(".last-run")),
+      };
+    });
+    expect(fit, st.s).toEqual({ overflow: false, state: false, lastRun: false });
+    expect(await height(), st.s).toBe(shown);
+    if (st.s === "ready")
+      await expect(bar).toContainText(
+        "Last run: whole file (started with no locals) · r(9999) at line 9999 · 59 min 59 s",
+      );
+  }
 });

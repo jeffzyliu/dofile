@@ -24,11 +24,18 @@ export type MenuItem =
       onSelect?: () => void;
       href?: string; // a link instead of an action (opens in this tab)
       hint?: ComponentChildren; // at the right: a key ("F2") or a value (the version)
+      hintIsKey?: boolean; // the hint names a key: hidden from sight on a phone (class key-hint), kept in the item's name
       danger?: boolean;
       disabled?: boolean;
       keepOpen?: boolean; // picking it leaves the menu open
     };
 type Items = MenuItem[] | (() => MenuItem[]);
+
+/** An item's hint; one that names a key (`hintIsKey`: "F2") has the class key-hint, which a phone hides from sight as it
+ *  hides the key chips (app.css); it stays in the item's accessible name. */
+const Hint = ({ item }: { item: { hint?: ComponentChildren; hintIsKey?: boolean } }) => (
+  <span class={item.hintIsKey ? "aside key-hint" : "aside"}>{item.hint}</span>
+);
 
 interface Open {
   label: string;
@@ -194,7 +201,7 @@ export function MenuHost() {
             onClick={() => closeMenu(false)}
           >
             {item.label}
-            {item.hint && <span class="aside">{item.hint}</span>}
+            {item.hint && <Hint item={item} />}
           </a>
         ) : (
           <button
@@ -207,7 +214,7 @@ export function MenuHost() {
             onClick={(e) => pick(item, e.currentTarget)}
           >
             {item.label}
-            {item.hint && <span class="aside">{item.hint}</span>}
+            {item.hint && <Hint item={item} />}
           </button>
         ),
       )}

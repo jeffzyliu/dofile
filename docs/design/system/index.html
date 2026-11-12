@@ -34,6 +34,19 @@
   .stage .toasts { position: absolute; }
   .demo-pane { height: 300px; }
   .demo-pane .pane-body { overflow: hidden; }
+  .demo-pane.short { height: auto; }
+  /* a copy of the inline rename's rules in web/src/styles/app.css (step 4a block): this sheet loads ui.css only */
+  .files li.renaming { flex-wrap: wrap; row-gap: 2px; }
+  .rename-field { flex: 1; min-width: 0; font: inherit; font-weight: 400; color: var(--ink); background: var(--surface);
+                  border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 1px 4px; margin: -2px 0; }
+  .rename-field:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 1px var(--accent); }
+  .rename-field[aria-invalid="true"] { border-color: var(--error); }
+  .rename-field[aria-invalid="true"]:focus-visible { box-shadow: 0 0 0 1px var(--error); }
+  .rename-problem { flex-basis: 100%; white-space: normal; font-size: var(--text-xs); font-weight: 400; color: var(--error); }
+  @media (forced-colors: active) {
+    .rename-field { border-color: Highlight; }
+    .rename-field[aria-invalid="true"] { border: 2px solid Mark; }
+  }
 </style>
 </head>
 <body>
@@ -166,6 +179,24 @@
       accent underline; the × is for the mouse, Delete closes) and links in the accent. <b>Editor lines:</b> selected
       (soft accent), running (accent bar, bold number; it moves with its text), error (red bar and tint, bold number),
       warning (bold number in <code>--warn</code>, a wavy underline, and the lint message under the line).</p>
+  </figure>
+  <figure style="margin:0">
+    <section class="pane demo-pane short" aria-label="Inline rename (example)">
+      <div class="pane-head"><span class="pane-title">Files</span></div>
+      <div class="pane-body">
+        <ul class="files" role="tree" aria-label="Inline rename (example)">
+          <li class="renaming" role="treeitem" aria-level="1" aria-selected="false" tabindex="-1"><input class="rename-field" aria-label="New name for untitled.do" value="untitled.do" spellcheck="false"></li>
+          <li class="open renaming" role="treeitem" aria-level="1" aria-selected="true" tabindex="-1"><input class="rename-field" aria-label="New name for analysis.do" aria-invalid="true" aria-describedby="ds-rename-problem" value="clean.do" spellcheck="false"><span class="rename-problem" id="ds-rename-problem">clean.do already exists here.</span></li>
+          <li role="treeitem" aria-level="1" aria-selected="false" tabindex="-1">clean.do <span class="size">2 KB</span></li>
+        </ul>
+      </div>
+    </section>
+    <p class="spec"><b>Inline rename</b> (DS-7, prototype 1 step 4a). F2, the row menu's Rename, or a new file
+      (<code>untitled.do</code>) or folder: the name becomes a field, with the name selected up to its extension. Enter
+      renames; Esc cancels; leaving the field renames when the name can be used, else cancels. <b>A name in use</b>, or one
+      that cannot be used (empty, with a <code>/</code>), keeps the field open: its edge in <code>--error</code>,
+      <code>aria-invalid</code>, the reason under it (its <code>aria-describedby</code>), and the live region says it.
+      The field is the row's own text size, so the row does not jump.</p>
   </figure>
 </div>
 

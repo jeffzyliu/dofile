@@ -19,5 +19,7 @@ export const testMode = q.get("test"); // null: no hook
 /** ?brotli=wasm: brotli-wasm instead of the browser's own decoder for the snapshot (to compare them). */
 export const brotli = q.get("brotli") ?? undefined;
 
-/** The landing page (step 5 builds it): the wordmark and "About dofile" go there. */
-export const LANDING_URL = `${import.meta.env.BASE_URL}landing.html`;
+/** The landing page (web/landing.html, step 5), the site's root: the wordmark, "About dofile" and the other-tab dialog's
+ *  "Close editor" go there. The build sets it (scripts/urls.ts SITE_URL: "/" while the editor is under /app/ on the same
+ *  origin, a whole URL once the editor has its own). The editor's own files are under import.meta.env.BASE_URL. */
+export const LANDING_URL = __SITE_URL__;

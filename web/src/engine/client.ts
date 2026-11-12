@@ -83,6 +83,17 @@ const aborted = (signal: AbortSignal) =>
     ? signal.reason
     : new DOMException(String(signal.reason?.message ?? signal.reason ?? "aborted"), "AbortError");
 
+// Delete from `cache` every entry that is not one of the list's download files, at the address the page and the worker
+// use for it (relative to the list). Never rejects: a Cache that will not say or delete leaves the entries, as before.
+async function dropUnlisted(cache: Cache, list: StartFiles & { base: string }): Promise<void> {
+  const keep = new Set(list.files.filter((f) => f.download).map((f) => new URL(f.path, list.base).href));
+  try {
+    for (const request of await cache.keys()) if (!keep.has(request.url)) await cache.delete(request);
+  } catch (e: any) {
+    console.warn(`[dofile] could not drop the old start files: ${e?.message ?? e}`);
+  }
+}
+
 // why a start failed or a worker crashed, from the worker's error
 function reasonOf({ name, message }: { name?: string; message: string }): "download" | "memory" | "unknown" {
   if (name === "DownloadError") return "download";
@@ -286,6 +297,11 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };
       throw fail(String(e?.message ?? e), "failed", { reason: "unknown" });
     }
+    // An entry of this Cache that the list does not name is never read again: the same build's files kept at another
+    // address (the editor moved from / to /app/ with the snapshot unchanged, so the Cache's name stayed). Drop it, or it
+    // keeps tens of MB until the next snapshot. The list's own files stay, so a download that resumes keeps what it has;
+    // and not while a worker is live, which may be reading this Cache (the machine downloads only before a worker exists).
+    if (!this.#live) await dropUnlisted(cache, list);
     const total = list.compressed,
       got = new Map<StartFile, number>();
     let received = list.files.reduce((n, f) => n + (f.download ? 0 : f.compressed), 0),

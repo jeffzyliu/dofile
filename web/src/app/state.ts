@@ -167,8 +167,9 @@ export function say(text: string) {
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
-/** A toast: a short confirmation with no buttons ("Saved analysis.do", "Copied"). One at a time, 4 s; the live region says
- *  it too. `holdToast(true)` while the pointer is on it keeps it; `holdToast(false)` gives it 4 s again. */
+/** A toast, with no buttons: a short confirmation ("Saved analysis.do", "Copied"), or an error that needs no action from
+ *  the visitor ("Couldn't load wages.dta: r(601)"); what the visitor must act on is a banner or a dialog (SPEC 3.10).
+ *  One at a time, 4 s; the live region says it too. `holdToast(true)` while the pointer is on it keeps it; `holdToast(false)` gives it 4 s again. */
 export function showToast(text: string) {
   toastText.value = text;
   say(text);

@@ -17,7 +17,10 @@
 //  area above it, the tab bar is hidden, and the toast sits above the command line there (viewport.ts, app.css). Text
 //  fields are 16 px or more on a phone (app.css), so iOS does not zoom in on focus: 4b's command line and editor too.
 //
-// Each step 4 part edits only its own files; this file only places them and is not edited in step 4. Per part: the files,
+// Each step 4 part edits only its own files; this file only places them (two changes were made here when 4a was joined,
+// on the maintainer's word: the phone's ⋯ holds 4a's fileMenuItems on the Files view, whose head app.css hides on a
+// phone, and the unfolded file list gives the focus to the tree's row; and one when 4b and 4d were joined: the phone ⋯'s
+// Save is off unless the active tab is a text tab, as the toolbar's). Per part: the files,
 // the signals it writes (state.ts), what it calls, and the slots here it fills. Every part reads any signal.
 // Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8):
 //  - `engine` has the machine's sixteen state names (types.ts EngineState): the page load is `checking-lock`, then
@@ -25,8 +28,8 @@
 //    `other-tab-idle` or `other-tab-taking`. A view that treats a pair alike writes two `case`s; CSS keyed on
 //    <html data-engine> matches by prefix.
 //  - A signal with one owner is a ReadonlySignal: assigning it in a view fails `npm run check`. Views write `graphIndex`,
-//    `graphFull`, `dialog`, `tabs`, `activeTab`, `split`, `outputTab`, `phoneTab`, `pickedVar`, `theme`; the rest through
-//    the controllers' actions and state.ts's helpers.
+//    `graphFull`, `dialog`, `tabs`, `activeTab`, `split`, `outputTab`, `phoneTab`, `pickedVar`, `theme` (and main.tsx
+//    `layout`; `isolated` is set once at load); the rest through the controllers' actions and state.ts's helpers.
 //  - There is no `about` signal: env.ts ABOUT (dofile, engine_commit, stata_version) is compiled in, there from the
 //    first paint. engine.ts no longer maps the worker's status texts to stages (the worker sends typed stage ids): the
 //    words of each Stage are stageStatus (the status bar) and stageWords (the live region).
@@ -34,42 +37,50 @@
 //    nothing): ask() in `none` and `declined`; decline in `asking` and `downloading`; start in `none`, `asking`,
 //    `declined`, `failed`; reset in `ready`, `running`, `breaking`, `waiting`; takeOver in `other-tab-idle`.
 //  - run.ts runCode and runCommand (through engine.ts run()) throw when called while a step of the state machine is in
-//    progress: inside a handler given to connectRun, and also inside a signal effect on `engine`, `lastRun` or `log`,
-//    which are written during a step. Start the next run after the step: when the run's promise has resolved, say.
+//    progress: inside a handler given to connectRun, and also inside a signal effect on `engine` or `lastRun`, which are
+//    written only during a step, or on a `log` write a step makes (a run's start and end; a streamed chunk and "Clear
+//    log" write `log` outside a step, where the call does not throw: during a run it is refused). Start the next run
+//    after the step: when the run's promise has resolved, say.
 //   4a files/FilesPane.tsx (FilesHead, FilesBody), files/EditorTabs.tsx (EditorTabs, the phone's FileSwitcher),
 //      files/FileBar.tsx (FileBar: the bars over a .csv, .tsv or .log), files/open.ts (openFile, decodeText),
 //      files/dialogs.tsx (clash, delete, delete-all, close-tab; the words of delete-all and close-tab are decided: SPEC
 //      3.10), files/banners.tsx (not-text).
 //      Writes `tabs` (not `dirty`), `activeTab`, `dialog` (its four kinds), `banners` (not-text); openFile writes
 //      `phoneTab` = "editor" on a phone when a text or .dta tab opens, and for a .png `outputTab` = "graph" (desktop) or
-//      `graphFull` (phone). Calls store.* (app/store.ts), files.ts downloadAll() and saveAs, editorCommands.open, reload,
-//      renamed, closed, save(path) (editor/commands.ts), run.ts addFileGraph(path, png) and runCommand(text) (Import),
-//      state.ts addBanner, dismiss, showToast. downloadAll() makes no zip and resolves false when the store has no file
+//      `graphFull` (phone); the phone's FileSwitcher writes `phoneTab` = "files" ("Show all files"). Calls store.*
+//      (app/store.ts), files.ts downloadAll() and saveAs, editorCommands.open, reload, renamed, closed, save(path) and
+//      focus (after a tab closes) (editor/commands.ts), run.ts addFileGraph(path, png) and runCommand(text) (Import),
+//      state.ts addBanner, dismiss, showToast, say. The plain logic: files/tree.ts, files/actions.ts. downloadAll() makes no zip and resolves false when the store has no file
 //      (folders do not count): disable your "Download all (.zip)" while state.ts `hasFiles` is false, as the ⋯ menu
 //      does; a failure shows by itself (files.ts adds the banner download-failed). No tab can be dirty before 4b's
 //      editor exists: 4a's tests of the close-tab and reload paths call state.ts setDirty(path, true) themselves.
 //   4b editor/Editor.tsx, editor/commands.ts (fills editorCommands and `selection`), editor/RunControls.tsx,
-//      editor/StatusBar.tsx, editor/banners.tsx (save-failed), log/LogView.tsx, log/CommandLine.tsx (CommandLine,
-//      LogActions, logMenuItems for the phone's ⋯, PhoneStrip).
-//      Writes `tabs[].dirty` only through state.ts setDirty(path, on), `banners` (save-failed), `graphIndex` and
-//      `outputTab` (a graph link), `graphFull` (a tap on an inline graph, phone). Calls run.ts runCode(code, head) and
-//      runCommand(text), engine.ts breakRun, keepWaiting, reset, files/open.ts openFile (goToLine on a closed file),
-//      store.write (Save), showToast. Reads the log's per-run data on each text item (`unsaved`, `end`: types.ts LogItem).
+//      editor/StatusBar.tsx, editor/banners.tsx (save-failed, run-changed), log/LogView.tsx, log/CommandLine.tsx
+//      (CommandLine, LogActions, logMenuItems for the phone's ⋯, PhoneStrip). The plain logic: editor/cm.ts, clock.ts,
+//      csv.ts, errormark.ts, keys.ts, ranover.ts, words.ts; log/align.ts, classify.ts, find.ts, paste.ts, pasterun.ts.
+//      Writes `tabs[].dirty` only through state.ts setDirty(path, on), `banners` (addBanner for save-failed; dismiss for
+//      save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; "log" when Find opens unsplit),
+//      `graphFull` (a tap on an inline graph, phone), `phoneTab` = "log" (a tap on the phone's Break pill). Calls run.ts
+//      runCode(code, head) and runCommand(text), engine.ts breakRun and reset ("Reset now"), files/open.ts openFile
+//      (goToLine on a closed file), store.write (Save), files.ts saveAs (Download log, the save-failed banner's Download)
+//      and textInStore with editorCommands.reload (the run-changed banner's "Reload from the run"), showToast, say. Reads the log's per-run data on each text item (`unsaved`, `end`: types.ts LogItem).
 //      The command line: runCommand(text) returns { accepted, done } at once; clear the field only when `accepted` (it
 //      ran, or was queued with no engine; then it is in `history`, an error too); refused (the page load, a start or a
 //      run in progress): the text stays, and `history` is unchanged. A queued run goes from `starting-worker` straight to
 //      `running`. The log's head ("dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax") takes its values from env.ts ABOUT.
-//   4c output/tabs.tsx (GraphTab, DataTab, ResultsTab), output/FullSize.tsx (FullSize), output/DtaView.tsx (DtaView).
+//   4c output/tabs.tsx (re-exports GraphTab, DataTab, ResultsTab from GraphTab.tsx, DataTab.tsx, ResultsTab.tsx),
+//      output/FullSize.tsx (FullSize), output/DtaView.tsx (DtaView); the plain logic: output/format.ts, clip.ts, view.ts.
 //      Writes `graphIndex`, `graphFull`, `pickedVar`. Not `rows`: "Show 50 more" calls run.ts moreRows(), which appends
 //      (run.ts is the one writer of `rows`), and no view calls `browse`. Calls engine.ts call(op, args) (matrix,
 //      describe_file: the read ops a view alone shows), run.ts moreRows() and runCommand(text) (Load), showToast ("Copied").
 //   4d states/DownloadDialog.tsx (the other-tab dialog's "Close editor" goes to env.ts LANDING_URL, step 5's page),
 //      states/ResetDialog.tsx (askReset), states/banners.tsx (the engine-state banners, reset, storage, memory, and
-//      download-failed, built in step 3: 4d may restyle or reword it). Writes `dialog` (reset; it closes download and
+//      download-failed, built in step 3 and reworded by 4d). Writes `dialog` (reset; it closes download and
 //      other-tab), `banners` (only dismiss()). Calls engine.ts start (also "Try again"), ask() (the declined banner's
 //      "Download the engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,
 //      and a second press does nothing), keepWaiting, reset; editorCommands.runFile ("Run the file
-//      again"); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner
+//      again") and editorCommands.focus (states/focus.ts focusStable); run.ts refreshData (Reset describes the memory
+//      again after a run: states/words.ts resetDecision); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner
 //      download-failed, which a later download that works removes; with no file to put in it, false and nothing shown).
 //      A failed start's `message` is the visitor's words; its `detail` is the developer's cause (types.ts EngineState).
 // editorCommands is filled field by field when 4b's editor mounts: every part calls through the object
@@ -94,7 +105,7 @@ import { StatusBar } from "./editor/StatusBar";
 import { ABOUT, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
-import { FilesBody, FilesHead } from "./files/FilesPane";
+import { FilesBody, FilesHead, fileMenuItems } from "./files/FilesPane";
 import { downloadAll } from "./files.ts";
 import { CommandLine, LogActions, logMenuItems, PhoneStrip } from "./log/CommandLine";
 import { LogView } from "./log/LogView";
@@ -144,10 +155,13 @@ const moreItems = (): MenuItem[] => [
 ];
 
 /** The phone's ⋯ menu: Save and the theme (OQ-14); on the Log view the Log head's Find and Download log (4b's
- *  logMenuItems), since the phone hides that head; then the desktop's items. Theme cycles and keeps the menu open. */
+ *  logMenuItems) and on the Files view the Files head's "File actions" (4a's fileMenuItems), since the phone hides
+ *  those heads; then the desktop's items. Theme cycles and keeps the menu open. */
+const isDownloadAll = (i: MenuItem) => i !== "rule" && i.label === "Download all (.zip)"; // the ⋯ has its own
 const phoneMoreItems = (): MenuItem[] => [
   {
     label: "Save",
+    disabled: tabs.value.find((t) => t.path === activeTab.value)?.kind !== "text", // as the toolbar's Save (4b)
     onSelect: () => {
       editorCommands.save();
     },
@@ -162,6 +176,7 @@ const phoneMoreItems = (): MenuItem[] => [
     keepOpen: true,
   },
   ...(phoneTab.value === "log" ? logMenuItems() : []),
+  ...(phoneTab.value === "files" ? [...fileMenuItems().filter((i) => !isDownloadAll(i)), "rule" as const] : []),
   {
     label: "Download all (.zip)",
     disabled: !hasFiles.value,
@@ -244,7 +259,11 @@ function foldFiles(open: boolean) {
     setTimeout(() => {
       // after the render that shows the pane
       const pane = document.getElementById("files-pane");
-      (pane?.querySelector<HTMLElement>('[tabindex="0"], button:not([disabled]), [href], input') ?? pane)?.focus();
+      (
+        pane?.querySelector<HTMLElement>('[role="tree"] [tabindex="0"]') ??
+        pane?.querySelector<HTMLElement>("button:not([disabled]), [href], input") ??
+        pane
+      )?.focus();
     });
 }
 

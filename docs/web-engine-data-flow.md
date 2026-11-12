@@ -445,6 +445,8 @@ event that is not valid in its state, change nothing and are recorded (`drops()`
 
 - `began` when a run starts (this one, or a queued one when its engine is up): the run-head and a text item go into the log.
 - `log` for each chunk; `ended` with the result, always after the `engine` signal has the new state.
+- `dropped` when the queued run will not run (the machine's effect `drop-run`: "Not now", "Stop download", a failed
+  start, the lock lost): the queued run's promise (`runCode`'s and `runCommand`'s `done`) settles with null.
 - `engineReady`: it asks for `memory`.
 - `engineGone` (a reset, or another tab took the engine): it clears `results`, `macros`, `data`, `rows`, `memory`,
   `lastRun`, and the session's run count.
@@ -474,8 +476,8 @@ places that knew the build, the window at load, the seq and `upTo` journal, stat
 4. **A closed database keeps today's restart.** The machine resets the worker on `crashed` with cause `storage`, though the
    journal makes that unnecessary for the seqs; it stays because a deleted database leaves `/work` with files the store no
    longer has, which no journal row says (the maintainer's ruling, 2026-11-11).
-5. **The failed states show nothing.** `failed` and `failed-twice` are in the `engine` signal, with a visitor's `message`, but
-   the banners are step 4d's: until then a failed start is seen only as "Stopped" on Run.
+5. **The failed states' banners** (closed by step 4d). `failed` and `failed-twice` are in the `engine` signal, with a
+   visitor's `message`; step 4d's banners above the editor show them (`web/src/app/states/banners.tsx`).
 6. **The synchronous Python call.** While a run is on, the worker answers nothing: no `sync`, no `browse`. The journal and
    `resync` make that safe. The alternative (passing changes mid-run through shared memory) is recorded as a prototype 2 idea.
 7. **JSON text with base64 images.** Simple and one parse, but every graph is encoded in Python, embedded in a string,

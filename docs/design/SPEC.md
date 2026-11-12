@@ -38,10 +38,15 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   hidden `role="status" aria-live="polite"` region says each change once ("Run started", "Run finished: error r(111) at line
   17", "Engine reset", "Engine ready", each start-up stage, each toast). Meaning is never color alone.
 - **Forced colors, touch, motion:** keep the forced-colors block at the end of `ui.css` and add new bars, icons and rings to
-  it. Under `pointer: coarse`, rows and menu items are 44 px, the row ⋯ 44 px square, the tab × 32 px. Hover styles only
+  it. (Step 4's parts put their forced-colors rules in their own blocks of `app.css` instead: an open question, plan, "Step 4: decisions and open questions",
+  C 17.) Under `pointer: coarse`, rows and menu items are 44 px, the row ⋯ 44 px square, the tab × 32 px. Hover styles only
   under `hover: hover`. Reduced motion stops the spinner and the toast's animation.
 - **Glyphs:** ⌘ ▶ ■ ● ▾ ⋯ are SVG icons (`.ico`), never typed. Key chips say ⌘ on a Mac, Ctrl elsewhere; a disabled button
-  shows none. An icon-only button has an `aria-label`.
+  shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
+  app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
+  ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
+  name keeps it; a Results row's "↵ Copy" goes (a tap copies, and the toast says so; for the maintainer to confirm: plan, "Step 4: decisions and open questions", B 8); the nested-do note (`S 15`) names
+  the ⋯ menu's Save instead of the key. An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
 - **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the
@@ -54,11 +59,11 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
 
 ## 2. Pages and layout
 
-| Page | Content | Step |
-|---|---|---|
-| Editor | The app; its own Vite entry. | 3, 4 |
-| Landing | `L`: static HTML that shows at once. Nav: Commands, GitHub, the theme button. "Open the editor →". | 5 |
-| Commands | A static list made from `web/src/stata/commands.json`; no links to help pages (`R` round 1). Not drawn: OQ-18. | 5 |
+| Page | URL | Content | Step |
+|---|---|---|---|
+| Landing | `/` | `L`: static HTML that shows at once. Nav: Commands, GitHub, the theme button. "Open the editor →". | 5 |
+| Commands | `/commands/` | A static list made from `web/src/stata/commands.json`; no links to help pages (`R` round 1). Not drawn: OQ-18. | 5 |
+| Editor | `/app/` | The app, a single-page app under its own path (one setting: `web/scripts/urls.ts`, section 8 "URLs"); its own Vite build. | 3, 4 |
 
 **Desktop B, split** (`E`, 1440 x 900): toolbar; columns `230px | 1fr | 660px` with `--s2` gaps; status bar. The right column
 is two panes: Log above (`1.35fr`, the command line at its foot) and, below (`1fr`), a tablist "Output": Graph, Data, Results
@@ -83,11 +88,14 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   the open file has the soft accent and the bar; a "new" badge marks files the last run wrote. Under it: the dropzone ("Drop
   files or folders" in P1; the mockup's "or a .zip" is P2, OQ-19; links "Upload" and "New .do file") and "Download all (.zip)".
 - **Upload:** the Upload link, "Upload a folder", or a drop anywhere; folder paths are kept. A name that exists asks (3.10).
-  Replacing the open file reloads it in the editor (`F 3.3`). P1 stores a .zip as one file.
+  Replacing the open file reloads it in the editor (`F 3.3`). P1 stores a .zip as one file. Uploads run one at a time, a
+  name clash never replaces another dialog (it waits for it to close), and a drop while a dialog is open, or while another
+  tab has the files, uploads nothing. A name with a control character (a line break) is refused, as the store refuses a
+  file, and counted in the toast.
 - **Row menu** (`S 13`): "Open", "Rename" (hint F2; edits the name in place), "Download", rule, "Delete…" (asks, 3.10). From
   the row's ⋯ (on the hovered, focused or open row; always on touch), right click, Shift+F10 or the menu key.
 - **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload a folder", "Download all (.zip)",
-  "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`) is not in that list: OQ-13.
+  "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`, OQ-13; built in step 5) sits above "Delete all files…", after a rule.
 - **States:** drawn: open, unsaved dot, hover, folder open and closed, size, new badge (`E`), row menu (`S 13`). In the flows'
   list, not drawn: drop target, upload count (`WS 4`), inline rename and "name already exists" (DS-7), could not save, too big
   (OQ-16).
@@ -138,7 +146,8 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   "dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax" from `ABOUT` (`web/src/app/env.ts`: compiled in, section 8); "Files stay in this browser. Try: help regress"); per run a
   run-head (`.runhead`, section 4); each echo (`.echo`); output; notes (`.note`: the path shim's "(path … is … in the working
   folder)"); the error and its `r(N);` (`.err`); the engine's hint (`.hint`); "Go to line 17" (`.jump`), which moves the
-  editor's cursor. Mono at `--log`, 80 columns, no wrapping; wide tables scroll sideways.
+  editor's cursor. Mono at `--log`, 80 columns, no wrapping; wide tables scroll sideways. The notes at a run's end are the
+  exception: they wrap in the pane (section 8, "As built in step 4b").
 - The head, run-heads and the page's own notes are shown only: never in Download log or a log file (`S 15`).
 - The log streams during a run (OQ-1): the worker posts `{id, log}` chunks, and the page appends them. When the run ends, the
   page replaces the streamed text with `RunResult.log`, which is the complete text. If step 1 finds that streaming does not
@@ -161,8 +170,13 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   by Break (`S 10`), nested do with unsaved edits (`S 15`). Not drawn: the notes of OQ-10.
 
 ### 3.6 Status bar (P1, step 4b)
-- Left to right (`E`): state dot and word, the last run, "Memory 612 MB", spacer, "Files are kept in this browser" (or "Files
-  may be cleared by this browser", `S 19`). State texts: section 5. Last run: "Last run: whole file (started with no locals)
+- Left to right (`E`): state dot and word, the last run, "Memory 612 MB", spacer, "Not affiliated with StataCorp", "Files
+  are kept in this browser" (or "Files may be cleared by this browser", `S 19`). The affiliation line is muted text, no
+  link, no tab stop, not a live region; screen readers get `LICENSE-POLICY.md`'s sentence, "Stata is a registered
+  trademark of StataCorp LLC; dofile is not affiliated with StataCorp.", which is also the short text's `title`. It shows
+  from 1200 px only: at 1200 px the widest bar (ready, the longest last run, "Memory 4,096 MB", "Files may be cleared by
+  this browser") leaves about 143 px beside it, so under about 1060 px it would not fit; the phone has no status bar,
+  and the landing page carries the line. State texts: section 5. Last run: "Last run: whole file (started with no locals)
   · r(111) at line 17 · 0.38 s" (`E`); "Last run: stopped by Break · r(1) · 18.4 s" (`S 10`); the rc in the error color.
   Memory comes from the `memory` op after the start and each run; it cannot update during a run (OQ-8).
 
@@ -174,7 +188,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Empty** (`S 16`): "No graphs yet" / "Graphs drawn by a run appear here, for example `scatter wage educ`. A .png from the
   file list opens here too."
 - **Calls:** `RunResult.images` (base64 PNG, the last 5 a run drew at most; `new_graphs` counts all). Every run sends
-  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors. Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
+  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors, and a graph is drawn in the run's theme whatever colors its command names (decided 2026-11-11: `docs/prototype1-plan.md`, 4c). The card of a run's graph follows the run's theme; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
 
 ### 3.8 Data tab and Browse (P1, step 4c)
 - **Tab** (`P/Data`): facts ("500 obs", "3 vars", "from data/wages.dta", "6 KB in memory"); the field "Filter variables"; a
@@ -208,7 +222,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Dialog | Drawn | Content and rules |
 |---|---|---|
 | Download prompt, progress | `S 1`, `S 8`; `S 2`, `S 3` | Section 5. Download is the default (Enter) on purpose (UX-037). The bar is `role="progressbar"` with `aria-valuetext`; screen readers hear the stages, not the megabytes. |
-| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them". |
+| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is asked even after "Do the same" with Replace (not after Esc, or "Do the same" with Keep mine: keeping it loses nothing; an open question: plan, "Step 4: decisions and open questions", C 14). |
 | Delete (4a) | `P/Notices` | "Delete clean.do?" / "It's kept only in this browser; there is no undo." / Cancel (focused), Delete. `DS` words it differently: OQ-19. |
 | Reset | `S 14` | `role="alertdialog"`. "Reset the engine?" / "The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset. Not asked with no data in memory and no results. |
 | Upload report | `P/Upload report` | Drawn with P2 content only. P1: the toast "3 files uploaded" (OQ-19). |
@@ -223,9 +237,11 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
   `persisted()` is false, once per visit after files change). Above the log: running (`E?r`), stopping (`S 9`), waiting
   (`S 9b`), Break resets (`S 11`), reset (`P/Notices`), memory (`P/Notices`: "**Memory 1.6 GB of about 2 GB.** A bigger
   dataset may reset the engine. `compress` or `keep` fewer variables to save memory."; OQ-8). In the Files pane: not UTF-8.
-- **Toast** (`DS`; no mockup): a confirmation with no buttons ("Saved analysis.do", "Copied", "3 files uploaded"); inverted
-  colors, bottom center above the status bar, one at a time, 4 s (longer while hovered), never focused; the live region says
-  the same words. Anything to act on is a banner or a dialog. Its place on a phone: DS-7.
+- **Toast** (`DS`; no mockup): a confirmation with no buttons ("Saved analysis.do", "Copied", "3 files uploaded"), or an
+  error that needs no action from the visitor (a copy the browser refused, a matrix that could not be read, a load that
+  failed with its rc: "Couldn't load wages.dta: r(601)"; decided 2026-11-11); inverted colors, bottom center above the
+  status bar, one at a time, 4 s (longer while hovered), never focused, no buttons; the live region says the same words.
+  Anything the visitor must act on, or choose between, is a banner or a dialog. Its place on a phone: DS-7.
 - **Menus** (`DS`): buttons with `role="menuitem"`; arrows move, Esc closes; a key hint at the right; a destructive item in
   the error color, with "…" when it asks first. The trigger has `aria-haspopup="menu"` and `aria-expanded`.
 
@@ -241,6 +257,10 @@ A file is text when its bytes decode as strict UTF-8: `decodeText` in `web/src/a
 | other UTF-8 text | Editor tab; .md and .json with CodeMirror's packages, anything else plain. P2: .py, .R, .tex, .sql, .yaml. | `P/.log` caption |
 | .png | The Graph tab, and full size the same way. | `S 16` (text) |
 | not UTF-8 (.xlsx, ...) | No tab. A warning banner in the Files pane: "**survey.xlsx can't be opened in the editor.** It isn't UTF-8 text, so the editor would change it. Download it to edit it elsewhere." / "Download", "Dismiss". No Import button for .xlsx (OQ-19). | `P/.xlsx` |
+
+In the `use` and `import delimited` commands a `$` in the path is written `\$`, and a double quote puts it in compound
+quotes. A name the command cannot hold (a backquote, a control character, `"'`) gives no command: bar 2 says why in its
+place and Load or Import and Copy are off (`web/src/stata/quote.ts`).
 
 ### 3.12 Landing page, commands page, sample (P1, step 5)
 - Build `L` as drawn, desktop and phone. The banner and the do-file drawing are `aria-hidden`, with a hidden plain-text copy
@@ -269,7 +289,8 @@ A file is text when its bytes decode as strict UTF-8: `decodeText` in `web/src/a
   `analysis.do`. One run at a time. Run does not save. Editing during a run is allowed and does not change the run.
 - `do` and `include` read the saved file in `/work`. When the log shows a nested `do` or `include` of a file that was open with
   unsaved edits when the run started, the page adds under that echo (`S 15`): "Note: clean.do has unsaved edits in the editor;
-  do runs the saved file. Save it (⌘ S) to run your edits."
+  do runs the saved file. Save it (⌘ S) to run your edits." (Ctrl S off a Mac; on the phone layout "Save it (⋯ › Save) to
+  run your edits.")
 - Load and Import run their shown command as if typed in the command line: echoed in the log, added to the history (↑ brings
   it back), never written into a do-file. Load does not ask first in P1 (OQ-6: P2). Copy puts the command on
   the clipboard.
@@ -288,7 +309,7 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 
 | State | Status bar | Dialog or banner | Run | Break |
 |---|---|---|---|---|
-| `checking-lock`, `checking-cache` | "No engine yet" (the words of `none`, until step 4b chooses others) | none | "Run", disabled | disabled |
+| `checking-lock`, `checking-cache` | "**Opening**" (step 4b's word for the page load, a draft) | none | "Run", disabled | disabled |
 | `none` | "No engine yet" | none (`none` is seen only with `?test=manual`: no start until the test calls `start()`) | "Run", disabled | disabled |
 | `asking` | "No engine yet" | Blocking prompt `S 1` (phone `S 8`): "Download the engine?", its two paragraphs, "Not now", "Download 48 MB" (default) | "Run", disabled | disabled |
 | `declined` | "**No engine** · Run downloads it first" | `S 5`: "**The engine isn't downloaded.** You can open, edit, upload and download files; running code needs the engine (about 48 MB)." / "Download the engine" | enabled: it, and the command line, open the prompt titled "Download the engine to run code"; the run starts when the engine is ready | disabled |
@@ -298,9 +319,9 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 | `running` | "**Running** lines 14–15 · 3.4 s" (`E?r`); "**Running** · 12 s" (`S 11`) | Log banner (`E?r`): "Running lines 14–15 · **3.4 s**. Break stops between commands. If one long command doesn't stop within 5 s, the engine is reset: **the data in memory is lost**; your files are kept." | `aria-disabled` | "Break", live |
 | `breaking` | "**Stopping** · resets in 4 s", the run's time | `S 9`, once it takes a moment: "**Stopping…** This command can't stop until it ends. **In 4 s the engine is reset:** the data in memory is lost; your files are kept." / "Don't reset: wait for it" (focused) | disabled | "Stopping…", disabled |
 | `waiting` | "**Waiting** · Break after this command", the run's time | `S 9b`, a banner with `tabindex="-1"` that takes the focus: "**Waiting for this command to end.** The Break is still pending: the run stops after this command, with the data kept. If it never ends, **Reset now** resets the engine: the data in memory is lost; your files are kept." | disabled | "Reset now", live; asks nothing |
-| `failed` | "**Stopped** · the engine didn't start" | `S 6`, `role="alert"`: "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Close other tabs, then try again". | "Stopped" (the play icon; named "Stopped: the engine didn't start, so Run is off"), disabled | disabled |
+| `failed` | "**Stopped** · the engine didn't start" | `S 6`, `role="alert"`: "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Try again", after a message that says "Close other tabs, then try again" (`FAILED` in `engine.ts`). | "Stopped" (the play icon; named "Stopped: the engine didn't start, so Run is off"), disabled | disabled |
 | `failed-twice` | "**Stopped** · failed twice" | `S 7`: "**The engine stopped after failing twice** (it ran out of memory). It won't restart by itself, since each try can use a lot of a phone's memory. Your files are safe." / "Reload the page", "Download all (.zip)" | "Stopped" (the play icon; named "Stopped: the engine didn't start, so Run is off"), disabled | disabled |
-| `other-tab-idle`, `other-tab-taking` | "paused" | `WS 6`, blocking: "dofile is open in another tab" / "Only one tab can use your files at a time, so they are not overwritten. The other tab keeps its data until you take over here." / "Close editor" (focused, so a stray Enter does not take over), "Use dofile in this tab". WS 6 draws "Close this tab", but a page may close only a tab a script opened: "Close editor" goes to the landing page (step 5 builds it) | none | none |
+| `other-tab-idle`, `other-tab-taking` | "paused" | `WS 6`, blocking: "dofile is open in another tab" / "Only one tab can use your files at a time, so they are not overwritten. The other tab keeps its data until you take over here." / "Close editor" (focused, so a stray Enter does not take over), "Use dofile in this tab". WS 6 draws "Close this tab", but a page may close only a tab a script opened: "Close editor" goes to the landing page (`landing.html`, built in step 5) | none | none |
 
 
 ### Transition matrix
@@ -512,7 +533,10 @@ As built:
   when that is one) and no `kind`; every other failure is a client error with a `kind` (an unreachable list:
   `failed`/`download`). It checks the list's build (`checkBuild`, below) before fetching anything, fetches with
   `cache: "no-cache"`, and never caches a file whose byte count is not the listed size.
-  `download()` is the Cache's only writer: the worker only reads it.
+  `download()` is the Cache's only writer: the worker only reads it. Before it fetches, and only when no worker is live, it
+  deletes every entry of that Cache that is not one of the list's `download` files at its URL (relative to the list): the same
+  build kept at an older address (the editor's move to `/app/` with an unchanged snapshot) would otherwise stay until the next
+  snapshot. The list's own files are never deleted, so a resumed download keeps what it has.
   The machine's effect `start-download` calls `download()` before every start the visitor triggers; if it fails (other than by
   "Stop download") the state is `failed` and no worker is made. There is no offline start. `startList()` fetches the list.
   A restart is another path: the machine's `starting-list` state asks `build()` for the list, fetched fresh and checked, before
@@ -749,6 +773,13 @@ One module of signals. Components read any of them and write only through the ow
 engine, did not start, failed twice, running, stopping, waiting and "Break resets" are drawn from `engine` and `isolated`;
 they are not in `banners`.
 
+Step 4's decisions, the review decisions waiting for the maintainer's confirmation and the open questions are listed
+once, in `docs/prototype1-plan.md`, "Step 4: decisions and open questions" (step 5's in "Step 5: decisions and open
+questions"); this section points there. They do not block the merge: they are reviewed after it (the plan's "Post-merge
+review"), with the draft words. The words drafted
+for the visitor are below, per part: "Words the spec does not give" in 4a and 4b, "Step 4c: draft words", "Step 4d:
+draft words".
+
 ```ts
 type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";   // snapshot start: no "packages";
                                                                                    // ?snapshot=0: no "unpack" (OQ-11)
@@ -784,7 +815,8 @@ type Dialog = null | { d: "download"; forRun: boolean } | { d: "clash"; path: st
             | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "reset" }
             | { d: "close-tab"; path: string } | { d: "other-tab" };
 type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user" } | { b: "memory" } | { b: "storage" }
-            | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string };
+            | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
+            | { b: "run-changed"; path: string };
 
 // A signal with one owner is a ReadonlySignal (step 3.5 C): a view that assigns one fails `npm run check`.
 export const engine: ReadonlySignal<EngineState>;        // the engine controller, from the state machine's state; starts as checking-lock
@@ -853,7 +885,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     ready and the run began), `"queued"` (no engine yet, `none` or `declined`: the prompt opens, titled for a run, and the run
     begins when the engine has started) or `"refused"` (any other state); views call `runCode` and `runCommand`, not `run`. It
     throws, before it queues anything, when called while a step of the machine is in progress: inside a handler given to
-    `connectRun`, and also inside a signal effect on `engine`, `lastRun` or `log`, which are written during a step. Start the
+    `connectRun`, and also inside a signal effect on `engine` or `lastRun`, which are written only during a step, or on a
+    `log` write a step makes (a run's start and end; a streamed chunk and "Clear log" write `log` outside a step, where the
+    call does not throw: during a run it is refused). Start the
     next run after the step, for example when the run's promise has resolved. `call(op, args)` is the page's one provider of
     read ops (`ViewOp`: `describe`, `describe_file`, `matrix`, `macros`, `browse`, `memory`); views use `matrix` and
     `describe_file`. It raises no event, and rejects with kind `no-engine` with no worker and `reset` when a reset cut it.
@@ -862,9 +896,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the earlier wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
     (`UPDATED` is reason "updated"'s); `stageWords` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
-  - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs`,
-    `graphIndex` (to the newest) and `history`. It reads no engine state: the engine controller tells it, through the
-    handlers it gives to `connectRun` (a run began, a chunk of its log, its end, an engine is ready, the engine is gone).
+  - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
+    `history`; it also moves `graphIndex` to the newest graph (views write `graphIndex` too). It reads no engine state: the engine controller tells it, through the
+    handlers it gives to `connectRun` (a run began, a chunk of its log, its end, the queued run was dropped, an engine is
+    ready, the engine is gone).
     It clears `results`, `macros`, `data`, `rows`, `memory` and `lastRun` when the engine is gone (a reset, or another tab
     took it: the machine's effect `engine-gone`), and asks for `memory` when an engine is ready. Actions: `runCode(code,
     head)`, `runCommand(text)` (both throw during a step, as `run` does), `addFileGraph(path, png)` (a .png opened; the same
@@ -879,8 +914,11 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     command counts as accepted); only then is it added to `history` (not twice in a row), also when the run ends in an
     error, and the command line clears its field. In any other state (the page load: `checking-lock`, `checking-cache`;
     a start or a run in progress, `failed`, `other-tab-idle`, `other-tab-taking`) or for an empty command it is refused:
-    `history` is unchanged and the text stays in the field. `done` is `runCode`'s promise: the result, or null when
-    nothing ran now.
+    `history` is unchanged and the text stays in the field. `done` is `runCode`'s promise: the result once it has run (a
+    queued command's too, when its engine has started), or null when it did not run: refused, or queued and then dropped
+    ("Not now", a failed download or start, the lock lost). The machine says so with the effect `drop-run`, which
+    `transition()` adds as the last effect of any step that lets go of the queued run without `send-run`; the engine
+    controller passes it to run.ts (the handler `dropped`).
   - `files.ts` owns `files`, `fresh`, `persisted`, the download-failed banner (below) and the storage banner (S 19: once per visit, when `persisted` is false
     and the files change, by the page or a run). It also performs two effects of the machine: `own()` when the tab lock is
     this tab's (unblocks the store, asks the browser to keep the files, lists the store) and `block()` when another tab took
@@ -889,7 +927,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `{b: "download-failed"}` above the editor (on a phone on every view, since "Download all" is in every view's ⋯),
     one at a time (a second failure replaces it), says "Your files couldn't be
     downloaded" once in the live region and logs the cause to the console; a later download that works removes the
-    banner. No toast: a toast only confirms, 3.10. It never rejects), `saveAs`. With no file in the store (folders do not
+    banner. No toast: it offers "Try again", and what the visitor can act on is a banner, 3.10. It never rejects), `saveAs`. With no file in the store (folders do not
     count) `downloadAll` makes no zip, shows and says nothing and resolves false; the ⋯ menu's item is disabled then
     (`hasFiles`).
   - The page's one store: `web/src/app/store.ts`; views change files through it. It starts `blocked` and is unblocked
@@ -897,56 +935,309 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - Helpers in `state.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `setDirty(path, on)`, `saved`
     (localStorage); computed `isPhone` (the layout is the phone's: read it, never pass a `phone` prop) and `hasFiles`
     (the store has a file; folders do not count).
-- **Where each step 4 part goes.** `App.tsx` places the parts and is not edited in step 4; each part edits only its own
-  files. A part reads any signal; it writes only those listed for it.
+- **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
+  three times in step 4, its header says which: the phone ⋯'s file actions and the focus on the tree's row when 4a was
+  joined, and the phone ⋯'s Save off on a .dta tab when 4b and 4d were joined.) A part reads any signal; it writes only those listed for it.
   - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
     delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Writes `tabs`
     (not `dirty`), `activeTab`, `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
-    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone). Calls
-    `store.*`, `downloadAll`, `saveAs`, `editorCommands.open`, `reload`, `renamed`, `closed` and `save(path)`,
-    `addFileGraph`, `runCommand` (Import), `addBanner`, `dismiss`, `showToast`. Its "Download all (.zip)" is disabled while
+    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
+    `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
+    `editorCommands.open`, `reload`, `renamed`, `closed`, `save(path)` and `focus` (after a tab closes), `addFileGraph`,
+    `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
     inline rename) calls `preventDefault()`. No tab can become dirty before 4b's
     editor exists, so 4a's tests of the close-tab and reload paths call `setDirty(path, true)` themselves.
+    **As built in step 4a:** the plain logic is in `files/tree.ts` (the rows: in each folder its folders first, then its
+    files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
+    with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
+    rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
+    are written first, then each clash is asked; what the clash dialog shows beyond the `dialog` value is
+    `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
+    open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
+    is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), both tested in Node
+    (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
+    its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
+    now selected, else the tree's row, else the editor; the close-tab dialog stays open while its Save writes the file,
+    so the focus moves once there too. The commands built from a path (Import here, Load in 4c) come
+    from `web/src/stata/quote.ts` `fileCommand` (3.11). The page's drop listeners are the window's, in the capture phase,
+    so 4b's CodeMirror never sees a file drop; a drag that began in the page (a graph image, which Chromium and WebKit
+    list as carrying a file) is not an upload (a guard kept on partial evidence: C 15 of the plan's list). `FilesPane.tsx` exports
+    `fileMenuItems()` (the head menu); on a phone the Files pane's head is hidden (the top bar already says "Files") and
+    `App.tsx` puts those items in the top bar's ⋯ while the Files view is shown, as it does the Log head's (decided
+    2026-11-11). A drop of files anywhere on the page uploads them (3.1); the Files pane is outlined meanwhile (OQ-16), except while a
+    dialog is open or another tab has the files, when the drop uploads nothing and there is no outline (C 16 of the
+    plan's list).
+    When the folded list is opened (700 to 1199 px) the focus goes to the tree's row in the tab order. "Restore the sample" (OQ-13) is in the head menu since step 5, above "Delete all files…". A new folder is `folder` (`folder-2`, ...) in inline rename. The
+    phone's `FileSwitcher` is one button as wide as the title in every state ("Editor" with no open file, so the top
+    bar's boxes never move); its menu lists the open files, then "Close <name>" (the phone has no ×) and "Show all
+    files" (the Files view). Words the spec does not
+    give, drafts for the maintainer: the inline rename's reasons ("clean.do already exists here.", "Type a name.", "A
+    name can't contain / or \.", "A name can't contain a line break or another control character.", "That name isn't
+    allowed.", "That name is dofile's own."); the bar of a file whose name a command can't hold ("Its name has a
+    character a command can't hold: rename the file to use it here.", also the .dta tab's); a folder's delete ("Delete
+    data/?" / "The folder and everything in it are kept only in this browser; there is no undo."); an upload with files
+    the store refused ("2 files uploaded · 1 couldn't be"); the live region's "survey.xlsx can't be opened in the
+    editor" and "<action> didn't work".
   - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands` and `selection`), `editor/RunControls.tsx`
     (built for the section 5 states, each button at one size, 3.4; 4b adds the timers, and the pill's time goes into
     its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the
-    timers, last run, memory, the right side), `editor/banners.tsx` (save-failed), `log/LogView.tsx` (a plain stand-in
-    today), `log/CommandLine.tsx` (`CommandLine`, `LogActions`: Find and Download log, `logMenuItems` for the phone's ⋯,
-    `PhoneStrip`). Writes `dirty` only through `setDirty`, `banners` (save-failed), `graphIndex` and `outputTab` (a graph
-    link), `graphFull` (a tap on an inline graph, phone). Calls `runCode`, `runCommand` (the command line clears its
-    field only when `accepted`), `breakRun`, `keepWaiting`, `reset`, `openFile` (Go to line in a file that is not open),
-    `store.write`, `showToast`. On a phone the command line's field and the editor's text are 16 px or more, or iOS
+    timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px),
+    `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
+    `log/CommandLine.tsx` (`CommandLine`, `LogActions`: Find and Download log, `logMenuItems` for the phone's ⋯,
+    `PhoneStrip`). Writes `dirty` only through `setDirty`, `banners` (`addBanner` for save-failed; `dismiss` for
+    save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
+    Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
+    pill). Calls `runCode`, `runCommand` (the command line clears its field only when `accepted`), `breakRun`, `reset`
+    ("Reset now"), `openFile` (Go to line in a file that is not open), `store.write`, `saveAs` (Download log, the
+    save-failed banner's Download), `textInStore` and `editorCommands.reload` (the run-changed banner's "Reload from the
+    run"), `showToast`, `say`. `keepWaiting` is 4d's (the stopping banner). On a phone the command line's field and the editor's text are 16 px or more, or iOS
     Safari zooms in when they take the focus: `app.css` sets every `input`, `textarea` and `[contenteditable]` (CodeMirror's
     `.cm-content`) to at least 16 px under 700 px; do not set a smaller size on them there.
+    **As built in step 4b:** the logic with no DOM is in plain `.ts` files tested in Node (`web/test/editor.test.ts`):
+    `log/classify.ts` (the .log tokenizer, OQ-4, used by the log and by a .log in the editor: an echo is `. cmd`, or a
+    loop body `  2. cmd` or a continued `> ` line right after an echo; the error is `r(N);`, `--Break--` and the line
+    right above the hint or above `r(N);`; the hint runs from `  → ` to `r(N);`; notes are the path shim's lines, the
+    tempfile note and a log file's head, before the file's first echo only; the rest is output), `log/align.ts` (the echo
+    of each line of the code sent: the echoes are walked beside the code, an echo that is not the code's next line is
+    passed over, so a graph's link goes after the echo of line `graph_lines[i]`, and at the run's end when it is not found;
+    a nested do-file is passed over whole when its `do` or `include` is a line outside any block (`{ }`, a program, a mata
+    block) and shows its echoes (no prefix, or `noisily`, abbreviated to `n` too, the last of `capture`, `quietly`,
+    `noisily`); a `do` inside a block opens nothing, and after it, or after a nested file's end, a top-level echo is taken
+    only when no `end of do-file` comes before the next `do` (else the walk cannot know whose echo it is: a link in the
+    wrong place is worse than one at the run's end); a top-level echo that is not the next line is looked for further
+    down, so the walk gets back in step after a mata block; lines never echoed are passed over (a `/* */` comment's inside,
+    the body of a `quietly { }` or `capture { }` outside a loop or a program), and a local's or global's braces open no
+    block; the code is indexed by text, so the walk is linear, and the log keeps each run's answer; the code is kept by the
+    run's head, `editor/commands.ts` `codeOf`), `log/paste.ts` (the command line's pasted lines),
+    `log/find.ts`, `editor/csv.ts` (a .csv's columns), `editor/words.ts` (the run-head, last-run, time and memory words).
+    `editor/cm.ts` has the CodeMirror pieces (the languages by extension, the line marks as a state field mapped through
+    edits, the drop guard) and `editor/clock.ts` the 100 ms clock of the timers (it reads `breaking`'s `resetAt`; `test/imports.test.ts`
+    allows two view files to, this one and 4d's `states/banners.tsx`, for the Break countdown). The editor is one `EditorView`, mounted once, with one `EditorState` per
+    open text tab; `data-editor` is on CodeMirror's content with a file shown and on the empty view without one. The unsaved
+    dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page, the
+    editor too, and Ctrl/Cmd+Enter runs, each with Ctrl or Cmd on every platform; S is the key that types "s" or, on a
+    layout whose key there types no Latin letter (Cyrillic, Greek...), the key in S's place (`editor/keys.ts`); a held
+    Ctrl/Cmd+S saves once, and a held Ctrl/Cmd+Enter runs once; a Ctrl/Cmd+Enter that the engine does not take (run.ts
+    `requestRun` answers it was refused, where the Run buttons are disabled) says why in a toast, in the words of the
+    engine's state (`editor/words.ts` `refusedRunWords`, decided by the maintainer, plan's list A; nothing where the
+    press runs or opens the prompt: `ready`, `none`, `declined`); with a dialog open it saves the active tab behind it (an open question: C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast); Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
+    place to change it; the joining agent's, for the maintainer to approve: plan, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
+    when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
+    of that same file starts, when the engine is reset or restarted (the effect `engine-gone` sets `lastRun` to null, which
+    clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line), and when the marked line is
+    deleted; it moves with edits; a command from the command line and a run of another file leave it; a file closed with
+    its mark and no unsaved edits has it again when it is opened with the same text (closed with edits, or opened with
+    other text, it has none). **A run that
+    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`; the decision
+    in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
+    tab of a `\r\n` file follows a run as any other; Save keeps the file's form, noted when its text is read
+    (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
+    a new or empty file and for lone `\r`; the mixed and lone-`\r` cases are for the maintainer to confirm, B 9 of the
+    plan's list) and its UTF-8 byte order mark, which the editor never holds (so neither Run nor
+    the comparisons see it); Save writes the editor's text in that form (`fileText`), as does the save-failed banner's
+    Download, except that a `.do` or `.ado` file (case ignored) is written without its BOM (`dropsBom`), since the engine
+    reads a BOM as part of the first command (ODT-34) and a do-file saved here must run in a nested `do`; the name it is
+    saved under decides, so a rename keeps the noted BOM and the new name decides at the next Save, and after a Save the
+    noted form is the one written; a run that becomes the saved version brings its own form, one that writes the same
+    rows in another form leaves the tab's): the same text
+    again (a byte-identical rewrite, a `.log` open during every run) changes nothing; a text tab with no unsaved edits
+    shows the run's version, changed in one transaction where the two differ, so the caret, the selection and the undo
+    history are kept; one with edits keeps them and takes the run's version as its saved text (the tab stays unsaved, so
+    Save then replaces the run's version knowingly; the dot clears if the two are the same) and gets the warning banner
+    `run-changed` above the editor, on a phone on every view: "**The run changed t.csv.** Your unsaved edits are still in
+    the editor; saving them replaces the run's version." / "Reload from the run", "Dismiss" (a banner, not a question:
+    several files at once, a dialog already open and the phone made a dialog the harder path; a save or a reload of the
+    file removes it, a close or delete of its tab too, and a rename moves it to the new name, as it does `save-failed`).
+    A run that writes something that is not text over an open text tab (binary, not UTF-8: a `.dta` saved as `t.csv`)
+    keeps the tab's text, edits or not, makes the tab unsaved, and gets the same banner with other words and no reload:
+    "**The run changed t.csv, and it is no longer text.** The editor still shows your text; saving it replaces the run's
+    version." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost; for the maintainer to confirm, B 7
+    of the plan's list); a later run that writes
+    the editor's own text over it makes the tab clean again and takes the banner away. A file the run deleted
+    keeps its tab (not handled): the file leaves the file list, the tab keeps its dot as it was, and Save writes the file
+    again (an open question: C 7 of the plan's list). `editorCommands.focus()` focuses at once and never changes
+    the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
+    `[data-editor]`); with a .dta tab active, that tab in "Open files" when it is shown, else its view's first enabled
+    button (Load), else the focus does not move (for the maintainer to confirm, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) it makes no check of its own: it focuses the same element, which the browser does not focus under `display: none`, so the focus does not move.
+    Decisions where this spec is silent: a whole-file run marks no running
+    lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
+    N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
+    by Break. The data is as the last complete command left it.", no line); the notes at a run's end (Break's with its
+    "Go to line", OQ-10's, the files not kept) wrap in the Log pane at every width; on a phone, a tap on the Break pill also shows
+    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; for the
+    maintainer to confirm, B 2 of the plan's list); a phone's
+    inline graph is on the card of its run's theme; Run with no text tab open runs nothing and
+    says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
+    line out; the page load's status words are "Opening"; a selection's last run is "Last run: lines 6–7 · …" and a
+    command's "Last run: a command · …"; the phone's strip shows the state's words where it has no last run; Find is a
+    field over the log ("Find in the log", "2 of 5", Enter and Shift+Enter, Esc closes; every match is counted and
+    numbered in the log's order; on the desktop with the Output pane unsplit, Find shows the Log tab first; Esc and Close
+    give the focus back to the Find button, on a phone to the ⋯ button); Download log saves
+    `dofile.log`; the phone has no "Run command" button (PH draws none); on a phone the command line has a fixed height
+    (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (taken as 61 px and the safe
+    area, from ui.css's `.tabbar`: a figure, not a measure); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` are highlighted with CodeMirror's
+    `@codemirror/lang-markdown` (its `markdownLanguage` alone: `markdown()` would bring the HTML, CSS and JavaScript
+    languages, about 160 KB more) and `@codemirror/lang-json`, on the Stata tokens' classes (added when 4b and 4d were
+    joined). **Pasted lines** (the maintainer's decision: each line runs in turn): a paste
+    with no line break, or with breaks only at its end (one copied line), is an ordinary paste and runs nothing; with
+    other breaks, the field's text before and after the cursor joins the first and
+    last lines, empty lines are left out, and the lines run one after the other, each once the one before has ended; they
+    stop at the first that is refused, that was queued for an engine that then did not start, that ends with any rc
+    but 0 (Break too), or whose run another tab cut by taking the engine (the rest never reach the engine this tab may
+    get back; the wait for a line also ends when its run's promise settles), and before a line that cannot run alone (not sent: it runs from the editor): one that ends with
+    `{`, holds `///`, opens a `/*` comment it does not close (a pasted `/*`, `drop _all`, `*/` runs nothing), or is
+    `program define` or `mata` on its own (`mata: x = 1` runs); a
+    toast says how many were not run, and a refused line goes back into the field (these stops are for the maintainer to
+    confirm, B 3 of the plan's list). The next line starts in a microtask
+    after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
+    .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
+    nothing either (for the maintainer to confirm, B 4 of the plan's list). Words the spec does not give, drafts for the
+    maintainer: "No file is open: open one from the file
+    list." (the empty editor); "No file is open to run" (toast); a refused Ctrl/Cmd+Enter's toast: "Run is off until this run ends" (`running`,
+    `breaking`, `waiting`), "Starting… Run is off until the engine is ready" (the page load, `asking`, `downloading`,
+    `starting-*`; the Run button's own label), "Run is off: the engine isn't running in this tab" (`failed`,
+    `failed-twice`, `other-tab-*`); "Opening" (status bar, the page load); the save-failed
+    banner ("analysis.do couldn't be saved: <reason>. Your edits are still in the editor; download them to keep a copy."
+    / Download, Dismiss); the pasted lines' toasts ("2 of 4 pasted lines not run: line 2 ended with r(111)", "… not run:
+    the engine can't take a command now", "… not run: line 1 didn't run", "… not run: another tab took over the engine
+    during line 1", "… not run: line 2 starts a block, a comment or
+    a /// command; run those from the editor"); "Stopped by Break before line N. …", and for a command "Stopped by Break. The
+    data is as the last complete command left it."; "Not
+    kept: a.dta, b.dta. Its folder was renamed or deleted during the run."; "The files this run wrote couldn't be kept in
+    this browser: <reason>"; the last-run words above; the strip's "Last run 0.38 s" and "before line 17 · 18.4 s";
+    "Find in the log", "none", "Close"; the editor's name "Editor: analysis.do"; the inline graph's name "Graph: scatter
+    y x: open full size"; the live region's "analysis.do couldn't be saved" (a failed save); the run-changed banner
+    ("**The run changed t.csv.** Your unsaved edits are still in the editor; saving them replaces the run's version." /
+    "Reload from the run", "Dismiss"; for a version that is not text "**The run changed t.csv, and it is no longer
+    text.** The editor still shows your text; saving it replaces the run's version." / "Dismiss"); a time of a minute or
+    more in the status bar and the last run, "2 min 5 s"; "the selection" (a selection's run-head or last run with no
+    lines) and "the file" (a run-head with no path).
   - **4c** `output/tabs.tsx` (`GraphTab`, `DataTab`, `ResultsTab`; they may be mounted again when the layout changes, so
     their state lives in signals), `output/FullSize.tsx` (`FullSize`, placed once over the page for every width, open
     while `graphFull`), `output/DtaView.tsx` (`DtaView({path})`, a .dta tab, shown in the editor's place). Writes
     `graphIndex`, `graphFull`, `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
     run.ts `moreRows()`, which appends (run.ts is the one writer of `rows`). Calls
     `call("matrix" | "describe_file", ...)`, `moreRows()`, `runCommand` (Load), `showToast` ("Copied").
+    As built (step 4c): `tabs.tsx` only re-exports the three tabs, one file each (`GraphTab.tsx`, `DataTab.tsx`,
+    `ResultsTab.tsx`); the logic with no DOM is `format.ts` (tested in Node, `test/output.test.ts`), the clipboard and PNG
+    helpers `clip.ts`, and the views' own state `view.ts` (module signals: the filter text, the focused name and value,
+    the folds, the open matrices, the cells shown whole, what `describe_file` said of each .dta). Details where the
+    sections above are silent: "graph n of N" counts by the graph's number `n` (the log's links) against the newest
+    graph's number; the alt text is "Graph: scatter wage educ", and "Graph 2: scatter wage educ" when another kept graph
+    has the same command; the card of a run's graph drawn dark is dark (`--graph-card-dark`, OQ-21: the run's theme), and a
+    .png from the files is on the light card; the full-size view is a fixed overlay (not a native modal dialog, whose top
+    layer would hide the toast) with its own focus trap, which leaves the keys to a native dialog opened over it, and a
+    move to another graph is said through `say()` (the graph's alt text); the .dta bar's size is the tree's
+    (`formatSize`, decimal units); picking the picked
+    name again clears it; a Browse cell over 60 characters, or with a line break, is cut to one line (a break shows as ↵)
+    and shows whole when pressed; the r() scalars start open when e() has no scalars; an open matrix closes when another
+    run replaces the results; Load says "Loaded wages.dta" (or "Couldn't load wages.dta: r(601)") in a toast when it
+    ends; a matrix grid shows 100 rows and 30 columns at most (Copy has all).
+    **Step 4c: draft words**, for the maintainer to approve (the words the spec draws are not listed): Load's toasts
+    "Loaded wages.dta" and "Couldn't load wages.dta: r(601)"; the alt text "Graph 2: scatter wage educ" (a command that
+    another kept graph shares) and "Graph 3" (a graph with no command); a thumbnail's name "Show graph 2: scatter wage
+    educ", the thumbnails' list "Graphs"; the full-size view's name "Full-size graph" and, on a phone, "Previous" and
+    "Next"; the toasts "Couldn't read the matrix", "Couldn't copy: this browser said no" and "Couldn't copy the image:
+    this browser said no"; a matrix opened in place: "Reading e(b)…", "Couldn't read e(b): <reason>" ("the engine is
+    not running" with no engine), the buttons' names "View e(b)" and "Hide e(b)"; Browse with every row shown "500
+    rows · read only"; the live region's "More rows shown" (Show 50 more) and "Copied" (Copy image in the full-size
+    view).
   - **4d** `states/DownloadDialog.tsx` (the prompt and "dofile is open in another tab", built as far as the start and the
-    tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, a dead link until step 5),
+    tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, the landing page since step 5),
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
-    banners above the editor and the log, and the reset, storage and memory banners; `DownloadFailedBanner` is built: "Your
-    files couldn't be downloaded: this browser didn't open the storage where dofile keeps them." / "Try again"
-    (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d may restyle or reword
-    it). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
+    banners above the editor and the log, and the reset, storage and memory banners; `DownloadFailedBanner` was built in
+    step 3, "Try again" (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d
+    reworded it: "Step 4d: draft words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
     `ask()` (the declined banner's "Download the engine" leads back to `asking`, section 5), `decline`,
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
-    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `downloadAll`.
+    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `editorCommands.focus` (through
+    `states/focus.ts` `focusStable`), `downloadAll`, and run.ts `refreshData` (Reset describes the memory again after a
+    run).
+    **As built (4d, to review).** `states/words.ts` holds the logic and the words with no view (Node-tested:
+    `test/states.test.ts`), `states/clock.ts` the `useNow` timer (the machine has no clock; a view reads `Date.now()`).
+    S 2 and S 3 are one progress dialog: while `downloading` the header row "Downloading  14.2 of 48 MB · 6 s", the bar
+    (`aria-valuetext` "Downloading the engine, step 1 of 5": the stage, not the megabytes) and the stage list with the
+    bytes on the current stage; from `starting-*` the row "Loading packages  step 4 of 5 · 9 s" (a stage seen twice adds up),
+    no bar, done stages keep their time (the download's as "48 MB · 7.1 s"). "Use dofile in this tab" is `aria-disabled`
+    and `.off` (same label; ui.css's disabled look, as Run's) in `other-tab-taking`, and a press then does nothing.
+    Reset (for the maintainer to confirm, B 5 of the plan's list; C 1 there asks about globals and scalars): `askReset()`
+    resets at once only while the engine is `ready`, `data` has no variables or observations and
+    `results` has no scalar, macro or matrix (macros and graphs are not counted: S 14 says "no data in memory and no
+    results"; `words.ts` `resetAsks`). A run in progress always asks (its data and results are known only when it
+    ends). After a run, "nothing to lose" is checked again once run.ts `refreshData()` has described the memory afresh
+    (`words.ts` `resetDecision`): until the run's own refreshData answers, `data` may still describe the memory from
+    before the run, so a run that made data and no r() or e() would otherwise be reset with no question; a description
+    that fails asks, and a press while the check is pending does nothing. The dialog closes itself if the engine can no
+    longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
+    under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (`editorCommands.focus()`, which must focus at once; with a .dta tab
+    active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
+    focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/Dialog.tsx` uses
+    the same `focusStable` when a dialog closes and its opener has left the page (a banner's button: another tab took
+    the lock during a Break, then "Use dofile in this tab"), after the timers its answer set and only for a focus left on
+    `<body>`; the opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on
+    `close()`, and the dialog gives it back itself, the same way: a focus its answer places (the close-tab dialog's "Don't
+    save") moves once. A dialog that opens while the one before it is still handing the focus back (the next clash after
+    "Keep mine", other-tab over a dialog) takes that one's opener as its own, and `<body>` is never an opener (a dialog
+    opened with the focus on nothing gives it to `focusStable` when it closes). The
+    hand-off waits for a microtask and moves only a focus left on nothing, and the banners that take the focus (stopping,
+    waiting) take it in a layout effect: so from the stopping banner to the waiting one the focus goes straight across,
+    never through the editor. The declined banner's "Download the engine" moves the focus to the editor before the prompt
+    opens, so the prompt gives it back there. The banners above the editor follow the
+    `reason` of a failed start (`failedActions`): no-wasm "Browsers that work" and Download all; download and memory "Try
+    again"; updated "Reload the page"; unknown "Try again" and "Reload the page"; failed twice "Reload the page" and
+    Download all, never "Try again". Download all is `disabled` while `hasFiles` is false. Above the log: running
+    (`not isolated`: S 11's words instead of the Break sentence, as a warning banner with its icon, as S 11 draws it),
+    stopping once Break has been pending 1 s (the 5 s is the constant `GRACE_S`, as in the running banner's own text, and
+    the machine's `graceMs` is not visible to views: a shared constant, or the time Break was pressed in the `breaking`
+    view, would need engine.ts: C 4 of the plan's list; the focus goes to "Don't reset: wait for it"; at 0 s, until the reset lands, the bold part
+    reads "The engine is being reset now:" instead of "In 0 s"), waiting (takes
+    the focus), the reset banner ("Run the file again" is on while the engine is `ready` and a text tab is active, runs the active
+    tab, and dismisses the banner: C 3 of the plan's list). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "next error",
+    the memory banner's trigger (OQ-8; its view is built, with no action, as P/Notices draws it, so its owner removes it:
+    C 12 of the plan's list). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
+    **Step 4d: draft words**, for the maintainer to approve (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
+    Reset banner by kind: user "You reset the engine." / break "The engine was reset: the code did not stop at Break."
+    (the reason, a cause in parentheses cut off) or, with no cross-origin isolation, "Break reset the engine." "This page
+    can't ask a run to stop, so Break resets it." / crash "The engine was reset: the engine crashed."; each then "The
+    data in memory is gone; your files are kept." Running banner: "Running lines 14–15 · 3.4 s" also "Running line 9",
+    "Running analysis.do", "Running a command". The failed banner: "The engine didn't start." then the engine's
+    `message` for the reason (`FAILED` in `engine.ts`), then "Your files are safe: you can still edit and download them."
+    The declined banner's "(about 48 MB)" is the build's size. Failed twice: "The engine stopped after failing twice
+    (it ran out of memory)." (the parenthesis only for reason memory) "It won't restart by itself, since each try can
+    use a lot of a phone's memory. Your files are safe." `DownloadFailedBanner` (OQ-16, storage unavailable): "Your files
+    couldn't be downloaded. This browser wouldn't open the storage where dofile keeps them, so the .zip couldn't be made.
+    Try again; if it fails again, reload the page." / Try again, Dismiss. Stopping banner at 0 s: "**The engine is being
+    reset now:** the data in memory is lost; your files are kept." Memory banner with no measured size: "**Memory is near
+    its limit of about 2 GB.**" (then the drawn sentences). Progress rows: "Downloading the engine",
+    "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
+    of M". OQ-18: "Browsers that work" goes to `/#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
+    step 5 built listing the browsers that run dofile, opened in a new tab. OQ-10, the
+    notes (`noteFor(rc, error)` in `words.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
+    error, where `error` is the error the run ended with, its last error line that is not `r(N);`, not one an earlier
+    `capture noisily` caught: `log/classify.ts` `runError`): `restore` with nothing preserved (r(622);
+    the engine prints only "nothing to restore") "Nothing was preserved in this run. A run restores the data it preserved
+    when it ends, so put preserve and restore in the same run."; a community command (the engine says it "is not a
+    command known to OpenDTA" and may suggest a near name, "did you mean recode?") (r(199), `reghdfe`, `esttab`, `estout`, `outreg2`, `ivreg2`, `xtivreg2`, `ftools`, `winsor2`)
+    "reghdfe is a community command: it isn't part of Stata itself, and dofile doesn't have it." No note for a
+    temporary name from an earlier run (r(601) naming the engine's temporary file): the engine's own line after `r(601);`
+    says it (`browser.py` TEMPFILE_HINT, "(a tempfile lasts one run: save it under a name to use it in a later run)"), so
+    the draft "A tempfile, tempvar or tempname lasts one run. …" was dropped when 4b and 4d were joined.
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
-    on a phone every view draws it (download-failed); the hidden views are `display: none`, so it is read and tabbed once.
+    on a phone every view draws it (download-failed, run-changed); the hidden views are `display: none`, so it is read and tabbed once.
 - **The editor's interface** (`editor/commands.ts`; no-op defaults until 4b's editor mounts, so 4a can call them first):
   `runFile()`, `runSelection()`, `save(path?)` (resolves true once saved), `focus()`, and for 4a `open(path, text)` (a
   text file was opened: its tab is in `tabs`), `reload(path, text)` (an upload replaced an open file, F 3.3: edits
   dropped), `renamed(from, to)` (an open file was renamed or moved: the editor keeps text, edits and undo), `closed(path)`
   (a tab closed, the close-tab dialog's "Don't save" too, or its file deleted: the state is dropped); for 4b's log and 4d
-  `goToLine(line, path?)`. 4a changes `tabs` first, then calls these. `selection` is the editor's. The editor fills
+  `goToLine(line, path?)`; for files.ts `ranOver(path, text)` (a run rewrote an open text file; `text` is null when the
+  run's version is not text; it answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on
+  "kept"). `reload` returns at once when the file has no tab or state. 4a changes `tabs` first, then calls these. `selection` is the editor's. The editor fills
   `editorCommands` field by field when it mounts: call through the object (`editorCommands.save(path)`) and never
   destructure it or keep a field, or the caller keeps the no-op.
 - **Slots in `App.tsx`.** `FileBar` above the editor; the editor sits in `.editor-slot`, hidden (never unmounted) while a
@@ -958,7 +1249,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `<Dialog>` with its focus on `data-autofocus` again. A view that another dialog replaces is unmounted with no answer:
   it treats that as Cancel.
 - **Primitives** (`web/src/app/ui/`): `Dialog` (a native modal `<dialog>`: `title`, `actions`, `role`, `onCancel` = Esc,
-  none = blocking; `data-autofocus` marks the first focus; focus returns to the opener when it unmounts; a bottom sheet
+  none = blocking; `data-autofocus` marks the first focus; focus returns to the opener when it unmounts, or, when the
+  opener has left the page, to the editor or "More actions" (`states/focus.ts` `focusStable`), after the timers its answer
+  set and only for a focus left on nothing, so it moves once; a bottom sheet
   under 700 px); `MenuButton` and `openMenu({label, items, anchor | at})` (one menu at a time, in the top layer, arrows,
   Home, End, Esc returns focus, Tab closes and moves on from the trigger; an item is `{label, onSelect | href, hint,
   danger, disabled, keepOpen}` or `"rule"`; `keepOpen` leaves the menu open with the focus on the item, as the phone's
@@ -982,8 +1275,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   fixed sentence per reason (`FAILED` in `engine.ts`; `FAILED_TWICE` for `failed-twice`): what happened and what to do (try
   again, reload the page, close other tabs, another browser), with no command, file name, byte count or build term. The
   cause (it may name `npm run snapshot`, a file, bytes) is `detail`, logged to the console by the effect `warn` and not shown
-  by default. No message names `?snapshot=0`, and there is no automatic fallback to the normal boot. The failed states show
-  nothing yet: step 4d builds their banners.
+  by default. No message names `?snapshot=0`, and there is no automatic fallback to the normal boot. The failed states'
+  banners are 4d's (`states/banners.tsx`).
   - **Tickets and the drop record.** Each request (the tab lock, the cache check, the download, the list fetch, each worker,
     each take-over) has a ticket, a number the machine issues. An answer presents the ticket of the request it answers, and the
     machine drops an answer whose ticket is not the state's current one: a reset during a start, a lock lost during a
@@ -1046,6 +1339,162 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   DS-8 (`--dur-fast`, `--dur`, `--z-menu` < `--z-toast` < `--z-dialog`), DS-7's bottom sheet and tab bar (drawn in
   `system/index.html`).
 
+### As built in step 5 (landing, commands, sample; branch `prototype1-step5`)
+
+The maintainer's list for step 5 (decided, waiting for confirmation, open) is the plan's "Step 5: decisions and open
+questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below, under "To look at on the first real deploy".
+
+- **URLs** (decided by the maintainer in the review of step 5): the landing page is the site's root, `/`; the commands page is
+  `/commands/`; the editor is a single-page app under `/app/` (`/app/?test` and the other flags as before). Every address,
+  in `npm run dev`, `npm run preview` (and the e2e tests) and on the host (Cloudflare Workers static assets, `wrangler.jsonc`):
+
+  | Address | Serves |
+  |---|---|
+  | `/` | the landing page (`dist/index.html`, from `web/landing.html`); `/#browsers` its "Browsers that work"; `/index.html` redirects to `/` |
+  | `/commands/` | the commands page (`dist/commands/index.html`, from `web/commands.html`); `/commands`, `/commands.html` and `/commands/index.html` redirect to it |
+  | `/app/`, `/app/?test`, ... | the editor (`dist/app/index.html`, from `web/index.html`); `/app`, `/app.html` and `/app/index.html` redirect to `/app/`, the query kept |
+  | `/app/assets/…`, `/app/snapshot/…`, `/app/pyodide/…`, `/app/start-files.json`, `/app/*.whl` | the editor's files |
+  | `/assets/…` | the two static pages' own script, stylesheet and fonts |
+  | anything else (`/landing.html`, `/nope.html`, `/nope/`, `/app/nope.html`, `/_headers`) | 404, never a page in its place |
+
+  `/commands/` and not `/commands.html`: a folder's index is served at the same address, with no redirect, by the dev server,
+  `vite preview` and Cloudflare's `html_handling: "auto-trailing-slash"`. `wrangler dev` (local workerd) redirected `/index.html`,
+  `/commands`, `/commands.html` and `/app` (with and without `?test`) as the table says; the dev and preview servers do the
+  same for every redirect in the table (`slash` in `vite.config.ts`), and `/app.html`, `/app/index.html` and
+  `/commands/index.html` are redirected there to match what auto-trailing-slash is documented to do, not seen on workerd. `/landing.html`
+  was never deployed (step 5 is the first to build it), so it is a 404, not redirected. Headers: the cross-origin isolation the editor's Break needs (`COOP: same-origin`, `COEP: require-corp`) on
+  `/app/*` only (`dist/_headers`, written by the site's build); the static pages get none. The dev server sends them on every
+  response (Biome's checker panel is a frame and needs them). Links: the static pages name each other by absolute path (`/`,
+  `/commands/`) and the editor by `{{editor-url}}`, which the build fills; the editor names the landing page by
+  `LANDING_URL` (`app/env.ts`, from the build's `__SITE_URL__`) and `BROWSERS_URL` (`${LANDING_URL}#browsers`); its own files
+  by `import.meta.env.BASE_URL` (`main.tsx`), so the worker, the wheels, `pyodide/`, `snapshot/`, `start-files.json` and the
+  paths in it (relative to the list) all follow the base.
+- **Checked on `wrangler dev`** (local workerd, Cloudflare's runtime on this machine, not the edge), with `dist/` built on the
+  quality-11 snapshot as `deploy.yml` builds it (no file over 21 MB): every address in the table, its status, redirect and
+  headers, and in Chromium the landing page's and the commands page's scripts, and the editor at `/app/?test` starting from
+  the snapshot, cross-origin isolated, and running code. `vite preview` (the e2e tests) answers as the table says, which is
+  the documented host behavior, not the edge's.
+- **To look at on the first real deploy** (the edge itself is not checked: its compression and caching, `deploy.yml`'s upload):
+  1. `/`, `/commands/` and `/app/`: in the editor's console `crossOriginIsolated` is true, and the download size on the prompt
+     and on the landing page agree.
+  2. The redirects: `/app` and `/commands` to their folders, the query kept (`/app?test`); and, not requested on workerd,
+     `/app.html`, `/app/index.html?test` and `/commands/index.html` (the preview server redirects them as auto-trailing-slash is
+     documented to). Note the status code and whether `Location` is a path or a whole URL.
+  3. What preview serves and the edge may not: `/index`, `/app/index`, `/commands/index` and `/app//` answer 200 in preview;
+     the edge should redirect them to the folder. Harmless either way, since every URL the editor uses is absolute.
+  4. A missing page is a 404 (`/nope.html`, `/app/nope.html`, `/landing.html`), and `/_headers` is a 404 (not uploaded as a
+     file).
+  5. The isolation headers on a 304 under `/app/*`: reload the editor in Safari once the engine has started (WebKit refuses a
+     worker script whose cached 304 reply lacks COEP).
+  6. "Browsers that work" from the editor opens `/#browsers`.
+  7. A tab of the old build (the editor at `/`) left open across the deploy: its next start or Reset fetches `/start-files.json`,
+     now a 404, so it shows a failed download ("Try again" fails the same way) rather than "dofile was updated"; a reload loads
+     the landing page, and "Open the editor" the new editor, with the visitor's files (same origin). Unsaved edits in that tab
+     can still be saved to the store before the reload.
+  8. If step 4 deployed before step 5 with the same snapshot (`built` unchanged): after one download at `/app/`, DevTools'
+     Cache Storage `dofile-snapshot-<built>` holds only `/app/…` entries (`download()` dropped the root-keyed ones).
+- **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/app/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base` and
+  its output folder (`dist/app/`); `EDITOR_URL` (default `EDITOR_BASE`; `DOFILE_EDITOR_URL`) is what the static pages link
+  to; `SITE_URL` (`/`; `DOFILE_SITE_URL`) is the landing page, from the editor. `vite.config.ts`, `playwright.config.ts`
+  (its `baseURL` ends in the base, so a relative `goto("?test")` is the editor and `goto("/")` the landing page),
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.mjs` read it; the tests compare with the
+  setting, not with `/app/`. `test/site.test.ts` fails if another source (`.ts`, `.tsx`, `.mjs`, `.html`, `.css`, `.json`), script,
+  e2e test, config, page or workflow spells the editor's path after a quote, a backquote, `(` or `=` (comments may name it; a
+  path joined from pieces, `"/" + "app"`, is not caught: never write one).
+  **Another path on the same origin:** change `EDITOR_BASE` (or set `DOFILE_EDITOR_BASE`); nothing else. Checked with
+  `/editor/`: `npm run build` wrote `dist/editor/`, `_headers` for `/editor/*` and the landing page's links to `/editor/`;
+  `npm test`'s site tests and the e2e specs `landing`, `sample`, `commands` and `step2` (Chromium) passed on it.
+  **Its own subdomain later** (`app.<domain>`), two folders deployed as two Workers; checked into `/tmp`:
+  1. The editor: `DOFILE_EDITOR_BASE=/ DOFILE_SITE_URL=https://<domain>/ npx vite build --outDir <editor folder>`. It writes
+     the editor at the folder's root, its `start-files.json`, and its own `_headers` with every path isolated (`/*`); it leaves
+     `dist/` alone (only a build into `dist/` empties `dist/`).
+  2. The static pages: `DOFILE_EDITOR_URL=https://app.<domain>/ DOFILE_EDITOR_DIR=<editor folder> npx vite build --mode site
+     --outDir <site folder>`. The download size comes from the editor's list in `DOFILE_EDITOR_DIR`; no `_headers` (the editor is
+     elsewhere, and the pages need none). The site's build refuses to write into the editor's own folder (with `EDITOR_BASE` `/`,
+     `npm run build` as it is fails there, so the landing page never replaces the editor's `index.html`).
+  3. By hand: a second Wrangler config for the editor's Worker (`assets.directory` the editor folder, the same `html_handling`
+     and `not_found_handling: "none"`) and this one's `directory` the site folder; `package.json`'s `build`, `cf:dev` and
+     `deploy` and `deploy.yml` (two builds, two deploys, the size check over both folders) changed to match; the e2e setup,
+     which serves one origin (`vite preview` of one folder, `baseURL` the site's origin plus the base), needs a second server
+     for the editor's origin before the tests that cross between the pages run; the dev server has no static pages with
+     `EDITOR_BASE` `/` (they are another site's).
+  What does not follow the editor to
+  a new origin, because the browser keeps it per origin: the visitors' files (IndexedDB `dofile`; they must "Download all
+  (.zip)" on the old address and upload them on the new), the downloaded engine (the Cache `dofile-snapshot-<built>`: a first
+  visit's download again), the tab lock (`dofile-engine`, per origin), the sample's mark (everyone gets the sample again) and the
+  theme choice (`dofile.theme`: the landing page and the editor no longer share it). Moving the path on one origin keeps the
+  files, the tab lock and the theme (all per origin), but the Cache's entries are keyed by their full URL, so a visitor whose
+  engine was cached at `/snapshot/…` downloads it once more at `/app/snapshot/…`; that download removes the old copy
+  (`download()` drops every entry of the Cache it fills that the build's list does not name, when no worker is live; the list's
+  own files stay, so a resumed download keeps them).
+- **Builds.** `npm run build` = the wheel, then `vite build` (the editor: empties `dist/`, writes `dist/app/` with its
+  `public/` files and `start-files.json`, which lists only `dist/app/`), then `vite build --mode site` (the static pages:
+  `publicDir: false`, no module-preload polyfill, so they load nothing of the editor's; their download size read from
+  `dist/app/start-files.json`, which must exist; the pages moved to `index.html` and `commands/index.html`; `_headers`).
+  Both builds take their folder from Vite's resolved `build.outDir`, so `--outDir` moves the whole output, `start-files.json`
+  included. `vite preview` serves all of `dist/` at `/` with the isolation headers under `/app/` and the folder redirects, as the
+  host does. The dev server is the editor's (base `/app/`) with a middleware for `/` and `/commands/` (their scripts are then
+  served from under `/app/`, a dev-only detail).
+- **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
+  the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `theme.ts`, the theme button's words,
+  the editor's (a test compares them); `landing.ts`; `commands.ts` and `filter.ts`, the filter). These import nothing but
+  `src/site/` and the stylesheets (CSS `@import`s too), and nothing imports them, the editor's `index.html` and CSS included (`test/imports.test.ts`): no signals, no store, no tab lock, so
+  reading the landing page never touches the editor's files. `web/scripts/site-pages.ts` fills the pages at build time (a
+  plugin in `vite.config.ts`): `{{version}}` (the package's version, `0.1.0.dev1`, OQ-20), `{{engine-mb}}` (`Math.round` of
+  the compressed total in MB, the editor prompt's number: in dev from `public/`, in a build from the editor's
+  `start-files.json`), `{{editor-url}}` (section 8, "URLs") and the commands list.
+- **Landing page** as drawn (`L`): desktop two columns, the phone's hero, both banner drawings and `welcome.do` hidden from
+  screen readers with a plain copy that holds no link; Copy buttons that name what they copy ("Copied" beside the button for
+  2 s, the live region says "Copied to the clipboard" once); " from a public CDN" and " from a CDN" are gone; "48 MB" is the
+  build's number in every place. Added: the section `#browsers` ("Browsers that work", the target of the editor's banner link and
+  of the section's own heading), full width under the two columns.
+- **Commands page** (OQ-18): the landing page's top bar and footer, one column of text, then every name of
+  `src/stata/commands.json` (`npm run commands` makes it from the engine's registry) in columns, written into the HTML by the
+  build, so the list is there with no script. In each name the shortest form you can type is bold. Names `browser.py` turns off
+  (`DENIED`, read from the source text) carry "off in the browser". A second list holds the prefixes: the six the interpreter
+  handles itself (`OWN_PREFIXES` in `scripts/site-pages.ts`, a test compares them with `src/stata/language.ts`) and the
+  registry's. Each list is a `<section>` with its heading (and the prefixes' note). A filter field (shown only when the script
+  runs) keeps the names that contain the text, hides a section with no name left, and says "N of M commands", with ", 1 prefix"
+  or ", N prefixes" when prefixes are shown (`countText` in `src/site/filter.ts`).
+  No descriptions and no links to help pages: a name's meaning is the visitor's own knowledge or a search away, and the
+  clean-room risk of 515 descriptions is not worth it (`R` round 1).
+- **Sample** (`F 2.1`, `F 2.4`; OQ-21's names): `web/sample/analysis.do` (the main do-file: `use`, `describe`, `summarize`,
+  `tabulate`, `tabstat`, `regress`, a `foreach` loop, `do helpers.do`, a `scatter`), `web/sample/helpers.do` (a `program` that
+  compares two groups' average wage), `web/sample/data/wages.dta` (500 rows: `id age educ female region wage`, made by
+  `web/sample/make_sample.py` with numpy's `default_rng(2026)` and written by the engine itself, with a fixed time in the .dta
+  header, so every run makes the same bytes; `--check` says whether the committed file is what the script makes, and
+  `tests/test_sample_data.py` checks it in CI. The draws repeat while numpy is the version `uv.lock` pins). `npm run sample` runs the script and `scripts/make-sample.ts`, which writes the generated
+  module `src/app/sample-files.ts` (text as strings, the .dta as base64) so the sample is in the page's own bundle and needs no
+  request. `src/app/sample.ts`: `seedSample()` is called by `files.ts own()` once the tab lock is this tab's; it writes the three
+  files and opens `analysis.do` when the store has no entry at all and the localStorage mark `dofile.sample` is not set, and sets
+  the mark once the three files are written (a seed that fails sets none and never rejects). A store with a file of the
+  visitor's is never written (the mark is set so it never will be); a visitor who deleted everything is not given it again.
+  The seed's own writes (of the sample's paths) bring no storage banner (S 19); any other change meanwhile, and the visitor's
+  first change afterwards (a Save, an upload, a run that writes a file), does (`files.ts`, from the store's change row). With `?test` in the URL it does nothing unless the URL has `?sample` too, so the e2e specs
+  start from an empty store. "Restore the sample" (`fileMenuItems`, above "Delete all files…" after a rule): writes the missing
+  files with no question and the toast "Sample restored"; if any file of the sample is there with other contents, or is open
+  with unsaved edits, the dialog `restore-sample` ({ d, paths }; `files/dialogs.tsx`, `role="alertdialog"`) asks first and
+  Replace drops those edits. Other files are never touched. A restored file that is open is reloaded in its tab with the text
+  decoded as the editor reads a file (`decodeText(bytes, true)`), so the tab takes the sample's form, `\n` and no BOM: a tab
+  whose file had `\r\n` or a BOM saves the sample's form from then on, as the store holds it.
+- **Words not in the sources** (drafts for the maintainer): the dialog "Restore the sample?" / "helpers.do differs from the
+  sample. Replacing it discards your changes. Your other files are not touched." (plural: "analysis.do, helpers.do differ from
+  the sample. Replacing them discards your changes. …") / **Cancel** (focused), **Replace** (`.btn.stop.live`); the toasts
+  "Sample restored", "The sample is already here", "Couldn't restore the sample"; the Copy failure line in the live region
+  "Couldn't copy: select the text and copy it by hand"; the section "Browsers that work"; the commands page's text (below the
+  title, the Filter label and its placeholder "for example: reg", the count "N of M commands, 1 prefix", "No command starts with
+  or contains that.", "off in the browser", "Prefixes", "Back to the start", "Open the editor"). The Copy buttons and the theme
+  button are hidden until the script that makes them work runs. Their exact text is in the two HTML files and in
+  `docs/prototype1-plan.md`, "Step 5: the clean-room record".
+- **Tests.** Node: `web/test/site.test.ts` (placeholders, the commands list against `commands.json`, `DENIED`, the six prefixes,
+  the filter, the clean-room greps), `web/test/sample.test.ts` (the first visit, never over a visitor's files, Restore and its
+  dialog on the real store module; the generated module is current), `web/test/sample-run.test.ts` (both do-files run with
+  rc 0 in Pyodide, draw one graph, and every output line of the landing page's regression block appears in that run's log).
+  e2e: `landing.spec.ts` (content, 404 for a missing page, the links in both directions and from the other-tab dialog and the
+  failed-start banner, the build's size, the theme, Copy, axe in both themes on both pages, no sideways scroll, forced colors),
+  `commands.spec.ts`, `sample.spec.ts` (first load, a later visit, never over files, Restore with its dialog, a run in the real
+  engine).
+
 ## 9. Tests (step 6)
 
 One Playwright file per flow in `web/e2e/`, in Chromium, Firefox, WebKit and the iPhone profile. `web/e2e/poc.spec.ts` is tied
@@ -1054,7 +1503,7 @@ and `fonts` also run over the real editor, landing and commands pages, light and
 
 | Flow | The e2e test that must exist | Covered in part today by |
 |---|---|---|
-| F1 First visit | The prompt shows once. Download shows byte counts, the stages, then "Ready". "Stop download" and "Not now" leave a working file panel and editor, and Run reopens the prompt. A later visit shows no dialog. No request leaves the origin. A refused snapshot gives the did-not-start banner. `?snapshot=0` still starts. | poc: "the default start: from the memory snapshot…", "a snapshot from a different build of the wheel is refused…", "?snapshot=0: the normal boot…"; `web/test/engine.test.mjs`: "files can be listed, written and read while the engine is still loading…" |
+| F1 First visit | The prompt shows once. Download shows byte counts, the stages, then "Ready". "Stop download" and "Not now" leave a working file panel and editor, and Run reopens the prompt. A later visit shows no dialog. No request leaves the origin. A refused snapshot gives the did-not-start banner. `?snapshot=0` still starts. | poc: "the default start: from the memory snapshot…", "a snapshot from a different build of the wheel is refused…", "?snapshot=0: the normal boot…"; `web/test/engine.test.ts`: "files can be listed, written and read while the engine is still loading…" |
 | F2 Open the sample | A first visit lists the sample and opens its main do-file; a second file opens a second tab; closing an unsaved tab asks; the sample runs to a table and a graph. | poc: "Save writes the file; Discard opens the other file" (the one-file model) |
 | F3 Upload a package | Files and a folder upload and show as a tree; a clash asks, and Enter, Esc and "Do the same" act as in 3.10; a Windows path in a do-file is mapped, with its note; a .dta, .csv, .log, .png and a non-UTF-8 file open as in 3.11. | poc: "the page runs .do code on uploaded files…", "legacy .xls and the ReadStat formats work…"; engine.test: "run with a Windows path…" |
 | F4 Run | Run, Run selection and Ctrl/Cmd+Enter send what section 4 says (a whole file run twice gives the same result; a selection keeps locals). The run-head, the error line, "Go to line", the status bar. Run does not save; an edit during a run does not change it; the nested-do note. Graph, Data with Browse, Results with a matrix. The command line and its history. New files get the badge. | poc: "the page runs .do code…", "Save is explicit: Run doesn't save…", "the editor never rewrites a file it didn't change" |

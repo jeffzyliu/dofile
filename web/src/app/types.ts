@@ -123,20 +123,23 @@ export type Dialog =
   | { d: "delete-all"; count: number }
   | { d: "reset" }
   | { d: "close-tab"; path: string }
+  | { d: "restore-sample"; paths: string[] }
   | { d: "other-tab" };
 export type DialogName = NonNullable<Dialog>["d"];
 
 /** The banners in `banners`. Who adds each: reset: engine.ts on a reset of an engine that had been ready (`kind`: Break
  *  ran out of time or the page cannot ask a run to stop, the worker crashed, or Reset / "Reset now"); storage: files.ts,
  *  once per visit, when persisted() is false and the files change; download-failed: files.ts, when downloadAll() could
- *  not make the zip (removed when a later one works); not-text: 4a; save-failed: 4b; memory: not in P1. */
+ *  not make the zip (removed when a later one works); not-text: 4a; save-failed: 4b; memory: not in P1; run-changed:
+ *  files.ts afterRun, when a run rewrote an open file that has unsaved edits (a save or a reload of that file removes it). */
 export type Banner =
   | { b: "reset"; reason: string; kind: ResetKind }
   | { b: "memory" }
   | { b: "storage" }
   | { b: "download-failed" }
   | { b: "not-text"; path: string }
-  | { b: "save-failed"; path: string; message: string };
+  | { b: "save-failed"; path: string; message: string }
+  | { b: "run-changed"; path: string };
 export type BannerName = Banner["b"];
 
 export type Theme = "system" | "light" | "dark";
