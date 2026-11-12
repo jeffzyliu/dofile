@@ -150,7 +150,7 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
 - **The site's addresses: the landing page is `/`, the commands page `/commands/`, the editor a single-page app under
   `/app/`.** The editor's location is ONE setting, `scripts/urls.ts` (`EDITOR_BASE`, and `EDITOR_URL`/`SITE_URL` for links
   across origins); everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL`
-  (`app/env.ts`), and a test fails if another file spells `/app/`. Never write a root-absolute path to an editor file. To move
+  (`app/env.ts`), and `test/site.test.ts` fails if another source, script, e2e test, config or page spells `/app` in a string. Never write a root-absolute path to an editor file. To move
   the editor (another path, or its own subdomain later, and what does not follow it to a new origin: the stored files, the
   downloaded engine, the sample's mark, the theme): `docs/design/SPEC.md`, section 8, "URLs". `npm run build` is two builds:
   `vite build` (the editor into `dist/app/`, emptying `dist/` first) and `vite build --mode site` (the landing and commands

@@ -1350,8 +1350,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   | anything else (`/landing.html`, `/nope.html`, `/nope/`, `/app/nope.html`, `/_headers`) | 404, never a page in its place |
 
   `/commands/` and not `/commands.html`: a folder's index is served at the same address, with no redirect, by the dev server,
-  `vite preview` and Cloudflare's `html_handling: "auto-trailing-slash"`; the redirects above are what `wrangler dev` (local
-  workerd) did with this `dist/`, and the dev and preview servers do the same (`slash` in `vite.config.ts`). `/landing.html`
+  `vite preview` and Cloudflare's `html_handling: "auto-trailing-slash"`. `wrangler dev` (local workerd) redirected `/index.html`,
+  `/commands`, `/commands.html` and `/app` (with and without `?test`) as the table says; the dev and preview servers do the
+  same for every redirect in the table (`slash` in `vite.config.ts`), and `/app.html`, `/app/index.html` and
+  `/commands/index.html` are redirected there to match what auto-trailing-slash is documented to do, not seen on workerd. `/landing.html`
   was never deployed (step 5 is the first to build it), so it is a 404, not redirected. Headers: the cross-origin isolation the editor's Break needs (`COOP: same-origin`, `COEP: require-corp`) on
   `/app/*` only (`dist/_headers`, written by the site's build); the static pages get none. The dev server sends them on every
   response (Biome's checker panel is a frame and needs them). Links: the static pages name each other by absolute path (`/`,
@@ -1365,13 +1367,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   the snapshot, cross-origin isolated, and running code. **Not checked, for the first deploy:** the edge itself (its
   compression and caching, `deploy.yml`'s upload). Look at `/`, `/commands/`, `/app/` (in the console `crossOriginIsolated` is
   true; the download size on the prompt and on the landing page agree), `/app` and `/commands` redirecting, "Browsers that
-  work" from the editor opening `/#browsers`, and a missing page giving a 404.
+  work" from the editor opening `/#browsers`, a missing page giving a 404, and `/app.html`, `/app/index.html` and
+  `/commands/index.html` (not requested on workerd).
 - **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/app/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base` and
   its output folder (`dist/app/`); `EDITOR_URL` (default `EDITOR_BASE`; `DOFILE_EDITOR_URL`) is what the static pages link
   to; `SITE_URL` (`/`; `DOFILE_SITE_URL`) is the landing page, from the editor. `vite.config.ts`, `playwright.config.ts`
   (its `baseURL` ends in the base, so a relative `goto("?test")` is the editor and `goto("/")` the landing page),
-  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.mjs` read it; a test checks that nothing else
-  spells `/app/`. **Another path on the same origin:** change `EDITOR_BASE`; nothing else. **Its own subdomain later**
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.mjs` read it; a test (`test/site.test.ts`) checks that no
+  other source, script, e2e test, config or page spells `/app` in a string. **Another path on the same origin:** change `EDITOR_BASE`; nothing else. **Its own subdomain later**
   (`app.<domain>`): build the editor with `DOFILE_EDITOR_BASE=/ DOFILE_SITE_URL=https://<domain>/` and the static pages with
   `DOFILE_EDITOR_URL=https://app.<domain>/`, as two folders deployed as two Workers (today `npm run build` writes both into
   one `dist/`: give the editor's build its own `--outDir` and the site's `_headers` the editor's rules, `headersFile("/")`,

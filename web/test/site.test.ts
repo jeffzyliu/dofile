@@ -3,7 +3,7 @@
 // numbers are the build's, and the clean-room greps (docs/prototype1-plan.md, "Clean-room check of the site's text").
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -116,15 +116,17 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     "scripts/measure-startup.mjs",
   ])
     assert.match(web(f), /from "\.{1,2}\/(scripts\/)?urls\.ts"/, f);
-  // nothing else spells the editor's path
-  for (const f of [
-    "vite.config.ts",
-    "playwright.config.ts",
-    "src/main.tsx",
-    "src/app/env.ts",
-    "src/app/states/banners.tsx",
-  ])
-    assert.doesNotMatch(web(f), /["'`]\/app\//, f);
+  // nothing else spells the editor's path in a string: the sources, the scripts, the e2e tests, the configs and the pages
+  const walk = (dir: string): string[] =>
+    readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)), { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.(ts|tsx|mjs|html)$/.test(e.name) ? [`${dir}/${e.name}`] : [],
+    );
+  const files = [
+    ...["src", "scripts", "e2e"].flatMap(walk).filter((f) => f !== "scripts/urls.ts"),
+    ...["vite.config.ts", "playwright.config.ts", "index.html", "landing.html", "commands.html"],
+  ];
+  assert.ok(files.length > 50, "the walk found the sources");
+  for (const f of files) assert.doesNotMatch(web(f), /["'`]\/app(\/|["'`])/, f);
 });
 
 test("the filter keeps the names that contain what was typed, ignoring case and outer spaces", () => {
