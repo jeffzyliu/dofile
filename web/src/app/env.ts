@@ -1,5 +1,6 @@
 // What the page's URL and build say, read once at load.
 import type { About } from "../engine/types.ts";
+import { kbModeOf } from "./viewport.ts";
 
 const q = new URLSearchParams(location.search);
 
@@ -26,3 +27,11 @@ export const LANDING_URL = __SITE_URL__;
 
 /** The commands page ("Commands" in the ⋯ menus): the site's /commands/, from the landing page's address (which ends in /). */
 export const COMMANDS_URL = `${LANDING_URL}commands/`;
+
+/** ?kb=…: the phone keyboard's strategy, an experiment for a real iPhone (docs/phone-keyboard-experiment.md; the modes:
+ *  app/viewport.ts KB_MODES). Without the flag, or with an unknown value, "top": the page's behavior before it. */
+export const kbMode = kbModeOf(q);
+/** ?kblog: the keyboard experiment's overlay, which lists the viewport's events with their times (app/kblog.ts). */
+export const kbLog = q.has("kblog");
+/** ?slide: .app slides to its place while the keyboard opens or closes, instead of jumping (app.css). */
+export const kbSlide = q.has("slide");
