@@ -1431,7 +1431,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   start from an empty store. "Restore the sample" (`fileMenuItems`, above "Delete all files…" after a rule): writes the missing
   files with no question and the toast "Sample restored"; if any file of the sample is there with other contents, or is open
   with unsaved edits, the dialog `restore-sample` ({ d, paths }; `files/dialogs.tsx`, `role="alertdialog"`) asks first and
-  Replace drops those edits. Other files are never touched.
+  Replace drops those edits. Other files are never touched. A restored file that is open is reloaded in its tab with the text
+  decoded as the editor reads a file (`decodeText(bytes, true)`), so the tab takes the sample's form, `\n` and no BOM: a tab
+  whose file had `\r\n` or a BOM saves the sample's form from then on, as the store holds it.
 - **Words not in the sources** (drafts for the maintainer): the dialog "Restore the sample?" / "helpers.do differs from the
   sample. Replacing it discards your changes. Your other files are not touched." (plural: "analysis.do, helpers.do differ from
   the sample. Replacing them discards your changes. …") / **Cancel** (focused), **Replace** (`.btn.stop.live`); the toasts

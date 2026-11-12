@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-415-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-420-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -95,9 +95,9 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 415 tests)
+## Web (about 420 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 321)
+### Unit and integration (`node --test`, `web/test/`, 323)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.

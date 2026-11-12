@@ -15,7 +15,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   differs from `main`. Before the merge the maintainer goes through "Step 4: decisions and open questions" (below) and
   the draft words in `docs/design/SPEC.md` section 8. Step 5 is on its own branch, `prototype1-step5`, in draft pull
   request #18 over step 4. The step 4 bullets below are the record of that work.
-- **Step 5 is built on `prototype1-step5`, a branch stacked on `prototype1-step4`** (its own pull request, after step 4's):
+- **Step 5 is built on `prototype1-step5`, a branch stacked on `prototype1-step4`** (its own pull request, after step 4's;
+  rebased onto `prototype1-step4` at 486f6bf, with the step 4 e2e cases moved to the editor's address `/app/`):
   the landing page (`web/landing.html`), the commands page (`web/commands.html`), the sample project (`web/sample/`, loaded on a
   first visit, "Restore the sample" in the file menu), and the clean-room check of all text (the record at the end of this
   file). What was built, the URLs, the words the sources do not give and the decisions left open are in SPEC section 8, "As
@@ -23,7 +24,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   `/commands/`, the editor a single-page app under `/app/`, its location one setting (`web/scripts/urls.ts`) so that it can move
   to its own subdomain later (SPEC 8, "URLs", says how and what stays at the old origin). **Decisions for the maintainer:** (2) the commands page has names and no descriptions; (3) the sample's first
   load is off under `?test` unless the URL has `?sample`; (4) writing the sample on a first visit does not bring the storage banner (S 19)
-  (`files.ts` ignores the changes made while it seeds); the visitor's own first change does; (5) the draft
+  (`files.ts` ignores the seed's writes of the sample's own paths); any other change, during the seed or after, does; (5) the draft
   words listed in SPEC 8 and the "Browsers that work" section.
 
 - **Steps 3 and 3.5 are merged into `main`**, with the formatting and linting work, by pull request #13 (the merge commit
@@ -481,8 +482,10 @@ maintainer's review of the doubtful items below is still open.
 1. **"Stata 14 syntax" in the log's head** (`log/LogView.tsx`, from `ABOUT.stata_version`) and "Stata 14" on the commands page
    ("checked against results recorded from Stata 14 for a set of test programs"). It names the product to say which behavior the
    engine follows, which is a statement of fact, but the policy's own forms are "Stata-syntax" and "Stata-compatible", so a version
-   number is a small step beyond them. The editor page carries no "not affiliated with StataCorp" line (the landing and commands
-   pages do); consider one in the About section or the log's head.
+   number is a small step beyond them. `LICENSE-POLICY.md` forbids "Stata" in a product name and does not require the "not
+   affiliated" line on every page; the landing and commands pages carry it in their footer, and since step 4 the editor's
+   status bar does from 1200 px ("Not affiliated with StataCorp", with the policy's whole sentence for screen readers, SPEC
+   3.6). The phone layout of the editor has no status bar, so no line there.
 2. **Text the engine prints is not the page's text and was not re-audited here:** the error messages and output layouts of the
    engine (behavior it reproduces), `help <topic>` (the page suggests "Try: help regress"; the engine reads OpenDTA's own
    173 `help/*.sthlp` pages, written by OpenDTA under its own clean-room policy; the extension is the format's, but a reader

@@ -11,7 +11,7 @@
 //    names them (dialogs: files/dialogs.tsx). Other files are never touched.
 // Plain TypeScript (no JSX), tested in Node (test/sample.test.ts).
 import { editorCommands } from "./editor/commands.ts";
-import { openFile } from "./files/open.ts";
+import { decodeText, openFile } from "./files/open.ts";
 import { SAMPLE } from "./sample-files.ts";
 import { dialog, saved, showToast, tabs } from "./state.ts";
 import { store } from "./store.ts";
@@ -37,9 +37,11 @@ async function put(only?: string[]) {
   for (const f of sampleFiles()) {
     if (only && !only.includes(f.path)) continue;
     await store.write(f.path, f.bytes);
-    // an open tab of a file written over shows the sample's text
+    // an open tab of a file written over shows the sample's text, decoded as the editor reads a file (a BOM kept, so the
+    // editor notes the file's form): the sample's form, "\n" and no BOM, so a tab whose file had "\r\n" or a BOM saves
+    // the sample's form from then on, as the store now holds it
     const tab = tabs.value.find((t) => t.path === f.path && t.kind === "text");
-    if (tab) editorCommands.reload(f.path, new TextDecoder().decode(f.bytes));
+    if (tab) editorCommands.reload(f.path, decodeText(f.bytes, true) ?? "");
   }
 }
 

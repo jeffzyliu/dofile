@@ -187,6 +187,10 @@ test("Restore the sample asks about a sample file open with unsaved edits, even 
     ["analysis.do"],
     "Replace shows the sample's text in the tab",
   );
+  // the editor is given the file's text as it reads a file: the sample's own form, "\n" and no BOM (its Save then keeps it)
+  const given = (reloads as [string, string][])[0][1]; // (deepEqual above narrowed the array's type to empty)
+  assert.equal(given, dec(sample.sampleFiles()[0].bytes));
+  assert.ok(!given.includes("\r") && !given.startsWith("\uFEFF"));
   assert.ok((await names()).includes("analysis.do"));
 });
 

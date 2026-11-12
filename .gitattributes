@@ -4,3 +4,4 @@ uv.lock -diff linguist-generated=true
 src/dofile/_vendor/** linguist-generated=true
 docs/img/startup-times.json linguist-generated=true
 docs/img/startup-times.svg linguist-generated=true
+web/src/app/sample-files.ts linguist-generated=true
