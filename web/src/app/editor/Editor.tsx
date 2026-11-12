@@ -5,7 +5,8 @@
 //  - What is shown follows `activeTab`: a text tab whose state exists (open() made it), else the empty view. A .dta tab
 //    shows 4c's DtaView in the editor's place (App.tsx hides this one, never unmounts it).
 //  - `data-editor` is on the element that takes the focus: CodeMirror's content with a file shown, the empty view
-//    without one (commands.ts focus(), and the engine's dialog that closes by itself, focus there).
+//    without one (commands.ts focus(), and the engine's dialog that closes by itself, focus there). With a .dta tab
+//    active, focus() goes to that tab, or its view's Load, outside `[data-editor]` (see focus()).
 //  - The unsaved dot: setDirty(path, text differs from the saved text) on each edit, so undoing back to the saved text
 //    clears it; a save clears it unless the text changed while it was being written.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
@@ -19,7 +20,7 @@
 
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
-import { effect, signal } from "@preact/signals-core";
+import { effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
 import { useEffect, useRef } from "preact/hooks";
 import { openFile } from "../files/open.ts";
@@ -166,27 +167,33 @@ function runEither() {
   else runFile();
 }
 
-// The run's marks: a selection run's lines while it runs; the file's error line when it ends.
+// The run's marks: a selection run's lines while it runs; the file's error line when it ends. Each effect depends on its
+// one signal (`engine`, `lastRun`) and on nothing it reads while it marks: `shown` above all, or a tab switch would
+// place the error again at the run's line number, not where its text has moved since.
 let marked: { head: RunHead; path: string } | null = null;
 function followRuns() {
   const st = engine.value;
-  const run = st.s === "running" || st.s === "breaking" || st.s === "waiting" ? st.run : null;
-  if (run && marked?.head === run) return;
-  if (marked && states.has(marked.path)) update(marked.path, { effects: setRunLines.of(null) });
-  marked = null;
-  if (!run) return;
-  for (const path of states.keys()) update(path, { effects: setErrorLine.of(null) }); // a new run: the old error goes
-  if (run.kind === "selection" && run.path && run.lines && states.has(run.path)) {
-    marked = { head: run, path: run.path };
-    update(run.path, { effects: setRunLines.of(run.lines) });
-  }
+  untracked(() => {
+    const run = st.s === "running" || st.s === "breaking" || st.s === "waiting" ? st.run : null;
+    if (run && marked?.head === run) return;
+    if (marked && states.has(marked.path)) update(marked.path, { effects: setRunLines.of(null) });
+    marked = null;
+    if (!run) return;
+    for (const path of states.keys()) update(path, { effects: setErrorLine.of(null) }); // a new run: the old error goes
+    if (run.kind === "selection" && run.path && run.lines && states.has(run.path)) {
+      marked = { head: run, path: run.path };
+      update(run.path, { effects: setRunLines.of(run.lines) });
+    }
+  });
 }
 function followErrors() {
   const r = lastRun.value;
-  for (const path of states.keys()) update(path, { effects: setErrorLine.of(null) });
-  if (!r || r.rc === 0 || r.rc === 1 || r.line === null || r.kind === "command" || !r.path) return;
-  const st = current(r.path);
-  if (st && r.line <= st.doc.lines) update(r.path, { effects: setErrorLine.of(r.line) });
+  untracked(() => {
+    for (const path of states.keys()) update(path, { effects: setErrorLine.of(null) });
+    if (!r || r.rc === 0 || r.rc === 1 || r.line === null || r.kind === "command" || !r.path) return;
+    const st = current(r.path);
+    if (st && r.line <= st.doc.lines) update(r.path, { effects: setErrorLine.of(r.line) });
+  });
 }
 
 // ---- save ----
@@ -273,9 +280,26 @@ async function goToLine(line: number, path: string | undefined = activeTab.value
   });
 }
 
+/** Put the focus in the editor, at once, without changing the active tab or the phone's view:
+ *  - a text tab shown: CodeMirror's content (`[data-editor]`);
+ *  - no tab open: the empty view, "No file is open" (`[data-editor]` then);
+ *  - a .dta tab active (no editor shows): its tab in "Open files" when that is shown, else the first enabled button of
+ *    its view (Load); the focus is then not in `[data-editor]`, and when neither is shown it does not move;
+ *  - the Editor pane hidden (a phone on another view): the focus does not move. */
 function focus() {
-  if (view && shown.value) view.focus();
-  else empty?.focus();
+  if (view && shown.value) {
+    view.focus();
+    return;
+  }
+  const active = tabs.value.find((t) => t.path === activeTab.value);
+  if (!active || active.kind === "text") {
+    empty?.focus();
+    return;
+  }
+  const seen = (el: Element | null): el is HTMLElement => el instanceof HTMLElement && el.getClientRects().length > 0;
+  const tab = document.querySelector('[role="tablist"][aria-label="Open files"] [role="tab"][aria-selected="true"]');
+  const button = document.querySelector(".editor-pane .dta-view button:not([disabled])");
+  [tab, button].find(seen)?.focus();
 }
 
 /** Ctrl/Cmd+S anywhere on the page saves the active tab. */

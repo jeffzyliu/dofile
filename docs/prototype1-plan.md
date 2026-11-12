@@ -205,6 +205,22 @@ Decided in the step 2 review:
   only keeps the two walks in step); the toast placed against the command line's fixed phone height (`--cmdline-h`,
   app.css 4b block); the field cleared only when accepted. Left open: the old `.cmdline .placeholder` rules in app.css's
   shell part are no longer used; the e2e checks of 4b are `e2e/editor.spec.ts`.
+- **Step 4b review (2026-11-11), fixed in 4b's files:** Find counted only the run-heads' and notes' matches (now every
+  match, in the log's order), was unseen when unsplit on another Output tab, and left the focus on the page after the
+  phone's ⋯; the error mark went back to the run's line number after a tab switch; the echo walk lost step after a `do`
+  in a block or a mata block, and missed `capture noisily do`; a phone's inline graph was always on the light card; no
+  focus ring in forced colors; `editorCommands.focus()` with a .dta tab active focused nothing; a log file's head words
+  were muted anywhere in a run's output; a command's Break note named "line 1"; a pasted block's line was sent (now the
+  lines stop before it, with a toast), and a Run or Enter could slip in between two pasted lines; Save was on for a .dta
+  tab. Decided at the review (from step 4d's): on a phone the Break pill also shows the Log view. **Left for the joining
+  agent or the maintainer:** a queued command's end is told from state names in `log/CommandLine.tsx` (`DROPPED`): run.ts's
+  `runCommand().done` should resolve for a queued run (run.ts or the machine); a run that rewrites an open file leaves
+  the editor's text stale, and a later Save overwrites the run's file (the maintainer's question; files.ts `afterRun`);
+  whether a command-line command should clear the file's error mark (it does); whether a paste of one line and a line
+  break should run at once (it does); the dead `.cmdline .placeholder` rules and the phone toast's offset on views
+  without the command line; a two-word `help` topic in a hint's link (unverified); `@lezer/highlight` to declare in
+  `package.json`; `.md` and `.json` open plain, against SPEC 3.11; `files.spec.ts` no longer tests "Save fails, the
+  tab stays" in the close-tab dialog (4a); the phone ⋯'s Save (App.tsx) is not off on a .dta tab.
 - **Step 4d:** a failed "Download all" shows the banner `download-failed` above the editor ("Your files couldn't be
   downloaded: …" / "Try again", "Dismiss"), built in step 3 in `states/banners.tsx`; `files.js` adds it (one at a time)
   and removes it when a later download works. Restyle or reword it with the other storage states if needed (OQ-16).

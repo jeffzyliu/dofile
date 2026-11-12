@@ -7,23 +7,25 @@
 //    it as a command, OQ-20), the path shim's lines muted (.note);
 //  - after the echo of the line that drew it (RunResult.graph_lines, placed by log/align.ts; at the run's end when the
 //    line is not found), each graph: a link "graph 1" (.glink) that shows it in the Graph tab, or on a phone the graph
-//    itself, which opens full size when tapped;
+//    itself on the card of its run's theme (4c's cardTheme), which opens full size when tapped;
 //  - after the echo of a nested `do` or `include` of a file that had unsaved edits when the run started, S 15's note;
 //  - at the run's end: "Go to line 17" (.jump) after its r(N); (an error in the file, not in a command); after Break,
 //    "Stopped by Break before line 17. The data is as the last complete command left it." (OQ-9) with "Go to line 17"
-//    and no error mark; the files a run wrote that were not kept (`skipped`, `store_error`);
+//    and no error mark (a command from the command line names no line: "Stopped by Break. The data is ..."); the
+//    files a run wrote that were not kept (`skipped`, `store_error`);
 //  - the page's notes (.note), such as a reset's reason.
 // On a phone the hint is a block (.explain), and a block of output wider than the screen is followed by "← wide table:
 // swipe sideways →". The head, run-heads and the page's notes are shown only: Download log has the runs' text alone.
 // The pane follows the end of the log unless the visitor has scrolled up. role="log".
-import type { ComponentChildren } from "preact";
+import { type ComponentChildren, Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { codeOf, editorCommands } from "../editor/commands.ts";
 import { jumpLine, runheadWords } from "../editor/words.ts";
 import { ABOUT } from "../env";
 import { graphAlt } from "../output/format.ts";
+import { cardTheme } from "../output/GraphTab";
 import { runCommand } from "../run.ts";
-import { graphFull, graphIndex, graphs, isPhone, log, outputTab } from "../state.ts";
+import { graphFull, graphIndex, graphs, isPhone, log, outputTab, split } from "../state.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
 import { commandEnd, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
@@ -79,6 +81,7 @@ function GraphLink({ g }: { g: Graph }) {
       <button
         type="button"
         class="inline-graph"
+        data-theme={cardTheme(g)}
         aria-label={`${graphAlt(g, all)}: open full size`}
         onClick={() => {
           graphIndex.value = i;
@@ -125,8 +128,10 @@ const hintLine = (text: string, m: Marker) =>
 
 const PHONE_COLUMNS = 48; // about what a phone's log shows across; a wider block of output says it scrolls sideways
 
-/** One run's text, with what goes after its lines. */
-function RunText({ item, head, m }: { item: TextItem; head: RunHead | null; m: Marker }) {
+/** One run's text, with what goes after its lines. A plain function that LogView calls, not a component: every match
+ *  of Find is then numbered while LogView renders, in the order the log shows them, and counted before FindBar uses
+ *  the count (a child component would render after LogView had read it). */
+function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChildren {
   const lines = linesOf(item);
   const phone = isPhone.value;
   const after = new Map<number, ComponentChildren[]>();
@@ -212,7 +217,7 @@ function RunText({ item, head, m }: { item: TextItem; head: RunHead | null; m: M
   if (end?.rc === 1)
     out.push(
       <span key="break" class="note">
-        {end.line !== null
+        {end.line !== null && end.kind !== "command"
           ? `Stopped by Break before line ${end.line}. The data is as the last complete command left it.`
           : "Stopped by Break. The data is as the last complete command left it."}
       </span>,
@@ -235,11 +240,11 @@ function RunText({ item, head, m }: { item: TextItem; head: RunHead | null; m: M
       </span>,
       "\n",
     );
-  return <>{out}</>;
+  return out;
 }
 
-/** The log's head: the banner and the versions (shown only). */
-function Head({ m }: { m: Marker }) {
+/** The log's head: the banner and the versions (shown only). A plain function, as runText is. */
+function logHead(m: Marker) {
   const commit = (ABOUT.engine_commit ?? "").slice(0, 7);
   return (
     <span class="head">
@@ -258,13 +263,14 @@ function Head({ m }: { m: Marker }) {
 }
 
 /** Find's field, over the log (log/find.ts). */
-function FindBar({ total }: { total: number }) {
+function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) {
   if (!findOpen.value) return null;
   const at = total ? (findAt.value % total) + 1 : 0;
   const close = () => {
     findOpen.value = false;
     findText.value = "";
-    findReturn?.focus();
+    // back to what opened Find (the Log head's button, or the phone's ⋯); else the log itself, never the page
+    (findReturn?.isConnected && findReturn.getClientRects().length ? findReturn : pre)?.focus();
   };
   return (
     <div class="findbar">
@@ -305,10 +311,13 @@ function FindBar({ total }: { total: number }) {
 }
 let findFocus = false;
 let findReturn: HTMLElement | null = null;
-/** Open Find (the Log head's button, the phone's ⋯): the field takes the focus; Esc gives it back to `from`. */
+/** Open Find (the Log head's button, the phone's ⋯): the field takes the focus; Esc and Close give it back to `from`
+ *  (the phone's ⋯ passes none: the focus is then on the ⋯ button, which the menu gave it back to). On the desktop with
+ *  the Output pane unsplit and Graph, Data or Results showing, the Log tab is shown first, so the field can be seen. */
 export function openFind(from: HTMLElement | null) {
-  findReturn = from;
+  findReturn = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
   findFocus = true;
+  if (!isPhone.value && !split.value && outputTab.value !== "log") outputTab.value = "log";
   findOpen.value = true;
 }
 
@@ -320,10 +329,11 @@ export function LogView() {
   let head: RunHead | null = null;
   const placed = new Set<number>(); // the graphs drawn inside their run's text
   for (const i of items) if (i.t === "text") for (const g of graphs.value) if (g.run === i.run) placed.add(g.n);
+  // every part is drawn here, in the log's order, so Find numbers and counts its matches as they are shown
   const body = items.map((item, k) => {
     switch (item.t) {
       case "head":
-        return <Head key={k} m={m} />;
+        return <Fragment key={k}>{logHead(m)}</Fragment>;
       case "runhead": {
         head = item.run;
         const [bold, rest] = runheadWords(item.run, item.first, isPhone.value);
@@ -337,7 +347,7 @@ export function LogView() {
       case "text": {
         const h = head;
         head = null;
-        return <RunText key={k} item={item} head={h} m={m} />;
+        return <Fragment key={k}>{runText(item, h, m)}</Fragment>;
       }
       case "note":
         return (
@@ -378,11 +388,15 @@ export function LogView() {
   useLayoutEffect(() => {
     if (findOpen.value && findText.value) pre.current?.querySelector("mark.on")?.scrollIntoView({ block: "nearest" });
   }, [findAt.value, findText.value]);
+  // fewer matches than before (Clear log): the current one is the first again
+  useLayoutEffect(() => {
+    if (findAt.value >= total && findAt.value > 0) findAt.value = 0;
+  });
 
   return (
     <>
-      <FindBar total={total} />
-      <pre class="log" role="log" aria-label="Log" ref={pre}>
+      <FindBar total={total} pre={pre.current} />
+      <pre class="log" role="log" aria-label="Log" ref={pre} tabIndex={-1}>
         {body}
       </pre>
     </>

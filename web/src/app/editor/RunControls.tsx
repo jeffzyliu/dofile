@@ -10,7 +10,7 @@
 // `other-tab-idle` and `other-tab-taking` the buttons stay in place, hidden (app.css), so the bar keeps its height.
 
 import * as eng from "../engine.ts";
-import { activeTab, engine, isolated, tabs } from "../state.ts";
+import { activeTab, engine, isolated, phoneTab, tabs } from "../state.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { since } from "./clock.ts";
 import { editorCommands, selection } from "./commands.ts";
@@ -57,7 +57,9 @@ export function RunControls() {
   const run = runState(),
     brk = breakState(),
     sel = selection.value;
-  const dirty = tabs.value.find((t) => t.path === activeTab.value)?.dirty ?? false;
+  const tab = tabs.value.find((t) => t.path === activeTab.value);
+  const dirty = tab?.dirty ?? false;
+  const text = tab?.kind === "text"; // Save saves a text tab; a .dta tab has nothing to save
   const usable = !run.disabled && !run.busy;
   // new elements for each label (one vnode is not placed twice)
   const play = () => <Icon name="play" />,
@@ -123,12 +125,12 @@ export function RunControls() {
       <button
         type="button"
         class="btn run-ctl"
-        disabled={!activeTab.value}
-        aria-keyshortcuts={activeTab.value ? modShortcut("S") : undefined}
+        disabled={!text}
+        aria-keyshortcuts={text ? modShortcut("S") : undefined}
         onClick={() => editorCommands.save()}
       >
         <Labels
-          at={(activeTab.value ? 0 : 2) + (dirty ? 0 : 1)}
+          at={(text ? 0 : 2) + (dirty ? 0 : 1)}
           labels={[
             <>
               Save{dot()}
@@ -146,7 +148,8 @@ export function RunControls() {
 
 /** The phone's one button (PH, WP 1, WP 2): Run (or "Run 6–7" with a selection, named "Run lines 6–7"), and while a run
  *  is on, Break in its place as a pill. A tap in Break's first 600 ms is ignored, so a double tap on Run doesn't break
- *  the run. Both buttons carry every label either can show, so they have one width and the ⋯ beside them never moves. */
+ *  the run. A tap that counts also shows the Log view, where the Break's countdown and its outcome are (decided at the
+ *  step 4b review, from 4d's: its stopping banner is in the Log view's slot). Both buttons carry every label either can show, so they have one width and the ⋯ beside them never moves. */
 export function PhoneRun() {
   const st = engine.value;
   const running = st.s === "running" || st.s === "breaking" || st.s === "waiting";
@@ -190,7 +193,9 @@ export function PhoneRun() {
         disabled={brk.disabled}
         aria-label={NAME[brk.label] ?? brk.label}
         onClick={() => {
-          if (Date.now() - st.t0 >= 600) pressBreak();
+          if (Date.now() - st.t0 < 600) return;
+          pressBreak();
+          phoneTab.value = "log"; // Break's countdown, "wait for it" and the outcome show in the Log view
         }}
       >
         <Labels at={RUN.length + 1 + BREAK.indexOf(brk.label)} labels={all} />

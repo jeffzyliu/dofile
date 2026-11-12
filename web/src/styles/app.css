@@ -742,7 +742,8 @@ input.filter::placeholder {
   background: var(--surface);
 }
 .editor-cm .cm-editor.cm-focused {
-  outline: none;
+  outline: 2px solid transparent; /* shown in forced colors, where the box-shadow is not */
+  outline-offset: -2px;
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 .editor-cm .cm-scroller {
@@ -971,6 +972,9 @@ input.filter::placeholder {
   padding: var(--s1);
   background: var(--graph-card);
   border-radius: var(--radius);
+}
+.log button.inline-graph[data-theme="dark"] {
+  background: var(--graph-card-dark);
 }
 .log button.inline-graph img {
   width: 100%;

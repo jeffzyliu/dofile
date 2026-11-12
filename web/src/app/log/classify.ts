@@ -7,7 +7,8 @@
 //  - hint: the engine's explanation under an error, from `  → ` down to the line before `r(111);`; its `How to fix:` and
 //    `Learn more:` are shown bold, and `help summarize` after `Learn more:` runs as a command (OQ-20);
 //  - note: what the page's own engine code adds: the path shim's `(path C:\… is cps.dta in the working folder)`, `(cd …
-//    in the working folder)`, the tempfile note, and the header a `log using` file starts with (`name:`, `log:`, ...);
+//    in the working folder)`, the tempfile note, and the header a `log using` file starts with (`name:`, `log:`, ...),
+//    only before the file's first echo: the same lines in a run's output (`log using` prints them) are output;
 //  - out: everything else, at normal weight.
 // Plain TypeScript, no DOM: tested in Node (test/editor.test.ts).
 
@@ -35,6 +36,7 @@ export function classify(text: string): LogLine[] {
   const lines = text.split("\n");
   const out: LogLine[] = [];
   let hintFrom = -1; // the first line of the hint block in progress, or -1
+  let echoed = false; // an echo seen: no log file's head after it
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i];
     const prev = out[i - 1];
@@ -45,7 +47,8 @@ export function classify(text: string): LogLine[] {
     else if (HINT.test(t)) kind = "hint";
     else if (hintFrom >= 0 && /^ {4}/.test(t)) kind = "hint";
     else if (NOTE.some((re) => re.test(t))) kind = "note";
-    else if (HEADER.test(t) || (RULE.test(t) && !out.some((l) => l.kind === "echo"))) kind = "note"; // a log file's head
+    else if (!echoed && (HEADER.test(t) || RULE.test(t))) kind = "note"; // a log file's head
+    if (kind === "echo") echoed = true;
     if (kind === "hint" && hintFrom < 0) hintFrom = i;
     if (kind !== "hint") {
       // an error's r(N); (or a hint block, which only comes under an error): its message is the line right above

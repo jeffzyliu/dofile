@@ -5,8 +5,8 @@
 //    the field clears; when refused (the page load, a start or a run in progress) the text stays. ↑ ↓ recall `history`,
 //    and ↓ past the newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
 //    Pasted text with line breaks runs each line in turn (log/paste.ts says the rules: the next line only once the one
-//    before has ended; the lines stop at one that is refused, does not run, or ends with an error; a toast says how many
-//    were not run, and a refused line goes back into the field).
+//    before has ended; the lines stop at one that is refused, does not run, or ends with an error, and before a block's
+//    line; a toast says how many were not run, and a refused line goes back into the field).
 //  - LogActions: the Log head's "Find" (log/find.ts) and "Download log" (the runs' text only, as dofile.log; no head,
 //    run-head or note). App.tsx adds Split / Unsplit after them. The phone hides the Log head, so the same two are
 //    logMenuItems(), which the phone's ⋯ shows on the Log view.
@@ -36,16 +36,20 @@ let typed = ""; // what was being typed before ↑
 /** The states in which a command queued for an engine that is not there is dropped: it will not run. */
 const DROPPED = new Set<EngineState["s"]>(["declined", "failed", "failed-twice", "other-tab-idle", "other-tab-taking"]);
 
-/** Wait for a command queued while there was no engine: its rc once it has run (lastRun is a new run), or null when
- *  the start was declined or failed. Resolved after the machine's step, so the next line may start then. */
-function whenQueuedEnds(before: unknown): Promise<number | null> {
+/** Wait for the end of a command just accepted: its rc once it has run (lastRun is a new run), or null when it was
+ *  queued for an engine that then did not start. Resolved in a microtask after the step of the state machine that ended
+ *  it (a run cannot start inside that step; the step is synchronous, so it is over by then), so the next pasted line
+ *  starts before the page takes any other input: a Run or an Enter pressed between two pasted lines waits for the next
+ *  line's run and is refused as during any run. The run's after-run reads (run.ts refreshData) may still be answering;
+ *  the engine takes them in turn. */
+function whenEnds(before: unknown): Promise<number | null> {
   return new Promise((done) => {
     let stop = () => {};
     let over = false;
     const end = (rc: number | null) => {
       if (over) return;
       over = true;
-      setTimeout(() => {
+      queueMicrotask(() => {
         stop();
         done(rc);
       });
@@ -61,11 +65,8 @@ function whenQueuedEnds(before: unknown): Promise<number | null> {
 /** One pasted line, as Enter would run it. */
 const runOne: RunOne = (line) => {
   const before = lastRun.value;
-  const { accepted, done } = runCommand(line);
-  return {
-    accepted,
-    done: accepted ? done.then((r) => (r ? r.rc : whenQueuedEnds(before))) : Promise.resolve(null),
-  };
+  const { accepted } = runCommand(line);
+  return { accepted, done: accepted ? whenEnds(before) : Promise.resolve(null) };
 };
 
 async function runPasted(lines: string[]) {

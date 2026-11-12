@@ -82,6 +82,15 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   // the [data-editor] element is the editor's content, and focus() puts the focus there
   await expect(page.locator("[data-editor]")).toHaveCount(1);
   await expect(page.locator("[data-editor]")).toHaveClass(/cm-content/);
+  // the focused editor's ring is also an outline, which forced colors keep (they drop the box-shadow)
+  await page.emulateMedia({ forcedColors: "active" });
+  expect(
+    await page.locator(".cm-editor").evaluate((el) => {
+      const s = getComputedStyle(el);
+      return [el.classList.contains("cm-focused"), s.outlineStyle, s.outlineWidth];
+    }),
+  ).toEqual([true, "solid", "2px"]);
+  await page.emulateMedia({ forcedColors: "none" });
 
   // a store that refuses: the banner above the editor, with Download; the dot stays
   await page.evaluate(() => {
@@ -263,7 +272,185 @@ test("the log's formatting: echoes bold, output normal, errors red and bold, hin
   expect(text).toBe(". display 1\n1\n");
 });
 
+test("Find in the log: every match counted and numbered in the log's order, Enter and Shift+Enter, Esc gives the focus back", async ({
+  page,
+}) => {
+  await page.goto("/?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  await page.evaluate(() => {
+    const S = window.__dofile.state;
+    S.runWriter.log.value = [
+      { t: "head" }, // "Try: help regress": 1
+      { t: "runhead", run: { kind: "file", path: "regress.do", fresh_locals: true }, first: false }, // 1
+      { t: "text", run: 1, text: ". regress y x\nREGRESS output\n" }, // 2
+      { t: "note", text: "a regress note" }, // 1
+    ];
+  });
+  const phone = isPhone(page);
+  if (phone) await view(page, "Log");
+  else {
+    // unsplit, with the Graph tab showing: Find shows the Log tab first
+    await page.evaluate(() => {
+      window.__dofile.state.split.value = false;
+      window.__dofile.state.outputTab.value = "graph";
+    });
+  }
+  const opener = phone
+    ? page.getByRole("button", { name: "More actions" })
+    : page.getByRole("button", { name: "Find" });
+  if (phone) {
+    await opener.click();
+    await page.getByRole("menuitem", { name: "Find" }).click();
+  } else await opener.click();
+  const field = page.getByRole("searchbox", { name: "Find in the log" });
+  await expect(field).toBeFocused();
+  if (!phone)
+    await expect(page.getByRole("tablist", { name: "Output" }).getByRole("tab", { name: "Log" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  await field.fill("regress");
+  const count = page.locator(".findbar .count");
+  await expect(count).toHaveText("1 of 5");
+  const log = page.getByRole("log", { name: "Log" });
+  await expect(log.locator("mark")).toHaveCount(5);
+  // the marks are numbered as the log shows them, and the current one is the first
+  expect(await log.locator("mark").evaluateAll((ms) => ms.map((m) => m.getAttribute("data-find")))).toEqual([
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+  ]);
+  const current = () =>
+    log.locator("mark.on").evaluate((m) => m.closest(".head, .runhead, .note, .echo")?.className ?? "out");
+  expect(await current()).toBe("head");
+  await field.press("Enter");
+  await expect(count).toHaveText("2 of 5");
+  expect(await current()).toBe("runhead");
+  await field.press("Enter");
+  expect(await current()).toBe("echo");
+  await field.press("Shift+Enter");
+  await field.press("Shift+Enter");
+  await field.press("Shift+Enter");
+  await expect(count).toHaveText("5 of 5");
+  expect(await current()).toBe("note");
+  await field.fill("nothing like it");
+  await expect(count).toHaveText("none");
+  // Esc closes it, and the focus goes back to what opened it (the Find button; on a phone the ⋯ button)
+  await field.press("Escape");
+  await expect(field).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});
+
+test("the error line keeps to its text when the tab is left and shown again", async ({ page }) => {
+  await setUp(page, { "a.do": "line 1\nline 2\nline 3\nline 4\n", "b.do": "other\n" });
+  await open(page, "a.do");
+  await open(page, "b.do");
+  await open(page, "a.do");
+  await page.evaluate(() => {
+    window.__dofile.state.runWriter.lastRun.value = {
+      kind: "file",
+      path: "a.do",
+      fresh_locals: true,
+      rc: 111,
+      line: 3,
+      seconds: 0.1,
+    };
+  });
+  const err = page.locator(".cm-line.cm-err-line");
+  await expect(err).toHaveText("line 3");
+  // two lines added above it: the mark moves with its text
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+Home");
+  for (const line of ["new 1", "new 2"]) {
+    await page.keyboard.type(line);
+    await page.keyboard.press("Enter");
+  }
+  await expect(page.locator(".cm-line").nth(2)).toHaveText("line 1");
+  await expect(err).toHaveText("line 3");
+  // another tab, then this one again: still on its text, not on the run's line number
+  await open(page, "b.do");
+  await expect(err).toHaveCount(0);
+  await open(page, "a.do");
+  await expect(err).toHaveText("line 3");
+});
+
+test("the log: a command stopped by Break names no line; a phone's inline graph is on the card of its run's theme", async ({
+  page,
+}) => {
+  await page.goto("/?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+  await page.evaluate((png) => {
+    const S = window.__dofile.state;
+    S.runWriter.graphs.value = [
+      { n: 1, png, theme: "dark", from: "run", run: 1, command: "scatter y x", line: 1 },
+      { n: 2, png, theme: "light", from: "run", run: 1, command: "scatter x y", line: 2 },
+    ];
+    S.runWriter.log.value = [
+      { t: "text", run: 1, text: ". scatter y x\n\n. scatter x y\n\n" },
+      {
+        t: "text",
+        run: 2,
+        text: ". sleep 5000\n--Break--\nr(1);\n",
+        end: { kind: "command", fresh_locals: false, rc: 1, line: 1, seconds: 2 },
+      },
+    ];
+  }, PNG);
+  if (isPhone(page)) await view(page, "Log");
+  const log = page.getByRole("log", { name: "Log" });
+  await expect(log.locator(".note")).toHaveText("Stopped by Break. The data is as the last complete command left it.");
+  await expect(log.getByRole("button", { name: /^Go to line/ })).toHaveCount(0);
+  if (isPhone(page)) {
+    const cards = await log.locator(".inline-graph").evaluateAll((els) =>
+      els.map((el) => {
+        const probe = document.createElement("span");
+        el.append(probe);
+        probe.style.color = "var(--graph-card-dark)";
+        const dark = getComputedStyle(probe).color;
+        probe.style.color = "var(--graph-card)";
+        const light = getComputedStyle(probe).color;
+        probe.remove();
+        const bg = getComputedStyle(el).backgroundColor;
+        return bg === dark ? "dark" : bg === light ? "light" : bg;
+      }),
+    );
+    expect(cards).toEqual(["dark", "light"]);
+  }
+});
+
 // ---- with an engine ----
+
+test("a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab", async ({
+  page,
+}) => {
+  test.skip(
+    isPhone(page),
+    "a phone types a command on the Log view, where nothing of the editor is shown to take the focus",
+  );
+  await setUp(page, { "d.dta": "not read here", "a.do": "display 1\n" });
+  await open(page, "a.do");
+  const save = page.locator(".toolbar .run-ctl").nth(3);
+  await expect(save).toBeEnabled();
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^d\.dta/ })
+    .click();
+  const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^d\.dta/ });
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  await expect(save).toBeDisabled();
+  // a command with no engine: the prompt opens; the engine starts, the prompt closes by itself and gives the focus to the
+  // editor's place, here the .dta tab (no editor is shown)
+  const field = page.getByRole("textbox", { name: "Command" });
+  await field.fill("display 1");
+  await field.press("Enter");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.evaluate(() => (window as any).__dofile.start());
+  await ready(page);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(tab).toBeFocused();
+});
 
 const CODE = [
   "clear", // 1
@@ -272,7 +459,7 @@ const CODE = [
   "scatter x x", // 4
   "summarize x", // 5
   "summarize nosuch", // 6
-  "display 9", // 7
+  "display `k' + 1", // 7: a local an earlier run set (Run selection keeps the locals)
 ].join("\n");
 
 test("Run: the run-head, the graph after its echo, the error line marked, Go to line, the last run; Run selection keeps locals", async ({
@@ -316,7 +503,11 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
     });
   await expect.poll(caretLine).toBe("summarize nosuch");
 
-  // Run selection: lines 7 (keeps nothing, but runs with the locals kept)
+  // Run selection keeps the locals (SPEC 4: fresh_locals false): a run sets `k`, then line 7 uses it
+  await page.evaluate(() => window.__dofile.run("local k = 41"));
+  await ready(page);
+  if (phone) await view(page, "Editor");
+  await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.press("Shift+Home");
   await expect.poll(() => page.evaluate(() => window.__dofile.selection.value)).toEqual([7, 7]);
@@ -324,7 +515,9 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
   else await page.keyboard.press("ControlOrMeta+Enter");
   await ready(page);
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.kind)).toBe("selection");
+  expect(await page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
   await expect(log.locator(".runhead").last()).toContainText("Run selection: line 7");
+  expect(await page.evaluate(() => window.__dofile.state.log.value.at(-1).text)).toContain("\n42\n");
   await expect(page.locator(".cm-err-line")).toHaveCount(0); // the new run cleared the old error
   if (!phone) await expect(page.locator(".statusbar")).toContainText("Last run: line 7 · ");
 });
@@ -343,12 +536,32 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
     await expect(pill).toHaveText(/^\d+(\.\d)? s$/);
   } else await expect(page.locator(".statusbar")).toContainText(/Running · \d/);
   await page.waitForTimeout(800);
-  await page.evaluate(() => window.__dofile.breakRun());
+  if (isPhone(page)) {
+    // Break from the Editor view: the Log view shows, where Break's countdown and its outcome are
+    await view(page, "Editor");
+    await page.locator(".btn.stop.pill").click();
+    await expect(views(page).getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
+  } else await page.evaluate(() => window.__dofile.breakRun());
   await ready(page);
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(1);
   const log = page.getByRole("log", { name: "Log" });
-  await expect(log.locator(".note").last()).toContainText("Stopped by Break");
-  await expect(log.locator(".note").last()).toContainText("The data is as the last complete command left it.");
+  const note = log.locator(".note").last();
+  await expect(note).toHaveText(
+    /^Stopped by Break before line \d+\. The data is as the last complete command left it\.$/,
+  );
+  // the line it stopped before: a line of the loop, and "Go to line" goes there; no error mark
+  const line = Number(/before line (\d+)/.exec((await note.textContent()) ?? "")![1]);
+  expect([2, 3, 4]).toContain(line);
+  await log.getByRole("button", { name: `Go to line ${line}` }).click();
+  await expect(page.locator(".cm-content")).toBeFocused();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const at = getSelection()!.anchorNode?.parentElement?.closest(".cm-line");
+        return at ? [...document.querySelectorAll(".cm-line")].indexOf(at) + 1 : 0;
+      }),
+    )
+    .toBe(line);
   await expect(page.locator(".cm-err-line")).toHaveCount(0);
   if (!isPhone(page)) await expect(page.locator(".statusbar")).toContainText("Last run: stopped by Break · r(1)");
 });

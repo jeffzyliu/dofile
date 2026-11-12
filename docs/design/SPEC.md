@@ -963,23 +963,36 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `log/classify.ts` (the .log tokenizer, OQ-4, used by the log and by a .log in the editor: an echo is `. cmd`, or a
     loop body `  2. cmd` or a continued `> ` line right after an echo; the error is `r(N);`, `--Break--` and the line
     right above the hint or above `r(N);`; the hint runs from `  → ` to `r(N);`; notes are the path shim's lines, the
-    tempfile note and a log file's head; the rest is output), `log/align.ts` (the echo of each line of the code sent: the
-    echoes are walked beside the code, an echo that is not the code's next line belongs to a nested do-file and is passed
-    over, so a graph's link goes after the echo of line `graph_lines[i]`, and at the run's end when it is not found; the
-    code is kept by the run's head, `editor/commands.ts` `codeOf`), `log/paste.ts` (the command line's pasted lines),
+    tempfile note and a log file's head, before the file's first echo only; the rest is output), `log/align.ts` (the echo
+    of each line of the code sent: the echoes are walked beside the code, an echo that is not the code's next line is
+    passed over, so a graph's link goes after the echo of line `graph_lines[i]`, and at the run's end when it is not found;
+    a nested do-file is passed over whole when its `do` or `include` is a line outside any block (`{ }`, a program, a mata
+    block) and shows its echoes (no prefix, or `noisily` the last of `capture`, `quietly`, `noisily`); a `do` inside a block
+    opens nothing; a top-level echo that is not the next line is looked for further down, so the walk gets back in step
+    after a mata block; the code is kept by the run's head, `editor/commands.ts` `codeOf`), `log/paste.ts` (the command line's pasted lines),
     `log/find.ts`, `editor/csv.ts` (a .csv's columns), `editor/words.ts` (the run-head, last-run, time and memory words).
     `editor/cm.ts` has the CodeMirror pieces (the languages by extension, the line marks as a state field mapped through
     edits, the drop guard) and `editor/clock.ts` the 100 ms clock of the timers (it reads `breaking`'s `resetAt`, the one
     view file `test/imports.test.ts` allows to). The editor is one `EditorView`, mounted once, with one `EditorState` per
     open text tab; `data-editor` is on CodeMirror's content with a file shown and on the empty view without one. The unsaved
     dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page; a
-    failed save adds the banner `save-failed`. Decisions where this spec is silent: a whole-file run marks no running
+    failed save adds the banner `save-failed`; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    mark keeps to its text when the tab is left and shown again. `editorCommands.focus()` focuses at once and never changes
+    the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
+    `[data-editor]`); with a .dta tab active, that tab in "Open files" when it is shown, else its view's first enabled
+    button (Load), else the focus does not move; with the Editor pane hidden (a phone on another view) it does not move.
+    Decisions where this spec is silent: a whole-file run marks no running
     lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
-    N. The data is as the last complete command left it." with "Go to line N"; Run with no text tab open runs nothing and
+    N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
+    by Break. The data is as the last complete command left it.", no line); on a phone, a tap on the Break pill also shows
+    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's); a phone's
+    inline graph is on the card of its run's theme; Run with no text tab open runs nothing and
     says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
     line out; the page load's status words are "Opening"; a selection's last run is "Last run: lines 6–7 · …" and a
     command's "Last run: a command · …"; the phone's strip shows the state's words where it has no last run; Find is a
-    field over the log ("Find in the log", "2 of 5", Enter and Shift+Enter, Esc closes); Download log saves
+    field over the log ("Find in the log", "2 of 5", Enter and Shift+Enter, Esc closes; every match is counted and
+    numbered in the log's order; on the desktop with the Output pane unsplit, Find shows the Log tab first; Esc and Close
+    give the focus back to the Find button, on a phone to the ⋯ button); Download log saves
     `dofile.log`; the phone has no "Run command" button (PH draws none); on a phone the command line has a fixed height
     (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (taken as 61 px and the safe
     area, from ui.css's `.tabbar`: a figure, not a measure); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` open as plain text (their
@@ -987,13 +1000,17 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     with no line break is an ordinary paste; with breaks, the field's text before and after the cursor joins the first and
     last lines, empty lines are left out, and the lines run one after the other, each once the one before has ended; they
     stop at the first that is refused, that was queued for an engine that then did not start, or that ends with any rc
-    but 0 (Break too); a toast says how many were not run, and a refused line goes back into the field. Load on a phone's
+    but 0 (Break too), and before a line that ends with `{` or holds `///` (not sent: a block runs from the editor); a
+    toast says how many were not run, and a refused line goes back into the field. The next line starts in a microtask
+    after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
     nothing either. Words the spec does not give, drafts for the maintainer: "No file is open: open one from the file
     list." (the empty editor); "No file is open to run" (toast); "Opening" (status bar, the page load); the save-failed
     banner ("analysis.do couldn't be saved: <reason>. Your edits are still in the editor; download them to keep a copy."
     / Download, Dismiss); the pasted lines' toasts ("2 of 4 pasted lines not run: line 2 ended with r(111)", "… not run:
-    the engine can't take a command now", "… not run: line 1 didn't run"); "Stopped by Break before line N. …"; "Not
+    the engine can't take a command now", "… not run: line 1 didn't run", "… not run: line 2 starts a block or a ///
+    command; run those from the editor"); "Stopped by Break before line N. …", and for a command "Stopped by Break. The
+    data is as the last complete command left it."; "Not
     kept: a.dta, b.dta. Its folder was renamed or deleted during the run."; "The files this run wrote couldn't be kept in
     this browser: <reason>"; the last-run words above; the strip's "Last run 0.38 s" and "before line 17 · 18.4 s";
     "Find in the log", "none", "Close"; the editor's name "Editor: analysis.do"; the inline graph's name "Graph: scatter

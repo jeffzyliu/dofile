@@ -5,8 +5,10 @@
 //  - lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too;
 //  - the lines stop at the first one that is not run (refused: a start or a run in progress; or accepted while there is
 //    no engine and then dropped, by "Not now" say) or that ends with an error (any rc but 0, Break's rc 1 too). The rest
-//    are not run, and the page says how many in a toast; a refused line goes back into the field, as a typed one stays.
-// A block (`forvalues i = 1/3 {` ... `}`) does not run as one this way: each line is its own command. Run it from the editor.
+//    are not run, and the page says how many in a toast; a refused line goes back into the field, as a typed one stays;
+//  - a block (`forvalues i = 1/3 {` ... `}`) or a command continued with `///` cannot run this way, one line at a time:
+//    the lines stop before a line that ends with `{` or holds `///` (it is not sent), and the toast says to run it from
+//    the editor.
 // Plain TypeScript, no DOM: tested in Node (test/editor.test.ts). log/CommandLine.tsx gives runInTurn the real runner.
 
 /** The lines a paste runs, or null when the pasted text has no line break (an ordinary paste). */
@@ -23,12 +25,16 @@ export type RunOne = (line: string) => { accepted: boolean; done: Promise<number
 export interface InTurn {
   total: number;
   ran: number;
-  stop: null | { line: number; why: "refused" | "not-run" | "error"; rc?: number }; // line: 1-based, of the paste
+  stop: null | { line: number; why: "refused" | "not-run" | "error" | "block"; rc?: number }; // line: 1-based, of the paste
 }
+
+/** Whether a line opens a block (`{` at its end) or goes on to the next line (`///`): it cannot run on its own. */
+export const opensBlock = (line: string) => /\{\s*$/.test(line) || line.includes("///");
 
 /** Run `lines` one after the other through `runOne`, as the module's header says. */
 export async function runInTurn(lines: readonly string[], runOne: RunOne): Promise<InTurn> {
   for (let i = 0; i < lines.length; i++) {
+    if (opensBlock(lines[i])) return { total: lines.length, ran: i, stop: { line: i + 1, why: "block" } };
     const { accepted, done } = runOne(lines[i]);
     if (!accepted) return { total: lines.length, ran: i, stop: { line: i + 1, why: "refused" } };
     const rc = await done;
@@ -47,5 +53,7 @@ export function inTurnWords(r: InTurn): string | null {
   const lines = `${left} of ${r.total} pasted lines`;
   if (r.stop.why === "error") return `${lines} not run: line ${r.stop.line} ended with r(${r.stop.rc})`;
   if (r.stop.why === "refused") return `${lines} not run: the engine can't take a command now`;
+  if (r.stop.why === "block")
+    return `${lines} not run: line ${r.stop.line} starts a block or a /// command; run those from the editor`;
   return `${lines} not run: line ${r.stop.line} didn't run`;
 }

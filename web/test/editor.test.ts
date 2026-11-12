@@ -16,9 +16,10 @@ import {
   seconds,
   ticking,
 } from "../src/app/editor/words.ts";
-import { commandEnd, echoLines, nestedTarget, unsavedTarget } from "../src/app/log/align.ts";
+import { commandEnd, echoLines, inBlocks, nestedTarget, unsavedTarget } from "../src/app/log/align.ts";
 import { classify, hintParts, plainLog } from "../src/app/log/classify.ts";
-import { inTurnWords, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
+import { matches } from "../src/app/log/find.ts";
+import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
 import type { LastRun, RunHead } from "../src/app/types.ts";
 
 // a log as the engine writes it (the engine's own text: hints on, as browser.py runs it)
@@ -104,6 +105,13 @@ test("the .log tokenizer: a log file's head is muted", () => {
   assert.equal(k[0].split(":")[0], "note");
   assert.ok(k.slice(1, 5).every((x) => x.startsWith("note:")));
   assert.equal(k.at(-1), "echo:. display 1");
+  // after an echo the same lines are a run's output (the engine's own log of `log using` and a display), not muted
+  const run = kinds(
+    `. log using t.log, replace text\n${"-".repeat(79)}\n      name:  <unnamed>\n       log:  /work/t.log\n  log type:  text\n opened on:  11 Nov 2026, 17:23:25\n\n. display "name: Ann"\nname: Ann\n`,
+  );
+  assert.ok(run.includes("out:      name:  <unnamed>"));
+  assert.ok(run.includes(`out:${"-".repeat(79)}`));
+  assert.ok(run.includes("out:name: Ann"));
 });
 
 test("a hint line's bold words, and its help command as a link", () => {
@@ -165,7 +173,139 @@ test("echoLines: a nested do-file's echoes are passed over, even one with the te
   assert.equal(echoLines(deep, deepCode).get(2), deep.length - 2);
 });
 
+// The engine's own logs (run through dofile's engine, hints on), for the walk's harder cases. ok.do holds `display 1`
+// and `display 2`; s2.do holds `display 7`.
+const LOOP_DO = `. forvalues i = 1/2 {
+  2.   do ok.do
+  3. }
+
+. display 1
+1
+
+. display 2
+2
+
+.
+end of do-file
+
+. display 1
+1
+
+. display 2
+2
+
+.
+end of do-file
+
+. display "after"
+after
+
+. scatter x x
+
+`;
+const IF_DO = `. if 0 {
+.   do ok.do
+. }
+
+. display "z"
+z
+
+. scatter x x
+
+`;
+const MATA = `. clear
+
+. mata:
+------------------------------------------------- mata (type end to exit) ------
+: x = 1
+
+: x
+  1
+
+: end
+--------------------------------------------------------------------------------
+
+. display "after"
+after
+
+. #delimit ;
+delimiter now ;
+. display
+>   "semi" ;
+semi
+
+. #delimit cr
+delimiter now cr
+. display "z"
+z
+
+`;
+const CAPTURE_DO = `. capture noisily do s2.do
+
+. display 7
+7
+
+.
+end of do-file
+
+. display 7
+7
+
+. quietly do s2.do
+
+. display 8
+8
+
+`;
+
+test("echoLines: a do-file run from a block opens nothing, and the walk stays in step after it", () => {
+  // a loop that runs a do-file: its echoes come after the loop's, twice; the lines after the loop are still found
+  let log = classify(LOOP_DO);
+  let at = echoLines(log, 'forvalues i = 1/2 {\n  do ok.do\n}\ndisplay "after"\nscatter x x');
+  assert.equal(log[at.get(3)!]?.text, "  3. }");
+  assert.equal(log[at.get(4)!]?.text, '. display "after"');
+  assert.equal(log[at.get(5)!]?.text, ". scatter x x");
+  // a do-file in a block that does not run: echoed, and no `end of do-file` ever comes
+  log = classify(IF_DO);
+  at = echoLines(log, 'if 0 {\n  do ok.do\n}\ndisplay "z"\nscatter x x');
+  assert.equal(log[at.get(4)!]?.text, '. display "z"');
+  assert.equal(log[at.get(5)!]?.text, ". scatter x x");
+  // a do in a program's body is a block too
+  assert.deepEqual(inBlocks(["program define p", "  do ok.do", "end", "p", "forvalues i=1/2 {", "  x", "}", "y"]), [
+    false,
+    true,
+    true,
+    false,
+    false,
+    true,
+    true,
+    false,
+  ]);
+  // braces in strings and comments are not counted
+  assert.deepEqual(inBlocks(['display "{"', "// {", "x /* { */", "y"]), [false, false, false, false]);
+});
+
+test("echoLines: after lines echoed in another form (a mata block) the walk finds the next line further down", () => {
+  const log = classify(MATA);
+  const at = echoLines(
+    log,
+    'clear\nmata:\nx = 1\nx\nend\ndisplay "after"\n#delimit ;\ndisplay\n  "semi" ;\n#delimit cr\ndisplay "z"',
+  );
+  assert.equal(log[at.get(6)!]?.text, '. display "after"');
+  assert.equal(log[at.get(8)!]?.text, ". display");
+  assert.equal(log[at.get(11)!]?.text, '. display "z"');
+});
+
+test("echoLines: capture noisily do shows its file's echoes, which are passed over; quietly do shows none", () => {
+  const log = classify(CAPTURE_DO);
+  const at = echoLines(log, "capture noisily do s2.do\ndisplay 7\nquietly do s2.do\ndisplay 8");
+  assert.equal(at.get(2), 8, "the main file's `. display 7`, not the nested one at 2");
+  assert.equal(log[at.get(4)!]?.text, ". display 8");
+});
+
 test("nestedTarget and unsavedTarget: the file a do or include runs, and the open file with unsaved edits it is", () => {
+  assert.equal(nestedTarget("capture noisily do clean.do"), "clean.do");
+  assert.equal(nestedTarget("qui: do clean"), "clean.do");
   assert.equal(nestedTarget("do clean.do"), "clean.do");
   assert.equal(nestedTarget("do clean"), "clean.do");
   assert.equal(nestedTarget('do "my files/clean.do"'), "my files/clean.do");
@@ -227,6 +367,37 @@ test("pasted lines run in turn and stop at the first refused, not run, or failed
   // the last line fails: nothing is left, so no toast
   s = script({ b: { rc: 111 } });
   assert.equal(inTurnWords(await runInTurn(["a", "b"], s.runOne)), null);
+});
+
+test("pasted lines stop before a block's line or a /// line, which is not sent, and the toast says to use the editor", async () => {
+  assert.equal(opensBlock("forvalues i = 1/3 {"), true);
+  assert.equal(opensBlock("if x > 1 {  "), true);
+  assert.equal(opensBlock("regress y x /// controls"), true);
+  assert.equal(opensBlock("display ${x}"), false);
+  assert.equal(opensBlock("}"), false);
+  const s = script({});
+  const r = await runInTurn(["clear", "forvalues i = 1/3 {", "display `i'", "}"], s.runOne);
+  assert.deepEqual(r, { total: 4, ran: 1, stop: { line: 2, why: "block" } });
+  assert.deepEqual(s.ran, ["clear"]);
+  assert.equal(
+    inTurnWords(r),
+    "3 of 4 pasted lines not run: line 2 starts a block or a /// command; run those from the editor",
+  );
+  // the block's line is the last one: still said, since it did not run
+  assert.equal(
+    inTurnWords(await runInTurn(["regress y x ///"], script({}).runOne)),
+    "1 of 1 pasted lines not run: line 1 starts a block or a /// command; run those from the editor",
+  );
+});
+
+test("Find's matches: every occurrence, case ignored, none for an empty query", () => {
+  assert.deepEqual(matches("Regress y x; regress", "regress"), [
+    [0, 7],
+    [13, 20],
+  ]);
+  assert.deepEqual(matches("aaa", "aa"), [[0, 2]], "matches do not overlap");
+  assert.deepEqual(matches("abc", ""), []);
+  assert.deepEqual(matches("abc", "x"), []);
 });
 
 test("pasted lines: the next starts only once the one before has ended", async () => {
