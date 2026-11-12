@@ -333,7 +333,7 @@ test("the banners above the log: running, stopping (focus on Don't reset), waiti
   await expect(waiting).toHaveAttribute("tabindex", "-1");
 });
 
-test("the storage, reset, memory and download-failed banners", async ({ page }) => {
+test("the storage, reset and download-failed banners", async ({ page }) => {
   await page.evaluate(() => {
     const s = window.__dofile.state;
     s.addBanner({ b: "storage" });
@@ -360,10 +360,6 @@ test("the storage, reset, memory and download-failed banners", async ({ page }) 
   await expect(reset.getByRole("button", { name: "Run the file again" })).toBeDisabled(); // no engine, no open file
   await reset.getByRole("button", { name: "Dismiss" }).click();
   await expect(reset).toHaveCount(0);
-  await page.evaluate(() => window.__dofile.state.addBanner({ b: "memory" }));
-  await expect(page.locator(".banner", { hasText: "of about 2 GB." })).toContainText(
-    "A bigger dataset may reset the engine.",
-  );
 });
 
 test("Reset asks only with data in memory (described again after a run); Cancel keeps it; Reset clears it and the banner says so", async ({

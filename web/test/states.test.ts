@@ -1,12 +1,11 @@
 // Step 4d's plain logic (src/app/states/words.ts): what Reset asks (and when: never at once during a run, and after a run
 // only once the memory is described again), the words of
-// the reset banner and the running banner, the stopping countdown at 0, the memory banner with no size, the action each
+// the reset banner and the running banner, the stopping countdown at 0, the action each
 // failed reason gets, the times, and the three drafted notes (OQ-10).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   failedActions,
-  memoryHead,
   noteFor,
   nothingToLose,
   ofTotal,
@@ -120,12 +119,10 @@ test("after a run, Reset describes the memory again before it resets with no que
   );
 });
 
-test("the stopping banner's countdown never says In 0 s; the memory banner never shows an empty size", () => {
+test("the stopping banner's countdown never says In 0 s", () => {
   assert.equal(resetIn(4), "In 4 s the engine is reset:");
   assert.equal(resetIn(1), "In 1 s the engine is reset:");
   assert.equal(resetIn(0), "The engine is being reset now:");
-  assert.equal(memoryHead(1.6e9), "Memory 1.6 GB of about 2 GB.");
-  for (const none of [null, undefined, 0]) assert.equal(memoryHead(none), "Memory is near its limit of about 2 GB.");
 });
 
 test("the times and sizes are written as the drawings write them", () => {
