@@ -4,7 +4,7 @@ Loaded when work touches `web/`, the web demo: the engine in Pyodide inside a We
 `CLAUDE.md` still applies. What each script and folder does, with times: `web/README.md`. The plan and decisions:
 `docs/phase2-plan.md`. The build plan and status of prototype 1: `docs/prototype1-plan.md` (read it first when picking that work up). The rework of the engine code (step 3.5, done
 and merged with step 3 by pull request #13): `docs/prototype1-step3.5-plan.md`; the state machine's design:
-`docs/prototype1-step3.5-c-design.md`. Biome was added after step 3.5, in the same pull request (`docs/formatting-proposal.md`). How data flows through the engine code, as built: `docs/web-engine-data-flow.md`.
+`docs/prototype1-step3.5-c-design.md`. Biome was added after step 3.5, in the same pull request (`docs/formatting-proposal.md`). How data flows through the engine code, as built: `docs/web-engine-data-flow.md`; the editor page's focus, runs, open files and log links: `docs/web-page-flows.md`.
 The build spec for the pages: `docs/design/SPEC.md` (section 5 holds the machine's transition matrix, which a test checks).
 
 ## Commands
