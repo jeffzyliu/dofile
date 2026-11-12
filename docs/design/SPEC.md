@@ -43,8 +43,9 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
 - **Glyphs:** ⌘ ▶ ■ ● ▾ ⋯ are SVG icons (`.ico`), never typed. Key chips say ⌘ on a Mac, Ctrl elsewhere; a disabled button
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
-  ("Rename F2", `ui/Menu.tsx` `key-hint`) is only hidden from sight, so the item's name keeps it; a Results row's
-  "↵ Copy" goes (a tap copies, and the toast says so). An icon-only button has an `aria-label`.
+  ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
+  name keeps it; a Results row's "↵ Copy" goes (a tap copies, and the toast says so); the nested-do note (`S 15`) names
+  the ⋯ menu's Save instead of the key. An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
 - **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the
@@ -281,7 +282,8 @@ place and Load or Import and Copy are off (`web/src/stata/quote.ts`).
   `analysis.do`. One run at a time. Run does not save. Editing during a run is allowed and does not change the run.
 - `do` and `include` read the saved file in `/work`. When the log shows a nested `do` or `include` of a file that was open with
   unsaved edits when the run started, the page adds under that echo (`S 15`): "Note: clean.do has unsaved edits in the editor;
-  do runs the saved file. Save it (⌘ S) to run your edits."
+  do runs the saved file. Save it (⌘ S) to run your edits." (Ctrl S off a Mac; on the phone layout "Save it (⋯ › Save) to
+  run your edits.")
 - Load and Import run their shown command as if typed in the command line: echoed in the log, added to the history (↑ brings
   it back), never written into a do-file. Load does not ask first in P1 (OQ-6: P2). Copy puts the command on
   the clipboard.
@@ -990,7 +992,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     view file `test/imports.test.ts` allows to). The editor is one `EditorView`, mounted once, with one `EditorState` per
     open text tab; `data-editor` is on CodeMirror's content with a file shown and on the empty view without one. The unsaved
     dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page, the
-    editor too, and Ctrl/Cmd+Enter runs, each with Ctrl or Cmd on every platform; a failed save adds the banner `save-failed`; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    editor too, and Ctrl/Cmd+Enter runs, each with Ctrl or Cmd on every platform; S is the key that types "s" or, on a
+    layout whose key there types no Latin letter (Cyrillic, Greek...), the key in S's place (`editor/keys.ts`); a held
+    Ctrl/Cmd+S saves once; with a dialog open it saves the active tab behind it; a failed save adds the banner `save-failed`; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
     place to change it; the joining agent's, for the maintainer to approve): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
@@ -1000,11 +1004,12 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     other text, it has none). **A run that
     rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`; the decision
     in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
-    tab of a `\r\n` file follows a run as any other; Save keeps the file's line break, noted when its text is read
-    (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for a new or empty file and
-    for lone `\r`), and writes the editor's text with it (`fileText`), as does the save-failed banner's Download; a run
-    that becomes the saved version brings its own line break, one that writes the same rows with the other break leaves
-    the tab's): the same text
+    tab of a `\r\n` file follows a run as any other; Save keeps the file's form, noted when its text is read
+    (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
+    a new or empty file and for lone `\r`) and its UTF-8 byte order mark, which the editor never holds (so neither Run nor
+    the comparisons see it); Save writes the editor's text in that form (`fileText`), as does the save-failed banner's
+    Download; a run that becomes the saved version brings its own form, one that writes the same rows in another form
+    leaves the tab's): the same text
     again (a byte-identical rewrite, a `.log` open during every run) changes nothing; a text tab with no unsaved edits
     shows the run's version, changed in one transaction where the two differ, so the caret, the selection and the undo
     history are kept; one with edits keeps them and takes the run's version as its saved text (the tab stays unsaved, so

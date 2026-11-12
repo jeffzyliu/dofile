@@ -307,7 +307,11 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   const short = (await r2.textContent())!;
   expect(short.length).toBeLessThanOrEqual(10);
   await r2.focus();
-  await expect(page.locator(".rs .focusrow .hint")).toHaveText("↵ Copy");
+  // the focused row's "↵ Copy": in sight on the desktop; a phone hides it (a tap copies, and the toast says so)
+  const copyHint = page.locator(".rs .focusrow .hint");
+  await expect(copyHint).toHaveText("↵ Copy");
+  if (phone(page)) await expect(copyHint).toBeHidden();
+  else await expect(copyHint).toBeVisible();
   const whole = (await r2.textContent())!;
   expect(whole.length).toBeGreaterThan(short.length);
   await page.keyboard.press("Enter");

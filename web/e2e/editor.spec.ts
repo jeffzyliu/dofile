@@ -7,6 +7,7 @@
 //  - With an engine (one start per test): Run and the run-head, the error mark and "Go to line", the graph link after
 //    the echo of its line (inline on a phone), the status bar or the phone's strip, Run selection, Break's note, the
 //    command line (Enter, ↑, a paste of several lines that stops at an error, an ordinary paste).
+import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
@@ -91,8 +92,39 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
     await expect.poll(() => stored(page, "a.do")).toBe(text);
     await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
   }
-  await page.keyboard.press("Backspace");
-  await page.keyboard.press("Backspace");
+  // a layout whose S types no Latin letter (Cyrillic: "ы", in S's place): Ctrl+S saves, and the browser's own Save page
+  // is kept away (the default prevented); a held key (repeats) saves once. Events made in the page: Playwright's keyboard
+  // has no such layout.
+  await page.keyboard.insertText("?");
+  const held = await page.evaluate(() => {
+    const s = window.__dofile.store as any;
+    const real = s.write;
+    let writes = 0;
+    s.write = (...a: unknown[]) => {
+      writes++;
+      return real.apply(s, a);
+    };
+    const el = document.querySelector(".cm-content")!;
+    const fire = (repeat: boolean) => {
+      const e = new KeyboardEvent("keydown", {
+        key: "ы",
+        code: "KeyS",
+        ctrlKey: true,
+        repeat,
+        bubbles: true,
+        cancelable: true,
+      });
+      el.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    const prevented = [fire(false), fire(true), fire(true)];
+    s.write = real;
+    return { writes, prevented };
+  });
+  expect(held).toEqual({ writes: 1, prevented: [true, true, true] });
+  await expect.poll(() => stored(page, "a.do")).toBe("display 1\ndisplay 2!!?");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
   await page.keyboard.press("ControlOrMeta+s");
   await expect.poll(() => stored(page, "a.do")).toBe("display 1\ndisplay 2");
   // the [data-editor] element is the editor's content, and focus() puts the focus there
@@ -163,10 +195,10 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(content).toHaveText("display 1display 2display 3display 4");
 });
 
-test("Save keeps a file's line breaks: a \\r\\n file edited and saved has \\r\\n throughout and is clean; a \\n file stays \\n", async ({
+test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throughout and is clean, and so has the save-failed banner's Download and the file renamed; a \\n file stays \\n; a file's BOM is not in the editor and is written back", async ({
   page,
 }) => {
-  await setUp(page, { "c.do": "display 1\r\ndisplay 2\r\n", "n.csv": "a\nb\n" });
+  await setUp(page, { "c.do": "display 1\r\ndisplay 2\r\n", "n.csv": "a\nb\n", "b.csv": "\uFEFFa,b\r\n1,2\r\n" });
   const dirty = (path: string) =>
     page.evaluate((p) => window.__dofile.state.tabs.value.find((t: { path: string }) => t.path === p)?.dirty, path);
   const content = page.locator(".cm-content");
@@ -188,6 +220,37 @@ test("Save keeps a file's line breaks: a \\r\\n file edited and saved has \\r\\n
   await expect.poll(() => dirty("c.do")).toBe(true);
   await page.keyboard.press("Backspace");
   await expect.poll(() => dirty("c.do")).toBe(false);
+  // a save that fails: the banner's Download is the editor's text in the file's form
+  await page.keyboard.insertText("x");
+  await page.evaluate(() => {
+    const s = window.__dofile.store as any;
+    s.realWrite = s.write;
+    s.write = () => Promise.reject(new Error("the disk is full"));
+  });
+  await page.keyboard.press("ControlOrMeta+s");
+  const failed = page.locator(".banner.error", { hasText: "c.do couldn't be saved" });
+  const download = page.waitForEvent("download");
+  await failed.getByRole("button", { name: "Download" }).click();
+  const crlf = "display 1\r\ndisplay 2\r\ndisplay 3\r\ndisplay 4x";
+  expect(readFileSync((await (await download).path())!, "utf8")).toBe(crlf);
+  await page.evaluate(() => {
+    const s = window.__dofile.store as any;
+    s.write = s.realWrite;
+  });
+  // renamed (F2 in the tree), it keeps its form: saved under the new name, still \r\n
+  if (isPhone(page)) await view(page, "Files");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^c\.do/ })
+    .focus();
+  await page.keyboard.press("F2");
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("d.do");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: /^d\.do/ })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+s"); // the active tab, wherever the focus is
+  await expect.poll(() => stored(page, "d.do")).toBe(crlf);
+  await expect.poll(() => dirty("d.do")).toBe(false);
 
   await open(page, "n.csv");
   await content.click();
@@ -198,6 +261,25 @@ test("Save keeps a file's line breaks: a \\r\\n file edited and saved has \\r\\n
   await expect(page.locator(".toast")).toHaveText("Saved n.csv");
   expect(await stored(page, "n.csv")).toBe("a\nb\nc\n");
   await expect.poll(() => dirty("n.csv")).toBe(false);
+
+  // a BOM: not in the editor (CodeMirror would draw it), the tab clean; Save writes it back, with the file's breaks
+  await open(page, "b.csv");
+  expect(await dirty("b.csv")).toBe(false);
+  expect(
+    await page
+      .locator(".cm-line")
+      .first()
+      .evaluate((el) => el.textContent),
+  ).toBe("a,b");
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("3,4");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(page.locator(".toast")).toHaveText("Saved b.csv");
+  const raw = await page.evaluate(async () => [...(await window.__dofile.store.read("b.csv"))]);
+  expect(raw.slice(0, 3)).toEqual([0xef, 0xbb, 0xbf]);
+  expect(Buffer.from(raw.slice(3)).toString("utf8")).toBe("a,b\r\n1,2\r\n3,4");
+  await expect.poll(() => dirty("b.csv")).toBe(false);
 });
 
 test("the editor: a .csv's columns have their colors, a .log's lines their kinds, .md and .json their tokens; a file dropped on it uploads and leaves its text", async ({
@@ -785,7 +867,9 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
 test("Break: the run stops before a line, with a note, Go to line and no error mark; the Break pill's time on a phone", async ({
   page,
 }) => {
-  await setUp(page, { "loop.do": "clear\nforvalues i = 1/100000 {\n  quietly display `i'\n}\ndisplay 1" }, "/?test");
+  // a loop with no end, so Break always lands inside it, however long the test's steps before Break take on a busy
+  // machine (a forvalues of fixed length ran out first once); Break ends it between passes
+  await setUp(page, { "loop.do": "clear\nwhile 1 {\n  quietly display 1\n}\ndisplay 1" }, "/?test");
   await startEngine(page);
   await ready(page);
   await open(page, "loop.do");
@@ -1038,4 +1122,68 @@ test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites 
   ).toBe(false);
   await expect(page.locator(".banner", { hasText: "The run changed w.csv" })).toHaveCount(0);
   await expect(page.getByRole("img", { name: "unsaved changes" })).toHaveCount(0);
+});
+
+test("a file's form follows the store's text the editor takes: a run's version (shown, or kept with edits) and Reload from the run; a do-file with a BOM runs, since the editor sends no BOM", async ({
+  page,
+}) => {
+  await setUp(page, { "w.csv": "a\n9\n", "x.csv": "a\n9\n", "b.do": "﻿display 40+2\r\n" }, "/?test");
+  await startEngine(page);
+  await ready(page);
+  const dirty = (path: string) =>
+    page.evaluate((p) => window.__dofile.state.tabs.value.find((t: { path: string }) => t.path === p)?.dirty, path);
+  const content = page.locator(".cm-content");
+  const save = async (path: string, add: string) => {
+    await content.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.type(add);
+    await page.keyboard.press("ControlOrMeta+s");
+    await expect.poll(() => dirty(path)).toBe(false);
+  };
+  // x.csv with an unsaved edit, w.csv clean; a run writes both with "\r\n" (file write: the engine's own writes are "\n")
+  await open(page, "x.csv");
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("mine");
+  await open(page, "w.csv");
+  const crlf = (f: string) =>
+    `file open h using "${f}", write text replace\nfile write h "a\`cr'" _n "1\`cr'" _n\nfile close h`;
+  const r = await page.evaluate(
+    (code) => window.__dofile.run(code),
+    `local cr = char(13)\n${crlf("w.csv")}\n${crlf("x.csv")}`,
+  );
+  expect(r?.rc, r?.log).toBe(0);
+  await ready(page);
+  if (isPhone(page)) await view(page, "Editor");
+  // the clean tab shows the run's version; edited and saved, it has the run's "\r\n"
+  await expect(content).toHaveText(/^a\s*1\s*$/);
+  await save("w.csv", "2");
+  expect(await stored(page, "w.csv")).toBe("a\r\n1\r\n2");
+  // the tab with edits keeps them; saved, they have the run's "\r\n"
+  await open(page, "x.csv");
+  await expect(content).toContainText("mine");
+  await save("x.csv", "!");
+  expect(await stored(page, "x.csv")).toBe("a\r\n9\r\nmine!");
+  await expect(page.locator(".banner", { hasText: "The run changed x.csv." })).toHaveCount(0);
+
+  // Reload from the run takes the store's text in its form: a run gives x.csv the banner again, then the store's
+  // version changes once more behind the editor (written here as another writer would, "\n"); Reload, edit and Save: "\n"
+  await page.keyboard.type("?");
+  const r2 = await page.evaluate((code) => window.__dofile.run(code), `local cr = char(13)\n${crlf("x.csv")}`);
+  expect(r2?.rc, r2?.log).toBe(0);
+  await ready(page);
+  await page.evaluate(() => window.__dofile.store.write("x.csv", new TextEncoder().encode("a\n5\n")));
+  const banner = page.locator(".banner:visible", { hasText: "The run changed x.csv." });
+  await banner.getByRole("button", { name: "Reload from the run" }).click();
+  if (isPhone(page)) await view(page, "Editor");
+  await expect(content).toHaveText(/^a\s*5\s*$/);
+  await save("x.csv", "6");
+  expect(await stored(page, "x.csv")).toBe("a\n5\n6");
+
+  // a do-file with a BOM: Run sends the editor's text, which has none (the engine reads a BOM as part of the first command)
+  await open(page, "b.do");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await ready(page);
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
+  await expect(page.getByRole("log", { name: "Log" })).toContainText("42");
 });

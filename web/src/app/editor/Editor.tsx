@@ -9,9 +9,10 @@
 //    active, focus() goes to that tab, or its view's Load, outside `[data-editor]` (see focus()).
 //  - The unsaved dot: setDirty(path, text differs from the saved text) on each edit, so undoing back to the saved text
 //    clears it; a save clears it unless the text changed while it was being written.
-//  - Save keeps the file's line break (ranover.ts lineBreakOf, noted at open, reload and a run's new version): the
-//    editor's text, which has "\n" only, is written with "\r\n" for a "\r\n" file (fileText); the save-failed banner's
-//    Download too (textOf). The texts compared (the dot, a run's version) stay in the editor's "\n" form.
+//  - Save keeps the file's form (ranover.ts formOf, noted at open, reload and a run's new version): its line break and
+//    its UTF-8 byte order mark. The editor's text, which has "\n" only and never a BOM, is written with "\r\n" for a
+//    "\r\n" file and with the BOM for a file that had one (fileText); the save-failed banner's Download too (textOf).
+//    The texts compared (the dot, a run's version) and the text Run sends stay in the editor's form.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
 //    is the one that applies (Ctrl or Cmd on every platform, as Save). With no text tab shown, Run says so in a toast and runs nothing. The code of each run is
 //    kept by its head (commands.ts codeOf) for the log's graph links.
@@ -19,8 +20,9 @@
 //    and the error line of the file's last run (not for Break's rc 1, whose line is the command that did not start).
 //    Both move with their text while it is edited.
 //  - Ctrl/Cmd+S saves the active tab wherever the focus is, the editor too (the browser's own Save page is never wanted
-//    here): one window listener, which takes Ctrl or Cmd on every platform. Not CodeMirror's "Mod-s", whose Mod is Cmd
-//    alone on Apple devices, where Ctrl+S in the editor was swallowed and saved nothing.
+//    here): one window listener, which takes Ctrl or Cmd on every platform, and S on any keyboard layout (keys.ts
+//    isSaveKey); a held key saves once. Not CodeMirror's "Mod-s", whose Mod is Cmd alone on Apple devices, where Ctrl+S
+//    in the editor was swallowed and saved nothing. With a dialog open it saves the active tab behind it.
 //  - A file drop is the page's (4a's window listeners): CodeMirror is told it is handled (cm.ts leaveFileDrops).
 
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -45,17 +47,18 @@ import {
 } from "./cm.ts";
 import { codeOf, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
-import { editorText, fileText, followRun, type LineBreak, lineBreakOf } from "./ranover.ts";
+import { isSaveKey } from "./keys.ts";
+import { editorText, type FileForm, fileText, followRun, formOf, PLAIN } from "./ranover.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
-// what the store has of each, as last read or saved, with its line breaks as the editor holds them ("\n": ranover.ts
-// editorText), so a clean tab's document equals it; null when a run wrote something that is not text over it (the tab
-// is then unsaved until a save, whatever its text)
+// what the store has of each, as last read or saved, with its line breaks as the editor holds them ("\n", no BOM:
+// ranover.ts editorText), so a clean tab's document equals it; null when a run wrote something that is not text over
+// it (the tab is then unsaved until a save, whatever its text)
 const savedText = new Map<string, string | null>();
-// each open file's line break, which Save writes (ranover.ts lineBreakOf): noted when the editor takes the store's text
-// (open, reload, a run's version that becomes the saved one); a run that writes the same rows with the other break
+// each open file's form (line break, BOM), which Save writes (ranover.ts formOf): noted when the editor takes the store's
+// text (open, reload, a run's version that becomes the saved one); a run that writes the same rows in another form
 // changes nothing, so the tab keeps its own
-const breaks = new Map<string, LineBreak>();
+const forms = new Map<string, FileForm>();
 const scrolled = new Map<string, number>(); // where each was scrolled to
 const shown = signal<string | null>(null); // the path whose state the view shows, or null (the empty view)
 let view: EditorView | null = null;
@@ -105,11 +108,11 @@ const emptyState = EditorState.create({ doc: "", extensions: [EditorState.readOn
 /** The state of `path` as it is now: the view's while it is shown. */
 const current = (path: string) => (shown.value === path && view ? view.state : states.get(path));
 
-/** The editor's text of an open file, saved or not, with the file's line break, as Save writes it (the save-failed
- *  banner's Download), or null. */
+/** The editor's text of an open file, saved or not, in the file's form (line break, BOM), as Save writes it (the
+ *  save-failed banner's Download), or null. */
 export function textOf(path: string) {
   const st = current(path);
-  return st ? fileText(st.doc.toString(), breaks.get(path) ?? "\n") : null;
+  return st ? fileText(st.doc.toString(), forms.get(path) ?? PLAIN) : null;
 }
 
 /** Show `path`'s state (or the empty view). The shown one's state is kept first. */
@@ -225,7 +228,7 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
   if (!path || !st) return false;
   const text = st.doc.toString();
   try {
-    await store.write(path, new TextEncoder().encode(fileText(text, breaks.get(path) ?? "\n")));
+    await store.write(path, new TextEncoder().encode(fileText(text, forms.get(path) ?? PLAIN)));
   } catch (e) {
     const message = (e as Error)?.message ?? String(e);
     addBanner({ b: "save-failed", path, message });
@@ -249,7 +252,7 @@ function open(path: string, file: string) {
   closedMarks.delete(path);
   if (kept && kept.text === text && kept.line <= fresh.doc.lines) update(path, { effects: setErrorLine.of(kept.line) });
   savedText.set(path, text);
-  breaks.set(path, lineBreakOf(file));
+  forms.set(path, formOf(file));
   scrolled.delete(path);
   if (activeTab.value === path) show(path);
 }
@@ -260,7 +263,7 @@ function reload(path: string, file: string) {
   const fresh = stateFor(path, text);
   states.set(path, fresh);
   savedText.set(path, text);
-  breaks.set(path, lineBreakOf(file));
+  forms.set(path, formOf(file));
   if (shown.value === path && view) {
     view.setState(fresh);
     selection.value = null;
@@ -276,9 +279,9 @@ function ranOver(path: string, text: string | null): "same" | "shown" | "kept" {
   const r = followRun(st.doc.toString(), savedText.get(path) ?? null, text);
   if (r.t === "same") return "same"; // rewritten with the same text: nothing changes
   savedText.set(path, text === null ? null : editorText(text));
-  // the run's rows are now the saved ones: their line break with them (not when the run wrote the editor's own rows,
-  // which changes nothing the tab shows, or something that is not text)
-  if (text !== null && (r.t === "shown" || r.dirty)) breaks.set(path, lineBreakOf(text));
+  // the run's rows are now the saved ones: their form with them (not when the run wrote the editor's own rows, which
+  // changes nothing the tab shows, or something that is not text)
+  if (text !== null && (r.t === "shown" || r.dirty)) forms.set(path, formOf(text));
   // no unsaved edits: the run's text, changed in one transaction where the two differ, so the caret, the selection and
   // the undo history are kept
   if (r.t === "shown") update(path, { changes: { from: r.from, to: r.to, insert: r.insert } });
@@ -301,8 +304,8 @@ function renamed(from: string, to: string) {
   states.set(to, next);
   savedText.set(to, savedText.has(from) ? savedText.get(from)! : "");
   savedText.delete(from);
-  breaks.set(to, breaks.get(from) ?? "\n");
-  breaks.delete(from);
+  forms.set(to, forms.get(from) ?? PLAIN);
+  forms.delete(from);
   // its banners follow it
   for (const b of banners.value)
     if ((b.b === "run-changed" || b.b === "save-failed") && b.path === from) {
@@ -328,7 +331,7 @@ function closed(path: string) {
     closedMarks.set(path, { line, text: saved });
   states.delete(path);
   savedText.delete(path);
-  breaks.delete(path);
+  forms.delete(path);
   scrolled.delete(path);
   for (const b of banners.value) if ((b.b === "run-changed" || b.b === "save-failed") && b.path === path) dismiss(b);
   if (shown.value === path && view) {
@@ -373,12 +376,13 @@ function focus() {
   [tab, button].find(seen)?.focus();
 }
 
-/** Ctrl/Cmd+S anywhere on the page saves the active tab. */
+/** Ctrl/Cmd+S anywhere on the page saves the active tab, once while the key is held (each repeat is only kept from the
+ *  browser's own Save page). */
 function onKey(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    editorCommands.save();
-  }
+  if (!isSaveKey(e)) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  editorCommands.save();
 }
 
 /** Make the view in `host` and fill editorCommands. Called once, when Editor mounts. */

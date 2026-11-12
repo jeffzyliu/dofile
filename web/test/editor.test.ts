@@ -9,7 +9,8 @@ import { test } from "node:test";
 import { ChangeSet, Text } from "@codemirror/state";
 import { CSV_COLORS, csvFields } from "../src/app/editor/csv.ts";
 import { lineDeleted, onLastRun, onRunStart } from "../src/app/editor/errormark.ts";
-import { editorText, fileText, followRun, lineBreakOf } from "../src/app/editor/ranover.ts";
+import { isSaveKey } from "../src/app/editor/keys.ts";
+import { editorText, fileText, followRun, formOf, lineBreakOf, PLAIN } from "../src/app/editor/ranover.ts";
 import {
   jumpLine,
   lastRunWords,
@@ -822,7 +823,7 @@ test("a run's version of an open file (editor/ranover.ts): compared with line br
   assert.deepEqual(followRun("a\n", null, "b\n"), { t: "kept", dirty: true });
 });
 
-test("a file's line break (editor/ranover.ts): noted when it opens, the more common one, \\n on a tie or with none; Save writes it back, byte for byte", () => {
+test("a file's form (editor/ranover.ts): its line break, the more common one, \\n on a tie or with none, and its BOM; noted when it opens; Save writes it back, byte for byte", () => {
   assert.equal(lineBreakOf("a\r\nb\r\n"), "\r\n");
   assert.equal(lineBreakOf("a\nb\n"), "\n");
   // mixed: the more common one; a tie is "\n"
@@ -835,14 +836,56 @@ test("a file's line break (editor/ranover.ts): noted when it opens, the more com
   // a lone "\r" (old Mac) is not counted: such a file is "\n" (the editor holds its breaks as "\n" already)
   assert.equal(lineBreakOf("a\rb\r"), "\n");
   assert.equal(lineBreakOf("a\rb\rc\r\n"), "\r\n");
-  // writing back: the editor's text with the noted break
-  assert.equal(fileText("a\nb\n", "\r\n"), "a\r\nb\r\n");
-  assert.equal(fileText("a\nb\n", "\n"), "a\nb\n");
-  assert.equal(fileText("", "\r\n"), "");
+  // a BOM: noted, and never in the editor's text (what Run sends and the comparisons use)
+  assert.deepEqual(formOf("﻿a\r\nb\r\n"), { br: "\r\n", bom: true });
+  assert.deepEqual(formOf("a\nb\n"), { br: "\n", bom: false });
+  assert.deepEqual(formOf(""), PLAIN);
+  assert.equal(editorText("﻿a\r\nb\r\n"), "a\nb\n");
+  assert.equal(editorText("a﻿"), "a﻿", "only a leading BOM");
+  assert.deepEqual(followRun("a\n", "a\n", "﻿a\n"), { t: "same" }, "the same rows with a BOM: the same text");
+  // writing back: the editor's text in the noted form
+  assert.equal(fileText("a\nb\n", { br: "\r\n", bom: false }), "a\r\nb\r\n");
+  assert.equal(fileText("a\nb\n", PLAIN), "a\nb\n");
+  assert.equal(fileText("", { br: "\r\n", bom: false }), "");
+  assert.equal(fileText("a\nb\n", { br: "\r\n", bom: true }), "﻿a\r\nb\r\n");
+  assert.equal(fileText("", { br: "\n", bom: true }), "﻿");
   // a mixed file becomes uniform on its first Save
   const mixed = "a\r\nb\r\nc\n";
-  assert.equal(fileText(editorText(mixed), lineBreakOf(mixed)), "a\r\nb\r\nc\r\n");
-  // a round trip of a "\r\n" or "\n" text is byte-identical, with or without a final line break
-  for (const t of ["a\r\nb\r\n", "a\r\nb", "a\nb\n", "a\nb", "\r\n", "x"])
-    assert.equal(fileText(editorText(t), lineBreakOf(t)), t);
+  assert.equal(fileText(editorText(mixed), formOf(mixed)), "a\r\nb\r\nc\r\n");
+  // a round trip of a "\r\n" or "\n" text, with or without a BOM, is byte-identical, with or without a final line break
+  for (const t of ["a\r\nb\r\n", "a\r\nb", "a\nb\n", "a\nb", "\r\n", "x", "﻿a\r\nb\r\n", "﻿a\nb", "﻿"])
+    assert.equal(fileText(editorText(t), formOf(t)), t);
+});
+
+test("Save's key (editor/keys.ts): Ctrl or Cmd with S on any layout, the key that types s or, typing no Latin letter, the key in S's place; never with Alt (AltGr) or Shift", () => {
+  const press = (key: string, code: string, mods: { ctrl?: boolean; meta?: boolean; alt?: boolean; shift?: boolean }) =>
+    isSaveKey({
+      key,
+      code,
+      ctrlKey: !!mods.ctrl,
+      metaKey: !!mods.meta,
+      altKey: !!mods.alt,
+      shiftKey: !!mods.shift,
+    });
+  // QWERTY (and AZERTY, whose S is in the same place): Ctrl+S and Cmd+S; Caps Lock's "S" too
+  assert.equal(press("s", "KeyS", { ctrl: true }), true);
+  assert.equal(press("s", "KeyS", { meta: true }), true);
+  assert.equal(press("S", "KeyS", { ctrl: true }), true);
+  // Dvorak: S types "o" in S's place, and "s" sits where QWERTY has ";"
+  assert.equal(press("s", "Semicolon", { ctrl: true }), true);
+  assert.equal(press("o", "KeyS", { ctrl: true }), false);
+  // Cyrillic (and Greek, Hebrew, Arabic): the key in S's place types no Latin letter
+  assert.equal(press("ы", "KeyS", { ctrl: true }), true);
+  assert.equal(press("ы", "KeyS", { meta: true }), true);
+  assert.equal(press("σ", "KeyS", { ctrl: true }), true);
+  assert.equal(press("в", "KeyD", { ctrl: true }), false);
+  // no Ctrl or Cmd; Alt (AltGr on Windows is Ctrl+Alt); Shift
+  assert.equal(press("s", "KeyS", {}), false);
+  assert.equal(press("ś", "KeyS", { ctrl: true, alt: true }), false);
+  assert.equal(press("s", "KeyS", { ctrl: true, alt: true }), false);
+  assert.equal(press("S", "KeyS", { ctrl: true, shift: true }), false);
+  assert.equal(press("Ы", "KeyS", { ctrl: true, shift: true }), false);
+  // other keys
+  assert.equal(press("Enter", "Enter", { ctrl: true }), false);
+  assert.equal(press("d", "KeyD", { ctrl: true }), false);
 });

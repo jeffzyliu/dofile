@@ -508,29 +508,47 @@ test("phone: the toast is above the command line and the tab bar, and above the 
   expect(open.toast!.top).toBeGreaterThanOrEqual(100);
 });
 
-test("key chips: none in sight on a phone (top bar, ⋯ menu, Log view, a file's menu), the shortcuts still stated; shown on the desktop", async ({
+test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ menus, the Editor and Log views with a nested do's note), the shortcuts still stated; shown on the desktop", async ({
   page,
   isMobile,
 }) => {
   await page.goto("/?test=manual");
   await writeFile(page, "a.do");
-  // the key chips and key hints in sight: a box bigger than the 1 px of a visually hidden one, and not visibility: hidden
-  const chips = () =>
-    page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>(".key, .key-hint, .rs .act .hint")]
-        .filter((el) => {
-          const r = el.getBoundingClientRect();
-          return r.width > 2 && r.height > 2 && getComputedStyle(el).visibility !== "hidden";
-        })
-        .map((el) => el.textContent),
-    );
+  // a run's log with a nested do of a file that has unsaved edits: its note says how to save
+  await page.evaluate(() => {
+    const W = (window as any).__dofile.state.runWriter;
+    W.log.value = [{ t: "text", run: 1, text: ". do a.do\n\n. display 1\n1\n\nend of do-file\n", unsaved: ["a.do"] }];
+  });
+  // every text in sight that names a key: a text node in the page (.app) whose element and all its ancestors up to .app
+  // that have a box (not display: contents) are bigger than the 1 px of a visually hidden one, and which is not
+  // visibility: hidden (a toolbar label not shown)
+  const keysInSight = () =>
+    page.evaluate(() => {
+      const KEY = /⌘|\bCtrl\b|\bEsc\b|\bF\d{1,2}\b|↵|↩/;
+      const app = document.querySelector(".app")!;
+      const seen = (el: Element | null) => {
+        if (!el || getComputedStyle(el).visibility === "hidden") return false;
+        for (let e: Element | null = el; e && e !== app.parentElement; e = e.parentElement) {
+          if (getComputedStyle(e).display === "contents") continue; // no box of its own (the phone's .out)
+          const r = e.getBoundingClientRect();
+          if (r.width <= 1 || r.height <= 1) return false;
+        }
+        return true;
+      };
+      const out: string[] = [];
+      const walk = document.createTreeWalker(app, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode())
+        if (KEY.test(n.textContent ?? "") && seen(n.parentElement)) out.push((n.textContent ?? "").trim());
+      return out;
+    });
+  const note = /Save it \((⌘|Ctrl) S\) to run your edits\.$/;
   const tree = page.getByRole("tree", { name: "Files" });
   if (isMobile) {
     const views = page.getByRole("tablist", { name: "Views" });
     await views.getByRole("tab", { name: "Files" }).click();
     await tree.getByRole("treeitem", { name: /^a\.do/ }).click();
     await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: a.do");
-    expect(await chips()).toEqual([]); // the top bar
+    expect(await keysInSight()).toEqual([]); // the top bar and the Editor view
     // a file's menu: its Rename keeps "F2" in its name, out of sight
     await views.getByRole("tab", { name: "Files" }).click();
     await page.locator(".row-more").first().click();
@@ -538,28 +556,33 @@ test("key chips: none in sight on a phone (top bar, ⋯ menu, Log view, a file's
     await expect(rename).toBeVisible();
     const f2 = await rename.locator("span", { hasText: /^F2$/ }).boundingBox();
     expect(f2!.width).toBeLessThanOrEqual(1);
-    expect(await chips()).toEqual([]);
+    expect(await keysInSight()).toEqual([]);
     await page.keyboard.press("Escape");
     for (const view of ["Editor", "Log"]) {
       await views.getByRole("tab", { name: view }).click();
-      expect(await chips()).toEqual([]);
+      expect(await keysInSight()).toEqual([]);
       await page.getByRole("button", { name: "More actions" }).click();
       await expect(page.getByRole("menu")).toBeVisible();
-      expect(await chips()).toEqual([]);
+      expect(await keysInSight()).toEqual([]);
       await page.keyboard.press("Escape");
       await expect(page.getByRole("menu")).toHaveCount(0);
     }
+    // the nested do's note names the ⋯ menu's Save instead
+    await expect(page.getByRole("log", { name: "Log" })).toContainText(
+      "Note: a.do has unsaved edits in the editor; do runs the saved file. Save it (⋯ › Save) to run your edits.",
+    );
   } else {
     await tree.getByRole("treeitem", { name: /^a\.do/ }).click();
     await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: a.do");
-    // the toolbar's Save shows its chip and states its key
+    // the toolbar's Save shows its chip and states its key; the note names the key
     const save = page.locator(".toolbar").getByRole("button", { name: "Save" });
     await expect(save).toHaveAttribute("aria-keyshortcuts", /^(Meta|Control)\+S$/);
-    expect((await chips()).some((t) => /^(⌘|Ctrl) S$/.test(t ?? ""))).toBe(true);
+    expect((await keysInSight()).some((t) => /^(⌘|Ctrl) S$/.test(t))).toBe(true);
+    expect((await keysInSight()).some((t) => note.test(t))).toBe(true);
     // a file's menu shows "F2"
     await tree.getByRole("treeitem", { name: /^a\.do/ }).click({ button: "right" });
     await expect(page.getByRole("menuitem", { name: "Rename F2" })).toBeVisible();
-    expect(await chips()).toContain("F2");
+    expect(await keysInSight()).toContain("F2");
     await page.keyboard.press("Escape");
   }
 });

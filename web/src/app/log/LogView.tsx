@@ -164,7 +164,7 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
       put(
         commandEnd(lines, at),
         <span key={`u${at}`} class="warn">
-          {`Note: ${name} has unsaved edits in the editor; do runs the saved file. Save it (${isMac ? "⌘" : "Ctrl"} S) to run your edits.`}
+          {`Note: ${name} has unsaved edits in the editor; do runs the saved file. Save it (${phone ? "⋯ › Save" : `${isMac ? "⌘" : "Ctrl"} S`}) to run your edits.`}
         </span>,
       );
     }

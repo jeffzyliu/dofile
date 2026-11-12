@@ -1,12 +1,17 @@
 // What a run's version of an open text file does to its tab (Editor.tsx ranOver; files.ts afterRun calls it), and the
 // text the editor compares: CodeMirror keeps every line break as "\n" (doc.toString()), so a file's text is compared
-// in that form, or a clean tab of a file with "\r\n" breaks would never equal its saved text. Each open file's line
-// break is noted when its text is read (lineBreakOf), and Save writes the editor's text with it (fileText), so a
-// "\r\n" file stays "\r\n"; a file with both kinds takes the more common one on its first Save. A new or empty file is
-// "\n". Plain TypeScript, no DOM: tested in Node (test/editor.test.ts).
+// in that form, or a clean tab of a file with "\r\n" breaks would never equal its saved text. Each open file's form is
+// noted when its text is read (formOf: its line break, and whether it starts with a UTF-8 byte order mark), and Save
+// writes the editor's text in it (fileText), so a "\r\n" file stays "\r\n" and a file with a BOM keeps it; a file with
+// both kinds of line break takes the more common one on its first Save. A new or empty file is "\n", without a BOM. The
+// editor never holds the BOM (editorText drops it), so neither Run nor the comparisons see it. The texts given here are
+// decoded with the BOM kept (files/open.ts decodeText(bytes, true)). Plain TypeScript, no DOM: tested in Node
+// (test/editor.test.ts).
 
-/** `text` with its line breaks as the editor holds them ("\r\n" and "\r" as "\n"). */
-export const editorText = (text: string) => text.replace(/\r\n?/g, "\n");
+const BOM = "\uFEFF";
+
+/** `text` as the editor holds it: line breaks "\n" ("\r\n" and "\r" as "\n"), and no leading BOM. */
+export const editorText = (text: string) => (text.startsWith(BOM) ? text.slice(1) : text).replace(/\r\n?/g, "\n");
 
 export type LineBreak = "\r\n" | "\n";
 
@@ -18,8 +23,17 @@ export function lineBreakOf(text: string): LineBreak {
   return crlf > lf ? "\r\n" : "\n";
 }
 
-/** The editor's text (line breaks "\n") as the file is written, with the line break `br`. */
-export const fileText = (doc: string, br: LineBreak) => (br === "\n" ? doc : doc.replace(/\n/g, "\r\n"));
+/** How a file is written: its line break and whether it starts with a BOM. */
+export type FileForm = { br: LineBreak; bom: boolean };
+/** A new file's form. */
+export const PLAIN: FileForm = { br: "\n", bom: false };
+
+/** The form of a file's text (decoded with its BOM kept). */
+export const formOf = (text: string): FileForm => ({ br: lineBreakOf(text), bom: text.startsWith(BOM) });
+
+/** The editor's text (line breaks "\n", no BOM) as the file is written, in the form `form`. */
+export const fileText = (doc: string, form: FileForm) =>
+  (form.bom ? BOM : "") + (form.br === "\n" ? doc : doc.replace(/\n/g, "\r\n"));
 
 /** What the tab does with a run's version:
  *  - same: the run wrote the saved text again; nothing changes;

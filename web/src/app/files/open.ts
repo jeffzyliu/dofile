@@ -28,11 +28,12 @@ import {
 import { store } from "../store.ts";
 import { baseName, extOf } from "./tree.ts";
 
-/** A file's text when its bytes are strict UTF-8 (the test the proof-of-concept page used; a leading BOM is dropped),
- *  else null: the editor would change such a file, so it is not opened as text. */
-export function decodeText(bytes: Uint8Array): string | null {
+/** A file's text when its bytes are strict UTF-8 (the test the proof-of-concept page used), else null: the editor would
+ *  change such a file, so it is not opened as text. A leading BOM is dropped, or with `keepBom` kept as "\uFEFF": the
+ *  editor's text is decoded so (editor/ranover.ts formOf notes the BOM, which Save writes back). */
+export function decodeText(bytes: Uint8Array, keepBom = false): string | null {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: keepBom }).decode(bytes);
   } catch {
     return null;
   }
@@ -73,7 +74,7 @@ export async function openFile(path: string): Promise<void> {
     else outputTab.value = "graph";
     return;
   }
-  const text = decodeText(bytes);
+  const text = decodeText(bytes, true);
   for (const b of banners.value) if (b.b === "not-text") dismiss(b);
   if (text === null) {
     addBanner({ b: "not-text", path });

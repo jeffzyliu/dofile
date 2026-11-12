@@ -98,7 +98,7 @@ async function followOpen(c: FileChange) {
   }
   let text: string | null;
   try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); // a BOM kept: the editor notes it
   } catch {
     text = null; // not text
   }
@@ -106,11 +106,12 @@ async function followOpen(c: FileChange) {
   if (editorCommands.ranOver(c.name, text) === "kept") S.addBanner({ b: "run-changed", path: c.name });
 }
 
-/** A file's text as the store has it (strict UTF-8), or null when it cannot be read or is not text. */
+/** A file's text as the store has it (strict UTF-8, a leading BOM kept as "\uFEFF": the editor's reload notes it), or
+ *  null when it cannot be read or is not text. */
 export async function textInStore(path: string): Promise<string | null> {
   if (!store) return null;
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(await store.read(path));
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await store.read(path));
   } catch {
     return null;
   }

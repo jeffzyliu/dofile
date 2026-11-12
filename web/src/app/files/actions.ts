@@ -305,7 +305,7 @@ async function uploadNow(items: Incoming[]): Promise<string[]> {
 function reopen({ path, data }: Incoming) {
   const tab = tabs.value.find((t) => t.path === path);
   if (tab?.kind !== "text") return;
-  const text = decodeText(data);
+  const text = decodeText(data, true);
   if (text === null) closeTab(path);
   else editorCommands.reload(path, text);
 }

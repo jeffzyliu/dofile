@@ -183,7 +183,7 @@ export const FilesHead = () => (
 
 /** A row's menu (S 13; a folder's, OQ-21). */
 function rowItems(row: Row): MenuItem[] {
-  const rename = { label: "Rename", hint: "F2", onSelect: () => startRename(row.path) };
+  const rename = { label: "Rename", hint: "F2", hintIsKey: true, onSelect: () => startRename(row.path) };
   const remove: MenuItem = { label: "Delete…", danger: true, onSelect: () => askDelete(row.path) };
   const download = (label: string): MenuItem => ({
     label,
