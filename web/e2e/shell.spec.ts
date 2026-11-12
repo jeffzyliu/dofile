@@ -57,9 +57,9 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
   const asked = page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.run('display "RAN"'));
   const forRun = page.getByRole("dialog", { name: "Download the engine to run code" });
   await expect(forRun).toBeVisible();
-  expect(await asked).toBeNull(); // nothing ran yet
   await forRun.getByRole("button", { name: "Not now" }).click();
   await expect(forRun).toBeHidden();
+  expect(await asked).toBeNull(); // the queued run was dropped: its promise settles with null
   expect(await state(page)).toBe("declined");
 });
 

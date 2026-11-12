@@ -19,7 +19,8 @@
 //
 // Each step 4 part edits only its own files; this file only places them (two changes were made here when 4a was joined,
 // on the maintainer's word: the phone's ⋯ holds 4a's fileMenuItems on the Files view, whose head app.css hides on a
-// phone, and the unfolded file list gives the focus to the tree's row). Per part: the files,
+// phone, and the unfolded file list gives the focus to the tree's row; and one when 4b and 4d were joined: the phone ⋯'s
+// Save is off unless the active tab is a text tab, as the toolbar's). Per part: the files,
 // the signals it writes (state.ts), what it calls, and the slots here it fills. Every part reads any signal.
 // Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8):
 //  - `engine` has the machine's sixteen state names (types.ts EngineState): the page load is `checking-lock`, then

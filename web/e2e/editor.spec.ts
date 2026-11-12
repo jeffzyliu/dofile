@@ -147,10 +147,10 @@ test("the editor: a .csv's columns have their colors, a .log's lines their kinds
     "meta.json": '{"rows": 12, "name": "wages"}\n',
   });
   await open(page, "notes.md");
-  await expect(page.locator(".cm-content .k").first()).toContainText("Wages"); // the heading
-  await expect(page.locator(".cm-content .s").first()).toContainText("wages.do"); // inline code
+  await expect(page.locator(".cm-content .k", { hasText: "Wages" })).toHaveCount(1); // the heading
+  await expect(page.locator(".cm-content .s", { hasText: "wages.do" })).toHaveCount(1); // inline code
   await open(page, "meta.json");
-  await expect(page.locator(".cm-content .m").first()).toHaveText('"rows"'); // a property name
+  await expect(page.locator(".cm-content .m", { hasText: '"rows"' })).toHaveCount(1); // a property name
   await expect(page.locator(".cm-content .num")).toHaveText("12");
   await open(page, "t.csv");
   const line2 = page.locator(".cm-line").nth(1);
@@ -492,6 +492,27 @@ test("the log: under an error, the OQ-10 note where the engine's own words do no
     "reghdfe is a community command: it isn't part of Stata itself, and dofile doesn't have it.",
     "(a tempfile lasts one run: save it under a name to use it in a later run)", // the engine's note; no second one
   ]);
+});
+
+test("the phone's ⋯: Save is on for a text tab and off for a .dta tab", async ({ page }) => {
+  test.skip(!isPhone(page), "the phone's ⋯ menu (the toolbar's Save is tested below)");
+  await setUp(page, { "d.dta": "not read here", "a.do": "display 1\n" });
+  await open(page, "a.do");
+  const save = async () => {
+    await page.getByRole("button", { name: "More actions" }).click();
+    const item = page.getByRole("menu", { name: "More actions" }).getByRole("menuitem", { name: "Save", exact: true });
+    const off = await item.getAttribute("aria-disabled");
+    await page.keyboard.press("Escape");
+    return off === "true";
+  };
+  expect(await save()).toBe(false);
+  await view(page, "Files");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^d\.dta/ })
+    .click();
+  expect(await page.evaluate(() => window.__dofile.state.activeTab.value)).toBe("d.dta");
+  expect(await save()).toBe(true);
 });
 
 // ---- with an engine ----
