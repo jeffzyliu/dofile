@@ -26,6 +26,7 @@ import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryWords, seconds } from "../editor/words.ts";
+import { kbMode } from "../env";
 import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
@@ -110,6 +111,15 @@ export function CommandLine() {
     recall = -1;
     if (lines.length) runPasted(lines);
   };
+  // ?kb=focus (the keyboard experiment, app/viewport.ts): a tap on the unfocused field focuses it here, with
+  // preventScroll, instead of the browser's own focus and its scroll into view; the caret goes to the end
+  const onTouchEnd = (e: TouchEvent) => {
+    const el = input.current;
+    if (kbMode !== "focus" || !el || document.activeElement === el) return;
+    e.preventDefault();
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(el.value.length, el.value.length);
+  };
   return (
     <div class="cmdline">
       <span class="prompt" aria-hidden="true">
@@ -134,6 +144,7 @@ export function CommandLine() {
         onInput={onInput}
         onKeyDown={onKey}
         onPaste={onPaste}
+        onTouchEnd={kbMode === "focus" ? onTouchEnd : undefined}
       />
       {phone ? (
         // A tap must not take the focus from the field, or the keyboard closes: mousedown and pointerdown are cancelled
