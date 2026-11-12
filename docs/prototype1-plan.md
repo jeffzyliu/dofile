@@ -80,7 +80,10 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   rewrites an open file reloads a clean tab and keeps an edited one unsaved with the banner `run-changed`; a paste of one
   line with its line break is an ordinary paste; the error mark belongs to the file's last run (`editor/errormark.ts`);
   a queued run's `done` settles (the machine's effect `drop-run`), so the command line reads no state names. Decisions
-  and words: SPEC section 8, "As built in step 4b" and "As built (4d, to review)". Checked on the branch: CHECKS.
+  and words: SPEC section 8, "As built in step 4b" and "As built (4d, to review)". Checked on the branch: `npm run check`, `npm run lint:strict`,
+  `uv run poe lint`; `npm test` (282 pass, none skipped); `uv run poe test` (1346 passed, 13 skipped, 3 xfailed); the
+  e2e suite (241 passed, 31 skipped); nothing under `src/dofile/` or `tests/` differs from `main`. The design checks
+  (`axe`, `tabwalk`, `contrast`, `fonts`) were not run: they check the mockups in `docs/design/`, which did not change.
 - **Open points:** the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
 
 ## Decisions (2026-11-10)
