@@ -36,7 +36,7 @@ jobs:
       # The snapshot depends on the wheel (engine source, dependencies), the pyodide version (package-lock) and the
       # scripts that build it. The key hashes those inputs, so it is rebuilt only when one changes.
       - id: cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: web/public/snapshot
           key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.mjs', 'web/scripts/install-engine.ts', 'web/scripts/build-id.ts', 'web/wheels/*.whl', 'web/src/engine/snapshot.ts') }}
