@@ -177,6 +177,31 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(banner).toHaveCount(0);
   expect(await stored(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
 
+  // with a dialog open Ctrl/Cmd+S saves nothing (and the browser's Save page is still kept away)
+  await page.keyboard.type("!");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(true);
+  await page.evaluate(() => {
+    window.__dofile.state.dialog.value = { d: "close-tab", path: "a.do" };
+  });
+  const ask = page.getByRole("dialog", { name: "Save changes to a.do?" });
+  await expect(ask).toBeVisible();
+  const prevented = await page.evaluate(() => {
+    const e = new KeyboardEvent("keydown", { key: "s", code: "KeyS", ctrlKey: true, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+  await page.keyboard.press("Control+s");
+  await page.keyboard.press("Meta+s");
+  await expect(ask).toBeVisible();
+  await expect(page.locator(".toast")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(true);
+  expect(await stored(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
+  await page.keyboard.press("Escape"); // Cancel
+  await expect(ask).toBeHidden();
+  await content.click();
+  await page.keyboard.press("Backspace"); // the "!" goes: the text is the saved text again
+
   // a rename of the open file (F2 in the tree) keeps its text, its edits and the unsaved dot
   await page.keyboard.type("\ndisplay 4");
   if (isPhone(page)) await view(page, "Files");

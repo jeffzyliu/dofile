@@ -236,7 +236,8 @@ Reviewed after the merge: see Post-merge review.
    the page's path. (Step 5: they go to `/#browsers` and `/`, checked by `e2e/landing.spec.ts` and the tab-lock test.)
 7. A file a run deleted keeps its tab: it leaves the file list, the tab keeps its unsaved dot as it was, and Save writes
    the file again.
-8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog.
+8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog. (Done: with a dialog open it only keeps the browser's
+   Save page away and saves nothing; `editor/Editor.tsx` `onKey`, one e2e case in `editor.spec.ts`.)
 9. The editor has no find of its own (no Ctrl/Cmd+F binding); Find searches the log only.
 10. On a phone the toast sits above the command line and the tab bar on every view, so on the views with no command line
     (Files, Editor, Data, Results) it is a command line's height higher than it needs to be. (UI fix round, 2026-11-12:
@@ -315,7 +316,7 @@ Reviewed after the merge: see Post-merge review.
    on the real landing and commands pages only axe runs (`e2e/landing.spec.ts`, both themes).
 6. "Restore the sample" against a Save in progress of the same file (step 4's `saving` set in `editor/Editor.tsx`), read
    from the code, not tested: the store's writes run in the order they began. A Save that began first (Ctrl/Cmd+S behind
-   the open dialog, then Replace) ends first, and the restore's `reload` then shows the sample: the tab is clean and the store
+   the open dialog, then Replace: that first step can no longer happen, since C 8 makes Ctrl/Cmd+S do nothing with a dialog open) ends first, and the restore's `reload` then shows the sample: the tab is clean and the store
    holds the sample. A Save that begins while the restore's write is in progress ends after the `reload`: the store then holds
    the Save's text while the tab shows the sample with no unsaved dot (the Save sets the saved text to its own, and the dot
    only follows edits). A window of milliseconds; `reload` does not touch `saving`.
