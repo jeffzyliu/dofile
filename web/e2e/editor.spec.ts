@@ -1459,8 +1459,8 @@ test("the phone's command line: the Run button runs the text as Enter does, an e
   // empty: it looks off (aria-disabled, not disabled, so a tap still keeps the keyboard), and a tap runs nothing
   await field.focus();
   await expect(send).toHaveAttribute("aria-disabled", "true");
-  await expect(send).toBeEnabled();
-  await send.tap();
+  await expect(send).not.toHaveAttribute("disabled"); // Playwright counts aria-disabled as disabled, so no toBeEnabled()
+  await send.tap({ force: true }); // and it would wait for "enabled" before a tap
   await expect(field).toBeFocused();
   expect(await page.evaluate(() => window.__dofile.state.history.value.length)).toBe(0);
   // with text: a tap runs it, clears the field, and the field still has the focus
