@@ -1,6 +1,7 @@
 // The command line is one line. Text pasted into it with line breaks runs each line in turn (the maintainer's decision,
 // 2026-11-11), as if each were typed and run with Enter, the next only once the one before has ended:
-//  - a paste with no line break is an ordinary paste (pastedLines answers null);
+//  - a paste with no line break, or with line breaks only at its end (one copied line), is an ordinary paste
+//    (pastedLines answers null); the browser then pastes it as it is, and a one-line field drops the breaks;
 //  - the field's text before and after the cursor joins the first and the last pasted line, as a paste would put them;
 //  - lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too;
 //  - the lines stop at the first one that is not run (refused: a start or a run in progress; or accepted while there is
@@ -13,8 +14,9 @@
 
 /** The lines a paste runs, or null when the pasted text has no line break (an ordinary paste). */
 export function pastedLines(before: string, pasted: string, after: string): string[] | null {
-  if (!/[\r\n]/.test(pasted)) return null;
-  return `${before}${pasted}${after}`.split(/\r\n|\r|\n/).filter((l) => l.trim() !== "");
+  const text = pasted.replace(/[\r\n]+$/, ""); // trailing line breaks do not count: one copied line is an ordinary paste
+  if (!/[\r\n]/.test(text)) return null;
+  return `${before}${text}${after}`.split(/\r\n|\r|\n/).filter((l) => l.trim() !== "");
 }
 
 /** What running one line gave: `accepted` at once (runCommand's), then `done`: the run's rc, or null when it did not run

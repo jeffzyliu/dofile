@@ -161,6 +161,7 @@ export type Effect =
   | { do: "start-break-timer"; n: Ticket; ms: number }
   | { do: "cancel-break-timer" }
   | { do: "end-run"; result: RunResult }
+  | { do: "drop-run" } // the run queued for an engine that was not there will not run (transition() adds it)
   | { do: "engine-ready" }
   | { do: "engine-gone" }
   | { do: "show-dialog"; dialog: "download"; forRun: boolean }
@@ -640,5 +641,15 @@ const TABLE: { [R in RowName]: Row<R> } = {
 export function transition(m: Machine, e: Event): Step {
   if ("n" in e && e.n !== ticketOf(m.state)) return same(m, "stale"); // the one stale guard
   const cell = TABLE[m.state.s][e.type] as Cell<RowName, Event["type"]> | undefined; // THE ONE CAST of the table
-  return cell ? cell(m, e) : same(m, "not-valid"); // the one place an event that is not valid changes nothing
+  return cell ? dropRun(m.state, cell(m, e)) : same(m, "not-valid"); // the one place an event that is not valid changes nothing
+}
+
+/** A step that lets go of the queued run without sending it ("Not now", a failed download or start, the lock lost) ends
+ *  with the effect `drop-run`, so the run's caller learns that it will not run. One rule here, not one in each cell. */
+function dropRun(before: State, next: Step): Step {
+  const run = "queued" in before ? before.queued : null;
+  if (!run) return next;
+  const after = next.machine.state;
+  if (("queued" in after && after.queued === run) || next.effects.some((f) => f.do === "send-run")) return next;
+  return { ...next, effects: [...next.effects, { do: "drop-run" }] };
 }

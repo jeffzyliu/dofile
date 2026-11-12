@@ -39,6 +39,7 @@ import {
   wholeLines,
 } from "./cm.ts";
 import { codeOf, editorCommands, selection } from "./commands.ts";
+import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
 const savedText = new Map<string, string>(); // what the store has of each, as last read or saved
@@ -167,9 +168,9 @@ function runEither() {
   else runFile();
 }
 
-// The run's marks: a selection run's lines while it runs; the file's error line when it ends. Each effect depends on its
-// one signal (`engine`, `lastRun`) and on nothing it reads while it marks: `shown` above all, or a tab switch would
-// place the error again at the run's line number, not where its text has moved since.
+// The run's marks: a selection run's lines while it runs; the file's error line (editor/errormark.ts says the rule). Each
+// effect depends on its one signal (`engine`, `lastRun`) and on nothing it reads while it marks: `shown` above all, or a
+// tab switch would place the error again at the run's line number, not where its text has moved since.
 let marked: { head: RunHead; path: string } | null = null;
 function followRuns() {
   const st = engine.value;
@@ -179,7 +180,7 @@ function followRuns() {
     if (marked && states.has(marked.path)) update(marked.path, { effects: setRunLines.of(null) });
     marked = null;
     if (!run) return;
-    for (const path of states.keys()) update(path, { effects: setErrorLine.of(null) }); // a new run: the old error goes
+    markErrors(onRunStart(run));
     if (run.kind === "selection" && run.path && run.lines && states.has(run.path)) {
       marked = { head: run, path: run.path };
       update(run.path, { effects: setRunLines.of(run.lines) });
@@ -188,12 +189,13 @@ function followRuns() {
 }
 function followErrors() {
   const r = lastRun.value;
-  untracked(() => {
-    for (const path of states.keys()) update(path, { effects: setErrorLine.of(null) });
-    if (!r || r.rc === 0 || r.rc === 1 || r.line === null || r.kind === "command" || !r.path) return;
-    const st = current(r.path);
-    if (st && r.line <= st.doc.lines) update(r.path, { effects: setErrorLine.of(r.line) });
-  });
+  untracked(() => markErrors(onLastRun(r)));
+}
+function markErrors({ clear, set }: MarkChange) {
+  for (const path of states.keys())
+    if (clear === "all" || clear === path) update(path, { effects: setErrorLine.of(null) });
+  const st = set ? current(set.path) : undefined;
+  if (set && st && set.line <= st.doc.lines) update(set.path, { effects: setErrorLine.of(set.line) });
 }
 
 // ---- save ----
@@ -212,7 +214,7 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
   }
   savedText.set(path, text);
   if (current(path)?.doc.toString() === text) setDirty(path, false);
-  for (const b of banners.value) if (b.b === "save-failed" && b.path === path) dismiss(b);
+  for (const b of banners.value) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === path) dismiss(b);
   showToast(`Saved ${baseName(path)}`);
   return true;
 }
@@ -235,6 +237,14 @@ function reload(path: string, text: string) {
     selection.value = null;
   }
   setDirty(path, false);
+  for (const b of banners.value) if (b.b === "run-changed" && b.path === path) dismiss(b);
+}
+
+function ranOver(path: string, text: string) {
+  const st = current(path);
+  if (!st) return;
+  savedText.set(path, text);
+  setDirty(path, st.doc.toString() !== text);
 }
 
 function renamed(from: string, to: string) {
@@ -320,6 +330,7 @@ function mount(host: HTMLElement, emptyView: HTMLElement) {
   editorCommands.focus = focus;
   editorCommands.open = open;
   editorCommands.reload = reload;
+  editorCommands.ranOver = ranOver;
   editorCommands.renamed = renamed;
   editorCommands.closed = closed;
   editorCommands.goToLine = (line, path) => {

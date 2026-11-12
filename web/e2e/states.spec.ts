@@ -219,6 +219,35 @@ test("a dialog whose opener has left the page gives the focus to the editor, or 
   else await expect.poll(() => inEditor(page)).toBe(true);
 });
 
+test("with a .dta tab active, a banner that goes with the focus hands it to that tab, in one move", async ({
+  page,
+}) => {
+  test.skip(phone(page), "a phone's banner sits on the Log view, where the Editor view's tab is hidden");
+  await page.waitForFunction(() => window.__dofile.store.blocked === false);
+  await page.evaluate(() => window.__dofile.store.write("d.dta", new TextEncoder().encode("not read here")));
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^d\.dta/ })
+    .click();
+  const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^d\.dta/ });
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  await page.evaluate(() => window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user" }));
+  const dismiss = page
+    .locator(".banner", { hasText: "You reset the engine." })
+    .getByRole("button", { name: "Dismiss" });
+  await dismiss.focus();
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as any).__focused = seen;
+    document.addEventListener("focusin", (e) =>
+      seen.push((e.target as Element).getAttribute("role") ?? (e.target as Element).tagName),
+    );
+  });
+  await page.keyboard.press("Enter");
+  await expect(tab).toBeFocused();
+  expect(await page.evaluate(() => (window as any).__focused)).toEqual(["tab"]); // not the tab, then More actions
+});
+
 test("from the stopping banner to the waiting banner the focus goes straight across, never through the editor", async ({
   page,
 }) => {

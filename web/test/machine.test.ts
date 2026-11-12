@@ -1192,7 +1192,14 @@ test("the table: every row by every event, 16 by 24, with every variant of the c
     assert.equal(step.outcome, "taken", what);
     const want = c.want({ old, at: c.event.at, next: step.machine.issued });
     assert.deepEqual(step.machine.state, want.state, `${what}: the state`);
-    assert.deepEqual(step.effects, want.effects, `${what}: the effects, in order`);
+    // a queued run that the step lets go of without sending it: drop-run, last (transition()'s rule, tested on its own below)
+    const held = (st: State) => ("queued" in st ? st.queued : null);
+    const lost =
+      held(old.state) !== null &&
+      JSON.stringify(held(want.state)) !== JSON.stringify(held(old.state)) &&
+      !want.effects.some((f) => f.do === "send-run");
+    const effects = lost ? [...want.effects, { do: "drop-run" } as const] : want.effects;
+    assert.deepEqual(step.effects, effects, `${what}: the effects, in order`);
     assert.equal(step.machine.crashes, want.crashes ?? old.crashes, `${what}: the crash count`);
     assert.equal(
       step.machine.issued,
@@ -1720,7 +1727,15 @@ const SCENARIOS: Record<string, () => At[]> = {
       dropped.map((at) => at.m.state.s),
       ["declined", "declined", "failed", "failed", "failed", "failed-twice", "other-tab-idle"],
     );
-    for (const at of dropped) assert.ok(!("queued" in at.m.state), at.m.state.s);
+    for (const at of dropped) {
+      assert.ok(!("queued" in at.m.state), at.m.state.s);
+      assert.deepEqual(at.trail.at(-1)!.step.effects.at(-1), { do: "drop-run" }, `${at.m.state.s}: drop-run, last`);
+    }
+    // the run that was sent has no drop-run on its way
+    assert.ok(
+      p.at.trail.every((t) => !t.step.effects.some((f) => f.do === "drop-run")),
+      "no drop-run for a run sent",
+    );
     return [p.at, ...dropped];
   },
   "13. Download or Run pressed at load, before the lock or the cache check answers: refused": () => [
@@ -1832,6 +1847,19 @@ test("property: a transition from running, breaking or waiting to a state that i
     const cut = running(m.before.state) && !running(m.step.machine.state);
     assert.equal(count(m.step, "end-run"), cut ? 1 : 0, says(m));
     if (cut) assert.equal(m.step.effects.at(-1)!.do, "end-run", `${says(m)}: last`);
+  }
+});
+
+test("property: a queued run is kept, sent (send-run) or dropped (drop-run, once, as the last effect); drop-run comes from nothing else", () => {
+  for (const m of everyMove()) {
+    const a = m.before.state,
+      b = m.step.machine.state;
+    const held = "queued" in a ? a.queued : null;
+    const kept = held !== null && "queued" in b && b.queued === held;
+    const sent = count(m.step, "send-run") > 0;
+    const lost = held !== null && !kept && !sent;
+    assert.equal(count(m.step, "drop-run"), lost ? 1 : 0, says(m));
+    if (lost) assert.equal(m.step.effects.at(-1)!.do, "drop-run", `${says(m)}: last`);
   }
 });
 

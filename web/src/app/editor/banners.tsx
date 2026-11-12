@@ -5,9 +5,10 @@
 // "Dismiss". banners.tsx (in app/) places it.
 import type { BannerOf } from "../banners";
 import { baseName } from "../files/tree.ts";
-import { saveAs } from "../files.ts";
+import { saveAs, textInStore } from "../files.ts";
 import { dismiss } from "../state.ts";
 import { Banner } from "../ui/Live";
+import { editorCommands } from "./commands.ts";
 import { textOf } from "./Editor";
 
 export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }) => {
@@ -32,6 +33,39 @@ export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }
     >
       <b>{`${name} couldn't be saved:`}</b> {`${banner.message.replace(/\.$/, "")}.`}{" "}
       {"Your edits are still in the editor; download them to keep a copy."}
+    </Banner>
+  );
+};
+
+// The banner above the editor when a run rewrote an open file that has unsaved edits: { b: "run-changed", path }, a
+// warning (files.ts afterRun adds it; the joining of 4b and 4d, in place of a question: several files at once, a dialog
+// already open and the phone made a dialog the harder path). The edits stay and the tab stays unsaved, so a Save then
+// replaces the run's version knowingly. Draft words: "The run changed t.csv. Your unsaved edits are still in the
+// editor; saving them replaces the run's version." / "Reload from the run" (the store's version, the edits dropped),
+// "Dismiss". A save or a reload of the file removes it.
+export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }) => {
+  const name = baseName(banner.path);
+  const reload = async () => {
+    const text = await textInStore(banner.path);
+    if (text !== null) editorCommands.reload(banner.path, text);
+    dismiss(banner);
+  };
+  return (
+    <Banner
+      kind="warn"
+      actions={
+        <>
+          <button type="button" class="btn" onClick={reload}>
+            Reload from the run
+          </button>
+          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
+            Dismiss
+          </button>
+        </>
+      }
+    >
+      <b>{`The run changed ${name}.`}</b>{" "}
+      {"Your unsaved edits are still in the editor; saving them replaces the run's version."}
     </Banner>
   );
 };

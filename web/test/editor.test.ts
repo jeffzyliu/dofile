@@ -5,7 +5,9 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ChangeSet, Text } from "@codemirror/state";
 import { CSV_COLORS, csvFields } from "../src/app/editor/csv.ts";
+import { lineDeleted, onLastRun, onRunStart } from "../src/app/editor/errormark.ts";
 import {
   jumpLine,
   lastRunWords,
@@ -325,7 +327,10 @@ test("a paste with no line break is an ordinary paste; with breaks, each non-emp
   assert.deepEqual(pastedLines("", "a\nb\n", ""), ["a", "b"]);
   assert.deepEqual(pastedLines("", "a\r\n\r\n  \rb", ""), ["a", "b"]);
   assert.deepEqual(pastedLines("sum", "marize x\ndisplay 1", " // end"), ["summarize x", "display 1 // end"]);
-  assert.deepEqual(pastedLines("", "\n\n", ""), []);
+  assert.equal(pastedLines("", "\n\n", ""), null); // only trailing breaks: an ordinary paste
+  assert.equal(pastedLines("", "summarize x\n", ""), null); // one copied line with its line break
+  assert.equal(pastedLines("", "summarize x\r\n\r\n", ""), null);
+  assert.deepEqual(pastedLines("", "\nsummarize x", ""), ["summarize x"]); // a break before it still counts
 });
 
 /** A runner that answers from a script: per line, accepted or not, and the rc (null: queued and not run). */
@@ -490,4 +495,34 @@ test("the words: run-heads, lines, times, the last run, memory", () => {
   assert.equal(jumpLine(run({ kind: "command", path: undefined, rc: 111, line: 1 })), null);
   assert.equal(memoryWords({ heap_bytes: 612e6, data_bytes: 0 }), "Memory 612 MB");
   assert.equal(memoryWords({ heap_bytes: 1612e6, data_bytes: 0 }, true), "Mem 1,612 MB");
+});
+
+test("the error mark's rule (editor/errormark.ts): the file's last run sets it, a new run of that file, a reset or the line's deletion clears it; a command or another file leaves it", () => {
+  const file = (path: string, rc: number, line: number | null, kind: "file" | "selection" = "file"): LastRun => ({
+    kind,
+    path,
+    fresh_locals: kind === "file",
+    rc,
+    line,
+    seconds: 1,
+  });
+  assert.deepEqual(onLastRun(file("a.do", 111, 3)), { clear: "a.do", set: { path: "a.do", line: 3 } });
+  assert.deepEqual(onLastRun(file("a.do", 111, 7, "selection")), { clear: "a.do", set: { path: "a.do", line: 7 } });
+  assert.deepEqual(onLastRun(file("a.do", 0, null)), { clear: "a.do", set: null });
+  assert.deepEqual(onLastRun(file("a.do", 1, 4)), { clear: "a.do", set: null }, "Break marks no error");
+  assert.deepEqual(onLastRun(null), { clear: "all", set: null }, "the engine is gone: a reset or a restart");
+  const command: LastRun = { kind: "command", fresh_locals: false, rc: 111, line: 1, seconds: 1 };
+  assert.deepEqual(onLastRun(command), { clear: null, set: null }, "a command leaves every mark");
+  assert.deepEqual(onRunStart({ kind: "file", path: "b.do", fresh_locals: true }), { clear: "b.do", set: null });
+  assert.deepEqual(onRunStart({ kind: "command", fresh_locals: false }), { clear: null, set: null });
+
+  const doc = Text.of(["one", "two", "", "four"]);
+  const at = (n: number) => doc.line(n).from;
+  const del = (from: number, to: number) => ChangeSet.of({ from, to }, doc.length);
+  assert.equal(lineDeleted(del(doc.line(2).from, doc.line(2).to + 1), doc, at(2)), true, "the line and its break");
+  assert.equal(lineDeleted(del(doc.line(1).to, doc.line(2).to), doc, at(2)), true, "the break before and the line");
+  assert.equal(lineDeleted(del(doc.line(2).from, doc.line(2).from + 1), doc, at(2)), false, "one character of it");
+  assert.equal(lineDeleted(del(doc.line(1).from, doc.line(1).to + 1), doc, at(2)), false, "the line above");
+  assert.equal(lineDeleted(del(doc.line(3).from, doc.line(3).from + 1), doc, at(3)), true, "an empty line's break");
+  assert.equal(lineDeleted(ChangeSet.of({ from: at(2), insert: "x" }, doc.length), doc, at(2)), false, "typing");
 });

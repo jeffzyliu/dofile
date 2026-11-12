@@ -4,7 +4,7 @@
 // numbers .cm-run-n, .cm-err-n; a .csv's columns .csv-c0 to .csv-c4 and .csv-d; a .log's lines .lg-echo, .lg-err,
 // .lg-hint, .lg-note.
 import { json } from "@codemirror/lang-json";
-import { markdown } from "@codemirror/lang-markdown";
+import { markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import {
   type EditorState,
@@ -28,6 +28,7 @@ import { stata } from "../../stata/language.ts";
 import { extOf } from "../files/tree.ts";
 import { classify } from "../log/classify.ts";
 import { CSV_COLORS, csvFields } from "./csv.ts";
+import { lineDeleted } from "./errormark.ts";
 
 // ---- highlighting ----
 
@@ -115,7 +116,7 @@ export function languageOf(path: string): Extension {
   if (ext === ".csv") return csvColumns(",");
   if (ext === ".tsv") return csvColumns("\t");
   if (ext === ".log") return logKinds;
-  if (ext === ".md") return [markdown(), syntaxHighlighting(docStyle)];
+  if (ext === ".md") return [markdownLanguage, syntaxHighlighting(docStyle)]; // the language alone: markdown() would bring HTML, CSS and JavaScript
   if (ext === ".json") return [json(), syntaxHighlighting(docStyle)];
   return [];
 }
@@ -173,7 +174,11 @@ export const lineMarksField = StateField.define<Marks>({
   update(marks, tr) {
     let { run, err } = marks;
     run = run.map(tr.changes);
-    err = err.map(tr.changes);
+    const at = marks.err.iter().value ? marks.err.iter().from : null; // the error line's start, before the changes
+    err =
+      at !== null && tr.docChanged && lineDeleted(tr.changes, tr.startState.doc, at)
+        ? Decoration.none
+        : err.map(tr.changes);
     for (const e of tr.effects) {
       if (e.is(setRunLines)) run = e.value ? lineMarks(tr.state, e.value, RUN).deco : Decoration.none;
       if (e.is(setErrorLine)) err = e.value ? lineMarks(tr.state, [e.value, e.value], ERR).deco : Decoration.none;

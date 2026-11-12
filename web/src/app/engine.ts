@@ -100,6 +100,7 @@ export interface RunHandlers {
   began(head: RunHead, theme: "light" | "dark"): void;
   log(text: string): void;
   ended(result: RunResult): void;
+  dropped(): void; // the queued run will not run (the effect drop-run)
   engineReady(): void;
   engineGone(): void;
 }
@@ -125,7 +126,7 @@ const DROPS_KEPT = 200;
 // The two handles. Each is made by one effect and released by another; neither decides a state.
 let breakTimer: ReturnType<typeof setTimeout> | undefined; // start-break-timer, cancel-break-timer
 let download: { n: Ticket; stop: AbortController } | null = null; // start-download, abort-download
-let runs: RunHandlers = { began() {}, log() {}, ended() {}, engineReady() {}, engineGone() {} };
+let runs: RunHandlers = { began() {}, log() {}, ended() {}, dropped() {}, engineReady() {}, engineGone() {} };
 
 /** Wire the controller to the page's transport and tab lock. `snapshot`: the snapshot start (not ?snapshot=0). `manual`:
  *  ?test=manual, no start until the test calls start(). `graceMs`: how long Break waits before the engine is reset.
@@ -382,6 +383,8 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         return;
       case "end-run":
         return runs.ended(effect.result);
+      case "drop-run":
+        return runs.dropped();
       case "engine-ready":
         return runs.engineReady();
       case "engine-gone":

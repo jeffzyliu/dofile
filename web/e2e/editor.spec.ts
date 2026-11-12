@@ -136,14 +136,22 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(content).toHaveText("display 1display 2display 3display 4");
 });
 
-test("the editor: a .csv's columns have their colors, a .log's lines their kinds; a file dropped on it uploads and leaves its text", async ({
+test("the editor: a .csv's columns have their colors, a .log's lines their kinds, .md and .json their tokens; a file dropped on it uploads and leaves its text", async ({
   page,
 }) => {
   await setUp(page, {
     "t.csv": 'id,region,age\n1001,"North, coast",41\n',
     "out.log": ". summarize x\nvariable x not found\nr(111);\n",
     "a.do": "display 1\n",
+    "notes.md": "# Wages\n\nSee `wages.do`.\n",
+    "meta.json": '{"rows": 12, "name": "wages"}\n',
   });
+  await open(page, "notes.md");
+  await expect(page.locator(".cm-content .k").first()).toContainText("Wages"); // the heading
+  await expect(page.locator(".cm-content .s").first()).toContainText("wages.do"); // inline code
+  await open(page, "meta.json");
+  await expect(page.locator(".cm-content .m").first()).toHaveText('"rows"'); // a property name
+  await expect(page.locator(".cm-content .num")).toHaveText("12");
   await open(page, "t.csv");
   const line2 = page.locator(".cm-line").nth(1);
   await expect(line2.locator(".csv-c1")).toHaveText('"North, coast"');
@@ -374,6 +382,42 @@ test("the error line keeps to its text when the tab is left and shown again", as
   await expect(err).toHaveCount(0);
   await open(page, "a.do");
   await expect(err).toHaveText("line 3");
+
+  // the mark is the file's last run's (editor/errormark.ts): a command and a run of another file leave it
+  const lastRun = (v: object | null) =>
+    page.evaluate((v) => {
+      window.__dofile.state.runWriter.lastRun.value = v;
+    }, v);
+  await lastRun({ kind: "command", fresh_locals: false, rc: 111, line: 1, seconds: 0.1 });
+  await lastRun({ kind: "file", path: "b.do", fresh_locals: true, rc: 0, line: null, seconds: 0.1 });
+  await expect(err).toHaveText("line 3");
+  // a run of a.do that starts clears it
+  await page.evaluate(() => {
+    window.__dofile.state.engine.value = {
+      s: "running",
+      run: { kind: "file", path: "a.do", fresh_locals: true },
+      t0: Date.now(),
+    };
+  });
+  await expect(err).toHaveCount(0);
+  await page.evaluate(() => {
+    window.__dofile.state.engine.value = { s: "none" };
+  });
+  // the engine gone (a reset: lastRun null) clears it
+  await lastRun({ kind: "file", path: "a.do", fresh_locals: true, rc: 111, line: 5, seconds: 0.1 });
+  await expect(err).toHaveText("line 3");
+  await lastRun(null);
+  await expect(err).toHaveCount(0);
+  // the marked line deleted clears it
+  await lastRun({ kind: "file", path: "a.do", fresh_locals: true, rc: 111, line: 5, seconds: 0.1 });
+  await expect(err).toHaveText("line 3");
+  await err.click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+End");
+  await page.keyboard.press("Shift+ArrowRight"); // the line and its break
+  await page.keyboard.press("Backspace");
+  await expect(page.locator(".cm-line").nth(4)).toHaveText("line 4");
+  await expect(err).toHaveCount(0);
 });
 
 test("the log: a command stopped by Break names no line; a phone's inline graph is on the card of its run's theme", async ({
@@ -596,7 +640,7 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
   if (!isPhone(page)) await expect(page.locator(".statusbar")).toContainText("Last run: stopped by Break · r(1)");
 });
 
-test("the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; a paste of one line is ordinary", async ({
+test("the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; a paste of one line, with or without its line break, is ordinary", async ({
   page,
 }) => {
   await setUp(page, {}, "/?test");
@@ -639,8 +683,11 @@ test("the command line: Enter runs and clears, ↑ recalls; a paste of lines run
     "nosuchcommand",
   ]);
   await expect(field).toHaveValue("");
-  // with no line break the browser pastes as usual
+  // with no line break the browser pastes as usual; so too with line breaks only at the end (one copied line): nothing runs
   expect(await paste("display 5")).toBe(false);
+  const runs = await page.evaluate(() => window.__dofile.state.history.value.length);
+  expect(await paste("display 6\n")).toBe(false);
+  expect(await page.evaluate(() => window.__dofile.state.history.value.length)).toBe(runs);
 });
 
 test("the command line with no engine: pasted lines wait for the engine; Not now drops them, and a toast says so", async ({
@@ -663,4 +710,43 @@ test("the command line with no engine: pasted lines wait for the engine; Not now
   await prompt.getByRole("button", { name: "Not now" }).click();
   await expect(page.locator(".toast")).toHaveText("2 of 2 pasted lines not run: line 1 didn't run");
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 1"]);
+});
+
+test("a run that rewrites open files: a clean tab shows the run's version; one with edits keeps them, unsaved, with a banner to reload", async ({
+  page,
+}) => {
+  await setUp(page, { "t.csv": "a\n9\n", "u.csv": "a\n9\n" }, "/?test");
+  await startEngine(page);
+  await ready(page);
+  await open(page, "u.csv");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("mine");
+  await open(page, "t.csv");
+  const r = await page.evaluate(() =>
+    (window as any).__dofile.run(
+      "clear\nset obs 2\ngenerate a = _n\nexport delimited using t.csv, replace\nexport delimited using u.csv, replace",
+    ),
+  );
+  expect(r?.rc, r?.log).toBe(0);
+  await ready(page);
+  if (isPhone(page)) await view(page, "Editor");
+  // the clean tab (shown): the run's version
+  await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*$/);
+  // the tab with edits: they stay, the tab stays unsaved, and the banner says the run changed it
+  await open(page, "u.csv");
+  await expect(page.locator(".cm-content")).toContainText("mine");
+  expect(await page.evaluate(() => window.__dofile.state.tabs.value.find((t: any) => t.path === "u.csv").dirty)).toBe(
+    true,
+  );
+  const banner = page.locator(".banner", { hasText: "The run changed u.csv." });
+  await expect(banner).toContainText(
+    "Your unsaved edits are still in the editor; saving them replaces the run's version.",
+  );
+  await banner.getByRole("button", { name: "Reload from the run" }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*$/);
+  expect(await page.evaluate(() => window.__dofile.state.tabs.value.find((t: any) => t.path === "u.csv").dirty)).toBe(
+    false,
+  );
 });

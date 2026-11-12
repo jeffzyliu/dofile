@@ -211,12 +211,22 @@ type FakeStore = {
   onChange: null | (() => void);
   list: () => Promise<FileInfo[]>;
   zip?: () => Promise<Blob>;
+  read: (path: string) => Promise<Uint8Array>;
+  texts: Map<string, string>; // what read() gives; a test sets it
 };
-const fakeStore = (paths: string[] = []): FakeStore => ({
-  blocked: true,
-  onChange: null,
-  list: async () => paths.map((path) => ({ path, dir: false, size: 1, mtime: 1 })),
-});
+const fakeStore = (paths: string[] = []): FakeStore => {
+  const texts = new Map<string, string>();
+  return {
+    blocked: true,
+    onChange: null,
+    list: async () => paths.map((path) => ({ path, dir: false, size: 1, mtime: 1 })),
+    texts,
+    read: async (path) => {
+      if (!texts.has(path)) throw new Error(`${path} not found`);
+      return new TextEncoder().encode(texts.get(path));
+    },
+  };
+};
 const fakeLock = (free = true) => ({
   asked: [] as { steal?: boolean }[],
   async take(o: { steal?: boolean } = {}) {
@@ -264,7 +274,10 @@ function wire({
   store = fakeStore(files);
   lock = fakeLock(free);
   client.isCached = cached;
-  connectFiles(store as Parameters<typeof connectFiles>[0], { persist: async () => true, persisted: async () => true });
+  connectFiles(store as unknown as Parameters<typeof connectFiles>[0], {
+    persist: async () => true,
+    persisted: async () => true,
+  });
   engine.connectRun(handlers);
   engine.connectEngine({ client: transport ?? client, lock, snapshot, manual, graceMs, canInterrupt });
 }
@@ -564,7 +577,7 @@ test("Stop download declines; Run then asks for a run, and the run starts with t
   assert.deepEqual(S.engine.value, { s: "declined" });
   assert.equal(client.dl.signal.aborted, true);
   assert.equal(S.dialog.value, null);
-  assert.equal(await runCode("display 1", FILE), null);
+  const queuedRun = runCode("display 1", FILE); // settles once the run has run
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
   engine.start();
@@ -580,6 +593,8 @@ test("Stop download declines; Run then asks for a run, and the run starts with t
   assert.deepEqual([client.run1.args.code, client.run1.args.fresh_locals], ["display 1", true]);
   assert.deepEqual(client.calls.at(-1), ["memory", undefined], "engine-ready all the same");
   assert.equal(logItems().find((i) => i.t === "runhead")!.first, true);
+  client.run1.done.ok(result());
+  assert.equal((await queuedRun)?.rc, 0, "the queued run's promise settles with its result");
 });
 
 test("a failed download is `failed` (reason download) with no worker; a failed start is `failed` with its cause; a second crash is `failed-twice`", async () => {
@@ -1119,7 +1134,7 @@ test("the page's store is blocked until the tab lock answers", async () => {
   await assert.rejects(store.write("a.do", new Uint8Array(1)), /another tab/);
 });
 
-test("runCode while a run is on does nothing; a queued run is dropped by Not now and by a failed start", async () => {
+test("runCode while a run is on does nothing; a queued run is dropped by Not now and by a failed start, and its promise then settles with null", async () => {
   await readyEngine();
   const first = runCode("a", FILE);
   assert.equal(await runCode("b", FILE), null);
@@ -1130,9 +1145,14 @@ test("runCode while a run is on does nothing; a queued run is dropped by Not now
 
   await load(); // nothing cached: the prompt
   engine.decline();
-  assert.equal(await runCode("queued", FILE), null);
+  let pending: Promise<unknown> | null = runCode("queued", FILE);
+  let settled = false;
+  pending.then(() => (settled = true));
+  await Promise.resolve();
+  assert.equal(settled, false, "a queued run's promise waits for its fate");
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   engine.decline();
+  assert.equal(await pending, null, "Not now: dropped, null");
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
@@ -1141,11 +1161,13 @@ test("runCode while a run is on does nothing; a queued run is dropped by Not now
 
   await load();
   engine.decline();
-  await runCode("queued", FILE);
+  pending = runCode("queued", FILE);
   assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
   engine.start();
   await begin();
   client.worker.reply({ type: "start-failed", reason: "unknown", detail: "no" });
+  assert.equal(await pending, null, "the failed start: dropped, null");
+  pending = null;
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
@@ -1397,7 +1419,6 @@ test("runCommand: a command that does not run is refused (not in history, so the
   writable(S.history).value = [];
   const queued = runCommand("use wages");
   assert.equal(queued.accepted, true);
-  assert.equal(await queued.done, null, "nothing ran now");
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   assert.deepEqual(S.history.value, ["use wages"]);
   assert.equal(runCommand("summarize").accepted, false, "asking: refused");
@@ -1411,6 +1432,7 @@ test("runCommand: a command that does not run is refused (not in history, so the
     "the queued command ran once the engine was ready",
   );
   client.run1.done.ok(result());
+  assert.equal((await queued.done)?.rc, 0, "a queued command's done settles with its result once it has run");
   expectDrops([{ type: "run", row: "asking", why: "not-valid" }]);
 });
 
@@ -1535,6 +1557,46 @@ test("the storage banner: once per visit, when persisted() is false and the file
   setUp(); // a new visit
   await afterRun([{ name: "out.csv", status: "created", bytes: 1 }]);
   assert.deepEqual(banners(), [{ b: "storage" }], "a run's files count too");
+});
+
+test("a run that rewrites an open file: a tab with no edits shows the run's version; one with edits keeps them, stays unsaved and gets the run-changed banner", async () => {
+  setUp();
+  store.blocked = false;
+  const { editorCommands } = await import("../src/app/editor/commands.ts");
+  const calls: string[] = [];
+  const kept = { reload: editorCommands.reload, ranOver: editorCommands.ranOver };
+  editorCommands.reload = (path, text) => calls.push(`reload ${path} ${text}`);
+  editorCommands.ranOver = (path, text) => calls.push(`ranOver ${path} ${text}`);
+  try {
+    writable(S.tabs).value = [
+      { path: "t.csv", kind: "text", dirty: false },
+      { path: "out.log", kind: "text", dirty: true },
+      { path: "d.dta", kind: "dta", dirty: false },
+    ];
+    for (const p of ["t.csv", "out.log", "d.dta", "other.csv"]) store.texts.set(p, `new ${p}`);
+    await afterRun([
+      { name: "t.csv", status: "modified", bytes: 9 },
+      { name: "out.log", status: "modified", bytes: 9 },
+      { name: "d.dta", status: "modified", bytes: 9 },
+      { name: "other.csv", status: "created", bytes: 9 },
+      { name: "gone.do", status: "removed", bytes: 0 },
+    ]);
+    assert.deepEqual(calls.sort(), ["ranOver out.log new out.log", "reload t.csv new t.csv"]);
+    assert.deepEqual(banners(), [{ b: "run-changed", path: "out.log" }], "the tab with edits: the banner");
+    // a run that wrote the same text as the edits: the editor clears the dot itself (ranOver), and no banner is added
+    S.dismiss({ b: "run-changed", path: "out.log" });
+    calls.length = 0;
+    editorCommands.ranOver = (path) => {
+      calls.push(`ranOver ${path}`);
+      S.setDirty(path, false);
+    };
+    await afterRun([{ name: "out.log", status: "modified", bytes: 9 }]);
+    assert.deepEqual(calls, ["ranOver out.log"]);
+    assert.deepEqual(banners(), []);
+  } finally {
+    Object.assign(editorCommands, kept);
+    writable(S.tabs).value = [];
+  }
 });
 
 test("showToast, holdToast; addBanner replaces one of a kind and path, dismiss removes it", async () => {
