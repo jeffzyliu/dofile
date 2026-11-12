@@ -1064,6 +1064,94 @@ test("the phone's ⋯: Save is on for a text tab and off for a .dta tab", async 
   expect(await save()).toBe(true);
 });
 
+test("the command line: no autocorrect, capitals or suggestions, one Run button on a phone and the text one elsewhere; typed curly quotes are straightened, pasted ones are not", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  if (isPhone(page)) await view(page, "Log");
+  const field = page.getByRole("textbox", { name: "Command" });
+  for (const [name, value] of Object.entries({
+    autocomplete: "off",
+    autocapitalize: "off",
+    autocorrect: "off",
+    spellcheck: "false",
+    enterkeyhint: "go",
+  }))
+    await expect(field, name).toHaveAttribute(name, value);
+  // the phone's Run button (an icon) or the desktop's text button, never both
+  await expect(page.getByRole("button", { name: "Run command" })).toHaveCount(1);
+  await expect(page.locator(".cmdline .send")).toHaveCount(isPhone(page) ? 1 : 0);
+  await expect(page.locator(".cmdline .btn")).toHaveCount(isPhone(page) ? 0 : 1);
+
+  // typing: Smart Punctuation's curly quotes and em dash become what was typed, and the caret stays after them
+  await field.focus();
+  await page.keyboard.insertText("display ");
+  await page.keyboard.insertText("“");
+  await page.keyboard.insertText("hi");
+  await page.keyboard.insertText("”");
+  await expect(field).toHaveValue('display "hi"');
+  await field.fill("a b");
+  await field.press("ArrowLeft");
+  await field.press("ArrowLeft");
+  await page.keyboard.insertText("’");
+  await page.keyboard.insertText("c");
+  await expect(field).toHaveValue("a'c b");
+  await field.fill("");
+  await page.keyboard.insertText("x—y");
+  await expect(field).toHaveValue("x--y");
+  // a paste, a drop and the en dash are left as they are, and so is the text already there
+  await field.fill("");
+  const fromInput = (inputType: string, text: string) =>
+    field.evaluate(
+      (el: HTMLInputElement, [inputType, text]) => {
+        el.value += text;
+        el.setSelectionRange(el.value.length, el.value.length);
+        el.dispatchEvent(
+          new InputEvent("input", { inputType, data: inputType === "insertText" ? text : null, bubbles: true }),
+        );
+      },
+      [inputType, text],
+    );
+  await fromInput("insertFromPaste", "“pasted”");
+  await fromInput("insertFromDrop", " ’");
+  await expect(field).toHaveValue("“pasted” ’");
+  await page.keyboard.insertText("–");
+  await expect(field).toHaveValue("“pasted” ’–");
+});
+
+test("the editor: typed curly quotes become straight ones in a .do file only, and a paste keeps its quotes", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1\n", "n.md": "note\n" });
+  const paste = (text: string) =>
+    page.locator(".cm-content").evaluate((el, text) => {
+      const dt = new DataTransfer();
+      dt.setData("text/plain", text);
+      let e: Event = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+      if ((e as ClipboardEvent).clipboardData?.getData("text/plain") !== text) {
+        e = new Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(e, "clipboardData", { value: dt });
+      }
+      el.dispatchEvent(e);
+    }, text);
+  await open(page, "a.do");
+  const content = page.locator(".cm-content");
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display “it’s”");
+  await expect(content).toContainText('display "it\'s"');
+  await paste("“pasted”");
+  await expect(content).toContainText("“pasted”");
+  await expect(content).toContainText('display "it\'s"');
+  // another kind of file keeps what is typed
+  await open(page, "n.md");
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("“q”");
+  await expect(content).toContainText("“q”");
+});
+
 // ---- with an engine ----
 
 test("a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab", async ({
@@ -1356,6 +1444,33 @@ test("the command line: Enter runs and clears, ↑ recalls; a paste of lines run
   const runs = await page.evaluate(() => window.__dofile.state.history.value.length);
   expect(await paste("display 6\n")).toBe(false);
   expect(await page.evaluate(() => window.__dofile.state.history.value.length)).toBe(runs);
+});
+
+test("the phone's command line: the Run button runs the text as Enter does, an empty field runs nothing, and the field keeps the focus either way", async ({
+  page,
+}) => {
+  test.skip(!isPhone(page), "the Run button is the phone's (the desktop's text button is tested with Enter above)");
+  await setUp(page, {}, "?test");
+  await startEngine(page);
+  await ready(page);
+  await view(page, "Log");
+  const field = page.getByRole("textbox", { name: "Command" });
+  const send = page.getByRole("button", { name: "Run command" });
+  // empty: it looks off (aria-disabled, not disabled, so a tap still keeps the keyboard), and a tap runs nothing
+  await field.focus();
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  await expect(send).toBeEnabled();
+  await send.tap();
+  await expect(field).toBeFocused();
+  expect(await page.evaluate(() => window.__dofile.state.history.value.length)).toBe(0);
+  // with text: a tap runs it, clears the field, and the field still has the focus
+  await field.fill("display 6*7");
+  await expect(send).not.toHaveAttribute("aria-disabled", "true");
+  await send.tap();
+  await expect(page.getByRole("log", { name: "Log" })).toContainText("42");
+  await expect(field).toHaveValue("");
+  await expect(field).toBeFocused();
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 6*7"]);
 });
 
 test("the command line with no engine: pasted lines wait for the engine; Not now drops them, and a toast says so", async ({
