@@ -123,7 +123,10 @@ export function CommandLine() {
         placeholder={phone ? "Type a command" : "Type a command · ↑ ↓ for earlier ones"}
         autocomplete="off"
         autocapitalize="off"
-        autocorrect="off"
+        // autoCorrect, not autocorrect: Preact sets a prop the element has as a property, and where a browser has
+        // `autocorrect` (Safari, Firefox) it is a boolean, so the string "off" would turn it on; this spelling is no
+        // property, so it is set as the attribute (HTML lowercases the name). The other fields do the same.
+        autoCorrect="off"
         spellcheck={false}
         enterKeyHint="go"
         inputMode="text"

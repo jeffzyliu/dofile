@@ -307,7 +307,7 @@ function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) 
         aria-label="Find in the log"
         placeholder="Find in the log"
         autocomplete="off"
-        autocorrect="off"
+        autoCorrect="off"
         autocapitalize="off"
         spellcheck={false}
         value={findText.value}

@@ -67,7 +67,7 @@ function Variables({ d }: { d: Summary }) {
         aria-label="Filter variables"
         placeholder="Filter variables"
         autocomplete="off"
-        autocorrect="off"
+        autoCorrect="off"
         autocapitalize="off"
         spellcheck={false}
         value={filterText.value}
