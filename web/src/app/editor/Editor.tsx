@@ -37,7 +37,19 @@ import { useEffect, useRef } from "preact/hooks";
 import { openFile } from "../files/open.ts";
 import { baseName } from "../files/tree.ts";
 import { requestRun } from "../run.ts";
-import { activeTab, addBanner, banners, dismiss, engine, lastRun, say, setDirty, showToast, tabs } from "../state.ts";
+import {
+  activeTab,
+  addBanner,
+  banners,
+  dismiss,
+  engine,
+  lastRun,
+  say,
+  setDirty,
+  showToast,
+  tabs,
+  wrap,
+} from "../state.ts";
 import { store } from "../store.ts";
 import type { RunHead } from "../types.ts";
 import {
@@ -70,6 +82,8 @@ let view: EditorView | null = null;
 let empty: HTMLElement | null = null;
 
 const language = new Compartment(); // the file's language and its name, which change when it is renamed
+const wrapping = new Compartment(); // EditorView.lineWrapping while the "Wrap lines" preference is on, else nothing
+const wrapExt = () => (wrap.value ? EditorView.lineWrapping : []);
 const named = (path: string): Extension => [
   languageOf(path),
   EditorView.contentAttributes.of({ "data-editor": "", "aria-label": `Editor: ${baseName(path)}` }),
@@ -117,6 +131,7 @@ function stateFor(path: string, text: string) {
       leaveFileDrops,
       follow,
       language.of(named(path)),
+      wrapping.of(wrapExt()),
     ],
   });
 }
@@ -175,13 +190,13 @@ function start(code: string, head: RunHead, keyed: boolean) {
   codeOf.set(head, code);
   if (requestRun(code, head).accepted || !keyed) return;
   const words = refusedRunWords(engine.value.s);
-  if (words) showToast(words);
+  if (words) showToast(words, "error");
 }
 
 function runFile(keyed = false) {
   const path = activeText();
   if (!path) {
-    showToast("No file is open to run");
+    showToast("No file is open to run", "error");
     return;
   }
   start(current(path)!.doc.toString(), { kind: "file", path, fresh_locals: true }, keyed);
@@ -450,6 +465,13 @@ function mount(host: HTMLElement, emptyView: HTMLElement) {
     }),
     effect(followRuns),
     effect(followErrors),
+    effect(() => {
+      // the preference, for every open text tab (a hidden tab's state is updated too)
+      const ext = wrapExt();
+      untracked(() => {
+        for (const path of states.keys()) update(path, { effects: wrapping.reconfigure(ext) });
+      });
+    }),
   ];
   addEventListener("keydown", onKey);
   return () => {

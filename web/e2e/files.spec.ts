@@ -64,10 +64,11 @@ const recordMoves = (page: Page) =>
   });
 const movesOf = (page: Page) => page.evaluate(() => (window as unknown as { moves: string[] }).moves);
 
-/** Open the file actions menu: the Files head's "File actions"; on a phone the top bar's ⋯ on the Files view. */
-async function fileActions(page: Page, phone: boolean) {
-  await page.getByRole("button", { name: phone ? "More actions" : "File actions" }).click();
-  return page.getByRole("menu", { name: phone ? "More actions" : "File actions" });
+/** Open the file actions menu: the Files head's "File actions"; on a phone the "Files ⋯" button at the right of the strip
+ *  under the top bar, on the Files view. */
+async function fileActions(page: Page) {
+  await page.getByRole("button", { name: "File actions" }).click();
+  return page.getByRole("menu", { name: "File actions" });
 }
 
 test("the tree: folders first with their levels, sizes, folding by keyboard; Enter opens a file in a tab", async ({
@@ -261,7 +262,7 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
   const ask = page.getByRole("alertdialog", { name: "Delete b.do?" });
-  await expect(ask).toContainText("It's kept only in this browser; there is no undo.");
+  await expect(ask).toContainText("It exists only in this browser. This can't be undone.");
   await expect(ask.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.keyboard.press("Enter"); // the default is Cancel
   await expect(ask).toBeHidden();
@@ -279,30 +280,24 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
     "Delete…",
   ]);
   await page.keyboard.press("Escape");
-  // the file actions: the Files head's menu; on a phone that head is hidden and they are in the top bar's ⋯ on the Files view
-  const head = await fileActions(page, isMobile);
-  if (isMobile) {
-    await expect(page.locator(".files-pane > .pane-head")).toBeHidden();
-    for (const name of ["New .do file", "New folder", "Upload a folder", "Restore the sample", "Delete all files…"])
-      await expect(head.getByRole("menuitem", { name })).toBeVisible();
-    await expect(head.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveCount(1); // the ⋯'s own, not twice
-  } else {
-    await expect(head.getByRole("menuitem")).toHaveText([
-      "New .do file",
-      "New folder",
-      "Upload a folder",
-      "Download all (.zip)",
-      "Restore the sample", // step 5, above Delete all files… (OQ-13)
-      "Delete all files…",
-    ]);
-  }
+  // the file actions: the Files head's menu; on a phone that head is hidden and the same menu is the "Files ⋯" button in the strip
+  const head = await fileActions(page);
+  if (isMobile) await expect(page.locator(".files-pane > .pane-head")).toBeHidden();
+  await expect(head.getByRole("menuitem")).toHaveText([
+    "New .do file",
+    "New folder",
+    "Upload a folder",
+    "Download all (.zip)",
+    "Restore the sample", // step 5, above Delete all files… (OQ-13)
+    "Delete all files…",
+  ]);
   await head.getByRole("menuitem", { name: "Delete all files…" }).click();
   const all = page.getByRole("alertdialog", { name: "Delete all 2 files?" });
-  await expect(all).toContainText("This removes every file dofile keeps in this browser. It can't be undone.");
+  await expect(all).toContainText("This removes every file dofile keeps in this browser. This can't be undone.");
   await expect(all.getByRole("button", { name: "Cancel" })).toBeFocused();
   await all.getByRole("button", { name: "Delete all" }).click();
   await expect(tree(page)).toHaveCount(0);
-  await fileActions(page, isMobile);
+  await fileActions(page);
   await expect(page.getByRole("menuitem", { name: "Delete all files…" })).toHaveAttribute("aria-disabled", "true");
 });
 

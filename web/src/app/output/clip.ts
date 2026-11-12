@@ -15,7 +15,7 @@ export async function copyText(text: string, done = "Copied"): Promise<boolean> 
   } catch {
     ok = fallbackCopy(text);
   }
-  showToast(ok ? done : "Couldn't copy: this browser said no");
+  showToast(ok ? done : "Couldn't copy: the browser refused", ok ? undefined : "error");
   return ok;
 }
 
@@ -61,7 +61,7 @@ export async function copyImage(g: Graph): Promise<boolean> {
     showToast("Copied");
     return true;
   } catch {
-    showToast("Couldn't copy the image: this browser said no");
+    showToast("Couldn't copy the image: the browser refused", "error");
     return false;
   }
 }

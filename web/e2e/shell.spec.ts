@@ -78,9 +78,9 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
     await page.keyboard.press("ArrowRight");
     await expect(views.getByRole("tab", { name: "Data" })).toBeFocused();
     await expect(page.getByRole("tabpanel", { name: "Data" })).toBeVisible();
-    // the theme is in the phone's ⋯ menu (OQ-14); "Download all (.zip)" is disabled with no files
+    // the theme is in the phone's ⋯ menu (OQ-14); the file actions are the Files view's "Files ⋯", not in it
     await page.getByRole("button", { name: "More actions" }).click();
-    await expect(page.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveCount(0);
     // Theme cycles and keeps the menu open, the focus on it and its name updated; Enter cycles again
     const themeItem = page.getByRole("menuitem", { name: /^Theme:/ });
     await expect(themeItem).toHaveAccessibleName("Theme: System");
@@ -121,13 +121,13 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
   await page.getByRole("button", { name: /^Theme:/ }).click();
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBeUndefined();
 
-  // the ⋯ menu: with no files "Download all (.zip)" is disabled, so ArrowDown opens it on "Clear log"
+  // the ⋯ menu: with no files "Download all (.zip)" is disabled, so ArrowDown opens it on "Wrap lines"
   const more = page.getByRole("button", { name: "More actions" });
   const menu = page.getByRole("menu", { name: "More actions" });
   await more.focus();
   await page.keyboard.press("ArrowDown");
   await expect(menu.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveAttribute("aria-disabled", "true");
-  await expect(menu.getByRole("menuitem", { name: "Clear log" })).toBeFocused();
+  await expect(menu.getByRole("menuitemcheckbox", { name: "Wrap lines" })).toBeFocused();
   await page.keyboard.press("Escape");
   await writeFile(page, "a.do");
   await page.waitForFunction(
@@ -139,7 +139,7 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
   await expect(more).toHaveAttribute("aria-expanded", "true");
   await expect(menu.getByRole("menuitem", { name: "Download all (.zip)" })).toBeFocused();
   await page.keyboard.press("ArrowDown");
-  await expect(menu.getByRole("menuitem", { name: "Clear log" })).toBeFocused();
+  await expect(menu.getByRole("menuitemcheckbox", { name: "Wrap lines" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect(more).toBeFocused();
@@ -195,7 +195,7 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
   // the visitor's case is a site updated since the page loaded: the reason says so, for "Reload the page"
   const st = await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.engine.value);
   expect(st.reason).toBe("updated");
-  expect(st.message).toBe("dofile has a newer version on this site: reload the page to use it");
+  expect(st.message).toBe("dofile has a newer version on this site. Reload the page to use it.");
 });
 
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN), moved from poc.spec.ts.
@@ -437,7 +437,11 @@ test("a failed Download all shows one banner with Try again, on every phone view
     };
   });
   const failed = () => page.evaluate(() => (window as unknown as Failing).zipFailed);
-  await page.getByRole("button", { name: "More actions" }).click();
+  if ((page.viewportSize()?.width ?? 0) < 700) {
+    // on a phone "Download all (.zip)" is in the Files view's "Files ⋯" menu
+    await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+    await page.getByRole("button", { name: "File actions" }).click();
+  } else await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Download all (.zip)" }).click();
   // the shown view's banner (on a phone every view has a copy)
   const banner = page.locator(".pane:not([hidden]) .banner", { hasText: "Your files couldn't be downloaded" });

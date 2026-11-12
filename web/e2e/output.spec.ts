@@ -107,9 +107,7 @@ test("a .dta tab whose name a command can't hold says so, and Load and Copy are 
     s.phoneTab.value = "editor";
   });
   const view = page.locator(".dta-view");
-  await expect(view.locator(".why")).toHaveText(
-    "Its name has a character a command can't hold: rename the file to use it here.",
-  );
+  await expect(view.locator(".why")).toHaveText("Its name has a character a command can't use: rename the file.");
   await expect(view.locator(".cmd")).toHaveCount(0);
   await expect(view.getByRole("button", { name: "Load" })).toBeDisabled();
   await expect(view.getByRole("button", { name: "Copy the use command" })).toBeDisabled();

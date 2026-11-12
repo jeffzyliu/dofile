@@ -646,12 +646,12 @@ test("pasted lines stop before a block's, a comment's or a /// line, which is no
   assert.deepEqual(s.ran, ["clear"]);
   assert.equal(
     inTurnWords(r),
-    "3 of 4 pasted lines not run: line 2 starts a block, a comment or a /// command; run those from the editor",
+    "3 of 4 pasted lines not run: line 2 can't be run from the command line; run it from the editor",
   );
   // the block's line is the last one: still said, since it did not run
   assert.equal(
     inTurnWords(await runInTurn(["regress y x ///"], script({}).runOne)),
-    "1 of 1 pasted lines not run: line 1 starts a block, a comment or a /// command; run those from the editor",
+    "1 of 1 pasted lines not run: line 1 can't be run from the command line; run it from the editor",
   );
   // a commented-out command is not run: the lines stop at the comment's first line
   const c = script({});
@@ -936,9 +936,10 @@ test("Save's key (editor/keys.ts): Ctrl or Cmd with S on any layout, the key tha
 test("a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or queued", () => {
   const by = (states: string[]) => states.map((s) => refusedRunWords(s as Parameters<typeof refusedRunWords>[0]));
   assert.deepEqual(by(["ready", "none", "declined"]), [null, null, null]);
-  for (const s of by(["running", "breaking", "waiting"])) assert.equal(s, "Run is off until this run ends");
+  for (const s of by(["running", "breaking", "waiting"]))
+    assert.equal(s, "Run is not available until the current run ends");
   for (const s of by(["checking-lock", "checking-cache", "asking", "downloading", "starting-list", "starting-worker"]))
-    assert.equal(s, "Starting… Run is off until the engine is ready");
+    assert.equal(s, "The engine is starting. Try again when it is ready.");
   for (const s of by(["failed", "failed-twice", "other-tab-idle", "other-tab-taking"]))
-    assert.equal(s, "Run is off: the engine isn't running in this tab");
+    assert.equal(s, "Run is not available: the engine isn't running in this tab");
 });

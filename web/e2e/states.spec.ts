@@ -81,7 +81,7 @@ test("the progress dialog: the download with its time and bytes, then the stages
     };
   });
   await expect(dlg.locator(".progress")).toHaveCount(0); // the bar is gone once the download is done
-  await expect(dlg.getByText("Loading your files", { exact: true })).toBeVisible();
+  await expect(dlg.locator("b", { hasText: "Loading your files" })).toBeVisible();
   await expect(dlg.getByText(/^step 4 of 5 · \d+(\.\d)? s$/)).toBeVisible();
   await expect(dlg.locator(".stages li.done")).toHaveCount(3);
   await expect(dlg.locator(".stages li.done .when").nth(0)).toContainText("7.1 s");
@@ -134,7 +134,7 @@ test("a failed start: the words and the first action follow the reason", async (
   }
   await show(page, { s: "failed-twice", reason: "memory", detail: "x", message: "x" });
   const twice = page.getByRole("alert").filter({ hasText: "The engine stopped after failing twice" });
-  await expect(twice).toContainText("(it ran out of memory)");
+  await expect(twice).toContainText("(out of memory)");
   await expect(twice.getByRole("button", { name: "Reload the page" })).toBeVisible();
   await expect(twice.getByRole("button", { name: "Download all (.zip)" })).toBeVisible();
 });
@@ -356,7 +356,7 @@ test("the storage, reset, memory and download-failed banners", async ({ page }) 
   });
   const reset = page.locator(".banner", { hasText: "The engine was reset:" });
   await expect(reset).toContainText("The engine was reset: the code did not stop at Break.");
-  await expect(reset).toContainText("The data in memory is gone; your files are kept.");
+  await expect(reset).toContainText("The data in memory is lost; your files are kept.");
   await expect(reset.getByRole("button", { name: "Run the file again" })).toBeDisabled(); // no engine, no open file
   await reset.getByRole("button", { name: "Dismiss" }).click();
   await expect(reset).toHaveCount(0);

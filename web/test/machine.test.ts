@@ -80,7 +80,7 @@ const result = (rc: number): RunResult => ({
 });
 
 // What the machine makes itself, written out here a second time.
-const SENTENCE = (reason: string) => `session reset: ${reason}. Data in memory is gone; your files are kept.`;
+const SENTENCE = (reason: string) => `session reset: ${reason}. Data in memory is lost; your files are kept.`;
 const CUT = (error: string, kind: CutKind): RunResult => ({
   rc: 9998,
   error,
@@ -1360,7 +1360,7 @@ test("initial(): ticket 1, the lock request; lost() and cutResult() are today's 
   assert.deepEqual([first.machine.issued, first.machine.crashes, first.outcome], [1, 0, "taken"]);
   assert.deepEqual(first.effects, [{ do: "take-lock", n: first.machine.issued, steal: false }]);
   assert.equal(RC_RESET, 9998);
-  assert.equal(lost("reset by you"), "session reset: reset by you. Data in memory is gone; your files are kept.");
+  assert.equal(lost("reset by you"), "session reset: reset by you. Data in memory is lost; your files are kept.");
   assert.deepEqual(cutResult("why", "crash"), CUT("why", "crash"));
   assert.equal(ticketOf(row("other-tab-idle").m.state), null);
   for (const r of ROWS) row(r); // every row is reached from initial() by events

@@ -79,6 +79,6 @@ export function inTurnWords(r: InTurn): string | null {
   if (r.stop.why === "refused") return `${lines} not run: the engine can't take a command now`;
   if (r.stop.why === "taken") return `${lines} not run: another tab took over the engine during line ${r.stop.line}`;
   if (r.stop.why === "block")
-    return `${lines} not run: line ${r.stop.line} starts a block, a comment or a /// command; run those from the editor`;
+    return `${lines} not run: line ${r.stop.line} can't be run from the command line; run it from the editor`;
   return `${lines} not run: line ${r.stop.line} didn't run`;
 }

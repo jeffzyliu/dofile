@@ -102,7 +102,7 @@ export const isPhone = computed(() => layout.value === "phone");
 // ---- runs (run.ts) ----
 /** The writers of the run controller's signals. Only app/run.ts imports it. */
 export const runWriter = {
-  log: signal<LogItem[]>([{ t: "head" }]), // "Clear log" empties it
+  log: signal<LogItem[]>([{ t: "head" }]), // "Clear log" keeps the head
   lastRun: signal<LastRun | null>(null),
   history: signal<string[]>([]), // runCommand(): the command line, Load and Import call it
   results: signal<Results | null>(null), // from each RunResult; null when the engine is gone (a reset, another tab)
@@ -141,11 +141,16 @@ export const resolvedTheme = computed(() =>
   theme.value === "system" ? (systemDark.value ? "dark" : "light") : theme.value,
 );
 
+// ---- wrap lines (App.tsx toggleWrap) ----
+export const wrap = signal(saved.get("dofile.wrap") === "1"); // the More actions menu's "Wrap lines"; kept in localStorage
+
 // ---- dialogs, banners, toast, the live region (app/ui/) ----
 const toastText = signal<string | null>(null),
   bannerList = signal<Banner[]>([]),
+  toastIsError = signal(false),
   announced = signal("");
-export const toast: ReadonlySignal<string | null> = toastText; // anyone, through showToast(text); it clears itself after 4 s
+export const toast: ReadonlySignal<string | null> = toastText; // anyone, through showToast(text); it clears itself (toastMs)
+export const toastError: ReadonlySignal<boolean> = toastIsError; // the toast reports an error (the warning icon), not a confirmation
 export const dialog = signal<Dialog>(null); // whoever opens one; the dialog closes itself (sets null)
 export const banners: ReadonlySignal<Banner[]> = bannerList; // their owners add (addBanner()); Dismiss removes one (dismiss())
 export const announce: ReadonlySignal<string> = announced; // the hidden live region: through say()
@@ -167,20 +172,32 @@ export function say(text: string) {
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
-/** A toast, with no buttons: a short confirmation ("Saved analysis.do", "Copied"), or an error that needs no action from
- *  the visitor ("Couldn't load wages.dta: r(601)"); what the visitor must act on is a banner or a dialog (SPEC 3.10).
- *  One at a time, 4 s; the live region says it too. `holdToast(true)` while the pointer is on it keeps it; `holdToast(false)` gives it 4 s again. */
-export function showToast(text: string) {
+/** How long a toast stays: 60 ms a character (a reading time), at least 4 s (an error 6 s), at most 10 s. */
+export const TOAST_MIN_MS = 4000,
+  TOAST_ERROR_MIN_MS = 6000,
+  TOAST_MAX_MS = 10_000,
+  TOAST_MS_PER_CHAR = 60;
+export const toastMs = (text: string, error = false) =>
+  Math.min(TOAST_MAX_MS, Math.max(error ? TOAST_ERROR_MIN_MS : TOAST_MIN_MS, text.length * TOAST_MS_PER_CHAR));
+/** A toast, with no buttons: a short confirmation ("Saved analysis.do", "Copied"), or, with `"error"`, an error that
+ *  needs no action from the visitor ("Couldn't load wages.dta: r(601)"; the warning icon, not the check mark); what the
+ *  visitor must act on is a banner or a dialog (SPEC 3.10). One at a time, for toastMs(text, error); the live region
+ *  says it too. `holdToast(true)` while the pointer is on it keeps it; `holdToast(false)` gives it its time again. */
+export function showToast(text: string, kind?: "error") {
   toastText.value = text;
+  toastIsError.value = kind === "error";
   say(text);
   holdToast(false);
 }
 export function holdToast(hold: boolean) {
   clearTimeout(toastTimer);
   if (!hold && toastText.value !== null)
-    toastTimer = setTimeout(() => {
-      toastText.value = null;
-    }, 4000);
+    toastTimer = setTimeout(
+      () => {
+        toastText.value = null;
+      },
+      toastMs(toastText.value ?? "", toastIsError.value),
+    );
 }
 
 /** Add a banner (one of each kind and path: a second replaces the first). Who adds each kind: types.ts, Banner. */

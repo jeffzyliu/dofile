@@ -21,13 +21,13 @@ const lines = (l?: [number, number]) => (l ? ` ${linesWords(l)}` : "");
 export const AFFILIATION = "Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.";
 
 /** The state's words: the bold word, then the rest, with its timer. One case for each of the sixteen states: a new state
- *  fails the check until it has its words. The page load (`checking-lock`, `checking-cache`) is "Opening": a word for
+ *  fails the check until it has its words. The page load (`checking-lock`, `checking-cache`) is "Loading": a word for
  *  the moment before the page knows whether the engine is there (a draft; the spec left it to step 4b). */
 export function stateWords(st: EngineState): [ComponentChildren, ComponentChildren] {
   switch (st.s) {
     case "checking-lock":
     case "checking-cache":
-      return ["Opening", null];
+      return ["Loading", null];
     case "none":
     case "asking":
       return [null, "No engine yet"];
@@ -52,12 +52,12 @@ export function stateWords(st: EngineState): [ComponentChildren, ComponentChildr
     case "waiting":
       return ["Waiting", " · Break after this command"];
     case "failed":
-      return ["Stopped", " · the engine didn't start"];
+      return ["Not started", " · the engine didn't start"];
     case "failed-twice":
       return ["Stopped", " · failed twice"];
     case "other-tab-idle":
     case "other-tab-taking":
-      return [null, "paused"];
+      return ["Paused", " · another tab has the engine"];
   }
 }
 

@@ -100,7 +100,7 @@ export async function restoreSample(): Promise<void> {
     showToast("Sample restored");
   } catch (e) {
     console.warn(`[dofile] restore the sample: ${(e as Error)?.message ?? e}`);
-    showToast("Couldn't restore the sample");
+    showToast("Couldn't restore the sample", "error");
   }
 }
 
@@ -114,6 +114,6 @@ export async function replaceWithSample(): Promise<void> {
     await openFile(SAMPLE_MAIN);
   } catch (e) {
     console.warn(`[dofile] restore the sample: ${(e as Error)?.message ?? e}`);
-    showToast("Couldn't restore the sample");
+    showToast("Couldn't restore the sample", "error");
   }
 }

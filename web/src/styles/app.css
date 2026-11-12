@@ -107,9 +107,14 @@ body {
 }
 .log-body {
   overflow: auto;
+  overscroll-behavior-x: none; /* no rubber-banding sideways */
+}
+.log-body > * {
+  flex: none; /* the body scrolls; its children are never shrunk to it */
 }
 .log-body .log {
   overflow: visible;
+  padding-bottom: var(--s4);
 } /* the body scrolls; wide tables sideways too */
 .banners:empty {
   display: none;
@@ -286,6 +291,12 @@ body {
    OpenDTA's dark scheme's background (graphics/scheme.py "opendta_dark"), so the card melts into the picture's edge. */
 .graph-card[data-theme="dark"] {
   background: var(--graph-card-dark);
+}
+/* a graph that keeps its own light scheme (a `scheme(s1mono)` in a dark theme) is a light picture on this dark card: a thin
+   border makes the picture's edge look intended */
+.graph-card[data-theme="dark"] img,
+.log button.inline-graph[data-theme="dark"] img {
+  border: 1px solid var(--border-strong);
 }
 
 /* the tabs scroll inside their pane (the pane body does not scroll) */
@@ -752,14 +763,23 @@ input.filter::placeholder {
 .editor-cm .cm-editor.cm-focused {
   outline: 2px solid transparent; /* shown in forced colors, where the box-shadow is not */
   outline-offset: -2px;
+}
+/* the ring is drawn over the gutters: .cm-scroller is a stacking context at z-index 0, so z-index 1 is above it */
+.editor-cm .cm-editor.cm-focused::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 .editor-cm .cm-scroller {
+  overscroll-behavior-x: none; /* no rubber-banding: the sticky gutter would move with the text */
   font-family: var(--font-mono);
   line-height: 1.6;
 }
 .editor-cm .cm-content {
-  padding: var(--s2) 0;
+  padding: var(--s2) var(--s3) var(--s2) 0; /* room at the right of long and wrapped lines */
   caret-color: var(--ink);
 }
 .editor-cm .cm-cursor {
@@ -783,7 +803,9 @@ input.filter::placeholder {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .editor-cm .cm-sel-line {
-  background: var(--accent-soft);
+  /* the lines Run will run: a thin accent bar and a faint tint, unlike the text selection's solid fill */
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 /* the lines a run is running: the accent bar and bold number; the error line: the red bar and tint, bold number */
 .editor-cm .cm-run-line {
@@ -965,14 +987,35 @@ input.filter::placeholder {
 .phone-strip {
   display: flex;
   align-items: center;
-  gap: var(--s3);
+  gap: var(--s2);
   padding: 5px var(--s3);
+  container-type: inline-size;
   font-size: var(--text-sm);
   color: var(--muted);
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   overflow: hidden;
+}
+/* the Files view's "Files ⋯" and the Log view's "Log ⋯" buttons (their head's actions, App.tsx): at the right end; the status text gives way to it with an
+   ellipsis, and the word goes when the strip is narrow, leaving the ⋯ */
+.phone-strip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone-strip > .rc-err {
+  flex: none;
+} /* the error code is never cut */
+.phone-strip .strip-actions {
+  flex: none;
+  margin-left: auto;
+  gap: var(--s1);
+}
+@container (max-width: 340px) {
+  .phone-strip .strip-word {
+    display: none;
+  }
 }
 .phone-strip b {
   color: var(--ink);
@@ -1020,6 +1063,18 @@ input.filter::placeholder {
   font: var(--text-xs) / 1.6 var(--font-ui);
   color: var(--muted);
 }
+/* "Wrap lines" (App.tsx toggleWrap; LogView.tsx gives the log the class wrap): the log's long lines wrap; the banner art keeps its shape */
+.log.wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.log.wrap .head {
+  white-space: pre-wrap; /* the versions line wraps (pre made it 398 px, wider than a 390 px phone's log) */
+  overflow-wrap: normal;
+}
+.log.wrap .head .art {
+  white-space: pre;
+}
 /* the notes at a run's end (Break's with its Go to line, OQ-10's, the files not kept): they wrap in the pane */
 .log .endnote {
   display: block;
@@ -1035,10 +1090,18 @@ input.filter::placeholder {
   height: var(--cmdline-h);
   box-sizing: border-box;
 }
+/* the views with no command line (Files, Editor, Data, Results) put it just above the tab bar */
 .app[data-layout="phone"] .toasts {
-  bottom: calc(var(--cmdline-h) + 61px + env(safe-area-inset-bottom, 0px) + var(--s2));
+  bottom: calc(61px + env(safe-area-inset-bottom, 0px) + var(--s2));
 }
 :root[data-keyboard] .app[data-layout="phone"] .toasts {
+  top: calc(var(--vv-top) + var(--vv-height) - var(--s2));
+}
+.app[data-layout="phone"]:has(.log-pane:not([hidden])) .toasts {
+  bottom: calc(var(--cmdline-h) + 61px + env(safe-area-inset-bottom, 0px) + var(--s2));
+}
+:root[data-keyboard] .app[data-layout="phone"]:has(.log-pane:not([hidden])) .toasts {
+  bottom: auto;
   top: calc(var(--vv-top) + var(--vv-height) - var(--cmdline-h) - var(--s2));
 }
 /* a phone zooms in on a focused text field under 16 px: the editor's text and its numbers too, so they stay in line */
@@ -1048,6 +1111,13 @@ input.filter::placeholder {
   }
 }
 @media (forced-colors: active) {
+  .editor-cm .cm-sel-line {
+    border-left: 2px solid Highlight;
+  }
+  .editor-cm .cm-editor.cm-focused::after {
+    box-shadow: none;
+    border: 2px solid Highlight;
+  }
   .editor-cm .cm-run-line,
   .editor-cm .cm-gutterElement.cm-run-n {
     border-left: var(--bar) solid Highlight;

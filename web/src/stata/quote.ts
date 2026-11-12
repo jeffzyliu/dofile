@@ -15,7 +15,7 @@ export const CONTROL = /[\u0000-\u001f\u007f]/;
 /** `verb "path", clear`, or `{ problem }` when the path cannot be put in a command (see above). */
 export function fileCommand(verb: "use" | "import delimited", path: string): { command: string } | { problem: string } {
   if (path.includes("`") || CONTROL.test(path) || path.includes(`"'`))
-    return { problem: "Its name has a character a command can't hold: rename the file to use it here." };
+    return { problem: "Its name has a character a command can't use: rename the file." };
   const text = path.replace(/\$/g, () => "\\$");
   return { command: `${verb} ${path.includes('"') ? `\`"${text}"'` : `"${text}"`}, clear` };
 }

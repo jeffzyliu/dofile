@@ -138,7 +138,7 @@ test("the times and sizes are written as the drawings write them", () => {
 test("the reset banner's words follow the kind, and cut a cause in parentheses off", () => {
   assert.deepEqual(resetWords("user", "reset by you", true), {
     head: "You reset the engine.",
-    rest: "The data in memory is gone; your files are kept.",
+    rest: "The data in memory is lost; your files are kept.",
   });
   assert.equal(
     resetWords("break", "the code did not stop at Break", true).head,
@@ -146,7 +146,7 @@ test("the reset banner's words follow the kind, and cut a cause in parentheses o
   );
   assert.equal(
     resetWords("crash", "the engine crashed (out of memory: x)", true).head,
-    "The engine was reset: the engine crashed.",
+    "The engine crashed and was reset.",
   );
   assert.equal(resetWords("break", "Break reset the engine, because ...", false).head, "Break reset the engine.");
 });
@@ -170,7 +170,7 @@ test("each failed reason has its own first action, and Download all is always of
   });
   for (const r of reasons) assert.ok(failedActions(r).includes("download-all"), r);
   assert.ok(!failedActions("no-wasm").includes("try-again"), "Try again cannot help without WebAssembly");
-  assert.match(twiceWords("memory").head, /ran out of memory/);
+  assert.match(twiceWords("memory").head, /out of memory/);
   assert.doesNotMatch(twiceWords("unknown").head, /memory/);
 });
 

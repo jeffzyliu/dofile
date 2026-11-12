@@ -1,14 +1,15 @@
 // The hidden live region, the toast, and the banner (docs/design/SPEC.md, sections 1 and 3.10).
 //  - say(text) (state.ts): the one role="status" region says each change once ("Run started", "Engine ready"). The
 //    status bar is not a live region.
-//  - showToast(text) (state.ts): a confirmation, or an error that needs no action from the visitor (a copy the browser
-//    refused, a load that failed with its rc); no buttons, inverted colors, bottom center, 4 s (kept while the pointer is
-//    on it), never focused; the live region says the same words. Anything the visitor must act on, or choose between, is
+//  - showToast(text, kind?) (state.ts): a confirmation (check mark), or with kind "error" an error that needs no action
+//    from the visitor (a copy the browser refused, a load that failed with its rc; warning icon); no buttons, inverted
+//    colors, bottom center, 4 to 10 s by its length and 6 s at least for an error (state.ts toastMs; kept while the
+//    pointer is on it), never focused; the live region says the same words. Anything the visitor must act on, or choose between, is
 //    a banner or a dialog.
 //  - <Banner kind>: a pane's notice above its content, until its cause goes or it is dismissed. Warning and error carry
 //    the warning icon (meaning is never color alone).
 import type { ComponentChildren, Ref } from "preact";
-import { announce, holdToast, toast } from "../state.ts";
+import { announce, holdToast, toast, toastError } from "../state.ts";
 import { Icon } from "./Icon";
 
 export const LiveRegion = () => (
@@ -23,7 +24,7 @@ export function ToastHost() {
   return (
     <div class="toasts" aria-hidden="true">
       <div class="toast" onPointerEnter={() => holdToast(true)} onPointerLeave={() => holdToast(false)}>
-        <Icon name="check" />
+        <Icon name={toastError.value ? "warn" : "check"} />
         {text}
       </div>
     </div>

@@ -1,7 +1,19 @@
 // Small shared pieces: the SVG icons of ui.css (.ico), the key chips, and the step placeholders.
 import type { ComponentChildren } from "preact";
 
-export type IconName = "play" | "stop" | "down" | "right" | "more" | "theme" | "graph" | "file" | "check" | "warn";
+export type IconName =
+  | "play"
+  | "stop"
+  | "down"
+  | "right"
+  | "more"
+  | "theme"
+  | "graph"
+  | "file"
+  | "check"
+  | "warn"
+  | "split"
+  | "unsplit";
 
 /** One of ui.css's icons (a mask in the text color). Decorative: the control around it has the words or an aria-label. */
 export const Icon = ({ name }: { name: IconName }) => <span class={`ico i-${name}`} aria-hidden="true" />;

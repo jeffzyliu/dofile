@@ -84,7 +84,9 @@ export function EditorTabs() {
             if (e.button === 1) close(t.path, false); // the middle button, as browsers' own tabs
           }}
         >
-          {labels[i]}
+          <span class="tl" data-label={labels[i]}>
+            {labels[i]}
+          </span>
           {t.dirty && <Unsaved />}
           <span
             class="x"

@@ -20,6 +20,7 @@ type Hook = {
   state: any; // the signals of src/app/state.ts
   selection: { value: [number, number] | null };
   breakRun(): void;
+  run(code: string): Promise<unknown>;
 };
 declare global {
   interface Window {
@@ -572,7 +573,7 @@ test("the log's formatting: echoes bold, output normal, errors red and bold, hin
   await expect(log.locator(".runhead")).toHaveText("Run: a.do, whole file · starts with no locals");
   const download = page.waitForEvent("download");
   if (isPhone(page)) {
-    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("button", { name: "Log actions" }).click(); // the strip's "Log ⋯"
     await page.getByRole("menuitem", { name: "Download log" }).click();
   } else await page.getByRole("button", { name: "Download log" }).click();
   const file = await download;
@@ -604,9 +605,7 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
       window.__dofile.state.outputTab.value = "graph";
     });
   }
-  const opener = phone
-    ? page.getByRole("button", { name: "More actions" })
-    : page.getByRole("button", { name: "Find" });
+  const opener = phone ? page.getByRole("button", { name: "Log actions" }) : page.getByRole("button", { name: "Find" });
   if (phone) {
     await opener.click();
     await page.getByRole("menuitem", { name: "Find" }).click();
@@ -646,8 +645,8 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
   await expect(count).toHaveText("5 of 5");
   await expect.poll(current).toBe("note");
   await field.fill("nothing like it");
-  await expect(count).toHaveText("none");
-  // Esc closes it, and the focus goes back to what opened it (the Find button; on a phone the ⋯ button)
+  await expect(count).toHaveText("no match");
+  // Esc closes it, and the focus goes back to what opened it (the Find button; on a phone the strip's Log ⋯ button)
   await field.press("Escape");
   await expect(field).toHaveCount(0);
   await expect(opener).toBeFocused();
@@ -889,10 +888,10 @@ test("the log: under an error, the OQ-10 note where the engine's own words do no
   });
   if (isPhone(page)) await view(page, "Log");
   await expect(page.getByRole("log", { name: "Log" }).locator(".note")).toHaveText([
-    "Nothing was preserved in this run. A run restores the data it preserved when it ends, so put preserve and restore in the same run.",
-    "reghdfe is a community command: it isn't part of Stata itself, and dofile doesn't have it.",
+    "Nothing was preserved. A run restores its data when it ends, so put preserve and restore in the same run.",
+    "reghdfe is a community command. OpenDTA, the engine behind dofile, doesn't include it.",
     "(a tempfile lasts one run: save it under a name to use it in a later run)", // the engine's note; no second one
-    "ftools is a community command: it isn't part of Stata itself, and dofile doesn't have it.", // run 5's, none for 4
+    "ftools is a community command. OpenDTA, the engine behind dofile, doesn't include it.", // run 5's, none for 4
   ]);
 });
 
@@ -1065,6 +1064,102 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
   if (!isPhone(page)) await expect(page.locator(".statusbar")).toContainText("Last run: stopped by Break · r(1)");
 });
 
+test("the log follows the end through runs that print wide lines (the running banner shrinks it and takes it back each run), until the visitor scrolls up; scrolling back down, or sideways, resumes or keeps it", async ({
+  page,
+}) => {
+  await setUp(page, {}, "?test");
+  await startEngine(page);
+  await ready(page);
+  if (isPhone(page)) await view(page, "Log");
+  const log = page.getByRole("log", { name: "Log" });
+  const fromEnd = () =>
+    log.evaluate(
+      (pre) => pre.parentElement!.scrollHeight - pre.parentElement!.scrollTop - pre.parentElement!.clientHeight,
+    );
+  const run = (n: number) =>
+    page.evaluate(
+      (code) => window.__dofile.run(code),
+      Array.from({ length: 14 }, (_, i) => `display "${`${n}.${i} `.padEnd(220 + 7 * i, "x")}"`).join("\n"),
+    );
+  // wide lines make the log scroll sideways; every run ends with the log at its end (the first runs fail on the
+  // pane's height changing by the running banner, whatever the line widths)
+  for (let n = 1; n <= 4; n++) {
+    await run(n);
+    await expect.poll(fromEnd, { message: `at the end after run ${n}` }).toBeLessThanOrEqual(1);
+  }
+  expect(await log.evaluate((pre) => pre.parentElement!.scrollWidth > pre.parentElement!.clientWidth)).toBe(true);
+  // sideways scrolling never stops the following
+  await log.evaluate((pre) => {
+    pre.parentElement!.scrollLeft = 150;
+  });
+  await run(5);
+  await expect.poll(fromEnd, { message: "at the end after run 5, scrolled sideways" }).toBeLessThanOrEqual(1);
+  // the visitor scrolls up: the log keeps its place while a run adds lines
+  await log.evaluate((pre) => {
+    // the visitor's input (a wheel event stands in for it, as the log only clears its following after one), then the move
+    pre.parentElement!.dispatchEvent(new WheelEvent("wheel", { deltaY: -500, bubbles: true }));
+    pre.parentElement!.scrollTop = 0;
+  });
+  await page.waitForTimeout(300); // a scroll event is delivered with the next frame
+  await run(6);
+  expect(await log.evaluate((pre) => pre.parentElement!.scrollTop)).toBe(0);
+  expect(await fromEnd()).toBeGreaterThan(100);
+  // back at the end, it follows again
+  await log.evaluate((pre) => {
+    pre.parentElement!.scrollTop = pre.parentElement!.scrollHeight;
+  });
+  await page.waitForTimeout(300);
+  await run(7);
+  await expect.poll(fromEnd, { message: "at the end after run 7, scrolled back down" }).toBeLessThanOrEqual(1);
+});
+
+test("the log follows the end while pasted lines run one after another (the running banner goes and comes back for each), and a paste does not move a log the visitor scrolled up", async ({
+  page,
+}) => {
+  await setUp(page, {}, "?test");
+  await startEngine(page);
+  await ready(page);
+  if (isPhone(page)) await view(page, "Log");
+  const log = page.getByRole("log", { name: "Log" });
+  const field = page.getByRole("textbox", { name: "Command" });
+  const fromEnd = () =>
+    log.evaluate(
+      (pre) => pre.parentElement!.scrollHeight - pre.parentElement!.scrollTop - pre.parentElement!.clientHeight,
+    );
+  const paste = (text: string) =>
+    field.evaluate((el, text) => {
+      const dt = new DataTransfer();
+      dt.setData("text/plain", text);
+      let e: Event = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+      if ((e as ClipboardEvent).clipboardData?.getData("text/plain") !== text) {
+        e = new Event("paste", { bubbles: true, cancelable: true }); // Firefox: a plain event that carries the data
+        Object.defineProperty(e, "clipboardData", { value: dt });
+      }
+      el.dispatchEvent(e);
+    }, text);
+  const block = (n: number) =>
+    `${Array.from({ length: 12 }, (_, i) => `display "${`${n}.${i} `.padEnd(120 + 9 * i, "x")}"`).join("\n")}\nforeach v in a b {\n`;
+  const stopped = () =>
+    expect(page.locator(".toast")).toContainText("not run: line 13 can't be run from the command line");
+  for (let n = 1; n <= 3; n++) {
+    await paste(block(n));
+    await stopped();
+    await ready(page);
+    await expect.poll(fromEnd, { message: `at the end after paste ${n}` }).toBeLessThanOrEqual(1);
+    await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
+  }
+  // scrolled up (a wheel event stands in for the visitor's input), the next paste leaves the log where it is
+  await log.evaluate((pre) => {
+    pre.parentElement!.dispatchEvent(new WheelEvent("wheel", { deltaY: -500, bubbles: true }));
+    pre.parentElement!.scrollTop = 0;
+  });
+  await page.waitForTimeout(300);
+  await paste(block(4));
+  await stopped();
+  await ready(page);
+  expect(await log.evaluate((pre) => pre.parentElement!.scrollTop)).toBe(0);
+});
+
 test("the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; a paste of one line, with or without its line break, is ordinary", async ({
   page,
 }) => {
@@ -1171,7 +1266,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
     true,
   );
   await expect(banner.first()).toContainText(
-    "Your unsaved edits are still in the editor; saving them replaces the run's version.",
+    "Your unsaved edits are still in the editor; saving them overwrites the file the run wrote.",
   );
   await banner.filter({ visible: true }).getByRole("button", { name: "Reload from the run" }).click();
   await expect(banner).toHaveCount(0);
@@ -1211,7 +1306,9 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   // a version that is not text (a .dta saved under the name): the tab keeps its text, is unsaved, and the banner says so
   await run("save u.csv, replace");
   const binary = page.locator(".banner", { hasText: "The run changed u.csv, and it is no longer text." });
-  await expect(binary.first()).toContainText("The editor still shows your text; saving it replaces the run's version.");
+  await expect(binary.first()).toContainText(
+    "The editor still shows your text; saving it overwrites the file the run wrote.",
+  );
   await expect(binary.getByRole("button", { name: "Reload from the run" })).toHaveCount(0);
   await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*3\s*$/);
   expect(await dirty()).toBe(true);
@@ -1442,7 +1539,7 @@ test("Ctrl/Cmd+Enter that the engine does not take says why in a toast and start
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("running");
   await toEditor();
   await page.keyboard.press("ControlOrMeta+Enter");
-  await expect(toast).toHaveText("Run is off until this run ends");
+  await expect(toast).toHaveText("Run is not available until the current run ends");
   expect(await runs()).toBe(2);
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("running");
   await page.evaluate(() => window.__dofile.breakRun());

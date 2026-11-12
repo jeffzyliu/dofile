@@ -100,6 +100,7 @@
   /* control heights, in rem so they grow with the visitor's font size: the toolbar's buttons, and a pane head's */
   --control: 2rem;
   --control-sm: 1.625rem;
+  --pane-head: 2.5rem; /* every pane head's height: the ones with tabs (Editor, Output) are this tall, so the others match */
   --bar: 3px; /* the marker bar on a line or row's left edge: open file, running line, error line, picked row */
   --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --disabled-opacity: 0.45;

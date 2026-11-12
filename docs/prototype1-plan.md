@@ -9,9 +9,17 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 
 ## Where things stand (2026-11-11)
 
+- **UI fix round (2026-11-12), on `ui-lightning`:** the maintainer's UI bugs after the merge of steps 4 and 5. Editor: the
+  focus ring over the gutters, a fainter lines-to-run mark with an accent bar, no sideways overscroll, tab labels that keep
+  their bold width, a tooltip with the full path on file rows. A "Wrap lines" preference (both ⋯ menus; the editor and the
+  log). Menus: "Clear log" left the desktop ⋯, "Commands" and "About dofile" open in a new tab, and on a phone the file
+  and log actions are the strip's "Files ⋯" and "Log ⋯". Log pane: a "Clear" button in its head, a "Log actions" ⋯ when the
+  head is narrow, Split with an icon, "Clear log" keeps the head, the log follows its end unless the visitor scrolls up.
+  Toasts: an error kind, a time by length, wrapping. The static pages: a sticky top bar, "Home", the GitHub link, shorter
+  sample comments. It does not finish the post-merge review below; the checks are recorded by its pull request.
 - **After steps 4 and 5 merge:** the open items are reviewed then, not before: "Post-merge review", below.
-- **Step 4 (4a, 4b, 4c, 4d and the joining changes) is built on `prototype1-step4`, in draft pull request #17; not
-  merged.** Checked at its tip `486f6bf`, CI green: Biome, `tsc` and ruff clean; `npm test` (295 pass); the e2e suite
+- **Step 4 (4a, 4b, 4c, 4d and the joining changes) was built on `prototype1-step4`, in pull request #17; merged
+  (with step 5, pull request #18).** Checked at its tip `486f6bf`, CI green: Biome, `tsc` and ruff clean; `npm test` (295 pass); the e2e suite
   (273 passed, 31 skipped); `uv run poe test` (1346 passed, 13 skipped, 3 xfailed); nothing under `src/dofile/` or `tests/`
   differs from `main`. Before the merge the maintainer goes through "Step 4: decisions and open questions" (below) and
   the draft words in `docs/design/SPEC.md` section 8. Step 5 is on its own branch, `prototype1-step5`, in draft pull
@@ -178,7 +186,7 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
 10. The log's head keeps "Stata 14 syntax" ("dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax"): a descriptive use of
     the name.
 11. From the joining of 4a and 4c: on a phone the Files pane's head is hidden and the file actions are in the top bar's ⋯
-    on the Files view; the unfolded file list (700 to 1199 px) gives the focus to the tree's row; a drop of files
+    on the Files view (UI fix round, 2026-11-12: by the maintainer's decision they are now in the phone strip's "Files ⋯" button, and the Log view's actions in "Log ⋯"); the unfolded file list (700 to 1199 px) gives the focus to the tree's row; a drop of files
     anywhere on the page uploads them; a toast confirms, or reports an error that needs no action, and anything the
     visitor must act on or choose between is a banner or a dialog (SPEC 3.10); a graph is drawn in the run's theme
     whatever colors its command names, so a dark plot with a user-named color is accepted as it is (Step 4c, below).
@@ -198,7 +206,7 @@ Reviewed after the merge: see Post-merge review.
 3. Pasted lines stop at the first line that is refused, that was queued and then dropped, that ends with any rc but 0
    (Break's rc 1 too), or whose run is cut because another tab took the engine; and before a line that opens a block
    (`{` at its end, a lone `program define` or `mata`), opens a `/*` comment it does not close, or holds `///` (not sent).
-   A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`).
+   A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.)
 4. Load on a phone's .dta tab shows only its toast ("Loaded wages.dta"); the Log view does not open.
 5. Reset asks whenever a run is in progress. Otherwise it resets at once while the engine is ready with no data in
    memory and no e() or r() scalar, macro or matrix; after a run it first describes the memory again, and asks when
@@ -230,10 +238,11 @@ Reviewed after the merge: see Post-merge review.
 8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog.
 9. The editor has no find of its own (no Ctrl/Cmd+F binding); Find searches the log only.
 10. On a phone the toast sits above the command line and the tab bar on every view, so on the views with no command line
-    (Files, Editor, Data, Results) it is a command line's height higher than it needs to be.
+    (Files, Editor, Data, Results) it is a command line's height higher than it needs to be. (UI fix round, 2026-11-12:
+    fixed; on a phone the toast is lower on the views with no command line.)
 11. In `#delimit ;` mode two commands on one line are echoed as the whole line twice, and the second echo can be matched
     to a later identical line, which puts a graph's link in the wrong place.
-12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured).
+12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.)
 13. On a real iPhone: that the on-screen keyboard opens again when a dialog gives the focus back to the command line (the
     focus now comes back in a timer); the iPhone checks of step 3 ("To try on a real iPhone", above); and step 3.5's
     open items (`web-engine-data-flow.md`, Part 3).
@@ -247,7 +256,7 @@ Reviewed after the merge: see Post-merge review.
     inside each part's block of `app.css`, not in the block at the end of `ui.css` that SPEC section 1 names.
 18. "Restore the sample" is not in the Files head menu until step 5's sample exists (OQ-13 puts it above "Delete all
     files…"). (Step 5: it is there, above "Delete all files…".)
-19. A graph that keeps its own scheme (`scheme(s1mono)`) in the dark theme is a light image on a dark card.
+19. A graph that keeps its own scheme (`scheme(s1mono)`) in the dark theme is a light image on a dark card. (2026-11-12: the card's image has a thin border from the tokens in the dark theme, so it looks intended; `app.css`.)
 20. The build's main JavaScript chunk is over Vite's 500 kB warning (about 525 kB raw, 173 kB gzip).
 21. A two-word `help` topic in a hint's link is unverified.
 22. From step 3: at 700 to about 855 px with a 20 px default font size the toolbar scrolls sideways instead of fitting
@@ -287,7 +296,7 @@ Reviewed after the merge: see Post-merge review.
    touched.
 5. "Browsers that work" says only what the tests and the docs support: the automatic tests run the page in Chromium,
    Firefox and WebKit, no browser was also tried by hand on a computer, one iPhone 13 was tried by hand, other iPhones and
-   iPads and Android were not tried; Break needs cross-origin isolation, and the files stay in the browser's storage.
+   iPads and Android were not tried; Break needs cross-origin isolation, and the files stay in the browser's storage. (2026-11-12: the maintainer replaced the section's text: computers tested automatically in Chromium, Firefox and WebKit; an iPhone 13 checked by hand in Safari, older iPhones and iPads with less memory may not start; Android not tested; the files stored in this browser only; on some networks Break resets the engine. It no longer says an iPhone-sized WebKit window is run or that Break needs isolation.)
 6. `/landing.html` is a 404, not a redirect: it was never deployed (step 5 is the first to build it).
 
 **C. Open questions**
@@ -318,7 +327,7 @@ merge of steps 4 and 5. They are reviewed after it:
 
 - [ ] Confirm or change each B item.
 - [ ] Decide each C item: fix it, move it to `docs/icebox.md`, or drop it.
-- [ ] Approve or reword the draft words (SPEC section 8).
+- [ ] Approve or reword the draft words (SPEC section 8). (2026-11-12: the maintainer went through all five lists; the entries decided are marked in SPEC section 8; the rest stay drafts.)
 - [ ] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan.
 - [ ] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand".
 - [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy.
@@ -330,8 +339,34 @@ merge of steps 4 and 5. They are reviewed after it:
       `dropped` in `run.ts`, and the special cases in `log/CommandLine.tsx` and `log/pasterun.ts`
       (`docs/web-page-flows.md`, section 2).
 
+Found in the UI fix round (2026-11-12), still open:
+- The "Running…" banner appears and goes for every short run and every pasted line (seen as a flash). The log no longer
+  loses its place through it.
+- The phone keyboard's jump. The study's finding: Safari pans the visual viewport before the page hears of it. The one
+  untried remedy is `transform: translateY(var(--vv-top))` in place of `top` on `:root[data-keyboard] .app`.
+- `overscroll-behavior-x: none` on the editor and the log also stops a trackpad back-swipe that starts over them.
+
+- `e2e/editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main`.
+
+## Later UI work (the maintainer's ideas, 2026-11-12; not started)
+
+Suggested order: "Remove the queued run" (Post-merge review) before 1 and 6, since they change the same Run controls.
+
+1. Run only from a `.do` or `.ado` file (today any text file runs). Overlaps the refused-run toast (step 4 A 12) and C 3.
+2. Live syntax checking of the active editor buffer, with underlines, and a run refused on a syntax error; the same for the
+   command line. It would replace the paste heuristics `opensComment` and `opensBlock` (step 4 B 3, C 11) and bears on A 5's
+   multi-line command line. A misspelled command name can come from `src/stata/commands.json`; argument checks need the
+   engine's parser.
+3. Reorder the editor's tabs by dragging.
+4. Move files: a "Move…" with a typed path first, drag in the file tree later.
+5. Rename from a right click on an editor tab.
+6. Hold back the presentation of very quick operations (about 100 ms), so buttons, the status bar and the running banner do
+   not flash; the internal state is unchanged. Subtle transitions later. Overlaps step 4 C 2 and the flash noted above.
+7. `cls` typed at the command line clears the log (Stata's command for it; the engine has none). `clear` keeps its meaning
+   of dropping the data.
+
 How this relates to steps 6, 6r and 7. **Step 6** (e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages) is
-partly done inside steps 3 to 5: the e2e suite has 103 tests in four browser profiles (412 cases, 381 run, 31 skipped:
+partly done inside steps 3 to 5: the e2e suite has 105 tests in four browser profiles (420 cases, 389 run, 31 skipped:
 `docs/test-map.md`), and `e2e/landing.spec.ts` runs axe on the built landing and commands pages. Left for it: the design-check
 scripts (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs and do not yet run on the built
 pages; the four tests in `e2e/poc.spec.ts` are still fixme; and the accessibility items in `docs/icebox.md` belong with that
@@ -396,7 +431,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | to review (built on `prototype1-step4`, pull request #17) |
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (built on `prototype1-step4`, pull request #17; the draft words in SPEC section 8, "Step 4d: draft words"; the review decisions and open questions in "Step 4: decisions and open questions" above) |
 | 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4; reviewed once, its findings fixed; the landing page moved to `/` and the editor to `/app/`; open for the maintainer: the words listed in SPEC section 8 "As built in step 5", the first deploy's checks in SPEC 8 "URLs") |
-| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (103 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review" |
+| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review" |
 | 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | done before the merge for steps 4 and 5 (fresh-context reviews of each part, the join and the move); a `/code-review` of the merged whole open if wanted |
 | 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started |
 
@@ -519,6 +554,8 @@ Decided in the step 2 review:
   desktop only). New specs import `test` from `e2e/fixtures.ts` (storage kept, no storage banner unless turned off).
 
 ## Step 5: the clean-room record (2026-11-11)
+
+The "Browsers that work" text was replaced by the maintainer on 2026-11-12 (item 3 below is the older wording). The sample's comments were shortened on 2026-11-12, in our own words, with no text from StataCorp.
 
 The check of every word the site shows a visitor against `LICENSE-POLICY.md`: nothing copied from StataCorp's files, manuals,
 help text or example datasets; "Stata" used as the policy allows (the policy's own forms are "runs Stata-syntax code" and

@@ -48,7 +48,23 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
   await expect(page.locator(".cm-content")).toContainText("A first look at wages, age and schooling");
   if (phone(page)) {
     await page.getByRole("button", { name: "More actions" }).click();
-    await page.getByRole("menuitem", { name: /About dofile/ }).click();
+    // Commands opens the commands page in a new tab too
+    const [commands] = await Promise.all([
+      page.context().waitForEvent("page"),
+      page.getByRole("menuitem", { name: "Commands" }).click(),
+    ]);
+    await commands.waitForLoadState();
+    expect(new URL(commands.url()).pathname).toBe("/commands/");
+    await commands.close();
+    await page.getByRole("button", { name: "More actions" }).click();
+    // About dofile opens in a new tab (leaving the editor would end the engine): that tab is the landing page
+    const [landing] = await Promise.all([
+      page.context().waitForEvent("page"),
+      page.getByRole("menuitem", { name: /About dofile/ }).click(),
+    ]);
+    await landing.waitForLoadState();
+    await expect(landingHeading(landing)).toHaveCount(1);
+    return;
   } else {
     await page.getByRole("link", { name: "dofile", exact: true }).click();
   }

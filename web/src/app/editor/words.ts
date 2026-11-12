@@ -78,18 +78,18 @@ export function refusedRunWords(s: EngineState["s"]): string | null {
     case "running":
     case "breaking":
     case "waiting":
-      return "Run is off until this run ends";
+      return "Run is not available until the current run ends";
     case "checking-lock":
     case "checking-cache":
     case "asking":
     case "downloading":
     case "starting-list":
     case "starting-worker":
-      return "Starting… Run is off until the engine is ready";
+      return "The engine is starting. Try again when it is ready.";
     case "failed":
     case "failed-twice":
     case "other-tab-idle":
     case "other-tab-taking":
-      return "Run is off: the engine isn't running in this tab";
+      return "Run is not available: the engine isn't running in this tab";
   }
 }

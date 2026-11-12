@@ -31,7 +31,7 @@ const EMPTY = "e() and r() appear after an estimation or a command such as ";
 const EMPTY_2 = ", with the locals and globals your runs set.";
 const MAX_ROWS = 100; // a matrix grid shows this many rows and columns at most; Copy has them all
 const MAX_COLS = 30;
-const NO_ENGINE = "the engine is not running";
+const NO_ENGINE = "the engine isn't running";
 
 export const EmptyResults = () => (
   <div class="empty">
@@ -80,7 +80,7 @@ async function copyMatrix(name: string) {
   const open = matrixFor(name, results.value);
   const entry = open?.status === "ready" ? open : await readMatrix(name);
   if (entry?.status === "ready") await copyText(matrixTsv(entry.matrix));
-  else showToast("Couldn't read the matrix");
+  else showToast("Couldn't read the matrix", "error");
 }
 
 function MatrixGrid({ entry, name }: { entry: OpenMatrix; name: string }) {

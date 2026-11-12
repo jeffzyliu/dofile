@@ -645,12 +645,12 @@ copy src.txt other.txt, replace`,
       eng.end(live(eng), {
         kind: "reset",
         reset: "user",
-        reason: "session reset: test. Data in memory is gone; your files are kept.",
+        reason: "session reset: test. Data in memory is lost; your files are kept.",
       });
       await assert.rejects(running, {
         kind: "reset",
         reset: "user",
-        message: "session reset: test. Data in memory is gone; your files are kept.",
+        message: "session reset: test. Data in memory is lost; your files are kept.",
       });
       assert.equal(eng.worker, null);
       await startWorker(eng);
@@ -861,7 +861,7 @@ test("the engine with its own database: the old /work database is left alone; Br
       );
       await sleep(50);
       assert.equal(settled, false, "the sort does not stop mid-way");
-      const reason = "session reset: the code did not stop at Break. Data in memory is gone; your files are kept.";
+      const reason = "session reset: the code did not stop at Break. Data in memory is lost; your files are kept.";
       eng.end(live(eng), { kind: "reset", reset: "break", reason });
       await assert.rejects(running, { kind: "reset", reset: "break", message: reason });
       await startWorker(eng);

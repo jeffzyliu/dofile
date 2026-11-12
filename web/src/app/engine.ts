@@ -37,6 +37,7 @@ import { editorCommands } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
 import { engineWriter } from "./state.ts";
+import { stageNow } from "./states/words.ts";
 import type { EngineState, FailReason, RunHead, Stage } from "./types.ts";
 
 // ---- the words ----
@@ -47,27 +48,15 @@ export const stagesOf = (snapshot: boolean): Stage[] =>
     ? ["download", "unpack", "python", "files", "engine"]
     : ["download", "python", "files", "packages", "engine"];
 
-/** What the live region says at each stage (S 2's stage list). */
-export const stageWords: Record<Stage, string> = {
-  download: "Download the engine",
-  unpack: "Unpack the engine",
-  python: "Start Python",
-  files: "Load your files",
-  packages: "Load packages",
-  engine: "Start the engine",
-};
-/** What the status bar says at each stage. */
-export const stageStatus: Record<Stage, string> = {
-  download: "downloading the engine",
-  unpack: "unpacking the engine",
-  python: "loading Python",
-  files: "loading your files",
-  packages: "loading packages",
-  engine: "starting the engine",
-};
+/** What the live region and the dialog's rows say at each stage (S 2's stage list): `stageNow` in states/words.ts is the one
+ *  list. The status bar says the same phrase with a small first letter, after its "Starting · ". */
+export const stageWords: Record<Stage, string> = stageNow;
+export const stageStatus = Object.fromEntries(
+  Object.entries(stageNow).map(([k, v]) => [k, v[0].toLowerCase() + v.slice(1)]),
+) as Record<Stage, string>;
 
 /** The message of a start that failed with reason "updated". 4d's "Reload the page" keys on the reason, not on these words. */
-export const UPDATED = "dofile has a newer version on this site: reload the page to use it";
+export const UPDATED = "dofile has a newer version on this site. Reload the page to use it.";
 
 /** What a failed start tells the visitor (`message`), by reason: what happened and what they can do, in plain words. The
  *  developer's cause (a file name, a byte count, `npm run snapshot`) is `detail`, and goes to the console. */
