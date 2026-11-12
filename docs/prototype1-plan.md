@@ -16,16 +16,13 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   the draft words in `docs/design/SPEC.md` section 8. Step 5 is on its own branch, `prototype1-step5`, in draft pull
   request #18 over step 4. The step 4 bullets below are the record of that work.
 - **Step 5 is built on `prototype1-step5`, a branch stacked on `prototype1-step4`** (its own pull request, after step 4's;
-  rebased onto `prototype1-step4` at 486f6bf, with the step 4 e2e cases moved to the editor's address `/app/`):
+  rebased onto `prototype1-step4` at 486f6bf, with the step 4 e2e cases moved to the editor's address `/app/`, and again at
+  d94bb5e, step 4's docs):
   the landing page (`web/landing.html`), the commands page (`web/commands.html`), the sample project (`web/sample/`, loaded on a
   first visit, "Restore the sample" in the file menu), and the clean-room check of all text (the record at the end of this
   file). What was built, the URLs, the words the sources do not give and the decisions left open are in SPEC section 8, "As
-  built in step 5". **Decided by the maintainer after the review:** the landing page is the site's root `/`, the commands page
-  `/commands/`, the editor a single-page app under `/app/`, its location one setting (`web/scripts/urls.ts`) so that it can move
-  to its own subdomain later (SPEC 8, "URLs", says how and what stays at the old origin). **Decisions for the maintainer:** (2) the commands page has names and no descriptions; (3) the sample's first
-  load is off under `?test` unless the URL has `?sample`; (4) writing the sample on a first visit does not bring the storage banner (S 19)
-  (`files.ts` ignores the seed's writes of the sample's own paths); any other change, during the seed or after, does; (5) the draft
-  words listed in SPEC 8 and the "Browsers that work" section.
+  built in step 5". The maintainer's list (what was decided, what waits for confirmation, what is open) is "Step 5: decisions and open
+  questions", below; the first real deploy's checks are in SPEC 8, "URLs".
 
 - **Steps 3 and 3.5 are merged into `main`**, with the formatting and linting work, by pull request #13 (the merge commit
   `aff60a5`, 2026-11-11). `main` is pushed and protected (root `CLAUDE.md`, Rules): every change is a pull request, and a
@@ -224,7 +221,7 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
    banner, which has `role="alert"`.
 6. "Browsers that work" (`landing.html#browsers`) and the other-tab dialog's "Close editor" (`landing.html`) are dead
    links until step 5 builds the landing page; check them then, and that the e2e tab-lock test's request still matches
-   the page's path.
+   the page's path. (Step 5: they go to `/#browsers` and `/`, checked by `e2e/landing.spec.ts` and the tab-lock test.)
 7. A file a run deleted keeps its tab: it leaves the file list, the tab keeps its unsaved dot as it was, and Save writes
    the file again.
 8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog.
@@ -246,12 +243,61 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
 17. The forced-colors rules of 4a, 4b and 4c (and the shell's fold button) are in `@media (forced-colors: active)` blocks
     inside each part's block of `app.css`, not in the block at the end of `ui.css` that SPEC section 1 names.
 18. "Restore the sample" is not in the Files head menu until step 5's sample exists (OQ-13 puts it above "Delete all
-    files…").
+    files…"). (Step 5: it is there, above "Delete all files…".)
 19. A graph that keeps its own scheme (`scheme(s1mono)`) in the dark theme is a light image on a dark card.
 20. The build's main JavaScript chunk is over Vite's 500 kB warning (about 525 kB raw, 173 kB gzip).
 21. A two-word `help` topic in a hint's link is unverified.
 22. From step 3: at 700 to about 855 px with a 20 px default font size the toolbar scrolls sideways instead of fitting
     (its compact form starts below 56em).
+
+## Step 5: decisions and open questions
+
+The list for step 5 (pull request #18), in the same form: each item as the code behaves. What was built, the addresses and
+the words drafted for the visitor are in SPEC section 8, "As built in step 5".
+
+**A. Decided by the maintainer** (2026-11-11)
+1. The landing page is the site's root, `/`; the commands page is `/commands/`; the editor is a single-page app under
+   `/app/` (`/app/?test` and the other flags as before).
+2. The editor's location is one setting, `web/scripts/urls.ts` (`EDITOR_BASE`, with `EDITOR_URL` and `SITE_URL` for links
+   across origins), so that it can move to its own subdomain later. Another path on the same origin is a change of that
+   setting alone; the subdomain is two builds into two folders plus the hand edits SPEC section 8, "URLs", lists.
+3. The landing and commands pages load none of the editor's code: static HTML with their own two small scripts and
+   stylesheet (`src/site/`, which imports only `src/site/` and the stylesheets; nothing of the editor's imports it), complete
+   with scripts off.
+4. `sysuse` is left as the engine has it: it loads OpenDTA's three synthetic datasets (`cohort`, `diet`, `growth`), and
+   the names of Stata's example datasets give rc 601 with a note (the clean-room record, below).
+
+**B. Made during the step, waiting for the maintainer's confirmation**
+1. The commands page is `/commands/` (`dist/commands/index.html`), not `/commands.html`: a folder's index is served at
+   the same address with no redirect by the dev server, `vite preview` and Cloudflare's `auto-trailing-slash`, and
+   `/commands.html` redirects to it.
+2. The first visit's sample brings no storage banner (S 19) for its own writes (of the sample's three paths); a change of
+   the visitor's made while it is written, and the first one afterwards (a Save, an upload, a run that writes a file), do
+   (`app/files.ts`, from the store's change row).
+3. The first-visit sample is off under `?test` unless the URL also has `?sample`, so the e2e tests start from an empty
+   store.
+4. "Restore the sample" (the Files head menu): files that are only missing are written with no question and the toast
+   "Sample restored"; when all three are there unchanged, the toast "The sample is already here"; when one differs from the
+   sample or is open with unsaved edits, the dialog `restore-sample` names those files first, and Replace writes the missing,
+   differing and unsaved ones, reloads their open tabs with the sample's text and opens `analysis.do`. Other files are never
+   touched.
+5. "Browsers that work" says only what the tests and the docs support: the automatic tests run the page in Chromium,
+   Firefox and WebKit, no browser was also tried by hand on a computer, one iPhone 13 was tried by hand, other iPhones and
+   iPads and Android were not tried; Break needs cross-origin isolation, and the files stay in the browser's storage.
+6. `/landing.html` is a 404, not a redirect: it was never deployed (step 5 is the first to build it).
+
+**C. Open questions**
+1. The first real deploy: the list in SPEC section 8, "To look at on the first real deploy" (the edge's redirects, 404s and
+   headers on 304s; a tab of the old build left open across the deploy shows a failed download, not "updated").
+2. OpenDTA's `growth` dataset (`sysuse growth`) resembles Stata's `childweight` in theme only (children measured at several
+   ages with a `girl` indicator; other variables, another measure, other values); its generator was read, not run.
+3. The engine's own text was not audited again for step 5: its error messages and hints, and OpenDTA's help pages (`help`),
+   are covered by the vendor's clean-room policy only; the clean-room check covered the site's pages, the sample and the
+   editor's words.
+4. `shell.spec.ts`'s `?snapshot=0` test (the normal boot from the CDN) has failed now and then in Firefox, not in the other
+   profiles; not investigated.
+5. The design checks (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs, not the built pages;
+   on the real landing and commands pages only axe runs (`e2e/landing.spec.ts`, both themes).
 
 ## Decisions (2026-11-10)
 

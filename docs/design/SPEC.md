@@ -1339,6 +1339,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 
 ### As built in step 5 (landing, commands, sample; branch `prototype1-step5`)
 
+The maintainer's list for step 5 (decided, waiting for confirmation, open) is the plan's "Step 5: decisions and open
+questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below, under "To look at on the first real deploy".
+
 - **URLs** (decided by the maintainer in the review of step 5): the landing page is the site's root, `/`; the commands page is
   `/commands/`; the editor is a single-page app under `/app/` (`/app/?test` and the other flags as before). Every address,
   in `npm run dev`, `npm run preview` (and the e2e tests) and on the host (Cloudflare Workers static assets, `wrangler.jsonc`):
