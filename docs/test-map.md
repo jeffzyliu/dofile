@@ -95,9 +95,9 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 430 tests)
+## Web (about 440 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 328)
+### Unit and integration (`node --test`, `web/test/`, 331)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
@@ -124,14 +124,15 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 108 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 111 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 432 cases, of which 401 run and 31 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 444 cases, of which 410 run and 34 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
 view and nothing of the editor shows; the banner's hand-off to a .dta tab on the iPhone, where the banner is on the Log
-view; the phone ⋯'s Save in the three desktop profiles).
+view; the phone ⋯'s Save in the three desktop profiles; the phone command line's Run button in the three desktop
+profiles).
 
 - `shell.spec.ts` (13): desktop and phone layout, toolbar stability, panes never remounted, banners, toast position;
   no text that names a key in sight on a phone (any text node with ⌘, Ctrl, Esc, F1 to F12, ↵ or ↩ whose box is in
@@ -148,7 +149,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
   clash, a non-UTF-8 file's banner, a folder upload (Chromium), a drop anywhere on the page (taken in the capture phase;
   none while a dialog is open; none for a drag that began in the page), the phone's file actions in the strip's "Files ⋯".
 - `states.spec.ts` (14, step 4d): the prompt, Not now and the declined banner (the real machine in `none`; the focus back on the editor after Not now; "in the editor" is `activeElement.closest("[data-editor]")`, so it holds for 4b's CodeMirror); the progress dialog's downloading and stage rows with times (the `engine` signal set through the hook); the take-over button's `aria-disabled` and `.off`, and a press then reaches no machine (no drop); the failed banner for each reason and failed twice; Download all off with an empty store and on after a write; Reset during a run asks (no data or results yet); the focus handed to the editor, or More actions on a phone's Log view, when a stopping or reset banner goes with the focus in it, and when the editor's save-failed and run-changed banners (Dismiss, "Reload from the run") and the Files pane's not-text banner go by keyboard (More actions on a phone's Files view); from the stopping to the waiting banner the focus goes straight across, never through the editor; running, stopping, waiting banners; storage, reset and download-failed banners; a dialog whose opener has left the page (the stopping banner's button, then the other-tab dialog) gives the focus to the editor or More actions; with a .dta tab active a banner's hand-off goes to that tab in one move (desktop); and one test with an engine: Reset's dialog (Cancel, Esc), Reset, the reset banner, a reset with nothing to lose that asks nothing, a Reset at the end of a run that made data and no results, before its data is described, that asks, and the reset banner's "Run the file again" with 4b's editor.
-- `editor.spec.ts` (27, step 4b): with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
+- `editor.spec.ts` (30, step 4b): with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
   its toast (Ctrl+S and Cmd+S each pressed by name, so both save from the editor in every profile on any host; Ctrl+S
   on a Cyrillic layout, an event made in the page with key "ы" and code KeyS, saves and prevents the browser's Save
   page, and its repeats save nothing more), the focused editor's ring (an outline that forced colors give a system color while they drop the box-shadow; Chromium and Firefox, since WebKit forces no colors), a failed save's banner and its Download, a rename of
@@ -231,7 +232,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (108, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (111, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
