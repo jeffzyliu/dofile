@@ -2104,8 +2104,13 @@ test("J1: pasted lines: a line cut because another tab took the engine stops the
   );
 });
 
-test("a paste with no engine is an ordinary paste: the engine is checked first, no line runs, no prompt opens and the machine hears nothing; no line is put back into the disabled field", async () => {
-  const { linesToRun, putBack, runOne } = await import("../src/app/log/pasterun.ts");
+test("a paste is decided before anything changes (pastePlan): with no engine an ordinary paste (no line runs, no prompt, the machine hears nothing); with an engine that is not ready, refused whole with the toast's words; ready, the lines run; no line is put back into an off field", async () => {
+  const { pastePlan, putBack, runOne } = await import("../src/app/log/pasterun.ts");
+  const linesToRun = (before: string, pasted: string, after: string) => {
+    const plan = pastePlan(before, pasted, after);
+    return plan.do === "run" ? plan.lines : plan.do === "refused" ? plan.words : null;
+  };
+  const REFUSED = "3 of 3 pasted lines not run: the engine can't take a command now";
   const { runInTurn } = await import("../src/app/log/paste.ts");
   const TEXT = "use wages\nsummarize\nregress y x";
   await load(); // nothing cached: the prompt
@@ -2117,12 +2122,11 @@ test("a paste with no engine is an ordinary paste: the engine is checked first, 
   startEngine();
   assert.equal(linesToRun("", TEXT, ""), null, "asking: an ordinary paste");
   engine.start();
-  assert.deepEqual(
-    linesToRun("", TEXT, ""),
-    ["use wages", "summarize", "regress y x"],
-    "a start in progress: not no engine",
-  );
+  // a download, then a start, in progress: refused whole, and one line alone is still an ordinary paste
+  assert.deepEqual(pastePlan("", TEXT, ""), { do: "refused", words: REFUSED }, "downloading");
+  assert.deepEqual(pastePlan("typed ", "one line\n", " after"), { do: "ordinary" });
   await begin();
+  assert.equal(linesToRun("", TEXT, ""), REFUSED, "starting-worker");
   client.worker.reply({ type: "started" });
   await sleep(20);
   state("ready");
@@ -2133,7 +2137,12 @@ test("a paste with no engine is an ordinary paste: the engine is checked first, 
   assert.equal(linesToRun("", "one line\n", ""), null, "no line break inside: an ordinary paste, as before");
 
   // a refused line goes back into an empty field; not into one with text
-  const first = runCommand("regress y x"); // a run is on: the next line is refused
+  const first = runCommand("regress y x"); // a run is on: a paste is refused whole, the text around the cursor counted
+  assert.equal(
+    linesToRun("gen x = ", "1\nlist", " in 1/5"),
+    "2 of 2 pasted lines not run: the engine can't take a command now",
+  );
+  assert.equal(client.worker.runs.length, 1, "the refused paste sent nothing");
   const r = await runInTurn(["a", "b"], runOne);
   assert.deepEqual(r, { total: 2, ran: 0, stop: { line: 1, why: "refused" } });
   assert.equal(putBack(["a", "b"], r, ""), "a");
@@ -2186,8 +2195,14 @@ test("Start engine: what each engine state offers (start.ts startOffer), every s
     assert.equal(startOffer(st), offer, `${st.s}${"reason" in st ? ` (${st.reason})` : ""}`);
   const names = new Set(table.map(([st]) => st.s));
   assert.equal(names.size, 16, "every state of the machine is in the table");
-  assert.equal(startFirst("see help regress"), "Start the engine to see help regress");
-  assert.equal(startFirst("load wages.dta"), "Start the engine to load wages.dta");
+  // the off controls' toast: what to do where a start is offered; where none is, that the engine is not running
+  for (const offer of ["prompt", "retry", "take-over"] as const) {
+    assert.equal(startFirst(offer, "see help regress"), "Start the engine to see help regress");
+    assert.equal(startFirst(offer, "load wages.dta"), "Start the engine to load wages.dta");
+  }
+  assert.equal(startFirst("off", "see help regress"), "The engine isn't running: can't see help regress");
+  assert.equal(startFirst("off", "load wages.dta"), "The engine isn't running: can't load wages.dta");
+  assert.equal(startFirst("off", "import survey.csv"), "The engine isn't running: can't import survey.csv");
   assert.equal(startHint("prompt"), "Start the engine to run code");
   assert.equal(startHint("retry"), "Start the engine to run code");
   assert.equal(startHint("take-over"), "Start the engine to run code");

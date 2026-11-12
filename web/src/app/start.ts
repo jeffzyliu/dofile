@@ -2,7 +2,8 @@
 // (docs/web-page-flows.md, section 2, has the table; docs/design/SPEC.md, sections 3.4, 3.5 and 5). This module is the
 // one statement of which engine states are "no engine" and of what a press of "Start engine" does in each. The toolbar's
 // Run, the command line's button and Ctrl/Cmd+Enter in the editor all call startEngine(); the command line's field,
-// Run selection, Load, Import and the log's `help x` links are off while startOffer() is not null.
+// Run selection, Load, Import and the log's `help x` links are off while startOffer() is not null. A control that is off
+// stays focusable (aria-disabled, never `disabled`), so the focus does not fall to the page when a state turns it off.
 // Plain TypeScript, no DOM: tested in Node (test/app.test.ts).
 import * as engine from "./engine.ts";
 import * as S from "./state.ts";
@@ -61,9 +62,12 @@ export function startEngine(): StartOffer | null {
   return offer;
 }
 
-/** The toast of a control that is off because there is no engine (Load, Import, a `help x` link): what to do, and what
- *  for. `what`: "see help regress", "load wages.dta". Draft words (SPEC section 8). */
-export const startFirst = (what: string): string => `Start the engine to ${what}`;
-/** The command line's hint while it is disabled, by the offer (shown while the field is empty). Draft words. */
+/** The toast of a control that is off because there is no engine (Load, Import, a `help x` link), by the offer: what to
+ *  do, and what for, where "Start engine" can start it; where nothing can start it from here, that it is not running
+ *  and what cannot be done. `what`: "see help regress", "load wages.dta". Draft words (SPEC section 8). */
+export const startFirst = (offer: StartOffer, what: string): string =>
+  offer === "off" ? `The engine isn't running: can't ${what}` : `Start the engine to ${what}`;
+/** The command line's hint while it is off, by the offer (its placeholder, so it shows while the field is empty; Enter in
+ *  the field says it in a toast). Draft words. */
 export const startHint = (offer: StartOffer): string =>
   offer === "off" ? "The engine isn't running" : "Start the engine to run code";

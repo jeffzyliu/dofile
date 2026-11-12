@@ -4,17 +4,31 @@ import { effect } from "@preact/signals-core";
 import type { RunResult } from "../../engine/types.ts";
 import { runCommand } from "../run.ts";
 import { noEngine } from "../start.ts";
-import { lastRun } from "../state.ts";
-import { type InTurn, pastedLines, type RunOne } from "./paste.ts";
+import { engine, lastRun } from "../state.ts";
+import { type InTurn, inTurnWords, pastedLines, type RunOne } from "./paste.ts";
 
-/** The lines a paste into the command line runs, or null for an ordinary paste: text with no line break (paste.ts
- *  pastedLines), and any text while there is no engine (start.ts). The engine is checked first: the field is disabled
- *  then, so this guards the instant before it is drawn so, and a paste never opens a prompt or runs a line. */
-export const linesToRun = (before: string, pasted: string, after: string): string[] | null =>
-  noEngine() ? null : pastedLines(before, pasted, after);
+/** What a paste into the command line does, decided before anything is changed:
+ *   "ordinary"  the browser pastes it: text with no line break (paste.ts pastedLines), and any text while there is no
+ *               engine (start.ts). The engine is checked first: the field is off then, so this guards the instant
+ *               before it is drawn so, and a paste never opens a prompt or runs a line;
+ *   "refused"   lines, and an engine that is there or on its way but not `ready` (the page load, a start, a run): the
+ *               paste is refused whole. Nothing is pasted, the field stays exactly as it was, and `words` is the toast
+ *               (the refusal's, with every line counted). Running the first line would have it refused and put back,
+ *               with the other lines and the text after the cursor lost;
+ *   "run"       `lines` run in turn (paste.ts runInTurn): the engine is `ready`. */
+export type Paste = { do: "ordinary" } | { do: "refused"; words: string } | { do: "run"; lines: string[] };
+export function pastePlan(before: string, pasted: string, after: string): Paste {
+  if (noEngine()) return { do: "ordinary" };
+  const lines = pastedLines(before, pasted, after);
+  if (!lines) return { do: "ordinary" };
+  if (engine.value.s === "ready") return { do: "run", lines };
+  const refused: InTurn = { total: lines.length, ran: 0, stop: { line: 1, why: "refused" } };
+  return { do: "refused", words: inTurnWords(refused) ?? "The engine can't take a command now" };
+}
 
-/** The line to put back into the field after pasted lines stopped (`r`), or null: a refused line, when the field is
- *  empty (`fieldText`) and not disabled. With no engine the field is disabled, and nothing is put into it. */
+/** The line to put back into the field after pasted lines stopped (`r`), or null: a line refused part of the way (the
+ *  engine was `ready` when the paste began: pastePlan), when the field is empty (`fieldText`) and not off. With no
+ *  engine the field is off, and nothing is put into it. */
 export const putBack = (lines: readonly string[], r: InTurn, fieldText: string): string | null =>
   r.stop?.why === "refused" && !fieldText && !noEngine() ? lines[r.stop.line - 1] : null;
 

@@ -273,9 +273,11 @@ test("the toolbar does not move: its box and every button's box are the same in 
     { s: "other-tab-taking" },
   ];
   expect(states).toHaveLength(16);
-  for (const width of [1440, 1024, 390]) {
+  // 900, 800 and 700 px: the narrow desktop, where the widest toolbar only just fits (app.css drops chips under 56em)
+  for (const width of [1440, 1024, 900, 800, 700, 390]) {
     await page.setViewportSize({ width, height: 800 });
     const seen = new Map<string, string>();
+    const cut: string[] = []; // the states in which the toolbar does not fit its row (it would scroll sideways)
     const labels: Record<string, string> = {}; // Run's shown label in each state, with a file open and no selection
     for (const st of states) {
       for (const [tab, dirty, sel] of [
@@ -310,6 +312,11 @@ test("the toolbar does not move: its box and every button's box are the same in 
           ].join(" | ");
         });
         seen.set(boxes, `${st.s}${tab ? " tab" : ""}${dirty ? " unsaved" : ""}${sel ? ` lines ${sel.join("-")}` : ""}`);
+        const over = await page.evaluate(() => {
+          const bar = document.querySelector("header.toolbar")!;
+          return bar.scrollWidth - bar.clientWidth;
+        });
+        if (over > 0) cut.push(`${st.s}${sel ? " with a selection" : ""}: ${over} px`);
         if (tab && !sel)
           labels[st.s] = await page.evaluate(
             () =>
@@ -317,6 +324,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
           );
       }
     }
+    expect(cut, `at ${width} px the toolbar does not fit, "Start engine" among its labels`).toEqual([]);
     // the label swap, in the one box: "Start engine" with no engine, "Run" with one
     for (const s of ["none", "asking", "declined", "failed", "other-tab-idle", "other-tab-taking"])
       expect(labels[s], `${s} at ${width} px`).toBe("Start engine");

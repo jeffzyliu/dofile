@@ -26,8 +26,8 @@ import { ABOUT } from "../env";
 import { graphOpenName } from "../output/format.ts";
 import { cardTheme } from "../output/GraphTab";
 import { runCommand } from "../run.ts";
-import { noEngine, startFirst } from "../start.ts";
-import { graphFull, graphIndex, graphs, isPhone, log, outputTab, showToast, split, wrap } from "../state.ts";
+import { startFirst, startOffer } from "../start.ts";
+import { engine, graphFull, graphIndex, graphs, isPhone, log, outputTab, showToast, split, wrap } from "../state.ts";
 import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
@@ -127,14 +127,15 @@ const Jump = ({ line, path }: { line: number; path?: string }) => (
 /** A hint's `help x` link: it runs the command. With no engine (start.ts) it is off, aria-disabled and `.off`, still
  *  focusable, and a press only says why in a toast ("Start the engine to see help regress"). */
 function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
-  const off = noEngine();
+  const offer = startOffer(engine.value),
+    off = offer !== null;
   return (
     <button
       type="button"
       class={`help-link${off ? " off" : ""}`}
       aria-disabled={off ? "true" : undefined}
       onClick={() => {
-        if (off) showToast(startFirst(`see ${command}`), "error");
+        if (offer !== null) showToast(startFirst(offer, `see ${command}`), "error");
         else runCommand(command);
       }}
     >

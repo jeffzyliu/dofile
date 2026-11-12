@@ -6,14 +6,22 @@
 //    runs through run.ts's runCommand(text): when the command runs ("started") the field clears; when it does not
 //    ("refused": the page load, a start or a run in progress) the text stays. ↑ ↓ recall `history`, and ↓ past the
 //    newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
-//    With no engine (start.ts) the field is disabled and keeps its text, which is usable again when the engine is
-//    back; empty, it shows the hint "Start the engine to run code". The button is then "Start engine" (start.ts
-//    startEngine: the download prompt, a new try after a failed start, the take-over dialog), in words on a phone too,
-//    so it is wider there than the icon; no width is reserved for it, and the field takes what is left.
+//    While the engine is there or on its way but not `ready` (the page load, a start, a run) the field stays on, so a
+//    draft can be typed; the button is off, and Enter, or a press of the off button, says why in a toast (the words
+//    Ctrl/Cmd+Enter gives: editor/words.ts refusedRunWords).
+//    With no engine (start.ts) the field is off and keeps its text, which is usable again when the engine is back;
+//    empty, it shows the hint "Start the engine to run code", and Enter in it says the hint in a toast. The button is
+//    then "Start engine" (start.ts startEngine: the download prompt, a new try after a failed start, the take-over
+//    dialog), in words on a phone too, so it is wider there than the icon; no width is reserved for it, and the field
+//    takes what is left.
+//    Nothing here is ever `disabled`: an off field is aria-disabled and read-only, an off button aria-disabled and
+//    `.off`. A disabled element loses the focus to the page, and the states change under the visitor's hands (a start
+//    that fails while a command is typed; "Start engine" pressed, which becomes the off "Run command" in its place).
 //    Pasted text with line breaks runs each line in turn (log/paste.ts says the rules: the next line only once the one
 //    before has ended; the lines stop at one that does not run or ends with an error, and before a block's line; a toast
-//    says how many were not run; a line that did not run goes back into the field). With no engine a paste is an
-//    ordinary paste (log/pasterun.ts linesToRun), and no line is put back into a disabled field (putBack).
+//    says how many were not run; a line that did not run goes back into the field). What a paste does is decided before
+//    anything changes (log/pasterun.ts pastePlan): with no engine it is an ordinary paste; with an engine that is not
+//    `ready` it is refused whole, the field untouched, with the toast; no line is put back into an off field (putBack).
 //  - LogActions: the Log head's "Find" (log/find.ts) and "Download log" (the runs' text only, as dofile.log; no head,
 //    run-head or note) and "Clear…" (asks first: ClearLogDialog; disabled when canClearLog() is false). It draws both forms: the three links (.log-link) and one "Log actions" ⋯ menu button
 //    (.log-more, logMenuItems()); ui.css shows one by a container query on the head's width (the unsplit head, .tabbed, only: the
@@ -30,7 +38,7 @@ import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
 import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
-import { jumpLine, linesWords, memoryWords, seconds } from "../editor/words.ts";
+import { jumpLine, linesWords, memoryWords, refusedRunWords, seconds } from "../editor/words.ts";
 import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
@@ -40,7 +48,7 @@ import { MenuButton, type MenuItem } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
 import { openFind } from "./LogView";
 import { inTurnWords, runInTurn } from "./paste.ts";
-import { linesToRun, putBack, runOne } from "./pasterun.ts";
+import { pastePlan, putBack, runOne } from "./pasterun.ts";
 
 const field = signal(""); // the command line's text (a signal: the pane may be drawn again when the layout changes)
 let recall = -1; // the history entry ↑ ↓ show, or -1 for the text being typed
@@ -54,23 +62,39 @@ async function runPasted(lines: string[]) {
   if (words) showToast(words, "error");
 }
 
-/** Run what the field holds (Enter, "Run command"). */
+/** Why the engine takes no command now, in a toast (the words Ctrl/Cmd+Enter gives in the editor). */
+function sayRefused() {
+  const words = refusedRunWords(engine.value.s);
+  if (words) showToast(words, "error");
+}
+
+/** Run what the field holds (Enter, "Run command"). A command the engine does not take stays in the field, and a toast
+ *  says why; an empty field says nothing. */
 function submit() {
   if (runCommand(field.value).how === "started") {
     field.value = "";
     recall = -1;
-  }
+  } else if (field.value.trim()) sayRefused();
 }
 
 export function CommandLine() {
   const input = useRef<HTMLInputElement>(null);
   const phone = isPhone.value;
   const offer = startOffer(engine.value); // not null: no engine, so the field is off and the button starts the engine
+  const busy = offer === null && engine.value.s !== "ready"; // an engine that takes no command now: the button is off
   const onKey = (e: KeyboardEvent) => {
     const list = history.value;
+    if (offer !== null) {
+      // the field is off (read-only): no key changes it, and Enter says what its hint says
+      if (e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        if (!e.repeat) showToast(startHint(offer), "error");
+      }
+      return;
+    }
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault();
-      submit();
+      if (!e.repeat) submit();
     } else if (e.key === "ArrowUp" && list.length) {
       e.preventDefault();
       if (recall === -1) {
@@ -107,16 +131,20 @@ export function CommandLine() {
   const onPaste = (e: ClipboardEvent) => {
     const el = e.currentTarget as HTMLInputElement;
     const text = e.clipboardData?.getData("text/plain") ?? "";
-    const lines = linesToRun(
+    const plan = pastePlan(
       el.value.slice(0, el.selectionStart ?? el.value.length),
       text,
       el.value.slice(el.selectionEnd ?? el.value.length),
     );
-    if (!lines) return; // an ordinary paste (no line break, or no engine)
+    if (plan.do === "ordinary") return; // no line break, or no engine (the field is read-only then)
     e.preventDefault();
+    if (plan.do === "refused") {
+      showToast(plan.words, "error"); // the field stays exactly as it was
+      return;
+    }
     field.value = "";
     recall = -1;
-    if (lines.length) runPasted(lines);
+    if (plan.lines.length) runPasted(plan.lines);
   };
   return (
     <div class="cmdline">
@@ -131,7 +159,9 @@ export function CommandLine() {
         placeholder={
           offer !== null ? startHint(offer) : phone ? "Type a command" : "Type a command · ↑ ↓ for earlier ones"
         }
-        disabled={offer !== null}
+        // off with no engine: aria-disabled and read-only, not `disabled`, so a field that has the focus keeps it
+        aria-disabled={offer !== null ? "true" : undefined}
+        readOnly={offer !== null}
         autocomplete="off"
         autocapitalize="off"
         // autoCorrect, not autocorrect: Preact sets a prop the element has as a property, and where a browser has
@@ -151,12 +181,13 @@ export function CommandLine() {
       />
       {offer !== null ? (
         // No engine: the one action is to start it. In words on a phone too (wider than the icon; the field shrinks).
+        // Where nothing can start it from here it is off, and a press says so.
         <button
           type="button"
-          class={`btn start${phone ? " primary" : ""}`}
-          disabled={offer === "off"}
+          class={`btn start${phone ? " primary" : ""}${offer === "off" ? " off" : ""}`}
+          aria-disabled={offer === "off" ? "true" : undefined}
           onClick={() => {
-            startEngine();
+            if (startEngine() === "off") showToast(startHint("off"), "error");
           }}
         >
           Start engine
@@ -169,18 +200,27 @@ export function CommandLine() {
           type="button"
           class="send"
           aria-label="Run command"
-          aria-disabled={field.value.trim() ? undefined : "true"}
+          aria-disabled={busy || !field.value.trim() ? "true" : undefined}
           onPointerDown={keepFocus}
           onMouseDown={keepFocus}
           onClick={() => {
-            if (field.value.trim()) submit();
+            if (busy) sayRefused();
+            else if (field.value.trim()) submit();
             input.current?.focus({ preventScroll: true });
           }}
         >
           <Icon name="play" />
         </button>
       ) : (
-        <button type="button" class="btn" onClick={submit}>
+        <button
+          type="button"
+          class={`btn${busy ? " off" : ""}`}
+          aria-disabled={busy ? "true" : undefined}
+          onClick={() => {
+            if (busy) sayRefused();
+            else submit();
+          }}
+        >
           Run command
         </button>
       )}

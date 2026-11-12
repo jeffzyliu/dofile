@@ -127,7 +127,10 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   no key chip): a press, and Ctrl/Cmd+Enter, which does exactly what the button does (held, once), open the download
   prompt (`none`, `asking`, `declined`), try the start again as the failed banner's "Try again" does (`failed`, where
   the banner has that button), or go into the take-over dialog (`other-tab-idle`; never straight to a start); they run
-  nothing, then or when the engine is ready. Run selection is disabled then. "Start engine" is one of the labels the
+  nothing, then or when the engine is ready. Run selection is disabled then. Run itself is never `disabled`: off, it is
+  `aria-disabled` with `.off`, so a Run that has the focus keeps it when its state turns it off ("Start engine"
+  pressed by keyboard after a failed start becomes "Starting…"), and a press of it then says why in a toast, in the
+  words Ctrl/Cmd+Enter gives, except while a run is on. "Start engine" is one of the labels the
   button holds in its one cell, so the button is as wide with "Run" as with "Start engine" and the toolbar does not
   move. The table of states is in section 5; the code's one statement of it is `app/start.ts`, and the flow is in
   `docs/web-page-flows.md`, section 2.
@@ -179,14 +182,20 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   dash, or in text already there. Enter runs; ↑ ↓ recall earlier commands; it waits while a run is on (`WP 2`). A command that does not run (the
   engine can't take it now: it is asking, downloading, starting, failed or in another tab; or a run is on) stays in the
   field and is not added to the history; One that runs is cleared from the field and added
-  to the history, also when it ends in an error. **With no engine** (section 5; `app/start.ts`) the field is disabled,
+  to the history, also when it ends in an error. While the engine is there or on its way but not ready (the page load, a
+  download, a start, a run) the field stays on, so a draft can be typed, the button is off (`aria-disabled`), and
+  Enter with text, or a press of the off button, says why in a toast (the words Ctrl/Cmd+Enter gives; the text stays);
+  a paste of several lines is refused whole then, with the field left exactly as it was and the toast "3 of 3 pasted
+  lines not run: the engine can't take a command now". **With no engine** (section 5; `app/start.ts`) the field is off
+  (`aria-disabled` and read-only, not `disabled`: a field that has the focus when a start fails keeps it),
   with the hint "Start the engine to run code" as its placeholder, so the hint shows only while the field is empty.
-  Disabling never changes the field's text: a typed draft stays, greyed, and is usable when the engine is back. The
+  Enter in the off field says the hint in a toast. Turning the field off never changes its text: a typed draft stays, greyed, and is usable when the engine is back. The
   hint and the draft are the muted color at full opacity (the text contrast, 4.5), not the disabled opacity. The
   button is then "Start engine" (what the toolbar's does), in words on a phone too: no width is reserved for it, so
   the phone's button is the 44 px icon with an engine and wider without one, and the field takes what is left. A paste
   into the field with no engine is an ordinary paste. The log's `help x` links are off then (`aria-disabled` and
-  `.off`, still focusable): a press runs nothing and a toast says "Start the engine to see help regress".
+  `.off`, still focusable): a press runs nothing and a toast says "Start the engine to see help regress", or, where nothing can
+  start the engine from the page, "The engine isn't running: can't see help regress".
 - **Phone only** (`PH`): a strip under the top bar ("r(111)", "line 17 · 0.38 s", "Mem 612 MB", "Go to line 17"; running:
   "Running lines 14–15", "Mem 612 MB"); the hint as a block (`.explain`); "← wide table: swipe sideways →".
 - **States:** drawn: after an error (`E`, `PH`), first run running (`E?r`, `PH?r`), stopping and waiting (`S 9`, `9b`), stopped
@@ -360,6 +369,8 @@ Run column above), Run selection is disabled, the command line is disabled with 
 it is an ordinary paste, and Load, Import and the log's `help x` links are off and say why in a toast. Nothing runs
 when the engine becomes ready: no state carries a run, or a mark that a run was wanted. A returning visitor whose
 browser has the engine never sees "Start engine": "Run" (disabled, the page load), "Starting…", "Run".
+In the Run column "disabled" is the look and the role, not the attribute: Run is `aria-disabled` with `.off` and stays
+focusable (section 3.4).
 
 
 ### Transition matrix
@@ -1125,7 +1136,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `{`, holds `///`, opens a `/*` comment it does not close (a pasted `/*`, `drop _all`, `*/` runs nothing), or is
     `program define` or `mata` on its own (`mata: x = 1` runs); a
     toast says how many were not run, and a line that did not run goes back into the field unless the field is disabled
-    by then; with no engine a paste is an ordinary paste and no line runs (`log/pasterun.ts` `linesToRun`, `putBack`)
+    by then; with no engine a paste is an ordinary paste and no line runs, and with an engine that is not ready a paste
+    of lines is refused whole, the field untouched (`log/pasterun.ts` `pastePlan`, `putBack`)
     (these stops are for the maintainer to confirm, B 3 of the plan's list). The next line starts in a microtask
     after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
@@ -1254,7 +1266,12 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     engine to run code", and "The engine isn't running" where nothing can start it from here (a failed start whose
     banner says to reload or to use another browser, failed twice, a take-over in progress); the toasts of the controls
     that are off, "Start the engine to see help regress" (the link's own text after "see"), "Start the engine to load
-    wages.dta" and "Start the engine to import survey.csv" (the file's name); the status bar's "**No engine** · Start
+    wages.dta" and "Start the engine to import survey.csv" (the file's name), and where nothing can start the engine
+    from the page (the same states as the hint's) "The engine isn't running: can't see help regress", "The engine
+    isn't running: can't load wages.dta", "The engine isn't running: can't import survey.csv"; the toast of Enter in
+    the off command line and of a press of the off "Start engine" is the hint's words; the toast of a command, or of a
+    press of the off "Run command" or the off Run, while the engine takes none is the refused Ctrl/Cmd+Enter's ("The
+    engine is starting. Try again when it is ready.", "Run is not available until the current run ends"); the status bar's "**No engine** · Start
     engine downloads it" (`declined`; was "Run downloads it first"). The download prompt has one title again, "Download
     the engine?": "Download the engine to run code" is gone with the run behind it.
   - **Clear log dialog: draft words**, for the maintainer to approve (UI fix round): the title "Clear the log?", the body

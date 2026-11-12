@@ -15,7 +15,7 @@ import { useEffect, useState } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
 import { copyText } from "../output/clip.ts";
 import { runCommand } from "../run.ts";
-import { noEngine, startFirst } from "../start.ts";
+import { startFirst, startOffer } from "../start.ts";
 import { activeTab, engine, files, fresh, showToast, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import { Icon } from "../ui/Icon";
@@ -75,7 +75,8 @@ export function FileBar() {
     );
   const made = fileCommand("import delimited", path);
   const command = "command" in made ? made.command : null;
-  const off = noEngine(); // Import is off, and says why when pressed
+  const offer = startOffer(engine.value),
+    off = offer !== null; // Import is off, and says why when pressed
   return (
     <>
       <div class="filebar">
@@ -99,7 +100,7 @@ export function FileBar() {
           aria-disabled={off ? "true" : undefined}
           onClick={() => {
             if (command === null) return;
-            if (off) showToast(startFirst(`import ${baseName(path)}`), "error");
+            if (offer !== null) showToast(startFirst(offer, `import ${baseName(path)}`), "error");
             else runCommand(command);
           }}
         >

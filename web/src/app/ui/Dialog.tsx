@@ -22,6 +22,7 @@
 import type { ComponentChildren } from "preact";
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { focusStable } from "../states/focus.ts";
+import { isHeldEnter } from "./keys.ts";
 
 export interface DialogProps {
   title: ComponentChildren;
@@ -36,7 +37,7 @@ export interface DialogProps {
 /** A held Enter presses no button of a dialog: the key that opened it (Ctrl/Cmd+Enter with no engine opens the download
  *  prompt, whose "Download" has the focus) would answer it with its repeats. */
 const heldEnter = (e: KeyboardEvent) => {
-  if (e.repeat && e.key === "Enter") e.preventDefault();
+  if (isHeldEnter(e)) e.preventDefault();
 };
 
 // the opener of a dialog that has closed and not yet given the focus back (its timer below), for a dialog opened
