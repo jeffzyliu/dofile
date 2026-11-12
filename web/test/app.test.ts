@@ -55,7 +55,7 @@ Object.defineProperty(globalThis, "localStorage", {
 
 const S = await import("../src/app/state.ts");
 const engine = await import("../src/app/engine.ts");
-const { runCode, runCommand, clearLog, addFileGraph, moreRows, handlers, MAX_GRAPHS } = await import(
+const { runCode, runCommand, clearLog, canClearLog, addFileGraph, moreRows, handlers, MAX_GRAPHS } = await import(
   "../src/app/run.ts"
 );
 const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.ts");
@@ -1301,6 +1301,28 @@ test("Clear log keeps the head (the banner and versions a fresh page shows) and 
   ];
   clearLog();
   assert.deepEqual(logItems(), [{ t: "head" }]);
+});
+
+test("canClearLog: false for the head alone and for a streaming run's text; true for any run text, note, run-head or graph", () => {
+  const graph = { n: 1, png: "P", theme: "light", from: "run" } as const;
+  writable(S.log).value = [{ t: "head" }];
+  assert.equal(canClearLog(), false, "a fresh page");
+  writable(S.log).value = [{ t: "head" }, { t: "text", run: 1, text: "1\n", streaming: true }];
+  assert.equal(canClearLog(), false, "only the streaming run's text, which clearLog keeps");
+  writable(S.log).value = [{ t: "head" }, { t: "text", run: 1, text: "1\n" }];
+  assert.equal(canClearLog(), true, "run text");
+  writable(S.log).value = [{ t: "head" }, { t: "note", text: "n" }];
+  assert.equal(canClearLog(), true, "a note");
+  writable(S.log).value = [
+    { t: "head" },
+    { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: false },
+  ];
+  assert.equal(canClearLog(), true, "a run-head");
+  writable(S.log).value = [{ t: "head" }];
+  writable(S.graphs).value = [graph];
+  assert.equal(canClearLog(), true, "a graph alone");
+  clearLog();
+  assert.equal(canClearLog(), false, "after Clear log there is nothing more to clear");
 });
 
 test("Clear log during a run keeps the run's text item, so its log still arrives; the graph numbers start again", async () => {

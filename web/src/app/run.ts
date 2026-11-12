@@ -268,7 +268,14 @@ export async function moreRows(count = 50): Promise<boolean> {
   return true;
 }
 
-/** "Clear log": the log and the graphs, not the data. The head (banner and versions) stays, as a fresh page shows it. A run
+/** Whether "Clear log" has anything to remove: a log item other than the head and the streaming run's text item (which
+ *  clearLog keeps), or a graph. The button and the menu items are disabled when it is false, so no dialog asks about
+ *  nothing. Reads signals: call it while drawing. */
+export function canClearLog(): boolean {
+  return W.graphs.value.length > 0 || W.log.value.some((i) => !(i.t === "head" || (i.t === "text" && i.streaming)));
+}
+
+/** "Clear log" (after the clear-log dialog's answer; log/ClearLogDialog.tsx): the log and the graphs, not the data. The head (banner and versions) stays, as a fresh page shows it. A run
  *  in progress keeps its text item, so its log still arrives. */
 export function clearLog() {
   W.log.value = W.log.value.filter((i) => i.t === "head" || (i.t === "text" && i.streaming));

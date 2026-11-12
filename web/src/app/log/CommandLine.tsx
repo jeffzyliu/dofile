@@ -8,7 +8,7 @@
 //    before has ended; the lines stop at one that is refused, does not run, or ends with an error, and before a block's
 //    line; a toast says how many were not run, and a refused line goes back into the field).
 //  - LogActions: the Log head's "Find" (log/find.ts) and "Download log" (the runs' text only, as dofile.log; no head,
-//    run-head or note) and "Clear". It draws both forms: the three links (.log-link) and one "Log actions" ⋯ menu button
+//    run-head or note) and "Clear…" (asks first: ClearLogDialog; disabled when canClearLog() is false). It draws both forms: the three links (.log-link) and one "Log actions" ⋯ menu button
 //    (.log-more, logMenuItems()); ui.css shows one by a container query on the head's width (the unsplit head, .tabbed, only: the
 //    split layout's Log head always has room), so the tabs are never clipped.
 //    App.tsx adds Split / Unsplit after them, always visible (icon and word; the word goes first when the head is very narrow). The phone hides the Log head, so the same logMenuItems()
@@ -24,8 +24,8 @@ import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryWords, seconds } from "../editor/words.ts";
 import { saveAs } from "../files.ts";
-import { clearLog, runCommand } from "../run.ts";
-import { engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
+import { canClearLog, runCommand } from "../run.ts";
+import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
@@ -127,6 +127,11 @@ function downloadLog() {
   saveAs(new Blob([plainLog(log.value)], { type: "text/plain" }), "dofile.log");
 }
 
+/** "Clear log…" asks first (ClearLogDialog): the log and the graphs cannot be brought back. */
+const askClearLog = () => {
+  dialog.value = { d: "clear-log" };
+};
+
 export const LogActions = () => (
   <>
     <button type="button" class="head-link log-link" onClick={(e) => openFind(e.currentTarget as HTMLElement)}>
@@ -135,8 +140,14 @@ export const LogActions = () => (
     <button type="button" class="head-link log-link" onClick={downloadLog}>
       Download log
     </button>
-    <button type="button" class="head-link log-link danger" aria-label="Clear log" onClick={clearLog}>
-      Clear
+    <button
+      type="button"
+      class="head-link log-link danger"
+      aria-label="Clear log…"
+      disabled={!canClearLog()}
+      onClick={askClearLog}
+    >
+      Clear…
     </button>
     <MenuButton label="Log actions" class="head-link icon log-more" items={logMenuItems}>
       <Icon name="more" />
@@ -149,7 +160,7 @@ export const LogActions = () => (
 export const logMenuItems = (): MenuItem[] => [
   { label: "Find", onSelect: () => openFind(null) },
   { label: "Download log", onSelect: downloadLog },
-  { label: "Clear log", danger: true, onSelect: clearLog },
+  { label: "Clear log…", danger: true, disabled: !canClearLog(), onSelect: askClearLog },
 ];
 
 export function PhoneStrip({ children }: { children?: ComponentChildren }) {
