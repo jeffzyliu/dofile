@@ -1,12 +1,16 @@
-// Step 4d's plain logic (src/app/states/words.ts): what Reset asks, the words of the reset banner and the running banner,
-// the action each failed reason gets, the times, and the three drafted notes (OQ-10).
+// Step 4d's plain logic (src/app/states/words.ts): what Reset asks (and when: never at once during a run), the words of
+// the reset banner and the running banner, the stopping countdown at 0, the memory banner with no size, the action each
+// failed reason gets, the times, and the three drafted notes (OQ-10).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   failedActions,
+  memoryHead,
   noteFor,
   nothingToLose,
   ofTotal,
+  resetAsks,
+  resetIn,
   resetWords,
   runningWhat,
   secs,
@@ -34,6 +38,26 @@ test("Reset is not asked with no data in memory and no results", () => {
   assert.equal(nothingToLose(summary(0, 3), null), false, "variables with no observations are data");
   assert.equal(nothingToLose(null, results({ ...empty, scalars: { N: 74 } })), false);
   assert.equal(nothingToLose(null, results(empty, { ...empty, matrices: { b: "1x3" } })), false);
+});
+
+test("Reset resets at once only when the engine is ready with nothing to lose; a run in progress always asks", () => {
+  const run = { kind: "file" as const, path: "a.do", fresh_locals: true, rc: 0, line: null, seconds: 1 };
+  assert.equal(resetAsks("ready", null, null, null), false, "a new engine, no run yet");
+  assert.equal(resetAsks("ready", summary(0, 0), results(), run), false, "a run left nothing");
+  assert.equal(resetAsks("ready", summary(74, 12), results(), run), true);
+  // a run in progress: its data and results are known only when it ends (the first run of a visit has neither yet)
+  for (const s of ["running", "breaking", "waiting"] as const) assert.equal(resetAsks(s, null, null, null), true, s);
+  assert.equal(resetAsks("running", summary(0, 0), results(), run), true);
+  // a run has ended and its data is not described yet (run.ts sets `results` at the end, `data` when refreshData answers)
+  assert.equal(resetAsks("ready", null, results(), run), true);
+});
+
+test("the stopping banner's countdown never says In 0 s; the memory banner never shows an empty size", () => {
+  assert.equal(resetIn(4), "In 4 s the engine is reset:");
+  assert.equal(resetIn(1), "In 1 s the engine is reset:");
+  assert.equal(resetIn(0), "The engine is being reset now:");
+  assert.equal(memoryHead(1.6e9), "Memory 1.6 GB of about 2 GB.");
+  for (const none of [null, undefined, 0]) assert.equal(memoryHead(none), "Memory is near its limit of about 2 GB.");
 });
 
 test("the times and sizes are written as the drawings write them", () => {

@@ -424,6 +424,10 @@ test("no counter or flag outside the machine decides a state: the old ones are g
   assert.equal(count(source(ENGINE, true), gone), count(source(ENGINE, true), /\b(breakTimer|resetAt|queued)\b/));
   assert.equal(count(source("src/app/types.ts", true), gone), count(source("src/app/types.ts", true), /\bresetAt\b/));
   assert.equal(
+    count(source("src/app/states/banners.tsx", true), gone),
+    count(source("src/app/states/banners.tsx", true), /\bresetAt\b/),
+  );
+  assert.equal(
     count(source("src/engine/machine.ts", true), gone),
     count(source("src/engine/machine.ts", true), /\b(queued|resetAt)\b/),
   );

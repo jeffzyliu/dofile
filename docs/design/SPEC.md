@@ -997,17 +997,28 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`aria-valuetext` "Downloading the engine, step 1 of 5": the stage, not the megabytes) and the stage list with the
     bytes on the current stage; from `starting-*` the row "Loading packages  step 4 of 5 · 9 s" (a stage seen twice adds up),
     no bar, done stages keep their time (the download's as "48 MB · 7.1 s"). "Use dofile in this tab" is `aria-disabled`
-    (same label) in `other-tab-taking`. Reset: `askReset()` resets at once when `data` has no variables or observations
-    and `results` has no scalar, macro or matrix (macros and graphs are not counted: S 14 says "no data in memory and no
-    results"); the dialog closes itself if the engine can no longer be reset. The banners above the editor follow the
+    and `.off` (same label; ui.css's disabled look, as Run's) in `other-tab-taking`, and a press then does nothing.
+    Reset: `askReset()` resets at once only while the engine is `ready`, `data` has no variables or observations and
+    `results` has no scalar, macro or matrix (macros and graphs are not counted: S 14 says "no data in memory and no
+    results"; `words.ts` `resetAsks`). A run in progress always asks (its data and results are known only when it
+    ends), and so does the moment after a run before its data is described (`data` null while `lastRun` is set); that
+    also asks once after a run that a reset cut, until the next run. The dialog closes itself if the engine can no longer
+    be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending under
+    "Don't reset: wait for it") hands the focus to the editor (`editorCommands.focus()`), or to the top bar's "More
+    actions" when the editor is hidden (a .dta tab, another phone view) (`states/focus.ts`); the declined banner's
+    "Download the engine" moves it there before the prompt opens, so the prompt gives it back there. The banners above the editor follow the
     `reason` of a failed start (`failedActions`): no-wasm "Browsers that work" and Download all; download and memory "Try
     again"; updated "Reload the page"; unknown "Try again" and "Reload the page"; failed twice "Reload the page" and
     Download all, never "Try again". Download all is `disabled` while `hasFiles` is false. Above the log: running
-    (`not isolated`: S 11's words instead of the Break sentence), stopping once Break has been pending 1 s (the 5 s is the
-    constant `GRACE_S`, as in the running banner's own text; the focus goes to "Don't reset: wait for it"), waiting (takes
+    (`not isolated`: S 11's words instead of the Break sentence, as a warning banner with its icon, as S 11 draws it),
+    stopping once Break has been pending 1 s (the 5 s is the constant `GRACE_S`, as in the running banner's own text, and
+    the machine's `graceMs` is not visible to views: a shared constant, or the time Break was pressed in the `breaking`
+    view, would need engine.ts; the focus goes to "Don't reset: wait for it"; at 0 s, until the reset lands, the bold part
+    reads "The engine is being reset now:" instead of "In 0 s"), waiting (takes
     the focus), the reset banner ("Run the file again" is on while the engine is `ready` and a text tab is active, and
     dismisses the banner). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "Find",
-    "next error" (4b's), a failed save (4b's `save-failed`), the memory banner's trigger (OQ-8; its view is built).
+    "next error" (4b's), a failed save (4b's `save-failed`), the memory banner's trigger (OQ-8; its view is built, with
+    no action, as P/Notices draws it, so its owner removes it).
     **Step 4d: draft words**, for the maintainer to approve (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
     Reset banner by kind: user "You reset the engine." / break "The engine was reset: the code did not stop at Break."
     (the reason, a cause in parentheses cut off) or, with no cross-origin isolation, "Break reset the engine." "This page
@@ -1019,7 +1030,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (it ran out of memory)." (the parenthesis only for reason memory) "It won't restart by itself, since each try can
     use a lot of a phone's memory. Your files are safe." `DownloadFailedBanner` (OQ-16, storage unavailable): "Your files
     couldn't be downloaded. This browser wouldn't open the storage where dofile keeps them, so the .zip couldn't be made.
-    Try again; if it fails again, reload the page." / Try again, Dismiss. Progress rows: "Downloading the engine",
+    Try again; if it fails again, reload the page." / Try again, Dismiss. Stopping banner at 0 s: "**The engine is being
+    reset now:** the data in memory is lost; your files are kept." Memory banner with no measured size: "**Memory is near
+    its limit of about 2 GB.**" (then the drawn sentences). Progress rows: "Downloading the engine",
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
     of M". OQ-18: "Browsers that work" goes to `landing.html#browsers` (`BROWSERS_URL` in `states/banners.tsx`), a section
     step 5 builds listing the browsers that run dofile, opened in a new tab; a dead link until then. OQ-10, the three

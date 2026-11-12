@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-280-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-310-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -95,9 +95,9 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 280 tests)
+## Web (about 310 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 258)
+### Unit and integration (`node --test`, `web/test/`, 260)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
@@ -113,15 +113,15 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `snapshot-native.test.ts` | 14 | Native library calls from an engine restored from the memory snapshot (skipped, as one test, without a current snapshot). |
 | `engine.test.ts` | 13 | The engine in Pyodide under Node: runs, results, graphs, Break, a worker that fails to load. |
 | `output.test.ts` | 14 | The Output tabs' logic (`app/output/format.ts`): numbers to 8 digits and the exponent form, missing values, matrix as tab-separated text, the Results sections and groups (defaults, system globals, no Functions group), a long Browse cell cut short, a graph's label and alt text with its number when a command is shared, sizes. |
-| `states.test.ts` | 6 | Step 4d's plain logic (`app/states/words.ts`): Reset asked only with data or results, the times, the reset banner's words by kind, the running banner's name of a run, the action for each failed reason, the three drafted log notes (OQ-10). |
+| `states.test.ts` | 8 | Step 4d's plain logic (`app/states/words.ts`): Reset asked only with data or results, and always during a run or before a run's data is described, the stopping countdown at 0 s, the memory banner with no size, the times, the reset banner's words by kind, the running banner's name of a run, the action for each failed reason, the three drafted log notes (OQ-10). |
 | `imports.test.ts` | 12 | Architecture rules enforced by scanning source: import layering, single writers, single instances, one `postMessage` site. |
 | `snapshot.test.ts` | 5 | Snapshot inflate and unpack. |
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 49 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 51 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 196 cases, of which 170 run and 26 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 204 cases, of which 178 run and 26 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list).
@@ -133,7 +133,7 @@ rename on the iPhone, which has no folded list).
   clashes (Enter, Esc, "Do the same", a clash dialog that another dialog replaces answers as Esc), the unsaved-edits
   clash, a non-UTF-8 file's banner, a folder upload (Chromium), a drop anywhere on the page (taken in the capture phase;
   none while a dialog is open; none for a drag that began in the page), the phone's file actions in the top bar's ⋯.
-- `states.spec.ts` (8, step 4d): the prompt, Not now and the declined banner (the real machine in `none`); the progress dialog's downloading and stage rows with times (the `engine` signal set through the hook); the take-over button's `aria-disabled`; the failed banner for each reason and failed twice; Download all off with no file; running, stopping, waiting banners; storage, reset, memory and download-failed banners; and one test with an engine: Reset's dialog (Cancel, Esc), Reset, the reset banner, and a reset with nothing to lose that asks nothing.
+- `states.spec.ts` (10, step 4d): the prompt, Not now and the declined banner (the real machine in `none`; the focus back on the editor after Not now); the progress dialog's downloading and stage rows with times (the `engine` signal set through the hook); the take-over button's `aria-disabled` and `.off`, and a press then reaches no machine (no drop); the failed banner for each reason and failed twice; Download all off with an empty store and on after a write; Reset during a run asks (no data or results yet); the focus handed to the editor, or More actions on a phone's Log view, when a stopping or reset banner goes with the focus in it; running, stopping, waiting banners; storage, reset, memory and download-failed banners; and one test with an engine: Reset's dialog (Cancel, Esc), Reset, the reset banner, and a reset with nothing to lose that asks nothing.
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
 - `engine.spec.ts` (3): runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start.

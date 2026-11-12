@@ -3,13 +3,16 @@
 // hook to show a state that is hard to reach (a failed start of each reason, Break pending, ...); that is a view test, not
 // a machine test (test/machine.test.ts decides the states). The real machine is used where it is cheap: the prompt's
 // "Not now" and the declined banner's "Download the engine" go through ask() and decline(). One test starts a real engine
-// for Reset: its dialog (asked only with data in memory), Cancel, Reset, the reset banner.
+// for Reset: its dialog (asked only with data in memory), Cancel, Reset, the reset banner. Where the focus goes when a
+// banner that holds it goes away is checked with the stand-in editor's `[data-editor]` (4b's editor keeps the attribute).
 import type { Page } from "@playwright/test";
 import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type Hook = {
   run(code: string): Promise<{ rc: number; log: string } | null>;
   state: any; // the signals of src/app/state.ts
+  store: { blocked: boolean; write(path: string, bytes: Uint8Array): Promise<unknown> };
+  drops(): unknown[];
 };
 declare global {
   interface Window {
@@ -44,6 +47,8 @@ test("no engine: the banner brings the prompt back; Not now leads to the banner 
   await expect.poll(() => engineIs(page)).toBe("declined");
   await expect(prompt).toHaveCount(0);
   await expect(page.locator(".banner", { hasText: "The engine isn't downloaded." })).toBeVisible();
+  // the banner's button was gone while the prompt was open: the prompt gives the focus back to the editor, not to <body>
+  await expect(page.locator("[data-editor]")).toBeFocused();
 });
 
 test("the progress dialog: the download with its time and bytes, then the stages with their times", async ({
@@ -97,7 +102,12 @@ test("another tab: the take-over button is aria-disabled while it is in progress
   await expect(use).not.toHaveAttribute("aria-disabled", "true");
   await show(page, { s: "other-tab-taking" });
   await expect(use).toHaveAttribute("aria-disabled", "true");
+  await expect(use).toHaveClass(/\boff\b/); // ui.css's disabled look, as Run's while a run is on
   await expect(use).toHaveText("Use dofile in this tab");
+  // a press while it is in progress does nothing: no take-over reaches the machine (it would record a drop)
+  const before = await page.evaluate(() => window.__dofile.drops().length);
+  await use.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
+  expect(await page.evaluate(() => window.__dofile.drops().length)).toBe(before);
 });
 
 test("a failed start: the words and the first action follow the reason", async ({ page }) => {
@@ -126,13 +136,53 @@ test("a failed start: the words and the first action follow the reason", async (
   await expect(twice.getByRole("button", { name: "Download all (.zip)" })).toBeVisible();
 });
 
-test("Download all is off in the failure banner while there is no file", async ({ page }) => {
-  await expect.poll(() => page.evaluate(() => window.__dofile.state.files.value.length >= 0)).toBe(true);
-  const has = await page.evaluate(() => window.__dofile.state.hasFiles.value);
+test("Download all in the failure banner is off while the store has no file, and on once it has one", async ({
+  page,
+}) => {
+  // the store answers once the tab lock has (own-files lists it); a new context's store is empty
+  await page.waitForFunction(() => window.__dofile.store.blocked === false);
+  expect(await page.evaluate(() => window.__dofile.state.files.value.length)).toBe(0);
   await show(page, { s: "failed", reason: "download", detail: "", message: "x" });
   const button = page.getByRole("alert").getByRole("button", { name: "Download all (.zip)" });
-  if (has) await expect(button).toBeEnabled();
-  else await expect(button).toBeDisabled();
+  await expect(button).toBeDisabled();
+  await page.evaluate(() => window.__dofile.store.write("a.do", new TextEncoder().encode("display 1\n")));
+  await expect(button).toBeEnabled();
+});
+
+test("Reset during a run always asks, even before the run has any data or results", async ({ page }) => {
+  // the first run of a visit: no data and no results until it ends; a Reset that did not ask would cut it
+  await show(page, { s: "running", run: { kind: "file", path: "a.do", fresh_locals: true }, t0: Date.now() });
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Reset the engine…" }).click();
+  const dlg = page.getByRole("alertdialog", { name: "Reset the engine?" });
+  await expect(dlg).toBeVisible();
+  await dlg.getByRole("button", { name: "Cancel" }).click();
+  await expect(dlg).toHaveCount(0);
+});
+
+test("a banner that goes with the focus in it hands the focus on: the editor, or More actions when it is hidden", async ({
+  page,
+}) => {
+  const ph = phone(page);
+  // on a phone the log is its own view, so the editor is hidden there: More actions takes the focus
+  if (ph) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
+  const next = ph ? page.getByRole("button", { name: "More actions" }) : page.locator("[data-editor]");
+  const run = { kind: "command", fresh_locals: false };
+  await show(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 3000 });
+  const wait = page.getByRole("button", { name: "Don't reset: wait for it" });
+  await expect(wait).toBeFocused();
+  await show(page, { s: "ready" }); // the run ended while the focus was on "Don't reset"
+  await expect(wait).toHaveCount(0);
+  await expect(next).toBeFocused();
+
+  await page.evaluate(() => window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user" }));
+  const dismiss = page
+    .locator(".banner", { hasText: "You reset the engine." })
+    .getByRole("button", { name: "Dismiss" });
+  await dismiss.focus(); // the keyboard's way: a click does not focus a button in Safari
+  await page.keyboard.press("Enter");
+  await expect(dismiss).toHaveCount(0);
+  await expect(next).toBeFocused();
 });
 
 test("the banners above the log: running, stopping (focus on Don't reset), waiting (takes the focus)", async ({

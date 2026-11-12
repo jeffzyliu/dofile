@@ -1,7 +1,16 @@
 // STEP 4d: the logic and the words of the dialogs and banners that are plain text, with no view and no signal of their own
 // (so Node tests them: test/states.test.ts). The words the spec draws are in the views, as drawn; the words it does not
 // give are drafts, marked DRAFT here and listed in SPEC section 8 ("Step 4d: draft words") for the maintainer to approve.
-import type { DataSummary, FailReason, ResetKind, Results, RunHead, Stage } from "../types.ts";
+import type {
+  DataSummary,
+  EngineStateName,
+  FailReason,
+  LastRun,
+  ResetKind,
+  Results,
+  RunHead,
+  Stage,
+} from "../types.ts";
 
 /** How long Break waits before the engine is reset (client and machine: `graceMs`, 5000 ms by default). The page's words
  *  count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
@@ -33,6 +42,29 @@ export function nothingToLose(data: DataSummary | null, results: Results | null)
   const anyResults = results !== null && (has(results.e) || has(results.r));
   return !dataInMemory && !anyResults;
 }
+
+/** Whether Reset asks first (S 14). It resets at once only while the engine is `ready` with nothing to lose. A run in
+ *  progress always asks: what it holds is known only when it ends (`results` comes with its end, `data` after it). So does
+ *  the moment after a run, before its data is described (`data` still null while `lastRun` is set: run.ts's refreshData
+ *  has not answered); that also asks after a run a reset cut, until the next run, which loses nothing by asking. */
+export function resetAsks(
+  state: EngineStateName,
+  data: DataSummary | null,
+  results: Results | null,
+  lastRun: LastRun | null,
+): boolean {
+  if (state !== "ready") return true;
+  if (data === null && lastRun !== null) return true;
+  return !nothingToLose(data, results);
+}
+
+/** The bold part of the stopping banner's countdown (S 9). At 0 the reset is under way: no "In 0 s". DRAFT (the 0 case). */
+export const resetIn = (left: number): string =>
+  left > 0 ? `In ${left} s the engine is reset:` : "The engine is being reset now:";
+
+/** The memory banner's first sentence (P/Notices); with no measured size it names none. DRAFT (no number). */
+export const memoryHead = (heapBytes: number | null | undefined): string =>
+  heapBytes ? `Memory ${(heapBytes / 1e9).toFixed(1)} GB of about 2 GB.` : "Memory is near its limit of about 2 GB.";
 
 /** The reset banner (P/Notices, OQ-9): `head` in bold, then `rest`. `reason` is the machine's, the developer's words for what
  *  happened ("the engine crashed (<cause>)"); the visitor sees it with a cause in parentheses cut off. DRAFT (OQ-9, OQ-19c). */

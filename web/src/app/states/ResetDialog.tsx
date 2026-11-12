@@ -1,18 +1,19 @@
 // STEP 4d: Reset (docs/design/SPEC.md, section 3.10, S 14). The ⋯ menu's "Reset the engine…" calls askReset().
-//  - askReset(): not asked with no data in memory and no results (then engine.ts reset() at once); else the dialog.
+//  - askReset(): not asked while the engine is ready with no data in memory and no results (then engine.ts reset() at
+//    once); else the dialog. A run in progress, or one whose data is not described yet, always asks (words.ts resetAsks).
 //  - ResetDialog { d: "reset" }: role alertdialog, "Reset the engine?" / "The data in memory, e() and r() results, macros
 //    and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset (.btn.stop.live).
 //    If the engine can no longer be reset while it is open (it failed, another tab took it), the dialog closes itself.
 import { useEffect } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";
-import { data, dialog, engine, results } from "../state.ts";
+import { data, dialog, engine, lastRun, results } from "../state.ts";
 import { Dialog } from "../ui/Dialog";
-import { nothingToLose } from "./words.ts";
+import { resetAsks } from "./words.ts";
 
 export function askReset() {
-  if (nothingToLose(data.value, results.value)) eng.reset();
-  else dialog.value = { d: "reset" };
+  if (resetAsks(engine.value.s, data.value, results.value, lastRun.value)) dialog.value = { d: "reset" };
+  else eng.reset();
 }
 
 const close = () => {

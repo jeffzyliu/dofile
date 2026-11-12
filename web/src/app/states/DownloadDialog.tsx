@@ -1,7 +1,8 @@
 // The engine's dialogs: the download prompt and its progress (S 1, S 2, S 3; phone S 8), and "dofile is open in another
 // tab" (WS 6). Step 3 built them as far as the start and the tab lock need (the words of the drawings, the actions).
 // STEP 4d finished them: S 2's stage list with each stage's time and S 3, the progress bar's aria-valuetext as the
-// stages, the times ("14.2 of 48 MB · 6 s"); the take-over button is aria-disabled while `other-tab-taking`.
+// stages, the times ("14.2 of 48 MB · 6 s"); the take-over button is aria-disabled (and `.off`, ui.css's disabled look,
+// as RunControls does) while `other-tab-taking`, and a press then does nothing.
 // "dofile is open in another tab" (WS 6): "Close editor" (the first focus: taking over ends the other tab's engine and
 // the data in its memory, so a stray Enter must not do it) and "Use dofile in this tab". WS 6 draws "Close this tab",
 // but a page may close only a tab a script opened, so the button leaves the editor for the landing page instead.
@@ -172,10 +173,10 @@ export function OtherTabDialog(_: { dialog: DialogOf<"other-tab"> }) {
           </button>
           <button
             type="button"
-            class="btn primary"
+            class={`btn primary${inProgress ? " off" : ""}`}
             aria-disabled={inProgress ? "true" : undefined}
             onClick={() => {
-              eng.takeOver(); // a second press while in progress: the machine ignores it
+              if (!inProgress) eng.takeOver(); // a second press does nothing, and adds no drop to the machine's record
             }}
           >
             Use dofile in this tab

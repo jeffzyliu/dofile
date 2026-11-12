@@ -6,12 +6,14 @@
 //    page"; unknown both. "Download all (.zip)" is off while the store has no file (`hasFiles`).
 //  - LogStateBanners: above the log, from `engine` and `isolated`: running (E?r; with no cross-origin isolation S 11 says
 //    what Break does instead), stopping (S 9, once the Break has been pending 1 s, takes the focus on "Don't reset: wait
-//    for it"), waiting (S 9b, takes the focus).
+//    for it"; at 0 s it says the reset is under way), waiting (S 9b, takes the focus). With no cross-origin isolation the
+//    running banner is a warning, as S 11 draws it.
 //  - ResetBanner { b: "reset", reason, kind } above the log (P/Notices): "Run the file again" (editorCommands.runFile,
 //    on while the engine is ready and a text file is open), "Dismiss". engine.ts adds it on a reset.
 //  - StorageBanner { b: "storage" } above the editor (S 19). MemoryBanner { b: "memory" }: nothing adds it in P1 (OQ-8).
 //  - DownloadFailedBanner { b: "download-failed" } above the editor (on a phone on every view; no role="alert": files.ts
 //    says it once in the live region).
+// A banner with controls hands the focus on when it goes with the focus inside it (focus.ts useFocusOnLeave).
 // The words the spec does not give are drafts (words.ts; SPEC section 8, "Step 4d: draft words").
 import { useEffect, useRef } from "preact/hooks";
 import type { BannerOf } from "../banners";
@@ -22,11 +24,14 @@ import { downloadAll } from "../files.ts";
 import { activeTab, dismiss, engine, engineBytes, hasFiles, isolated, memory, tabs } from "../state.ts";
 import { Banner } from "../ui/Live";
 import { useNow } from "./clock.ts";
+import { focusStable, useFocusOnLeave } from "./focus.ts";
 import {
   FAILED_HEAD,
   FILES_SAFE,
   failedActions,
   GRACE_S,
+  memoryHead,
+  resetIn,
   resetWords,
   runningWhat,
   STOPPING_AFTER_S,
@@ -66,10 +71,12 @@ function FailedBanner({
   const actions: ReturnType<typeof failedActions> = twice ? ["reload", "download-all"] : failedActions(reason);
   const w = twiceWords(reason);
   const first = (a: string) => actions[0] === a;
+  const ref = useFocusOnLeave<HTMLDivElement>();
   return (
     <Banner
       kind="error"
       role="alert"
+      bannerRef={ref}
       actions={actions.map((a) => {
         switch (a) {
           case "browsers":
@@ -120,27 +127,32 @@ function FailedBanner({
   );
 }
 
+/** S 5. The banner goes while the prompt is open, so the focus moves to the editor first: the prompt gives it back there. */
+function DeclinedBanner() {
+  return (
+    <Banner
+      actions={
+        <button
+          type="button"
+          class="btn primary"
+          onClick={() => {
+            focusStable();
+            eng.ask();
+          }}
+        >
+          Download the engine
+        </button>
+      }
+    >
+      <b>The engine isn't downloaded.</b> You can open, edit, upload and download files; running code needs the engine
+      {aboutMB ? ` (${aboutMB})` : ""}.
+    </Banner>
+  );
+}
+
 export function EditorStateBanners() {
   const st = engine.value;
-  if (st.s === "declined")
-    return (
-      <Banner
-        actions={
-          <button
-            type="button"
-            class="btn primary"
-            onClick={() => {
-              eng.ask();
-            }}
-          >
-            Download the engine
-          </button>
-        }
-      >
-        <b>The engine isn't downloaded.</b> You can open, edit, upload and download files; running code needs the engine
-        {aboutMB ? ` (${aboutMB})` : ""}.
-      </Banner>
-    );
+  if (st.s === "declined") return <DeclinedBanner />;
   if (st.s === "failed") return <FailedBanner reason={st.reason} twice={false} message={st.message} />;
   if (st.s === "failed-twice") return <FailedBanner reason={st.reason} twice message={st.message} />;
   return null;
@@ -152,7 +164,7 @@ function RunningBanner({ t0, run }: { t0: number; run: Parameters<typeof running
   const now = useNow(200);
   const time = secs(Math.max(0, (now - t0) / 1000));
   return (
-    <Banner>
+    <Banner kind={isolated.value ? "info" : "warn"}>
       {isolated.value ? (
         <>
           Running {runningWhat(run)} · <b>{time}</b>. Break stops between commands. If one long command doesn't stop
@@ -173,10 +185,12 @@ function StoppingBanner({ resetAt }: { resetAt: number }) {
   const now = useNow(200);
   const left = Math.max(0, Math.ceil((resetAt - now) / 1000));
   const button = useRef<HTMLButtonElement>(null);
+  const ref = useFocusOnLeave<HTMLDivElement>();
   useEffect(() => button.current?.focus(), []);
   return (
     <Banner
       kind="warn"
+      bannerRef={ref}
       actions={
         <button
           ref={button}
@@ -191,14 +205,14 @@ function StoppingBanner({ resetAt }: { resetAt: number }) {
         </button>
       }
     >
-      <b>Stopping…</b> This command can't stop until it ends. <b>In {left} s the engine is reset:</b> the data in memory
-      is lost; your files are kept.
+      <b>Stopping…</b> This command can't stop until it ends. <b>{resetIn(left)}</b> the data in memory is lost; your
+      files are kept.
     </Banner>
   );
 }
 
 function WaitingBanner() {
-  const box = useRef<HTMLDivElement>(null);
+  const box = useFocusOnLeave<HTMLDivElement>();
   useEffect(() => box.current?.focus(), []);
   return (
     <Banner focusable bannerRef={box}>
@@ -227,8 +241,10 @@ export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
   const w = resetWords(banner.kind, banner.reason, isolated.value);
   const open = tabs.value.find((t) => t.path === activeTab.value);
   const canRun = engine.value.s === "ready" && open?.kind === "text";
+  const ref = useFocusOnLeave<HTMLDivElement>();
   return (
     <Banner
+      bannerRef={ref}
       kind={banner.kind === "crash" ? "error" : banner.kind === "break" ? "warn" : "info"}
       actions={
         <>
@@ -254,54 +270,62 @@ export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
   );
 }
 
-export const StorageBanner = ({ banner }: { banner: BannerOf<"storage"> }) => (
-  <Banner
-    kind="warn"
-    actions={
-      <>
-        <DownloadAllButton />
-        <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
-          Dismiss
-        </button>
-      </>
-    }
-  >
-    <b>This browser may clear your files</b> when it needs space. Download all to keep a copy.
-  </Banner>
-);
-
-/** Not added in P1 (OQ-8: no limit is measured); drawn as the spec words it, "about 2 GB" being its guess. */
-export function MemoryBanner(_: { banner: BannerOf<"memory"> }) {
-  const heap = memory.value?.heap_bytes;
+export function StorageBanner({ banner }: { banner: BannerOf<"storage"> }) {
+  const ref = useFocusOnLeave<HTMLDivElement>();
   return (
-    <Banner kind="warn">
-      <b>Memory {heap ? `${(heap / 1e9).toFixed(1)} GB` : ""} of about 2 GB.</b> A bigger dataset may reset the engine.{" "}
-      <code>compress</code> or <code>keep</code> fewer variables to save memory.
+    <Banner
+      kind="warn"
+      bannerRef={ref}
+      actions={
+        <>
+          <DownloadAllButton />
+          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
+            Dismiss
+          </button>
+        </>
+      }
+    >
+      <b>This browser may clear your files</b> when it needs space. Download all to keep a copy.
     </Banner>
   );
 }
 
-export const DownloadFailedBanner = ({ banner }: { banner: BannerOf<"download-failed"> }) => (
-  <Banner
-    kind="error"
-    actions={
-      <>
-        <button
-          type="button"
-          class="btn"
-          onClick={() => {
-            downloadAll();
-          }}
-        >
-          Try again
-        </button>
-        <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
-          Dismiss
-        </button>
-      </>
-    }
-  >
-    <b>Your files couldn't be downloaded.</b> This browser wouldn't open the storage where dofile keeps them, so the
-    .zip couldn't be made. Try again; if it fails again, reload the page.
-  </Banner>
-);
+/** Not added in P1 (OQ-8: no limit is measured); drawn as the spec words it, "about 2 GB" being its guess. P/Notices draws
+ *  it with no action, so it has none: its owner (step 7) removes it when memory goes down. */
+export function MemoryBanner(_: { banner: BannerOf<"memory"> }) {
+  return (
+    <Banner kind="warn">
+      <b>{memoryHead(memory.value?.heap_bytes)}</b> A bigger dataset may reset the engine. <code>compress</code> or{" "}
+      <code>keep</code> fewer variables to save memory.
+    </Banner>
+  );
+}
+
+export function DownloadFailedBanner({ banner }: { banner: BannerOf<"download-failed"> }) {
+  const ref = useFocusOnLeave<HTMLDivElement>();
+  return (
+    <Banner
+      kind="error"
+      bannerRef={ref}
+      actions={
+        <>
+          <button
+            type="button"
+            class="btn"
+            onClick={() => {
+              downloadAll();
+            }}
+          >
+            Try again
+          </button>
+          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
+            Dismiss
+          </button>
+        </>
+      }
+    >
+      <b>Your files couldn't be downloaded.</b> This browser wouldn't open the storage where dofile keeps them, so the
+      .zip couldn't be made. Try again; if it fails again, reload the page.
+    </Banner>
+  );
+}
