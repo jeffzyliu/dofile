@@ -774,7 +774,9 @@ engine, did not start, failed twice, running, stopping, waiting and "Break reset
 they are not in `banners`.
 
 Step 4's decisions, the review decisions waiting for the maintainer's confirmation and the open questions are listed
-once, in `docs/prototype1-plan.md`, "Step 4: decisions and open questions"; this section points there. The words drafted
+once, in `docs/prototype1-plan.md`, "Step 4: decisions and open questions" (step 5's in "Step 5: decisions and open
+questions"); this section points there. They do not block the merge: they are reviewed after it (the plan's "Post-merge
+review"), with the draft words. The words drafted
 for the visitor are below, per part: "Words the spec does not give" in 4a and 4b, "Step 4c: draft words", "Step 4d:
 draft words".
 

@@ -9,6 +9,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 
 ## Where things stand (2026-11-11)
 
+- **After steps 4 and 5 merge:** the open items are reviewed then, not before: "Post-merge review", below.
 - **Step 4 (4a, 4b, 4c, 4d and the joining changes) is built on `prototype1-step4`, in draft pull request #17; not
   merged.** Checked at its tip `486f6bf`, CI green: Biome, `tsc` and ruff clean; `npm test` (295 pass); the e2e suite
   (273 passed, 31 skipped); `uv run poe test` (1346 passed, 13 skipped, 3 xfailed); nothing under `src/dofile/` or `tests/`
@@ -187,6 +188,7 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
     prompt. A held Ctrl/Cmd+Enter runs once.
 
 **B. Made during review, waiting for the maintainer's confirmation**
+Reviewed after the merge: see Post-merge review.
 1. The error mark belongs to the file's last run: set when a run of that file (whole or a selection) ends with an error
    on a line (not Break's rc 1); cleared by a new run of that file, a reset or a restart of the engine, or deleting the
    marked line; a command from the command line and a run of another file leave it; a file closed with its mark and no
@@ -210,6 +212,7 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
    `\r` is saved with `\n` (`editor/ranover.ts` `lineBreakOf`).
 
 **C. Open questions**
+Reviewed after the merge: see Post-merge review.
 1. Reset does not ask when only globals, Stata scalars or graphs are held: only data and e() or r() results count (S 14
    read literally), though the dialog says Reset clears macros and graphs.
 2. The running banner shows on every run, though S 11's caption says "with the first run".
@@ -268,6 +271,7 @@ the words drafted for the visitor are in SPEC section 8, "As built in step 5".
    the names of Stata's example datasets give rc 601 with a note (the clean-room record, below).
 
 **B. Made during the step, waiting for the maintainer's confirmation**
+Reviewed after the merge: see Post-merge review.
 1. The commands page is `/commands/` (`dist/commands/index.html`), not `/commands.html`: a folder's index is served at
    the same address with no redirect by the dev server, `vite preview` and Cloudflare's `auto-trailing-slash`, and
    `/commands.html` redirects to it.
@@ -287,6 +291,7 @@ the words drafted for the visitor are in SPEC section 8, "As built in step 5".
 6. `/landing.html` is a 404, not a redirect: it was never deployed (step 5 is the first to build it).
 
 **C. Open questions**
+Reviewed after the merge: see Post-merge review.
 1. The first real deploy: the list in SPEC section 8, "To look at on the first real deploy" (the edge's redirects, 404s and
    headers on 304s; a tab of the old build left open across the deploy shows a failed download, not "updated").
 2. OpenDTA's `growth` dataset (`sysuse growth`) resembles Stata's `childweight` in theme only (children measured at several
@@ -304,6 +309,29 @@ the words drafted for the visitor are in SPEC section 8, "As built in step 5".
    holds the sample. A Save that begins while the restore's write is in progress ends after the `reload`: the store then holds
    the Save's text while the tab shows the sample with no unsaved dot (the Save sets the saved text to its own, and the dot
    only follows edits). A window of milliseconds; `reload` does not touch `saving`.
+
+## Post-merge review (after steps 4 and 5 merge)
+
+By the maintainer's decision (2026-11-11), lists B (waiting for confirmation) and C (open questions) of "Step 4: decisions
+and open questions" and "Step 5: decisions and open questions", and the draft words in SPEC section 8, do not block the
+merge of steps 4 and 5. They are reviewed after it:
+
+- [ ] Confirm or change each B item.
+- [ ] Decide each C item: fix it, move it to `docs/icebox.md`, or drop it.
+- [ ] Approve or reword the draft words (SPEC section 8).
+- [ ] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan.
+- [ ] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand".
+- [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy.
+
+How this relates to steps 6, 6r and 7. **Step 6** (e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages) is
+partly done inside steps 3 to 5: the e2e suite has 103 tests in four browser profiles (412 cases, 381 run, 31 skipped:
+`docs/test-map.md`), and `e2e/landing.spec.ts` runs axe on the built landing and commands pages. Left for it: the design-check
+scripts (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs and do not yet run on the built
+pages; the four tests in `e2e/poc.spec.ts` are still fixme; and the accessibility items in `docs/icebox.md` belong with that
+work. **Step 6r** (a review of each merge by a fresh context) has in effect been done before the merge for steps 4 and 5:
+fresh-context reviewers went over each part, the join and the move, and their findings were fixed or listed in B and C. A
+`/code-review` of the merged whole is still open if the maintainer wants it. **Step 7** (the Phase 2 verification list, the
+real-phone pass, the Safari storage re-check) takes the real-phone items of the C lists (step 4's C 13).
 
 ## Decisions (2026-11-10)
 
@@ -361,8 +389,8 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | to review (built on `prototype1-step4`, pull request #17) |
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (built on `prototype1-step4`, pull request #17; the draft words in SPEC section 8, "Step 4d: draft words"; the review decisions and open questions in "Step 4: decisions and open questions" above) |
 | 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4; reviewed once, its findings fixed; the landing page moved to `/` and the editor to `/app/`; open for the maintainer: the words listed in SPEC section 8 "As built in step 5", the first deploy's checks in SPEC 8 "URLs") |
-| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | not started |
-| 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | not started |
+| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (103 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review" |
+| 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | done before the merge for steps 4 and 5 (fresh-context reviews of each part, the join and the move); a `/code-review` of the merged whole open if wanted |
 | 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started |
 
 ## How to run a step
