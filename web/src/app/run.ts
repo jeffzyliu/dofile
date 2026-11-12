@@ -72,7 +72,14 @@ function dropped() {
  *  in progress, no engine that can start) it does nothing. Resolves with the result, or null when it did not run (refused,
  *  or queued and then dropped). */
 export function runCode(code: string, head: RunHead): Promise<RunResult | null> {
-  return request(code, head).done;
+  return requestRun(code, head).done;
+}
+
+/** runCode, and whether the run was taken: `accepted` is true when it started now or was queued for the engine (`none`,
+ *  `declined`), false when it was refused (nothing happens). The editor's Ctrl/Cmd+Enter says why in a toast then. */
+export function requestRun(code: string, head: RunHead): { accepted: boolean; done: Promise<RunResult | null> } {
+  const { how, done } = request(code, head);
+  return { accepted: how !== "refused", done };
 }
 
 /** One command, as the command line, Load and Import send it (section 4): run with kind "command" and the locals kept.

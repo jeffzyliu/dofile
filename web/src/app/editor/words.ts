@@ -1,7 +1,7 @@
 // The words of the run-head, the status bar, the phone's strip and the Break pill (SPEC 3.4 to 3.6 and 4). Plain
 // TypeScript, no DOM: tested in Node (test/editor.test.ts). Text in quotes in the spec is used as it is; where it gives
 // none, the words here are drafts for the maintainer (SPEC section 8, "As built in step 4b").
-import type { LastRun, Memory, RunHead } from "../types.ts";
+import type { EngineState, LastRun, Memory, RunHead } from "../types.ts";
 
 /** "line 6" or "lines 6–7". */
 export const linesWords = ([a, b]: [number, number]) => (a === b ? `line ${a}` : `lines ${a}–${b}`);
@@ -65,3 +65,31 @@ export const memoryWords = (m: Memory, short = false) =>
 /** Whether a run's end goes to a line in its file ("Go to line 17"): an error or Break with a line, not a command's. */
 export const jumpLine = (r: LastRun): number | null =>
   r.rc !== 0 && r.line !== null && r.kind !== "command" && r.path ? r.line : null;
+
+/** The toast when Ctrl/Cmd+Enter in the editor asks for a run the engine does not take, by the state, as the status bar
+ *  picks its words (drafts for the maintainer, from the Run button's own: SPEC section 8). null where a run is taken or
+ *  queued (`ready`; `none` and `declined` open the prompt). */
+export function refusedRunWords(s: EngineState["s"]): string | null {
+  switch (s) {
+    case "ready":
+    case "none":
+    case "declined":
+      return null;
+    case "running":
+    case "breaking":
+    case "waiting":
+      return "Run is off until this run ends";
+    case "checking-lock":
+    case "checking-cache":
+    case "asking":
+    case "downloading":
+    case "starting-list":
+    case "starting-worker":
+      return "Starting… Run is off until the engine is ready";
+    case "failed":
+    case "failed-twice":
+    case "other-tab-idle":
+    case "other-tab-taking":
+      return "Run is off: the engine isn't running in this tab";
+  }
+}

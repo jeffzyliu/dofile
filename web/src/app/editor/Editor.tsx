@@ -16,8 +16,10 @@
 //    is saved under); the save-failed banner's Download too (textOf).
 //    The texts compared (the dot, a run's version) and the text Run sends stay in the editor's form.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
-//    is the one that applies (Ctrl or Cmd on every platform, as Save). With no text tab shown, Run says so in a toast and runs nothing. The code of each run is
-//    kept by its head (commands.ts codeOf) for the log's graph links.
+//    is the one that applies (Ctrl or Cmd on every platform, as Save; held, it runs once). With no text tab shown, Run says so in a toast and runs nothing. A
+//    Ctrl/Cmd+Enter the engine does not take (a run on, a start, no engine that can run) says why in a toast
+//    (words.ts refusedRunWords); the buttons are disabled then. The code of each run is kept by its head (commands.ts
+//    codeOf) for the log's graph links.
 //  - Line marks (cm.ts): the running lines of a selection run (a whole-file run marks none: every line would be marked),
 //    and the error line of the file's last run (not for Break's rc 1, whose line is the command that did not start).
 //    Both move with their text while it is edited.
@@ -27,14 +29,14 @@
 //    in the editor was swallowed and saved nothing. With a dialog open it saves the active tab behind it.
 //  - A file drop is the page's (4a's window listeners): CodeMirror is told it is handled (cm.ts leaveFileDrops).
 
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
 import { useEffect, useRef } from "preact/hooks";
 import { openFile } from "../files/open.ts";
 import { baseName } from "../files/tree.ts";
-import { runCode } from "../run.ts";
+import { requestRun } from "../run.ts";
 import { activeTab, addBanner, banners, dismiss, engine, lastRun, say, setDirty, showToast, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import type { RunHead } from "../types.ts";
@@ -51,6 +53,7 @@ import { codeOf, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
 import { isSaveKey } from "./keys.ts";
 import { editorText, type FileForm, fileText, followRun, formOf, PLAIN, savedForm } from "./ranover.ts";
+import { refusedRunWords } from "./words.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
 // what the store has of each, as last read or saved, with its line breaks as the editor holds them ("\n", no BOM:
@@ -77,10 +80,22 @@ const runKey = () => {
   runEither();
   return true;
 };
-const keys = keymap.of([
-  { key: "Ctrl-Enter", run: runKey },
-  { key: "Meta-Enter", run: runKey },
-]);
+const keys = [
+  keymap.of([
+    { key: "Ctrl-Enter", run: runKey },
+    { key: "Meta-Enter", run: runKey },
+  ]),
+  // a held Ctrl/Cmd+Enter runs once, as a held Ctrl/Cmd+S saves once: its repeats do nothing (no second run, no toast)
+  Prec.highest(
+    EditorView.domEventHandlers({
+      keydown: (e) => {
+        if (!(e.repeat && e.key === "Enter" && (e.ctrlKey || e.metaKey))) return false;
+        e.preventDefault();
+        return true;
+      },
+    }),
+  ),
+];
 
 const follow = EditorView.updateListener.of((u) => {
   const path = shown.value;
@@ -154,33 +169,37 @@ function activeText(): string | null {
   return path && tabs.value.some((t) => t.path === path && t.kind === "text") && states.has(path) ? path : null;
 }
 
-function start(code: string, head: RunHead) {
+/** Send a run. `keyed`: Ctrl/Cmd+Enter, which has no disabled button to show that Run is off, so a run the engine does
+ *  not take (run.ts requestRun: refused) says why in a toast, in the words of the engine's state (words.ts). */
+function start(code: string, head: RunHead, keyed: boolean) {
   codeOf.set(head, code);
-  runCode(code, head);
+  if (requestRun(code, head).accepted || !keyed) return;
+  const words = refusedRunWords(engine.value.s);
+  if (words) showToast(words);
 }
 
-function runFile() {
+function runFile(keyed = false) {
   const path = activeText();
   if (!path) {
     showToast("No file is open to run");
     return;
   }
-  start(current(path)!.doc.toString(), { kind: "file", path, fresh_locals: true });
+  start(current(path)!.doc.toString(), { kind: "file", path, fresh_locals: true }, keyed);
 }
 
-function runSelection() {
+function runSelection(keyed = false) {
   const path = activeText();
   const st = path ? current(path) : undefined;
   const lines = st ? wholeLines(st) : null;
   if (!path || !st || !lines) return;
   const code = st.doc.sliceString(st.doc.line(lines[0]).from, st.doc.line(lines[1]).to);
-  start(code, { kind: "selection", path, lines, fresh_locals: false });
+  start(code, { kind: "selection", path, lines, fresh_locals: false }, keyed);
 }
 
 /** Ctrl/Cmd+Enter: Run selection with a selection, else Run (the toolbar's chip says which). */
 function runEither() {
-  if (selection.value) runSelection();
-  else runFile();
+  if (selection.value) runSelection(true);
+  else runFile(true);
 }
 
 // The run's marks: a selection run's lines while it runs; the file's error line (editor/errormark.ts says the rule). Each
@@ -412,8 +431,8 @@ function onKey(e: KeyboardEvent) {
 function mount(host: HTMLElement, emptyView: HTMLElement) {
   empty = emptyView;
   view = new EditorView({ parent: host, state: emptyState });
-  editorCommands.runFile = runFile;
-  editorCommands.runSelection = runSelection;
+  editorCommands.runFile = () => runFile();
+  editorCommands.runSelection = () => runSelection();
   editorCommands.save = save;
   editorCommands.focus = focus;
   editorCommands.open = open;

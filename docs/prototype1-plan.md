@@ -172,6 +172,10 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
     anywhere on the page uploads them; a toast confirms, or reports an error that needs no action, and anything the
     visitor must act on or choose between is a banner or a dialog (SPEC 3.10); a graph is drawn in the run's theme
     whatever colors its command names, so a dark plot with a user-named color is accepted as it is (Step 4c, below).
+12. (2026-11-11) A Ctrl/Cmd+Enter in the editor that the engine does not take (a run on, the engine starting, no engine
+    that can run in this tab), where the Run buttons are disabled, says why in a short toast by the engine's state
+    (`editor/words.ts` `refusedRunWords`; the words are drafts in SPEC section 8); nothing where it runs or opens the
+    prompt. A held Ctrl/Cmd+Enter runs once.
 
 **B. Made during review, waiting for the maintainer's confirmation**
 1. The error mark belongs to the file's last run: set when a run of that file (whole or a selection) ends with an error

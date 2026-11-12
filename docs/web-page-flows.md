@@ -307,7 +307,7 @@ No Node test covers the focus. The rules hold only in a browser.
 |---|---|---|
 | Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready` and `declined`; `aria-disabled` (not `disabled`) in `running`, so a focused Run keeps the focus and a second Enter cannot reach Break; disabled in `breaking`, `waiting` and every other state ("Starting…" while downloading or starting, "Stopped" after a failed start). It is disabled in `none` too, which only `?test=manual` gives, though the machine would queue a run there. |
 | Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | enabled in `ready` and `declined` with a selection; `disabled` in every other state, `running` too (not `aria-disabled`) |
-| Ctrl/Cmd+Enter in the editor | `runEither()`: Run selection with a selection, else Run | in any state: outside `ready`, `none` and `declined` the run is refused, with no message |
+| Ctrl/Cmd+Enter in the editor | `runEither()`: Run selection with a selection, else Run; held, it runs once | in any state: outside `ready`, `none` and `declined` the run is refused (`run.ts` `requestRun`), and a toast says why by the state (`editor/words.ts` `refusedRunWords`) |
 | Break | `running`: `breakRun()` ("Break", or "Break (reset)" with no cross-origin isolation); `waiting`: "Reset now", `eng.reset()` with no question | disabled in `breaking` ("Stopping…") and when no run is on |
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile()`, then the banner is dismissed | enabled in `ready` with a text tab active |
@@ -494,12 +494,14 @@ toast: its error is in the log. A last line that is refused, not run or a block'
   - "pasted lines stop before a block's, a comment's or a /// line, …"
   - "pasted lines: the next starts only once the one before has ended"
   - "a paste with no line break is an ordinary paste; …"
+  - "a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or queued"
 - `web/test/imports.test.ts`:
   - "events get in through two doors: …; transition() is called once"
   - "each signal has one writer: …"
 - `web/e2e/editor.spec.ts`:
   - "the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; …"
   - "the command line with no engine: pasted lines wait for the engine; Not now drops them, and a toast says so"
+  - "Ctrl/Cmd+Enter that the engine does not take says why in a toast and starts nothing; …"
 - `web/e2e/shell.spec.ts`: "first visit: … a run asks again, titled for a run, and Not now drops it"
 
 ### If you change this

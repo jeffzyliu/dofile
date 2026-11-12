@@ -1016,7 +1016,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page, the
     editor too, and Ctrl/Cmd+Enter runs, each with Ctrl or Cmd on every platform; S is the key that types "s" or, on a
     layout whose key there types no Latin letter (Cyrillic, Greek...), the key in S's place (`editor/keys.ts`); a held
-    Ctrl/Cmd+S saves once; with a dialog open it saves the active tab behind it (an open question: C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast); Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    Ctrl/Cmd+S saves once, and a held Ctrl/Cmd+Enter runs once; a Ctrl/Cmd+Enter that the engine does not take (run.ts
+    `requestRun` answers it was refused, where the Run buttons are disabled) says why in a toast, in the words of the
+    engine's state (`editor/words.ts` `refusedRunWords`, decided by the maintainer, plan's list A; nothing where the
+    press runs or opens the prompt: `ready`, `none`, `declined`); with a dialog open it saves the active tab behind it (an open question: C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast); Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
     place to change it; the joining agent's, for the maintainer to approve: plan, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
@@ -1090,7 +1093,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
     nothing either (for the maintainer to confirm, B 4 of the plan's list). Words the spec does not give, drafts for the
     maintainer: "No file is open: open one from the file
-    list." (the empty editor); "No file is open to run" (toast); "Opening" (status bar, the page load); the save-failed
+    list." (the empty editor); "No file is open to run" (toast); a refused Ctrl/Cmd+Enter's toast: "Run is off until this run ends" (`running`,
+    `breaking`, `waiting`), "Starting… Run is off until the engine is ready" (the page load, `asking`, `downloading`,
+    `starting-*`; the Run button's own label), "Run is off: the engine isn't running in this tab" (`failed`,
+    `failed-twice`, `other-tab-*`); "Opening" (status bar, the page load); the save-failed
     banner ("analysis.do couldn't be saved: <reason>. Your edits are still in the editor; download them to keep a copy."
     / Download, Dismiss); the pasted lines' toasts ("2 of 4 pasted lines not run: line 2 ended with r(111)", "… not run:
     the engine can't take a command now", "… not run: line 1 didn't run", "… not run: another tab took over the engine

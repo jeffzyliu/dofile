@@ -1396,3 +1396,54 @@ test("S 15's note under a nested do in a loop: one note, after the loop's echo o
   });
   expect(echo).toBe("  2.     do sub.do");
 });
+
+test("Ctrl/Cmd+Enter that the engine does not take says why in a toast and starts nothing; pressed when ready it runs, with no toast, and a held key runs once", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1\n" }, "/?test");
+  await startEngine(page);
+  await ready(page);
+  await open(page, "a.do");
+  const content = page.locator(".cm-content");
+  const toast = page.locator(".toast");
+  const runs = () => page.evaluate(() => window.__dofile.state.log.value.filter((i: any) => i.t === "text").length);
+  const toEditor = async () => {
+    if (isPhone(page)) await view(page, "Editor"); // a run shows the phone's Log view
+    await content.click();
+  };
+  // ready: it runs, and nothing is said
+  await toEditor();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await ready(page);
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.kind)).toBe("file");
+  expect(await runs()).toBe(1);
+  await expect(toast).toHaveCount(0);
+  // a held key: its repeats run nothing more and say nothing
+  await toEditor();
+  await content.evaluate((el) => {
+    for (const repeat of [true, true])
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          ctrlKey: true,
+          repeat,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+  });
+  await page.waitForTimeout(200);
+  expect(await runs()).toBe(1);
+  await expect(toast).toHaveCount(0);
+  // during a run (a loop with no end, through the hook): refused, with the toast, and no run started
+  page.evaluate(() => window.__dofile.run("while 1 {\n  quietly display 1\n}"));
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("running");
+  await toEditor();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(toast).toHaveText("Run is off until this run ends");
+  expect(await runs()).toBe(2);
+  expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("running");
+  await page.evaluate(() => window.__dofile.breakRun());
+  await ready(page);
+});

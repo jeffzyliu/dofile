@@ -26,6 +26,7 @@ import {
   linesWords,
   memoryWords,
   pillTime,
+  refusedRunWords,
   runheadWords,
   seconds,
   ticking,
@@ -930,4 +931,14 @@ test("Save's key (editor/keys.ts): Ctrl or Cmd with S on any layout, the key tha
   // other keys
   assert.equal(press("Enter", "Enter", { ctrl: true }), false);
   assert.equal(press("d", "KeyD", { ctrl: true }), false);
+});
+
+test("a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or queued", () => {
+  const by = (states: string[]) => states.map((s) => refusedRunWords(s as Parameters<typeof refusedRunWords>[0]));
+  assert.deepEqual(by(["ready", "none", "declined"]), [null, null, null]);
+  for (const s of by(["running", "breaking", "waiting"])) assert.equal(s, "Run is off until this run ends");
+  for (const s of by(["checking-lock", "checking-cache", "asking", "downloading", "starting-list", "starting-worker"]))
+    assert.equal(s, "Starting… Run is off until the engine is ready");
+  for (const s of by(["failed", "failed-twice", "other-tab-idle", "other-tab-taking"]))
+    assert.equal(s, "Run is off: the engine isn't running in this tab");
 });
