@@ -1014,8 +1014,11 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
     a new or empty file and for lone `\r`) and its UTF-8 byte order mark, which the editor never holds (so neither Run nor
     the comparisons see it); Save writes the editor's text in that form (`fileText`), as does the save-failed banner's
-    Download; a run that becomes the saved version brings its own form, one that writes the same rows in another form
-    leaves the tab's): the same text
+    Download, except that a `.do` or `.ado` file (case ignored) is written without its BOM (`dropsBom`), since the engine
+    reads a BOM as part of the first command (ODT-34) and a do-file saved here must run in a nested `do`; the name it is
+    saved under decides, so a rename keeps the noted BOM and the new name decides at the next Save, and after a Save the
+    noted form is the one written; a run that becomes the saved version brings its own form, one that writes the same
+    rows in another form leaves the tab's): the same text
     again (a byte-identical rewrite, a `.log` open during every run) changes nothing; a text tab with no unsaved edits
     shows the run's version, changed in one transaction where the two differ, so the caret, the selection and the undo
     history are kept; one with edits keeps them and takes the run's version as its saved text (the tab stays unsaved, so

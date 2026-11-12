@@ -118,9 +118,11 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   S on any keyboard layout (`editor/keys.ts`: on a Cyrillic layout CodeMirror's binding had caught it, the window
   listener alone did not, and the browser's Save page opened) and saves once while held; a menu item says its hint is a
   key (`hintIsKey`) instead of a text pattern; the nested-do note on a phone says "Save it (⋯ › Save)"; the Break test's
-  loop has no end, since a fixed one ran out before Break once. Still open for the maintainer: Ctrl/Cmd+S with a dialog
-  open saves the active tab behind it; the engine reads a do-file's BOM as part of its first command (a nested `do` of
-  such a file stops with r(198); `import delimited` skips it).
+  loop has no end, since a fixed one ran out before Break once. The engine reads a do-file's BOM as part of its first
+  command (ODT-34: a nested `do` of such a file stops with r(198); `import delimited` skips it), so on the maintainer's
+  decision Save drops the BOM of a `.do` or `.ado` file and keeps it for any other (`editor/ranover.ts` `dropsBom`, by
+  the name it is saved under). Still open for the maintainer: Ctrl/Cmd+S with a dialog open saves the active tab behind
+  it.
   For the maintainer's pass on a real iPhone: the focus now comes back from a dialog in a timer, so check that it
   reopens the on-screen keyboard where it went back to a text field (the command line). The four new or extended e2e
   tests failed on the code before these fixes (16 of 16 cases). Checked on the branch: `npm run check`, `npm run

@@ -11,7 +11,8 @@
 //    clears it; a save clears it unless the text changed while it was being written.
 //  - Save keeps the file's form (ranover.ts formOf, noted at open, reload and a run's new version): its line break and
 //    its UTF-8 byte order mark. The editor's text, which has "\n" only and never a BOM, is written with "\r\n" for a
-//    "\r\n" file and with the BOM for a file that had one (fileText); the save-failed banner's Download too (textOf).
+//    "\r\n" file and with the BOM for a file that had one, except a .do or .ado file (fileText, dropsBom: by the name it
+//    is saved under); the save-failed banner's Download too (textOf).
 //    The texts compared (the dot, a run's version) and the text Run sends stay in the editor's form.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
 //    is the one that applies (Ctrl or Cmd on every platform, as Save). With no text tab shown, Run says so in a toast and runs nothing. The code of each run is
@@ -48,7 +49,7 @@ import {
 import { codeOf, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
 import { isSaveKey } from "./keys.ts";
-import { editorText, type FileForm, fileText, followRun, formOf, PLAIN } from "./ranover.ts";
+import { editorText, type FileForm, fileText, followRun, formOf, PLAIN, savedForm } from "./ranover.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
 // what the store has of each, as last read or saved, with its line breaks as the editor holds them ("\n", no BOM:
@@ -112,7 +113,7 @@ const current = (path: string) => (shown.value === path && view ? view.state : s
  *  save-failed banner's Download), or null. */
 export function textOf(path: string) {
   const st = current(path);
-  return st ? fileText(st.doc.toString(), forms.get(path) ?? PLAIN) : null;
+  return st ? fileText(st.doc.toString(), forms.get(path) ?? PLAIN, path) : null;
 }
 
 /** Show `path`'s state (or the empty view). The shown one's state is kept first. */
@@ -228,7 +229,7 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
   if (!path || !st) return false;
   const text = st.doc.toString();
   try {
-    await store.write(path, new TextEncoder().encode(fileText(text, forms.get(path) ?? PLAIN)));
+    await store.write(path, new TextEncoder().encode(fileText(text, forms.get(path) ?? PLAIN, path)));
   } catch (e) {
     const message = (e as Error)?.message ?? String(e);
     addBanner({ b: "save-failed", path, message });
@@ -236,6 +237,9 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
     return false;
   }
   savedText.set(path, text);
+  // the form as written (a do-file's BOM dropped), unless the tab was closed or renamed while it was written
+  const form = forms.get(path);
+  if (form) forms.set(path, savedForm(form, path));
   if (current(path)?.doc.toString() === text) setDirty(path, false);
   for (const b of banners.value) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === path) dismiss(b);
   showToast(`Saved ${baseName(path)}`);
@@ -304,6 +308,8 @@ function renamed(from: string, to: string) {
   states.set(to, next);
   savedText.set(to, savedText.has(from) ? savedText.get(from)! : "");
   savedText.delete(from);
+  // its form goes with it, the noted BOM too (the store's version has it unless a Save under a do-file name dropped
+  // it): the new name decides at the next Save whether it is written (dropsBom)
   forms.set(to, forms.get(from) ?? PLAIN);
   forms.delete(from);
   // its banners follow it

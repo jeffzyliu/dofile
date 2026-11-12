@@ -10,7 +10,16 @@ import { ChangeSet, Text } from "@codemirror/state";
 import { CSV_COLORS, csvFields } from "../src/app/editor/csv.ts";
 import { lineDeleted, onLastRun, onRunStart } from "../src/app/editor/errormark.ts";
 import { isSaveKey } from "../src/app/editor/keys.ts";
-import { editorText, fileText, followRun, formOf, lineBreakOf, PLAIN } from "../src/app/editor/ranover.ts";
+import {
+  dropsBom,
+  editorText,
+  fileText,
+  followRun,
+  formOf,
+  lineBreakOf,
+  PLAIN,
+  savedForm,
+} from "../src/app/editor/ranover.ts";
 import {
   jumpLine,
   lastRunWords,
@@ -837,24 +846,37 @@ test("a file's form (editor/ranover.ts): its line break, the more common one, \\
   assert.equal(lineBreakOf("a\rb\r"), "\n");
   assert.equal(lineBreakOf("a\rb\rc\r\n"), "\r\n");
   // a BOM: noted, and never in the editor's text (what Run sends and the comparisons use)
-  assert.deepEqual(formOf("﻿a\r\nb\r\n"), { br: "\r\n", bom: true });
+  assert.deepEqual(formOf("\uFEFFa\r\nb\r\n"), { br: "\r\n", bom: true });
   assert.deepEqual(formOf("a\nb\n"), { br: "\n", bom: false });
   assert.deepEqual(formOf(""), PLAIN);
-  assert.equal(editorText("﻿a\r\nb\r\n"), "a\nb\n");
-  assert.equal(editorText("a﻿"), "a﻿", "only a leading BOM");
-  assert.deepEqual(followRun("a\n", "a\n", "﻿a\n"), { t: "same" }, "the same rows with a BOM: the same text");
+  assert.equal(editorText("\uFEFFa\r\nb\r\n"), "a\nb\n");
+  assert.equal(editorText("a\uFEFF"), "a\uFEFF", "only a leading BOM");
+  assert.deepEqual(followRun("a\n", "a\n", "\uFEFFa\n"), { t: "same" }, "the same rows with a BOM: the same text");
   // writing back: the editor's text in the noted form
-  assert.equal(fileText("a\nb\n", { br: "\r\n", bom: false }), "a\r\nb\r\n");
-  assert.equal(fileText("a\nb\n", PLAIN), "a\nb\n");
-  assert.equal(fileText("", { br: "\r\n", bom: false }), "");
-  assert.equal(fileText("a\nb\n", { br: "\r\n", bom: true }), "﻿a\r\nb\r\n");
-  assert.equal(fileText("", { br: "\n", bom: true }), "﻿");
+  assert.equal(fileText("a\nb\n", { br: "\r\n", bom: false }, "t.csv"), "a\r\nb\r\n");
+  assert.equal(fileText("a\nb\n", PLAIN, "t.csv"), "a\nb\n");
+  assert.equal(fileText("", { br: "\r\n", bom: false }, "t.csv"), "");
+  assert.equal(fileText("a\nb\n", { br: "\r\n", bom: true }, "t.csv"), "\uFEFFa\r\nb\r\n");
+  assert.equal(fileText("", { br: "\n", bom: true }, "notes.txt"), "\uFEFF");
   // a mixed file becomes uniform on its first Save
   const mixed = "a\r\nb\r\nc\n";
-  assert.equal(fileText(editorText(mixed), formOf(mixed)), "a\r\nb\r\nc\r\n");
+  assert.equal(fileText(editorText(mixed), formOf(mixed), "a.do"), "a\r\nb\r\nc\r\n");
   // a round trip of a "\r\n" or "\n" text, with or without a BOM, is byte-identical, with or without a final line break
-  for (const t of ["a\r\nb\r\n", "a\r\nb", "a\nb\n", "a\nb", "\r\n", "x", "﻿a\r\nb\r\n", "﻿a\nb", "﻿"])
-    assert.equal(fileText(editorText(t), formOf(t)), t);
+  for (const t of ["a\r\nb\r\n", "a\r\nb", "a\nb\n", "a\nb", "\r\n", "x", "\uFEFFa\r\nb\r\n", "\uFEFFa\nb", "\uFEFF"])
+    assert.equal(fileText(editorText(t), formOf(t), "data/t.csv"), t);
+  // a do-file or an ado-file (by the name it is saved under, case ignored) is written without its BOM, its line break
+  // kept: the engine reads a BOM as part of the first command (ODT-34)
+  for (const path of ["a.do", "dir/b.DO", "prog.ado", "X.Ado"]) {
+    assert.equal(dropsBom(path), true, path);
+    assert.equal(fileText("a\nb", { br: "\r\n", bom: true }, path), "a\r\nb", path);
+  }
+  for (const path of ["t.csv", "notes.txt", "a.do.txt", "do", "a.dofile", "a.dta.log", "x.ado.bak"]) {
+    assert.equal(dropsBom(path), false, path);
+    assert.equal(fileText("a\nb", { br: "\n", bom: true }, path), "\uFEFFa\nb", path);
+  }
+  // the form noted after a Save is the one written: a do-file's BOM is gone, another file's stays
+  assert.deepEqual(savedForm({ br: "\r\n", bom: true }, "a.do"), { br: "\r\n", bom: false });
+  assert.deepEqual(savedForm({ br: "\r\n", bom: true }, "t.csv"), { br: "\r\n", bom: true });
 });
 
 test("Save's key (editor/keys.ts): Ctrl or Cmd with S on any layout, the key that types s or, typing no Latin letter, the key in S's place; never with Alt (AltGr) or Shift", () => {

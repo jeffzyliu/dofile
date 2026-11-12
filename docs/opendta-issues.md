@@ -49,6 +49,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-30 | the ML optimizer takes Newton steps from a nearly singular numerical Hessian, so where the likelihood is flat its path (and sometimes where it stops) depends on the last digits of the likelihood's derivatives. `gnbreg cnt x1 x2, lnalpha(x3)` in compat 1907 stops at the boundary alpha = 0 (ll equal to the Poisson log likelihood), a false convergence: a relative 1e-13 change in the derivatives gives a run that does not converge, 1e-11 one that converges to a log likelihood 0.17 higher. Its constant-only model is stuck (ll -959.397, Stata -952.7455) | found 2026-11-07 comparing CPython with Pyodide (`web/scripts/compare_numeric.py`); perturbation experiment in `browser-engine.md`, "`gnbreg` in 1907_models"; no test | unverified |
 | ODT-32 | a missing optional package (pyreadstat, pandas) is reported as rc 610, which in Stata means "file not Stata format", with advice to `pip install` it: `import sasxport`, `import spss`, `import sas`, `use` of a Stata 7 or older `.dta` (pyreadstat), `export sasxport` (pandas). A script that tests `_rc == 610` to detect a bad file misreads it, and the advice is useless in the web demo | found 2026-11-09 (the web demo ships without pandas); `tests/test_engine.py::test_odt32_*`, `web/e2e/engine.spec.ts` | patched |
 | ODT-33 | the hint for "unexpected end of file" (a block opened with `{` and not closed) says "In the Command window, type the whole block (Shift+Enter starts a new line) or write it in the Do-file Editor": OpenDTA's desktop window, which dofile does not have | `core/hints/programming.py` `_unclosed_block` (English and Portuguese); found 2026-11-11 (the web demo's command line), no test | left as is |
+| ODT-34 | a do-file that starts with a UTF-8 byte order mark fails on its first line with r(198) "invalid syntax": `_run_file` reads it as `utf-8`, so the BOM joins the first command. A nested `do` and `dofile run` both fail; `import delimited` reads a BOM file correctly | found 2026-11-11 (the web demo's Save, which now drops a do-file's BOM); `web/e2e/editor.spec.ts` (a nested `do` of a BOM do-file, r(198), in four browsers) | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
@@ -722,6 +723,22 @@ not closed), says in English and Portuguese: "add the closing }. In the Command 
 - Not a Stata behavior question: the words are OpenDTA's own.
 - Left as is on the maintainer's word (2026-11-11): no patch. To fix upstream, or together with a multi-line command line
   in the web demo (`docs/prototype1-plan.md`, future work), when the sentence would be true there.
+
+### ODT-34: a do-file that starts with a UTF-8 BOM fails on its first line
+`commands/program.py` `_run_file` reads the do-file with `path.read_text(encoding="utf-8")` (latin-1 when that fails),
+which keeps a leading byte order mark as U+FEFF. The lexer then takes it as part of the first command, so
+`\ufeffdisplay 1` stops with r(198) "invalid syntax" before anything runs. Editors on Windows (Notepad's "UTF-8 with
+BOM") and some exports write one.
+- Repro (dofile 0.1.0.dev1 on CPython, 2026-11-11): a file `b.do` holding the bytes `EF BB BF` then
+  `display "inner ok"`; `do b.do` from another do-file or the MCP server, and `dofile run b.do`, echo the line with
+  the BOM in front of `display`, then `invalid syntax`, r(198). The web demo's engine (Pyodide) does the same (`web/e2e/editor.spec.ts`).
+- `import delimited` reads a CSV with a BOM correctly: `io/delimited.py` `read_delimited` tries `utf-8-sig` first.
+- Expected in Stata: **unverified.** Stata 14 reads do-files as UTF-8; whether it skips a leading BOM is to check with a
+  Stata run (a do-file saved as "UTF-8 with BOM", run with `do`).
+- Not patched. The web demo's editor never holds a BOM, so Run from the editor works, and Save drops a `.do` or
+  `.ado` file's BOM (`web/src/app/editor/ranover.ts` `dropsBom`) so a do-file saved there runs in a nested `do`; a data
+  file keeps its BOM. A fix in the engine would be to read with `utf-8-sig` in `_run_file` (and in `include`, which
+  shares it).
 
 ### GAP-3: other `estat` subcommands after `ivregress`
 `estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).

@@ -2,8 +2,11 @@
 // text the editor compares: CodeMirror keeps every line break as "\n" (doc.toString()), so a file's text is compared
 // in that form, or a clean tab of a file with "\r\n" breaks would never equal its saved text. Each open file's form is
 // noted when its text is read (formOf: its line break, and whether it starts with a UTF-8 byte order mark), and Save
-// writes the editor's text in it (fileText), so a "\r\n" file stays "\r\n" and a file with a BOM keeps it; a file with
-// both kinds of line break takes the more common one on its first Save. A new or empty file is "\n", without a BOM. The
+// writes the editor's text in it (fileText), so a "\r\n" file stays "\r\n" and a data or other text file with a BOM
+// keeps it; a .do or .ado file is written without one (dropsBom), since the engine reads a BOM as part of the first
+// command (docs/opendta-issues.md, ODT-34), so a do-file saved here can be run by a nested `do`. The rule goes by the name
+// the file is saved under: a rename keeps the noted BOM, and the new name decides at the next Save. A file with both
+// kinds of line break takes the more common one on its first Save. A new or empty file is "\n", without a BOM. The
 // editor never holds the BOM (editorText drops it), so neither Run nor the comparisons see it. The texts given here are
 // decoded with the BOM kept (files/open.ts decodeText(bytes, true)). Plain TypeScript, no DOM: tested in Node
 // (test/editor.test.ts).
@@ -31,9 +34,20 @@ export const PLAIN: FileForm = { br: "\n", bom: false };
 /** The form of a file's text (decoded with its BOM kept). */
 export const formOf = (text: string): FileForm => ({ br: lineBreakOf(text), bom: text.startsWith(BOM) });
 
-/** The editor's text (line breaks "\n", no BOM) as the file is written, in the form `form`. */
-export const fileText = (doc: string, form: FileForm) =>
-  (form.bom ? BOM : "") + (form.br === "\n" ? doc : doc.replace(/\n/g, "\r\n"));
+/** Whether a file of this name is written without its BOM: a do-file or an ado-file (case ignored), which the engine
+ *  runs, and which a BOM breaks (ODT-34). */
+export const dropsBom = (path: string) => /\.(do|ado)$/i.test(path);
+
+/** The form the file `path` is written in: `form`, without the BOM for a do-file (dropsBom). After a Save it is the
+ *  file's noted form, as the store now has it. */
+export const savedForm = (form: FileForm, path: string): FileForm =>
+  form.bom && dropsBom(path) ? { ...form, bom: false } : form;
+
+/** The editor's text (line breaks "\n", no BOM) as the file `path` is written, in the form `form` (savedForm). */
+export function fileText(doc: string, form: FileForm, path: string) {
+  const f = savedForm(form, path);
+  return (f.bom ? BOM : "") + (f.br === "\n" ? doc : doc.replace(/\n/g, "\r\n"));
+}
 
 /** What the tab does with a run's version:
  *  - same: the run wrote the saved text again; nothing changes;

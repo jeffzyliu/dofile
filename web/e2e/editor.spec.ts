@@ -195,10 +195,15 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(content).toHaveText("display 1display 2display 3display 4");
 });
 
-test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throughout and is clean, and so has the save-failed banner's Download and the file renamed; a \\n file stays \\n; a file's BOM is not in the editor and is written back", async ({
+test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throughout and is clean, and so has the save-failed banner's Download and the file renamed; a \\n file stays \\n; a file's BOM is not in the editor and a .csv's is written back, a .do's dropped; a rename follows the new name", async ({
   page,
 }) => {
-  await setUp(page, { "c.do": "display 1\r\ndisplay 2\r\n", "n.csv": "a\nb\n", "b.csv": "\uFEFFa,b\r\n1,2\r\n" });
+  await setUp(page, {
+    "c.do": "display 1\r\ndisplay 2\r\n",
+    "n.csv": "a\nb\n",
+    "b.csv": "\uFEFFa,b\r\n1,2\r\n",
+    "e.do": "\uFEFFdisplay 1\r\n",
+  });
   const dirty = (path: string) =>
     page.evaluate((p) => window.__dofile.state.tabs.value.find((t: { path: string }) => t.path === p)?.dirty, path);
   const content = page.locator(".cm-content");
@@ -276,10 +281,49 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await page.keyboard.type("3,4");
   await page.keyboard.press("ControlOrMeta+s");
   await expect(page.locator(".toast")).toHaveText("Saved b.csv");
-  const raw = await page.evaluate(async () => [...(await window.__dofile.store.read("b.csv"))]);
-  expect(raw.slice(0, 3)).toEqual([0xef, 0xbb, 0xbf]);
-  expect(Buffer.from(raw.slice(3)).toString("utf8")).toBe("a,b\r\n1,2\r\n3,4");
+  // the bytes as stored, decoded with a BOM kept as "\uFEFF"
+  const bytes = async (path: string) =>
+    Buffer.from(await page.evaluate(async (p) => [...(await window.__dofile.store.read(p))], path)).toString("utf8");
+  expect(await bytes("b.csv")).toBe("\uFEFFa,b\r\n1,2\r\n3,4");
   await expect.poll(() => dirty("b.csv")).toBe(false);
+
+  // a do-file with a BOM: not in the editor either; Save drops it (the engine would read it as part of the first command,
+  // ODT-34), the line break kept
+  const rename = async (from: string, to: string) => {
+    if (isPhone(page)) await view(page, "Files");
+    await page
+      .getByRole("tree", { name: "Files" })
+      .getByRole("treeitem", { name: new RegExp(`^${from.replace(".", "\\.")}`) })
+      .focus();
+    await page.keyboard.press("F2");
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type(to);
+    await page.keyboard.press("Enter");
+    await expect(
+      page
+        .getByRole("tree", { name: "Files" })
+        .getByRole("treeitem", { name: new RegExp(`^${to.replace(".", "\\.")}`) }),
+    ).toBeFocused();
+  };
+  await open(page, "e.do");
+  expect(await dirty("e.do")).toBe(false);
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type("display 2");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(page.locator(".toast")).toHaveText("Saved e.do");
+  expect(await bytes("e.do")).toBe("display 1\r\ndisplay 2");
+  // renamed, a file follows its new name at the next Save: e.do, saved without its BOM, stays without as e.txt; b.csv,
+  // saved with it, loses it as f.do
+  await rename("e.do", "e.txt");
+  await page.keyboard.press("ControlOrMeta+s"); // the active tab, wherever the focus is
+  await expect(page.locator(".toast")).toHaveText("Saved e.txt");
+  expect(await bytes("e.txt")).toBe("display 1\r\ndisplay 2");
+  await open(page, "b.csv");
+  await rename("b.csv", "f.do");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(page.locator(".toast")).toHaveText("Saved f.do");
+  expect(await bytes("f.do")).toBe("a,b\r\n1,2\r\n3,4");
 });
 
 test("the editor: a .csv's columns have their colors, a .log's lines their kinds, .md and .json their tokens; a file dropped on it uploads and leaves its text", async ({
@@ -1124,10 +1168,10 @@ test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites 
   await expect(page.getByRole("img", { name: "unsaved changes" })).toHaveCount(0);
 });
 
-test("a file's form follows the store's text the editor takes: a run's version (shown, or kept with edits) and Reload from the run; a do-file with a BOM runs, since the editor sends no BOM", async ({
+test("a file's form follows the store's text the editor takes: a run's version (shown, or kept with edits) and Reload from the run; a do-file with a BOM fails in a nested do, runs from the editor, which sends no BOM, and runs in a nested do once saved", async ({
   page,
 }) => {
-  await setUp(page, { "w.csv": "a\n9\n", "x.csv": "a\n9\n", "b.do": "﻿display 40+2\r\n" }, "/?test");
+  await setUp(page, { "w.csv": "a\n9\n", "x.csv": "a\n9\n", "b.do": "\uFEFFdisplay 40+2\r\n" }, "/?test");
   await startEngine(page);
   await ready(page);
   const dirty = (path: string) =>
@@ -1186,10 +1230,26 @@ test("a file's form follows the store's text the editor takes: a run's version (
   expect(raw.slice(0, 3)).toEqual([0xef, 0xbb, 0xbf]);
   expect(Buffer.from(raw.slice(3)).toString("utf8")).toBe("a\r\n5\r\n6");
 
-  // a do-file with a BOM: Run sends the editor's text, which has none (the engine reads a BOM as part of the first command)
+  // a do-file with a BOM: the engine reads the BOM as part of the first command (ODT-34), so a nested `do` of it fails;
+  // Run sends the editor's text, which has none; saved from the editor it has none, and the nested `do` runs
+  const nested = async () => {
+    const r = await page.evaluate(() => window.__dofile.run("do b.do"));
+    await ready(page);
+    return { rc: r?.rc, log: r?.log ?? "" };
+  };
+  const before = await nested();
+  expect(before.rc, before.log).toBe(198);
+  expect(before.log).toContain("invalid syntax");
   await open(page, "b.do");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await ready(page);
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
   await expect(page.getByRole("log", { name: "Log" })).toContainText("42");
+  if (isPhone(page)) await view(page, "Editor");
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect.poll(() => stored(page, "b.do")).toBe("display 40+2\r\n");
+  expect((await page.evaluate(async () => [...(await window.__dofile.store.read("b.do"))]))[0]).toBe(0x64); // "d", no BOM
+  const after = await nested();
+  expect(after.rc, after.log).toBe(0);
+  expect(after.log).toContain("42");
 });
