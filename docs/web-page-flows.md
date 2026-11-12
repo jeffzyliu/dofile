@@ -237,7 +237,8 @@ sequenceDiagram
 | A banner leaves, or a dialog's opener has left | the editor (or the `.dta` tab, or Load) | the editor (or a `.dta` tab's Load) on the Editor view; "More actions" on any other view |
 | Close-tab's Save or "Don't save" | the selected tab in "Open files" | the editor: "Open files" is not shown, and neither is the tree on the Editor view |
 | The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's timer gives the focus to its opener. A queued Run has just shown the Log view (`run.ts` `began`). |
-| A dialog opened from a menu (Reset, Delete all) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all | the ⋯ trigger for Reset; the strip's "Files ⋯" ("File actions") for Delete all |
+| A dialog opened from a menu (Reset, Delete all, Clear log) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all, "Log actions" for Clear log | the ⋯ trigger for Reset; the strip's "Files ⋯" ("File actions") for Delete all; the strip's "Log ⋯" ("Log actions") for Clear log |
+| The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear) and cannot take the focus, so `ui/Dialog.tsx` hands it to `focusStable()`: the editor, or "More actions" |
 | Find opened from the phone strip's "Log ⋯" | (desktop: the Log head's Find button) | `openFind(null)` takes the focused element, the "Log ⋯" button that `closeMenu` just focused |
 
 ### Tests that hold this

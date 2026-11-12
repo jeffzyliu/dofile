@@ -6,7 +6,8 @@
 //    and "dofile is open in another tab").
 //  - When it closes (the component unmounts), focus returns to what had it when the dialog opened; if that has left the
 //    page, to the editor or More actions (states/focus.ts focusStable). Both after the timers its answer set, and only
-//    for a focus left on nothing, so a focus an answer places itself (the close-tab dialog's) moves once. A dialog that
+//    for a focus left on nothing, so a focus an answer places itself (the close-tab dialog's) moves once. The same when
+//    the opener cannot take the focus (the answer disabled it: the Log head's "Clear…" after Clear log). A dialog that
 //    opens while the one before it is handing the focus back (the next clash, other-tab over a dialog) takes that one's
 //    opener as its own; <body> is never an opener (a dialog opened with the focus on nothing gives it to focusStable).
 //  - Unmounted with no answer (another dialog replaced it in the `dialog` signal): its owner treats that as Cancel.
@@ -75,7 +76,8 @@ export function Dialog({
         if (leaving === opener) leaving = null;
         if (document.activeElement && document.activeElement !== document.body) return;
         if (opener?.isConnected) opener.focus();
-        else focusStable();
+        // an opener that cannot take it (the head's "Clear…", disabled by the answer) leaves the focus on nothing
+        if (!document.activeElement || document.activeElement === document.body) focusStable();
       });
     };
   }, []);

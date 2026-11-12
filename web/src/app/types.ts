@@ -114,6 +114,7 @@ export interface Graph {
 
 /** The open dialog. Who opens each: download, other-tab: engine.ts (effects of the state machine); reset: 4d's askReset(); clash, delete, delete-all,
  *  close-tab: 4a. delete-all: the head menu's "Delete all files…"; `count` is the files in `files` that are not folders.
+ *  clear-log: the Log head's "Clear…" and the menus' "Clear log…" (log/CommandLine.tsx; the view is log/ClearLogDialog.tsx).
  *  A new value with another payload (clash 1, then clash 2) draws a new dialog (dialogs.tsx keys on the whole value). */
 export type Dialog =
   | null
@@ -121,6 +122,7 @@ export type Dialog =
   | { d: "clash"; path: string; index: number; total: number }
   | { d: "delete"; paths: string[] }
   | { d: "delete-all"; count: number }
+  | { d: "clear-log" }
   | { d: "reset" }
   | { d: "close-tab"; path: string }
   | { d: "restore-sample"; paths: string[] }
