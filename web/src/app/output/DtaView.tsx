@@ -17,7 +17,7 @@ import { fileCommand } from "../../stata/quote.ts";
 import { call } from "../engine.ts";
 import { baseName, formatSize } from "../files/tree.ts";
 import { runCommand } from "../run.ts";
-import { noEngine, startFirst } from "../start.ts";
+import { startFirst, startOffer } from "../start.ts";
 import { engine, files, showToast } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { copyText } from "./clip.ts";
@@ -46,12 +46,13 @@ export function DtaView({ path }: { path: string }) {
   const summary = info && !("error" in info) ? info : null;
   const made = fileCommand("use", path);
   const command = "command" in made ? made.command : null;
-  const off = noEngine(); // Load is off, and says why when pressed
+  const offer = startOffer(engine.value),
+    off = offer !== null; // Load is off, and says why when pressed
   const load = async () => {
     if (command === null) return;
     const name = baseName(path);
-    if (off) {
-      showToast(startFirst(`load ${name}`), "error");
+    if (offer !== null) {
+      showToast(startFirst(offer, `load ${name}`), "error");
       return;
     }
     const run = runCommand(command);

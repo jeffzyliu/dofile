@@ -4,12 +4,15 @@
 //    (pastedLines answers null); the browser then pastes it as it is, and a one-line field drops the breaks;
 //  - the field's text before and after the cursor joins the first and the last pasted line, as a paste would put them;
 //  - lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too;
-//  - with no engine (start.ts) no pasted line runs: the paste is an ordinary paste (pasterun.ts linesToRun checks the
-//    engine first), into a field that is disabled then;
+//  - with no engine (start.ts) no pasted line runs: the paste is an ordinary paste (pasterun.ts pastePlan checks the
+//    engine first), into a field that is off then;
+//  - with an engine that is there or on its way but not `ready` (the page load, a start, a run) a paste of lines is
+//    refused whole, before anything changes: nothing is pasted, the field keeps its text, and a toast says that none of
+//    the lines ran (pastePlan);
 //  - the lines stop at the first one that is not run (refused: the page load, a start or a run in progress), that ends
 //    with an error (any rc but 0, Break's rc 1 too), or whose run is cut because another tab took the engine (the rest
 //    never go to the engine this tab gets back). The rest are not run, and the page says how many in a toast; a refused
-//    line goes back into the field, as a typed one stays, unless the field is disabled by then (pasterun.ts putBack);
+//    line goes back into the field, as a typed one stays, unless the field is off by then (pasterun.ts putBack);
 //  - a block (`forvalues i = 1/3 {` ... `}`, `program define` ... `end`, `mata` ... `end`), a comment that goes on to
 //    the next lines (`/*` ... `*/`) or a command continued with `///` cannot run this way, one line at a time (a pasted
 //    `/*`, `drop _all`, `*/` would run `drop _all`): the lines stop before the line that opens it (it is not sent), and

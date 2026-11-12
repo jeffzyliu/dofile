@@ -966,18 +966,17 @@ input.filter::placeholder {
 .cmdline .field::placeholder {
   color: var(--muted);
 }
-/* no engine: the field is off. Its hint and a typed draft stay readable (the muted color at full opacity, which meets
-   the text contrast on this ground: WCAG exempts a disabled control, the words here are still to be read) */
-.cmdline .field:disabled {
+/* no engine: the field is off (aria-disabled and read-only, so it can keep the focus). Its hint and a typed draft stay
+   readable: the muted color at full opacity, which meets the text contrast on this ground (WCAG exempts a disabled
+   control; the words here are still to be read) */
+.cmdline .field[aria-disabled="true"] {
   color: var(--muted);
-  -webkit-text-fill-color: var(--muted); /* Safari draws a disabled field's text in its own grey */
   background: var(--surface-2);
-  opacity: 1;
   cursor: default;
+  text-overflow: ellipsis;
 }
-.cmdline .field:disabled::placeholder {
+.cmdline .field[aria-disabled="true"]::placeholder {
   color: var(--muted);
-  -webkit-text-fill-color: var(--muted);
   opacity: 1;
 }
 /* "Start engine" in the command line: as wide as its words (no width is reserved: the field takes what is left) */
@@ -987,13 +986,19 @@ input.filter::placeholder {
 }
 .app[data-layout="phone"] .cmdline .start {
   min-height: 44px;
+  padding-inline: 8px;
+}
+/* on the narrowest phones (320 px) the hint only fits with every spare pixel: the off field has less padding, and the
+   "." prompt, which has no command to stand before, is not shown */
+.app[data-layout="phone"] .cmdline .field[aria-disabled="true"] {
+  padding-inline: 4px;
+}
+.app[data-layout="phone"] .cmdline:has(.field[aria-disabled="true"]) .prompt {
+  display: none;
 }
 /* beside that button the phone's field is narrow: the hint is set in the UI font, smaller, so it shows whole */
-.app[data-layout="phone"] .cmdline .field:disabled::placeholder {
+.app[data-layout="phone"] .cmdline .field[aria-disabled="true"]::placeholder {
   font: var(--text-sm) / 1.2 var(--font-ui);
-}
-.cmdline .field:disabled {
-  text-overflow: ellipsis;
 }
 /* the phone's Run button: 44 px square, the primary color; while the field is empty it looks off (aria-disabled, so a tap
    still keeps the keyboard open) */

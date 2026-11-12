@@ -77,7 +77,7 @@
 //      states/ResetDialog.tsx (askReset), states/banners.tsx (the engine-state banners, reset, storage, and
 //      download-failed, built in step 3 and reworded by 4d). Writes `dialog` (reset; it closes download and
 //      other-tab), `banners` (only dismiss()). Calls engine.ts start (also "Try again"), ask() (the declined banner's
-//      "Download the engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,
+//      "Start engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,
 //      and a second press does nothing), keepWaiting, reset; editorCommands.runFile ("Run the file
 //      again") and editorCommands.focus (states/focus.ts focusStable); run.ts refreshData (Reset describes the memory
 //      again after a run: states/words.ts resetDecision); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner

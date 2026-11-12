@@ -11,14 +11,17 @@
 // With no engine (start.ts startOffer) Run is "Start engine": a press does what the state offers (the download prompt,
 // a new try after a failed start, the take-over dialog) and runs nothing, and Run selection is off. "Start engine" is
 // one of Run's labels, so the button is as wide with "Run" as with it and the toolbar does not move.
+// Run is never `disabled`: off, it is aria-disabled and `.off`, so a Run that has the focus keeps it when its state
+// turns it off ("Start engine" pressed by keyboard after a failed start becomes "Starting…"), and a press then says why
+// in a toast (the words Ctrl/Cmd+Enter gives), except while a run is on, where a second Enter must stay silent.
 
 import * as eng from "../engine.ts";
 import { startEngine, startOffer } from "../start.ts";
-import { activeTab, engine, isolated, phoneTab, tabs } from "../state.ts";
+import { activeTab, engine, isolated, phoneTab, showToast, tabs } from "../state.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { since } from "./clock.ts";
 import { editorCommands, selection } from "./commands.ts";
-import { PILL_WIDEST, pillTime } from "./words.ts";
+import { PILL_WIDEST, pillTime, refusedRunWords } from "./words.ts";
 
 // The play icon says Run and the stop icon says Break, so the state labels are short; the words a screen reader hears
 // start with the shown ones (NAME).
@@ -60,6 +63,17 @@ function breakState(): { label: (typeof BREAK)[number]; live: boolean; disabled:
   return { label: "Break", live: false, disabled: true };
 }
 
+/** A press of Run (the toolbar's, the phone's): "Start engine" with no engine; a run when one can be sent; nothing
+ *  while a run is on; else a toast that says why Run is off. */
+function pressRun(run: ReturnType<typeof runState>, go: () => void) {
+  if (run.busy) return;
+  if (run.disabled) {
+    const words = refusedRunWords(engine.value.s);
+    if (words) showToast(words, "error");
+  } else if (run.start) startEngine();
+  else go();
+}
+
 const pressBreak = () => {
   if (engine.value.s === "waiting")
     eng.reset(); // "Reset now": asks nothing
@@ -82,18 +96,14 @@ export function RunControls() {
     dot = () => <span class="dot" role="img" aria-label="unsaved changes" />;
   return (
     <>
-      {/* While running, Run is aria-disabled, not disabled: a focused Run keeps the focus, so a second Enter can't reach Break. */}
+      {/* Off, Run is aria-disabled, never disabled: a focused Run keeps the focus, so a second Enter can't reach Break. */}
       <button
         type="button"
-        class={`btn primary run-ctl${run.busy ? " off" : ""}`}
-        disabled={run.disabled}
+        class={`btn primary run-ctl${run.busy || run.disabled ? " off" : ""}`}
         aria-label={NAME[run.label]}
-        aria-disabled={run.busy || undefined}
+        aria-disabled={run.busy || run.disabled || undefined}
         aria-keyshortcuts={(usable && !sel) || (run.start && !run.disabled) ? modShortcut("Enter") : undefined}
-        onClick={() => {
-          if (run.start) startEngine();
-          else if (!run.busy) editorCommands.runFile();
-        }}
+        onClick={() => pressRun(run, () => editorCommands.runFile())}
       >
         <Labels
           at={usable && !sel ? 0 : 1 + RUN.indexOf(run.label)}
@@ -220,14 +230,10 @@ export function PhoneRun() {
   return (
     <button
       type="button"
-      class="btn primary run-ctl"
-      disabled={run.disabled}
+      class={`btn primary run-ctl${run.disabled ? " off" : ""}`}
       aria-label={name}
-      onClick={() => {
-        if (run.start) startEngine();
-        else if (sel) editorCommands.runSelection();
-        else editorCommands.runFile();
-      }}
+      aria-disabled={run.disabled || undefined}
+      onClick={() => pressRun(run, () => (sel ? editorCommands.runSelection() : editorCommands.runFile()))}
     >
       <Labels at={range ? all.length - 2 : RUN.indexOf(run.label)} labels={all} />
     </button>

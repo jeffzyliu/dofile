@@ -36,6 +36,7 @@ import { classify, hintParts, plainLog, runError } from "../src/app/log/classify
 import { matches } from "../src/app/log/find.ts";
 import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
 import type { LastRun, RunHead } from "../src/app/types.ts";
+import { isHeldEnter } from "../src/app/ui/keys.ts";
 
 // a log as the engine writes it (the engine's own text: hints on, as browser.py runs it)
 const LOG = `. clear
@@ -932,6 +933,15 @@ test("Save's key (editor/keys.ts): Ctrl or Cmd with S on any layout, the key tha
   // other keys
   assert.equal(press("Enter", "Enter", { ctrl: true }), false);
   assert.equal(press("d", "KeyD", { ctrl: true }), false);
+});
+
+test("a dialog's held-Enter rule (ui/keys.ts isHeldEnter): only a repeat of Enter, with or without modifiers; the first press, and a held Space, Tab or Escape, are left alone", () => {
+  assert.equal(isHeldEnter({ key: "Enter", repeat: true }), true);
+  const withCtrl = { key: "Enter", repeat: true, ctrlKey: true, metaKey: false };
+  assert.equal(isHeldEnter(withCtrl), true, "Ctrl/Cmd+Enter held: the key that opened the prompt");
+  assert.equal(isHeldEnter({ key: "Enter", repeat: false }), false, "the first press answers the dialog");
+  for (const key of [" ", "Tab", "Escape", "a", "NumpadEnter"])
+    assert.equal(isHeldEnter({ key, repeat: true }), false, key);
 });
 
 test("a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or the key does what Start engine does (the download prompt, the take-over dialog)", () => {

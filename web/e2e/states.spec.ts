@@ -149,6 +149,100 @@ test("a second tab: Start engine goes into the take-over dialog, never straight 
   await second.close();
 });
 
+test("where nothing can start the engine from the page (a failed start that needs a reload or another browser, failed twice, a take-over in progress): the command line and its Start engine are off, and say so; the help link's toast says the engine isn't running", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.__dofile.state.runWriter.log.value = [
+      { t: "head" },
+      {
+        t: "text",
+        run: 1,
+        text: '. summarize sex\nsex not found\n  → "sex" is not a variable.\n    Learn more: help summarize\nr(111);\n',
+        end: { kind: "command", fresh_locals: false, rc: 111, line: null, seconds: 0.1 },
+      },
+    ];
+  });
+  if (phone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
+  const field = page.getByRole("textbox", { name: "Command" });
+  const start = page.locator(".cmdline").getByRole("button", { name: "Start engine" });
+  const help = page.getByRole("log", { name: "Log" }).getByRole("button", { name: "help summarize" });
+  const toast = page.locator(".toast");
+  const clear = () =>
+    page.evaluate(() => {
+      window.__dofile.state.toast.value = null;
+    });
+  const failed = (reason: string) => ({ s: "failed", reason, detail: "cause", message: "words" });
+  const cases: [string, object][] = [
+    ["failed, updated", failed("updated")],
+    ["failed, no-wasm", failed("no-wasm")],
+    ["failed-twice", { s: "failed-twice", reason: "memory", detail: "cause", message: "words" }],
+    ["other-tab-taking", { s: "other-tab-taking" }],
+  ];
+  for (const [name, st] of cases) {
+    await show(page, st);
+    // off, not `disabled`: still focusable, read-only, with the hint that says why
+    await expect(field, name).toHaveAttribute("aria-disabled", "true");
+    await expect(field, name).not.toHaveAttribute("disabled");
+    await expect(field, name).toHaveJSProperty("readOnly", true);
+    await expect(field, name).toHaveAttribute("placeholder", "The engine isn't running");
+    await expect(start, name).toHaveAttribute("aria-disabled", "true");
+    await expect(start, name).toHaveClass(/\boff\b/);
+    await expect(start, name).not.toHaveAttribute("disabled");
+    await expect(page.getByRole("button", { name: "Run command" })).toHaveCount(0);
+    // a press is not swallowed in silence, and reaches no machine
+    await clear();
+    await start.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
+    await expect(toast, name).toHaveText("The engine isn't running");
+    await clear();
+    await help.click({ force: true });
+    await expect(toast, name).toHaveText("The engine isn't running: can't see help summarize");
+    // Enter in the off field says its hint
+    await clear();
+    await field.focus();
+    await page.keyboard.press("Enter");
+    await expect(toast, name).toHaveText("The engine isn't running");
+    await expect(field).toBeFocused();
+  }
+  expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
+  // where a start is offered the words say to start it
+  await show(page, failed("download"));
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  await expect(start).not.toHaveAttribute("aria-disabled", "true");
+  await clear();
+  await help.click({ force: true });
+  await expect(toast).toHaveText("Start the engine to see help summarize");
+});
+
+test("the phone's command line at 320 px with no engine: the hint shows whole beside Start engine, and the row is no wider than the page", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await show(page, { s: "declined" });
+  await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
+  const field = page.getByRole("textbox", { name: "Command" });
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  await expect(page.locator(".cmdline").getByRole("button", { name: "Start engine" })).toBeVisible();
+  const room = await field.evaluate((el: HTMLInputElement) => {
+    const c = document.createElement("canvas").getContext("2d")!;
+    const hint = getComputedStyle(el, "::placeholder"),
+      box = getComputedStyle(el);
+    c.font = `${hint.fontStyle} ${hint.fontWeight} ${hint.fontSize} ${hint.fontFamily}`;
+    const line = document.querySelector(".cmdline")!;
+    return {
+      hint: c.measureText(el.placeholder).width,
+      field: el.clientWidth - Number.parseFloat(box.paddingLeft) - Number.parseFloat(box.paddingRight),
+      over: line.scrollWidth - line.clientWidth,
+      page: document.scrollingElement!.scrollWidth,
+    };
+  });
+  expect(room.hint).toBeGreaterThan(50);
+  expect(room.hint, `the hint (${room.hint} px) in the field (${room.field} px)`).toBeLessThanOrEqual(room.field);
+  expect(room.over).toBeLessThanOrEqual(0);
+  expect(room.page).toBe(320);
+});
+
 test("a failed start: the words and the first action follow the reason", async ({ page }) => {
   const cases: [string, string, string[]][] = [
     ["no-wasm", "no WebAssembly support", ["Browsers that work"]],

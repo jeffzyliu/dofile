@@ -1683,6 +1683,144 @@ test("with no engine nothing offers to run: Run is Start engine and Ctrl/Cmd+Ent
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.kind)).toBe("file");
 });
 
+test("while the engine starts, a command is refused with words and the draft stays; a start that fails under the caret, and Start engine pressed by keyboard, leave the focus where it was; Ctrl/Cmd+Enter after a failed start tries again, and says why where it cannot", async ({
+  page,
+}) => {
+  // the build's list is held, then refused: a download that stays `downloading` until the test lets it fail
+  let release = () => {};
+  let requests = 0;
+  const hold = () => {
+    const gate = new Promise<void>((ok) => {
+      release = ok;
+    });
+    return gate;
+  };
+  let gate = hold();
+  await page.route("**/start-files.json", async (route) => {
+    requests++;
+    await gate;
+    await route.abort();
+  });
+  await setUp(page, { "a.do": "display 1\n" });
+  await open(page, "a.do");
+  const engineIs = () => page.evaluate(() => document.documentElement.dataset.engine);
+  const toast = page.locator(".toast");
+  const clear = () =>
+    page.evaluate(() => {
+      window.__dofile.state.toast.value = null;
+    });
+  const focused = () =>
+    page.evaluate(() => {
+      const a = document.activeElement;
+      return a === document.body || !a
+        ? "the page"
+        : `${a.tagName.toLowerCase()} ${a.getAttribute("aria-label") ?? a.textContent?.trim()}`;
+    });
+  /** The download fails: the gate opens, and a new one is set for the next try. */
+  const fail = async () => {
+    const open = release;
+    gate = hold();
+    open();
+    await expect.poll(engineIs).toBe("failed");
+  };
+  const STARTING = "The engine is starting. Try again when it is ready.";
+  const field = page.getByRole("textbox", { name: "Command" });
+  const line = page.locator(".cmdline");
+
+  // "Download" pressed; a command typed during the download; Enter: the toast, and the text stays
+  await page.evaluate(() => (window as any).__dofile.start());
+  await expect.poll(engineIs).toBe("downloading");
+  if (isPhone(page)) await view(page, "Log");
+  await expect(field).toBeEnabled(); // on, so a draft can be typed
+  await field.fill("sysuse auto");
+  const run = page.getByRole("button", { name: "Run command" });
+  await expect(run).toHaveAttribute("aria-disabled", "true"); // not a live button that does nothing
+  await expect(run).not.toHaveAttribute("disabled");
+  await field.press("Enter");
+  await expect(toast).toHaveText(STARTING);
+  await expect(field).toHaveValue("sysuse auto");
+  // the off button says the same when pressed
+  await clear();
+  await run.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
+  await expect(toast).toHaveText(STARTING);
+  await expect(field).toHaveValue("sysuse auto");
+  // a paste of lines now is refused whole: nothing pasted, the field as it was, the refusal's toast
+  await clear();
+  const prevented = await field.evaluate((el: HTMLInputElement) => {
+    el.setSelectionRange(el.value.length, el.value.length);
+    const e = new Event("paste", { bubbles: true, cancelable: true });
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "\ndisplay 1\ndisplay 2");
+    Object.defineProperty(e, "clipboardData", { value: dt });
+    el.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+  await expect(toast).toHaveText("3 of 3 pasted lines not run: the engine can't take a command now");
+  await expect(field).toHaveValue("sysuse auto");
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
+
+  // the start fails while the field has the focus: the field is off, keeps its text and keeps the focus
+  await field.focus();
+  await fail();
+  await expect(field).toHaveAttribute("aria-disabled", "true");
+  await expect(field).toHaveValue("sysuse auto");
+  await expect(field).toBeFocused();
+  await clear();
+  await page.keyboard.press("Enter");
+  await expect(toast).toHaveText("Start the engine to run code");
+
+  // the command line's Start engine, by keyboard: a new try. The button in its place is the off "Run command", which
+  // keeps the focus; a second press at the same spot starts nothing more and says why
+  await line.getByRole("button", { name: "Start engine" }).focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(engineIs).toBe("downloading");
+  expect(await focused()).toBe("button Run command");
+  await clear();
+  await page.keyboard.press("Enter");
+  await expect(toast).toHaveText(STARTING);
+  expect(await engineIs()).toBe("downloading");
+  expect(requests).toBe(2);
+  await fail();
+
+  // the toolbar's Start engine, by keyboard: "Starting…" keeps the focus, and a second press says why
+  const top = page.locator(".toolbar .run-ctl").first();
+  const label = top.locator(".label:not([aria-hidden])"); // the one label shown, of those the button holds
+  await expect(label).toHaveText("Start engine");
+  await top.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(engineIs).toBe("downloading");
+  await expect(label).toHaveText("Starting…");
+  await expect(top).toHaveAttribute("aria-disabled", "true");
+  await expect(top).toBeFocused();
+  await clear();
+  await page.keyboard.press("Enter");
+  await expect(toast).toHaveText(STARTING);
+  expect(requests).toBe(3);
+  await fail();
+
+  // Ctrl/Cmd+Enter in the editor after a failed start: the same new try
+  if (isPhone(page)) await view(page, "Editor");
+  await page.locator(".cm-content").click();
+  await clear();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect.poll(engineIs).toBe("downloading");
+  expect(requests).toBe(4);
+  await expect(toast).toHaveCount(0);
+  await fail();
+  // and where the start cannot be tried again from the page (the `engine` signal set to show reason "updated"): a
+  // toast says so, and nothing is tried
+  await page.evaluate(() => {
+    window.__dofile.state.engine.value = { s: "failed", reason: "updated", detail: "cause", message: "words" };
+  });
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(toast).toHaveText("Run is not available: the engine isn't running in this tab");
+  await page.waitForTimeout(100);
+  expect(requests).toBe(4);
+  expect(await page.evaluate(() => window.__dofile.state.lastRun.value)).toBeNull();
+});
+
 test("with no engine Import and the log's help links are off: aria-disabled and still focusable, and a press only says why", async ({
   page,
 }) => {

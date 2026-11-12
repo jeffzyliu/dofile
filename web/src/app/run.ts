@@ -49,8 +49,9 @@ export const handlers: engine.RunHandlers = { began, log: streamed, ended, engin
  *  no run (start.ts: "Start engine"), so a refusal there is only a guard. */
 export type Requested = { how: "started"; done: Promise<RunResult> } | { how: "refused"; done: Promise<null> };
 
-/** Ask the engine controller for a run (the state machine decides; engine.run()). */
-function request(code: string, head: RunHead): Requested {
+/** Ask the engine controller for a run (the state machine decides; engine.run()), and what that gave at once
+ *  (Requested): the editor's Ctrl/Cmd+Enter says why in a toast when it was refused. */
+export function requestRun(code: string, head: RunHead): Requested {
   if (!engine.run(code, head)) return { how: "refused", done: Promise.resolve(null) };
   // the effect send-run called began() in the step that run() made, so the run is `current`; it is not only when the
   // engine controller tells other handlers than this module's (main.tsx: connectRun(handlers))
@@ -63,12 +64,7 @@ function request(code: string, head: RunHead): Requested {
 
 /** Run `code` as `head` says (section 4). Resolves with the result, or null when it did not run (see Requested). */
 export function runCode(code: string, head: RunHead): Promise<RunResult | null> {
-  return request(code, head).done;
-}
-
-/** runCode, and what it gave at once (Requested): the editor's Ctrl/Cmd+Enter says why in a toast when it was refused. */
-export function requestRun(code: string, head: RunHead): Requested {
-  return request(code, head);
+  return requestRun(code, head).done;
 }
 
 /** One command, as the command line, Load and Import send it (section 4): run with kind "command" and the locals kept.
@@ -78,7 +74,7 @@ export function requestRun(code: string, head: RunHead): Requested {
 export function runCommand(text: string): Requested {
   const command = text.trim();
   if (!command) return { how: "refused", done: Promise.resolve(null) };
-  const requested = request(command, { kind: "command", fresh_locals: false });
+  const requested = requestRun(command, { kind: "command", fresh_locals: false });
   if (requested.how === "started" && W.history.value.at(-1) !== command)
     W.history.value = [...W.history.value, command];
   return requested;

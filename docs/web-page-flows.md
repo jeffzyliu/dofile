@@ -313,37 +313,54 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 
 | State | `startOffer` | The toolbar's Run | A press, or Ctrl/Cmd+Enter | The command line |
 |---|---|---|---|---|
-| `checking-lock`, `checking-cache` (the page load) | null | "Run", disabled | Ctrl/Cmd+Enter: toast "The engine is starting. Try again when it is ready." | on (Enter is refused, the text stays); "Run command" |
-| `none` (only `?test=manual`), `declined` | `prompt` | "Start engine" | `ask`: the download prompt (`asking`) | disabled, hint "Start the engine to run code"; "Start engine" |
+| `checking-lock`, `checking-cache` (the page load) | null | "Run", off | the button and Ctrl/Cmd+Enter: toast "The engine is starting. Try again when it is ready." | on; "Run command", off; Enter and the off button: the same toast, and the text stays |
+| `none` (only `?test=manual`), `declined` | `prompt` | "Start engine" | `ask`: the download prompt (`asking`) | off, hint "Start the engine to run code"; "Start engine" |
 | `asking` | `prompt` | "Start engine" (under the blocking prompt) | `ask`: the prompt again, should another dialog have taken its place | the same |
-| `downloading`, `starting-list`, `starting-worker` | null | "Starting…", disabled | Ctrl/Cmd+Enter: the "starting" toast | on (Enter is refused, the text stays); "Run command" |
+| `downloading`, `starting-list`, `starting-worker` | null | "Starting…", off | the "starting" toast | on; "Run command", off; Enter and the off button: the "starting" toast, and the text stays |
 | `ready` | null | "Run" | a run | on; "Run command" |
-| `running`, `breaking`, `waiting` | null | "Run", `aria-disabled` in `running`, disabled in the other two | Ctrl/Cmd+Enter: toast "Run is not available until the current run ends" | on (Enter is refused, the text stays); "Run command" |
-| `failed`, reason `download`, `memory` or `unknown` (the banner has "Try again") | `retry` | "Start engine" | `start`: a new try, as the banner's "Try again" | disabled, hint "Start the engine to run code"; "Start engine" |
-| `failed`, reason `updated` or `no-wasm` (the banner says to reload, or which browsers work) | `off` | "Not started", disabled | Ctrl/Cmd+Enter: toast "Run is not available: the engine isn't running in this tab"; no event reaches the machine | disabled, hint "The engine isn't running"; "Start engine", disabled |
-| `failed-twice` | `off` | "Not started", disabled | the same | the same |
-| `other-tab-idle` | `take-over` | "Start engine" (hidden with the other run controls, and under the blocking dialog) | `ask`: the take-over dialog again (the state stays; no lock is taken, nothing starts). Only its "Use dofile in this tab" takes over | disabled, hint "Start the engine to run code"; "Start engine" |
-| `other-tab-taking` | `off` | "Start engine", disabled (hidden) | nothing | disabled, hint "The engine isn't running"; "Start engine", disabled |
+| `running`, `breaking`, `waiting` | null | "Run", off | the button: nothing (a second Enter on a focused Run must stay silent). Ctrl/Cmd+Enter: toast "Run is not available until the current run ends" | on; "Run command", off; Enter and the off button: that toast, and the text stays |
+| `failed`, reason `download`, `memory` or `unknown` (the banner has "Try again") | `retry` | "Start engine" | `start`: a new try, as the banner's "Try again" | off, hint "Start the engine to run code"; "Start engine" |
+| `failed`, reason `updated` or `no-wasm` (the banner says to reload, or which browsers work) | `off` | "Not started", off | toast "Run is not available: the engine isn't running in this tab"; no event reaches the machine | off, hint "The engine isn't running"; "Start engine", off: a press says the hint in a toast |
+| `failed-twice` | `off` | "Not started", off | the same | the same |
+| `other-tab-idle` | `take-over` | "Start engine" (hidden with the other run controls, and under the blocking dialog) | `ask`: the take-over dialog again (the state stays; no lock is taken, nothing starts). Only its "Use dofile in this tab" takes over | off, hint "Start the engine to run code"; "Start engine" |
+| `other-tab-taking` | `off` | "Start engine", off (hidden) | nothing started; the "isn't running in this tab" toast | off, hint "The engine isn't running"; "Start engine", off |
 
+"Off" in this table is never the `disabled` attribute. The toolbar's Run and the command line's button are
+`aria-disabled` with `.off`; the command line's field is `aria-disabled` and read-only. All stay focusable.
+
+- **Why not `disabled`: the focus.** These states change under the visitor's hands: a start fails while a command is
+  being typed, and a press of "Start engine" after a failed start turns that very button into "Starting…" (the
+  toolbar) or into the off "Run command" (the command line, the same element). A `disabled` element that has the focus
+  loses it to `<body>`. `aria-disabled` keeps the focus where it was, which is the pattern `RunControls.tsx` already
+  used for `running`; handing the focus on (as a banner that leaves does) would instead take it out of the field the
+  visitor is typing in, and it would not come back when the engine does. The field's text is never changed.
+- **An off control that is pressed is not silent**, except Run while a run is on: Enter in the field with text, and a
+  press of the off "Run command" or of the off Run, show the toast Ctrl/Cmd+Enter shows in that state
+  (`editor/words.ts` `refusedRunWords`); Enter in the off field, and a press of the off "Start engine", show the
+  field's hint. So a second click at the spot where "Start engine" was is answered: "The engine is starting. Try again
+  when it is ready."
 - **A returning visitor whose browser has the engine** never sees "Start engine": the page load shows "Run", disabled,
-  then `cache-checked` starts the engine by itself ("Starting…", disabled), then "Run". A first visit shows "Run",
-  disabled, for the moment of the page load, then the prompt, with "Start engine" under it.
+  then `cache-checked` starts the engine by itself ("Starting…", off), then "Run". A first visit shows "Run",
+  off, for the moment of the page load, then the prompt, with "Start engine" under it.
 - **The toolbar does not move.** "Start engine" is one of the labels the Run button holds in its one cell (`ui/Icon.tsx`
   `Labels`), so the button is as wide with "Run" as with "Start engine" (`e2e/shell.spec.ts`, "the toolbar does not
   move"). The command line's button reserves no width: it is "Run command" (on a phone the 44 px icon button) with an
   engine and "Start engine", in words on a phone too, without one; the field takes what is left.
 - **Run selection** is disabled with no engine (the phone's one button stays "Start engine" with a selection).
-- **The command line** is disabled with no engine. Disabling never changes its text: a typed draft stays, greyed, and
+- **The command line** is off with no engine. That never changes its text: a typed draft stays, greyed, and
   is usable when the engine is back. The hint is the placeholder, so it shows only while the field is empty (on a phone it is set in the UI font,
   smaller, so it shows whole beside the wider button). Hint and
   draft are the muted color at full opacity on `--surface-2` (the text contrast, 4.5, in both themes; an e2e test
   measures it).
-- **A paste** into the command line checks the engine first (`log/pasterun.ts` `linesToRun`): with no engine it is an
-  ordinary paste, whatever it holds. The field is disabled then, so this guards the instant before it is drawn so.
+- **A paste** into the command line is decided before anything changes (`log/pasterun.ts` `pastePlan`). With no engine
+  it is an ordinary paste, whatever it holds (the field is read-only then, so this guards the instant before it is
+  drawn so). With an engine that is there or on its way but not `ready`, a paste of lines is refused whole (the table
+  under "Three pasted lines").
 - **Load, Import and the log's `help x` links** are off with no engine: `aria-disabled` and `.off` (the take-over
-  button's pattern), still focusable. A press reaches no machine and opens no prompt; a toast says why: "Start the
-  engine to load wages.dta", "Start the engine to import survey.csv", "Start the engine to see help regress"
-  (`start.ts` `startFirst`).
+  button's pattern), still focusable. A press reaches no machine and opens no prompt; a toast says why, by the offer
+  (`start.ts` `startFirst`): where "Start engine" can start it, "Start the engine to load wages.dta", "Start the engine
+  to import survey.csv", "Start the engine to see help regress"; where nothing can start it from the page (`off`), "The
+  engine isn't running: can't load wages.dta" (and "can't import survey.csv", "can't see help regress").
 - **A held Ctrl/Cmd+Enter acts once.** The editor ignores the key's repeats, and a dialog ignores a repeated Enter
   (`ui/Dialog.tsx`), so the repeats do not press the prompt's "Download", which has the focus once the prompt is open.
 
@@ -351,13 +368,13 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 
 | Control | Calls | When it can be pressed |
 |---|---|---|
-| Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready`; `aria-disabled` (not `disabled`) in `running`, so a focused Run keeps the focus and a second Enter cannot reach Break; disabled in `breaking`, `waiting`, at the page load and while downloading or starting ("Starting…"). With no engine it is "Start engine" or "Not started" (the table above) and runs nothing. |
+| Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready`; off in every other state with an engine or one on its way: `aria-disabled`, never `disabled`, so a focused Run keeps the focus and a second Enter cannot reach Break. With no engine it is "Start engine" or "Not started" (the table above) and runs nothing. |
 | Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | enabled in `ready` with a selection; `disabled` in every other state, `running` too (not `aria-disabled`) |
 | Ctrl/Cmd+Enter in the editor | `runEither()`: with no engine `startEngine()`; else Run selection with a selection, else Run; held, it acts once | in any state: with no engine it does what "Start engine" does (the table above); in `ready` it runs; in the other states the run is refused (`run.ts` `requestRun`), and a toast says why by the state (`editor/words.ts` `refusedRunWords`) |
 | Break | `running`: `breakRun()` ("Break", or "Break (reset)" with no cross-origin isolation); `waiting`: "Reset now", `eng.reset()` with no question | disabled in `breaking` ("Stopping…") and when no run is on |
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile()`, then the banner is dismissed | enabled in `ready` with a text tab active |
-| The command line | `runCommand(text)` | with an engine, or one on its way: the machine accepts or refuses. Disabled with no engine |
+| The command line | `runCommand(text)` | in `ready` it runs. With an engine that is not ready, or one on its way, the field is on and the command is refused with a toast (the button is off). Off with no engine |
 | A hint's `help x` link (`log/LogView.tsx`) | `runCommand(text)` | with an engine, or one on its way: the machine accepts or refuses. Off with no engine (`aria-disabled`, a toast) |
 | Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`; off with no engine (`aria-disabled`, a toast); `disabled` in the other states |
 
@@ -478,7 +495,8 @@ sequenceDiagram
 | `stop.why` | When | Lines counted as run | Toast (`inTurnWords`) |
 |---|---|---|---|
 | `block` | the line opens a block, a `/*` comment it does not close, or holds `///` (`opensBlock`); it is not sent | those before it | "N of T pasted lines not run: line L starts a block, a comment or a /// command; run those from the editor" |
-| `refused` | `how` is `refused` | those before it | "N of T pasted lines not run: the engine can't take a command now". The line goes back into the field if the field is empty and not disabled (`pasterun.ts` `putBack`: with no engine by then, nothing is put into the disabled field). |
+| refused whole (`pastePlan`: `refused`) | the engine is there or on its way but not `ready` when the paste comes (the page load, a download, a start, a run) | none: no line is sent | "T of T pasted lines not run: the engine can't take a command now". The paste is prevented and the field is exactly as it was: nothing is pasted, nothing cleared, and the text before and after the cursor stays. (Before 2026-11-12 the field was cleared, line 1 was refused and put back, and the other lines and the text after the cursor were lost.) |
+| `refused` | `how` is `refused` for a line after the first (the engine was `ready` when the paste began, and was not when this line's turn came) | those before it | "N of T pasted lines not run: the engine can't take a command now". The line goes back into the field if the field is empty and not off (`pasterun.ts` `putBack`: with no engine by then, nothing is put into the off field). |
 | `error` | rc is not 0: an error, Break's rc 1, or rc 9998 (a reset, `run-failed`) | up to and with it | "N of T pasted lines not run: line L ended with r(rc)" |
 | `taken` | `done` gave kind `stopped` | up to and with it | "N of T pasted lines not run: another tab took over the engine during line L" |
 | none | every line ran | all | no toast |
@@ -486,7 +504,7 @@ sequenceDiagram
 When the last line ends with an error or is cut by another tab, nothing is left (`total - ran` is 0), and there is no
 toast: its error is in the log. A last line that is refused or a block's leaves one line, and the toast shows.
 
-With no engine no line is run at all: the paste is an ordinary paste (`linesToRun` answers null before `pastedLines` is
+With no engine no line is run at all: the paste is an ordinary paste (`pastePlan` answers before `pastedLines` is
 asked). An engine lost while pasted lines run keeps the rules above: `taken` when another tab took it during a line,
 `error` (rc 9998) when a reset cut the line.
 
@@ -532,8 +550,8 @@ asked). An engine lost while pasted lines run keeps the rules above: `taken` whe
     try, the take-over dialog, or nothing; …"
   - "C1: a run cut by losing the tab lock does not set lastRun, and the store is not listed afterwards"
   - "J1: pasted lines: a line cut because another tab took the engine stops the rest; …"
-  - "a paste with no engine is an ordinary paste: the engine is checked first, no line runs, no prompt opens and the
-    machine hears nothing; no line is put back into the disabled field"
+  - "a paste is decided before anything changes (pastePlan): with no engine an ordinary paste …; with an engine that
+    is not ready, refused whole with the toast's words; ready, the lines run; no line is put back into an off field"
   - "J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)"
 - `web/test/machine.test.ts`:
   - "property: a transition from running, breaking or waiting to a state that is none of those has exactly one end-run,
@@ -548,6 +566,7 @@ asked). An engine lost while pasted lines run keeps the rules above: `taken` whe
   - "pasted lines stop before a block's, a comment's or a /// line, …"
   - "pasted lines: the next starts only once the one before has ended"
   - "a paste with no line break is an ordinary paste; …"
+  - "a dialog's held-Enter rule (ui/keys.ts isHeldEnter): only a repeat of Enter, …"
   - "a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or the key does what
     Start engine does (the download prompt, the take-over dialog)"
 - `web/test/imports.test.ts`:
@@ -561,13 +580,18 @@ asked). An engine lost while pasted lines run keeps the rules above: `taken` whe
     Run selection is off; nothing runs when the engine is ready"
   - "with no engine Import and the log's help links are off: aria-disabled and still focusable, and a press only says
     why"
+  - "while the engine starts, a command is refused with words and the draft stays; a start that fails under the caret,
+    and Start engine pressed by keyboard, leave the focus where it was; Ctrl/Cmd+Enter after a failed start tries
+    again, and says why where it cannot"
   - "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab" (Start engine
     opens the prompt, and nothing runs once the engine is ready)
   - "Ctrl/Cmd+Enter that the engine does not take says why in a toast and starts nothing; …"
 - `web/e2e/shell.spec.ts`: "first visit: … Run is Start engine, which brings the prompt back; a run does nothing and
   opens no prompt"; "the toolbar does not move: …; Run is Start engine with no engine"
 - `web/e2e/states.spec.ts`: "a second tab: Start engine goes into the take-over dialog, never straight to a start; the
-  dialog's button takes over"
+  dialog's button takes over"; "where nothing can start the engine from the page …: the command line and its Start
+  engine are off, and say so; …"; "the phone's command line at 320 px with no engine: the hint shows whole beside Start
+  engine, …"
 - `web/e2e/output.spec.ts`: "a .dta tab with no engine …; Load is off and a press only says why"
 
 ### If you change this

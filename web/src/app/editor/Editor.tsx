@@ -220,8 +220,12 @@ function runSelection(keyed = false) {
  *  why); else Run selection with a selection, else Run (the toolbar's chip says which). */
 function runEither() {
   const offer = startEngine();
-  if (offer === "off") showToast(refusedRunWords(engine.value.s) ?? "", "error");
-  if (offer !== null) return;
+  if (offer !== null) {
+    // where nothing can start the engine from here, say so (words.ts has words for each such state)
+    const words = offer === "off" ? refusedRunWords(engine.value.s) : null;
+    if (words) showToast(words, "error");
+    return;
+  }
   if (selection.value) runSelection(true);
   else runFile(true);
 }
