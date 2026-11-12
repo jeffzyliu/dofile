@@ -37,6 +37,27 @@ body {
   top: var(--vv-top, 0px);
   height: var(--vv-height, 100%);
 }
+/* The keyboard experiment (app/viewport.ts, docs/phone-keyboard-experiment.md; <html data-kb> only with ?kb=…, so none
+   of this applies without it). ?kb=transform moves .app by a transform instead of `top`. A transformed .app is the
+   containing block of its fixed children: the toasts (whose phone rules count from the layout viewport's top, adding
+   --vv-top) and the full-size graph (.viewer, inset: 0). So the toast takes --vv-top as 0 there and its place counts from
+   .app's top, the visible area's; the graph view fills .app, which is the visible area (with `top` it fills the layout
+   viewport, which holds the visible area: either way the visible area is covered). In height, unpan and
+   pre, viewport.ts keeps --vv-top at 0, so the rules above need nothing. ?slide eases .app to its place. */
+:root[data-kb="transform"][data-keyboard] .app {
+  top: 0;
+  transform: translateY(var(--vv-top, 0px));
+}
+:root[data-kb="transform"][data-keyboard] .app .toasts {
+  --vv-top: 0px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-kb-slide] .app {
+    transition:
+      top 0.2s ease-out,
+      transform 0.2s ease-out;
+  }
+}
 :root[data-keyboard] .app[data-layout="phone"] .views {
   display: none;
 }

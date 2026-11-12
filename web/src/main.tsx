@@ -17,7 +17,7 @@ import { render } from "preact";
 import { App } from "./app/App";
 import { selection } from "./app/editor/commands.ts";
 import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
-import { brotli, snapshotStart, testMode } from "./app/env";
+import { brotli, kbLog, kbMode, kbSlide, snapshotStart, testMode } from "./app/env";
 import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
 import * as S from "./app/state.ts";
@@ -51,8 +51,13 @@ const fit = () => {
 };
 fit();
 narrow.addEventListener("change", fit);
-// a phone's on-screen keyboard: .app sized to the area above it (app/viewport.ts)
-const viewport = watchViewport({ enabled: () => S.isPhone.value });
+// a phone's on-screen keyboard: .app sized to the area above it (app/viewport.ts). ?kb=… picks another strategy, ?slide
+// adds a transition and ?kblog the event overlay: an experiment for a real iPhone (docs/phone-keyboard-experiment.md);
+// without them <html> has no data-kb and the overlay's module is not loaded.
+if (kbMode !== "top") document.documentElement.dataset.kb = kbMode;
+if (kbSlide) document.documentElement.dataset.kbSlide = "";
+const viewport = watchViewport({ enabled: () => S.isPhone.value, mode: kbMode });
+if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
 effect(() => {
   S.isPhone.value;
   viewport.update();

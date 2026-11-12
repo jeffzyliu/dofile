@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-430-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-440-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -95,16 +95,16 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 430 tests)
+## Web (about 440 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 327)
+### Unit and integration (`node --test`, `web/test/`, 331)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
 
 | File | Count | Function |
 |---|---|---|
-| `app.test.ts` | 59 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, "Clear log" keeping the log's head, toasts (their time by length, the error kind); banners; theme; the phone keyboard; a queued run's promise settles with its result or with null when it is dropped; a run that rewrites an open file (the editor's `ranOver` for every open text tab, with `null` for a version that is not text; the run-changed banner where the editor kept its text; nothing for a store that cannot be read); a run's promise settles even when the after-run work throws; pasted lines (the command line's runner, `log/pasterun.ts`) stop when another tab takes the engine during a line, and no leftover line runs after a take-over and a later run. |
+| `app.test.ts` | 63 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, "Clear log" keeping the log's head, toasts (their time by length, the error kind); banners; theme; the phone keyboard, and the keyboard experiment's strategies (`?kb=`: the flag's six names, unknown ones the default `top`; `transform` and `focus` follow the pan as `top`; `height` stays at the top; `unpan` scrolls the page back only while the keyboard is open and the page is panned; `pre` sets a predicted area on a field's focus, puts an editor's caret above it, holds it until the keyboard comes and drops it after 1 s without one); a queued run's promise settles with its result or with null when it is dropped; a run that rewrites an open file (the editor's `ranOver` for every open text tab, with `null` for a version that is not text; the run-changed banner where the editor kept its text; nothing for a store that cannot be read); a run's promise settles even when the after-run work throws; pasted lines (the command line's runner, `log/pasterun.ts`) stop when another tab takes the engine during a line, and no leftover line runs after a take-over and a later run. |
 | `files.test.ts` | 35 | Store and engine worker together: the journal, what a run changed, a worker that cannot open its store. |
 | `machine.test.ts` | 31 | State machine: the transition table, SPEC section 5 matching the code, invariants (stale events change nothing, one ticket issued once, one live worker, a queued run kept, sent or dropped with `drop-run`), the race scenarios. |
 | `files-ui.test.ts` | 25 | The file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) on the page's store over fake-indexeddb: the tree's rows and names, opening each kind of file (SPEC 3.11), closing, renaming and deleting with open tabs (a rename that changes how a file opens; a .dta renamed to .png closes its tab), a folder's .zip, upload and its name clashes (a second upload waits for the first, a clash waits for another dialog to close, another dialog put in its place answers as Esc, an unsaved file is asked after "Do the same" with Replace and not after Esc or Keep mine, nor when another dialog took the clash's place, a name with a control character is refused); a path in the `use` and `import delimited` commands (`src/stata/quote.ts`: `$`, compound quotes, the names a command can't hold). |
@@ -123,9 +123,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 105 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 109 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 420 cases, of which 389 run and 31 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 436 cases, of which 405 run and 31 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -140,6 +140,13 @@ view; the phone ⋯'s Save in the three desktop profiles).
   (at 1440 px in sight, with the full sentence for screen readers and as its title, no link or tab stop; none at
   1199 px, the bar's height the same; at 1200 px, with the longest last run, memory and "Files may be cleared", no
   overflow and nothing cut in seven engine states; none on the iPhone, which has no status bar).
+- `keyboard.spec.ts` (4): the phone keyboard experiment (`?kb=`, `?slide`, `?kblog`), in every profile at 390 by 844 px,
+  with viewport.ts's attributes set by script (no profile has a real keyboard): for no flag, `top`, an unknown value and
+  each strategy, `<html data-kb>` (none for the default), `.app` as the visible area (by a transform only under
+  `transform`), the tab bar hidden, the command line at its foot and the toast above it, and `.app` filling the window once
+  the keyboard closes; the full-size graph view covering the visible area under `top` and `transform` (a transformed
+  `.app` holds it); `pre`'s predicted area set in the command line's focus and gone after the hold; the `?kblog` overlay
+  (the strategy's name, a focus listed, `pointer-events: none` with what is under it reached), and none without the flag.
 - `files.spec.ts` (13): the file tree by keyboard, opening files in tabs, closing a tab with and without unsaved edits
   (a Save that fails keeps the tab open with the save-failed banner; Save saves through 4b's editor and closes the tab; the phone's file switcher; the focus after Save and after "Don't save", in one move to the tab now selected or, on a phone, the editor, and after Delete on the last tab), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
   open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
@@ -228,7 +235,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (105, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (109, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.

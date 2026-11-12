@@ -51,7 +51,9 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   `openMenu`; an item with `keepOpen` leaves the menu open), `Tablist`, `Live` (the live region `say()`, the toast `showToast()` and `Banner`), `Icon` (and `Key`), `Labels` (a control's
   labels in one cell, so the toolbar never changes size; keep labels short, the widest sets the width). Toolbar buttons
   share one height (`--control` in `tokens.css`), a pane head's controls another (`--control-sm`). `src/app/viewport.ts` sizes the page to the area above a phone's
-  on-screen keyboard.
+  on-screen keyboard. For an experiment on a real iPhone (`docs/phone-keyboard-experiment.md`), `?kb=transform|height|unpan|pre|focus`
+  picks another way to follow the keyboard (`<html data-kb>`), `?slide` eases `.app` to its place and `?kblog` loads an overlay
+  of the viewport's events (`src/app/kblog.ts`, imported only with the flag); without them the page is as before (`top`).
 - **One state machine decides the engine's state: `src/engine/machine.ts`.** `transition(machine, event)` is a pure function
   (only type imports, no clock, timer, console or variable at the top level; the time comes in the event) that gives the next
   state and the effects to perform. Its sixteen state names are the `engine` signal's, `<html data-engine>`'s and SPEC section
