@@ -1,13 +1,15 @@
 // The editor's and the log's logic with no DOM (step 4b; docs/design/SPEC.md, sections 3.3 to 3.6 and 4): the .log
 // tokenizer (src/app/log/classify.ts), where a code line is echoed (log/align.ts: the graph links, the nested-do note),
-// the pasted lines of the command line (log/paste.ts), the .csv columns (editor/csv.ts) and the words of the run-head,
-// the status bar and the Break pill (editor/words.ts). The views are checked in the browser (e2e/editor.spec.ts).
+// the pasted lines of the command line (log/paste.ts), the .csv columns (editor/csv.ts), what a run's version of an open
+// file does to its tab (editor/ranover.ts) and the words of the run-head, the status bar and the Break pill
+// (editor/words.ts). The views are checked in the browser (e2e/editor.spec.ts).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ChangeSet, Text } from "@codemirror/state";
 import { CSV_COLORS, csvFields } from "../src/app/editor/csv.ts";
 import { lineDeleted, onLastRun, onRunStart } from "../src/app/editor/errormark.ts";
+import { editorText, followRun } from "../src/app/editor/ranover.ts";
 import {
   jumpLine,
   lastRunWords,
@@ -790,4 +792,32 @@ test("runError: the error a run ended with is its last error line, not one captu
   assert.equal(runError(classify(CAUGHT_THEN_TYPO)), "command regresss is unrecognized");
   assert.equal(runError(classify(". display 1\n1\n")), null);
   assert.equal(runError(classify(". sleep 5000\n--Break--\nr(1);\n")), "--Break--");
+});
+
+test("a run's version of an open file (editor/ranover.ts): compared with line breaks as the editor holds them; one change where a clean tab differs; kept with edits or not text; clean again when the run wrote the editor's text", () => {
+  // the change, applied to the document as CodeMirror would apply it
+  const apply = (doc: string, r: ReturnType<typeof followRun>) =>
+    r.t === "shown" ? doc.slice(0, r.from) + r.insert + doc.slice(r.to) : doc;
+  assert.equal(editorText("a\r\nb\rc\n"), "a\nb\nc\n");
+  // a clean tab of a "\r\n" file (CodeMirror holds "\n"): the run's other rows are shown, not taken as edits
+  const saved = editorText("a\r\n9\r\n");
+  const crlf = followRun("a\n9\n", saved, "a\r\n1\r\n2\r\n");
+  assert.deepEqual(crlf, { t: "shown", from: 2, to: 3, insert: "1\n2" });
+  assert.equal(apply("a\n9\n", crlf), "a\n1\n2\n");
+  // the same rows with other line breaks: the same text
+  assert.deepEqual(followRun("a\n9\n", saved, "a\n9\n"), { t: "same" });
+  assert.deepEqual(followRun("a\n9\n", "a\n9\n", "a\r\n9\r\n"), { t: "same" });
+  // a .log that grew at the end, an empty file filled, a file emptied: one change each
+  assert.deepEqual(followRun("x\n", "x\n", "x\ny\n"), { t: "shown", from: 2, to: 2, insert: "y\n" });
+  assert.deepEqual(followRun("", "", "abc"), { t: "shown", from: 0, to: 0, insert: "abc" });
+  assert.deepEqual(followRun("abc", "abc", ""), { t: "shown", from: 0, to: 3, insert: "" });
+  // a repeated character: the change never overlaps itself
+  assert.equal(apply("aa", followRun("aa", "aa", "aaa")), "aaa");
+  // unsaved edits: kept, and unsaved unless the run wrote the editor's own text
+  assert.deepEqual(followRun("a\nmine\n", "a\n", "a\nb\n"), { t: "kept", dirty: true });
+  assert.deepEqual(followRun("a\nmine\n", "a\n", "a\r\nmine\r\n"), { t: "kept", dirty: false });
+  // not text: kept, unsaved; then a run that writes the editor's text makes it clean again, one with other text not
+  assert.deepEqual(followRun("a\n", "a\n", null), { t: "kept", dirty: true });
+  assert.deepEqual(followRun("a\n", null, "a\n"), { t: "kept", dirty: false });
+  assert.deepEqual(followRun("a\n", null, "b\n"), { t: "kept", dirty: true });
 });

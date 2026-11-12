@@ -40,9 +40,11 @@ import {
 } from "./cm.ts";
 import { codeOf, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
+import { editorText, followRun } from "./ranover.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
-// what the store has of each, as last read or saved; null when a run wrote something that is not text over it (the tab
+// what the store has of each, as last read or saved, with its line breaks as the editor holds them ("\n": ranover.ts
+// editorText), so a clean tab's document equals it; null when a run wrote something that is not text over it (the tab
 // is then unsaved until a save, whatever its text)
 const savedText = new Map<string, string | null>();
 const scrolled = new Map<string, number>(); // where each was scrolled to
@@ -233,7 +235,8 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
 
 // ---- what 4a calls ----
 
-function open(path: string, text: string) {
+function open(path: string, file: string) {
+  const text = editorText(file); // the saved text as the editor holds it, so it compares with the document
   const fresh = stateFor(path, text);
   states.set(path, fresh);
   const kept = closedMarks.get(path);
@@ -244,8 +247,9 @@ function open(path: string, text: string) {
   if (activeTab.value === path) show(path);
 }
 
-function reload(path: string, text: string) {
+function reload(path: string, file: string) {
   if (!states.has(path) || !tabs.value.some((t) => t.path === path)) return; // closed or renamed meanwhile
+  const text = editorText(file);
   const fresh = stateFor(path, text);
   states.set(path, fresh);
   savedText.set(path, text);
@@ -260,31 +264,18 @@ function reload(path: string, text: string) {
 function ranOver(path: string, text: string | null): "same" | "shown" | "kept" {
   const st = current(path);
   if (!st) return "same";
-  const saved = savedText.get(path);
-  if (text !== null && text === saved) return "same"; // rewritten with the same text: nothing changes
-  const doc = st.doc.toString();
-  if (text !== null && doc === saved) {
-    // no unsaved edits: the run's text, changed in one transaction where the two differ, so the caret, the selection
-    // and the undo history are kept
-    let from = 0;
-    while (from < doc.length && from < text.length && doc[from] === text[from]) from++;
-    let end = 0;
-    while (
-      end < doc.length - from &&
-      end < text.length - from &&
-      doc[doc.length - 1 - end] === text[text.length - 1 - end]
-    )
-      end++;
-    savedText.set(path, text);
-    update(path, { changes: { from, to: doc.length - end, insert: text.slice(from, text.length - end) } });
-    setDirty(path, false);
-    for (const b of banners.value) if (b.b === "run-changed" && b.path === path) dismiss(b);
-    return "shown";
-  }
-  savedText.set(path, text);
-  const dirty = text === null || doc !== text;
+  // editor/ranover.ts decides, on the texts as the editor holds them (line breaks as "\n")
+  const r = followRun(st.doc.toString(), savedText.get(path) ?? null, text);
+  if (r.t === "same") return "same"; // rewritten with the same text: nothing changes
+  savedText.set(path, text === null ? null : editorText(text));
+  // no unsaved edits: the run's text, changed in one transaction where the two differ, so the caret, the selection and
+  // the undo history are kept
+  if (r.t === "shown") update(path, { changes: { from: r.from, to: r.to, insert: r.insert } });
+  const dirty = r.t === "kept" && r.dirty;
   setDirty(path, dirty);
-  return dirty ? "kept" : "same";
+  // the editor now has the run's version: an earlier run's banner (one that was not text, say) no longer applies
+  if (!dirty) for (const b of banners.value) if (b.b === "run-changed" && b.path === path) dismiss(b);
+  return r.t === "shown" ? "shown" : dirty ? "kept" : "same";
 }
 
 /** Whether the store's version of an open file is text, as far as the editor knows (false after a run wrote something

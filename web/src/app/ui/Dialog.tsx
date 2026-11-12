@@ -6,7 +6,9 @@
 //    and "dofile is open in another tab").
 //  - When it closes (the component unmounts), focus returns to what had it when the dialog opened; if that has left the
 //    page, to the editor or More actions (states/focus.ts focusStable). Both after the timers its answer set, and only
-//    for a focus left on nothing, so a focus an answer places itself (the close-tab dialog's) moves once.
+//    for a focus left on nothing, so a focus an answer places itself (the close-tab dialog's) moves once. A dialog that
+//    opens while the one before it is handing the focus back (the next clash, other-tab over a dialog) takes that one's
+//    opener as its own; <body> is never an opener (a dialog opened with the focus on nothing gives it to focusStable).
 //  - Unmounted with no answer (another dialog replaced it in the `dialog` signal): its owner treats that as Cancel.
 //  - A destructive button is `.btn.stop.live` and never the default.
 // Render it while it should be open; the `dialog` signal decides that (app/dialogs.tsx maps each kind to its view):
@@ -29,6 +31,10 @@ export interface DialogProps {
   describedBy?: string; // id of the sentence that says what the dialog is about (default: none)
 }
 
+// the opener of a dialog that has closed and not yet given the focus back (its timer below), for a dialog opened
+// meanwhile
+let leaving: HTMLElement | null = null;
+
 export function Dialog({
   title,
   children,
@@ -46,7 +52,8 @@ export function Dialog({
 
   useLayoutEffect(() => {
     const d = ref.current!;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const active = document.activeElement;
+    const opener = active instanceof HTMLElement && active !== document.body ? active : leaving;
     // the opener lets go of the focus first, so the browser keeps no element to give it back to on close() (WebKit
     // does, before an answer can place it): the cleanup below gives it back, once
     opener?.blur();
@@ -59,11 +66,13 @@ export function Dialog({
       closing.current = true;
       if (d.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
       if (d.open) d.close();
+      leaving = opener;
       // after the timers already set, and only for a focus left on nothing: a dialog or banner that replaced this one
       // keeps the focus it took (states/focus.ts), and an answer that places the focus itself once the page has drawn
       // (the close-tab dialog's focusAfterClose) moves it once, straight to its place. Then the opener, or when it has
       // left the page (a banner's button, a tab the dialog closed), the editor or More actions, not <body>.
       setTimeout(() => {
+        if (leaving === opener) leaving = null;
         if (document.activeElement && document.activeElement !== document.body) return;
         if (opener?.isConnected) opener.focus();
         else focusStable();

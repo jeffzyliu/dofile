@@ -46,6 +46,24 @@ const setDirty = (page: Page, path: string) =>
 const openTabs = (page: Page) =>
   page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.tabs.value.map((t) => t.path));
 
+/** From now on, record every element outside a dialog that takes the focus (`moves`, read them with movesOf). */
+const recordMoves = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { moves: string[]; recording?: boolean };
+    w.moves = [];
+    if (w.recording) return;
+    w.recording = true;
+    document.addEventListener(
+      "focusin",
+      (e) => {
+        const el = e.target as HTMLElement;
+        if (!el.closest("dialog")) w.moves.push(`${el.getAttribute("role") ?? el.tagName}:${el.textContent?.trim()}`);
+      },
+      true,
+    );
+  });
+const movesOf = (page: Page) => page.evaluate(() => (window as unknown as { moves: string[] }).moves);
+
 /** Open the file actions menu: the Files head's "File actions"; on a phone the top bar's ⋯ on the Files view. */
 async function fileActions(page: Page, phone: boolean) {
   await page.getByRole("button", { name: phone ? "More actions" : "File actions" }).click();
@@ -91,7 +109,7 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect(row(page, /^a\.do/)).toHaveClass(/\bopen\b/);
 });
 
-test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel; Save that fails keeps it open; Save; Don't save); the focus goes to a tab or the tree, never the page", async ({
+test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel; Save that fails keeps it open; Save; Don't save); the focus goes to a tab or the tree, never the page, in one move after Save and Don't save", async ({
   page,
 }) => {
   await setUp(page, { "a.do": "1\n", "b.do": "2\n", "c.do": "3\n" });
@@ -159,10 +177,17 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     s.write = s.realWrite as Hook["store"]["write"];
   });
   await again();
+  await recordMoves(page);
   await ask.getByRole("button", { name: "Save", exact: true }).click(); // step 4b's editor saves it, then the tab closes
   await expect(ask).toBeHidden();
   await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
   await expect(page.locator(".toast")).toHaveText("Saved a.do");
+  // one move, once the file is written: to the tab now selected (the phone: the editor), not first back to a.do's tab
+  if (!isPhone(page))
+    await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: "b.do" })).toBeFocused();
+  else await expect(page.locator(".cm-content")).toBeFocused();
+  await page.waitForTimeout(100); // any later move would come by now
+  expect(await movesOf(page)).toEqual(isPhone(page) ? ["textbox:2"] : ["tab:b.do×"]);
   // open it again, with edits, for Don't save
   if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
   await row(page, /^a\.do/).click();
@@ -174,19 +199,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
       .getByRole("tab", { name: /^a\.do/ })
       .focus();
   await again();
-  // every element outside the dialog that takes the focus from here on
-  await page.evaluate(() => {
-    const w = window as unknown as { moves: string[] };
-    w.moves = [];
-    document.addEventListener(
-      "focusin",
-      (e) => {
-        const el = e.target as HTMLElement;
-        if (!el.closest("dialog")) w.moves.push(`${el.getAttribute("role") ?? el.tagName}:${el.textContent?.trim()}`);
-      },
-      true,
-    );
-  });
+  await recordMoves(page); // every element outside the dialog that takes the focus from here on
   await ask.getByRole("button", { name: "Don't save" }).click();
   await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
   if (!isPhone(page)) {
@@ -194,7 +207,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused(); // the tab now selected, not the page
     await page.waitForTimeout(100); // any later move would come by now
     // one move: straight to that tab, not through the editor first (the dialog leaves the focus to the close)
-    expect(await page.evaluate(() => (window as unknown as { moves: string[] }).moves)).toEqual(["tab:b.do×"]); // the tab holds its × button
+    expect(await movesOf(page)).toEqual(["tab:b.do×"]); // the tab holds its × button
     await page.keyboard.press("Delete"); // the last tab: the focus goes to the file tree
     await expect.poll(() => openTabs(page)).toEqual([]);
     await expect(tree(page).locator('[tabindex="0"]')).toBeFocused();
@@ -202,7 +215,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     // the phone shows no tabs: one move, to the editor, which focusAfterClose chooses (not first back to the switcher)
     await expect(page.locator(".cm-content")).toBeFocused();
     await page.waitForTimeout(100);
-    expect(await page.evaluate(() => (window as unknown as { moves: string[] }).moves)).toEqual(["textbox:2"]);
+    expect(await movesOf(page)).toEqual(["textbox:2"]);
   }
 });
 
@@ -372,6 +385,25 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
   await page.keyboard.press("Escape");
   await expect(other).toBeHidden();
   expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "new b.do"]);
+});
+
+test("a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it before the first, not the page", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "old a", "b.do": "old b" });
+  const opener = row(page, /^a\.do/);
+  await opener.focus();
+  await expect(opener).toBeFocused();
+  const file = (name: string) => ({ name, mimeType: "text/plain", buffer: Buffer.from(`new ${name}`) });
+  await page.locator('input[data-upload="files"]').setInputFiles(["a.do", "b.do"].map(file));
+  for (const name of ["a.do", "b.do"]) {
+    const clash = page.getByRole("alertdialog", { name: `${name} is already here` });
+    await expect(clash.getByRole("button", { name: "Keep mine" })).toBeFocused();
+    await page.keyboard.press("Enter"); // the next clash opens before this one has given the focus back
+  }
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "old b"]);
 });
 
 test("the clash over an open file with unsaved edits says so", async ({ page }) => {

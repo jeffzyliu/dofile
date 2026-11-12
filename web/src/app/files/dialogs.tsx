@@ -6,9 +6,10 @@
 //  - DeleteDialog { d: "delete", paths }: "Delete clean.do?" (Cancel focused; Delete is .btn.stop.live).
 //  - DeleteAllDialog { d: "delete-all", count }: "Delete all 12 files?" / Cancel (focused), "Delete all".
 //  - CloseTabDialog { d: "close-tab", path }: "Save changes to clean.do?" / Save (focused), "Don't save", Cancel; Esc is
-//    Cancel. Save: editorCommands.save(path), then the tab closes (it stays open when save resolves false: no editor,
-//    or the store refused); Don't save: the tab closes and editorCommands.closed(path) drops the edits. Once the tab
-//    has closed the focus goes to the tab now selected (EditorTabs.tsx focusAfterClose), not to the page.
+//    Cancel. Save: editorCommands.save(path), the dialog open until it answers, then the tab closes (it stays open when
+//    save resolves false: no editor, or the store refused); Don't save: the tab closes and editorCommands.closed(path)
+//    drops the edits. Once the tab has closed the focus goes to the tab now selected (EditorTabs.tsx focusAfterClose),
+//    not to the page.
 // The host draws a new dialog for each new value (clash 2 after clash 1); a view unmounted with no answer (another dialog
 // replaced it) answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
@@ -158,9 +159,15 @@ export function DeleteAllDialog({ dialog: d }: { dialog: DialogOf<"delete-all"> 
 }
 
 export function CloseTabDialog({ dialog: d }: { dialog: DialogOf<"close-tab"> }) {
+  const saving = useRef(false);
+  // the dialog stays open while the file is written, so the focus moves once: to the tab now selected when the save
+  // closes the tab, back to the opener when it fails (and a second press saves nothing twice)
   const save = async () => {
-    close();
-    if (await editorCommands.save(d.path)) {
+    if (saving.current) return;
+    saving.current = true;
+    const saved = await editorCommands.save(d.path);
+    if (dialog.value === d) close(); // not a dialog that replaced this one meanwhile
+    if (saved) {
       closeTab(d.path);
       focusAfterClose();
     }

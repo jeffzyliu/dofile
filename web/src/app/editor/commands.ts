@@ -47,11 +47,13 @@ export const editorCommands = {
    *  unsaved edits are dropped and the dot cleared. */
   reload(_path: string, _text: string) {},
   /** files.ts afterRun: a run rewrote the open text file `path`; `text` is the store's version, or null when it is not
-   *  text. Answers what the editor did: "same" (the run wrote the saved text again, or no such file is open: nothing),
-   *  "shown" (no unsaved edits: the run's text is shown, changed in one transaction, so the caret, the selection and
-   *  the undo history are kept), or "kept" (unsaved edits, or a version that is not text: the editor keeps its text and
-   *  takes the run's version as the saved one, so the tab stays unsaved and Save replaces the run's version knowingly;
-   *  files.ts then adds the banner run-changed). Not `reload`, which is 4a's "Replace with uploaded". */
+   *  text (texts compared with line breaks as "\n": editor/ranover.ts). Answers what the editor did: "same" (the run
+   *  wrote the saved text again, or no such file is open: nothing; or it wrote the editor's own text over edits or a
+   *  version that is not text: the tab is clean again and its run-changed banner goes), "shown" (no unsaved edits: the
+   *  run's text is shown, changed in one transaction, so the caret, the selection and the undo history are kept), or
+   *  "kept" (unsaved edits, or a version that is not text: the editor keeps its text and takes the run's version as the
+   *  saved one, so the tab stays unsaved and Save replaces the run's version knowingly; files.ts then adds the banner
+   *  run-changed). Not `reload`, which is 4a's "Replace with uploaded". */
   ranOver(_path: string, _text: string | null): "same" | "shown" | "kept" {
     return "same";
   },

@@ -934,7 +934,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     is asked even after "Do the same" with Replace, never after Esc), both tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
     its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
-    now selected, else the tree's row, else the editor. The commands built from a path (Import here, Load in 4c) come
+    now selected, else the tree's row, else the editor; the close-tab dialog stays open while its Save writes the file,
+    so the focus moves once there too. The commands built from a path (Import here, Load in 4c) come
     from `web/src/stata/quote.ts` `fileCommand` (3.11). The page's drop listeners are the window's, in the capture phase,
     so 4b's CodeMirror never sees a file drop; a drag that began in the page (a graph image, which Chromium and WebKit
     list as carrying a file) is not an upload. `FilesPane.tsx` exports
@@ -994,7 +995,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     deleted; it moves with edits; a command from the command line and a run of another file leave it; a file closed with
     its mark and no unsaved edits has it again when it is opened with the same text (closed with edits, or opened with
     other text, it has none). **A run that
-    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`): the same text
+    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`; the decision
+    in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
+    tab of a `\r\n` file follows a run as any other; Save writes the editor's text, so a `\r\n` file saved from the
+    editor has `\n` breaks, as it always had): the same text
     again (a byte-identical rewrite, a `.log` open during every run) changes nothing; a text tab with no unsaved edits
     shows the run's version, changed in one transaction where the two differ, so the caret, the selection and the undo
     history are kept; one with edits keeps them and takes the run's version as its saved text (the tab stays unsaved, so
@@ -1006,7 +1010,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     A run that writes something that is not text over an open text tab (binary, not UTF-8: a `.dta` saved as `t.csv`)
     keeps the tab's text, edits or not, makes the tab unsaved, and gets the same banner with other words and no reload:
     "**The run changed t.csv, and it is no longer text.** The editor still shows your text; saving it replaces the run's
-    version." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost). A file the run deleted
+    version." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost); a later run that writes
+    the editor's own text over it makes the tab clean again and takes the banner away. A file the run deleted
     keeps its tab (not handled): the file leaves the file list, the tab keeps its dot as it was, and Save writes the file
     again. `editorCommands.focus()` focuses at once and never changes
     the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
@@ -1108,7 +1113,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the lock during a Break, then "Use dofile in this tab"), after the timers its answer set and only for a focus left on
     `<body>`; the opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on
     `close()`, and the dialog gives it back itself, the same way: a focus its answer places (the close-tab dialog's "Don't
-    save") moves once. The
+    save") moves once. A dialog that opens while the one before it is still handing the focus back (the next clash after
+    "Keep mine", other-tab over a dialog) takes that one's opener as its own, and `<body>` is never an opener (a dialog
+    opened with the focus on nothing gives it to `focusStable` when it closes). The
     hand-off waits for a microtask and moves only a focus left on nothing, and the banners that take the focus (stopping,
     waiting) take it in a layout effect: so from the stopping banner to the waiting one the focus goes straight across,
     never through the editor. The declined banner's "Download the engine" moves the focus to the editor before the prompt

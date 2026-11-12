@@ -846,7 +846,7 @@ test("the command line with no engine: pasted lines wait for the engine; Not now
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 1"]);
 });
 
-test("a run that rewrites open files: a clean tab shows the run's version, keeping its selection and undo; the same text changes nothing; one with edits keeps them, unsaved, with a banner to reload (on every phone view); a version that is not text keeps the tab's text with its banner, which follows a rename and goes with the tab", async ({
+test("a run that rewrites open files: a clean tab shows the run's version, keeping its selection and undo; the same text changes nothing; one with edits keeps them, unsaved, with a banner to reload (on every phone view); a version that is not text keeps the tab's text with its banner, which a run that writes the editor's text takes away, which follows a rename and goes with the tab", async ({
   page,
 }) => {
   await setUp(page, { "t.csv": "a\n9\n", "u.csv": "a\n9\n" }, "/?test");
@@ -924,6 +924,13 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   await expect(binary.getByRole("button", { name: "Reload from the run" })).toHaveCount(0);
   await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*3\s*$/);
   expect(await dirty()).toBe(true);
+  // a run that writes the editor's own text over it: the tab is clean again and the banner goes
+  await run("export delimited using u.csv, replace");
+  await expect(page.locator(".banner", { hasText: "The run changed u.csv" })).toHaveCount(0);
+  expect(await dirty()).toBe(false);
+  await run("save u.csv, replace");
+  await expect(binary.first()).toBeAttached();
+  expect(await dirty()).toBe(true);
   // a rename takes the banner to the new name; closing the tab ("Don't save") takes it away
   if (isPhone(page)) await view(page, "Files");
   await page
@@ -956,4 +963,27 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
     .getByRole("button", { name: "Don't save" })
     .click();
   await expect(page.locator(".banner", { hasText: "The run changed v.csv" })).toHaveCount(0);
+});
+
+test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites it: the run's version shown, no unsaved dot, no banner", async ({
+  page,
+}) => {
+  await setUp(page, { "w.csv": "a\r\n9\r\n" }, "/?test");
+  await startEngine(page);
+  await ready(page);
+  await open(page, "w.csv");
+  const r = await page.evaluate(() =>
+    (window as any).__dofile.run("clear\nset obs 2\ngenerate a = _n\nexport delimited using w.csv, replace"),
+  );
+  expect(r?.rc, r?.log).toBe(0);
+  await ready(page);
+  if (isPhone(page)) await view(page, "Editor");
+  await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*$/);
+  expect(
+    await page.evaluate(
+      () => window.__dofile.state.tabs.value.find((t: { path: string }) => t.path === "w.csv")?.dirty,
+    ),
+  ).toBe(false);
+  await expect(page.locator(".banner", { hasText: "The run changed w.csv" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "unsaved changes" })).toHaveCount(0);
 });

@@ -106,6 +106,17 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   as it was, and Save writes it again. Checked on the branch after both: `npm run check`, `npm run lint:strict`, `uv run
   poe lint`; `npm test` (292 pass, none skipped); the e2e suite (249 passed, 31 skipped); `uv run poe test` not run
   (nothing under `src/dofile/` or `tests/` changed).
+- **A second review of the join, fixed** (2026-11-11): a dialog that follows another before that one has given the
+  focus back (the next clash after "Keep mine", other-tab over a dialog) gives it back to the first one's opener, not
+  to `<body>`, and `<body>` is never an opener; a clean tab of a file with `\r\n` breaks follows a run as any other (the
+  texts are compared with breaks as `\n`, `editor/ranover.ts`; Save writes the editor's text, so such a file saved from
+  the editor has `\n` breaks, as before); a run that writes the editor's own text over a version that was not text
+  takes the `run-changed` banner away; the close-tab dialog stays open while its Save writes, so the focus moves once.
+  For the maintainer's pass on a real iPhone: the focus now comes back from a dialog in a timer, so check that it
+  reopens the on-screen keyboard where it went back to a text field (the command line). The four new or extended e2e
+  tests failed on the code before these fixes (16 of 16 cases). Checked on the branch: `npm run check`, `npm run
+  lint:strict`, `uv run poe lint`; `npm test` (293 pass, none skipped); the e2e suite (257 passed, 31 skipped); `uv run
+  poe test` not run (nothing under `src/dofile/` or `tests/` changed).
 - **Open points:** the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
 
 ## Decisions (2026-11-10)
