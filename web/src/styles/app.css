@@ -722,3 +722,28 @@ input.filter::placeholder {
     border-bottom-color: CanvasText;
   }
 }
+
+/* Step 4d: dialogs and states (app/states/). The dialog, banner, progress and stage list are ui.css's; this block adds the
+   progress dialog's header row and the disabled take-over button. */
+.dialog .row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+  font-size: var(--text-sm);
+}
+.dialog .row .spacer {
+  flex: 1;
+}
+.dialog .row > span:last-child {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.dialog .progress {
+  margin-bottom: var(--s2);
+}
+/* "Use dofile in this tab" while the take-over is in progress: the same label, no second press */
+.dialog .btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+}

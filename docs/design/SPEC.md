@@ -991,6 +991,46 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
     same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `downloadAll`.
+    **As built (4d, to review).** `states/words.ts` holds the logic and the words with no view (Node-tested:
+    `test/states.test.ts`), `states/clock.ts` the `useNow` timer (the machine has no clock; a view reads `Date.now()`).
+    S 2 and S 3 are one progress dialog: while `downloading` the header row "Downloading  14.2 of 48 MB · 6 s", the bar
+    (`aria-valuetext` "Downloading the engine, step 1 of 5": the stage, not the megabytes) and the stage list with the
+    bytes on the current stage; from `starting-*` the row "Loading packages  step 4 of 5 · 9 s" (a stage seen twice adds up),
+    no bar, done stages keep their time (the download's as "48 MB · 7.1 s"). "Use dofile in this tab" is `aria-disabled`
+    (same label) in `other-tab-taking`. Reset: `askReset()` resets at once when `data` has no variables or observations
+    and `results` has no scalar, macro or matrix (macros and graphs are not counted: S 14 says "no data in memory and no
+    results"); the dialog closes itself if the engine can no longer be reset. The banners above the editor follow the
+    `reason` of a failed start (`failedActions`): no-wasm "Browsers that work" and Download all; download and memory "Try
+    again"; updated "Reload the page"; unknown "Try again" and "Reload the page"; failed twice "Reload the page" and
+    Download all, never "Try again". Download all is `disabled` while `hasFiles` is false. Above the log: running
+    (`not isolated`: S 11's words instead of the Break sentence), stopping once Break has been pending 1 s (the 5 s is the
+    constant `GRACE_S`, as in the running banner's own text; the focus goes to "Don't reset: wait for it"), waiting (takes
+    the focus), the reset banner ("Run the file again" is on while the engine is `ready` and a text tab is active, and
+    dismisses the banner). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "Find",
+    "next error" (4b's), a failed save (4b's `save-failed`), the memory banner's trigger (OQ-8; its view is built).
+    **Step 4d: draft words**, for the maintainer to approve (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
+    Reset banner by kind: user "You reset the engine." / break "The engine was reset: the code did not stop at Break."
+    (the reason, a cause in parentheses cut off) or, with no cross-origin isolation, "Break reset the engine." "This page
+    can't ask a run to stop, so Break resets it." / crash "The engine was reset: the engine crashed."; each then "The
+    data in memory is gone; your files are kept." Running banner: "Running lines 14–15 · 3.4 s" also "Running line 9",
+    "Running analysis.do", "Running a command". The failed banner: "The engine didn't start." then the engine's
+    `message` for the reason (`FAILED` in `engine.ts`), then "Your files are safe: you can still edit and download them."
+    The declined banner's "(about 48 MB)" is the build's size. Failed twice: "The engine stopped after failing twice
+    (it ran out of memory)." (the parenthesis only for reason memory) "It won't restart by itself, since each try can
+    use a lot of a phone's memory. Your files are safe." `DownloadFailedBanner` (OQ-16, storage unavailable): "Your files
+    couldn't be downloaded. This browser wouldn't open the storage where dofile keeps them, so the .zip couldn't be made.
+    Try again; if it fails again, reload the page." / Try again, Dismiss. Progress rows: "Downloading the engine",
+    "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
+    of M". OQ-18: "Browsers that work" goes to `landing.html#browsers` (`BROWSERS_URL` in `states/banners.tsx`), a section
+    step 5 builds listing the browsers that run dofile, opened in a new tab; a dead link until then. OQ-10, the three
+    notes (`noteFor(rc, error)` in `words.ts`, tested, **not shown yet**: the log is 4b's, which adds the note as a
+    `{t: "note"}` item after the run's text; the engine's own tempfile hint (`browser.py` TEMPFILE_HINT, a draft there
+    too) would then say the same twice, so replace its text with the approved words, or drop it): `restore` with nothing
+    preserved (r(622)) "Nothing was preserved in this run. A run restores the data it preserved when it ends, so put
+    preserve and restore in the same run."; a temporary name from an earlier run (r(601) naming the engine's temporary
+    file) "A tempfile, tempvar or tempname lasts one run. Save the data under a name to use it in a later run."; a
+    community command (r(199), `reghdfe`, `esttab`, `estout`, `outreg2`, `ivreg2`, `xtivreg2`, `ftools`, `winsor2`)
+    "reghdfe is a community command: it isn't part of Stata itself, and dofile doesn't have it."
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
     on a phone every view draws it (download-failed); the hidden views are `display: none`, so it is read and tabbed once.
