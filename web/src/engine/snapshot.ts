@@ -108,7 +108,8 @@ const STORAGE_REFUSALS = new Set([
 export const isStorageRefusal = (e: any): boolean => STORAGE_REFUSALS.has(e?.name);
 
 // The Cache that holds one build's start files: the snapshot, the runtime, and what else the build's list names. The page
-// fills it (client.ts, download) and the worker reads it. A rebuild has a new `built`; the older builds are dropped.
+// fills it (client.ts, download) and the worker reads it. A rebuild has a new `built`; the older builds are dropped. Within
+// one build's Cache, download() drops the entries its list does not name (the same files at an older address).
 export async function openCache(caches: CacheStorage, built: number): Promise<Cache> {
   const name = `dofile-snapshot-${built}`;
   for (const other of await caches.keys())

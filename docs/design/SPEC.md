@@ -533,7 +533,10 @@ As built:
   when that is one) and no `kind`; every other failure is a client error with a `kind` (an unreachable list:
   `failed`/`download`). It checks the list's build (`checkBuild`, below) before fetching anything, fetches with
   `cache: "no-cache"`, and never caches a file whose byte count is not the listed size.
-  `download()` is the Cache's only writer: the worker only reads it.
+  `download()` is the Cache's only writer: the worker only reads it. Before it fetches, and only when no worker is live, it
+  deletes every entry of that Cache that is not one of the list's `download` files at its URL (relative to the list): the same
+  build kept at an older address (the editor's move to `/app/` with an unchanged snapshot) would otherwise stay until the next
+  snapshot. The list's own files are never deleted, so a resumed download keeps what it has.
   The machine's effect `start-download` calls `download()` before every start the visitor triggers; if it fails (other than by
   "Stop download") the state is `failed` and no worker is made. There is no offline start. `startList()` fetches the list.
   A restart is another path: the machine's `starting-list` state asks `build()` for the list, fetched fresh and checked, before
@@ -1384,7 +1387,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   visit's download again), the tab lock (`dofile-engine`, per origin), the sample's mark (everyone gets the sample again) and the
   theme choice (`dofile.theme`: the landing page and the editor no longer share it). Moving the path on one origin keeps the
   files, the tab lock and the theme (all per origin), but the Cache's entries are keyed by their full URL, so a visitor whose
-  engine was cached at `/snapshot/…` downloads it once more at `/app/snapshot/…`.
+  engine was cached at `/snapshot/…` downloads it once more at `/app/snapshot/…`; that download removes the old copy (`download()` drops every entry of the Cache it fills that the build's list does not name, when no worker is live; the list's own files stay, so a resumed download keeps them), as it would with no move only once a new snapshot changed `built`.
 - **Builds.** `npm run build` = the wheel, then `vite build` (the editor: empties `dist/`, writes `dist/app/` with its
   `public/` files and `start-files.json`, which lists only `dist/app/`), then `vite build --mode site` (the static pages:
   `publicDir: false`, no module-preload polyfill, so they load nothing of the editor's; their download size read from
