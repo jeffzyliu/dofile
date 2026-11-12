@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-420-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-430-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -95,7 +95,7 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 420 tests)
+## Web (about 430 tests)
 
 ### Unit and integration (`node --test`, `web/test/`, 325)
 
@@ -123,9 +123,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 98 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 102 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 392 cases, of which 361 run and 31 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 408 cases, of which 377 run and 31 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -228,7 +228,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (98, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (102, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
