@@ -298,6 +298,12 @@ the words drafted for the visitor are in SPEC section 8, "As built in step 5".
    profiles; not investigated.
 5. The design checks (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs, not the built pages;
    on the real landing and commands pages only axe runs (`e2e/landing.spec.ts`, both themes).
+6. "Restore the sample" against a Save in progress of the same file (step 4's `saving` set in `editor/Editor.tsx`), read
+   from the code, not tested: the store's writes run in the order they began. A Save that began first (Ctrl/Cmd+S behind
+   the open dialog, then Replace) ends first, and the restore's `reload` then shows the sample: the tab is clean and the store
+   holds the sample. A Save that begins while the restore's write is in progress ends after the `reload`: the store then holds
+   the Save's text while the tab shows the sample with no unsaved dot (the Save sets the saved text to its own, and the dot
+   only follows edits). A window of milliseconds; `reload` does not touch `saving`.
 
 ## Decisions (2026-11-10)
 
