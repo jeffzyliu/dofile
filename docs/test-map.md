@@ -97,14 +97,14 @@ These test the Stata-language engine itself. Grouping is by file name.
 
 ## Web (about 430 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 327)
+### Unit and integration (`node --test`, `web/test/`, 328)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
 
 | File | Count | Function |
 |---|---|---|
-| `app.test.ts` | 59 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, "Clear log" keeping the log's head, toasts (their time by length, the error kind); banners; theme; the phone keyboard; a queued run's promise settles with its result or with null when it is dropped; a run that rewrites an open file (the editor's `ranOver` for every open text tab, with `null` for a version that is not text; the run-changed banner where the editor kept its text; nothing for a store that cannot be read); a run's promise settles even when the after-run work throws; pasted lines (the command line's runner, `log/pasterun.ts`) stop when another tab takes the engine during a line, and no leftover line runs after a take-over and a later run. |
+| `app.test.ts` | 60 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, "Clear log" keeping the log's head and `canClearLog` (nothing to clear: the head alone or a streaming run's text), toasts (their time by length, the error kind); banners; theme; the phone keyboard; a queued run's promise settles with its result or with null when it is dropped; a run that rewrites an open file (the editor's `ranOver` for every open text tab, with `null` for a version that is not text; the run-changed banner where the editor kept its text; nothing for a store that cannot be read); a run's promise settles even when the after-run work throws; pasted lines (the command line's runner, `log/pasterun.ts`) stop when another tab takes the engine during a line, and no leftover line runs after a take-over and a later run. |
 | `files.test.ts` | 35 | Store and engine worker together: the journal, what a run changed, a worker that cannot open its store. |
 | `machine.test.ts` | 31 | State machine: the transition table, SPEC section 5 matching the code, invariants (stale events change nothing, one ticket issued once, one live worker, a queued run kept, sent or dropped with `drop-run`), the race scenarios. |
 | `files-ui.test.ts` | 25 | The file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) on the page's store over fake-indexeddb: the tree's rows and names, opening each kind of file (SPEC 3.11), closing, renaming and deleting with open tabs (a rename that changes how a file opens; a .dta renamed to .png closes its tab), a folder's .zip, upload and its name clashes (a second upload waits for the first, a clash waits for another dialog to close, another dialog put in its place answers as Esc, an unsaved file is asked after "Do the same" with Replace and not after Esc or Keep mine, nor when another dialog took the clash's place, a name with a control character is refused); a path in the `use` and `import delimited` commands (`src/stata/quote.ts`: `$`, compound quotes, the names a command can't hold). |
@@ -123,7 +123,7 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 105 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 107 tests in 4 browser profiles)
 
 Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 420 cases, of which 389 run and 31 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
@@ -147,7 +147,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
   clash, a non-UTF-8 file's banner, a folder upload (Chromium), a drop anywhere on the page (taken in the capture phase;
   none while a dialog is open; none for a drag that began in the page), the phone's file actions in the strip's "Files ⋯".
 - `states.spec.ts` (14, step 4d): the prompt, Not now and the declined banner (the real machine in `none`; the focus back on the editor after Not now; "in the editor" is `activeElement.closest("[data-editor]")`, so it holds for 4b's CodeMirror); the progress dialog's downloading and stage rows with times (the `engine` signal set through the hook); the take-over button's `aria-disabled` and `.off`, and a press then reaches no machine (no drop); the failed banner for each reason and failed twice; Download all off with an empty store and on after a write; Reset during a run asks (no data or results yet); the focus handed to the editor, or More actions on a phone's Log view, when a stopping or reset banner goes with the focus in it, and when the editor's save-failed and run-changed banners (Dismiss, "Reload from the run") and the Files pane's not-text banner go by keyboard (More actions on a phone's Files view); from the stopping to the waiting banner the focus goes straight across, never through the editor; running, stopping, waiting banners; storage, reset, memory and download-failed banners; a dialog whose opener has left the page (the stopping banner's button, then the other-tab dialog) gives the focus to the editor or More actions; with a .dta tab active a banner's hand-off goes to that tab in one move (desktop); and one test with an engine: Reset's dialog (Cancel, Esc), Reset, the reset banner, a reset with nothing to lose that asks nothing, a Reset at the end of a run that made data and no results, before its data is described, that asks, and the reset banner's "Run the file again" with 4b's editor.
-- `editor.spec.ts` (25, step 4b): with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
+- `editor.spec.ts` (27, step 4b): with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
   its toast (Ctrl+S and Cmd+S each pressed by name, so both save from the editor in every profile on any host; Ctrl+S
   on a Cyrillic layout, an event made in the page with key "ы" and code KeyS, saves and prevents the browser's Save
   page, and its repeats save nothing more), the focused editor's ring (an outline that forced colors give a system color while they drop the box-shadow; Chromium and Firefox, since WebKit forces no colors), a failed save's banner and its Download, a rename of
@@ -161,7 +161,9 @@ view; the phone ⋯'s Save in the three desktop profiles).
   400, error red and bold, hint and note muted; the phone's hint block), Go to line and the help link shown, the
   run-head, Download log without the head, run-head or notes; Find in the log (every match counted and numbered in
   the log's order, Enter and Shift+Enter, "none", the Log tab shown first when unsplit, Esc back to the Find button or
-  the phone strip's "Log ⋯"); the error line that keeps to its text across a tab switch, and its rule (a command and another file's run leave it; a
+  the phone strip's "Log ⋯"); Clear log asks first (the head's "Clear…", or the strip's "Log ⋯" menu item on a phone: Cancel and
+  Esc keep the log and the graphs and give the focus back to the opener; "Clear log" removes them, the head stays, and the focus
+  does not fall to the page when the head's button is disabled by it) and is disabled with nothing to clear; the error line that keeps to its text across a tab switch, and its rule (a command and another file's run leave it; a
   run of the file, a reset and the line's deletion clear it), and back when its file is closed and opened again with the same text (not with other text); the notes at a run's end wrapping in the Log pane with Go to line in view (1440, 1200, 900 and 700 px, and the phone); the OQ-10 notes under an error (the error the run ended with, not one `capture noisily` caught; and none for the tempfile,
   whose note the engine prints); the phone ⋯'s Save off on a .dta tab; a command's Break note with no line, and a
   phone's inline graph on its run's card; pasted lines with no engine (queued, then "Not now": the toast). With an
@@ -228,7 +230,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (105, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (107, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.

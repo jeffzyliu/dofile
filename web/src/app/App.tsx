@@ -43,7 +43,7 @@
 //    after the step: when the run's promise has resolved, say.
 //   4a files/FilesPane.tsx (FilesHead, FilesBody), files/EditorTabs.tsx (EditorTabs, the phone's FileSwitcher),
 //      files/FileBar.tsx (FileBar: the bars over a .csv, .tsv or .log), files/open.ts (openFile, decodeText),
-//      files/dialogs.tsx (clash, delete, delete-all, close-tab; the words of delete-all and close-tab are decided: SPEC
+//      log/ClearLogDialog.tsx (clear-log), files/dialogs.tsx (clash, delete, delete-all, close-tab; the words of delete-all and close-tab are decided: SPEC
 //      3.10), files/banners.tsx (not-text).
 //      Writes `tabs` (not `dirty`), `activeTab`, `dialog` (its four kinds), `banners` (not-text); openFile writes
 //      `phoneTab` = "editor" on a phone when a text or .dta tab opens, and for a .png `outputTab` = "graph" (desktop) or

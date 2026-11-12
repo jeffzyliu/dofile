@@ -652,6 +652,111 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
   await expect(opener).toBeFocused();
 });
 
+// "Clear log…" asks first (SPEC 3.5, 3.10; log/ClearLogDialog.tsx): the head's "Clear…" button, and on a phone the strip's
+// "Log ⋯" menu item.
+test("Clear log asks first: Cancel and Esc keep the log and the graphs, Clear log removes them and the head stays", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  await page.evaluate(() => {
+    const S = window.__dofile.state;
+    S.runWriter.log.value = [
+      { t: "head" },
+      { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: true },
+      { t: "text", run: 1, text: ". display 1\n1\n" },
+      { t: "note", text: "a note of the page" },
+    ];
+    // a 1 x 1 PNG
+    S.runWriter.graphs.value = [
+      {
+        n: 1,
+        png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAfbLI3wAAAABJRU5ErkJggg==",
+        theme: "light",
+        from: "run",
+      },
+    ];
+  });
+  const phone = isPhone(page);
+  if (phone) await view(page, "Log");
+  const log = page.getByRole("log", { name: "Log" });
+  const opener = phone
+    ? page.getByRole("button", { name: "Log actions" })
+    : page.getByRole("button", { name: "Clear log…" });
+  const ask = page.getByRole("alertdialog", { name: "Clear the log?" });
+  const kept = async () => {
+    await expect(log).toContainText("display 1");
+    await expect(log).toContainText("a note of the page");
+    expect(await page.evaluate(() => window.__dofile.state.graphs.value.length)).toBe(1);
+  };
+  const openAsk = async () => {
+    await opener.click();
+    if (phone) await page.getByRole("menuitem", { name: "Clear log…" }).click();
+    await expect(ask).toContainText("This removes the log and the graphs. Your data and your files stay.");
+    await expect(ask.getByRole("button", { name: "Cancel" })).toBeFocused();
+  };
+  if (!phone) await expect(opener).toHaveText("Clear…");
+  // Cancel: nothing is removed, and the focus goes back to what opened it
+  await openAsk();
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(ask).toBeHidden();
+  await kept();
+  await expect(opener).toBeFocused();
+  // Esc is Cancel
+  await openAsk();
+  await page.keyboard.press("Escape");
+  await expect(ask).toBeHidden();
+  await kept();
+  await expect(opener).toBeFocused();
+  // Clear log: the text, the note and the graphs go; the head stays
+  await openAsk();
+  await ask.getByRole("button", { name: "Clear log" }).click();
+  await expect(ask).toBeHidden();
+  await expect(log).not.toContainText("display 1");
+  await expect(log).not.toContainText("a note of the page");
+  await expect(log).toContainText("Try: help regress");
+  expect(await page.evaluate(() => window.__dofile.state.graphs.value.length)).toBe(0);
+  // the head's button is disabled now (nothing left to clear), so the focus does not stay on it; on a phone the strip's
+  // button still takes it
+  if (phone) await expect(opener).toBeFocused();
+  else {
+    await expect(opener).toBeDisabled();
+    await expect(page.locator("body")).not.toBeFocused();
+  }
+});
+
+test("Clear log is disabled while there is nothing to clear (the head alone), in the head and in the menu", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  if (isPhone(page)) {
+    await view(page, "Log");
+    await page.getByRole("button", { name: "Log actions" }).click();
+    await expect(page.getByRole("menuitem", { name: "Clear log…" })).toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("menuitem", { name: "Clear log…" }).click({ force: true });
+    await expect(page.getByRole("alertdialog")).toHaveCount(0); // a disabled item asks nothing
+  } else {
+    await expect(page.getByRole("button", { name: "Clear log…" })).toBeDisabled();
+  }
+  // a graph alone is something to clear
+  await page.evaluate(() => {
+    window.__dofile.state.runWriter.graphs.value = [
+      {
+        n: 1,
+        png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAfbLI3wAAAABJRU5ErkJggg==",
+        theme: "light",
+        from: "run",
+      },
+    ];
+  });
+  if (isPhone(page)) {
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Log actions" }).click();
+    await expect(page.getByRole("menuitem", { name: "Clear log…" })).not.toHaveAttribute("aria-disabled", "true");
+  } else await expect(page.getByRole("button", { name: "Clear log…" })).toBeEnabled();
+});
+
 test("the error line keeps to its text when the tab is left and shown again", async ({ page }) => {
   await setUp(page, { "a.do": "line 1\nline 2\nline 3\nline 4\n", "b.do": "other\n" });
   await open(page, "a.do");

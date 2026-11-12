@@ -440,6 +440,11 @@ button {
 .head-link:hover {
   text-decoration: underline;
 }
+.head-link[disabled] {
+  opacity: var(--disabled-opacity);
+  cursor: default;
+  text-decoration: none;
+}
 .head-link.danger {
   color: var(--error); /* a destructive link in a pane head ("Clear"), as the menus' .danger */
 }
