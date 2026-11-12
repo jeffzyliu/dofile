@@ -152,6 +152,7 @@ const isDownloadAll = (i: MenuItem) => i !== "rule" && i.label === "Download all
 const phoneMoreItems = (): MenuItem[] => [
   {
     label: "Save",
+    disabled: tabs.value.find((t) => t.path === activeTab.value)?.kind !== "text", // as the toolbar's Save (4b)
     onSelect: () => {
       editorCommands.save();
     },

@@ -91,7 +91,7 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect(row(page, /^a\.do/)).toHaveClass(/\bopen\b/);
 });
 
-test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel, Don't save; Save keeps it with no editor); the focus goes to a tab or the tree, never the page", async ({
+test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel; Save that fails keeps it open; Save; Don't save); the focus goes to a tab or the tree, never the page", async ({
   page,
 }) => {
   await setUp(page, { "a.do": "1\n", "b.do": "2\n", "c.do": "3\n" });
@@ -142,6 +142,22 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
         .press("Delete");
     await expect(ask).toBeVisible();
   };
+  // Save fails (the store's write rejects): the tab stays open with its edits, and the save-failed banner says so
+  await page.evaluate(() => {
+    const s = (window as unknown as { __dofile: Hook }).__dofile.store as Hook["store"] & Record<string, unknown>;
+    s.realWrite = s.write;
+    s.write = () => Promise.reject(new Error("the disk is full"));
+  });
+  await again();
+  await ask.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(ask).toBeHidden();
+  await expect(page.locator(".banner", { hasText: "a.do couldn't be saved" })).toBeVisible();
+  expect(await openTabs(page)).toEqual(["a.do", "b.do"]);
+  expect(await textOf(page, "a.do")).toBe("1\n");
+  await page.evaluate(() => {
+    const s = (window as unknown as { __dofile: Hook }).__dofile.store as Hook["store"] & Record<string, unknown>;
+    s.write = s.realWrite as Hook["store"]["write"];
+  });
   await again();
   await ask.getByRole("button", { name: "Save", exact: true }).click(); // step 4b's editor saves it, then the tab closes
   await expect(ask).toBeHidden();

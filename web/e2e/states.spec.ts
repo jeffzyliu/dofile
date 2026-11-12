@@ -192,6 +192,33 @@ test("a banner that goes with the focus in it hands the focus on: the editor, or
   await handedOn();
 });
 
+test("a dialog whose opener has left the page gives the focus to the editor, or More actions, not to the page", async ({
+  page,
+}) => {
+  const ph = phone(page);
+  if (ph) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
+  const run = { kind: "command", fresh_locals: false };
+  await show(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 3000 });
+  await expect(page.getByRole("button", { name: "Don't reset: wait for it" })).toBeFocused();
+  // another tab takes the lock during the Break: the stopping banner goes, the other-tab dialog opens over it
+  await page.evaluate(() => {
+    const s = window.__dofile.state;
+    s.engine.value = { s: "other-tab-idle" };
+    s.dialog.value = { d: "other-tab" };
+  });
+  const dlg = page.getByRole("alertdialog", { name: "dofile is open in another tab" });
+  await expect(dlg.getByRole("button", { name: "Close editor" })).toBeFocused();
+  // "Use dofile in this tab" went through: the dialog closes, and its opener (Don't reset) is gone
+  await page.evaluate(() => {
+    const s = window.__dofile.state;
+    s.dialog.value = null;
+    s.engine.value = { s: "none" };
+  });
+  await expect(dlg).toHaveCount(0);
+  if (ph) await expect(page.getByRole("button", { name: "More actions" })).toBeFocused();
+  else await expect.poll(() => inEditor(page)).toBe(true);
+});
+
 test("from the stopping banner to the waiting banner the focus goes straight across, never through the editor", async ({
   page,
 }) => {
@@ -341,4 +368,24 @@ test("Reset asks only with data in memory (described again after a run); Cancel 
   await expect(dlg).toHaveCount(0);
   expect(await engineIs(page)).toBe("ready");
   expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs)).toBe(10);
+
+  // "Run the file again" with 4b's editor: on with the engine ready and a text tab active; it runs that file and goes
+  await page.evaluate(() => window.__dofile.store.write("again.do", new TextEncoder().encode("display 40+2\n")));
+  if (phone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^again\.do/ })
+    .click();
+  await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: again.do");
+  await page.evaluate(() => {
+    window.__dofile.state.dismiss({ b: "reset" });
+    window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user" });
+  });
+  if (phone(page)) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
+  const again = page.locator(".banner", { hasText: "You reset the engine." });
+  await again.getByRole("button", { name: "Run the file again" }).click();
+  await expect(again).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.path)).toBe("again.do");
+  expect(await page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
+  await expect(page.getByRole("log", { name: "Log" })).toContainText("42");
 });

@@ -3,6 +3,8 @@
 // (step 4b's block): tokens .k .s .c .m .num; line marks .cm-sel-line, .cm-run-line, .cm-err-line and their gutter
 // numbers .cm-run-n, .cm-err-n; a .csv's columns .csv-c0 to .csv-c4 and .csv-d; a .log's lines .lg-echo, .lg-err,
 // .lg-hint, .lg-note.
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import {
   type EditorState,
@@ -28,6 +30,15 @@ import { classify } from "../log/classify.ts";
 import { CSV_COLORS, csvFields } from "./csv.ts";
 
 // ---- highlighting ----
+
+/** .md and .json (CodeMirror's packages, SPEC 3.11), on the same token classes as Stata's. */
+const docStyle = HighlightStyle.define([
+  { tag: [tags.heading, tags.strong, tags.bool, tags.null], class: "k" },
+  { tag: [tags.string, tags.url, tags.link, tags.monospace], class: "s" },
+  { tag: [tags.comment, tags.quote, tags.processingInstruction], class: "c" },
+  { tag: tags.propertyName, class: "m" },
+  { tag: tags.number, class: "num" },
+]);
 
 const stataStyle = HighlightStyle.define([
   { tag: tags.keyword, class: "k" },
@@ -97,13 +108,15 @@ function logDecorations(state: EditorState): DecorationSet {
 }
 
 /** The language of a file, by its extension: Stata for .do and .ado, the column colors for .csv and .tsv, the log
- *  tokenizer for .log; plain text for the rest (.md and .json packages are not installed: P1 shows them plain). */
+ *  tokenizer for .log, CodeMirror's packages for .md and .json; plain text for the rest. */
 export function languageOf(path: string): Extension {
   const ext = extOf(path);
   if (ext === ".do" || ext === ".ado") return [stata, syntaxHighlighting(stataStyle)];
   if (ext === ".csv") return csvColumns(",");
   if (ext === ".tsv") return csvColumns("\t");
   if (ext === ".log") return logKinds;
+  if (ext === ".md") return [markdown(), syntaxHighlighting(docStyle)];
+  if (ext === ".json") return [json(), syntaxHighlighting(docStyle)];
   return [];
 }
 

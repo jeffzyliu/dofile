@@ -174,9 +174,9 @@ test("each failed reason has its own first action, and Download all is always of
   assert.doesNotMatch(twiceWords("unknown").head, /memory/);
 });
 
-test("the three notes (drafts) are chosen by the run's rc and error", () => {
+test("the two notes (drafts) are chosen by the run's rc and error", () => {
   assert.match(noteFor(622, "nothing to restore") ?? "", /preserve and restore in the same run/);
-  assert.match(noteFor(601, "file /tmp/opendta-123/S__000001.dta not found") ?? "", /lasts one run/);
+  assert.equal(noteFor(601, "file /tmp/opendta-123/S__000001.dta not found"), null); // the engine's own line says it
   assert.match(noteFor(199, "command reghdfe is unrecognized") ?? "", /^reghdfe is a community command/);
   assert.equal(noteFor(199, "command frobnicate is unrecognized"), null);
   assert.equal(noteFor(601, "file wages.dta not found"), null);

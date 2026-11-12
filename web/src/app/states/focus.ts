@@ -1,17 +1,22 @@
 // STEP 4d: where the focus goes when a banner that holds it goes away (its Dismiss, "Try again", the run ending under
 // "Don't reset: wait for it"), so it does not fall to <body>: the editor (editorCommands.focus(), which 4b's editor fills;
-// until then its default focuses the `[data-editor]` stand-in), else, when the editor is hidden (a .dta tab, another phone
-// view), the top bar's "More actions" button, which every width shows and nothing disables.
+// or with a .dta tab active its tab or Load), else, when the Editor pane is hidden (another phone view), the top bar's
+// "More actions" button, which every width shows and nothing disables. ui/Dialog.tsx uses it too, for a dialog whose
+// opener has left the page.
 // A view that takes the focus when it appears (the stopping and waiting banners, a dialog) does so in a useLayoutEffect, so
 // it has the focus before the hand-off below looks: the focus then goes straight to it, never through the editor.
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { editorCommands } from "../editor/commands.ts";
 
 /** Put the focus on the editor, or on the visible "More actions" button when the editor cannot take it. editorCommands.focus()
- *  must focus at once (not later), for the check that follows it. */
+ *  must focus at once (not later), for the check that follows it. With a .dta tab active the editor's own target wins (its
+ *  tab in "Open files", or its view's Load: editor/Editor.tsx focus()), so the focus moves once; "More actions" only when
+ *  editorCommands.focus() moved it nowhere (the Editor pane hidden, a phone on another view). */
 export function focusStable(doc: Document = document) {
+  const before = doc.activeElement;
   editorCommands.focus();
-  if (doc.activeElement?.closest("[data-editor]")) return;
+  const at = doc.activeElement;
+  if (at?.closest("[data-editor]") || (at && at !== before && at !== doc.body)) return;
   [...doc.querySelectorAll<HTMLElement>('button[aria-label="More actions"]')]
     .find((b) => b.getClientRects().length > 0)
     ?.focus();

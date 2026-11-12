@@ -52,9 +52,6 @@ body {
     ) {
     font-size: max(16px, 1em);
   }
-  .cmdline .placeholder {
-    font-size: 16px;
-  } /* the command line's stand-in, at the size its field will have */
 }
 
 /* The toolbar keeps one size: each button holds all its labels (RunControls.tsx), and in other-tab the run buttons keep
@@ -240,15 +237,6 @@ body {
   display: block;
   color: var(--ink);
   font-weight: var(--w-bold-ui);
-}
-.cmdline .placeholder {
-  margin: 0;
-  padding: var(--s1) var(--s2);
-  flex: 1;
-}
-.cmdline .placeholder b {
-  display: inline;
-  margin-right: var(--s2);
 }
 
 /* the editor's place in the Editor pane: hidden, not unmounted, while a .dta tab shows its view (App.tsx) */

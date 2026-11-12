@@ -27,9 +27,12 @@
     "deploy": "npm run lint:strict && npm run snapshot && npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.13.1",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
+    "@lezer/highlight": "^1.2.5",
     "@preact/signals": "^2.11.4",
     "@preact/signals-core": "^1.14.5",
     "brotli-wasm": "^3.0.1",

@@ -4,7 +4,8 @@
 //    otherwise; "Download" for the prompt, UX-037). Without one, the first button.
 //  - Esc cancels: it calls `onCancel`. Without `onCancel` the dialog is blocking: Esc does nothing (the download prompt
 //    and "dofile is open in another tab").
-//  - When it closes (the component unmounts), focus returns to what had it when the dialog opened.
+//  - When it closes (the component unmounts), focus returns to what had it when the dialog opened; if that has left the
+//    page, to the editor or More actions (states/focus.ts focusStable).
 //  - Unmounted with no answer (another dialog replaced it in the `dialog` signal): its owner treats that as Cancel.
 //  - A destructive button is `.btn.stop.live` and never the default.
 // Render it while it should be open; the `dialog` signal decides that (app/dialogs.tsx maps each kind to its view):
@@ -15,6 +16,7 @@
 //   </Dialog>
 import type { ComponentChildren } from "preact";
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
+import { focusStable } from "../states/focus.ts";
 
 export interface DialogProps {
   title: ComponentChildren;
@@ -53,6 +55,12 @@ export function Dialog({
       closing.current = true;
       if (d.open) d.close();
       if (opener?.isConnected) opener.focus();
+      // the opener has left the page (a banner's button): the editor or More actions, not <body>; after a microtask,
+      // so a dialog or banner that replaced this one keeps the focus it took (states/focus.ts)
+      else
+        queueMicrotask(() => {
+          if (!document.activeElement || document.activeElement === document.body) focusStable();
+        });
     };
   }, []);
 

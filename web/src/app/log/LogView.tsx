@@ -13,7 +13,7 @@
 //    "Stopped by Break before line 17. The data is as the last complete command left it." (OQ-9) with "Go to line 17"
 //    and no error mark (a command from the command line names no line: "Stopped by Break. The data is ..."); the
 //    files a run wrote that were not kept (`skipped`, `store_error`);
-//  - the page's notes (.note), such as a reset's reason.
+//  - the page's notes (.note), such as a reset's reason, and under an error the OQ-10 note (states/words.ts noteFor).
 // On a phone the hint is a block (.explain), and a block of output wider than the screen is followed by "← wide table:
 // swipe sideways →". The head, run-heads and the page's notes are shown only: Download log has the runs' text alone.
 // The pane follows the end of the log unless the visitor has scrolled up. role="log".
@@ -26,6 +26,7 @@ import { graphAlt } from "../output/format.ts";
 import { cardTheme } from "../output/GraphTab";
 import { runCommand } from "../run.ts";
 import { graphFull, graphIndex, graphs, isPhone, log, outputTab, split } from "../state.ts";
+import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
 import { commandEnd, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
@@ -226,6 +227,16 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
       "\n",
     );
   else if (jump !== null && rcAt < 0) out.push(<Jump key="jump" line={jump} path={end!.path} />, "\n");
+  // OQ-10's notes (4d's states/words.ts), under the error: the error is the run's first error line that is not r(N);
+  const error = end && end.rc > 1 ? lines.find((l) => l.kind === "err" && !/^r\(\d+\);$/.test(l.text)) : undefined;
+  const note = error ? noteFor(end!.rc, error.text) : null;
+  if (note)
+    out.push(
+      <span key="oq10" class="note">
+        {note}
+      </span>,
+      "\n",
+    );
   if (end?.skipped?.length)
     out.push(
       <span key="skipped" class="note">

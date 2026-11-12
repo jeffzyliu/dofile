@@ -420,6 +420,36 @@ test("the log: a command stopped by Break names no line; a phone's inline graph 
   }
 });
 
+test("the log: under an error, the OQ-10 note where the engine's own words do not say it", async ({ page }) => {
+  await page.goto("/?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  // the engine's own text for these three errors (src/dofile/browser.py, as a run prints it)
+  await page.evaluate(() => {
+    const end = (rc: number) => ({ kind: "command", fresh_locals: false, rc, line: 1, seconds: 0.1 });
+    window.__dofile.state.runWriter.log.value = [
+      { t: "text", run: 1, text: ". restore\nnothing to restore\nr(622);\n", end: end(622) },
+      {
+        t: "text",
+        run: 2,
+        text: '. reghdfe y x\ncommand reghdfe is unrecognized\n  → "reghdfe" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
+        end: end(199),
+      },
+      {
+        t: "text",
+        run: 3,
+        text: '. use "$T"\nfile /tmp/opendta-1/S__000000.dta not found\nr(601);\n(a tempfile lasts one run: save it under a name to use it in a later run)\n',
+        end: end(601),
+      },
+    ];
+  });
+  if (isPhone(page)) await view(page, "Log");
+  await expect(page.getByRole("log", { name: "Log" }).locator(".note")).toHaveText([
+    "Nothing was preserved in this run. A run restores the data it preserved when it ends, so put preserve and restore in the same run.",
+    "reghdfe is a community command: it isn't part of Stata itself, and dofile doesn't have it.",
+    "(a tempfile lasts one run: save it under a name to use it in a later run)", // the engine's note; no second one
+  ]);
+});
+
 // ---- with an engine ----
 
 test("a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab", async ({
