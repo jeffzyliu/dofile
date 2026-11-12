@@ -24,7 +24,7 @@ const page = (search = "") => Object.assign(globalThis, { location: { search } }
 
 const S = await import("../src/app/state.ts");
 const { store } = await import("../src/app/store.ts");
-const { afterRun, connectFiles, own, refresh } = await import("../src/app/files.ts");
+const { afterRun, connectFiles, keep, own, refresh } = await import("../src/app/files.ts");
 const { editorCommands } = await import("../src/app/editor/commands.ts");
 const sample = await import("../src/app/sample.ts");
 
@@ -222,6 +222,7 @@ for (const [what, change] of [
 test("a change of the visitor's made while the first visit's sample is being written brings the storage banner", async () => {
   try {
     connectFiles(store, notKept);
+    await keep(notKept); // persisted is false before anything is written
     own(); // the seed starts: it lists the store, then writes
     await store.write("mine.do", enc("display 1")); // the visitor's upload, while the seed is in progress
     assert.equal(storageBanner(), true);
