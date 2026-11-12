@@ -15,7 +15,7 @@ import {
   fillTokens,
   OWN_PREFIXES,
 } from "../scripts/site-pages.ts";
-import { filterNames } from "../src/site/filter.ts";
+import { countText, filterNames } from "../src/site/filter.ts";
 import data from "../src/stata/commands.json" with { type: "json" };
 
 const web = (p: string) => readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8");
@@ -91,6 +91,26 @@ test("the filter keeps the names that contain what was typed, ignoring case and 
   assert.deepEqual(filterNames(names, "zzz"), []);
 });
 
+test("the filter's count names the commands of the total and, when there are any, the prefixes shown", () => {
+  assert.equal(countText("", 515, 515, 18), "", "nothing typed: no count");
+  assert.equal(countText("  ", 515, 515, 18), "");
+  assert.equal(countText("regress", 9, 515, 0), "9 of 515 commands");
+  assert.equal(countText("quietly", 0, 515, 1), "0 of 515 commands, 1 prefix");
+  assert.equal(countText("reg", 30, 515, 2), "30 of 515 commands, 2 prefixes");
+});
+
+test("the theme button of the landing and commands pages has the editor's words, order and key", async () => {
+  const app = await import("../src/app/theme.ts");
+  const site = await import("../src/site/theme.ts");
+  assert.deepEqual(site.WORD, app.THEME_LABEL);
+  assert.deepEqual(site.ARIA, app.THEME_ARIA);
+  assert.deepEqual(site.NEXT, app.THEME_NEXT);
+  assert.match(web("src/app/theme.ts"), new RegExp(`saved\\.set\\("${site.KEY}"`));
+  // the pages' first-paint script reads the same key
+  for (const f of ["landing.html", "commands.html", "index.html"])
+    assert.ok(web(f).includes(`localStorage.getItem("${site.KEY}")`), f);
+});
+
 // ---- clean room (LICENSE-POLICY.md): what the checks can see; the record is in docs/prototype1-plan.md ----
 
 test("clean room: the pages say Stata only as the policy allows, name no real dataset, and keep the trademark line", () => {
@@ -113,4 +133,7 @@ test("clean room: the pages say Stata only as the policy allows, name no real da
     const text = web(f);
     assert.doesNotMatch(text, /sysuse|webuse|\bauto\b.*\.dta|nlsw88|census|lifeexp/i, f);
   }
+  // all five: no manual, no help file or ado-file, no link to StataCorp's site
+  for (const f of ["landing.html", "commands.html", "sample/analysis.do", "sample/helpers.do", "sample/make_sample.py"])
+    assert.doesNotMatch(web(f), /\bmanuals?\b|\.sthlp\b|\.ado\b|stata\.com/i, f);
 });

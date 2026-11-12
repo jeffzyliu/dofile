@@ -47,10 +47,19 @@ test("the filter keeps the names that contain the text, says how many, and bring
   await expect(page.locator("#count")).toHaveText(`${expected.length} of ${total} commands`);
   await field.fill("  REG ");
   await expect(names(page)).toHaveCount(Object.keys(data.commands).filter((n) => n.includes("reg")).length);
+  // a prefix only: the commands' section goes, the prefixes' stays with its note, and the count says both
+  await field.fill("quietly");
+  await expect(names(page)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Commands", level: 2 })).toBeHidden();
+  await expect(page.locator("#prefixes li:not([hidden])")).toHaveText(["quietly"]);
+  await expect(page.getByText("A prefix goes before another command")).toBeVisible();
+  await expect(page.locator("#count")).toHaveText(`0 of ${total} commands, 1 prefix`);
+  await expect(page.getByText("No command starts with or contains that.")).toBeHidden();
   await field.fill("zzzzz");
   await expect(names(page)).toHaveCount(0);
   await expect(page.getByText("No command starts with or contains that.")).toBeVisible();
   await expect(page.locator("#prefixes")).toBeHidden();
+  await expect(page.getByText("A prefix goes before another command")).toBeHidden(); // the note goes with its list
   await field.fill("");
   await expect(names(page)).toHaveCount(total);
   await expect(page.locator("#prefixes")).toBeVisible();

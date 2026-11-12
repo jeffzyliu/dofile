@@ -63,9 +63,9 @@
     <section class="card">
       <h2>On your computer</h2>
       <div class="label">Command line and MCP server <span class="soon">with the first release</span></div>
-      <div class="cmd"><code>pip install dofile</code><span class="copied" hidden aria-hidden="true"><span class="ico i-check"></span>Copied</span><button type="button" class="btn copy" data-copy="pip install dofile" aria-label="Copy pip install dofile">Copy</button></div>
+      <div class="cmd"><code>pip install dofile</code><span class="copied" hidden aria-hidden="true"><span class="ico i-check"></span>Copied</span><button type="button" class="btn copy" hidden data-copy="pip install dofile" aria-label="Copy pip install dofile">Copy</button></div>
       <div class="label">Today, from the source</div>
-      <div class="cmd"><code>claude mcp add dofile -- uv run <span class="nb">--directory</span> <span class="ph">/path/to/dofile</span> <span class="nb">--extra mcp</span> dofile-mcp <span class="nb">--workdir "$PWD"</span></code><span class="copied" hidden aria-hidden="true"><span class="ico i-check"></span>Copied</span><button type="button" class="btn copy" data-copy='claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"' aria-label="Copy the MCP command">Copy</button></div>
+      <div class="cmd"><code>claude mcp add dofile -- uv run <span class="nb">--directory</span> <span class="ph">/path/to/dofile</span> <span class="nb">--extra mcp</span> dofile-mcp <span class="nb">--workdir "$PWD"</span></code><span class="copied" hidden aria-hidden="true"><span class="ico i-check"></span>Copied</span><button type="button" class="btn copy" hidden data-copy='claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"' aria-label="Copy the MCP command">Copy</button></div>
       <p class="small" style="margin-top:0">Replace <span class="mono ph">/path/to/dofile</span> with the folder you cloned dofile into.</p>
       <p class="small">Setup and the MCP tools: <a href="https://github.com/jeffzyliu/dofile#readme">README on GitHub</a></p>
       <!-- Copy: "Copied" shows beside the button for 2 s; the button's name stays "Copy …", and only this region speaks, once -->
@@ -88,7 +88,7 @@
 
     <section class="card sample-card">
       <h2>What a run looks like</h2>
-      <!-- the sample project's own run (web/sample/analysis.do): test/site.test.ts checks these numbers against a run of it -->
+      <!-- the sample project's own run (web/sample/analysis.do): test/sample-run.test.ts checks that every line is in a run of it -->
 <pre class="sample"><span class="echo">. use data/wages, clear</span>
 <span class="echo">. regress wage age educ female</span>
 
@@ -112,14 +112,14 @@
 
   <section class="browsers" id="browsers" aria-labelledby="browsers-h">
     <h2 id="browsers-h">Browsers that work</h2>
-    <p>dofile runs in the page, so the browser needs WebAssembly, IndexedDB (where your files are kept) and enough memory
-      for the engine, which needs a little over 1 GB while it starts.</p>
+    <p>dofile runs in the page, so the browser needs WebAssembly, IndexedDB (where your files are kept) and enough free
+      memory to start the engine.</p>
     <ul>
-      <li><b>Chrome, Edge, Firefox and Safari on a computer.</b> Checked by automatic tests in Chromium, Firefox and WebKit
-        (the engine Safari is built on).</li>
-      <li><b>iPhone and iPad (Safari).</b> Tried by hand on one iPhone, once, and the tests run an iPhone-sized window. Not
-        checked on other models: a phone with little memory may fail to start the engine, and the page then says so.</li>
-      <li><b>Android (Chrome, Firefox).</b> Expected to work the same way. Not tried on a real phone yet.</li>
+      <li><b>On a computer.</b> Automatic tests run the page in the three browser engines: Chromium (Chrome, Edge), Firefox
+        and WebKit (Safari). Each browser was not also tried by hand.</li>
+      <li><b>iPhone (Safari).</b> Tried by hand on one iPhone 13; the automatic tests also run an iPhone-sized WebKit window.
+        Other iPhones and iPads were not tried: one with little memory may fail to start the engine.</li>
+      <li><b>Android.</b> Not tried yet.</li>
     </ul>
     <p>The Break button needs a page the browser treats as isolated from other sites; this site is served that way. If a
       browser or a network does not allow it, Break resets the engine instead of stopping the run. Your files stay in the

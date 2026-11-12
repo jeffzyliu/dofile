@@ -1,8 +1,10 @@
 """Regenerate the sample project's dataset, data/wages.dta (docs/prototype1-plan.md, step 5).
 
-The data are synthetic: drawn here from numpy's PCG64 generator with a fixed seed, so the same file comes out every time.
-No real person's record, no dataset of Stata's. The engine itself writes the .dta (import delimited, label, save), so
-the file is in the format the page reads.
+The data are synthetic: drawn here from numpy's PCG64 generator with a fixed seed. No real person's record, no dataset of
+Stata's. The engine itself writes the .dta (import delimited, label, save), so the file is in the format the page reads.
+`save` stamps the time in the file's header; build() puts a fixed time there, so the same bytes come out on every run.
+numpy does not promise the same draws across its versions (NEP 19), so the file repeats while numpy is the version uv.lock
+pins; a numpy upgrade that changes the draws fails tests/test_sample_data.py, and then this script is run again.
 
     uv run python web/sample/make_sample.py          # from the repository root; rewrites web/sample/data/wages.dta
     uv run python web/sample/make_sample.py --check  # exit 1 if the committed file differs from what this makes
@@ -12,6 +14,7 @@ Afterwards run `npm run sample` in web/ to refresh src/app/sample-files.ts, whic
 
 from __future__ import annotations
 
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -23,6 +26,9 @@ from dofile.engine import Engine
 SEED = 2026
 N = 500
 OUT = Path(__file__).resolve().parent / "data" / "wages.dta"
+# The header's time stamp ("dd Mon yyyy hh:mm", 17 bytes after a length byte), fixed so that the file does not change
+STAMP = b"01 Jan 2026 00:00"
+STAMP_FIELD = re.compile(rb"<timestamp>.[^<]*</timestamp>", re.DOTALL)
 
 REGIONS = {1: "North", 2: "East", 3: "South", 4: "West"}
 REGION_SHIFT = {1: 0.0, 2: 0.6, 3: -0.4, 4: 1.1}
@@ -64,7 +70,12 @@ save wages, replace
     )
     if r.rc != 0:
         raise SystemExit(f"the engine stopped with rc {r.rc}: {r.error}\n{r.log}")
-    return (folder / "wages.dta").read_bytes()
+    data, n = STAMP_FIELD.subn(
+        b"<timestamp>" + bytes([len(STAMP)]) + STAMP + b"</timestamp>", (folder / "wages.dta").read_bytes(), 1
+    )
+    if n != 1:
+        raise SystemExit("no <timestamp> in the .dta header: the format changed, see STAMP_FIELD")
+    return data
 
 
 def main() -> int:

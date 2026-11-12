@@ -6,9 +6,9 @@
 // tab's, and block(), when another tab took it. The store starts blocked (app/store.ts).
 
 import { keepFiles } from "../engine/tab.ts";
-import type { FileChange, FileInfo } from "../engine/types.ts";
+import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
 import { editorCommands } from "./editor/commands.ts";
-import { seedSample } from "./sample.ts";
+import { SAMPLE_PATHS, seedSample } from "./sample.ts";
 import * as S from "./state.ts";
 import { filesWriter as W } from "./state.ts";
 
@@ -16,7 +16,7 @@ type Store = {
   list(): Promise<FileInfo[]>;
   zip(): Promise<File>;
   read(path: string): Promise<Uint8Array>;
-  onChange: null | (() => void);
+  onChange: null | ((row: PendingRow) => void);
   blocked: boolean;
 };
 type Storage = Parameters<typeof keepFiles>[0];
@@ -24,7 +24,9 @@ type Storage = Parameters<typeof keepFiles>[0];
 let store: Store | null = null;
 let storage: Storage; // navigator.storage, or the tests' own
 let warned = false; // the storage banner was added in this visit
-let seeding = false; // the first visit's sample is being written (sample.ts): its changes bring no storage banner
+// the sample's paths while the first visit writes them (sample.ts): those writes bring no storage banner; any other change
+// made meanwhile (an upload, a run) does
+let seeding: ReadonlySet<string> = new Set();
 
 /** The store the page uses (main.tsx), and the browser's storage manager (the tests give theirs). The store's changes
  *  list it again. */
@@ -32,8 +34,8 @@ export function connectFiles(s: Store, manager: Storage = globalThis.navigator?.
   store = s;
   storage = manager;
   warned = false;
-  s.onChange = () => {
-    changed();
+  s.onChange = (row) => {
+    changed(row);
     refresh();
   };
 }
@@ -46,10 +48,10 @@ export function own() {
   keep(storage);
   refresh();
   // a first visit with no files: the sample (sample.ts). Writing it is not a change of the visitor's, so it does not bring
-  // the storage banner (S 19) before they have done anything
-  seeding = true;
+  // the storage banner (S 19) before they have done anything. seedSample never rejects.
+  seeding = new Set(SAMPLE_PATHS);
   seedSample().finally(() => {
-    seeding = false;
+    seeding = new Set();
   });
 }
 
@@ -58,9 +60,9 @@ export function block() {
   if (store) store.blocked = true;
 }
 
-// the files changed (the page's change, or a run's): S 19's banner, once per visit, if the browser may clear them
-function changed() {
-  if (seeding || warned || S.persisted.value !== false) return;
+// the files changed (the page's change, `row`, or a run's): S 19's banner, once per visit, if the browser may clear them
+function changed(row?: PendingRow) {
+  if ((row && seeding.has(row.path)) || warned || S.persisted.value !== false) return;
   warned = true;
   S.addBanner({ b: "storage" });
 }

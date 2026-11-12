@@ -1,34 +1,36 @@
 // The commands page's entry (web/commands.html): the shared behavior, and the filter over the lists the build wrote into
-// the page. Without this script the page is the full list.
-import { filterNames } from "./filter.ts";
+// the page. Without this script the page is the full list. Each list sits in its own <section> with its heading and note:
+// a list with no name left hides its whole section.
+import { countText, filterNames } from "./filter.ts";
 import "./site.ts";
 
 const finder = document.getElementById("finder");
 const field = document.getElementById("q") as HTMLInputElement | null;
 const count = document.getElementById("count");
 const none = document.getElementById("none");
-const lists = [...document.querySelectorAll<HTMLElement>("ul.names")];
+const commands = document.getElementById("names");
+const prefixes = document.getElementById("prefixes");
 
-if (finder && field && count && none) {
+if (finder && field && count && none && commands && prefixes) {
   finder.hidden = false;
-  const items = lists.map((ul) => [...ul.querySelectorAll<HTMLElement>("li")]);
-  const total = items[0].length;
+  const lists = [commands, prefixes].map((ul) => ({ ul, items: [...ul.querySelectorAll<HTMLElement>("li")] }));
+  const total = lists[0].items.length;
   const run = () => {
-    const shown = filterNames(
-      items.flat().map((li) => li.dataset.name ?? ""),
-      field.value,
+    const on = new Set(
+      filterNames(
+        lists.flatMap((l) => l.items.map((li) => li.dataset.name ?? "")),
+        field.value,
+      ),
     );
-    const on = new Set(shown);
-    for (const li of items.flat()) li.hidden = !on.has(li.dataset.name ?? "");
-    for (const [i, ul] of lists.entries()) {
-      const heading = document.getElementById(ul.getAttribute("aria-labelledby") ?? "");
-      const any = items[i].some((li) => !li.hidden);
-      ul.hidden = !any;
-      if (heading) heading.hidden = !any;
-    }
-    const n = items[0].filter((li) => !li.hidden).length;
-    none.hidden = shown.length > 0;
-    count.textContent = field.value.trim() ? `${n} of ${total} commands` : "";
+    const shown = lists.map(({ ul, items }) => {
+      for (const li of items) li.hidden = !on.has(li.dataset.name ?? "");
+      const n = items.filter((li) => !li.hidden).length;
+      const section = ul.closest("section");
+      if (section) section.hidden = n === 0;
+      return n;
+    });
+    none.hidden = on.size > 0;
+    count.textContent = countText(field.value, shown[0], total, shown[1]);
   };
   field.addEventListener("input", run);
 }

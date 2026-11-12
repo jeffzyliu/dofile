@@ -195,6 +195,27 @@ test("the import graph: engine/ never imports app/; no .ts file imports a .tsx; 
   }
 });
 
+test("the import graph: the landing and commands pages (src/site/) import nothing of the editor's, and the editor nothing of theirs", () => {
+  const site = SRC.filter((f) => f.startsWith("src/site/"));
+  assert.ok(site.length >= 4, "src/site/ has the pages' scripts");
+  for (const f of site) {
+    for (const i of importsOf(f)) {
+      assert.ok(i.file, `${f} imports the package "${i.from}": the pages load their own two small scripts only`);
+      assert.match(i.file, /^src\/(site|styles)\//, `${f} imports ${i.file}: only src/site/ and the stylesheets`);
+    }
+  }
+  for (const f of SRC.filter((f) => !f.startsWith("src/site/")))
+    for (const i of importsOf(f)) assert.ok(!i.file?.startsWith("src/site/"), `${f} imports ${i.file}`);
+  // the pages' HTML loads only their own entries
+  for (const page of ["landing.html", "commands.html"]) {
+    const scripts = [...readFileSync(join(web, page), "utf8").matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    assert.ok(scripts.length > 0, page);
+    for (const s of scripts) assert.match(s, /^\/src\/site\/[a-z-]+\.ts$/, `${page} loads ${s}`);
+  }
+});
+
 test("TypeScript as Node runs it: only syntax that can be erased, and no JSDoc types", () => {
   const options = JSON.parse(readFileSync(join(web, "tsconfig.json"), "utf8")).compilerOptions;
   assert.deepEqual(

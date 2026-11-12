@@ -1362,34 +1362,41 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   build, so the list is there with no script. In each name the shortest form you can type is bold. Names `browser.py` turns off
   (`DENIED`, read from the source text) carry "off in the browser". A second list holds the prefixes: the six the interpreter
   handles itself (`OWN_PREFIXES` in `scripts/site-pages.ts`, a test compares them with `src/stata/language.ts`) and the
-  registry's. A filter field (shown only when the script runs) keeps the names that contain the text and says "N of M commands".
+  registry's. Each list is a `<section>` with its heading (and the prefixes' note). A filter field (shown only when the script
+  runs) keeps the names that contain the text, hides a section with no name left, and says "N of M commands", with ", 1 prefix"
+  or ", N prefixes" when prefixes are shown (`countText` in `src/site/filter.ts`).
   No descriptions and no links to help pages: a name's meaning is the visitor's own knowledge or a search away, and the
   clean-room risk of 515 descriptions is not worth it (`R` round 1).
 - **Sample** (`F 2.1`, `F 2.4`; OQ-21's names): `web/sample/analysis.do` (the main do-file: `use`, `describe`, `summarize`,
   `tabulate`, `tabstat`, `regress`, a `foreach` loop, `do helpers.do`, a `scatter`), `web/sample/helpers.do` (a `program` that
   compares two groups' average wage), `web/sample/data/wages.dta` (500 rows: `id age educ female region wage`, made by
-  `web/sample/make_sample.py` with numpy's `default_rng(2026)` and written by the engine itself; `--check` says whether the committed
-  file is what the script makes). `npm run sample` runs the script and `scripts/make-sample.ts`, which writes the generated
+  `web/sample/make_sample.py` with numpy's `default_rng(2026)` and written by the engine itself, with a fixed time in the .dta
+  header, so every run makes the same bytes; `--check` says whether the committed file is what the script makes, and
+  `tests/test_sample_data.py` checks it in CI. The draws repeat while numpy is the version `uv.lock` pins). `npm run sample` runs the script and `scripts/make-sample.ts`, which writes the generated
   module `src/app/sample-files.ts` (text as strings, the .dta as base64) so the sample is in the page's own bundle and needs no
   request. `src/app/sample.ts`: `seedSample()` is called by `files.ts own()` once the tab lock is this tab's; it writes the three
   files and opens `analysis.do` when the store has no entry at all and the localStorage mark `dofile.sample` is not set, and sets
-  the mark. A store with a file of the visitor's is never written (the mark is set so it never will be); a visitor who deleted
-  everything is not given it again. With `?test` in the URL it does nothing unless the URL has `?sample` too, so the e2e specs
+  the mark once the three files are written (a seed that fails sets none and never rejects). A store with a file of the
+  visitor's is never written (the mark is set so it never will be); a visitor who deleted everything is not given it again.
+  The seed's own writes (of the sample's paths) bring no storage banner (S 19); any other change meanwhile, and the visitor's
+  first change afterwards (a Save, an upload, a run that writes a file), does (`files.ts`, from the store's change row). With `?test` in the URL it does nothing unless the URL has `?sample` too, so the e2e specs
   start from an empty store. "Restore the sample" (`fileMenuItems`, above "Delete all files…" after a rule): writes the missing
-  files with no question and the toast "Sample restored"; if any file of the sample is there with other contents, the dialog
-  `restore-sample` ({ d, paths }; `files/dialogs.tsx`, `role="alertdialog"`) asks first. Other files are never touched.
+  files with no question and the toast "Sample restored"; if any file of the sample is there with other contents, or is open
+  with unsaved edits, the dialog `restore-sample` ({ d, paths }; `files/dialogs.tsx`, `role="alertdialog"`) asks first and
+  Replace drops those edits. Other files are never touched.
 - **Words not in the sources** (drafts for the maintainer): the dialog "Restore the sample?" / "helpers.do differs from the
   sample. Replacing it discards your changes. Your other files are not touched." (plural: "analysis.do, helpers.do differ from
   the sample. Replacing them discards your changes. …") / **Cancel** (focused), **Replace** (`.btn.stop.live`); the toasts
   "Sample restored", "The sample is already here", "Couldn't restore the sample"; the Copy failure line in the live region
   "Couldn't copy: select the text and copy it by hand"; the section "Browsers that work"; the commands page's text (below the
-  title, the Filter label and its placeholder "for example: reg", "No command starts with or contains that.", "off in the
-  browser", "Prefixes", "Back to the start", "Open the editor"). Their exact text is in the two HTML files and in
+  title, the Filter label and its placeholder "for example: reg", the count "N of M commands, 1 prefix", "No command starts with
+  or contains that.", "off in the browser", "Prefixes", "Back to the start", "Open the editor"). The Copy buttons and the theme
+  button are hidden until the script that makes them work runs. Their exact text is in the two HTML files and in
   `docs/prototype1-plan.md`, "Step 5: the clean-room record".
 - **Tests.** Node: `web/test/site.test.ts` (placeholders, the commands list against `commands.json`, `DENIED`, the six prefixes,
   the filter, the clean-room greps), `web/test/sample.test.ts` (the first visit, never over a visitor's files, Restore and its
   dialog on the real store module; the generated module is current), `web/test/sample-run.test.ts` (both do-files run with
-  rc 0 in Pyodide, draw one graph, and the landing page's regression output is a line-for-line subset of that run's log).
+  rc 0 in Pyodide, draw one graph, and every output line of the landing page's regression block appears in that run's log).
   e2e: `landing.spec.ts` (content, 404 for a missing page, the links in both directions and from the other-tab dialog and the
   failed-start banner, the build's size, the theme, Copy, axe in both themes on both pages, no sideways scroll, forced colors),
   `commands.spec.ts`, `sample.spec.ts` (first load, a later visit, never over files, Restore with its dialog, a run in the real

@@ -56,7 +56,8 @@ status: [prototype1-plan.md](prototype1-plan.md).
   this when deploying (step 9).
 - Highlighting: tree-sitter-stata (codedthinking, MIT) exists. Clean room (`LICENSE-POLICY.md`) applies to all
   page text: no Stata manual or help text, no Stata example datasets. `sysuse` datasets bundled with OpenDTA have
-  their own data licenses; check them before using one as the sample.
+  their own data licenses; check them before using one as the sample. (Checked in prototype 1, step 5: `cohort`, `diet` and
+  `growth` are synthetic, made by OpenDTA's `tools/make_datasets.py` with fixed seeds; the sample uses data of our own anyway.)
 - stats.camp is a closed-source browser app with the same idea. Our demo's points are that it is open source,
   needs no account, sends no data and uses the same engine as the CLI and MCP server.
 

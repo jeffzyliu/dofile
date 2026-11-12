@@ -24,7 +24,7 @@ const page = (search = "") => Object.assign(globalThis, { location: { search } }
 
 const S = await import("../src/app/state.ts");
 const { store } = await import("../src/app/store.ts");
-const { connectFiles, refresh } = await import("../src/app/files.ts");
+const { afterRun, connectFiles, own, refresh } = await import("../src/app/files.ts");
 const { editorCommands } = await import("../src/app/editor/commands.ts");
 const sample = await import("../src/app/sample.ts");
 
@@ -36,10 +36,14 @@ const names = async () =>
     .map((f) => f.path)
     .sort();
 
+const kept = { persisted: async () => true, persist: async () => true } as never;
+const notKept = { persisted: async () => false, persist: async () => false } as never;
+const storageBanner = () => S.banners.value.some((b) => b.b === "storage");
+
 const reloads: [string, string][] = [];
 (editorCommands as Record<string, unknown>).open = () => {};
 (editorCommands as Record<string, unknown>).reload = (p: string, t: string) => void reloads.push([p, t]);
-connectFiles(store, { persisted: async () => true, persist: async () => true } as never);
+connectFiles(store, kept);
 store.blocked = false;
 
 async function empty() {
@@ -50,6 +54,7 @@ async function empty() {
   S.activeTab.value = null;
   S.dialog.value = null;
   S.layout.value = "desktop";
+  for (const b of S.banners.value) S.dismiss(b);
   reloads.length = 0;
 }
 beforeEach(async () => {
@@ -132,4 +137,97 @@ test("Restore the sample asks before it replaces a file that differs, and names 
     "the open tab shows the restored text",
   );
   assert.equal(S.activeTab.value, "analysis.do");
+});
+
+test("a seed whose write fails sets no mark, never rejects, and is tried again on a later visit to an empty store", async () => {
+  const write = store.write;
+  (store as { write: unknown }).write = async () => {
+    throw new Error("quota");
+  };
+  try {
+    assert.equal(await sample.seedSample(), false);
+  } finally {
+    (store as { write: unknown }).write = write;
+  }
+  assert.deepEqual(await names(), []);
+  assert.equal(memory.get("dofile.sample"), undefined, "no mark: the sample is not there");
+  assert.equal(await sample.seedSample(), true);
+  assert.deepEqual(await names(), ALL);
+  assert.equal(memory.get("dofile.sample"), "1");
+});
+
+test("a seed whose opening of analysis.do throws resolves (no unhandled rejection), with the files written", async () => {
+  const open = editorCommands.open;
+  (editorCommands as Record<string, unknown>).open = () => {
+    throw new Error("no editor");
+  };
+  try {
+    assert.equal(await sample.seedSample(), false);
+  } finally {
+    (editorCommands as Record<string, unknown>).open = open;
+  }
+  assert.deepEqual(await names(), ALL);
+});
+
+test("Restore the sample asks about a sample file open with unsaved edits, even when its stored copy is the sample's", async () => {
+  await sample.seedSample();
+  S.tabs.value = [{ path: "analysis.do", kind: "text", dirty: true }];
+  await sample.restoreSample();
+  assert.deepEqual(S.dialog.value, { d: "restore-sample", paths: ["analysis.do"] });
+  assert.deepEqual(reloads, [], "nothing is reloaded before the answer");
+  S.dialog.value = null;
+  // missing too: still asked, not written silently over the edits
+  await store.remove("analysis.do");
+  await sample.restoreSample();
+  assert.deepEqual(S.dialog.value, { d: "restore-sample", paths: ["analysis.do"] });
+  assert.equal((await names()).includes("analysis.do"), false);
+  await sample.replaceWithSample();
+  assert.deepEqual(
+    reloads.map((r) => r[0]),
+    ["analysis.do"],
+    "Replace shows the sample's text in the tab",
+  );
+  assert.ok((await names()).includes("analysis.do"));
+});
+
+// S 19: where the browser may clear the files, the sample's own writes bring no storage banner; the visitor's first change does
+async function seededWithoutStorage() {
+  connectFiles(store, notKept);
+  own();
+  await new Promise((r) => setTimeout(r, 0));
+  for (let i = 0; i < 100 && (await names()).length < ALL.length; i++) await new Promise((r) => setTimeout(r, 5));
+  await new Promise((r) => setTimeout(r, 20)); // the seed's open and the persisted() answer
+  assert.deepEqual(await names(), ALL);
+  assert.equal(S.persisted.value, false);
+  assert.equal(storageBanner(), false, "the sample's writes bring no banner");
+}
+
+for (const [what, change] of [
+  ["a Save (a write of the visitor's)", () => store.write("analysis.do", enc("* mine\n"))],
+  ["an upload of a new file", () => store.write("mine.do", enc("display 1"))],
+  ["a run that writes a file", () => afterRun([{ name: "out.csv", status: "created", bytes: 1 }])],
+] as const) {
+  test(`after the first visit's sample, ${what} brings the storage banner`, async () => {
+    try {
+      await seededWithoutStorage();
+      await change();
+      assert.equal(storageBanner(), true);
+    } finally {
+      connectFiles(store, kept);
+      store.blocked = false;
+    }
+  });
+}
+
+test("a change of the visitor's made while the first visit's sample is being written brings the storage banner", async () => {
+  try {
+    connectFiles(store, notKept);
+    own(); // the seed starts: it lists the store, then writes
+    await store.write("mine.do", enc("display 1")); // the visitor's upload, while the seed is in progress
+    assert.equal(storageBanner(), true);
+  } finally {
+    await new Promise((r) => setTimeout(r, 50));
+    connectFiles(store, kept);
+    store.blocked = false;
+  }
 });

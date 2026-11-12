@@ -1,6 +1,12 @@
 /* The landing and commands pages (step 5; docs/design/mockups/landing.html is the drawing). Components are ui.css's; this file
    holds only these two pages' own layout. The editor page does not load it. */
 
+/* the hidden attribute wins over a component's own display (.btn, .theme): the theme and Copy buttons stay out of sight
+   until the script that makes them work runs, and the filter hides names, lists and their headings */
+[hidden] {
+  display: none !important;
+}
+
 body.site {
   min-height: 100%;
   height: auto;
@@ -123,9 +129,6 @@ body.landing main {
   padding-top: 4px;
   font: var(--w-bold-ui) 11.5px / 1 var(--font-ui);
   color: var(--ok);
-}
-.cmd .copied[hidden] {
-  display: none;
 }
 .cmd .copy {
   order: 2;
@@ -256,9 +259,6 @@ footer a {
   padding: var(--s2) 0;
   background: var(--bg);
 }
-.finder[hidden] {
-  display: none;
-}
 .finder input {
   font: var(--text-md) / 1.2 var(--font-ui);
   color: var(--ink);
@@ -282,10 +282,6 @@ footer a {
 .names li {
   padding: 2px 0;
   break-inside: avoid;
-}
-.names li[hidden],
-.names[hidden] {
-  display: none;
 }
 .names b {
   font-weight: var(--w-bold-mono);

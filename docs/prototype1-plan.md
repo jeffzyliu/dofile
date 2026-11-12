@@ -459,10 +459,15 @@ maintainer's review of the doubtful items below is still open.
   about what dofile does.
 - Searched `web/src`, `web/*.html` and `web/sample` for `sysuse`, `webuse`, `auto.dta`, `nlsw`, `census`, `lifeexp`, `citytemp`,
   `manual`, `sthlp`, `.ado`, `stata.com` and every use of "Stata": the only hits are the product-name uses listed under "Doubtful"
-  and code comments. `test/site.test.ts` and `e2e/commands.spec.ts` repeat the searches that apply to the two pages and the sample,
-  so a later edit that brings one in fails a test.
+  and code comments. `test/site.test.ts` repeats them over the landing and commands pages' sources and the sample's three
+  files (the example datasets' names, `sysuse`, `webuse`, `manual`, `.sthlp`, `.ado`, `stata.com`), and `e2e/commands.spec.ts`
+  over the built commands page, so a later edit that brings one in fails a test.
 - The data: `make_sample.py` draws every value from numpy's seeded generator (`default_rng(2026)`) and writes the file with
-  dofile's own engine; the script is committed beside its output (`--check` proves they match). Variables are `id age educ female
+  dofile's own engine, with a fixed time in the .dta header (the engine's `save` stamps the time; until the review of step 5
+  that made every run's bytes differ, so `--check` always failed). The script is committed beside its output, and
+  `tests/test_sample_data.py` (in `poe test`, so in CI) checks that it makes the committed file byte for byte. The draws repeat
+  only while numpy is the version `uv.lock` pins (numpy does not promise the same stream across versions, NEP 19): an upgrade
+  that changes them fails that test, and then the script and `npm run sample` are run again. Variables are `id age educ female
   region wage`, regions are North, East, South and West, `id` is a counter: no person's name, no real record, nothing taken from
   a Stata or other dataset. The names are common words, not a copy of any example dataset's variable list.
 - The sample's do-files use ordinary commands in our own comments (`use`, `describe`, `summarize`, `tabulate`, `tabstat`,
@@ -480,14 +485,33 @@ maintainer's review of the doubtful items below is still open.
 2. **Text the engine prints is not the page's text and was not re-audited here:** the error messages and output layouts of the
    engine (behavior it reproduces), `help <topic>` (the page suggests "Try: help regress"; the engine reads OpenDTA's own
    173 `help/*.sthlp` pages, written by OpenDTA under its own clean-room policy; the extension is the format's, but a reader
-   may take them for StataCorp's files), and `sysuse`, which loads OpenDTA's own synthetic datasets (`cohort`, `diet`,
-   `growth`; its docstring says Stata's example datasets are not included). They are covered by `CLEAN_ROOM_POLICY.md` of OpenDTA, the
-   vendor's; `sysuse` and `help` are in the commands page's list like any command.
-3. **Claims the page makes that rest on a source I could not test:** the iPhone line of "Browsers that work" ("tried by hand on
-   one iPhone, once": `docs/pyodide-snapshot.md`, 2026-11-08), the Android line ("expected to work", untried), and "a little over
-   1 GB while it starts" (the 1.25 GB peak in the same file, measured on one phone). Each says what it rests on; reword if the
-   maintainer has better figures.
+   may take them for StataCorp's files), and `sysuse`, which loads OpenDTA's own synthetic datasets (below). They are covered
+   by `CLEAN_ROOM_POLICY.md` of OpenDTA, the vendor's; `sysuse` and `help` are in the commands page's list like any command.
+3. **"Browsers that work" says only what the repository supports** (reworded in the review of step 5, drafts): the desktop
+   line names the three engines the automatic tests run (Chromium, Firefox, WebKit) and says the branded browsers were not each
+   tried by hand; the iPhone line names the one iPhone 13 tried by hand (`docs/pyodide-snapshot.md`, 2026-11-08) and says
+   other iPhones and iPads were not; Android "Not tried yet". The memory figure was dropped: its source, the 1.25 GB peak in
+   the same file, is of a Node process with Node's own overhead, not of a browser.
 4. **The commands page lists the `shell` and `webuse` names marked "off in the browser"** (read from `browser.py`'s `DENIED`),
    which is true of the page; the CLI and MCP server turn off a longer list. Not a clean-room matter.
 5. The mockups and flows under `docs/design/` (not shipped to visitors) hold a Stata-style `regress` table in the landing
    mockup; its numbers were from dofile's own run of a synthetic file, and the page now shows the real sample's run instead.
+
+**`sysuse` and OpenDTA's datasets (checked in the review of step 5)**
+- What the engine does (`_vendor/opendta/commands/datasets.py`, unchanged): `sysuse <name>` loads `<name>.dta` from
+  `_vendor/opendta/data/` or the adopath; `sysuse dir` lists them. OpenDTA ships three: `cohort` (300 rows: `id exposed agegrp
+  time died`), `diet` (400 rows: `id sex age region upf fruitveg bmi obese strata psu weight`) and `growth` (300 rows, 50
+  children by 6 years: `id age girl height`), each labelled "(synthetic, OpenDTA)". The names of Stata's example datasets
+  (`auto`, `nlsw88`, `census`, `lifeexp`, `cancer`, `citytemp`, ... in its `STATA_EXAMPLES`) give rc 601 with a note that they
+  are not included and that `webuse` downloads them; `webuse` is off in the page and in the CLI and MCP sandbox. The page's
+  own sample is our data, not one of these.
+- Where the three come from: OpenDTA's `tools/make_datasets.py` at the pinned commit (0c3f3a2; read on GitHub, not vendored,
+  not run here) builds them with `np.random.default_rng(2026 + i)` (seeds 2026, 2027, 2028) and says "They are synthetic data
+  made by this script with a fixed seed ... no third-party dataset is copied." Its variable lists and row counts are the vendored
+  files'. Their values, read here, are on regular grids (whole-year ages 2 to 7, ids 1 to N) as a seeded script makes them; no
+  name, variable list or value matches a StataCorp example dataset I know (`growth` has a theme like Stata's `childweight`,
+  children measured at several ages with a `girl` indicator, but other variables, another measure and other values).
+- How sure: high that they are generated, not copied (a committed generator with seeds, matching structure, labels that say
+  so). Not done: running the generator and comparing bytes. `data/icd/` holds the U.S. CMS ICD-9-CM and ICD-10-CM tables
+  (public domain, per `datasets.py` and `data/icd/README.md`), for `icd9`/`icd10`, not `sysuse`.
+- `docs/design/flows` F2 said "`sysuse` gives rc 601, by design"; it now says that `sysuse auto` does, and what `sysuse` loads.

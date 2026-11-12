@@ -2,11 +2,13 @@
 // by web/sample/make_sample.py (fixed seed). Their bytes are in sample-files.ts (generated: `npm run sample`).
 //  - seedSample(): on a first visit, when the store is empty, writes them and opens analysis.do. "First visit" is the
 //    localStorage mark `dofile.sample` plus an empty store: a visitor who deleted every file is not given the sample
-//    again (the file menu's "Restore the sample" is there for that), and a store with any file is never written over. With
-//    ?test in the URL it does nothing unless the URL also has ?sample (the e2e tests start from an empty store).
+//    again (the file menu's "Restore the sample" is there for that), and a store with any file is never written over. The
+//    mark is set once the three files are written (or when the store has files of the visitor's): a seed that fails is
+//    tried again on the next visit if the store is still empty. With ?test in the URL it does nothing unless the URL also
+//    has ?sample (the e2e tests start from an empty store). It never rejects.
 //  - restoreSample(): the file menu's item. Files the visitor has not changed, or that are missing, are written with no
-//    question; if some differ from the sample, the dialog restore-sample asks first and names them (dialogs: files/dialogs.tsx).
-//    Other files are never touched.
+//    question; if some differ from the sample, or are open with unsaved edits, the dialog restore-sample asks first and
+//    names them (dialogs: files/dialogs.tsx). Other files are never touched.
 // Plain TypeScript (no JSX), tested in Node (test/sample.test.ts).
 import { editorCommands } from "./editor/commands.ts";
 import { openFile } from "./files/open.ts";
@@ -16,6 +18,8 @@ import { store } from "./store.ts";
 
 /** The file the first visit opens. */
 export const SAMPLE_MAIN = "analysis.do";
+/** The sample's paths (files.ts: the first visit's writes of these bring no storage banner). */
+export const SAMPLE_PATHS: readonly string[] = SAMPLE.map((f) => f.path);
 const MARK = "dofile.sample";
 
 const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -41,23 +45,23 @@ async function put(only?: string[]) {
 
 /** First visit: write the sample into an empty store and open its main do-file. Resolves true when it did. */
 export async function seedSample(): Promise<boolean> {
-  if (!globalThis.location) return false; // not a page (the Node tests)
-  const q = new URLSearchParams(globalThis.location.search);
-  if (q.has("test") && !q.has("sample")) return false;
-  if (saved.get(MARK) || store.blocked) return false;
   try {
+    if (!globalThis.location) return false; // not a page (the Node tests)
+    const q = new URLSearchParams(globalThis.location.search);
+    if (q.has("test") && !q.has("sample")) return false;
+    if (saved.get(MARK) || store.blocked) return false;
     if ((await store.list()).length) {
       saved.set(MARK, "1"); // the visitor has files of their own: never the sample
       return false;
     }
-    saved.set(MARK, "1");
     await put();
+    saved.set(MARK, "1"); // only once it is all there: a seed cut short is tried again on a later visit to an empty store
+    await openFile(SAMPLE_MAIN);
+    return true;
   } catch (e) {
     console.warn(`[dofile] the sample: ${(e as Error)?.message ?? e}`);
     return false;
   }
-  await openFile(SAMPLE_MAIN);
-  return true;
 }
 
 /** Which of the sample's files are missing, and which are there with other contents. */
@@ -75,10 +79,16 @@ export async function sampleState(): Promise<{ missing: string[]; changed: strin
   return { missing, changed };
 }
 
-/** The file menu's "Restore the sample". Nothing is replaced without asking. */
+/** The sample's files open in a tab with unsaved edits: Restore would drop the edits, so it counts them as changed. */
+const unsaved = () => SAMPLE_PATHS.filter((p) => tabs.value.some((t) => t.path === p && t.dirty));
+
+/** The file menu's "Restore the sample". Nothing is replaced without asking: a file whose stored copy differs from the
+ *  sample, or that is open with unsaved edits, is named in the dialog restore-sample. */
 export async function restoreSample(): Promise<void> {
   try {
-    const { missing, changed } = await sampleState();
+    const state = await sampleState(),
+      missing = state.missing.filter((p) => !unsaved().includes(p)),
+      changed = SAMPLE_PATHS.filter((p) => state.changed.includes(p) || unsaved().includes(p));
     if (changed.length) {
       dialog.value = { d: "restore-sample", paths: changed };
       return;
@@ -92,11 +102,12 @@ export async function restoreSample(): Promise<void> {
   }
 }
 
-/** The dialog's "Replace": write every file of the sample that is missing or differs, then open the main do-file. */
+/** The dialog's "Replace": write every file of the sample that is missing, differs or is open with unsaved edits (an open
+ *  tab shows the sample's text, its edits dropped), then open the main do-file. */
 export async function replaceWithSample(): Promise<void> {
   try {
     const { missing, changed } = await sampleState();
-    await put([...missing, ...changed]);
+    await put([...missing, ...changed, ...unsaved()]);
     showToast("Sample restored");
     await openFile(SAMPLE_MAIN);
   } catch (e) {

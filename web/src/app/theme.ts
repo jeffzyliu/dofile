@@ -5,7 +5,8 @@ import { effect } from "@preact/signals-core";
 import { saved, theme } from "./state.ts";
 import type { Theme } from "./types.ts";
 
-const NEXT: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
+/** The order of the presses. */
+export const THEME_NEXT: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
 /** The button's word. */
 export const THEME_LABEL: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
 /** The button's aria-label: what it is now, and what presses do. The first is the spec's; the other two follow it. */
@@ -16,7 +17,7 @@ export const THEME_ARIA: Record<Theme, string> = {
 };
 
 export function cycleTheme() {
-  theme.value = NEXT[theme.value];
+  theme.value = THEME_NEXT[theme.value];
 }
 
 /** Keep <html data-theme> and localStorage in step with the signal (main.tsx calls it once). */

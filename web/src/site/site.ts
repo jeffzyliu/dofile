@@ -3,17 +3,7 @@
 // store, no tab lock: a visitor reading the landing page must not touch the editor's files or its lock).
 import "../styles/ui.css";
 import "./site.css";
-
-type Theme = "system" | "light" | "dark";
-const NEXT: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
-const WORD: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
-// the same words as the editor's button (src/app/theme.ts)
-const ARIA: Record<Theme, string> = {
-  system: "Theme: follows the system. Press for light, then dark.",
-  light: "Theme: light. Press for dark, then to follow the system.",
-  dark: "Theme: dark. Press to follow the system, then light.",
-};
-const KEY = "dofile.theme"; // the editor's key: one choice for the whole site
+import { ARIA, KEY, NEXT, type Theme, WORD } from "./theme.ts";
 
 function stored(): Theme {
   try {
@@ -69,6 +59,7 @@ async function copyText(text: string) {
 function copyButtons() {
   const status = document.getElementById("copy-status");
   for (const b of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+    b.hidden = false; // hidden in the HTML: without this script it would do nothing
     let timer: ReturnType<typeof setTimeout> | undefined;
     b.addEventListener("click", async () => {
       const shown = b.parentElement?.querySelector<HTMLElement>(".copied");

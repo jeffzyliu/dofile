@@ -42,8 +42,9 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
   await expect(page).toHaveURL(/\/$/);
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBeTruthy(); // the editor
   await expect(landingHeading(page)).toHaveCount(0);
-  // a first visit: the sample is in the file list, and the download prompt is over the page until it is answered
+  // a first visit: the download prompt is over the page until it is answered, and the sample's analysis.do is open
   await page.getByRole("dialog", { name: "Download the engine?" }).getByRole("button", { name: "Not now" }).click();
+  await expect(page.locator(".cm-content")).toContainText("A first look at wages, age and schooling");
   if (phone(page)) {
     await page.getByRole("button", { name: "More actions" }).click();
     await page.getByRole("menuitem", { name: /About dofile/ }).click();
@@ -128,8 +129,12 @@ test("the theme button cycles System, Light, Dark; the choice is the editor's to
   await button.click();
   expect(await theme()).toBe("dark");
   await expect(button).toHaveAccessibleName("Theme: dark. Press to follow the system, then light.");
+  // the first paint: the inline script in <head> sets it, before any module runs (here no module runs at all)
+  await page.route("**/*.js", (route) => route.abort());
   await page.reload();
-  expect(await theme()).toBe("dark"); // before the script runs: no flash
+  expect(await theme()).toBe("dark");
+  await expect(button).toBeHidden(); // with no script, no theme button
+  await page.unroute("**/*.js");
   await page.goto("/?test=manual");
   expect(await theme()).toBe("dark"); // the same key as the editor's button
   await page.goto("/landing.html");
