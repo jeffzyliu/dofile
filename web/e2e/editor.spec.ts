@@ -68,7 +68,8 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(content).toHaveText("display 1");
   await content.click();
   await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.type("display 2");
+  // one insertion, so one undo takes it back (keys typed slowly can fall into several undo steps)
+  await page.keyboard.insertText("display 2");
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(true);
   // undo back to the saved text: no longer unsaved
   await page.keyboard.press("ControlOrMeta+z");
