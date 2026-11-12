@@ -23,12 +23,14 @@ def _script():
     return module
 
 
-def test_the_committed_sample_data_is_what_the_script_makes(tmp_path):
+def test_the_committed_sample_data_is_what_the_script_makes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the Engine changes the working folder to its own; put it back after the test
     script = _script()
     assert script.build(tmp_path) == script.OUT.read_bytes(), "run `uv run python web/sample/make_sample.py`"
 
 
-def test_two_builds_make_the_same_bytes(tmp_path):
+def test_two_builds_make_the_same_bytes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     script = _script()
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()

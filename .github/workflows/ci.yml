@@ -12,7 +12,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# A pull request that changes none of the files these tests cover (src/, tests/, tests_opendta/, scripts/,
+# A pull request that changes none of the files these tests cover (src/, tests/, tests_opendta/, scripts/, web/sample/,
 # pyproject.toml, uv.lock, .python-version, this workflow) skips the test
 # jobs but still starts the workflow, so the required check `ci ok` reports. (A workflow-level `paths` filter starts
 # nothing, and a required check that never reports blocks the merge forever.)
@@ -20,7 +20,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes none of: src/, tests/, tests_opendta/, scripts/, pyproject.toml, uv.lock, .python-version, this workflow
+      code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes none of: src/, tests/, tests_opendta/, scripts/, web/sample/ (tests/test_sample_data.py), pyproject.toml, uv.lock, .python-version, this workflow
       python: ${{ steps.diff.outputs.python }}   # "false" only for a pull request that changes none of the above and no web/scripts/*.py: what ruff checks
     steps:
       - uses: actions/checkout@v7
