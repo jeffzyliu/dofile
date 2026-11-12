@@ -7,7 +7,34 @@ Status column and the "Where things stand" section at the end of every session.
 To pick up after a break: read this file, then `docs/design/SPEC.md` (the build spec), then run `git status` and
 `git log --oneline -5`.
 
-## Where things stand (2026-11-11)
+## Where things stand (2026-11-12)
+
+- **Fix round 2 (2026-11-12), built on six branches, none merged or pushed** (the session that built them could not push to
+  GitHub; the branches were handed to the maintainer as a git bundle). Each is made from `main` at `bc8a942`:
+  `claude/post-merge-small-fixes` (step 4's C 4, C 8 and C 12, arrow keys with Alt, Ctrl or Cmd left to the browser, dead
+  toast CSS, the two flaky e2e tests); `claude/clear-log-confirm` ("Clear log" asks first); `claude/phone-command-input`
+  (autocorrect off as an attribute, typed curly quotes straightened, a Run button on the phone's command line);
+  `claude/screen-wake-lock` (the screen stays awake while the engine works); `claude/remove-queued-run` (the checkbox of
+  "Post-merge review"); `claude/phone-keyboard-experiment` (`?kb=`, `?slide`, `?kblog`; the default unchanged;
+  `docs/phone-keyboard-experiment.md`). This branch joins all six, with the test map's counts added up. They conflict with
+  each other only in `docs/test-map.md`'s counts, `web/CLAUDE.md` (two sentences added at one place) and, for the queued
+  run against the command line's other changes, `log/CommandLine.tsx`, `e2e/editor.spec.ts` and `docs/web-page-flows.md`.
+  Checked on the joined branch: `npm run check`, `npm run lint:strict`; `npm test` (296 tests: 279 pass, and the 12 that
+  load the engine's packages from the CDN fail where that host is blocked, as they do on `main` there); the e2e suite in
+  Chromium only, at desktop size and in the iPhone profile's size, with no engine (the snapshot could not be built
+  there): 161 cases pass against 146 on `main`, and every failure is a test that needs the engine or
+  `shell.spec.ts`'s "the toolbar does not move", which failed 3 runs of 8 on `main` in the same setup. **Not run
+  anywhere yet:** Firefox, WebKit, and every test that starts the engine (among the new ones: the phone Run button's
+  test, the last part of the no-engine command line test, the `?snapshot=0` test's new failure message). CI's first run
+  on a pull request is their first run. A fresh-context review went over four of the branches and its findings are
+  fixed on them; `claude/remove-queued-run` and `claude/phone-keyboard-experiment` have had no such review.
+- **The post-merge review is prepared, not decided.** Lists B and C of steps 4 and 5 were checked against the code item by
+  item, each with a recommended answer; so were the later UI work, step 6's scope and the icebox's accessibility items.
+  The maintainer's review document holds the recommendations and the decisions to make. Found on the way and not
+  fixed: a Save pressed right after a rename's Enter, before the rename's write ends, leaves the old text under the new
+  name and the new text under the old name, with the tab shown as saved (`files/actions.ts` `renameEntry`,
+  `editor/Editor.tsx` `save`); the file tree's focus retry after a rename (`files/FilesPane.tsx` `focusRow`) can take
+  the focus from a visitor who clicks into the editor within a second.
 
 - **UI fix round (2026-11-12), on `ui-lightning`:** the maintainer's UI bugs after the merge of steps 4 and 5. Editor: the
   focus ring over the gutters, a fainter lines-to-run mark with an accent bar, no sideways overscroll, tab labels that keep
