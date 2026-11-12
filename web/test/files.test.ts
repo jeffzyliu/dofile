@@ -691,9 +691,11 @@ test("after a start that failed, every store call works and nothing is journalle
     return port as unknown as globalThis.Worker;
   };
   const eng = new EngineClient({ createWorker: blocked, wheel, extraWheels, store });
-  const starting = startWorker(eng);
+  // the start fails 10 ms after it is asked for: its rejection is awaited from here on, so a write that takes longer
+  // than that (a slow machine) does not leave it unhandled, which the test runner counts as a failure
+  const failed = assert.rejects(startWorker(eng), { type: "crashed", cause: "error", detail: "blocked" });
   await store.write("while-failing.do", bytes("display 1")); // a worker exists for a moment: journalled, and harmless
-  await assert.rejects(starting, { type: "crashed", cause: "error", detail: "blocked" });
+  await failed;
   eng.end(live(eng), { kind: "failed-twice", reason: "the engine's worker failed twice (blocked); reload the page" }); // the machine's TWICE
   await store.write("a/b.do", bytes("display 2"));
   await store.mkdir("c");
