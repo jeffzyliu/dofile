@@ -1,6 +1,8 @@
 // STEP 4d: the logic and the words of the dialogs and banners that are plain text, with no view and no signal of their own
 // (so Node tests them: test/states.test.ts). The words the spec draws are in the views, as drawn; the words it does not
 // give are drafts, marked DRAFT here and listed in SPEC section 8 ("Step 4d: draft words") for the maintainer to approve.
+
+import { BREAK_GRACE_MS } from "../../engine/types.ts";
 import type {
   DataSummary,
   EngineStateName,
@@ -12,9 +14,9 @@ import type {
   Stage,
 } from "../types.ts";
 
-/** How long Break waits before the engine is reset (client and machine: `graceMs`, 5000 ms by default). The page's words
+/** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by default). The page's words
  *  count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
-export const GRACE_S = 5;
+export const GRACE_S = BREAK_GRACE_MS / 1000;
 /** The stopping banner (S 9) shows once the Break has been pending this long: a run that stops at once never shows it. */
 export const STOPPING_AFTER_S = 1;
 
