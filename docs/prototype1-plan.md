@@ -322,6 +322,13 @@ merge of steps 4 and 5. They are reviewed after it:
 - [ ] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan.
 - [ ] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand".
 - [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy.
+- [ ] Remove the queued run (asked for by the maintainer, 2026-11-12). Today a Run or a command with no engine (`none`,
+      `declined`) is accepted, opens the download prompt and is held until the engine starts; the machine drops it
+      (`drop-run`) when the visitor says "Not now", the start fails or another tab takes the engine. The simpler model: with
+      no engine, Run only opens the prompt and runs nothing, and the visitor presses Run again when the engine is ready. That
+      removes the held run from the machine's table (`web/src/engine/machine.ts`), the `drop-run` effect, `pending` and
+      `dropped` in `run.ts`, and the special cases in `log/CommandLine.tsx` and `log/pasterun.ts`
+      (`docs/web-page-flows.md`, section 2).
 
 How this relates to steps 6, 6r and 7. **Step 6** (e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages) is
 partly done inside steps 3 to 5: the e2e suite has 103 tests in four browser profiles (412 cases, 381 run, 31 skipped:
