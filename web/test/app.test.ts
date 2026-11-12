@@ -570,16 +570,18 @@ test("open() is once for each wiring, and an action before it throws", () => {
   assert.deepEqual(S.engine.value, { s: "checking-lock" });
 });
 
-test("Stop download declines; Run then asks for a run, and the run starts with the engine: `ready` is not shown in between", async () => {
+test("Stop download declines; Run then opens the prompt titled for a run and runs nothing, not when the engine is ready either; Run then runs", async () => {
   await load();
   engine.start();
   engine.stopDownload();
   assert.deepEqual(S.engine.value, { s: "declined" });
   assert.equal(client.dl.signal.aborted, true);
   assert.equal(S.dialog.value, null);
-  const queuedRun = runCode("display 1", FILE); // settles once the run has run
+  const asked = runCode("display 1", FILE);
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
+  assert.equal(await asked, null, "it did not run: null at once");
+  assert.deepEqual(logItems(), [], "no run-head, no text: nothing began");
   engine.start();
   await begin();
   const seen: string[] = [];
@@ -588,13 +590,17 @@ test("Stop download declines; Run then asks for a run, and the run starts with t
   });
   client.worker.reply({ type: "started" });
   off();
-  assert.deepEqual(seen, ["starting-worker", "running"], "straight to running");
-  assert.equal(client.worker.runs.length, 1, "the run waited for the engine");
+  assert.deepEqual(seen, ["starting-worker", "ready"], "ready, and nothing runs by itself");
+  await tick();
+  state("ready");
+  assert.equal(client.worker.runs.length, 0, "the run pressed with no engine was not kept");
+  assert.deepEqual(client.calls.at(-1), ["memory", undefined], "engine-ready");
+  const ran = runCode("display 1", FILE); // the visitor runs it again
+  assert.equal(client.worker.runs.length, 1);
   assert.deepEqual([client.run1.args.code, client.run1.args.fresh_locals], ["display 1", true]);
-  assert.deepEqual(client.calls.at(-1), ["memory", undefined], "engine-ready all the same");
   assert.equal(logItems().find((i) => i.t === "runhead")!.first, true);
   client.run1.done.ok(result());
-  assert.equal((await queuedRun)?.rc, 0, "the queued run's promise settles with its result");
+  assert.equal((await ran)?.rc, 0);
 });
 
 test("a failed download is `failed` (reason download) with no worker; a failed start is `failed` with its cause; a second crash is `failed-twice`", async () => {
@@ -680,7 +686,7 @@ test("an empty or partial cache asks; the lock lost while the cache check is pen
   assert.deepEqual(S.engine.value, { s: "checking-cache" });
   // Download or Run pressed now is refused: the page has not decided yet whether to ask
   engine.start();
-  assert.equal(runCommand("display 1").accepted, false);
+  assert.equal(runCommand("display 1").how, "refused");
   assert.deepEqual(S.engine.value, { s: "checking-cache" });
   engine.lost(); // another tab takes the lock while the cache is checked
   answer.ok(true);
@@ -1134,7 +1140,7 @@ test("the page's store is blocked until the tab lock answers", async () => {
   await assert.rejects(store.write("a.do", new Uint8Array(1)), /another tab/);
 });
 
-test("runCode while a run is on does nothing; a queued run is dropped by Not now and by a failed start, and its promise then settles with null", async () => {
+test("runCode while a run is on does nothing; with no engine a run opens the prompt and settles with null at once, and after Not now or a failed start nothing runs", async () => {
   await readyEngine();
   const first = runCode("a", FILE);
   assert.equal(await runCode("b", FILE), null);
@@ -1145,34 +1151,32 @@ test("runCode while a run is on does nothing; a queued run is dropped by Not now
 
   await load(); // nothing cached: the prompt
   engine.decline();
-  let pending: Promise<unknown> | null = runCode("queued", FILE);
+  const asked = runCode("not kept", FILE);
   let settled = false;
-  pending.then(() => (settled = true));
+  asked.then(() => (settled = true));
   await Promise.resolve();
-  assert.equal(settled, false, "a queued run's promise waits for its fate");
+  assert.equal(settled, true, "it settles at once: nothing waits for the engine");
+  assert.equal(await asked, null);
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
   engine.decline();
-  assert.equal(await pending, null, "Not now: dropped, null");
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
   state("ready");
-  assert.equal(client.worker.runs.length, 0, "Not now dropped the run");
+  assert.equal(client.worker.runs.length, 0, "after Not now: nothing ran");
 
   await load();
   engine.decline();
-  pending = runCode("queued", FILE);
+  assert.equal(await runCode("not kept", FILE), null);
   assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
   engine.start();
   await begin();
   client.worker.reply({ type: "start-failed", reason: "unknown", detail: "no" });
-  assert.equal(await pending, null, "the failed start: dropped, null");
-  pending = null;
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
   state("ready");
-  assert.equal(client.worker.runs.length, 0, "the failed start dropped the run");
+  assert.equal(client.worker.runs.length, 0, "after a failed start: nothing ran");
 });
 
 // Addition A3
@@ -1398,7 +1402,7 @@ test("each run's text item keeps how it ended (rc, line, skipped, store_error) a
 test("runCommand: added to history (not twice in a row), run as a command with the locals kept, no run-head", async () => {
   await readyEngine();
   const heads = logItems().filter((i) => i.t === "runhead").length;
-  assert.equal(runCommand("  summarize  ").accepted, true);
+  assert.equal(runCommand("  summarize  ").how, "started");
   assert.deepEqual(S.history.value, ["summarize"]);
   assert.deepEqual([client.run1.args.code, client.run1.args.fresh_locals], ["summarize", false]);
   assert.equal(logItems().filter((i) => i.t === "runhead").length, heads);
@@ -1409,23 +1413,23 @@ test("runCommand: added to history (not twice in a row), run as a command with t
   client.run1.done.ok(result());
   assert.equal((await again.done)!.rc, 0, "done resolves with the result");
   const empty = runCommand("   ");
-  assert.equal(empty.accepted, false);
+  assert.equal(empty.how, "refused");
   assert.equal(await empty.done, null);
 });
 
-test("runCommand: a command that does not run is refused (not in history, so the field keeps it); one that runs or is queued is accepted, an error too", async () => {
+test("runCommand: a command that does not run is not in history (so the field keeps it): refused, or asked with no engine; one that runs is, an error too", async () => {
   // the page load: refused, in both of its states
   setUp();
   engine.open();
-  assert.deepEqual([S.engine.value.s, runCommand("display 1").accepted], ["checking-lock", false]);
+  assert.deepEqual([S.engine.value.s, runCommand("display 1").how], ["checking-lock", "refused"]);
   expectDrops([{ type: "run", row: "checking-lock", why: "not-valid" }]);
 
   await readyEngine();
   const first = runCommand("regress y x");
-  assert.equal(first.accepted, true);
+  assert.equal(first.how, "started");
   // a run is on: refused, nothing sent, history unchanged
   const busy = runCommand("describe");
-  assert.equal(busy.accepted, false);
+  assert.equal(busy.how, "refused");
   assert.equal(await busy.done, null);
   assert.equal(client.worker.runs.length, 1);
   assert.deepEqual(S.history.value, ["regress y x"]);
@@ -1436,9 +1440,9 @@ test("runCommand: a command that does not run is refused (not in history, so the
   // starting (a reset): refused
   engine.reset();
   state("starting-list");
-  assert.equal(runCommand("summarize").accepted, false);
+  assert.equal(runCommand("summarize").how, "refused");
   await begin();
-  assert.equal(runCommand("summarize").accepted, false);
+  assert.equal(runCommand("summarize").how, "refused");
   assert.deepEqual(S.history.value, ["regress y x"]);
   expectDrops([
     { type: "run", row: "running", why: "not-valid" },
@@ -1446,26 +1450,29 @@ test("runCommand: a command that does not run is refused (not in history, so the
     { type: "run", row: "starting-worker", why: "not-valid" },
   ]);
 
-  // no engine (declined): queued, which counts as accepted; while the prompt asks, refused
+  // no engine (declined): asked (the prompt opens, titled for a run), not in history, nothing sent; while the prompt
+  // asks, refused; once the engine is ready, nothing runs until the command is run again
   await load();
   engine.decline();
   writable(S.history).value = [];
-  const queued = runCommand("use wages");
-  assert.equal(queued.accepted, true);
+  const asked = runCommand("use wages");
+  assert.equal(asked.how, "asked");
+  assert.equal(await asked.done, null);
   assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
-  assert.deepEqual(S.history.value, ["use wages"]);
-  assert.equal(runCommand("summarize").accepted, false, "asking: refused");
-  assert.deepEqual(S.history.value, ["use wages"]);
+  assert.deepEqual(S.history.value, [], "a command that did not run is not in history");
+  assert.equal(runCommand("summarize").how, "refused", "asking: refused");
+  assert.deepEqual(S.history.value, []);
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
-  assert.deepEqual(
-    client.worker.runs.map((r) => r.args.code),
-    ["use wages"],
-    "the queued command ran once the engine was ready",
-  );
+  await tick();
+  state("ready");
+  assert.equal(client.worker.runs.length, 0, "nothing ran once the engine was ready");
+  const again = runCommand("use wages");
+  assert.equal(again.how, "started");
+  assert.deepEqual(S.history.value, ["use wages"]);
   client.run1.done.ok(result());
-  assert.equal((await queued.done)?.rc, 0, "a queued command's done settles with its result once it has run");
+  assert.equal((await again.done)?.rc, 0);
   expectDrops([{ type: "run", row: "asking", why: "not-valid" }]);
 });
 
@@ -2068,7 +2075,7 @@ test("J1: pasted lines: a line cut because another tab took the engine stops the
   client.worker.reply({ type: "started" });
   state("ready");
   const next = runCommand("display 2");
-  assert.equal(next.accepted, true);
+  assert.equal(next.how, "started");
   client.run1.done.ok(result());
   await next.done;
   await sleep(20);
@@ -2079,6 +2086,25 @@ test("J1: pasted lines: a line cut because another tab took the engine stops the
     inTurnWords(await pasted),
     "1 of 2 pasted lines not run: another tab took over the engine during line 1",
   );
+});
+
+test("pasted lines with no engine: the first line opens the prompt and nothing runs, then or once the engine is ready; no toast", async () => {
+  const { runOne } = await import("../src/app/log/pasterun.ts");
+  const { runInTurn, inTurnWords } = await import("../src/app/log/paste.ts");
+  await load(); // nothing cached: the prompt
+  engine.decline();
+  writable(S.history).value = [];
+  const r = await runInTurn(["use wages", "summarize", "regress y x"], runOne);
+  assert.deepEqual(r, { total: 3, ran: 0, stop: { line: 1, why: "asked" } });
+  assert.equal(inTurnWords(r), null, "the download prompt is the answer: no toast over it");
+  assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
+  assert.deepEqual(S.history.value, [], "no line is in history");
+  engine.start();
+  await begin();
+  client.worker.reply({ type: "started" });
+  await sleep(20);
+  state("ready");
+  assert.equal(client.worker.runs.length, 0, "no pasted line ran once the engine was ready");
 });
 
 test("J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)", async () => {

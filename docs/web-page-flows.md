@@ -236,7 +236,7 @@ sequenceDiagram
 |---|---|---|
 | A banner leaves, or a dialog's opener has left | the editor (or the `.dta` tab, or Load) | the editor (or a `.dta` tab's Load) on the Editor view; "More actions" on any other view |
 | Close-tab's Save or "Don't save" | the selected tab in "Open files" | the editor: "Open files" is not shown, and neither is the tree on the Editor view |
-| The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's timer gives the focus to its opener. A queued Run has just shown the Log view (`run.ts` `began`). |
+| The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's timer gives the focus to its opener. Nothing runs then: a Run pressed with no engine only opened the prompt, so the focus is not taken from the Log view by a run. |
 | A dialog opened from a menu (Reset, Delete all, Clear log) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all, "Log actions" for Clear log | the ⋯ trigger for Reset; the strip's "Files ⋯" ("File actions") for Delete all; the strip's "Log ⋯" ("Log actions") for Clear log |
 | The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear) and cannot take the focus, so `ui/Dialog.tsx` hands it to `focusStable()`: the editor, or "More actions" |
 | Find opened from the phone strip's "Log ⋯" | (desktop: the Log head's Find button) | `openFind(null)` takes the focused element, the "Log ⋯" button that `closeMenu` just focused |
@@ -288,37 +288,34 @@ No Node test covers the focus. The rules hold only in a browser.
 
 - `engine/machine.ts` decides whether a run is taken:
   - `ready`: sent at once (effect `send-run`);
-  - `none`, `declined`: queued (state `asking` with `queued`, and the prompt, titled for a run);
+  - `none`, `declined`: asked: the state goes to `asking` with `forRun`, and the prompt opens, titled for a run. The
+    run is not kept: no state holds a run's code, and `started` always leads to `ready`. The visitor presses Run again
+    once the engine is ready. (Until 2026-11-12 the machine held the run there, sent it on `started` and dropped it
+    with an effect when the start did not happen; the maintainer removed that: `docs/prototype1-plan.md`, Post-merge
+    review.)
   - every other state has no `run` cell, so the event is not valid and changes nothing.
-  - A queued run stays through `asking` → `downloading` → `starting-worker`, and through a crash reset from
-    `starting-worker` (`RESET` keeps `queued`). It is sent by `started`.
-  - `transition()` ends with `dropRun`: a step that lets go of a queued run without `send-run` gets the effect
-    `drop-run` as its last effect. That covers "Not now", "Stop download", a failed download, list or start,
-    failed-twice, and the lock lost.
   - Every exit from `running`, `breaking` or `waiting` has one `end-run`, as its last effect: `END` (`run-ended`,
     `run-failed`), `RESET` (`reset`, `crashed`, `break-timeout`, or Break with no `SharedArrayBuffer`) and `LOST`.
-- `engine.ts` `run(code, head)` dispatches the event and answers `started`, `queued` or `refused` from the step. It
+- `engine.ts` `run(code, head)` dispatches the event and answers `started`, `asked` or `refused` from the step. It
   throws while a step is in progress (`stepping`). A step writes the `engine` signal before it performs its effects
   (`apply`).
-- `run.ts` turns that into promises:
-  - `request()` returns `current.promise` for a started run. For a queued one, a new promise whose resolver is
-    `pending`. For a refused one, `Promise.resolve(null)`.
-  - `began()` adopts `pending`: the queued caller's promise settles with this run's result.
-  - `dropped()` settles `pending` with null.
-- `runCommand(text)` adds `kind: "command"`, `fresh_locals: false` and `history`, and returns `{accepted, done}`.
+- `run.ts` turns that into a `Requested`, `{how, done}`: `done` is `current.promise` for a started run (`began()`, which
+  the effect `send-run` called inside the step, made it), and `Promise.resolve(null)` for an asked or refused one.
+  `runCode` returns `done`; `requestRun` (the editor) and `runCommand` return the whole `Requested`.
+- `runCommand(text)` adds `kind: "command"`, `fresh_locals: false`, and `history` when it started.
 
 ### Where a run starts
 
 | Control | Calls | When it can be pressed |
 |---|---|---|
-| Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready` and `declined`; `aria-disabled` (not `disabled`) in `running`, so a focused Run keeps the focus and a second Enter cannot reach Break; disabled in `breaking`, `waiting` and every other state ("Starting…" while downloading or starting, "Stopped" after a failed start). It is disabled in `none` too, which only `?test=manual` gives, though the machine would queue a run there. |
+| Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready` and `declined`; `aria-disabled` (not `disabled`) in `running`, so a focused Run keeps the focus and a second Enter cannot reach Break; disabled in `breaking`, `waiting` and every other state ("Starting…" while downloading or starting, "Stopped" after a failed start). It is disabled in `none` too, which only `?test=manual` gives, though the machine would open the prompt there. In `declined` it opens the prompt and runs nothing. |
 | Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | enabled in `ready` and `declined` with a selection; `disabled` in every other state, `running` too (not `aria-disabled`) |
-| Ctrl/Cmd+Enter in the editor | `runEither()`: Run selection with a selection, else Run; held, it runs once | in any state: outside `ready`, `none` and `declined` the run is refused (`run.ts` `requestRun`), and a toast says why by the state (`editor/words.ts` `refusedRunWords`) |
+| Ctrl/Cmd+Enter in the editor | `runEither()`: Run selection with a selection, else Run; held, it runs once | in any state: in `none` and `declined` it opens the prompt and runs nothing (no toast: the prompt says why); outside `ready`, `none` and `declined` the run is refused (`run.ts` `requestRun`), and a toast says why by the state (`editor/words.ts` `refusedRunWords`) |
 | Break | `running`: `breakRun()` ("Break", or "Break (reset)" with no cross-origin isolation); `waiting`: "Reset now", `eng.reset()` with no question | disabled in `breaking` ("Stopping…") and when no run is on |
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile()`, then the banner is dismissed | enabled in `ready` with a text tab active |
 | The command line, a hint's `help x` link | `runCommand(text)` | any time; the machine accepts or refuses |
-| Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`, `none` and `declined` |
+| Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`, `none` and `declined`; in the last two it opens the prompt and loads or imports nothing (Load shows no toast then) |
 
 The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` on `engine`, `followErrors` on
 `lastRun`. Both run inside a step.
@@ -329,37 +326,33 @@ The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` o
 stateDiagram-v2
   state "runCommand(text)" as sub
   state "refused" as refused
-  state "queued for the engine" as queued
+  state "asked: the prompt opens" as asked
   state "running" as running
   state "ended by the engine" as ended
-  state "dropped" as dropped
   state "cut by a reset" as cut
   state "cut by another tab" as taken
   [*] --> sub
   sub --> refused: empty text, or a state with no run cell
   sub --> running: ready, send-run
-  sub --> queued: none or declined, the prompt opens
-  queued --> running: started, send-run
-  queued --> dropped: drop-run
+  sub --> asked: none or declined
   running --> ended: run-ended or run-failed
   running --> cut: reset, crash, Break timeout, Break with no SharedArrayBuffer
   running --> taken: lock-lost
   refused --> [*]
-  dropped --> [*]
+  asked --> [*]
   ended --> [*]
   cut --> [*]
   taken --> [*]
 ```
 
-| Fate | `accepted` | `done` settles with | `lastRun` | `history` | The command line's text |
+| Fate | `how` | `done` settles with | `lastRun` | `history` | The command line's text |
 |---|---|---|---|---|---|
-| Refused | false | null, at once | unchanged | unchanged | kept |
-| Ran (from `ready`) | true | the result, after the after-run work | the run, written in the step that ended it | + the command (not twice in a row) | cleared |
-| Queued, then ran | true | the same, once the engine has started | the same | + the command, at the time it was queued | cleared |
-| Queued, then dropped | true | null (`drop-run`) | unchanged | + the command, kept | cleared |
-| Its op failed in the worker | true | the machine's rc 9998, kind `run-failed` | the run, rc 9998 (the worker stays) | + | cleared |
-| Cut by a reset | true | the machine's rc 9998, kind `break`, `crash` or `user` | null (`engine-gone`), then the cut run, rc 9998, in the same step | + | cleared |
-| Cut by another tab | true | the machine's rc 9998, kind `stopped` | null (`engine-gone`), and not written again | + | cleared |
+| Refused | `refused` | null, at once | unchanged | unchanged | kept |
+| Asked (no engine: the prompt opens; nothing runs, then or when the engine is ready) | `asked` | null, at once | unchanged | unchanged | kept |
+| Ran (from `ready`) | `started` | the result, after the after-run work | the run, written in the step that ended it | + the command (not twice in a row) | cleared |
+| Its op failed in the worker | `started` | the machine's rc 9998, kind `run-failed` | the run, rc 9998 (the worker stays) | + | cleared |
+| Cut by a reset | `started` | the machine's rc 9998, kind `break`, `crash` or `user` | null (`engine-gone`), then the cut run, rc 9998, in the same step | + | cleared |
+| Cut by another tab | `started` | the machine's rc 9998, kind `stopped` | null (`engine-gone`), and not written again | + | cleared |
 
 `runCode` (Run, Run selection) is the same without `history` and the field. Its head is `kind: "file"` or
 `"selection"`, and `began` adds a run-head to the log and, on a phone, sets `phoneTab` to `"log"`.
@@ -382,7 +375,7 @@ sequenceDiagram
   E->>C: run, posted now
   E-->>R: started
   R->>R: history gets the command
-  R-->>CL: accepted true, and done
+  R-->>CL: how started, and done
   CL->>CL: the field is cleared
   C-->>R: log chunks, outside any step, the text item grows
   C-->>E: the result, reply run-ended
@@ -399,7 +392,7 @@ What a view may rely on, and when:
 
 | When | What is true |
 |---|---|
-| `runCommand` has returned | `accepted` is known. When started: `history` has the command, `engine` is `running`, and the log has the run's text item. |
+| `runCommand` has returned | `how` is known. When started: `history` has the command, `engine` is `running`, and the log has the run's text item. |
 | A signal effect on `engine` sees `ready` | The run has ended, but `ended` has not run yet: `log`, `lastRun`, `results` and `graphs` are the old ones. |
 | A signal effect on `lastRun` sees the new run | The log text is final, with `end`, and the graphs are added. `results` is still the old one (written next). |
 | A component renders after the step | The whole step: `engine`, the log, `graphs`, `lastRun`, `results`, and `fresh` (and the storage banner, when it is due), which `afterRun` writes before its first `await`. |
@@ -420,7 +413,7 @@ sequenceDiagram
   participant E as the end step
   CL->>P: lines a, b, c (pastedLines)
   P->>O: runOne(a)
-  O->>R: runCommand(a), accepted
+  O->>R: runCommand(a), started
   O->>O: whenEnds, a signal effect on lastRun, and done
   E->>R: the step that ends a, lastRun = rc 0
   R->>O: the effect sees the new lastRun, end(0), settle in a microtask
@@ -438,28 +431,28 @@ sequenceDiagram
   after the after-run reads. Between the two the engine is `ready`, so an Enter or a Run pressed then would take the
   engine, and the next pasted line would be refused. Starting it in a microtask after the step leaves no gap. It cannot
   start inside the step: `run()` would throw.
-- **Why `done` is still awaited.** Two ends write no new `lastRun`. A queued line that is dropped settles `done` with
-  null. A line cut by another tab settles with kind `stopped`. `done` settling also stops the effect, so no wait
+- **Why `done` is still awaited.** A line cut by another tab writes no new `lastRun`: `done` settles with kind
+  `stopped`. `done` settling also stops the effect, so no wait
   outlives its run. The first of the two to come wins (`over`).
 
 | `stop.why` | When | Lines counted as run | Toast (`inTurnWords`) |
 |---|---|---|---|
 | `block` | the line opens a block, a `/*` comment it does not close, or holds `///` (`opensBlock`); it is not sent | those before it | "N of T pasted lines not run: line L starts a block, a comment or a /// command; run those from the editor" |
-| `refused` | `accepted` is false | those before it | "N of T pasted lines not run: the engine can't take a command now". The line goes back into the field if the field is empty. |
-| `not-run` | `done` gave null (queued, then dropped) | those before it | "N of T pasted lines not run: line L didn't run" |
+| `refused` | `how` is `refused` | those before it | "N of T pasted lines not run: the engine can't take a command now". The line goes back into the field if the field is empty. |
+| `asked` | `how` is `asked`: no engine, the line opened the download prompt (in practice the first line) | those before it | none: the prompt says why nothing ran, and a toast behind the modal prompt would be read over its title and gone before it closes. The line goes back into the field if the field is empty; the lines after it are not kept (paste them again once the engine is ready). |
 | `error` | rc is not 0: an error, Break's rc 1, or rc 9998 (a reset, `run-failed`) | up to and with it | "N of T pasted lines not run: line L ended with r(rc)" |
 | `taken` | `done` gave kind `stopped` | up to and with it | "N of T pasted lines not run: another tab took over the engine during line L" |
 | none | every line ran | all | no toast |
 
 When the last line ends with an error or is cut by another tab, nothing is left (`total - ran` is 0), and there is no
-toast: its error is in the log. A last line that is refused, not run or a block's leaves one line, and the toast shows.
+toast: its error is in the log. A last line that is refused or a block's leaves one line, and the toast shows.
 
 ### Invariants a change must keep
 
-- **At most one queued run.** The machine has no `run` cell in `asking`, `downloading` or `starting-*`, and run.ts has
-  one `pending` slot.
-- **`done` always settles.** A started run settles through `end-run` (every exit from a running state has one). A
-  queued run settles through `began` or `drop-run`. A refused run settles at once. The after-run work uses
+- **No run is held.** A run is sent in the step of its `run` event, from `ready`, or never: no state keeps a run's code
+  (a property in `machine.test.ts`), and run.ts keeps no promise for a run that has not begun.
+- **`done` always settles.** A started run settles through `end-run` (every exit from a running state has one). An
+  asked or refused run settles at once. The after-run work uses
   `Promise.allSettled`, so a failed read does not keep `done` open.
 - **No run starts during a step.** A view never calls `runCode` or `runCommand` inside a handler given to `connectRun`,
   or inside a signal effect on `engine` or `lastRun`. Both are written only during a step, so the call throws. A `log`
@@ -477,38 +470,46 @@ toast: its error is in the log. A last line that is refused, not run or a block'
   - "a run: the streamed log grows one item and the result's log replaces it; graphs, lastRun, results and the
     after-run calls"
   - "a crash cuts a run: the new state first, then engine-gone, then the cut run's result; …"
-  - "runCode while a run is on does nothing; a queued run is dropped by Not now and by a failed start, and its promise
-    then settles with null"
+  - "runCode while a run is on does nothing; with no engine a run opens the prompt and settles with null at once, and
+    after Not now or a failed start nothing runs"
   - "run() called while a step is in progress throws before it queues anything"
   - "runCommand: added to history (not twice in a row), …"
-  - "runCommand: a command that does not run is refused …"
+  - "runCommand: a command that does not run is not in history (so the field keeps it): refused, or asked with no
+    engine; …"
   - "a run whose op failed in the worker (run-failed) is not a reset: …"
-  - "Stop download declines; Run then asks for a run, and the run starts with the engine: `ready` is not shown in
-    between"
+  - "Stop download declines; Run then opens the prompt titled for a run and runs nothing, not when the engine is ready
+    either; Run then runs"
   - "C1: a run cut by losing the tab lock does not set lastRun, and the store is not listed afterwards"
   - "J1: pasted lines: a line cut because another tab took the engine stops the rest; …"
+  - "pasted lines with no engine: the first line opens the prompt and nothing runs, then or once the engine is ready;
+    no toast"
   - "J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)"
 - `web/test/machine.test.ts`:
   - "property: a transition from running, breaking or waiting to a state that is none of those has exactly one end-run,
     as its last effect; no other has one"
-  - "property: a queued run is kept, sent (send-run) or dropped (drop-run, once, as the last effect); drop-run comes
-    from nothing else"
+  - "property: no run is held: send-run comes only from a run in ready, with that run's code and head, and no state
+    keeps a run's code"
+  - "scenario 12. Run with no engine opens the prompt and runs nothing: …"
   - "property: a transition from ready, running, breaking or waiting to a state that does not hold the same worker has
     engine-gone, once"
 - `web/test/editor.test.ts`:
-  - "pasted lines run in turn and stop at the first refused, not run, or failed one"
+  - "pasted lines run in turn and stop at the first refused, asked (no engine), or failed one"
   - "pasted lines stop before a block's, a comment's or a /// line, …"
   - "pasted lines: the next starts only once the one before has ended"
   - "a paste with no line break is an ordinary paste; …"
-  - "a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or queued"
+  - "a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or opens the download
+    prompt"
 - `web/test/imports.test.ts`:
   - "events get in through two doors: …; transition() is called once"
   - "each signal has one writer: …"
 - `web/e2e/editor.spec.ts`:
   - "the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; …"
-  - "the command line with no engine: pasted lines wait for the engine; Not now drops them, and a toast says so"
+  - "the command line with no engine: pasted lines open the prompt and run nothing, with no toast; the first line stays
+    in the field, and runs when Enter is pressed once the engine is ready"
+  - "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab" (a command with no
+    engine stays in the field, and nothing runs once the engine is ready)
   - "Ctrl/Cmd+Enter that the engine does not take says why in a toast and starts nothing; …"
-- `web/e2e/shell.spec.ts`: "first visit: … a run asks again, titled for a run, and Not now drops it"
+- `web/e2e/shell.spec.ts`: "first visit: … a run asks again, titled for a run, and runs nothing"
 
 ### If you change this
 
@@ -516,8 +517,9 @@ toast: its error is in the log. A last line that is refused, not run or a block'
   engine. The next line is then refused.
 - **Changing `Promise.allSettled` to `Promise.all` in `ended`** leaves `done` unsettled when an open tab's follow-up
   fails, and a paste then waits for ever (J5).
-- **A new state that holds a queued run** must call its field `queued`. `dropRun` reads that name, and a run held under
-  another name would never settle.
+- **Holding a run again** (sending it when the engine is ready) would need a state field, the promise that waits for
+  it and an effect for each way it is let go; that is what was removed on 2026-11-12. The no-held-run property in
+  `machine.test.ts` fails first.
 - **The order of writes in `ended`:** log and graphs, then `lastRun`, then `results`. The editor's error mark and
   `whenEnds` react to `lastRun`. Moving `lastRun` earlier gives them a log that is not final.
 - **The `RunHead` object is passed through unchanged**, from `runCode` through the machine to `began` and the run-head

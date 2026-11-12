@@ -25,7 +25,6 @@ import type {
   Expect,
   Machine,
   PlainEvent,
-  QueuedRun,
   Reply,
   RowName,
   State,
@@ -50,7 +49,6 @@ type Plain<T> = T extends Ticket ? number : T extends object ? { [K in keyof T]:
 const ENV: Env = { snapshot: true, canInterrupt: true, graceMs: 5000, engineBytes: 48_000_000, manual: false };
 const HEAD: RunHead = { kind: "file", path: "a.do", fresh_locals: true };
 const RUN = { type: "run", code: "display 1", head: HEAD } as const;
-const QUEUED: QueuedRun = { code: "display 1", head: HEAD };
 const BUILD: Build = {
   built: 777,
   files: {
@@ -171,9 +169,9 @@ function go(at: At, f: Feed, o: { n?: Ticket; at?: number } = {}): At {
   return next;
 }
 
-type Options = { env?: Partial<Env>; queued?: boolean; crashed?: boolean };
-/** The machine in row `name`, by the shortest path: a normal load for most. `queued`: with a run queued (the rows that
- *  can hold one). `crashed`: with the crash count at 1 (ruling 2: it survives a failed start and "Try again"): the
+type Options = { env?: Partial<Env>; forRun?: boolean; crashed?: boolean };
+/** The machine in row `name`, by the shortest path: a normal load for most. `forRun`: `asking` after a Run opened the
+ *  prompt (no other row knows of it: the run is not kept). `crashed`: with the crash count at 1 (ruling 2: it survives a failed start and "Try again"): the
  *  starting rows after a crash, and `failed`, `downloading`, `declined` and `asking` by the events after it (a crash,
  *  the list, a start that fails, "Try again", "Stop download", the prompt). Every row can be reached. */
 function row(name: RowName, o: Options = {}): At {
@@ -183,7 +181,7 @@ function row(name: RowName, o: Options = {}): At {
   return at;
 }
 function reach(name: RowName, o: Options): At {
-  const plain = { ...o, queued: false, crashed: false };
+  const plain = { ...o, forRun: false, crashed: false };
   switch (name) {
     case "checking-lock":
       return begin(o.env);
@@ -192,25 +190,21 @@ function reach(name: RowName, o: Options): At {
     case "none":
       return go(begin({ ...o.env, manual: true }), { type: "lock-answered", owned: true });
     case "asking":
-      return o.queued
-        ? go(row("declined", { ...o, queued: false }), RUN)
+      return o.forRun
+        ? go(row("declined", { ...o, forRun: false }), RUN)
         : o.crashed
           ? go(row("declined", o), { type: "ask" })
           : go(row("checking-cache", o), { type: "cache-checked", cached: false });
     case "declined":
       return o.crashed
-        ? go(row("downloading", { ...o, queued: false }), { type: "stop-download" })
+        ? go(row("downloading", o), { type: "stop-download" })
         : go(row("asking", plain), { type: "decline" });
     case "downloading":
-      return o.queued
-        ? go(row("asking", o), { type: "start" })
-        : o.crashed
-          ? go(row("failed", o), { type: "start" })
-          : go(row("checking-cache", o), { type: "cache-checked", cached: true });
-    case "starting-list":
       return o.crashed
-        ? go(row(o.queued ? "starting-worker" : "ready", { ...o, crashed: false }), CRASH)
-        : go(row("ready", o), { type: "reset" });
+        ? go(row("failed", o), { type: "start" })
+        : go(row("checking-cache", o), { type: "cache-checked", cached: true });
+    case "starting-list":
+      return o.crashed ? go(row("ready", { ...o, crashed: false }), CRASH) : go(row("ready", o), { type: "reset" });
     case "starting-worker":
       return o.crashed
         ? go(row("starting-list", o), { type: "list-checked", build: BUILD })
@@ -225,7 +219,7 @@ function reach(name: RowName, o: Options): At {
       return go(row("breaking", o), { type: "keep-waiting" });
     case "failed":
       return o.crashed
-        ? go(row("starting-worker", { ...o, queued: false }), {
+        ? go(row("starting-worker", o), {
             type: "start-failed",
             reason: "unknown",
             detail: "mount failed",
@@ -290,16 +284,14 @@ const warned = (reason: FailReason, detail: string): Effect => ({
   text: `the engine didn't start (${reason}): ${detail}`,
 });
 
-const wantDownload =
-  (queued: QueuedRun | null) =>
-  ({ old, at, next }: Ctx): Want => ({
-    issues: true,
-    state: { s: "downloading", download: next, received: 0, total: old.env.engineBytes ?? 0, t0: at, queued },
-    effects: [{ do: "start-download", n: next }],
-  });
-const wantAsk = (queued: QueuedRun | null) => (): Want => ({
-  state: { s: "asking", queued },
-  effects: [{ do: "show-dialog", dialog: "download", forRun: queued !== null }],
+const wantDownload = ({ old, at, next }: Ctx): Want => ({
+  issues: true,
+  state: { s: "downloading", download: next, received: 0, total: old.env.engineBytes ?? 0, t0: at },
+  effects: [{ do: "start-download", n: next }],
+});
+const wantAsk = (forRun: boolean) => (): Want => ({
+  state: { s: "asking", forRun },
+  effects: [{ do: "show-dialog", dialog: "download", forRun }],
 });
 const wantOwn =
   (before: Effect[]) =>
@@ -340,14 +332,7 @@ const wantReset =
     return {
       issues: true,
       crashes: kind === "crash" ? 1 : 0,
-      state: {
-        s: "starting-list",
-        worker: next,
-        stage: firstStage(old),
-        t0: at,
-        done: {},
-        queued: was.s === "starting-worker" ? was.queued : null,
-      },
+      state: { s: "starting-list", worker: next, stage: firstStage(old), t0: at, done: {} },
       effects: RESET_DOES[was.s].map((name) => all[name]!),
     };
   };
@@ -434,13 +419,8 @@ const CAN_HAVE_CRASHED = new Set<RowName>([
 const KEPT = "after a crash: the count stays 1";
 /** `variant`, for a row that can have the crash count at 1. */
 const afterCrash = (r: RowName, variant: () => Variant): Variant[] => (CAN_HAVE_CRASHED.has(r) ? [variant()] : []);
-/** With and without a queued run, with the crash count at 0 and at 1. */
-const VARIETIES = [
-  { queued: false, crashed: false },
-  { queued: true, crashed: false },
-  { queued: false, crashed: true },
-  { queued: true, crashed: true },
-];
+/** With the crash count at 0 and at 1. */
+const VARIETIES = [{ crashed: false }, { crashed: true }];
 
 /** The cells that do something, by the name GRID gives them. `r`: the row; `t`: the event's type. */
 const CELLS = {
@@ -487,11 +467,11 @@ const CELLS = {
   ],
   LOST: (r) => [
     { name: "", from: row(r), feed: { type: "lock-lost" }, want: wantLost },
-    ...(r === "asking" || r === "downloading" || r === "starting-list" || r === "starting-worker"
+    ...(r === "asking"
       ? [
           {
-            name: "a queued run is dropped",
-            from: row(r, { queued: true, crashed: r === "starting-list" }),
+            name: "after a Run opened the prompt",
+            from: row(r, { forRun: true }),
             feed: { type: "lock-lost" } as const,
             want: wantLost,
           },
@@ -509,64 +489,60 @@ const CELLS = {
       : []),
   ],
   CACHE: (r) => [
-    { name: "cached", from: row(r), feed: { type: "cache-checked", cached: true }, want: wantDownload(null) },
-    { name: "not cached", from: row(r), feed: { type: "cache-checked", cached: false }, want: wantAsk(null) },
+    { name: "cached", from: row(r), feed: { type: "cache-checked", cached: true }, want: wantDownload },
+    { name: "not cached", from: row(r), feed: { type: "cache-checked", cached: false }, want: wantAsk(false) },
   ],
-  "DOWNLOAD(null)": (r) => [
-    { name: "", from: row(r), feed: { type: "start" }, want: wantDownload(null) },
+  DOWNLOAD: (r) => [
+    { name: "", from: row(r), feed: { type: "start" }, want: wantDownload },
     {
       name: "no size in the page: the total starts at 0",
       from: row(r, { env: { engineBytes: null } }),
       feed: { type: "start" },
-      want: wantDownload(null),
+      want: wantDownload,
     },
     ...afterCrash(r, () => ({
       name: KEPT,
       from: row(r, { crashed: true }),
       feed: { type: "start" },
-      want: wantDownload(null),
+      want: wantDownload,
     })),
+    ...(r === "asking"
+      ? [
+          {
+            name: "after a Run opened the prompt: the same download, and no run waits for it",
+            from: row(r, { forRun: true }),
+            feed: { type: "start" } as const,
+            want: wantDownload,
+          },
+        ]
+      : []),
   ],
-  "DOWNLOAD(queued)": (r) => [
-    { name: "no run queued", from: row(r), feed: { type: "start" }, want: wantDownload(null) },
-    {
-      name: "the queued run is kept",
-      from: row(r, { queued: true }),
-      feed: { type: "start" },
-      want: wantDownload(QUEUED),
-    },
-    { name: KEPT, from: row(r, { crashed: true }), feed: { type: "start" }, want: wantDownload(null) },
-    {
-      name: `the queued run is kept; ${KEPT}`,
-      from: row(r, { queued: true, crashed: true }),
-      feed: { type: "start" },
-      want: wantDownload(QUEUED),
-    },
-  ],
-  "ASK(null)": (r) => [
-    { name: "", from: row(r), feed: { type: "ask" }, want: wantAsk(null) },
+  ASK: (r) => [
+    { name: "", from: row(r), feed: { type: "ask" }, want: wantAsk(false) },
     ...afterCrash(r, () => ({
       name: KEPT,
       from: row(r, { crashed: true }),
       feed: { type: "ask" },
-      want: wantAsk(null),
+      want: wantAsk(false),
     })),
   ],
   "ASK(run)": (r) => [
-    { name: "", from: row(r), feed: RUN, want: wantAsk(QUEUED) },
-    ...afterCrash(r, () => ({ name: KEPT, from: row(r, { crashed: true }), feed: RUN, want: wantAsk(QUEUED) })),
+    { name: "the prompt titled for a run; the run is not kept", from: row(r), feed: RUN, want: wantAsk(true) },
+    ...afterCrash(r, () => ({ name: KEPT, from: row(r, { crashed: true }), feed: RUN, want: wantAsk(true) })),
   ],
   "NOT-NOW": (r) =>
-    VARIETIES.map(({ queued, crashed }) => ({
-      name: [queued ? "the queued run is dropped" : "", crashed ? KEPT : ""].filter(Boolean).join("; "),
-      from: row(r, { queued, crashed }),
-      feed: { type: "decline" } as const,
-      want: (): Want => ({ state: { s: "declined" }, effects: [closeDownload()] }),
-    })),
+    [false, true]
+      .flatMap((forRun) => VARIETIES.map(({ crashed }) => ({ forRun, crashed })))
+      .map(({ forRun, crashed }) => ({
+        name: [forRun ? "after a Run opened the prompt" : "", crashed ? KEPT : ""].filter(Boolean).join("; "),
+        from: row(r, { forRun, crashed }),
+        feed: { type: "decline" } as const,
+        want: (): Want => ({ state: { s: "declined" }, effects: [closeDownload()] }),
+      })),
   STOP: (r, t) =>
-    VARIETIES.map(({ queued, crashed }) => ({
-      name: [queued ? "the queued run is dropped" : "", crashed ? KEPT : ""].filter(Boolean).join("; "),
-      from: row(r, { queued, crashed }),
+    VARIETIES.map(({ crashed }) => ({
+      name: crashed ? KEPT : "",
+      from: row(r, { crashed }),
       feed: { type: t === "decline" ? "decline" : "stop-download" } as const,
       want: ({ old }: Ctx): Want => ({
         state: { s: "declined" },
@@ -591,9 +567,9 @@ const CELLS = {
     },
   ],
   PROGRESS: (r) =>
-    VARIETIES.map(({ queued, crashed }) => ({
-      name: [queued ? "with a queued run" : "", crashed ? KEPT : ""].filter(Boolean).join("; "),
-      from: row(r, { queued, crashed }),
+    VARIETIES.map(({ crashed }) => ({
+      name: crashed ? KEPT : "",
+      from: row(r, { crashed }),
       feed: { type: "download-progress", received: 1_200_000, total: 47_000_000 } as const,
       want: ({ old }: Ctx): Want => ({
         state: { ...inRow(old, "downloading"), received: 1_200_000, total: 47_000_000 },
@@ -603,7 +579,6 @@ const CELLS = {
   DONE: (r) =>
     [
       { name: "", o: {} },
-      { name: "the queued run is kept", o: { queued: true } },
       { name: "the normal start: no list, and the first stage is python", o: { env: { snapshot: false } } },
       { name: KEPT, o: { crashed: true } },
     ].map(({ name, o }: { name: string; o: Options }) => {
@@ -623,7 +598,6 @@ const CELLS = {
               stage,
               t0: at,
               done: { download: (at - was.t0) / 1000 },
-              queued: was.queued,
             },
             effects: [
               { do: "start-worker", n: next, build },
@@ -637,9 +611,9 @@ const CELLS = {
     (
       [
         { reason: "download", o: {} },
-        { reason: "updated", o: { queued: true } },
+        { reason: "updated", o: {} },
         { reason: "download", o: { crashed: true } },
-        { reason: "updated", o: { crashed: true, queued: true } },
+        { reason: "updated", o: { crashed: true } },
       ] as const
     ).map(({ reason, o }: { reason: "download" | "updated"; o: Options }) => ({
       name: `${reason}${o.crashed ? `; ${KEPT}` : ""}`,
@@ -650,7 +624,7 @@ const CELLS = {
   LISTED: (r) =>
     [
       { name: "", o: {}, build: BUILD },
-      { name: "the queued run and the crash count are kept", o: { queued: true, crashed: true }, build: BUILD },
+      { name: "the crash count is kept", o: { crashed: true }, build: BUILD },
       { name: "the normal start: no list", o: { env: { snapshot: false } }, build: null },
     ].map(({ name, o, build }: { name: string; o: Options; build: Build | null }) => ({
       name,
@@ -704,18 +678,6 @@ const CELLS = {
           };
         },
       },
-      {
-        name: "with a queued run",
-        from: row(r, { queued: true }),
-        feed: { type: "stage", stage: "files" },
-        want: ({ old, at }) => {
-          const was = inRow(old, "starting-worker");
-          return {
-            state: { ...was, stage: "files", t0: at, done: { download: was.done.download! + (at - was.t0) / 1000 } },
-            effects: [{ do: "say", line: { stage: "files" } }],
-          };
-        },
-      },
     ];
   },
   STARTED: (r) => {
@@ -726,32 +688,19 @@ const CELLS = {
       effects: up,
     });
     return [
-      { name: "no queued run", from: row(r), feed: { type: "started" }, want: ready },
+      { name: "ready, and nothing runs", from: row(r), feed: { type: "started" }, want: ready },
       {
         name: "after a crash: the count goes back to 0",
         from: row(r, { crashed: true }),
         feed: { type: "started" },
         want: ready,
       },
-      {
-        name: "a queued run starts",
-        from: row(r, { queued: true }),
-        feed: { type: "started" },
-        want: ({ old, at }) => {
-          const { worker } = inRow(old, "starting-worker");
-          return {
-            crashes: 0,
-            state: { s: "running", worker, run: HEAD, t0: at },
-            effects: [...up, { do: "send-run", n: worker, code: QUEUED.code, head: HEAD }],
-          };
-        },
-      },
     ];
   },
   "FAIL(start)": (r) =>
     (["no-wasm", "download", "memory", "unknown"] as const).map((reason) => ({
       name: reason === "unknown" ? "unknown, after a crash: the count stays 1" : reason,
-      from: row(r, { crashed: reason === "unknown", queued: reason === "memory" }),
+      from: row(r, { crashed: reason === "unknown" }),
       feed: { type: "start-failed", reason, detail: "mount failed" } as const,
       want: (c: Ctx): Want => ({ ...wantFail(reason, "mount failed")(c), crashes: reason === "unknown" ? 1 : 0 }),
     })),
@@ -761,7 +710,7 @@ const CELLS = {
       const detail = `the engine's worker failed twice (${what}); reload the page`;
       return {
         name: `the second crash, ${reason}, ${cause}`,
-        from: row(r, { crashed: true, queued: reason === "download" }),
+        from: row(r, { crashed: true }),
         feed: { type: "crashed", cause, reason, detail: what },
         want: ({ old }) => ({
           crashes: 0,
@@ -782,12 +731,6 @@ const CELLS = {
     };
     return [
       { name: "the first crash", from: row(r), feed: CRASH, want: wantReset("crash", "the engine crashed (boom)") },
-      {
-        name: "the first crash: the queued run is kept",
-        from: row(r, { queued: true }),
-        feed: CRASH,
-        want: wantReset("crash", "the engine crashed (boom)"),
-      },
       {
         name: "the first crash: the file storage",
         from: row(r),
@@ -918,9 +861,9 @@ const _ = "·",
 const A: Record<RowName, Record<"start" | "ask" | "decline" | "stop-download" | "reset" | "take-over", CellName>> = {
   "checking-lock": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
   "checking-cache": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
-  none: { start: "DOWNLOAD(null)", ask: "ASK(null)", decline: _, "stop-download": _, reset: _, "take-over": _ },
-  asking: { start: "DOWNLOAD(queued)", ask: _, decline: "NOT-NOW", "stop-download": _, reset: _, "take-over": _ },
-  declined: { start: "DOWNLOAD(null)", ask: "ASK(null)", decline: _, "stop-download": _, reset: _, "take-over": _ },
+  none: { start: "DOWNLOAD", ask: "ASK", decline: _, "stop-download": _, reset: _, "take-over": _ },
+  asking: { start: "DOWNLOAD", ask: _, decline: "NOT-NOW", "stop-download": _, reset: _, "take-over": _ },
+  declined: { start: "DOWNLOAD", ask: "ASK", decline: _, "stop-download": _, reset: _, "take-over": _ },
   downloading: { start: _, ask: _, decline: "STOP", "stop-download": "STOP", reset: _, "take-over": _ },
   "starting-list": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
   "starting-worker": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
@@ -928,7 +871,7 @@ const A: Record<RowName, Record<"start" | "ask" | "decline" | "stop-download" | 
   running: { start: _, ask: _, decline: _, "stop-download": _, reset: "RESET(user)", "take-over": _ },
   breaking: { start: _, ask: _, decline: _, "stop-download": _, reset: "RESET(user)", "take-over": _ },
   waiting: { start: _, ask: _, decline: _, "stop-download": _, reset: "RESET(user)", "take-over": _ },
-  failed: { start: "DOWNLOAD(null)", ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
+  failed: { start: "DOWNLOAD", ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
   "failed-twice": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
   "other-tab-idle": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": "TAKE-OVER" },
   "other-tab-taking": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
@@ -1192,14 +1135,7 @@ test("the table: every row by every event, 16 by 24, with every variant of the c
     assert.equal(step.outcome, "taken", what);
     const want = c.want({ old, at: c.event.at, next: step.machine.issued });
     assert.deepEqual(step.machine.state, want.state, `${what}: the state`);
-    // a queued run that the step lets go of without sending it: drop-run, last (transition()'s rule, tested on its own below)
-    const held = (st: State) => ("queued" in st ? st.queued : null);
-    const lost =
-      held(old.state) !== null &&
-      JSON.stringify(held(want.state)) !== JSON.stringify(held(old.state)) &&
-      !want.effects.some((f) => f.do === "send-run");
-    const effects = lost ? [...want.effects, { do: "drop-run" } as const] : want.effects;
-    assert.deepEqual(step.effects, effects, `${what}: the effects, in order`);
+    assert.deepEqual(step.effects, want.effects, `${what}: the effects, in order`);
     assert.equal(step.machine.crashes, want.crashes ?? old.crashes, `${what}: the crash count`);
     assert.equal(
       step.machine.issued,
@@ -1252,7 +1188,8 @@ test("the matrix built from transition() has the grid's cells: not valid, stale,
   assert.equal(built["starting-worker"].crashed, "starting-list | failed-twice");
   assert.equal(built.running.break, "breaking | starting-list");
   assert.equal(built.breaking["run-ended"], "ready");
-  assert.equal(built["starting-worker"].started, "ready | running");
+  assert.equal(built["starting-worker"].started, "ready");
+  assert.equal(built.declined.run, "asking");
 });
 
 // ---- SPEC section 5's transition matrix (step E, rulings 10 and 12) ----
@@ -1435,7 +1372,7 @@ const SCENARIOS: Record<string, () => At[]> = {
     assert.deepEqual(p.at.m.state, { s: "ready", worker: 4 });
     p.go(
       { type: "reset" },
-      { s: "starting-list", worker: 5, done: {}, queued: null },
+      { s: "starting-list", worker: 5, done: {} },
       [endReset(4, "user", "reset by you"), { do: "fetch-list", n: 5 }, ...banner("user", "reset by you")],
       { crashes: 0 },
     )
@@ -1458,7 +1395,7 @@ const SCENARIOS: Record<string, () => At[]> = {
   },
   "2. the lock lost during a download: no worker is ever started": () => {
     const p = play(row("asking"));
-    assert.deepEqual([p.at.m.state, p.at.m.issued], [{ s: "asking", queued: null }, 2]);
+    assert.deepEqual([p.at.m.state, p.at.m.issued], [{ s: "asking", forRun: false }, 2]);
     p.go({ type: "start" }, { s: "downloading", download: 3 }, [{ do: "start-download", n: 3 }])
       .go({ type: "lock-lost" }, { s: "other-tab-idle" }, [{ do: "abort-download", n: 3 }, ...blocked], { crashes: 0 })
       .drop({ type: "download-progress", received: 5, total: 9 }, "stale", 3)
@@ -1473,12 +1410,9 @@ const SCENARIOS: Record<string, () => At[]> = {
       { do: "say", line: { stage: "download" } },
     ]);
     assert.deepEqual(Object.keys(inRow(p.at.m, "starting-worker").done), ["download"]);
-    p.go(
-      CRASH,
-      { s: "starting-list", worker: 5, done: {}, queued: null },
-      [endReset(4, "crash", BOOM), { do: "fetch-list", n: 5 }],
-      { crashes: 1 },
-    )
+    p.go(CRASH, { s: "starting-list", worker: 5, done: {} }, [endReset(4, "crash", BOOM), { do: "fetch-list", n: 5 }], {
+      crashes: 1,
+    })
       .go({ type: "list-checked", build: BUILD }, { s: "starting-worker", worker: 5 }, [
         { do: "start-worker", n: 5, build: BUILD },
       ])
@@ -1686,58 +1620,37 @@ const SCENARIOS: Record<string, () => At[]> = {
         [],
       ).at,
   ],
-  "12. the queued run through a crash: it runs on the second worker, straight from starting-worker": () => {
-    const p = play(row("declined"))
-      .go(RUN, { s: "asking", queued: QUEUED }, [{ do: "show-dialog", dialog: "download", forRun: true }])
-      .go({ type: "start" }, { s: "downloading", download: 3, queued: QUEUED }, [{ do: "start-download", n: 3 }])
-      .go({ type: "download-done", build: BUILD }, { s: "starting-worker", worker: 4, queued: QUEUED }, [
-        { do: "start-worker", n: 4, build: BUILD },
-        { do: "say", line: { stage: "download" } },
-      ])
-      .go(
-        CRASH,
-        { s: "starting-list", worker: 5, queued: QUEUED },
-        [endReset(4, "crash", BOOM), { do: "fetch-list", n: 5 }],
-        { crashes: 1 },
-      )
-      .go({ type: "list-checked", build: BUILD }, { s: "starting-worker", worker: 5, queued: QUEUED }, [
-        { do: "start-worker", n: 5, build: BUILD },
-      ])
-      .go(
-        { type: "started" },
-        { s: "running", worker: 5, run: HEAD },
-        [...up, { do: "send-run", n: 5, code: "display 1", head: HEAD }],
-        { crashes: 0 },
+  "12. Run with no engine opens the prompt and runs nothing: not when the engine is ready, nor after a crash on the way; Run then runs":
+    () => {
+      const p = play(row("declined"))
+        .go(RUN, { s: "asking", forRun: true }, [{ do: "show-dialog", dialog: "download", forRun: true }])
+        .drop(RUN, "not-valid") // a second Run while the prompt asks
+        .go({ type: "start" }, { s: "downloading", download: 3 }, [{ do: "start-download", n: 3 }])
+        .drop(RUN, "not-valid") // Run during the download is refused, as before
+        .go({ type: "download-done", build: BUILD }, { s: "starting-worker", worker: 4 }, [
+          { do: "start-worker", n: 4, build: BUILD },
+          { do: "say", line: { stage: "download" } },
+        ])
+        .go(CRASH, { s: "starting-list", worker: 5 }, [endReset(4, "crash", BOOM), { do: "fetch-list", n: 5 }], {
+          crashes: 1,
+        })
+        .go({ type: "list-checked", build: BUILD }, { s: "starting-worker", worker: 5 }, [
+          { do: "start-worker", n: 5, build: BUILD },
+        ])
+        .go({ type: "started" }, { s: "ready", worker: 5 }, up, { crashes: 0 }); // ready, and nothing was sent
+      const before = p.at.trail.length;
+      assert.ok(
+        p.at.trail.every((t) => !t.step.effects.some((f) => f.do === "send-run")),
+        "nothing is sent before the visitor runs again",
       );
-    // the run is dropped instead by "Not now", STOP, FAIL, TWICE and LOST: none of their states has a `queued` field
-    const dropped = [
-      go(row("asking", { queued: true }), { type: "decline" }),
-      go(row("downloading", { queued: true }), { type: "stop-download" }),
-      go(row("downloading", { queued: true }), { type: "download-failed", reason: "download", detail: "x" }),
-      go(row("starting-worker", { queued: true }), { type: "start-failed", reason: "unknown", detail: "x" }),
-      go(row("starting-list", { queued: true, crashed: true }), {
-        type: "list-failed",
-        reason: "download",
-        detail: "x",
-      }),
-      go(row("starting-worker", { queued: true, crashed: true }), CRASH),
-      go(row("starting-worker", { queued: true }), { type: "lock-lost" }),
-    ];
-    assert.deepEqual(
-      dropped.map((at) => at.m.state.s),
-      ["declined", "declined", "failed", "failed", "failed", "failed-twice", "other-tab-idle"],
-    );
-    for (const at of dropped) {
-      assert.ok(!("queued" in at.m.state), at.m.state.s);
-      assert.deepEqual(at.trail.at(-1)!.step.effects.at(-1), { do: "drop-run" }, `${at.m.state.s}: drop-run, last`);
-    }
-    // the run that was sent has no drop-run on its way
-    assert.ok(
-      p.at.trail.every((t) => !t.step.effects.some((f) => f.do === "drop-run")),
-      "no drop-run for a run sent",
-    );
-    return [p.at, ...dropped];
-  },
+      p.go(RUN, { s: "running", worker: 5, run: HEAD }, [{ do: "send-run", n: 5, code: "display 1", head: HEAD }]);
+      assert.equal(p.at.trail.length, before + 1);
+      // "Not now" after a Run: the prompt closes, and nothing is left to drop
+      const notNow = play(row("none"))
+        .go(RUN, { s: "asking", forRun: true }, [{ do: "show-dialog", dialog: "download", forRun: true }])
+        .go({ type: "decline" }, { s: "declined" }, [closed]).at;
+      return [p.at, notNow];
+    },
   "13. Download or Run pressed at load, before the lock or the cache check answers: refused": () => [
     play(row("checking-lock"))
       .drop({ type: "start" }, "not-valid")
@@ -1747,7 +1660,7 @@ const SCENARIOS: Record<string, () => At[]> = {
       .drop({ type: "start" }, "not-valid")
       .drop(RUN, "not-valid")
       .drop({ type: "ask" }, "not-valid")
-      .go({ type: "cache-checked", cached: false }, { s: "asking", queued: null }, [
+      .go({ type: "cache-checked", cached: false }, { s: "asking", forRun: false }, [
         { do: "show-dialog", dialog: "download", forRun: false },
       ]).at,
   ],
@@ -1850,17 +1763,21 @@ test("property: a transition from running, breaking or waiting to a state that i
   }
 });
 
-test("property: a queued run is kept, sent (send-run) or dropped (drop-run, once, as the last effect); drop-run comes from nothing else", () => {
+test("property: no run is held: send-run comes only from a run in ready, with that run's code and head, and no state keeps a run's code", () => {
+  let sent = 0;
   for (const m of everyMove()) {
-    const a = m.before.state,
-      b = m.step.machine.state;
-    const held = "queued" in a ? a.queued : null;
-    const kept = held !== null && "queued" in b && b.queued === held;
-    const sent = count(m.step, "send-run") > 0;
-    const lost = held !== null && !kept && !sent;
-    assert.equal(count(m.step, "drop-run"), lost ? 1 : 0, says(m));
-    if (lost) assert.equal(m.step.effects.at(-1)!.do, "drop-run", `${says(m)}: last`);
+    const sends = m.step.effects.filter((e) => e.do === "send-run");
+    if (m.event.type === "run" && m.before.state.s === "ready") {
+      sent++;
+      assert.deepEqual(
+        sends.map(({ code, head }) => ({ code, head })),
+        [{ code: m.event.code, head: m.event.head }],
+        says(m),
+      );
+    } else assert.equal(sends.length, 0, says(m));
+    assert.ok(!JSON.stringify(m.step.machine.state).includes('"code"'), `${says(m)}: a state with a run's code`);
   }
+  assert.ok(sent > 0);
 });
 
 test("property: a transition from ready, running, breaking or waiting to a state that does not hold the same worker has engine-gone, once", () => {
@@ -1928,7 +1845,7 @@ test("property: every exit from downloading that is not that download's own end 
       assert.deepEqual(aborts, [], says(m));
     }
   }
-  assert.ok(exits >= 4, "decline, stop-download and lock-lost, with and without a queued run");
+  assert.ok(exits >= 4, "decline, stop-download and lock-lost, with the crash count at 0 and at 1");
 });
 
 test("property: one live worker: start-worker only from downloading and starting-list, into starting-worker with that ticket; a worker that is left is ended, once, and nothing else is", () => {
@@ -1995,8 +1912,6 @@ export type Misspelt = Expect<AnswersOk<Omit<Answers, "take-lock"> & { "take-loc
 export type MissingTag = Expect<SameTags<Exclude<EngineState, { s: "none" }>>>;
 // @ts-expect-error check 2: a ticket in a view's state
 export type TicketShown = Expect<NothingHidden<EngineState | { s: "ready"; worker: Ticket }>>;
-// @ts-expect-error check 2: a queued run in a view's state
-export type QueuedShown = Expect<NothingHidden<EngineState | { s: "asking"; queued: QueuedRun | null }>>;
 
 /** Never called: only compiled. */
 export function mustNotCompile(
