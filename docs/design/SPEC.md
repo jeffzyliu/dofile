@@ -41,7 +41,10 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   it. Under `pointer: coarse`, rows and menu items are 44 px, the row ⋯ 44 px square, the tab × 32 px. Hover styles only
   under `hover: hover`. Reduced motion stops the spinner and the toast's animation.
 - **Glyphs:** ⌘ ▶ ■ ● ▾ ⋯ are SVG icons (`.ico`), never typed. Key chips say ⌘ on a Mac, Ctrl elsewhere; a disabled button
-  shows none. An icon-only button has an `aria-label`.
+  shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
+  app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
+  ("Rename F2", `ui/Menu.tsx` `key-hint`) is only hidden from sight, so the item's name keeps it; a Results row's
+  "↵ Copy" goes (a tap copies, and the toast says so). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
 - **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the

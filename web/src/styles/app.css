@@ -259,6 +259,26 @@ body {
   transform: translate(-50%, -100%);
 }
 
+/* no key chips or key hints on a phone (the shortcuts still work with a keyboard): a chip (ui/Icon.tsx Key) is
+   aria-hidden, its control's aria-keyshortcuts says the key; a menu's key hint (ui/Menu.tsx key-hint: "Rename F2") is
+   only hidden from sight, so the item's name keeps it; the Results row's "↵ Copy" goes (a tap copies, and the toast
+   says "Copied"). The desktop's sizes do not change: the phone shows neither the toolbar nor its chips. */
+.app[data-layout="phone"] .key,
+.app[data-layout="phone"] .rs .act .hint {
+  display: none;
+}
+.app[data-layout="phone"] .menu .key-hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Step 4c: graph, data, results (app/output/). Used here and nowhere else: the Output tabs, the full-size graph view and
    a .dta file's tab. The classes of ui.css (.graph-card, .thumb, .facts, .t, .grid, .rs, .empty ...) are used as drawn. */
 

@@ -507,3 +507,59 @@ test("phone: the toast is above the command line and the tab bar, and above the 
   expect(open.toast!.bottom).toBeLessThanOrEqual(open.cmdline!.top);
   expect(open.toast!.top).toBeGreaterThanOrEqual(100);
 });
+
+test("key chips: none in sight on a phone (top bar, ⋯ menu, Log view, a file's menu), the shortcuts still stated; shown on the desktop", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto("/?test=manual");
+  await writeFile(page, "a.do");
+  // the key chips and key hints in sight: a box bigger than the 1 px of a visually hidden one, and not visibility: hidden
+  const chips = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>(".key, .key-hint, .rs .act .hint")]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 2 && r.height > 2 && getComputedStyle(el).visibility !== "hidden";
+        })
+        .map((el) => el.textContent),
+    );
+  const tree = page.getByRole("tree", { name: "Files" });
+  if (isMobile) {
+    const views = page.getByRole("tablist", { name: "Views" });
+    await views.getByRole("tab", { name: "Files" }).click();
+    await tree.getByRole("treeitem", { name: /^a\.do/ }).click();
+    await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: a.do");
+    expect(await chips()).toEqual([]); // the top bar
+    // a file's menu: its Rename keeps "F2" in its name, out of sight
+    await views.getByRole("tab", { name: "Files" }).click();
+    await page.locator(".row-more").first().click();
+    const rename = page.getByRole("menuitem", { name: "Rename F2" });
+    await expect(rename).toBeVisible();
+    const f2 = await rename.locator("span", { hasText: /^F2$/ }).boundingBox();
+    expect(f2!.width).toBeLessThanOrEqual(1);
+    expect(await chips()).toEqual([]);
+    await page.keyboard.press("Escape");
+    for (const view of ["Editor", "Log"]) {
+      await views.getByRole("tab", { name: view }).click();
+      expect(await chips()).toEqual([]);
+      await page.getByRole("button", { name: "More actions" }).click();
+      await expect(page.getByRole("menu")).toBeVisible();
+      expect(await chips()).toEqual([]);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("menu")).toHaveCount(0);
+    }
+  } else {
+    await tree.getByRole("treeitem", { name: /^a\.do/ }).click();
+    await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: a.do");
+    // the toolbar's Save shows its chip and states its key
+    const save = page.locator(".toolbar").getByRole("button", { name: "Save" });
+    await expect(save).toHaveAttribute("aria-keyshortcuts", /^(Meta|Control)\+S$/);
+    expect((await chips()).some((t) => /^(⌘|Ctrl) S$/.test(t ?? ""))).toBe(true);
+    // a file's menu shows "F2"
+    await tree.getByRole("treeitem", { name: /^a\.do/ }).click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Rename F2" })).toBeVisible();
+    expect(await chips()).toContain("F2");
+    await page.keyboard.press("Escape");
+  }
+});

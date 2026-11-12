@@ -120,16 +120,19 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 73 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 74 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 292 cases, of which 261 run and 31 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 296 cases, of which 265 run and 31 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
 view and nothing of the editor shows; the banner's hand-off to a .dta tab on the iPhone, where the banner is on the Log
 view; the phone ⋯'s Save in the three desktop profiles).
 
-- `shell.spec.ts` (11): desktop and phone layout, toolbar stability, panes never remounted, banners, toast position.
+- `shell.spec.ts` (12): desktop and phone layout, toolbar stability, panes never remounted, banners, toast position;
+  no key chip or key hint in sight on a phone (top bar, ⋯ menu on the Editor and Log views, a file's menu, whose
+  Rename keeps "F2" in its name), and on the desktop the toolbar's Save chip with its `aria-keyshortcuts` and a file's
+  menu's "F2".
 - `files.spec.ts` (13): the file tree by keyboard, opening files in tabs, closing a tab with and without unsaved edits
   (a Save that fails keeps the tab open with the save-failed banner; Save saves through 4b's editor and closes the tab; the phone's file switcher; the focus after Save and after "Don't save", in one move to the tab now selected or, on a phone, the editor, and after Delete on the last tab), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
   open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
