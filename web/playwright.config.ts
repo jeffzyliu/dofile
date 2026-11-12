@@ -11,7 +11,7 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts", // the server on the port must serve this folder's build
   timeout: 600_000, // a whole test; the engine-ready waits inside it are 300 s each, and some tests start the engine twice
   reporter: "list",
-  // The editor is at EDITOR_BASE (/app/), so a relative URL is the editor's ("?test", "./", "start-files.json") and an
+  // The editor is at EDITOR_BASE, /app/ today, so a relative URL is the editor's ("?test", "./", "start-files.json") and an
   // absolute one the site's ("/", "/commands/"): page.goto("?test=manual") opens the editor.
   use: { baseURL: `http://localhost:${port}${EDITOR_BASE}`, trace: "retain-on-failure", screenshot: "only-on-failure" },
   webServer: { command: `npx vite preview --port ${port} --strictPort`, port, reuseExistingServer: true },

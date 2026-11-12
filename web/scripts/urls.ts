@@ -4,9 +4,11 @@
 //
 // Today the editor is a single-page app under /app/ on the site's own origin, and the landing page is the root /.
 // To move the editor elsewhere on the same origin: change EDITOR_BASE (or set DOFILE_EDITOR_BASE), nothing else.
-// To move it to its own subdomain (app.<domain>): set DOFILE_EDITOR_BASE=/ (the editor at the root of its origin),
-// DOFILE_EDITOR_URL=https://app.<domain>/ (the landing page's links) and DOFILE_SITE_URL=https://<domain>/ (the editor's
-// links back), and deploy the two parts as two Workers (SPEC section 8 lists the steps and what does not follow the move).
+// To move it to its own subdomain (app.<domain>), two builds into two folders, deployed as two Workers:
+//   DOFILE_EDITOR_BASE=/ DOFILE_SITE_URL=https://<domain>/ npx vite build --outDir <editor folder>
+//   DOFILE_EDITOR_URL=https://app.<domain>/ DOFILE_EDITOR_DIR=<editor folder> npx vite build --mode site --outDir <site folder>
+// and by hand: a Wrangler config for the editor's Worker, package.json's build and deploy scripts, deploy.yml, and the e2e
+// setup (one origin today). SPEC section 8, "URLs", has the exact list and what does not follow the editor to a new origin.
 
 /** The editor's path on its origin, with a slash at each end: Vite's `base` for the editor's build and dev server. */
 export const EDITOR_BASE = process.env.DOFILE_EDITOR_BASE ?? "/app/";

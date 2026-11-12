@@ -214,6 +214,25 @@ test("the import graph: the landing and commands pages (src/site/) import nothin
     assert.ok(scripts.length > 0, page);
     for (const s of scripts) assert.match(s, /^\/src\/site\/[a-z-]+\.ts$/, `${page} loads ${s}`);
   }
+  // and the editor's HTML loads nothing of theirs: no script and no stylesheet under src/site/
+  const editorHtml = readFileSync(join(web, "index.html"), "utf8");
+  const loads = [...editorHtml.matchAll(/<(?:script|link)[^>]*\b(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(loads.includes("/src/main.tsx"), "index.html loads the editor's entry");
+  for (const l of loads) assert.ok(!l.includes("/site/"), `index.html loads ${l}`);
+  // CSS: an @import or url() of a stylesheet in src/site/ only from src/site/; src/site/'s CSS only of src/site/ and src/styles/
+  const css = files("src", /\.css$/);
+  assert.ok(css.includes("src/site/site.css") && css.includes("src/styles/ui.css"), "the walk found the stylesheets");
+  for (const f of css) {
+    const text = readFileSync(join(web, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const refs = [...text.matchAll(/@import\s+(?:url\()?\s*["']?([^"')\s;]+)|url\(\s*["']?([^"')\s]+)/g)]
+      .map((m) => m[1] ?? m[2])
+      .filter((r) => !/^(data:|https?:|#)/.test(r));
+    for (const r of refs.filter((r) => r.endsWith(".css"))) {
+      const target = relative(web, resolve(web, dirname(f), r));
+      if (f.startsWith("src/site/")) assert.match(target, /^src\/(site|styles)\//, `${f} imports ${target}`);
+      else assert.ok(!target.startsWith("src/site/"), `${f} imports ${target}`);
+    }
+  }
 });
 
 test("TypeScript as Node runs it: only syntax that can be erased, and no JSDoc types", () => {

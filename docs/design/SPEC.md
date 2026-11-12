@@ -1367,38 +1367,73 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 - **Checked on `wrangler dev`** (local workerd, Cloudflare's runtime on this machine, not the edge), with `dist/` built on the
   quality-11 snapshot as `deploy.yml` builds it (no file over 21 MB): every address in the table, its status, redirect and
   headers, and in Chromium the landing page's and the commands page's scripts, and the editor at `/app/?test` starting from
-  the snapshot, cross-origin isolated, and running code. **Not checked, for the first deploy:** the edge itself (its
-  compression and caching, `deploy.yml`'s upload). Look at `/`, `/commands/`, `/app/` (in the console `crossOriginIsolated` is
-  true; the download size on the prompt and on the landing page agree), `/app` and `/commands` redirecting, "Browsers that
-  work" from the editor opening `/#browsers`, a missing page giving a 404, and `/app.html`, `/app/index.html` and
-  `/commands/index.html` (not requested on workerd).
+  the snapshot, cross-origin isolated, and running code. `vite preview` (the e2e tests) answers as the table says, which is
+  the documented host behavior, not the edge's.
+- **To look at on the first real deploy** (the edge itself is not checked: its compression and caching, `deploy.yml`'s upload):
+  1. `/`, `/commands/` and `/app/`: in the editor's console `crossOriginIsolated` is true, and the download size on the prompt
+     and on the landing page agree.
+  2. The redirects: `/app` and `/commands` to their folders, the query kept (`/app?test`); and, not requested on workerd,
+     `/app.html`, `/app/index.html?test` and `/commands/index.html` (the preview server redirects them as auto-trailing-slash is
+     documented to). Note the status code and whether `Location` is a path or a whole URL.
+  3. What preview serves and the edge may not: `/index`, `/app/index`, `/commands/index` and `/app//` answer 200 in preview;
+     the edge should redirect them to the folder. Harmless either way, since every URL the editor uses is absolute.
+  4. A missing page is a 404 (`/nope.html`, `/app/nope.html`, `/landing.html`), and `/_headers` is a 404 (not uploaded as a
+     file).
+  5. The isolation headers on a 304 under `/app/*`: reload the editor in Safari once the engine has started (WebKit refuses a
+     worker script whose cached 304 reply lacks COEP).
+  6. "Browsers that work" from the editor opens `/#browsers`.
+  7. A tab of the old build (the editor at `/`) left open across the deploy: its next start or Reset fetches `/start-files.json`,
+     now a 404, so it shows a failed download ("Try again" fails the same way) rather than "dofile was updated"; a reload loads
+     the landing page, and "Open the editor" the new editor, with the visitor's files (same origin). Unsaved edits in that tab
+     can still be saved to the store before the reload.
+  8. If step 4 deployed before step 5 with the same snapshot (`built` unchanged): after one download at `/app/`, DevTools'
+     Cache Storage `dofile-snapshot-<built>` holds only `/app/…` entries (`download()` dropped the root-keyed ones).
 - **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/app/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base` and
   its output folder (`dist/app/`); `EDITOR_URL` (default `EDITOR_BASE`; `DOFILE_EDITOR_URL`) is what the static pages link
   to; `SITE_URL` (`/`; `DOFILE_SITE_URL`) is the landing page, from the editor. `vite.config.ts`, `playwright.config.ts`
   (its `baseURL` ends in the base, so a relative `goto("?test")` is the editor and `goto("/")` the landing page),
-  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.mjs` read it; a test (`test/site.test.ts`) checks that no
-  other source, script, e2e test, config or page spells `/app` in a string. **Another path on the same origin:** change `EDITOR_BASE`; nothing else. **Its own subdomain later**
-  (`app.<domain>`): build the editor with `DOFILE_EDITOR_BASE=/ DOFILE_SITE_URL=https://<domain>/` and the static pages with
-  `DOFILE_EDITOR_URL=https://app.<domain>/`, as two folders deployed as two Workers (today `npm run build` writes both into
-  one `dist/`: give the editor's build its own `--outDir` and the site's `_headers` the editor's rules, `headersFile("/")`,
-  in the editor's Worker, which then needs `/*` isolated and its own `not_found_handling`). What does not follow the editor to
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.mjs` read it; the tests compare with the
+  setting, not with `/app/`. `test/site.test.ts` fails if another source (`.ts`, `.tsx`, `.mjs`, `.html`, `.css`, `.json`), script,
+  e2e test, config, page or workflow spells the editor's path after a quote, a backquote, `(` or `=` (comments may name it; a
+  path joined from pieces, `"/" + "app"`, is not caught: never write one).
+  **Another path on the same origin:** change `EDITOR_BASE` (or set `DOFILE_EDITOR_BASE`); nothing else. Checked with
+  `/editor/`: `npm run build` wrote `dist/editor/`, `_headers` for `/editor/*` and the landing page's links to `/editor/`;
+  `npm test`'s site tests and the e2e specs `landing`, `sample`, `commands` and `step2` (Chromium) passed on it.
+  **Its own subdomain later** (`app.<domain>`), two folders deployed as two Workers; checked into `/tmp`:
+  1. The editor: `DOFILE_EDITOR_BASE=/ DOFILE_SITE_URL=https://<domain>/ npx vite build --outDir <editor folder>`. It writes
+     the editor at the folder's root, its `start-files.json`, and its own `_headers` with every path isolated (`/*`); it leaves
+     `dist/` alone (only a build into `dist/` empties `dist/`).
+  2. The static pages: `DOFILE_EDITOR_URL=https://app.<domain>/ DOFILE_EDITOR_DIR=<editor folder> npx vite build --mode site
+     --outDir <site folder>`. The download size comes from the editor's list in `DOFILE_EDITOR_DIR`; no `_headers` (the editor is
+     elsewhere, and the pages need none). The site's build refuses to write into the editor's own folder (with `EDITOR_BASE` `/`,
+     `npm run build` as it is fails there, so the landing page never replaces the editor's `index.html`).
+  3. By hand: a second Wrangler config for the editor's Worker (`assets.directory` the editor folder, the same `html_handling`
+     and `not_found_handling: "none"`) and this one's `directory` the site folder; `package.json`'s `build`, `cf:dev` and
+     `deploy` and `deploy.yml` (two builds, two deploys, the size check over both folders) changed to match; the e2e setup,
+     which serves one origin (`vite preview` of one folder, `baseURL` the site's origin plus the base), needs a second server
+     for the editor's origin before the tests that cross between the pages run; the dev server has no static pages with
+     `EDITOR_BASE` `/` (they are another site's).
+  What does not follow the editor to
   a new origin, because the browser keeps it per origin: the visitors' files (IndexedDB `dofile`; they must "Download all
   (.zip)" on the old address and upload them on the new), the downloaded engine (the Cache `dofile-snapshot-<built>`: a first
   visit's download again), the tab lock (`dofile-engine`, per origin), the sample's mark (everyone gets the sample again) and the
   theme choice (`dofile.theme`: the landing page and the editor no longer share it). Moving the path on one origin keeps the
   files, the tab lock and the theme (all per origin), but the Cache's entries are keyed by their full URL, so a visitor whose
-  engine was cached at `/snapshot/…` downloads it once more at `/app/snapshot/…`; that download removes the old copy (`download()` drops every entry of the Cache it fills that the build's list does not name, when no worker is live; the list's own files stay, so a resumed download keeps them), as it would with no move only once a new snapshot changed `built`.
+  engine was cached at `/snapshot/…` downloads it once more at `/app/snapshot/…`; that download removes the old copy
+  (`download()` drops every entry of the Cache it fills that the build's list does not name, when no worker is live; the list's
+  own files stay, so a resumed download keeps them).
 - **Builds.** `npm run build` = the wheel, then `vite build` (the editor: empties `dist/`, writes `dist/app/` with its
   `public/` files and `start-files.json`, which lists only `dist/app/`), then `vite build --mode site` (the static pages:
   `publicDir: false`, no module-preload polyfill, so they load nothing of the editor's; their download size read from
   `dist/app/start-files.json`, which must exist; the pages moved to `index.html` and `commands/index.html`; `_headers`).
-  `vite preview` serves all of `dist/` at `/` with the isolation headers under `/app/` and the folder redirects, as the
+  Both builds take their folder from Vite's resolved `build.outDir`, so `--outDir` moves the whole output, `start-files.json`
+  included. `vite preview` serves all of `dist/` at `/` with the isolation headers under `/app/` and the folder redirects, as the
   host does. The dev server is the editor's (base `/app/`) with a middleware for `/` and `/commands/` (their scripts are then
   served from under `/app/`, a dev-only detail).
 - **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
   the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `theme.ts`, the theme button's words,
   the editor's (a test compares them); `landing.ts`; `commands.ts` and `filter.ts`, the filter). These import nothing but
-  `src/site/` and the stylesheets, and nothing imports them (`test/imports.test.ts`): no signals, no store, no tab lock, so
+  `src/site/` and the stylesheets (CSS `@import`s too), and nothing imports them, the editor's `index.html` and CSS included (`test/imports.test.ts`): no signals, no store, no tab lock, so
   reading the landing page never touches the editor's files. `web/scripts/site-pages.ts` fills the pages at build time (a
   plugin in `vite.config.ts`): `{{version}}` (the package's version, `0.1.0.dev1`, OQ-20), `{{engine-mb}}` (`Math.round` of
   the compressed total in MB, the editor prompt's number: in dev from `public/`, in a build from the editor's

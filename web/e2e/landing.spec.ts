@@ -1,6 +1,6 @@
 // Prototype 1, step 5: the landing page and its links (docs/design/SPEC.md, sections 3.12 and 8) in real browsers. The
 // landing page is static HTML at the site's root, /, the commands page at /commands/, and the editor a single-page app at
-// EDITOR_BASE (/app/: Playwright's baseURL, so a relative URL is the editor's and an absolute one the site's). The tests
+// EDITOR_BASE, /app/ today (Playwright's baseURL, so a relative URL is the editor's and an absolute one the site's). The tests
 // assert the landing page's own content after each link, not only the URL: a host that answers a missing page with the
 // editor would pass a URL check with no landing page.
 // Also: the build's numbers in the text, the theme button (one choice for the whole site), the Copy buttons, and axe on the

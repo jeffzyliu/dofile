@@ -150,16 +150,22 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
 - **The site's addresses: the landing page is `/`, the commands page `/commands/`, the editor a single-page app under
   `/app/`.** The editor's location is ONE setting, `scripts/urls.ts` (`EDITOR_BASE`, and `EDITOR_URL`/`SITE_URL` for links
   across origins); everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL`
-  (`app/env.ts`), and `test/site.test.ts` fails if another source, script, e2e test, config or page spells `/app` in a string. Never write a root-absolute path to an editor file. To move
-  the editor (another path, or its own subdomain later, and what does not follow it to a new origin: the stored files, the
-  downloaded engine, the sample's mark, the theme): `docs/design/SPEC.md`, section 8, "URLs". `npm run build` is two builds:
+  (`app/env.ts`), and `test/site.test.ts` fails if another source (CSS and JSON too), script, e2e test, config, page or
+  workflow spells the editor's path after a quote, a backquote, `(` or `=`. Never write a root-absolute path to an editor file,
+  nor one joined from pieces. Another path on the same origin is a change of `EDITOR_BASE` alone (the tests compare with the
+  setting). Its own subdomain later is two builds into two folders (the editor with `DOFILE_EDITOR_BASE=/` and `--outDir`, the
+  pages with `DOFILE_EDITOR_URL`, `DOFILE_EDITOR_DIR` and `--outDir`; both builds follow `--outDir`, and the pages' build
+  refuses the editor's folder) plus hand edits to the Wrangler configs, `package.json`, `deploy.yml` and the e2e setup: the
+  exact list, and what does not follow the editor to a new origin (the stored files, the downloaded engine, the sample's mark,
+  the theme), is in `docs/design/SPEC.md`, section 8, "URLs". `npm run build` is two builds:
   `vite build` (the editor into `dist/app/`, emptying `dist/` first) and `vite build --mode site` (the landing and commands
   pages into `dist/index.html` and `dist/commands/index.html`, their own assets in `dist/assets/`, and `dist/_headers`, which
   isolates `/app/*` only; `public/` has no `_headers`). `vite preview` serves all of `dist/` as the host does; the dev server
   is the editor's with the two pages added at `/` and `/commands/`. The e2e `baseURL` ends in `/app/`: `goto("?test")` is the
   editor, `goto("/")` the landing page. A missing page is a 404 everywhere (`appType: "mpa"`; `not_found_handling: "none"`).
 - **The landing and commands pages (step 5) are static HTML** (`landing.html`, `commands.html`; the editor is `index.html`).
-  Their code is `src/site/` and imports only `src/site/` and the stylesheets (`test/imports.test.ts`): no signals, no store, no
+  Their code is `src/site/` and imports only `src/site/` and the stylesheets, CSS `@import`s included, and the editor's
+  `index.html` loads none of it (`test/imports.test.ts`): no signals, no store, no
   tab lock, and no module-preload polyfill. The build fills `{{version}}`, `{{engine-mb}}`, `{{editor-url}}` and the commands list
   into them (`scripts/site-pages.ts`; the commands come from `src/stata/commands.json`, `npm run commands`); an unknown token
   fails `test/site.test.ts`, and the e2e tests check the served pages have none left. With scripts off both are complete (the

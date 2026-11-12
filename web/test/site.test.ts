@@ -21,6 +21,7 @@ import { EDITOR_BASE, EDITOR_URL, SITE_URL } from "../scripts/urls.ts";
 import { countText, filterNames } from "../src/site/filter.ts";
 import data from "../src/stata/commands.json" with { type: "json" };
 
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 const web = (p: string) => readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8");
 
 test("fillTokens fills the version and the size, each only when given", () => {
@@ -61,7 +62,7 @@ test("the six prefixes the interpreter handles itself are the highlighter's (lan
 });
 
 test("commands.html and landing.html: no placeholder is left once filled, and every placeholder is one the build knows", () => {
-  const tokens = { version: "9.9.9", engineMB: "50", editorURL: "/app/" };
+  const tokens = { version: "9.9.9", engineMB: "50", editorURL: EDITOR_URL };
   const commands = fillCommands(fillTokens(web("commands.html"), tokens), data as CommandData, ["shell", "webuse"]);
   assert.doesNotMatch(commands, /\{\{|<!--COMMANDS-->|<!--PREFIXES-->/);
   const landing = fillTokens(web("landing.html"), tokens);
@@ -93,21 +94,32 @@ test("where each page is served, and the headers file: isolation on the editor's
   assert.equal(sitePageFor("/index.html"), "landing.html");
   assert.equal(sitePageFor("/commands/"), "commands.html");
   assert.equal(sitePageFor("/commands/index.html"), "commands.html");
-  for (const p of ["/commands", "/commands.html", "/landing.html", "/app/", "/nope/"])
+  for (const p of [
+    "/commands",
+    "/commands.html",
+    "/landing.html",
+    "/nope/",
+    ...(EDITOR_BASE === "/" ? [] : [EDITOR_BASE]),
+  ])
     assert.equal(sitePageFor(p), null, p);
-  const h = headersFile("/app/");
-  assert.match(
-    h,
-    /^\/app\/\*\n {2}Cross-Origin-Opener-Policy: same-origin\n {2}Cross-Origin-Embedder-Policy: require-corp$/m,
-  );
-  assert.doesNotMatch(h, /^\/\*$/m, "no rule for the whole site");
-  assert.match(headersFile("/"), /^\/\*$/m, "an editor at the root of its own origin: every path");
+  const rule = (base: string) =>
+    new RegExp(
+      `^${esc(base)}\\*\\n {2}Cross-Origin-Opener-Policy: same-origin\\n {2}Cross-Origin-Embedder-Policy: require-corp$`,
+      "m",
+    );
+  assert.match(headersFile("/editor/"), rule("/editor/"));
+  assert.doesNotMatch(headersFile("/editor/"), /^\/\*$/m, "no rule for the whole site");
+  assert.match(headersFile(EDITOR_BASE), rule(EDITOR_BASE));
+  assert.match(headersFile("/"), rule("/"), "an editor at the root of its own origin: every path");
 });
 
 test("the editor's location is one setting: scripts/urls.ts, read by the config, the e2e config and the scripts", () => {
-  assert.equal(EDITOR_BASE, "/app/");
-  assert.equal(EDITOR_URL, EDITOR_BASE);
-  assert.equal(SITE_URL, "/");
+  // the defaults follow the setting: a path with a slash at each end, the links the same origin's unless the environment
+  // gives whole URLs (so moving the editor to another path is a change of EDITOR_BASE alone)
+  assert.match(EDITOR_BASE, /^\/(.*\/)?$/);
+  assert.match(web("scripts/urls.ts"), /export const EDITOR_BASE = process\.env\.DOFILE_EDITOR_BASE \?\? "\/[^"]*\/";/);
+  assert.equal(EDITOR_URL, process.env.DOFILE_EDITOR_URL ?? EDITOR_BASE);
+  assert.equal(SITE_URL, process.env.DOFILE_SITE_URL ?? "/");
   for (const f of [
     "vite.config.ts",
     "playwright.config.ts",
@@ -116,17 +128,34 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     "scripts/measure-startup.mjs",
   ])
     assert.match(web(f), /from "\.{1,2}\/(scripts\/)?urls\.ts"/, f);
-  // nothing else spells the editor's path in a string: the sources, the scripts, the e2e tests, the configs and the pages
+  // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=` (an
+  // HTML attribute), followed by anything but a letter or digit ("/app/", "/app?test", "/app.html", "/app#x"). Comments may
+  // name it. Read: the sources (CSS and JSON too), the scripts, the e2e tests, the configs, the pages and the workflows.
+  // A path made by joining strings ("/" + "app") is not caught: never write one.
+  if (EDITOR_BASE === "/") return; // the editor at the root of its own origin: nothing to spell
   const walk = (dir: string): string[] =>
     readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)), { withFileTypes: true }).flatMap((e) =>
-      e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.(ts|tsx|mjs|html)$/.test(e.name) ? [`${dir}/${e.name}`] : [],
+      e.isDirectory()
+        ? walk(`${dir}/${e.name}`)
+        : /\.(ts|tsx|mjs|html|css|json|jsonc|yml)$/.test(e.name)
+          ? [`${dir}/${e.name}`]
+          : [],
     );
   const files = [
-    ...["src", "scripts", "e2e"].flatMap(walk).filter((f) => f !== "scripts/urls.ts"),
-    ...["vite.config.ts", "playwright.config.ts", "index.html", "landing.html", "commands.html"],
+    ...["src", "scripts", "e2e", "../.github/workflows"].flatMap(walk).filter((f) => f !== "scripts/urls.ts"),
+    ...["vite.config.ts", "playwright.config.ts", "index.html", "landing.html", "commands.html", "wrangler.jsonc"],
+    ...["package.json", "biome.json", "tsconfig.json"],
   ];
   assert.ok(files.length > 50, "the walk found the sources");
-  for (const f of files) assert.doesNotMatch(web(f), /["'`]\/app(\/|["'`])/, f);
+  assert.ok(
+    files.some((f) => f.endsWith(".css")) && files.some((f) => f.endsWith(".yml")),
+    "CSS and workflows are read",
+  );
+  const spelled = new RegExp(`["'\`(=]${esc(EDITOR_BASE.slice(0, -1))}(?![\\w-])`);
+  for (const probe of ['"/app/"', "'/app?test'", "`/app.html`", "url(/app/x.woff2)", "href=/app#x", '"/app"'])
+    assert.match(probe.replace("/app", EDITOR_BASE.slice(0, -1)), spelled, probe);
+  assert.doesNotMatch(`"${EDITOR_BASE.slice(0, -1)}s/"`, spelled, "another name that starts the same");
+  for (const f of files) assert.doesNotMatch(web(f), spelled, f);
 });
 
 test("the filter keeps the names that contain what was typed, ignoring case and outer spaces", () => {

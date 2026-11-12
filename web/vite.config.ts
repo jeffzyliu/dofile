@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Connect, defineConfig, type Plugin, type UserConfig } from "vite";
 import checker from "vite-plugin-checker";
@@ -20,12 +20,14 @@ import commandData from "./src/stata/commands.json" with { type: "json" };
 
 // Two builds make the site (`npm run build`), and one dev server serves it (docs/design/SPEC.md, section 8, "URLs"):
 //  - the editor (`vite build`): a single-page app under EDITOR_BASE (scripts/urls.ts; /app/ today), built into
-//    dist/<EDITOR_BASE> with its public/ files (the wheels, the runtime, the snapshot) and start-files.json. It empties
-//    dist/ first, so nothing of an older layout is left to deploy.
+//    dist/<EDITOR_BASE> (or `--outDir`) with its public/ files (the wheels, the runtime, the snapshot) and start-files.json.
+//    A build into dist/ empties dist/ first, so nothing of an older layout is left to deploy. With EDITOR_BASE "/" (the
+//    editor at the root of its own origin) it also writes its own _headers, every path isolated.
 //  - the landing and commands pages (`vite build --mode site`): static HTML at the site's root, dist/index.html and
-//    dist/commands/index.html, with their own two small scripts and stylesheet in dist/assets/, and dist/_headers. Built
-//    after the editor: they say the editor's download size, read from its start-files.json. Nothing of public/ and no
-//    script of the editor's.
+//    dist/commands/index.html (or `--outDir`), with their own two small scripts and stylesheet in assets/, and _headers
+//    (the editor's isolation, when the editor is on this origin). Built after the editor: they say the editor's download
+//    size, read from its start-files.json (in dist/<EDITOR_BASE>, or DOFILE_EDITOR_DIR). Nothing of public/ and no script of
+//    the editor's. It refuses to build into the editor's own folder.
 //  - `vite` (dev): the editor's config at EDITOR_BASE, plus the two static pages at / and /commands/ (a middleware).
 //  - `vite preview`: all of dist/ at /, with the isolation headers under EDITOR_BASE only, as dist/_headers says for the host.
 
@@ -63,7 +65,19 @@ for (const f of RUNTIME_FILES)
 // these inputs while the server runs is accepted without a restart (same stamp, same inputs).
 const publicDir = fileURLToPath(new URL("./public", import.meta.url)),
   siteDir = fileURLToPath(new URL("./dist", import.meta.url)), // the site's root: what the host serves
-  editorDir = fileURLToPath(new URL(`./dist${EDITOR_BASE}`, import.meta.url)); // the editor's build
+  // the editor's build: dist/<EDITOR_BASE> unless `vite build --outDir` says otherwise (the build takes the resolved folder);
+  // the site's build reads the editor's start-files.json from DOFILE_EDITOR_DIR, else from here
+  editorDefault = fileURLToPath(new URL(`./dist${EDITOR_BASE}`, import.meta.url)),
+  editorSource = resolve(process.env.DOFILE_EDITOR_DIR ?? editorDefault);
+/** Whether `dir` is `parent` or a folder inside it. */
+const within = (dir: string, parent: string) => {
+  const r = relative(parent, dir);
+  return !r.startsWith("..") && !isAbsolute(r);
+};
+/** A build's output folder, as Vite resolved it (`build.outDir`, or `--outDir`). */
+const outDirOf = (config: { root: string; build: { outDir: string } }) => resolve(config.root, config.build.outDir);
+/** Whether the editor is on another origin than the static pages (EDITOR_URL a whole URL). */
+const editorElsewhere = /^[a-z][a-z0-9+.-]*:/i.test(EDITOR_URL);
 let devList = { key: "", json: "" };
 function devStartFiles() {
   let key = "";
@@ -122,8 +136,11 @@ const isSitePage = (path: string) => Object.keys(SITE_FILES).some((p) => path.en
 
 /** The editor's built list, for the site's build: the download size its pages state. */
 function editorList(): { compressed: number } {
-  const file = `${editorDir}start-files.json`;
-  if (!existsSync(file)) throw new Error(`site: no ${file}; build the editor first (\`npm run build\` does both)`);
+  const file = `${editorSource}/start-files.json`;
+  if (!existsSync(file))
+    throw new Error(
+      `site: no ${file}; build the editor first (\`npm run build\` does both; DOFILE_EDITOR_DIR names an editor built elsewhere)`,
+    );
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
@@ -166,17 +183,28 @@ const sitePages: Plugin = {
   },
 };
 
-// the site's build: each page to the path it is served at, and the headers file
+// The site's build: each page to the path it is served at, and the headers file (the editor's isolation, when the editor is
+// on this origin; none when it has its own). It refuses to write into the editor's own folder: with the editor at the root
+// of its origin (EDITOR_BASE "/"), the landing page would take the place of the editor's index.html.
+let siteOut = siteDir;
 const siteFiles: Plugin = {
   name: "site-files",
   apply: "build",
+  configResolved(config) {
+    siteOut = outDirOf(config);
+    if (siteOut === editorSource)
+      throw new Error(
+        `site: ${siteOut} is the editor's folder (EDITOR_BASE ${EDITOR_BASE}); its index.html is the editor's page. Build the ` +
+          "landing and commands pages into another folder (`vite build --mode site --outDir <folder>`), as their own site",
+      );
+  },
   closeBundle(error?: Error) {
     if (error) return;
     for (const [source, served] of Object.entries(SITE_FILES)) {
-      mkdirSync(dirname(`${siteDir}/${served}`), { recursive: true });
-      renameSync(`${siteDir}/${source}`, `${siteDir}/${served}`);
+      mkdirSync(dirname(`${siteOut}/${served}`), { recursive: true });
+      renameSync(`${siteOut}/${source}`, `${siteOut}/${served}`);
     }
-    writeFileSync(`${siteDir}/_headers`, headersFile(EDITOR_BASE));
+    if (!editorElsewhere) writeFileSync(`${siteOut}/_headers`, headersFile(EDITOR_BASE));
   },
 };
 
@@ -217,77 +245,87 @@ const site = (): UserConfig => ({
 });
 
 // The editor's build and the dev server.
-const editor = (command: "build" | "serve"): UserConfig => {
-  if (command === "build") rmSync(siteDir, { recursive: true, force: true }); // a build starts from an empty dist/
-  return {
-    // No fallback to the editor for a path that is not a file: a missing page is a 404 (the editor is a single-page app only
-    // in that it is one page; it has no routes of its own)
-    appType: "mpa",
-    base: EDITOR_BASE,
-    build: { outDir: editorDir, emptyOutDir: true },
-    define: {
-      __WHEEL__: JSON.stringify(wheel),
-      __EXTRA_WHEELS__: JSON.stringify(extraWheels),
-      __BUILD_ID__: JSON.stringify(buildId(stamp, inputs)), // start-files.json must carry the same (client.ts, checkBuild)
-      __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
-      __ABOUT__: JSON.stringify(about(inputs)), // the version, the engine's commit, the Stata version: app/env.ts ABOUT
-      __SITE_URL__: JSON.stringify(SITE_URL), // the landing page, from the editor: app/env.ts LANDING_URL
+let editorOut = editorDefault; // the editor's build folder, as resolved (configResolved below)
+const editor = (): UserConfig => ({
+  // No fallback to the editor for a path that is not a file: a missing page is a 404 (the editor is a single-page app only
+  // in that it is one page; it has no routes of its own)
+  appType: "mpa",
+  base: EDITOR_BASE,
+  build: { outDir: editorDefault, emptyOutDir: true },
+  define: {
+    __WHEEL__: JSON.stringify(wheel),
+    __EXTRA_WHEELS__: JSON.stringify(extraWheels),
+    __BUILD_ID__: JSON.stringify(buildId(stamp, inputs)), // start-files.json must carry the same (client.ts, checkBuild)
+    __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
+    __ABOUT__: JSON.stringify(about(inputs)), // the version, the engine's commit, the Stata version: app/env.ts ABOUT
+    __SITE_URL__: JSON.stringify(SITE_URL), // the landing page, from the editor: app/env.ts LANDING_URL
+  },
+  plugins: [
+    {
+      // A build into dist/ (or a folder in it) starts from an empty dist/, so nothing of an older layout is left to deploy;
+      // a build into a folder elsewhere (`--outDir`) leaves dist/ alone (Vite empties that folder itself)
+      name: "editor-out",
+      apply: "build",
+      configResolved(config) {
+        editorOut = outDirOf(config);
+        if (within(editorOut, siteDir)) rmSync(siteDir, { recursive: true, force: true });
+      },
     },
-    plugins: [
-      {
-        name: "cross-origin-isolation",
-        enforce: "pre", // before the checker below, which is "pre" too: the headers must be on its pages as well
-        configureServer: (server) => {
-          server.middlewares.use(isolate);
-        },
+    {
+      name: "cross-origin-isolation",
+      enforce: "pre", // before the checker below, which is "pre" too: the headers must be on its pages as well
+      configureServer: (server) => {
+        server.middlewares.use(isolate);
       },
-      // Biome's linter (biome.json), while the dev server runs and in a build. In development it runs again on each change:
-      // an error opens a panel over the page, a warning is only listed (the badge in the corner, and the terminal). A build
-      // fails on an error and not on a warning; CI and `npm run deploy` refuse warnings too (`npm run lint:strict`).
-      // Formatting is not checked here: `npm run check` and CI do that. Its panel is a frame from the dev server, which the
-      // isolated page refuses unless it has the isolation headers: so cross-origin-isolation comes first.
-      checker({
-        biome: {
-          command: "lint",
-          watchPath: ["src", "test", "e2e", "scripts"],
-          dev: { logLevel: ["error", "warning"] },
-        },
-        overlay: { initialIsOpen: "error" },
-      }),
-      siteDev,
-      sitePages,
-      {
-        name: "start-files-dev",
-        apply: "serve",
-        configureServer: (server) => {
-          server.middlewares.use(`${EDITOR_BASE}start-files.json`, (_req, res) => {
-            res.setHeader("Content-Type", "application/json");
-            res.end(devStartFiles());
-          });
-        },
-        // the download size, in the page as in a build (there the total has the page's own files too)
-        transformIndexHtml: (html, ctx) =>
-          isSitePage(ctx.path)
-            ? html
-            : html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).compressed)}\n</head>`),
+    },
+    // Biome's linter (biome.json), while the dev server runs and in a build. In development it runs again on each change:
+    // an error opens a panel over the page, a warning is only listed (the badge in the corner, and the terminal). A build
+    // fails on an error and not on a warning; CI and `npm run deploy` refuse warnings too (`npm run lint:strict`).
+    // Formatting is not checked here: `npm run check` and CI do that. Its panel is a frame from the dev server, which the
+    // isolated page refuses unless it has the isolation headers: so cross-origin-isolation comes first.
+    checker({
+      biome: {
+        command: "lint",
+        watchPath: ["src", "test", "e2e", "scripts"],
+        dev: { logLevel: ["error", "warning"] },
       },
-      {
-        name: "start-files",
-        apply: "build",
-        // the editor's folder is complete: its files have their final names and sizes. An error here fails the build.
-        closeBundle(error?: Error) {
-          if (!error) writeStartFiles(editorDir, { stamp, inputs });
-        },
+      overlay: { initialIsOpen: "error" },
+    }),
+    siteDev,
+    sitePages,
+    {
+      name: "start-files-dev",
+      apply: "serve",
+      configureServer: (server) => {
+        server.middlewares.use(`${EDITOR_BASE}start-files.json`, (_req, res) => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(devStartFiles());
+        });
       },
-    ],
-    optimizeDeps: { exclude: ["pyodide", "brotli-wasm"] }, // both load a wasm file by URL, which pre-bundling breaks
-    // One file for the worker: no chunks. A chunk (brotli-wasm's, loaded only for a snapshot) imports the bundler's helpers from the
-    // worker's entry file, and iOS Safari then runs the entry a second time as another module; the second copy sets onmessage
-    // again, so every later message reaches a copy that never got "mount" ("undefined is not an object (evaluating 'V.loadPackage')").
-    worker: { format: "es", rollupOptions: { output: { inlineDynamicImports: true } } },
-  };
-};
+      // the download size, in the page as in a build (there the total has the page's own files too)
+      transformIndexHtml: (html, ctx) =>
+        isSitePage(ctx.path)
+          ? html
+          : html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).compressed)}\n</head>`),
+    },
+    {
+      name: "start-files",
+      apply: "build",
+      // the editor's folder is complete: its files have their final names and sizes. An error here fails the build.
+      // An editor at the root of its own origin is a site of its own: it writes the host's headers file itself (every path
+      // isolated); under a path, the site's build writes it (scripts/site-pages.ts, headersFile).
+      closeBundle(error?: Error) {
+        if (error) return;
+        writeStartFiles(editorOut, { stamp, inputs });
+        if (EDITOR_BASE === "/") writeFileSync(`${editorOut}/_headers`, headersFile("/"));
+      },
+    },
+  ],
+  optimizeDeps: { exclude: ["pyodide", "brotli-wasm"] }, // both load a wasm file by URL, which pre-bundling breaks
+  // One file for the worker: no chunks. A chunk (brotli-wasm's, loaded only for a snapshot) imports the bundler's helpers from the
+  // worker's entry file, and iOS Safari then runs the entry a second time as another module; the second copy sets onmessage
+  // again, so every later message reaches a copy that never got "mount" ("undefined is not an object (evaluating 'V.loadPackage')").
+  worker: { format: "es", rollupOptions: { output: { inlineDynamicImports: true } } },
+});
 
-export default defineConfig(({ command, mode, isPreview }) =>
-  isPreview || mode === "site" ? site() : editor(command),
-);
+export default defineConfig(({ mode, isPreview }) => (isPreview || mode === "site" ? site() : editor()));
