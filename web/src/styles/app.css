@@ -949,6 +949,17 @@ input.filter::placeholder {
   text-overflow: ellipsis;
   min-width: 0;
 }
+/* "Not affiliated with StataCorp" (editor/StatusBar.tsx): one line, never cut; from 1200 px only, since under it the
+   bar has no room beside the longest last run (the phone has no status bar) */
+.statusbar .affiliation {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@media (max-width: 1199.98px) {
+  .statusbar .affiliation {
+    display: none;
+  }
+}
 
 /* the phone: the strip under the top bar, a graph in the log, the hint as a block, the wide-table note */
 .phone-strip {

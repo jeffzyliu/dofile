@@ -168,8 +168,13 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   by Break (`S 10`), nested do with unsaved edits (`S 15`). Not drawn: the notes of OQ-10.
 
 ### 3.6 Status bar (P1, step 4b)
-- Left to right (`E`): state dot and word, the last run, "Memory 612 MB", spacer, "Files are kept in this browser" (or "Files
-  may be cleared by this browser", `S 19`). State texts: section 5. Last run: "Last run: whole file (started with no locals)
+- Left to right (`E`): state dot and word, the last run, "Memory 612 MB", spacer, "Not affiliated with StataCorp", "Files
+  are kept in this browser" (or "Files may be cleared by this browser", `S 19`). The affiliation line is muted text, no
+  link, no tab stop, not a live region; screen readers get `LICENSE-POLICY.md`'s sentence, "Stata is a registered
+  trademark of StataCorp LLC; dofile is not affiliated with StataCorp.", which is also the short text's `title`. It shows
+  from 1200 px only: at 1200 px the widest bar (ready, the longest last run, "Memory 4,096 MB", "Files may be cleared by
+  this browser") leaves about 143 px beside it, so under about 1060 px it would not fit; the phone has no status bar,
+  and the landing page carries the line. State texts: section 5. Last run: "Last run: whole file (started with no locals)
   · r(111) at line 17 · 0.38 s" (`E`); "Last run: stopped by Break · r(1) · 18.4 s" (`S 10`); the rc in the error color.
   Memory comes from the `memory` op after the start and each run; it cannot update during a run (OQ-8).
 
@@ -962,7 +967,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands` and `selection`), `editor/RunControls.tsx`
     (built for the section 5 states, each button at one size, 3.4; 4b adds the timers, and the pill's time goes into
     its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the
-    timers, last run, memory, the right side), `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (a plain stand-in
+    timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px),
+    `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (a plain stand-in
     today), `log/CommandLine.tsx` (`CommandLine`, `LogActions`: Find and Download log, `logMenuItems` for the phone's ⋯,
     `PhoneStrip`). Writes `dirty` only through `setDirty`, `banners` (save-failed), `graphIndex` and `outputTab` (a graph
     link), `graphFull` (a tap on an inline graph, phone). Calls `runCode`, `runCommand` (the command line clears its

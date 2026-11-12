@@ -586,3 +586,71 @@ test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ m
     await page.keyboard.press("Escape");
   }
 });
+
+test("the status bar's 'Not affiliated with StataCorp': in sight from 1200 px with the full sentence for screen readers and as its title, no link and no tab stop; at 1200 px the bar holds it beside the longest last run and every state's words without overflowing; none under 1200 px or on a phone", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto("/?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  const note = page.locator(".statusbar .affiliation");
+  if (isMobile) {
+    await expect(page.locator(".statusbar")).toHaveCount(0); // the phone has no status bar
+    await expect(note).toHaveCount(0);
+    await expect(page.getByText("Not affiliated with StataCorp")).toHaveCount(0);
+    return;
+  }
+  const full = "Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.";
+  const bar = page.locator(".statusbar");
+  const height = async () => (await bar.boundingBox())!.height;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(note).toBeVisible();
+  await expect(note.locator("[aria-hidden='true']")).toHaveText("Not affiliated with StataCorp");
+  await expect(note.locator("[aria-hidden='true']")).toHaveAttribute("title", full);
+  await expect(note.locator(".visually-hidden")).toHaveText(full);
+  expect(await note.locator("a, button, [tabindex]").count()).toBe(0);
+  const shown = await height();
+  // under 1200 px: none, and the bar keeps its height
+  await page.setViewportSize({ width: 1199, height: 900 });
+  await expect(note).toBeHidden();
+  expect(await height()).toBe(shown);
+
+  // at 1200 px: the longest last run, memory and "Files may be cleared", and each state's words: nothing overflows or
+  // wraps, the last run and the state's words are not cut
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.evaluate(() => {
+    const S = (window as any).__dofile.state;
+    S.persisted.value = false;
+    S.memory.value = { heap_bytes: 4_096e6, data_bytes: 0 };
+    S.lastRun.value = { kind: "file", path: "a.do", fresh_locals: true, rc: 9999, line: 9999, seconds: 3599 };
+  });
+  const t0 = Date.now() - 3_599_000;
+  const run = { kind: "selection", path: "a.do", lines: [1234, 5678], fresh_locals: false };
+  for (const st of [
+    { s: "ready" },
+    { s: "starting-worker", stage: "packages", t0, done: {} },
+    { s: "running", run, t0 },
+    { s: "breaking", run, t0, resetAt: Date.now() + 5000 },
+    { s: "waiting", run, t0 },
+    { s: "declined" },
+    { s: "failed-twice" },
+  ]) {
+    await page.evaluate((v) => ((window as any).__dofile.state.engine.value = v), st);
+    await expect(bar.locator("[data-state]")).toHaveAttribute("data-state", st.s);
+    await expect(note).toBeVisible();
+    const fit = await bar.evaluate((el) => {
+      const cut = (e: Element | null) => !!e && e.scrollWidth > e.clientWidth;
+      return {
+        overflow: el.scrollWidth > el.clientWidth,
+        state: cut(el.querySelector("[data-state]")),
+        lastRun: cut(el.querySelector(".last-run")),
+      };
+    });
+    expect(fit, st.s).toEqual({ overflow: false, state: false, lastRun: false });
+    expect(await height(), st.s).toBe(shown);
+    if (st.s === "ready")
+      await expect(bar).toContainText(
+        "Last run: whole file (started with no locals) · r(9999) at line 9999 · 59 min 59 s",
+      );
+  }
+});

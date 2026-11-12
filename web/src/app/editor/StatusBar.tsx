@@ -4,7 +4,9 @@
 // run: whole file (started with no locals) · r(111) at line 17 · 0.38 s", the rc in the error color); "Memory 612 MB"
 // (`memory`, the last measured value, also during a run: OQ-8); then at the right "You can edit and upload while it
 // starts" while it starts, else "Files are kept in this browser" or "Files may be cleared by this browser"
-// (`persisted`; nothing while it is unknown). The timers count with editor/clock.ts.
+// (`persisted`; nothing while it is unknown), with "Not affiliated with StataCorp" before it (LICENSE-POLICY.md's
+// sentence in full for screen readers and as its title; muted text, no link, no tab stop; from 1200 px only, app.css:
+// under it the bar has no room for it beside the longest last run). The timers count with editor/clock.ts.
 import type { ComponentChildren } from "preact";
 import { stageStatus, stagesOf } from "../engine.ts";
 import { snapshotStart } from "../env";
@@ -14,6 +16,9 @@ import { resetsIn, since } from "./clock.ts";
 import { lastRunWords, linesWords, memoryWords, seconds, ticking } from "./words.ts";
 
 const lines = (l?: [number, number]) => (l ? ` ${linesWords(l)}` : "");
+
+/** LICENSE-POLICY.md's sentence; the status bar shows it short. */
+export const AFFILIATION = "Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.";
 
 /** The state's words: the bold word, then the rest, with its timer. One case for each of the sixteen states: a new state
  *  fails the check until it has its words. The page load (`checking-lock`, `checking-cache`) is "Opening": a word for
@@ -93,6 +98,12 @@ export function StatusBar() {
       {st.s === "ready" && <LastRunText />}
       {mem && <span>{memoryWords(mem)}</span>}
       <span class="spacer" />
+      <span class="affiliation">
+        <span aria-hidden="true" title={AFFILIATION}>
+          {"Not affiliated with StataCorp"}
+        </span>
+        <span class="visually-hidden">{AFFILIATION}</span>
+      </span>
       {starting ? (
         <span>{"You can edit and upload while it starts"}</span>
       ) : kept === null ? null : (
