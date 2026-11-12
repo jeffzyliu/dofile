@@ -1001,12 +1001,17 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     Reset: `askReset()` resets at once only while the engine is `ready`, `data` has no variables or observations and
     `results` has no scalar, macro or matrix (macros and graphs are not counted: S 14 says "no data in memory and no
     results"; `words.ts` `resetAsks`). A run in progress always asks (its data and results are known only when it
-    ends), and so does the moment after a run before its data is described (`data` null while `lastRun` is set); that
-    also asks once after a run that a reset cut, until the next run. The dialog closes itself if the engine can no longer
-    be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending under
-    "Don't reset: wait for it") hands the focus to the editor (`editorCommands.focus()`), or to the top bar's "More
-    actions" when the editor is hidden (a .dta tab, another phone view) (`states/focus.ts`); the declined banner's
-    "Download the engine" moves it there before the prompt opens, so the prompt gives it back there. The banners above the editor follow the
+    ends). After a run, "nothing to lose" is checked again once run.ts `refreshData()` has described the memory afresh
+    (`words.ts` `resetDecision`): until the run's own refreshData answers, `data` may still describe the memory from
+    before the run, so a run that made data and no r() or e() would otherwise be reset with no question; a description
+    that fails asks, and a press while the check is pending does nothing. The dialog closes itself if the engine can no
+    longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
+    under "Don't reset: wait for it") hands the focus to the editor (`editorCommands.focus()`, which must focus at once),
+    or to the top bar's "More actions" when the editor is hidden (a .dta tab, another phone view) (`states/focus.ts`). The
+    hand-off waits for a microtask and moves only a focus left on nothing, and the banners that take the focus (stopping,
+    waiting) take it in a layout effect: so from the stopping banner to the waiting one the focus goes straight across,
+    never through the editor. The declined banner's "Download the engine" moves the focus to the editor before the prompt
+    opens, so the prompt gives it back there. The banners above the editor follow the
     `reason` of a failed start (`failedActions`): no-wasm "Browsers that work" and Download all; download and memory "Try
     again"; updated "Reload the page"; unknown "Try again" and "Reload the page"; failed twice "Reload the page" and
     Download all, never "Try again". Download all is `disabled` while `hasFiles` is false. Above the log: running

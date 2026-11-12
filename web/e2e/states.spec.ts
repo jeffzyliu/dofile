@@ -4,7 +4,8 @@
 // a machine test (test/machine.test.ts decides the states). The real machine is used where it is cheap: the prompt's
 // "Not now" and the declined banner's "Download the engine" go through ask() and decline(). One test starts a real engine
 // for Reset: its dialog (asked only with data in memory), Cancel, Reset, the reset banner. Where the focus goes when a
-// banner that holds it goes away is checked with the stand-in editor's `[data-editor]` (4b's editor keeps the attribute).
+// banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the stand-in and
+// for 4b's CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
 import type { Page } from "@playwright/test";
 import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
@@ -24,6 +25,8 @@ const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 const engineIs = (page: Page) => page.evaluate(() => document.documentElement.dataset.engine);
 /** Set the engine signal to show a state (the machine stays in `none`). */
 const show = (page: Page, value: object) => page.evaluate((v) => (window.__dofile.state.engine.value = v), value);
+/** The focus is in the editor: on `[data-editor]` or inside it (4b's CodeMirror focuses its `.cm-content`). */
+const inEditor = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]")));
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
@@ -48,7 +51,7 @@ test("no engine: the banner brings the prompt back; Not now leads to the banner 
   await expect(prompt).toHaveCount(0);
   await expect(page.locator(".banner", { hasText: "The engine isn't downloaded." })).toBeVisible();
   // the banner's button was gone while the prompt was open: the prompt gives the focus back to the editor, not to <body>
-  await expect(page.locator("[data-editor]")).toBeFocused();
+  await expect.poll(() => inEditor(page)).toBe(true);
 });
 
 test("the progress dialog: the download with its time and bytes, then the stages with their times", async ({
@@ -166,14 +169,18 @@ test("a banner that goes with the focus in it hands the focus on: the editor, or
   const ph = phone(page);
   // on a phone the log is its own view, so the editor is hidden there: More actions takes the focus
   if (ph) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
-  const next = ph ? page.getByRole("button", { name: "More actions" }) : page.locator("[data-editor]");
+  const more = page.getByRole("button", { name: "More actions" });
+  const handedOn = async () => {
+    if (ph) await expect(more).toBeFocused();
+    else await expect.poll(() => inEditor(page)).toBe(true);
+  };
   const run = { kind: "command", fresh_locals: false };
   await show(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 3000 });
   const wait = page.getByRole("button", { name: "Don't reset: wait for it" });
   await expect(wait).toBeFocused();
   await show(page, { s: "ready" }); // the run ended while the focus was on "Don't reset"
   await expect(wait).toHaveCount(0);
-  await expect(next).toBeFocused();
+  await handedOn();
 
   await page.evaluate(() => window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user" }));
   const dismiss = page
@@ -182,7 +189,37 @@ test("a banner that goes with the focus in it hands the focus on: the editor, or
   await dismiss.focus(); // the keyboard's way: a click does not focus a button in Safari
   await page.keyboard.press("Enter");
   await expect(dismiss).toHaveCount(0);
-  await expect(next).toBeFocused();
+  await handedOn();
+});
+
+test("from the stopping banner to the waiting banner the focus goes straight across, never through the editor", async ({
+  page,
+}) => {
+  if (phone(page)) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
+  const run = { kind: "command", fresh_locals: false };
+  await show(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 3000 });
+  await expect(page.getByRole("button", { name: "Don't reset: wait for it" })).toBeFocused();
+  // every element that takes the focus from here on, by where it is
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as any).__focused = seen;
+    document.addEventListener("focusin", (e) => {
+      const t = e.target as Element;
+      seen.push(
+        t.closest("[data-editor]")
+          ? "editor"
+          : t.closest(".banner")
+            ? "banner"
+            : (t.getAttribute("aria-label") ?? t.tagName),
+      );
+    });
+  });
+  await show(page, { s: "waiting", run, t0: Date.now() - 9000 }); // "Don't reset: wait for it" was pressed
+  const waiting = page.locator(".banner", { hasText: "Waiting for this command to end." });
+  await expect(waiting).toBeFocused();
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await expect(waiting).toBeFocused();
+  expect(await page.evaluate(() => (window as any).__focused)).toEqual(["banner"]);
 });
 
 test("the banners above the log: running, stopping (focus on Don't reset), waiting (takes the focus)", async ({
@@ -248,7 +285,7 @@ test("the storage, reset, memory and download-failed banners", async ({ page }) 
   );
 });
 
-test("Reset asks only with data in memory; Cancel keeps it; Reset clears it and the banner says so", async ({
+test("Reset asks only with data in memory (described again after a run); Cancel keeps it; Reset clears it and the banner says so", async ({
   page,
 }) => {
   await page.goto("/?test");
@@ -284,4 +321,24 @@ test("Reset asks only with data in memory; Cancel keeps it; Reset clears it and 
   await expect(dlg).toHaveCount(0);
   await expect.poll(() => engineIs(page)).not.toBe("ready");
   await expect(page.locator(".banner", { hasText: "You reset the engine." })).toBeVisible();
+
+  // Reset right at the end of a run that made data and no r() or e(), before its refreshData has answered: `data` is still
+  // the description from before that run (set back here, as it is in that moment). It is described again: the dialog.
+  await expect.poll(() => engineIs(page), { timeout: 300_000 }).toBe("ready");
+  expect((await page.evaluate(() => window.__dofile.run("display 1")))?.rc).toBe(0);
+  const before = await page.evaluate(() => window.__dofile.state.data.value);
+  expect(before?.nobs ?? 0).toBe(0);
+  expect((await page.evaluate(() => window.__dofile.run("set obs 10\ngen y = 1")))?.rc).toBe(0);
+  const res = await page.evaluate(() => window.__dofile.state.results.value);
+  for (const k of ["e", "r"]) {
+    const r = res?.[k] ?? { scalars: {}, macros: {}, matrices: {} };
+    expect(Object.keys({ ...r.scalars, ...r.macros, ...r.matrices }), k).toEqual([]); // no results: only the data counts
+  }
+  await page.evaluate((d) => (window.__dofile.state.data.value = d), before);
+  await more();
+  await expect(dlg).toBeVisible();
+  await dlg.getByRole("button", { name: "Cancel" }).click();
+  await expect(dlg).toHaveCount(0);
+  expect(await engineIs(page)).toBe("ready");
+  expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs)).toBe(10);
 });

@@ -1,4 +1,5 @@
-// Step 4d's plain logic (src/app/states/words.ts): what Reset asks (and when: never at once during a run), the words of
+// Step 4d's plain logic (src/app/states/words.ts): what Reset asks (and when: never at once during a run, and after a run
+// only once the memory is described again), the words of
 // the reset banner and the running banner, the stopping countdown at 0, the memory banner with no size, the action each
 // failed reason gets, the times, and the three drafted notes (OQ-10).
 import assert from "node:assert/strict";
@@ -9,7 +10,9 @@ import {
   noteFor,
   nothingToLose,
   ofTotal,
+  type ResetSnapshot,
   resetAsks,
+  resetDecision,
   resetIn,
   resetWords,
   runningWhat,
@@ -41,15 +44,80 @@ test("Reset is not asked with no data in memory and no results", () => {
 });
 
 test("Reset resets at once only when the engine is ready with nothing to lose; a run in progress always asks", () => {
-  const run = { kind: "file" as const, path: "a.do", fresh_locals: true, rc: 0, line: null, seconds: 1 };
-  assert.equal(resetAsks("ready", null, null, null), false, "a new engine, no run yet");
-  assert.equal(resetAsks("ready", summary(0, 0), results(), run), false, "a run left nothing");
-  assert.equal(resetAsks("ready", summary(74, 12), results(), run), true);
+  assert.equal(resetAsks("ready", null, null), false, "a new engine, no run yet");
+  assert.equal(resetAsks("ready", summary(0, 0), results()), false);
+  assert.equal(resetAsks("ready", summary(74, 12), results()), true);
   // a run in progress: its data and results are known only when it ends (the first run of a visit has neither yet)
-  for (const s of ["running", "breaking", "waiting"] as const) assert.equal(resetAsks(s, null, null, null), true, s);
-  assert.equal(resetAsks("running", summary(0, 0), results(), run), true);
-  // a run has ended and its data is not described yet (run.ts sets `results` at the end, `data` when refreshData answers)
-  assert.equal(resetAsks("ready", null, results(), run), true);
+  for (const s of ["running", "breaking", "waiting"] as const) assert.equal(resetAsks(s, null, null), true, s);
+  assert.equal(resetAsks("running", summary(0, 0), results()), true);
+});
+
+test("after a run, Reset describes the memory again before it resets with no question", async () => {
+  const run = { kind: "file" as const, path: "a.do", fresh_locals: true, rc: 0, line: null, seconds: 1 };
+  type Snap = ResetSnapshot;
+  /** The signals as `read` sees them; `refresh` writes `fresh` into `data` (as refreshData does), or fails. */
+  const memory = (now: Snap, fresh: Snap["data"] | "fails" | "never-called", after: Partial<Snap> = {}) => {
+    let calls = 0;
+    const refresh = async () => {
+      calls++;
+      if (fresh === "fails" || fresh === "never-called") throw new Error("no engine");
+      now = { ...now, ...after, data: fresh };
+    };
+    return { read: () => now, refresh, calls: () => calls };
+  };
+  const decide = async (m: ReturnType<typeof memory>) => [await resetDecision(m.read, m.refresh), m.calls()];
+
+  // run 1 left nothing (described 0 x 0); run 2 made 10 observations and no r() or e(), and its refreshData has not
+  // answered: `data` is still run 1's description. Described again, there is data: the dialog.
+  const stale = summary(0, 0);
+  assert.deepEqual(
+    await decide(memory({ state: "ready", data: stale, results: results(), lastRun: run }, summary(10, 1))),
+    ["ask", 1],
+  );
+  // described again and still nothing: at once
+  assert.deepEqual(
+    await decide(memory({ state: "ready", data: stale, results: results(), lastRun: run }, summary(0, 0))),
+    ["reset", 1],
+  );
+  // a run that a reset cut: no data and no description yet; the new engine's memory is empty: at once, no question
+  assert.deepEqual(await decide(memory({ state: "ready", data: null, results: null, lastRun: run }, summary(0, 0))), [
+    "reset",
+    1,
+  ]);
+  // no description came (the call failed, `data` is the same): the dialog
+  assert.deepEqual(await decide(memory({ state: "ready", data: stale, results: results(), lastRun: run }, "fails")), [
+    "ask",
+    1,
+  ]);
+  // a run started meanwhile: the dialog; the engine went to another tab meanwhile: nothing
+  assert.deepEqual(
+    await decide(
+      memory({ state: "ready", data: stale, results: results(), lastRun: run }, summary(0, 0), { state: "running" }),
+    ),
+    ["ask", 1],
+  );
+  assert.deepEqual(
+    await decide(
+      memory({ state: "ready", data: stale, results: results(), lastRun: run }, summary(0, 0), {
+        state: "other-tab-idle",
+      }),
+    ),
+    ["none", 1],
+  );
+  // no run yet (a new engine, or one just reset): at once, nothing described; with something to lose, or during a run:
+  // the dialog at once, nothing described
+  assert.deepEqual(await decide(memory({ state: "ready", data: null, results: null, lastRun: null }, "never-called")), [
+    "reset",
+    0,
+  ]);
+  assert.deepEqual(
+    await decide(memory({ state: "ready", data: summary(74, 12), results: results(), lastRun: run }, "never-called")),
+    ["ask", 0],
+  );
+  assert.deepEqual(
+    await decide(memory({ state: "running", data: null, results: null, lastRun: null }, "never-called")),
+    ["ask", 0],
+  );
 });
 
 test("the stopping banner's countdown never says In 0 s; the memory banner never shows an empty size", () => {

@@ -13,9 +13,10 @@
 //  - StorageBanner { b: "storage" } above the editor (S 19). MemoryBanner { b: "memory" }: nothing adds it in P1 (OQ-8).
 //  - DownloadFailedBanner { b: "download-failed" } above the editor (on a phone on every view; no role="alert": files.ts
 //    says it once in the live region).
-// A banner with controls hands the focus on when it goes with the focus inside it (focus.ts useFocusOnLeave).
+// A banner with controls hands the focus on when it goes with the focus inside it (focus.ts useFocusOnLeave); a banner that
+// takes the focus takes it in a useLayoutEffect, so the hand-off from the banner it replaces finds the focus taken.
 // The words the spec does not give are drafts (words.ts; SPEC section 8, "Step 4d: draft words").
-import { useEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import type { BannerOf } from "../banners";
 import { editorCommands } from "../editor/commands.ts";
 import * as eng from "../engine.ts";
@@ -186,7 +187,7 @@ function StoppingBanner({ resetAt }: { resetAt: number }) {
   const left = Math.max(0, Math.ceil((resetAt - now) / 1000));
   const button = useRef<HTMLButtonElement>(null);
   const ref = useFocusOnLeave<HTMLDivElement>();
-  useEffect(() => button.current?.focus(), []);
+  useLayoutEffect(() => button.current?.focus(), []); // in a layout effect, so focus.ts finds the focus taken
   return (
     <Banner
       kind="warn"
@@ -213,7 +214,7 @@ function StoppingBanner({ resetAt }: { resetAt: number }) {
 
 function WaitingBanner() {
   const box = useFocusOnLeave<HTMLDivElement>();
-  useEffect(() => box.current?.focus(), []);
+  useLayoutEffect(() => box.current?.focus(), []); // in a layout effect, so focus.ts finds the focus taken
   return (
     <Banner focusable bannerRef={box}>
       <b>Waiting for this command to end.</b> The Break is still pending: the run stops after this command, with the

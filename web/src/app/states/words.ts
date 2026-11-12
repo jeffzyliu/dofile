@@ -43,19 +43,41 @@ export function nothingToLose(data: DataSummary | null, results: Results | null)
   return !dataInMemory && !anyResults;
 }
 
-/** Whether Reset asks first (S 14). It resets at once only while the engine is `ready` with nothing to lose. A run in
- *  progress always asks: what it holds is known only when it ends (`results` comes with its end, `data` after it). So does
- *  the moment after a run, before its data is described (`data` still null while `lastRun` is set: run.ts's refreshData
- *  has not answered); that also asks after a run a reset cut, until the next run, which loses nothing by asking. */
-export function resetAsks(
-  state: EngineStateName,
-  data: DataSummary | null,
-  results: Results | null,
-  lastRun: LastRun | null,
-): boolean {
-  if (state !== "ready") return true;
-  if (data === null && lastRun !== null) return true;
-  return !nothingToLose(data, results);
+/** Whether Reset asks first, on what is known now (S 14): it may reset at once only while the engine is `ready` with nothing
+ *  to lose. A run in progress always asks: what it holds is known only when it ends. */
+export const resetAsks = (state: EngineStateName, data: DataSummary | null, results: Results | null): boolean =>
+  state !== "ready" || !nothingToLose(data, results);
+
+/** What Reset reads: the engine's state and what is in memory (state.ts `engine`, `data`, `results`, `lastRun`). */
+export interface ResetSnapshot {
+  state: EngineStateName;
+  data: DataSummary | null;
+  results: Results | null;
+  lastRun: LastRun | null;
+}
+
+/** What a press of "Reset the engine…" does: "ask" (the dialog), "reset" (at once) or "none" (the engine can no longer
+ *  be reset). `read` gives the state now; `refresh` is run.ts refreshData. After a run, `data` may still describe the
+ *  memory as it was before that run (run.ts sets `results` at the run's end and `data` only when refreshData answers), so
+ *  "nothing to lose" after a run is checked again on a fresh description: a run that made data and no r() or e() is asked
+ *  about. A description that does not come (`data` is the same object after `refresh`) asks. Before any run (`lastRun`
+ *  null: a new engine, or one just reset) nothing is described again. */
+export async function resetDecision(
+  read: () => ResetSnapshot,
+  refresh: () => Promise<unknown>,
+): Promise<"ask" | "reset" | "none"> {
+  const before = read();
+  if (resetAsks(before.state, before.data, before.results)) return "ask";
+  if (before.lastRun === null) return "reset";
+  try {
+    await refresh();
+  } catch {
+    // no description: `data` is unchanged, so it asks
+  }
+  const now = read();
+  if (!["ready", "running", "breaking", "waiting"].includes(now.state)) return "none";
+  if (now.data === before.data) return "ask";
+  return resetAsks(now.state, now.data, now.results) ? "ask" : "reset";
 }
 
 /** The bold part of the stopping banner's countdown (S 9). At 0 the reset is under way: no "In 0 s". DRAFT (the 0 case). */
