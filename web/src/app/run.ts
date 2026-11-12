@@ -154,7 +154,12 @@ function ended(r: RunResult) {
             ? "Run failed: the engine could not finish it"
             : `Run finished: error r(${r.rc})${line ? ` at line ${line}` : ""}`,
   );
-  Promise.all([afterRun(r.files), reset ? null : refreshData()]).then(() => run.done(r));
+  // the run's promise settles once the after-run work is over, even when some of it failed (its cause to the console)
+  Promise.allSettled([afterRun(r.files), reset ? null : refreshData()]).then((after) => {
+    for (const a of after)
+      if (a.status === "rejected") console.warn(`[dofile] after the run: ${a.reason?.message ?? a.reason}`);
+    run.done(r);
+  });
 }
 
 /** An engine is ready (the effect `engine-ready`): its memory. */

@@ -66,6 +66,14 @@ function markMessage(out: LogLine[], at: number) {
   l.kind = "err";
 }
 
+/** The error a run ended with: its last error line that is not `r(N);` (an error caught earlier, by `capture noisily`,
+ *  comes before it), or null. OQ-10's note under it is chosen from this line. */
+export function runError(lines: readonly LogLine[]): string | null {
+  for (let i = lines.length - 1; i >= 0; i--)
+    if (lines[i].kind === "err" && !/^r\(\d+\);$/.test(lines[i].text)) return lines[i].text;
+  return null;
+}
+
 /** A hint line in pieces: plain text, the bold words (`How to fix:`, `Learn more:`), and a `help x` to run. */
 export type HintPart = { t: "text" | "bold"; text: string } | { t: "help"; text: string };
 export function hintParts(line: string): HintPart[] {

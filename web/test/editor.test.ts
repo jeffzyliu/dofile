@@ -19,7 +19,7 @@ import {
   ticking,
 } from "../src/app/editor/words.ts";
 import { commandEnd, echoLines, inBlocks, nestedTarget, unsavedTarget } from "../src/app/log/align.ts";
-import { classify, hintParts, plainLog } from "../src/app/log/classify.ts";
+import { classify, hintParts, plainLog, runError } from "../src/app/log/classify.ts";
 import { matches } from "../src/app/log/find.ts";
 import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
 import type { LastRun, RunHead } from "../src/app/types.ts";
@@ -545,7 +545,7 @@ test("a paste with no line break is an ordinary paste; with breaks, each non-emp
 });
 
 /** A runner that answers from a script: per line, accepted or not, and the rc (null: queued and not run). */
-function script(answers: Record<string, { accepted?: boolean; rc?: number | null }>) {
+function script(answers: Record<string, { accepted?: boolean; rc?: number | null | "taken" }>) {
   const ran: string[] = [];
   const runOne: RunOne = (line) => {
     const a = answers[line] ?? {};
@@ -579,6 +579,11 @@ test("pasted lines run in turn and stop at the first refused, not run, or failed
   const dropped = await runInTurn(["a", "b"], s.runOne);
   assert.deepEqual(dropped, { total: 2, ran: 0, stop: { line: 1, why: "not-run" } });
   assert.equal(inTurnWords(dropped), "2 of 2 pasted lines not run: line 1 didn't run");
+
+  s = script({ a: { rc: "taken" } }); // another tab took the engine during the line's run
+  const taken = await runInTurn(["a", "b", "c"], s.runOne);
+  assert.deepEqual(taken, { total: 3, ran: 1, stop: { line: 1, why: "taken" } });
+  assert.equal(inTurnWords(taken), "2 of 3 pasted lines not run: another tab took over the engine during line 1");
 
   // the last line fails: nothing is left, so no toast
   s = script({ b: { rc: 111 } });
@@ -755,4 +760,34 @@ test("the error mark's rule (editor/errormark.ts): the file's last run sets it, 
   assert.equal(lineDeleted(del(doc.line(1).from, doc.line(1).to + 1), doc, at(2)), false, "the line above");
   assert.equal(lineDeleted(del(doc.line(3).from, doc.line(3).from + 1), doc, at(3)), true, "an empty line's break");
   assert.equal(lineDeleted(ChangeSet.of({ from: at(2), insert: "x" }, doc.length), doc, at(2)), false, "typing");
+});
+
+// the engine's own log: a community command caught by capture noisily, then a typo the run ends with
+const CAUGHT_THEN_TYPO = `. capture noisily {
+. reghdfe y x
+command reghdfe is unrecognized
+  → "reghdfe" is not a command known to OpenDTA.
+    The first word of each line is the command. Commands can be shortened (sum
+    for summarize, gen for generate), but the letters must be in the right
+    order.
+    How to fix: did you mean "recode"?
+    Learn more: help opendta
+r(199);
+. }
+
+. regresss y x
+command regresss is unrecognized
+  → "regresss" is not a command known to OpenDTA.
+    The first word of each line is the command. Commands can be shortened (sum
+    for summarize, gen for generate), but the letters must be in the right
+    order.
+    How to fix: did you mean "regress", "ivregress", "etregress"?
+    Learn more: help opendta
+r(199);
+`;
+
+test("runError: the error a run ended with is its last error line, not one capture noisily caught before it", () => {
+  assert.equal(runError(classify(CAUGHT_THEN_TYPO)), "command regresss is unrecognized");
+  assert.equal(runError(classify(". display 1\n1\n")), null);
+  assert.equal(runError(classify(". sleep 5000\n--Break--\nr(1);\n")), "--Break--");
 });

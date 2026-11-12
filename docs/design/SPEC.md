@@ -994,13 +994,21 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     deleted; it moves with edits; a command from the command line and a run of another file leave it; a file closed with
     its mark and no unsaved edits has it again when it is opened with the same text (closed with edits, or opened with
     other text, it has none). **A run that
-    rewrites an open file** (files.ts `afterRun`, from the run's `files`): a text tab with no unsaved edits shows the run's
-    version (`editorCommands.reload`); one with edits keeps them, takes the run's version as its saved text
-    (`editorCommands.ranOver`, so the tab stays unsaved and Save then replaces the run's version knowingly; the dot clears
-    if the two are the same) and gets the warning banner `run-changed` above the editor: "**The run changed t.csv.** Your
-    unsaved edits are still in the editor; saving them replaces the run's version." / "Reload from the run", "Dismiss" (a
-    banner, not a question: several files at once, a dialog already open and the phone made a dialog the harder path; a
-    save or a reload of the file removes it). A file the run deleted keeps its tab (not handled). `editorCommands.focus()` focuses at once and never changes
+    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`): the same text
+    again (a byte-identical rewrite, a `.log` open during every run) changes nothing; a text tab with no unsaved edits
+    shows the run's version, changed in one transaction where the two differ, so the caret, the selection and the undo
+    history are kept; one with edits keeps them and takes the run's version as its saved text (the tab stays unsaved, so
+    Save then replaces the run's version knowingly; the dot clears if the two are the same) and gets the warning banner
+    `run-changed` above the editor, on a phone on every view: "**The run changed t.csv.** Your unsaved edits are still in
+    the editor; saving them replaces the run's version." / "Reload from the run", "Dismiss" (a banner, not a question:
+    several files at once, a dialog already open and the phone made a dialog the harder path; a save or a reload of the
+    file removes it, a close or delete of its tab too, and a rename moves it to the new name, as it does `save-failed`).
+    A run that writes something that is not text over an open text tab (binary, not UTF-8: a `.dta` saved as `t.csv`)
+    keeps the tab's text, edits or not, makes the tab unsaved, and gets the same banner with other words and no reload:
+    "**The run changed t.csv, and it is no longer text.** The editor still shows your text; saving it replaces the run's
+    version." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost). A file the run deleted
+    keeps its tab (not handled): the file leaves the file list, the tab keeps its dot as it was, and Save writes the file
+    again. `editorCommands.focus()` focuses at once and never changes
     the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
     `[data-editor]`); with a .dta tab active, that tab in "Open files" when it is shown, else its view's first enabled
     button (Load), else the focus does not move; with the Editor pane hidden (a phone on another view) it does not move.
@@ -1026,8 +1034,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     with no line break, or with breaks only at its end (one copied line), is an ordinary paste and runs nothing; with
     other breaks, the field's text before and after the cursor joins the first and
     last lines, empty lines are left out, and the lines run one after the other, each once the one before has ended; they
-    stop at the first that is refused, that was queued for an engine that then did not start, or that ends with any rc
-    but 0 (Break too), and before a line that cannot run alone (not sent: it runs from the editor): one that ends with
+    stop at the first that is refused, that was queued for an engine that then did not start, that ends with any rc
+    but 0 (Break too), or whose run another tab cut by taking the engine (the rest never reach the engine this tab may
+    get back; the wait for a line also ends when its run's promise settles), and before a line that cannot run alone (not sent: it runs from the editor): one that ends with
     `{`, holds `///`, opens a `/*` comment it does not close (a pasted `/*`, `drop _all`, `*/` runs nothing), or is
     `program define` or `mata` on its own (`mata: x = 1` runs); a
     toast says how many were not run, and a refused line goes back into the field. The next line starts in a microtask
@@ -1037,7 +1046,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     list." (the empty editor); "No file is open to run" (toast); "Opening" (status bar, the page load); the save-failed
     banner ("analysis.do couldn't be saved: <reason>. Your edits are still in the editor; download them to keep a copy."
     / Download, Dismiss); the pasted lines' toasts ("2 of 4 pasted lines not run: line 2 ended with r(111)", "… not run:
-    the engine can't take a command now", "… not run: line 1 didn't run", "… not run: line 2 starts a block, a comment or
+    the engine can't take a command now", "… not run: line 1 didn't run", "… not run: another tab took over the engine
+    during line 1", "… not run: line 2 starts a block, a comment or
     a /// command; run those from the editor"); "Stopped by Break before line N. …", and for a command "Stopped by Break. The
     data is as the last complete command left it."; "Not
     kept: a.dta, b.dta. Its folder was renamed or deleted during the run."; "The files this run wrote couldn't be kept in
@@ -1095,7 +1105,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
     focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/Dialog.tsx` uses
     the same `focusStable` when a dialog closes and its opener has left the page (a banner's button: another tab took
-    the lock during a Break, then "Use dofile in this tab"), after a microtask and only for a focus left on `<body>`. The
+    the lock during a Break, then "Use dofile in this tab"), after the timers its answer set and only for a focus left on
+    `<body>`; the opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on
+    `close()`, and the dialog gives it back itself, the same way: a focus its answer places (the close-tab dialog's "Don't
+    save") moves once. The
     hand-off waits for a microtask and moves only a focus left on nothing, and the banners that take the focus (stopping,
     waiting) take it in a layout effect: so from the stopping banner to the waiting one the focus goes straight across,
     never through the editor. The declined banner's "Download the engine" moves the focus to the editor before the prompt
@@ -1130,7 +1143,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     of M". OQ-18: "Browsers that work" goes to `landing.html#browsers` (`BROWSERS_URL` in `states/banners.tsx`), a section
     step 5 builds listing the browsers that run dofile, opened in a new tab; a dead link until then. OQ-10, the
     notes (`noteFor(rc, error)` in `words.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
-    error, where `error` is the run's first error line that is not `r(N);`): `restore` with nothing preserved (r(622);
+    error, where `error` is the error the run ended with, its last error line that is not `r(N);`, not one an earlier
+    `capture noisily` caught: `log/classify.ts` `runError`): `restore` with nothing preserved (r(622);
     the engine prints only "nothing to restore") "Nothing was preserved in this run. A run restores the data it preserved
     when it ends, so put preserve and restore in the same run."; a community command (the engine says it "is not a
     command known to OpenDTA" and may suggest a near name, "did you mean recode?") (r(199), `reghdfe`, `esttab`, `estout`, `outreg2`, `ivreg2`, `xtivreg2`, `ftools`, `winsor2`)
@@ -1140,14 +1154,15 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the draft "A tempfile, tempvar or tempname lasts one run. …" was dropped when 4b and 4d were joined.
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
-    on a phone every view draws it (download-failed); the hidden views are `display: none`, so it is read and tabbed once.
+    on a phone every view draws it (download-failed, run-changed); the hidden views are `display: none`, so it is read and tabbed once.
 - **The editor's interface** (`editor/commands.ts`; no-op defaults until 4b's editor mounts, so 4a can call them first):
   `runFile()`, `runSelection()`, `save(path?)` (resolves true once saved), `focus()`, and for 4a `open(path, text)` (a
   text file was opened: its tab is in `tabs`), `reload(path, text)` (an upload replaced an open file, F 3.3: edits
   dropped), `renamed(from, to)` (an open file was renamed or moved: the editor keeps text, edits and undo), `closed(path)`
   (a tab closed, the close-tab dialog's "Don't save" too, or its file deleted: the state is dropped); for 4b's log and 4d
-  `goToLine(line, path?)`; for files.ts `ranOver(path, text)` (a run rewrote an open file with unsaved edits: the text
-  stays and `text` becomes its saved text). 4a changes `tabs` first, then calls these. `selection` is the editor's. The editor fills
+  `goToLine(line, path?)`; for files.ts `ranOver(path, text)` (a run rewrote an open text file; `text` is null when the
+  run's version is not text; it answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on
+  "kept"). `reload` returns at once when the file has no tab or state. 4a changes `tabs` first, then calls these. `selection` is the editor's. The editor fills
   `editorCommands` field by field when it mounts: call through the object (`editorCommands.save(path)`) and never
   destructure it or keep a field, or the caller keeps the no-op.
 - **Slots in `App.tsx`.** `FileBar` above the editor; the editor sits in `.editor-slot`, hidden (never unmounted) while a
@@ -1160,7 +1175,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   it treats that as Cancel.
 - **Primitives** (`web/src/app/ui/`): `Dialog` (a native modal `<dialog>`: `title`, `actions`, `role`, `onCancel` = Esc,
   none = blocking; `data-autofocus` marks the first focus; focus returns to the opener when it unmounts, or, when the
-  opener has left the page, to the editor or "More actions" (`states/focus.ts` `focusStable`); a bottom sheet
+  opener has left the page, to the editor or "More actions" (`states/focus.ts` `focusStable`), after the timers its answer
+  set and only for a focus left on nothing, so it moves once; a bottom sheet
   under 700 px); `MenuButton` and `openMenu({label, items, anchor | at})` (one menu at a time, in the top layer, arrows,
   Home, End, Esc returns focus, Tab closes and moves on from the trigger; an item is `{label, onSelect | href, hint,
   danger, disabled, keepOpen}` or `"rule"`; `keepOpen` leaves the menu open with the focus on the item, as the phone's

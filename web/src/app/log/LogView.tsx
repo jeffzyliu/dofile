@@ -30,7 +30,7 @@ import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
 import { commandEnd, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
-import { classify, hintParts, type LogLine } from "./classify.ts";
+import { classify, hintParts, type LogLine, runError } from "./classify.ts";
 import { findAt, findOpen, findText, matches } from "./find.ts";
 
 type TextItem = Extract<LogItem, { t: "text" }>;
@@ -240,9 +240,9 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
       </span>,
     );
   else if (jump !== null && rcAt < 0) out.push(<Jump key="jump" line={jump} path={end!.path} />, "\n");
-  // OQ-10's notes (4d's states/words.ts), under the error: the error is the run's first error line that is not r(N);
-  const error = end && end.rc > 1 ? lines.find((l) => l.kind === "err" && !/^r\(\d+\);$/.test(l.text)) : undefined;
-  const note = error ? noteFor(end!.rc, error.text) : null;
+  // OQ-10's notes (4d's states/words.ts), under the error the run ended with (classify.ts runError: the last error line
+  // that is not r(N);, not one an earlier `capture noisily` caught)
+  const note = end && end.rc > 1 ? noteFor(end.rc, runError(lines)) : null;
   if (note)
     out.push(
       <span key="oq10" class="note endnote">

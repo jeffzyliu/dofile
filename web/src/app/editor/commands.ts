@@ -46,9 +46,15 @@ export const editorCommands = {
   /** 4a: the store's copy of an open file was replaced (an upload over it, F 3.3, "Replace with uploaded"): show `text`;
    *  unsaved edits are dropped and the dot cleared. */
   reload(_path: string, _text: string) {},
-  /** files.ts afterRun: a run rewrote an open file that has unsaved edits. The editor keeps its text and takes `text` as
-   *  the file's saved text, so the dot says whether the two differ (an undo back to the old text keeps it on). */
-  ranOver(_path: string, _text: string) {},
+  /** files.ts afterRun: a run rewrote the open text file `path`; `text` is the store's version, or null when it is not
+   *  text. Answers what the editor did: "same" (the run wrote the saved text again, or no such file is open: nothing),
+   *  "shown" (no unsaved edits: the run's text is shown, changed in one transaction, so the caret, the selection and
+   *  the undo history are kept), or "kept" (unsaved edits, or a version that is not text: the editor keeps its text and
+   *  takes the run's version as the saved one, so the tab stays unsaved and Save replaces the run's version knowingly;
+   *  files.ts then adds the banner run-changed). Not `reload`, which is 4a's "Replace with uploaded". */
+  ranOver(_path: string, _text: string | null): "same" | "shown" | "kept" {
+    return "same";
+  },
   /** 4a: an open file was renamed or moved (a folder's rename calls it once for each open file under it): the editor
    *  keeps its text, edits and undo under the new path. 4a has already changed the tab's path. */
   renamed(_from: string, _to: string) {},

@@ -33,7 +33,7 @@ const VIEWS: { [K in BannerName]: { place: Place; phone?: "every"; view: Compone
   "download-failed": { place: "editor", phone: "every", view: DownloadFailedBanner }, // "Download all" is on every view's ⋯
   "not-text": { place: "files", view: NotTextBanner },
   "save-failed": { place: "editor", view: SaveFailedBanner },
-  "run-changed": { place: "editor", view: RunChangedBanner },
+  "run-changed": { place: "editor", phone: "every", view: RunChangedBanner }, // a run from the Log view's command line
 };
 
 export function BannerSlot({ place }: { place: Place }) {

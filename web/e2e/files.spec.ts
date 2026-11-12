@@ -174,14 +174,35 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
       .getByRole("tab", { name: /^a\.do/ })
       .focus();
   await again();
+  // every element outside the dialog that takes the focus from here on
+  await page.evaluate(() => {
+    const w = window as unknown as { moves: string[] };
+    w.moves = [];
+    document.addEventListener(
+      "focusin",
+      (e) => {
+        const el = e.target as HTMLElement;
+        if (!el.closest("dialog")) w.moves.push(`${el.getAttribute("role") ?? el.tagName}:${el.textContent?.trim()}`);
+      },
+      true,
+    );
+  });
   await ask.getByRole("button", { name: "Don't save" }).click();
   await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
   if (!isPhone(page)) {
     const tabs = page.getByRole("tablist", { name: "Open files" });
     await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused(); // the tab now selected, not the page
+    await page.waitForTimeout(100); // any later move would come by now
+    // one move: straight to that tab, not through the editor first (the dialog leaves the focus to the close)
+    expect(await page.evaluate(() => (window as unknown as { moves: string[] }).moves)).toEqual(["tab:b.do×"]); // the tab holds its × button
     await page.keyboard.press("Delete"); // the last tab: the focus goes to the file tree
     await expect.poll(() => openTabs(page)).toEqual([]);
     await expect(tree(page).locator('[tabindex="0"]')).toBeFocused();
+  } else {
+    // the phone shows no tabs: one move, to the editor, which focusAfterClose chooses (not first back to the switcher)
+    await expect(page.locator(".cm-content")).toBeFocused();
+    await page.waitForTimeout(100);
+    expect(await page.evaluate(() => (window as unknown as { moves: string[] }).moves)).toEqual(["textbox:2"]);
   }
 });
 

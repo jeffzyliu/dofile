@@ -1559,42 +1559,67 @@ test("the storage banner: once per visit, when persisted() is false and the file
   assert.deepEqual(banners(), [{ b: "storage" }], "a run's files count too");
 });
 
-test("a run that rewrites an open file: a tab with no edits shows the run's version; one with edits keeps them, stays unsaved and gets the run-changed banner", async () => {
+test("a run that rewrites an open file: the editor follows it (ranOver); the banner when it keeps the tab's text: edits, or a version that is not text; nothing for the same text", async () => {
   setUp();
   store.blocked = false;
   const { editorCommands } = await import("../src/app/editor/commands.ts");
   const calls: string[] = [];
   const kept = { reload: editorCommands.reload, ranOver: editorCommands.ranOver };
+  // the editor's answers, as Editor.tsx gives them: the same text again, a clean tab shown, edits (or not text) kept
+  const answers: Record<string, "same" | "shown" | "kept"> = {
+    "t.csv": "shown",
+    "out.log": "kept",
+    "same.log": "same",
+    "bin.csv": "kept",
+  };
   editorCommands.reload = (path, text) => calls.push(`reload ${path} ${text}`);
-  editorCommands.ranOver = (path, text) => calls.push(`ranOver ${path} ${text}`);
+  editorCommands.ranOver = (path, text) => {
+    calls.push(`ranOver ${path} ${text}`);
+    return answers[path];
+  };
+  const read = store.read;
+  store.read = async (path) => (path === "bin.csv" ? new Uint8Array([0x9e, 0xff, 0x00]) : read(path));
   try {
     writable(S.tabs).value = [
       { path: "t.csv", kind: "text", dirty: false },
       { path: "out.log", kind: "text", dirty: true },
+      { path: "same.log", kind: "text", dirty: true },
+      { path: "bin.csv", kind: "text", dirty: false },
       { path: "d.dta", kind: "dta", dirty: false },
     ];
-    for (const p of ["t.csv", "out.log", "d.dta", "other.csv"]) store.texts.set(p, `new ${p}`);
+    for (const p of ["t.csv", "out.log", "same.log", "d.dta", "other.csv"]) store.texts.set(p, `new ${p}`);
     await afterRun([
       { name: "t.csv", status: "modified", bytes: 9 },
       { name: "out.log", status: "modified", bytes: 9 },
+      { name: "same.log", status: "modified", bytes: 9 },
+      { name: "bin.csv", status: "modified", bytes: 3 },
       { name: "d.dta", status: "modified", bytes: 9 },
       { name: "other.csv", status: "created", bytes: 9 },
       { name: "gone.do", status: "removed", bytes: 0 },
     ]);
-    assert.deepEqual(calls.sort(), ["ranOver out.log new out.log", "reload t.csv new t.csv"]);
-    assert.deepEqual(banners(), [{ b: "run-changed", path: "out.log" }], "the tab with edits: the banner");
-    // a run that wrote the same text as the edits: the editor clears the dot itself (ranOver), and no banner is added
-    S.dismiss({ b: "run-changed", path: "out.log" });
+    assert.deepEqual(calls.sort(), [
+      "ranOver bin.csv null", // not text: null, not left alone
+      "ranOver out.log new out.log",
+      "ranOver same.log new same.log",
+      "ranOver t.csv new t.csv",
+    ]);
+    assert.deepEqual(
+      banners()
+        .map((b) => b.path)
+        .sort(),
+      ["bin.csv", "out.log"],
+      "a banner where the editor kept its text; none for the same text or a clean tab shown",
+    );
+    // a store that cannot be read: nothing is known of the run's version, so nothing is done
     calls.length = 0;
-    editorCommands.ranOver = (path) => {
-      calls.push(`ranOver ${path}`);
-      S.setDirty(path, false);
+    store.read = async () => {
+      throw new Error("the store failed");
     };
-    await afterRun([{ name: "out.log", status: "modified", bytes: 9 }]);
-    assert.deepEqual(calls, ["ranOver out.log"]);
-    assert.deepEqual(banners(), []);
+    await afterRun([{ name: "t.csv", status: "modified", bytes: 9 }]);
+    assert.deepEqual(calls, []);
   } finally {
     Object.assign(editorCommands, kept);
+    store.read = read;
     writable(S.tabs).value = [];
   }
 });
@@ -1969,4 +1994,63 @@ test("the phone keyboard where the browser shrinks the layout viewport: open whi
   resize(390 - KEYBOARD - 50, 800); // then the keyboard in landscape
   assert.equal("keyboard" in root.dataset, true);
   stop();
+});
+
+// ---- the review of the step 4 join ----
+
+test("J1: pasted lines: a line cut because another tab took the engine stops the rest; after a take-over and a later run, no leftover line runs", async () => {
+  const { runOne } = await import("../src/app/log/pasterun.ts");
+  const { runInTurn, inTurnWords } = await import("../src/app/log/paste.ts");
+  await readyEngine();
+  let ended: unknown = "not yet";
+  const pasted = runInTurn(["display 1", "erase results.csv"], runOne).then((r) => {
+    ended = r;
+    return r;
+  });
+  state("running");
+  assert.equal(client.run1.args.code, "display 1");
+  engine.lost(); // another tab takes the engine: the line's run is cut (rc 9998, kind "stopped"), and lastRun is not written
+  state("other-tab-idle");
+  await sleep(20);
+  // "Use dofile in this tab", the engine starts again, and the visitor runs something
+  engine.takeOver();
+  await tick();
+  await begin();
+  client.worker.reply({ type: "started" });
+  state("ready");
+  const next = runCommand("display 2");
+  assert.equal(next.accepted, true);
+  client.run1.done.ok(result());
+  await next.done;
+  await sleep(20);
+  const sent = client.workers.flatMap((w) => w.runs.map((r) => r.args.code));
+  assert.deepEqual(sent, ["display 1", "display 2"], "the leftover pasted line is never sent");
+  assert.deepEqual(ended, { total: 2, ran: 1, stop: { line: 1, why: "taken" } });
+  assert.equal(
+    inTurnWords(await pasted),
+    "1 of 2 pasted lines not run: another tab took over the engine during line 1",
+  );
+});
+
+test("J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)", async () => {
+  await readyEngine();
+  store.blocked = false;
+  const { editorCommands } = await import("../src/app/editor/commands.ts");
+  const kept = { ranOver: editorCommands.ranOver, reload: editorCommands.reload };
+  const fail = () => {
+    throw new Error("the editor failed");
+  };
+  Object.assign(editorCommands, { ranOver: fail, reload: fail });
+  try {
+    writable(S.tabs).value = [{ path: "t.csv", kind: "text", dirty: false }];
+    store.texts.set("t.csv", "new");
+    const done = runCode("x", FILE);
+    client.run1.done.ok(result({ files: [{ name: "t.csv", status: "modified", bytes: 3 }] }));
+    const settled = await Promise.race([done.then(() => "settled"), sleep(100).then(() => "pending")]);
+    assert.equal(settled, "settled");
+    state("ready");
+  } finally {
+    Object.assign(editorCommands, kept);
+    writable(S.tabs).value = [];
+  }
 });

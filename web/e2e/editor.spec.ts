@@ -507,7 +507,8 @@ test("the notes at a run's end wrap in the Log pane, so Go to line stays in view
       return {
         note: note.right <= box.right + 0.5,
         link: link.right <= box.right + 0.5 && link.left >= box.left,
-        noBlankLine: next.top - note.bottom < next.height / 2,
+        // from the last line of the note and its link (the link may wrap under the note) to the next run's first line
+        noBlankLine: next.top - Math.max(note.bottom, link.bottom) < next.height / 2,
       };
     });
     expect(fits, `at ${width} px`).toEqual({ note: true, link: true, noBlankLine: true });
@@ -582,6 +583,19 @@ test("the log: under an error, the OQ-10 note where the engine's own words do no
         text: '. use "$T"\nfile /tmp/opendta-1/S__000000.dta not found\nr(601);\n(a tempfile lasts one run: save it under a name to use it in a later run)\n',
         end: end(601),
       },
+      // the note is the error's the run ended with, not one capture noisily caught before it (the engine's own log)
+      {
+        t: "text",
+        run: 4,
+        text: '. capture noisily {\n. reghdfe y x\ncommand reghdfe is unrecognized\n  → "reghdfe" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n. }\n\n. regresss y x\ncommand regresss is unrecognized\n  → "regresss" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
+        end: end(199),
+      },
+      {
+        t: "text",
+        run: 5,
+        text: '. capture noisily {\n. regresss y x\ncommand regresss is unrecognized\n  → "regresss" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n. }\n\n. ftools\ncommand ftools is unrecognized\n  → "ftools" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
+        end: end(199),
+      },
     ];
   });
   if (isPhone(page)) await view(page, "Log");
@@ -589,6 +603,7 @@ test("the log: under an error, the OQ-10 note where the engine's own words do no
     "Nothing was preserved in this run. A run restores the data it preserved when it ends, so put preserve and restore in the same run.",
     "reghdfe is a community command: it isn't part of Stata itself, and dofile doesn't have it.",
     "(a tempfile lasts one run: save it under a name to use it in a later run)", // the engine's note; no second one
+    "ftools is a community command: it isn't part of Stata itself, and dofile doesn't have it.", // run 5's, none for 4
   ]);
 });
 
@@ -831,7 +846,7 @@ test("the command line with no engine: pasted lines wait for the engine; Not now
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 1"]);
 });
 
-test("a run that rewrites open files: a clean tab shows the run's version; one with edits keeps them, unsaved, with a banner to reload", async ({
+test("a run that rewrites open files: a clean tab shows the run's version, keeping its selection and undo; the same text changes nothing; one with edits keeps them, unsaved, with a banner to reload (on every phone view); a version that is not text keeps the tab's text with its banner, which follows a rename and goes with the tab", async ({
   page,
 }) => {
   await setUp(page, { "t.csv": "a\n9\n", "u.csv": "a\n9\n" }, "/?test");
@@ -849,7 +864,13 @@ test("a run that rewrites open files: a clean tab shows the run's version; one w
   );
   expect(r?.rc, r?.log).toBe(0);
   await ready(page);
-  if (isPhone(page)) await view(page, "Editor");
+  const banner = page.locator(".banner", { hasText: "The run changed u.csv." });
+  if (isPhone(page)) {
+    // the run showed the Log view: the banner is there too, before anything else is tapped
+    await expect(views(page).getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".banner:visible", { hasText: "The run changed u.csv." })).toHaveCount(1);
+    await view(page, "Editor");
+  }
   // the clean tab (shown): the run's version
   await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*$/);
   // the tab with edits: they stay, the tab stays unsaved, and the banner says the run changed it
@@ -858,14 +879,81 @@ test("a run that rewrites open files: a clean tab shows the run's version; one w
   expect(await page.evaluate(() => window.__dofile.state.tabs.value.find((t: any) => t.path === "u.csv").dirty)).toBe(
     true,
   );
-  const banner = page.locator(".banner", { hasText: "The run changed u.csv." });
-  await expect(banner).toContainText(
+  await expect(banner.first()).toContainText(
     "Your unsaved edits are still in the editor; saving them replaces the run's version.",
   );
-  await banner.getByRole("button", { name: "Reload from the run" }).click();
+  await banner.filter({ visible: true }).getByRole("button", { name: "Reload from the run" }).click();
   await expect(banner).toHaveCount(0);
   await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*$/);
-  expect(await page.evaluate(() => window.__dofile.state.tabs.value.find((t: any) => t.path === "u.csv").dirty)).toBe(
-    false,
-  );
+  const dirty = () =>
+    page.evaluate(() => window.__dofile.state.tabs.value.find((t: { path: string }) => t.path === "u.csv")?.dirty);
+  expect(await dirty()).toBe(false);
+
+  // line 2 selected: a run that writes the same text again changes nothing (the selection stays, no banner)
+  const run = async (code: string) => {
+    const r = await page.evaluate((c) => window.__dofile.run(c), code);
+    expect(r?.rc, r?.log).toBe(0);
+    await ready(page);
+    if (isPhone(page)) await view(page, "Editor");
+  };
+  await page.locator(".cm-line").nth(1).click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+End");
+  const selected = () => page.evaluate(() => window.__dofile.selection.value);
+  await expect.poll(selected).toEqual([2, 2]);
+  await run("export delimited using u.csv, replace");
+  expect(await selected()).toEqual([2, 2]);
+  await expect(page.locator(".banner")).toHaveCount(0);
+  expect(await dirty()).toBe(false);
+  // a run that adds a row: shown in one change, so the selection stays on line 2 and one undo takes the change back
+  await run("set obs 3\nreplace a = 3 in 3\nexport delimited using u.csv, replace");
+  await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*3\s*$/);
+  expect(await selected()).toEqual([2, 2]);
+  expect(await dirty()).toBe(false);
+  await page.locator(".cm-content").focus();
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*$/);
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*3\s*$/);
+  expect(await dirty()).toBe(false);
+
+  // a version that is not text (a .dta saved under the name): the tab keeps its text, is unsaved, and the banner says so
+  await run("save u.csv, replace");
+  const binary = page.locator(".banner", { hasText: "The run changed u.csv, and it is no longer text." });
+  await expect(binary.first()).toContainText("The editor still shows your text; saving it replaces the run's version.");
+  await expect(binary.getByRole("button", { name: "Reload from the run" })).toHaveCount(0);
+  await expect(page.locator(".cm-content")).toHaveText(/^a\s*1\s*2\s*3\s*$/);
+  expect(await dirty()).toBe(true);
+  // a rename takes the banner to the new name; closing the tab ("Don't save") takes it away
+  if (isPhone(page)) await view(page, "Files");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^u\.csv/ })
+    .focus();
+  await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "New name for u.csv" })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("v.csv");
+  await page.keyboard.press("Enter");
+  // the rename is over when its row has the focus back
+  await expect(page.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: /^v\.csv/ })).toBeFocused();
+  await expect(
+    page.locator(".banner", { hasText: "The run changed v.csv, and it is no longer text." }),
+  ).not.toHaveCount(0);
+  await expect(binary).toHaveCount(0);
+  if (isPhone(page)) {
+    await view(page, "Editor");
+    await page.getByRole("button", { name: /^v\.csv.*Open files/ }).click();
+    await page.getByRole("menuitem", { name: "Close v.csv" }).click();
+  } else {
+    const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^v\.csv/ });
+    await tab.focus();
+    await expect(tab).toBeFocused();
+    await page.keyboard.press("Delete");
+  }
+  await page
+    .getByRole("dialog", { name: "Save changes to v.csv?" })
+    .getByRole("button", { name: "Don't save" })
+    .click();
+  await expect(page.locator(".banner", { hasText: "The run changed v.csv" })).toHaveCount(0);
 });

@@ -93,6 +93,19 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   run's end wrap in the Log pane, so "Go to line" stays in view. A file closed with its error mark and no unsaved edits
   has it again when opened with the same text. Known, left: in `#delimit ;` mode two commands on one line are echoed as
   the whole line twice, and the second echo could be matched to a later identical line.
+- **A review of the join's commits, fixed** (2026-11-11): pasted lines stop when another tab takes the engine during a
+  line ("… not run: another tab took over the engine during line 1"), and no leftover line is sent to the engine this
+  tab gets back; a run's promise settles even when the after-run work fails; a run that rewrites an open file goes
+  through the editor's `ranOver`: the same text changes nothing, a clean tab is changed in one transaction (caret,
+  selection and undo kept), and a version that is not text keeps the tab's text, unsaved, with the `run-changed` banner
+  in other words and no reload (chosen over closing a clean tab: one path, and no edits are lost); the `run-changed` and
+  `save-failed` banners go with a closed tab and follow a rename, `reload` does nothing for a file no longer open, and
+  `run-changed` shows on every phone view; OQ-10's note comes from the error the run ended with; a dialog gives the focus
+  back once, after its answer places it (the opener lets go of it before `showModal()`, so the browser gives nothing
+  back on `close()`). A file the run deleted keeps its tab (not handled): it leaves the file list, the tab keeps its dot
+  as it was, and Save writes it again. Checked on the branch after both: `npm run check`, `npm run lint:strict`, `uv run
+  poe lint`; `npm test` (292 pass, none skipped); the e2e suite (249 passed, 31 skipped); `uv run poe test` not run
+  (nothing under `src/dofile/` or `tests/` changed).
 - **Open points:** the toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size (notes below, step 3).
 
 ## Decisions (2026-11-10)

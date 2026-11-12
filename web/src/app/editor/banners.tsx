@@ -9,7 +9,7 @@ import { saveAs, textInStore } from "../files.ts";
 import { dismiss } from "../state.ts";
 import { Banner } from "../ui/Live";
 import { editorCommands } from "./commands.ts";
-import { textOf } from "./Editor";
+import { savedIsText, textOf } from "./Editor";
 
 export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }) => {
   const name = baseName(banner.path);
@@ -37,14 +37,18 @@ export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }
   );
 };
 
-// The banner above the editor when a run rewrote an open file that has unsaved edits: { b: "run-changed", path }, a
-// warning (files.ts afterRun adds it; the joining of 4b and 4d, in place of a question: several files at once, a dialog
-// already open and the phone made a dialog the harder path). The edits stay and the tab stays unsaved, so a Save then
+// The banner above the editor when a run rewrote an open file that has unsaved edits, or wrote something that is not
+// text over an open file: { b: "run-changed", path }, a warning (files.ts afterRun adds it; the joining of 4b and 4d, in
+// place of a question: several files at once, a dialog already open and the phone made a dialog the harder path; on a
+// phone it shows on every view, banners.tsx). The editor keeps its text and the tab stays unsaved, so a Save then
 // replaces the run's version knowingly. Draft words: "The run changed t.csv. Your unsaved edits are still in the
 // editor; saving them replaces the run's version." / "Reload from the run" (the store's version, the edits dropped),
-// "Dismiss". A save or a reload of the file removes it.
+// "Dismiss"; when the run's version is not text: "The run changed t.csv, and it is no longer text. The editor still
+// shows your text; saving it replaces the run's version." / "Dismiss". A save or a reload of the file removes it; a close
+// or a delete of the file removes it, and a rename moves it to the new name (Editor.tsx).
 export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }) => {
   const name = baseName(banner.path);
+  const text = savedIsText(banner.path);
   const reload = async () => {
     const text = await textInStore(banner.path);
     if (text !== null) editorCommands.reload(banner.path, text);
@@ -55,17 +59,28 @@ export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }
       kind="warn"
       actions={
         <>
-          <button type="button" class="btn" onClick={reload}>
-            Reload from the run
-          </button>
+          {text && (
+            <button type="button" class="btn" onClick={reload}>
+              Reload from the run
+            </button>
+          )}
           <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
             Dismiss
           </button>
         </>
       }
     >
-      <b>{`The run changed ${name}.`}</b>{" "}
-      {"Your unsaved edits are still in the editor; saving them replaces the run's version."}
+      {text ? (
+        <>
+          <b>{`The run changed ${name}.`}</b>{" "}
+          {"Your unsaved edits are still in the editor; saving them replaces the run's version."}
+        </>
+      ) : (
+        <>
+          <b>{`The run changed ${name}, and it is no longer text.`}</b>{" "}
+          {"The editor still shows your text; saving it replaces the run's version."}
+        </>
+      )}
     </Banner>
   );
 };

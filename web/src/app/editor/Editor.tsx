@@ -42,7 +42,9 @@ import { codeOf, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
-const savedText = new Map<string, string>(); // what the store has of each, as last read or saved
+// what the store has of each, as last read or saved; null when a run wrote something that is not text over it (the tab
+// is then unsaved until a save, whatever its text)
+const savedText = new Map<string, string | null>();
 const scrolled = new Map<string, number>(); // where each was scrolled to
 const shown = signal<string | null>(null); // the path whose state the view shows, or null (the empty view)
 let view: EditorView | null = null;
@@ -243,6 +245,7 @@ function open(path: string, text: string) {
 }
 
 function reload(path: string, text: string) {
+  if (!states.has(path) || !tabs.value.some((t) => t.path === path)) return; // closed or renamed meanwhile
   const fresh = stateFor(path, text);
   states.set(path, fresh);
   savedText.set(path, text);
@@ -254,12 +257,39 @@ function reload(path: string, text: string) {
   for (const b of banners.value) if (b.b === "run-changed" && b.path === path) dismiss(b);
 }
 
-function ranOver(path: string, text: string) {
+function ranOver(path: string, text: string | null): "same" | "shown" | "kept" {
   const st = current(path);
-  if (!st) return;
+  if (!st) return "same";
+  const saved = savedText.get(path);
+  if (text !== null && text === saved) return "same"; // rewritten with the same text: nothing changes
+  const doc = st.doc.toString();
+  if (text !== null && doc === saved) {
+    // no unsaved edits: the run's text, changed in one transaction where the two differ, so the caret, the selection
+    // and the undo history are kept
+    let from = 0;
+    while (from < doc.length && from < text.length && doc[from] === text[from]) from++;
+    let end = 0;
+    while (
+      end < doc.length - from &&
+      end < text.length - from &&
+      doc[doc.length - 1 - end] === text[text.length - 1 - end]
+    )
+      end++;
+    savedText.set(path, text);
+    update(path, { changes: { from, to: doc.length - end, insert: text.slice(from, text.length - end) } });
+    setDirty(path, false);
+    for (const b of banners.value) if (b.b === "run-changed" && b.path === path) dismiss(b);
+    return "shown";
+  }
   savedText.set(path, text);
-  setDirty(path, st.doc.toString() !== text);
+  const dirty = text === null || doc !== text;
+  setDirty(path, dirty);
+  return dirty ? "kept" : "same";
 }
+
+/** Whether the store's version of an open file is text, as far as the editor knows (false after a run wrote something
+ *  that is not text over it; the run-changed banner says so). */
+export const savedIsText = (path: string) => savedText.get(path) !== null;
 
 function renamed(from: string, to: string) {
   const st = current(from);
@@ -267,8 +297,14 @@ function renamed(from: string, to: string) {
   const next = st.update({ effects: language.reconfigure(named(to)) }).state;
   states.delete(from);
   states.set(to, next);
-  savedText.set(to, savedText.get(from) ?? "");
+  savedText.set(to, savedText.has(from) ? savedText.get(from)! : "");
   savedText.delete(from);
+  // its banners follow it
+  for (const b of banners.value)
+    if ((b.b === "run-changed" || b.b === "save-failed") && b.path === from) {
+      dismiss(b);
+      addBanner({ ...b, path: to });
+    }
   if (scrolled.has(from)) scrolled.set(to, scrolled.get(from)!);
   scrolled.delete(from);
   if (shown.value === from && view) {
@@ -289,6 +325,7 @@ function closed(path: string) {
   states.delete(path);
   savedText.delete(path);
   scrolled.delete(path);
+  for (const b of banners.value) if ((b.b === "run-changed" || b.b === "save-failed") && b.path === path) dismiss(b);
   if (shown.value === path && view) {
     shown.value = null;
     view.setState(emptyState);

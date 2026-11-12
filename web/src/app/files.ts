@@ -76,10 +76,11 @@ export function keep(manager: Storage = globalThis.navigator?.storage) {
 }
 
 /** After a run: `fresh` is what it created or changed, and the list is read again. An open text tab whose file the run
- *  rewrote follows it: with no unsaved edits it shows the run's version (editorCommands.reload); with edits it keeps
- *  them, takes the run's version as the saved text (editorCommands.ranOver: the tab stays unsaved, so Save then replaces
- *  the run's version knowingly), and the banner run-changed says so, with "Reload from the run". A file the run deleted
- *  keeps its tab (not handled: a Save writes it again). */
+ *  rewrote follows it (editorCommands.ranOver): the same text again changes nothing; with no unsaved edits it shows the
+ *  run's version, keeping the caret and the undo history; with edits, or when the run's version is not text (binary,
+ *  or not UTF-8), it keeps its text, takes the run's version as the saved one (the tab stays unsaved, so Save then
+ *  replaces the run's version knowingly), and the banner run-changed says so (with "Reload from the run" when the run's
+ *  version is text). A file the run deleted keeps its tab (not handled: a Save writes it again). */
 export function afterRun(changes: FileChange[] | undefined) {
   W.fresh.value = new Set((changes ?? []).filter((c) => c.status !== "removed").map((c) => c.name));
   if (changes?.length) changed();
@@ -88,13 +89,21 @@ export function afterRun(changes: FileChange[] | undefined) {
 
 async function followOpen(c: FileChange) {
   const tab = S.tabs.value.find((t) => t.path === c.name && t.kind === "text");
-  if (!tab || c.status === "removed") return;
-  const text = await textInStore(c.name);
-  const now = S.tabs.value.find((t) => t.path === c.name && t.kind === "text"); // still open, as it is now
-  if (text === null || !now) return;
-  if (!now.dirty) return editorCommands.reload(c.name, text);
-  editorCommands.ranOver(c.name, text);
-  if (S.tabs.value.find((t) => t.path === c.name)?.dirty) S.addBanner({ b: "run-changed", path: c.name });
+  if (!tab || c.status === "removed" || !store) return;
+  let bytes: Uint8Array;
+  try {
+    bytes = await store.read(c.name);
+  } catch {
+    return; // the store cannot give it now: nothing is known of the run's version
+  }
+  let text: string | null;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    text = null; // not text
+  }
+  if (!S.tabs.value.some((t) => t.path === c.name && t.kind === "text")) return; // closed meanwhile
+  if (editorCommands.ranOver(c.name, text) === "kept") S.addBanner({ b: "run-changed", path: c.name });
 }
 
 /** A file's text as the store has it (strict UTF-8), or null when it cannot be read or is not text. */
