@@ -227,6 +227,8 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
         defaultValue={row.name}
         spellcheck={false}
         autoComplete="off"
+        autocorrect="off"
+        autoCapitalize="off"
         ref={(el) => {
           if (!el || el.dataset.ready) return;
           el.dataset.ready = "1";
