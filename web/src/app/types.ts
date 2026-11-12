@@ -1,6 +1,6 @@
 // The page's state model: docs/design/SPEC.md, section 8, as built in step 3. The signals that hold these are in state.ts.
 
-import type { Equal, Expect, QueuedRun, State, Ticket } from "../engine/machine.ts";
+import type { Equal, Expect, State, Ticket } from "../engine/machine.ts";
 import type {
   About,
   BrowseRows,
@@ -31,7 +31,7 @@ export type {
 };
 
 /** The engine's state as views see it: the sixteen tags of the state machine's State (engine/machine.ts), without the
- *  tickets and without the queued run. Written out by hand, one line per state, so that it can be read; the three checks
+ *  tickets. Written out by hand, one line per state, so that it can be read; the three checks
  *  below keep it in step with State. A field added to State is not seen by views until it is added here too.
  *  `failed` and `failed-twice`: `message` is for the visitor, plain words, one per reason (engine.ts FAILED; FAILED_TWICE
  *  for `failed-twice`), with no command, file name, byte count or build term; `detail` is the cause, for a developer:
@@ -40,7 +40,7 @@ export type EngineState =
   | { s: "checking-lock" } // the page load: waiting for the tab lock
   | { s: "checking-cache" } // then for the cache check
   | { s: "none" } // only with ?test=manual
-  | { s: "asking"; forRun: boolean } // forRun: a run is queued
+  | { s: "asking"; forRun: boolean } // forRun: a Run opened the prompt (it did not run, and nothing is kept to run)
   | { s: "declined" }
   | { s: "downloading"; received: number; total: number; t0: number }
   | { s: "starting-list"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> } // a restart fetches the build's list; no worker yet
@@ -60,10 +60,10 @@ export type SameTags<V extends { s: string }> = Equal<V["s"], State["s"]>;
 /** The type of every field, over every member. `keyof` of a union lists only the keys all members share, so each member is
  *  taken on its own: FieldOf<{ s: "a"; x: 1 } | { s: "b"; y: "t" }> is "a" | 1 | "b" | "t". */
 type FieldOf<T> = T extends unknown ? T[keyof T] : never;
-/** true when no field of any member of V is a ticket or a queued run. */
-export type NothingHidden<V> = Equal<Extract<FieldOf<V>, Ticket | QueuedRun>, never>;
+/** true when no field of any member of V is a ticket. */
+export type NothingHidden<V> = Equal<Extract<FieldOf<V>, Ticket>, never>;
 // Check 1: the same tags as the machine's State. A state added to one and not the other does not compile.
-// Check 2: no field of any member is a ticket or a queued run.
+// Check 2: no field of any member is a ticket.
 // Check 3 is view() in engine.ts: its return type is EngineState, so each case must build exactly that member's fields.
 export type EngineStateChecked = [Expect<SameTags<EngineState>>, Expect<NothingHidden<EngineState>>];
 

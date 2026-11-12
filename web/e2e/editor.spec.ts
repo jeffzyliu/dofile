@@ -936,16 +936,20 @@ test("a .dta tab: Save is off, and when the engine's dialog closes by itself the
   const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^d\.dta/ });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await expect(save).toBeDisabled();
-  // a command with no engine: the prompt opens; the engine starts, the prompt closes by itself and gives the focus to the
-  // editor's place, here the .dta tab (no editor is shown)
+  // a command with no engine: the prompt opens and the command does not run (it stays in the field); the engine starts,
+  // the prompt closes by itself and gives the focus to the editor's place, here the .dta tab (no editor is shown), and
+  // nothing runs by itself
   const field = page.getByRole("textbox", { name: "Command" });
   await field.fill("display 1");
   await field.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(field).toHaveValue("display 1");
   await page.evaluate(() => (window as any).__dofile.start());
   await ready(page);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(tab).toBeFocused();
+  expect(await page.evaluate(() => window.__dofile.state.lastRun.value)).toBeNull();
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
 });
 
 const CODE = [
@@ -1210,7 +1214,7 @@ test("the command line: Enter runs and clears, ↑ recalls; a paste of lines run
   expect(await page.evaluate(() => window.__dofile.state.history.value.length)).toBe(runs);
 });
 
-test("the command line with no engine: pasted lines wait for the engine; Not now drops them, and a toast says so", async ({
+test("the command line with no engine: pasted lines open the prompt and run nothing, with no toast; the first line stays in the field, and runs when Enter is pressed once the engine is ready", async ({
   page,
 }) => {
   await page.goto("?test=manual");
@@ -1224,12 +1228,28 @@ test("the command line with no engine: pasted lines wait for the engine; Not now
     Object.defineProperty(e, "clipboardData", { value: dt });
     el.dispatchEvent(e);
   });
-  // the first line is queued: the prompt opens for a run; the second waits for it
-  const prompt = page.getByRole("dialog");
+  // the first line opens the prompt, titled for a run, and does not run; the second is not run either
+  const prompt = page.getByRole("dialog", { name: "Download the engine to run code" });
   await expect(prompt).toBeVisible();
+  await expect(field).toHaveValue("display 1"); // a line that did not run goes back into the field
+  await expect(page.locator(".toast")).toHaveCount(0); // the prompt says why: no toast over it
   await prompt.getByRole("button", { name: "Not now" }).click();
-  await expect(page.locator(".toast")).toHaveText("2 of 2 pasted lines not run: line 1 didn't run");
+  await expect(prompt).toBeHidden();
+  await expect(page.locator(".toast")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
+  // the engine starts: nothing runs by itself
+  await page.evaluate(() => (window as any).__dofile.start());
+  await ready(page);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__dofile.state.lastRun.value)).toBeNull();
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
+  await expect(field).toHaveValue("display 1");
+  // Enter runs it now
+  if (isPhone(page)) await view(page, "Log");
+  await field.press("Enter");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 1"]);
+  await expect(field).toHaveValue("");
 });
 
 test("a run that rewrites open files: a clean tab shows the run's version, keeping its selection and undo; the same text changes nothing; one with edits keeps them, unsaved, with a banner to reload (on every phone view); a version that is not text keeps the tab's text with its banner, which a run that writes the editor's text takes away, which follows a rename and goes with the tab", async ({

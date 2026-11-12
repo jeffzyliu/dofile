@@ -1,7 +1,8 @@
 // The engine's state machine: every state of the engine in the page, every event that can happen to it, and what each
 // event does in each state. One pure function, transition(machine, event), gives the machine after the event and the
 // effects the caller must then perform. The design, with the tables this file holds cell for cell:
-// docs/prototype1-step3.5-c-design.md (items 1 to 5); the diagrams: docs/prototype1-step3.5-c-diagrams.md.
+// docs/prototype1-step3.5-c-design.md (items 1 to 5; less the run it held for an engine that was not there, removed on
+// 2026-11-12: with no engine a run only opens the prompt); the diagrams: docs/prototype1-step3.5-c-diagrams.md.
 //
 // How to read it: State (sixteen members, one per row of the table), Event (twenty-four), Effect; then the shorthands
 // (DOWNLOAD, ASK, STOP, OWN, BREAK, END, FAIL, TWICE, RESET, LOST), then TABLE, one row per state with a cell for each
@@ -35,36 +36,16 @@ export interface Env {
   engineBytes: number | null; // the total shown before the first progress event
   manual: boolean; // ?test=manual: no start until start() is called
 }
-/** A run asked for with no engine: it runs when the engine has started. */
-export interface QueuedRun {
-  code: string;
-  head: RunHead;
-}
-
 /** Sixteen members, one per row of the transition table. Each has its own literal tag and only its own fields. */
 export type State =
   | { s: "checking-lock"; id: Ticket }
   | { s: "checking-cache"; id: Ticket }
   | { s: "none" }
-  | { s: "asking"; queued: QueuedRun | null }
+  | { s: "asking"; forRun: boolean } // forRun: a Run opened the prompt (the run itself is not kept)
   | { s: "declined" }
-  | { s: "downloading"; download: Ticket; received: number; total: number; t0: number; queued: QueuedRun | null }
-  | {
-      s: "starting-list";
-      worker: Ticket;
-      stage: Stage;
-      t0: number;
-      done: Partial<Record<Stage, number>>;
-      queued: QueuedRun | null;
-    }
-  | {
-      s: "starting-worker";
-      worker: Ticket;
-      stage: Stage;
-      t0: number;
-      done: Partial<Record<Stage, number>>;
-      queued: QueuedRun | null;
-    }
+  | { s: "downloading"; download: Ticket; received: number; total: number; t0: number }
+  | { s: "starting-list"; worker: Ticket; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }
+  | { s: "starting-worker"; worker: Ticket; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }
   | { s: "ready"; worker: Ticket }
   | { s: "running"; worker: Ticket; run: RunHead; t0: number }
   | { s: "breaking"; worker: Ticket; run: RunHead; t0: number; resetAt: number }
@@ -161,7 +142,6 @@ export type Effect =
   | { do: "start-break-timer"; n: Ticket; ms: number }
   | { do: "cancel-break-timer" }
   | { do: "end-run"; result: RunResult }
-  | { do: "drop-run" } // the run queued for an engine that was not there will not run (transition() adds it)
   | { do: "engine-ready" }
   | { do: "engine-gone" }
   | { do: "show-dialog"; dialog: "download"; forRun: boolean }
@@ -311,24 +291,25 @@ const same = (machine: Machine, outcome: "stale" | "not-valid"): Step => ({ mach
 /** The first stage of a start: the snapshot start reads the cache first, ?snapshot=0 starts Python. */
 const firstStage = (env: Env): Stage => (env.snapshot ? "download" : "python");
 
-/** DOWNLOAD(queued): `downloading`, with a new ticket. */
-function DOWNLOAD(m: Machine, queued: QueuedRun | null, at: number): Step {
+/** DOWNLOAD: `downloading`, with a new ticket. */
+function DOWNLOAD(m: Machine, at: number): Step {
   const next = issue(m);
   return step(
     {
       ...m,
       issued: next,
-      state: { s: "downloading", download: next, received: 0, total: m.env.engineBytes ?? 0, t0: at, queued },
+      state: { s: "downloading", download: next, received: 0, total: m.env.engineBytes ?? 0, t0: at },
     },
     [{ do: "start-download", n: next }],
   );
 }
 
-/** ASK(queued): `asking`, and the download prompt, titled for a run when one is queued. */
-const ASK = (m: Machine, queued: QueuedRun | null): Step =>
-  step({ ...m, state: { s: "asking", queued } }, [{ do: "show-dialog", dialog: "download", forRun: queued !== null }]);
+/** ASK(forRun): `asking`, and the download prompt, titled for a run when a Run opened it. The run is not kept: with no
+ *  engine a Run only asks, and the visitor presses Run again once the engine is ready. */
+const ASK = (m: Machine, forRun: boolean): Step =>
+  step({ ...m, state: { s: "asking", forRun } }, [{ do: "show-dialog", dialog: "download", forRun }]);
 
-/** STOP: "Stop download", and "Not now" during the download. The queued run is dropped. */
+/** STOP: "Stop download", and "Not now" during the download. */
 const STOP = (m: In<"downloading">): Step =>
   step({ ...m, state: { s: "declined" } }, [
     { do: "abort-download", n: m.state.download },
@@ -424,14 +405,7 @@ function RESET(
       ...m,
       issued: next,
       crashes: kind === "crash" ? 1 : 0,
-      state: {
-        s: "starting-list",
-        worker: next,
-        stage: firstStage(m.env),
-        t0: at,
-        done: {},
-        queued: old.s === "starting-worker" ? old.queued : null,
-      },
+      state: { s: "starting-list", worker: next, stage: firstStage(m.env), t0: at, done: {} },
     },
     effects,
   );
@@ -484,24 +458,24 @@ const TABLE: { [R in RowName]: Row<R> } = {
   },
   "checking-cache": {
     "lock-lost": LOST,
-    "cache-checked": (m, e) => (e.cached ? DOWNLOAD(m, null, e.at) : ASK(m, null)),
+    "cache-checked": (m, e) => (e.cached ? DOWNLOAD(m, e.at) : ASK(m, false)),
   },
   none: {
-    start: (m, e) => DOWNLOAD(m, null, e.at),
-    ask: (m) => ASK(m, null),
-    run: (m, e) => ASK(m, { code: e.code, head: e.head }),
+    start: (m, e) => DOWNLOAD(m, e.at),
+    ask: (m) => ASK(m, false),
+    run: (m) => ASK(m, true),
     "lock-lost": LOST,
   },
   asking: {
-    start: (m, e) => DOWNLOAD(m, m.state.queued, e.at),
+    start: (m, e) => DOWNLOAD(m, e.at),
     decline: (m) =>
       step({ ...m, state: { s: "declined" } }, [{ do: "close-dialog", dialog: "download", focusEditor: false }]),
     "lock-lost": LOST,
   },
   declined: {
-    start: (m, e) => DOWNLOAD(m, null, e.at),
-    ask: (m) => ASK(m, null),
-    run: (m, e) => ASK(m, { code: e.code, head: e.head }),
+    start: (m, e) => DOWNLOAD(m, e.at),
+    ask: (m) => ASK(m, false),
+    run: (m) => ASK(m, true),
     "lock-lost": LOST,
   },
   downloading: {
@@ -522,7 +496,6 @@ const TABLE: { [R in RowName]: Row<R> } = {
             stage,
             t0: e.at,
             done: { download: (e.at - m.state.t0) / 1000 },
-            queued: m.state.queued,
           },
         },
         [
@@ -560,19 +533,12 @@ const TABLE: { [R in RowName]: Row<R> } = {
         [{ do: "say", line: { stage: e.stage } }],
       );
     },
-    started: (m, e) => {
-      const { worker, queued } = m.state;
-      const up: Effect[] = [
+    started: (m) =>
+      step({ ...m, crashes: 0, state: { s: "ready", worker: m.state.worker } }, [
         { do: "close-dialog", dialog: "download", focusEditor: true },
         { do: "say", line: "ready" },
         { do: "engine-ready" },
-      ];
-      if (!queued) return step({ ...m, crashes: 0, state: { s: "ready", worker } }, up);
-      return step({ ...m, crashes: 0, state: { s: "running", worker, run: queued.head, t0: e.at } }, [
-        ...up,
-        { do: "send-run", n: worker, code: queued.code, head: queued.head },
-      ]);
-    },
+      ]),
     "start-failed": (m, e) => FAIL(m, e.reason, e.detail),
     crashed: (m, e) => (m.crashes === 0 ? RESET(m, "crash", crashReason(e), e.at) : TWICE(m, e.reason, e.detail)),
   },
@@ -613,7 +579,7 @@ const TABLE: { [R in RowName]: Row<R> } = {
     "run-failed": (m, e) => END(m, cutResult(e.message, "run-failed")),
   },
   failed: {
-    start: (m, e) => DOWNLOAD(m, null, e.at),
+    start: (m, e) => DOWNLOAD(m, e.at),
     "lock-lost": LOST,
   },
   "failed-twice": {
@@ -641,15 +607,5 @@ const TABLE: { [R in RowName]: Row<R> } = {
 export function transition(m: Machine, e: Event): Step {
   if ("n" in e && e.n !== ticketOf(m.state)) return same(m, "stale"); // the one stale guard
   const cell = TABLE[m.state.s][e.type] as Cell<RowName, Event["type"]> | undefined; // THE ONE CAST of the table
-  return cell ? dropRun(m.state, cell(m, e)) : same(m, "not-valid"); // the one place an event that is not valid changes nothing
-}
-
-/** A step that lets go of the queued run without sending it ("Not now", a failed download or start, the lock lost) ends
- *  with the effect `drop-run`, so the run's caller learns that it will not run. One rule here, not one in each cell. */
-function dropRun(before: State, next: Step): Step {
-  const run = "queued" in before ? before.queued : null;
-  if (!run) return next;
-  const after = next.machine.state;
-  if (("queued" in after && after.queued === run) || next.effects.some((f) => f.do === "send-run")) return next;
-  return { ...next, effects: [...next.effects, { do: "drop-run" }] };
+  return cell ? cell(m, e) : same(m, "not-valid"); // the one place an event that is not valid changes nothing
 }

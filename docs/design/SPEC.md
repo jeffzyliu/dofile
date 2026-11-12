@@ -123,7 +123,8 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   There is no Reset button: Reset is in the ⋯ menu.
 - **Run** is the one primary button. The "⌘ ↩" chip sits on Run with nothing selected and on Run selection with a selection;
   Run selection is disabled with none. While running, Run is `aria-disabled="true"`, not `disabled`: focus stays on it, so a
-  second Enter cannot reach Break.
+  second Enter cannot reach Break. With no engine (`declined`; in `none`, seen only under `?test=manual`, the buttons are
+  disabled but Ctrl/Cmd+Enter is not) Run, Run selection and Ctrl/Cmd+Enter open the download prompt and run nothing: not then, and not when the engine is ready (section 5).
 - **Break** (`.btn.stop`): outlined and disabled when idle, filled red (`.live`) while running; its other labels are in
   section 5. **Save** has the dot when the active tab is unsaved, and the "⌘ S" chip.
 - **⋯ menu** (`S 12`): "Download all (.zip)" (disabled while the store has no file), "Wrap lines" (a switch, below), "Reset the engine…",
@@ -163,9 +164,9 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   `aria-label="Command"` with placeholder "Type a command · ↑ ↓ for earlier ones" (phone: "Type a command"), and "Run
   command". Enter runs; ↑ ↓ recall earlier commands; it waits while a run is on (`WP 2`). A command that does not run (the
   engine can't take it now: it is asking, downloading, starting, failed or in another tab; or a run is on) stays in the
-  field and is not added to the history. One that runs, or is queued
-  while there is no engine (the prompt opens), is cleared from the field and added to the history, also when it ends in an
-  error.
+  field and is not added to the history; so does one typed while there is no engine (`none`, `declined`): it opens the
+  download prompt and runs nothing, then or when the engine is ready. One that runs is cleared from the field and added
+  to the history, also when it ends in an error.
 - **Phone only** (`PH`): a strip under the top bar ("r(111)", "line 17 · 0.38 s", "Mem 612 MB", "Go to line 17"; running:
   "Running lines 14–15", "Mem 612 MB"); the hint as a block (`.explain`); "← wide table: swipe sideways →".
 - **States:** drawn: after an error (`E`, `PH`), first run running (`E?r`, `PH?r`), stopping and waiting (`S 9`, `9b`), stopped
@@ -313,7 +314,7 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 | `checking-lock`, `checking-cache` | "**Loading**" (step 4b's word for the page load; decided 2026-11-12) | none | "Run", disabled | disabled |
 | `none` | "No engine yet" | none (`none` is seen only with `?test=manual`: no start until the test calls `start()`) | "Run", disabled | disabled |
 | `asking` | "No engine yet" | Blocking prompt `S 1` (phone `S 8`): "Download the engine?", its two paragraphs, "Not now", "Download 48 MB" (default) | "Run", disabled | disabled |
-| `declined` | "**No engine** · Run downloads it first" | `S 5`: "**The engine isn't downloaded.** You can open, edit, upload and download files; running code needs the engine (about 48 MB)." / "Download the engine" | enabled: it, and the command line, open the prompt titled "Download the engine to run code"; the run starts when the engine is ready | disabled |
+| `declined` | "**No engine** · Run downloads it first" | `S 5`: "**The engine isn't downloaded.** You can open, edit, upload and download files; running code needs the engine (about 48 MB)." / "Download the engine" | enabled: it, and the command line, open the prompt titled "Download the engine to run code", and nothing runs: not now, and not when the engine is ready (the visitor runs it again then) | disabled |
 | `downloading` | "**Starting** · downloading" | `S 2`: "Getting the engine ready" / "**Downloading**" "14.2 of 48 MB · 6 s" / the bar / the stage list / "Stop download", "Edit files while it loads" (focused) | "Starting…" (the play icon; named "Starting… Run is not available until the engine is ready"), disabled | disabled |
 | `starting-list`, `starting-worker` | "**Starting** · loading packages (step 4 of 5) · 2.1 s" (the drawn text, for `?snapshot=0`; the snapshot start names its own stages, OQ-11); at the right "You can edit and upload while it starts" (`S 4`) | While the dialog is open, `S 3`: "**Loading packages**" "step 4 of 5 · 9 s"; no bar; done stages keep their time | "Starting…" (the play icon; named "Starting… Run is not available until the engine is ready"), disabled | disabled |
 | `ready` | "**Ready**", the last run, memory (`E`) | none | enabled | disabled |
@@ -343,7 +344,7 @@ Rows are states, columns are events. A cell is one of:
 - one state, or several separated by ", ": the state the event leads to. Several when the cell depends on the event's
   payload or on the machine: `lock-answered` in `checking-lock` leads to `checking-cache`, or to `none` with
   `?test=manual`, or to `other-tab-idle` when another tab holds the lock; `cache-checked` to `downloading` (cached) or
-  `asking`; `started` to `ready`, or to `running` when a run was queued; `crashed` in `starting-worker` to
+  `asking`; `crashed` in `starting-worker` to
   `starting-list` (the first crash) or `failed-twice`; `break` in `running` to `breaking`, or to `starting-list` on a page
   that cannot ask a run to stop. The same state as the row is a cell that changes only a field (`downloading` on progress,
   `starting-worker` on a stage).
@@ -427,7 +428,7 @@ that hold no ticket at all. `lock-lost` (another tab took the lock) is valid in 
 | `declined` | STALE | STALE | STALE | STALE |
 | `downloading` | · | · | · | · |
 | `starting-list` | · | · | · | · |
-| `starting-worker` | starting-worker | ready, running | failed | starting-list, failed-twice |
+| `starting-worker` | starting-worker | ready | failed | starting-list, failed-twice |
 | `ready` | · | · | · | starting-list |
 | `running` | · | · | · | starting-list |
 | `breaking` | · | · | · | starting-list |
@@ -465,9 +466,9 @@ What the cells mean as a visitor meets them:
 | `checking-lock` | the tab lock is taken by another tab | `other-tab-idle`. "Use dofile in this tab" (`take-over`) takes the lock with `steal` (`other-tab-taking`) and goes on as a page load; the tab that lost it ends its worker and shows the same dialog (`lock-lost`). "Close editor" leaves for the landing page; the other tab keeps the lock. A tab that loses the lock while it asks for it (`checking-lock`, `other-tab-taking`) drops the late answer. |
 | `checking-lock` | the lock is this tab's | `checking-cache` (or `none` with `?test=manual`): the store is unblocked and listed, and `client.cached()` is asked. |
 | `checking-cache` | this build's start files are not all in the Cache (`client.cached()`: every file `start-files.json` marks `download` is in `dofile-snapshot-<built>`; false offline, with no Cache API, storage refused or `?snapshot=0`) | `asking`. Otherwise `downloading` then `starting-worker`, with no dialog (`S 4`). There is no "downloaded" flag: evicted or cleared files, a partial download, or a new build ask again. |
-| `asking` | "Download 48 MB"; "Not now" | `downloading`; `declined`. From `declined` (and `none`), the banner's button (`ask`) or Run leads back to `asking`; Run queues its code, and the prompt is titled for a run. |
-| `downloading` | all bytes in; "Stop download" or "Not now"; a failed fetch | `starting-worker`; the fetches are aborted, `declined` (a queued run is dropped); `failed`. "Edit files while it loads" only closes the dialog. Stage list (`S 2`): "Downloading the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine" (the snapshot start differs: OQ-11; the words are one list, `stageNow` in `states/words.ts`, decided 2026-11-12). A download that fails is `failed`: no worker is made and there is no offline start. |
-| `starting-worker` | the last stage ends; the start is rejected | `ready` (or `running`, when a run was queued: `ready` is not shown in between): the dialog closes by itself, focus goes to the editor, the live region says "Engine ready". `failed`, or `failed-twice` when the worker failed twice. |
+| `asking` | "Download 48 MB"; "Not now" | `downloading`; `declined`. From `declined` (and `none`), the banner's button (`ask`) or Run leads back to `asking`; Run then runs nothing (its code is not kept), and the prompt is titled for a run. |
+| `downloading` | all bytes in; "Stop download" or "Not now"; a failed fetch | `starting-worker`; the fetches are aborted, `declined`; `failed`. "Edit files while it loads" only closes the dialog. Stage list (`S 2`): "Downloading the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine" (the snapshot start differs: OQ-11; the words are one list, `stageNow` in `states/words.ts`, decided 2026-11-12). A download that fails is `failed`: no worker is made and there is no offline start. |
+| `starting-worker` | the last stage ends; the start is rejected | `ready` (nothing runs by itself: a Run pressed with no engine only opened the prompt): the dialog closes by itself, focus goes to the editor, the live region says "Engine ready". `failed`, or `failed-twice` when the worker failed twice. |
 | `ready`, `running` | a run starts; its result arrives; Break | `running`; `ready`; `breaking`. |
 | `breaking` | the run ends with rc 1; 5 s pass; "Don't reset: wait for it" | `ready` (the log has "--Break--", "r(1);" and the note of `S 10`, OQ-9; a run that had ended before a safe point keeps its own rc); reset; `waiting`. |
 | `waiting` | the run ends; "Reset now" | `ready`; reset. |
@@ -786,12 +787,12 @@ type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
                                                                                    // ?snapshot=0: no "unpack" (OQ-11)
 interface RunHead { kind: "file" | "selection" | "command"; path?: string; lines?: [number, number]; fresh_locals: boolean }
 // The engine's state as views see it (step 3.5 C): the sixteen state names of the engine's state machine
-// (web/src/engine/machine.ts), without its tickets and its queued run. Written out by hand in web/src/app/types.ts.
+// (web/src/engine/machine.ts), without its tickets. Written out by hand in web/src/app/types.ts.
 type EngineState =
   | { s: "checking-lock" }                                                    // the page load: waiting for the tab lock
   | { s: "checking-cache" }                                                   // then for the cache check
   | { s: "none" }                                                             // only with ?test=manual
-  | { s: "asking"; forRun: boolean }                                          // forRun: a run is queued
+  | { s: "asking"; forRun: boolean }                                          // forRun: a Run opened the prompt (it did not run)
   | { s: "declined" }
   | { s: "downloading"; received: number; total: number; t0: number }
   | { s: "starting-list"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }     // a restart fetches the build's list
@@ -875,7 +876,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - `engine.ts` owns `engine` and the reset banner. It is the one caller of the engine's state machine
     (`web/src/engine/machine.ts`): each action is one event, the machine's table (section 5) says in which states it acts (in
     any other it does nothing), and the `engine` signal is the machine's state as views see it (`EngineState`, with the
-    sixteen names, the tickets and the queued run left out, and `message` added to the two failed states).
+    sixteen names, the tickets left out, and `message` added to the two failed states).
     `<html data-engine>` shows the same name; CSS that keys on it matches by prefix (`[data-engine^="other-tab"]`). The
     signal starts as `checking-lock`. At load the machine asks unless `client.cached()` says the start files are all in the
     Cache; a start that ends `failed-twice` (reason not `memory` or `no-wasm`) deletes the `dofile-snapshot-*` Caches
@@ -885,8 +886,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `none`, `asking`, `declined`, `failed`), `stopDownload`, `takeOver` (only in `other-tab-idle`; a second press while the
     take-over is in progress does nothing), `lost` (the tab lock was taken), `breakRun`, `keepWaiting`, `reset` (only in
     `ready`, `running`, `breaking`, `waiting`). `run(code, head)` is run.ts's way in: it answers `"started"` (the engine was
-    ready and the run began), `"queued"` (no engine yet, `none` or `declined`: the prompt opens, titled for a run, and the run
-    begins when the engine has started) or `"refused"` (any other state); views call `runCode` and `runCommand`, not `run`. It
+    ready and the run began), `"asked"` (no engine, `none` or `declined`: the prompt opens, titled for a run, and nothing
+    runs, then or when the engine is ready) or `"refused"` (any other state); views call `runCode` and `runCommand`, not `run`. It
     throws, before it queues anything, when called while a step of the machine is in progress: inside a handler given to
     `connectRun`, and also inside a signal effect on `engine` or `lastRun`, which are written only during a step, or on a
     `log` write a step makes (a run's start and end; a streamed chunk and "Clear log" write `log` outside a step, where the
@@ -901,8 +902,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
     `history`; it also moves `graphIndex` to the newest graph (views write `graphIndex` too). It reads no engine state: the engine controller tells it, through the
-    handlers it gives to `connectRun` (a run began, a chunk of its log, its end, the queued run was dropped, an engine is
-    ready, the engine is gone).
+    handlers it gives to `connectRun` (a run began, a chunk of its log, its end, an engine is ready, the engine is gone).
     It clears `results`, `macros`, `data`, `rows`, `memory` and `lastRun` when the engine is gone (a reset, or another tab
     took it: the machine's effect `engine-gone`), and asks for `memory` when an engine is ready. Actions: `runCode(code,
     head)`, `runCommand(text)` (both throw during a step, as `run` does), `addFileGraph(path, png)` (a .png opened; the same
@@ -911,17 +911,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     resolves true when rows were added, and appends nothing if a run or a new engine replaced `rows` meanwhile), `clearLog`.
     `refreshData()` does not look at the state: with no engine its calls reject and nothing is written; while an engine starts
     or a run is on, the calls wait in the worker's queue and the signals are written when they are answered.
-  - `runCommand(text)` (the command line, Load, Import; kind "command", locals kept) returns `{ accepted, done }` at once.
-    `accepted` is true when the command runs now (`ready`) or is queued (`none`, `declined`: the prompt opens titled for a
-    run, and it runs when the engine has started: the state goes from `starting-worker` straight to `running`; a queued
-    command counts as accepted); only then is it added to `history` (not twice in a row), also when the run ends in an
-    error, and the command line clears its field. In any other state (the page load: `checking-lock`, `checking-cache`;
-    a start or a run in progress, `failed`, `other-tab-idle`, `other-tab-taking`) or for an empty command it is refused:
-    `history` is unchanged and the text stays in the field. `done` is `runCode`'s promise: the result once it has run (a
-    queued command's too, when its engine has started), or null when it did not run: refused, or queued and then dropped
-    ("Not now", a failed download or start, the lock lost). The machine says so with the effect `drop-run`, which
-    `transition()` adds as the last effect of any step that lets go of the queued run without `send-run`; the engine
-    controller passes it to run.ts (the handler `dropped`).
+  - `runCommand(text)` (the command line, Load, Import; kind "command", locals kept) returns `{ how, done }` at once, as
+    `requestRun` does (`Requested` in run.ts). `how` is `"started"` when the command runs now (`ready`); only then is it
+    added to `history` (not twice in a row), also when the run ends in an error, and the command line clears its field.
+    `"asked"` with no engine (`none`, `declined`): the prompt opens titled for a run and nothing runs, then or when the
+    engine is ready. `"refused"` in any other state (the page load: `checking-lock`, `checking-cache`; a start or a run in
+    progress, `failed`, `other-tab-idle`, `other-tab-taking`) and for an empty command. When it did not start, `history`
+    is unchanged and the text stays in the field. `done` is the run's result once it has run (after the after-run reads),
+    or null at once when it did not start. Nothing is held for later: no run waits for the engine.
   - `files.ts` owns `files`, `fresh`, `persisted`, the download-failed banner (below) and the storage banner (S 19: once per visit, when `persisted` is false
     and the files change, by the page or a run). It also performs two effects of the machine: `own()` when the tab lock is
     this tab's (unblocks the store, asks the browser to keep the files, lists the store) and `block()` when another tab took
@@ -991,7 +988,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `PhoneStrip`). Writes `dirty` only through `setDirty`, `banners` (`addBanner` for save-failed; `dismiss` for
     save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
     Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
-    pill). Calls `runCode`, `runCommand` (the command line clears its field only when `accepted`), `breakRun`, `reset`
+    pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
     ("Reset now"), `openFile` (Go to line in a file that is not open), `store.write`, `saveAs` (Download log, the
     save-failed banner's Download), `textInStore` and `editorCommands.reload` (the run-changed banner's "Reload from the
     run"), `showToast`, `say`. `keepWaiting` is 4d's (the stopping banner). On a phone the command line's field and the editor's text are 16 px or more, or iOS
@@ -1086,13 +1083,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     with no line break, or with breaks only at its end (one copied line), is an ordinary paste and runs nothing; with
     other breaks, the field's text before and after the cursor joins the first and
     last lines, empty lines are left out, and the lines run one after the other, each once the one before has ended; they
-    stop at the first that is refused, that was queued for an engine that then did not start, that ends with any rc
+    stop at the first that does not run (refused; or, with no engine, it opened the download prompt), that ends with any rc
     but 0 (Break too), or whose run another tab cut by taking the engine (the rest never reach the engine this tab may
     get back; the wait for a line also ends when its run's promise settles), and before a line that cannot run alone (not sent: it runs from the editor): one that ends with
     `{`, holds `///`, opens a `/*` comment it does not close (a pasted `/*`, `drop _all`, `*/` runs nothing), or is
     `program define` or `mata` on its own (`mata: x = 1` runs); a
-    toast says how many were not run, and a refused line goes back into the field (these stops are for the maintainer to
-    confirm, B 3 of the plan's list). The next line starts in a microtask
+    toast says how many were not run (not when a line opened the download prompt: the prompt is the answer, and a toast
+    behind it would be read over its title and gone before it closes), and a line that did not run goes back into the field
+    (these stops are for the maintainer to confirm, B 3 of the plan's list). The next line starts in a microtask
     after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
     nothing either (for the maintainer to confirm, B 4 of the plan's list). Words the spec does not give, drafts for the
@@ -1272,11 +1270,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **Resets.** A reset ends the worker, fetches the build's list afresh (`starting-list`), then starts a new worker; every
     reset goes that way, and its first stage is not announced (it reads the cache; "Download the engine" would mislead). A
     reset of an engine that had been ready adds `{b: "reset", reason, kind}` and says "Engine reset"; a crash during a start
-    adds nothing, and a run queued for that start is kept. Reset and "Reset now" give the reason "reset by you" (4d's words may
+    adds nothing. Reset and "Reset now" give the reason "reset by you" (4d's words may
     change it). A page that cannot ask a run to stop (no `SharedArrayBuffer`) resets at once on Break. Every exit from
     `breaking` cancels the Break timer.
-  - **A queued run.** Run or the command line in `none` or `declined` opens the prompt with `forRun` and runs once the engine
-    has started; "Not now", "Stop download", a failed start and another tab take over drop that run.
+  - **No run is held.** Run, Run selection, Ctrl/Cmd+Enter, the command line, a paste of several lines, Load and Import in
+    `none` or `declined` open the prompt with `forRun` and run nothing; when the engine is ready nothing runs by itself, and
+    the visitor runs it again. (Until 2026-11-12 the machine held the run and sent it when the engine had started, and
+    dropped it when the start did not happen; the maintainer removed that, plan, Post-merge review.)
   - **The tab lock.** Losing it ends the worker, blocks the store, shows the take-over dialog, tells run.ts the engine is gone
     (it clears what the engine left) and cuts a run in progress with rc 9998, kind `stopped`. A lock answer that arrives after
     the lock was lost, or after a take-over was cancelled, is stale and dropped; there is no counter for it.

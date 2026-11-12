@@ -174,6 +174,8 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
    `@codemirror/lang-json`).
 4. What becomes of a queued command is decided by the state machine: a step that lets go of the queued run without
    sending it ends with the effect `drop-run`, which settles the command's `done` with null (`engine/machine.ts`).
+   (2026-11-12: the held run is gone, see Post-merge review: with no engine a command opens the prompt and does not
+   run, so there is no queued command and no `drop-run`.)
 5. The engine's hint for an unclosed block still names OpenDTA's Command window and Shift+Enter: left as is (ODT-33). A
    multi-line command line (Shift+Enter starts a new line, so a block or a `///` command can be typed or pasted and run
    as one) is future work; today such a paste stops with a toast that points to the editor.
@@ -331,7 +333,9 @@ merge of steps 4 and 5. They are reviewed after it:
 - [ ] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan.
 - [ ] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand".
 - [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy.
-- [ ] Remove the queued run (asked for by the maintainer, 2026-11-12). Today a Run or a command with no engine (`none`,
+- [x] Remove the queued run (asked for by the maintainer, 2026-11-12). Done on the branch `claude/remove-queued-run`: no
+      state holds a run, `started` always leads to `ready`, `drop-run`, run.ts's `pending` and `dropped` are gone, and with no
+      engine every way to run opens the prompt and runs nothing (`docs/web-page-flows.md`, section 2). Today a Run or a command with no engine (`none`,
       `declined`) is accepted, opens the download prompt and is held until the engine starts; the machine drops it
       (`drop-run`) when the visitor says "Not now", the start fails or another tab takes the engine. The simpler model: with
       no engine, Run only opens the prompt and runs nothing, and the visitor presses Run again when the engine is ready. That

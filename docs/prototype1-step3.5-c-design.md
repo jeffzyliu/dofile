@@ -7,6 +7,12 @@ the same table cells.
 
 - **Status:** approved by the maintainer on 2026-11-11, with the five additions listed under "Decisions".
 - **Date:** 2026-11-10, revised 2026-11-11.
+- **Since 2026-11-12 there is no held run.** The maintainer removed the queued run (`docs/prototype1-plan.md`, Post-merge
+  review): with no engine, `run` in `none` or `declined` is ASK with `forRun` and keeps nothing; `asking`, `downloading`,
+  `starting-list` and `starting-worker` have no `queued` field, `started` always leads to `ready`, and the effect `drop-run`,
+  run.ts's `pending` and the handler `dropped` are gone. What this design says of a queued run (ruling 5, the cells
+  DOWNLOAD(queued), ASK(queued), RESET, `started`, scenario 12, the `drop-run` row) is the record of what was built in steps
+  3.5 and 4, not the code. The current table is `web/src/engine/machine.ts`, `web/test/machine.test.ts` and SPEC section 5.
 - **Paths** are relative to the repository root. A citation such as `web/src/engine/client.ts:268-356` is to the code
   at commit a11033d (step B2), which is what step C starts from. The numbers are not kept up to date: step C and the later
   reformat (Biome, ruff) moved the lines.

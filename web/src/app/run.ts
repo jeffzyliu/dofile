@@ -4,11 +4,11 @@
 // add a .png opened from the files with addFileGraph(); they never write these signals themselves.
 //
 // It does not read the engine's state. A run goes to the engine controller (engine.run()), which answers at once whether
-// it started, was queued for an engine that is not there yet, or was refused; the state machine decides. What happens to
-// a run and to the engine reaches this file through `handlers`, which main.tsx gives to the engine controller
-// (connectRun): began (a run started: this one, or a queued one when its engine is up), log (a chunk of its log), ended
-// (its result, also when the machine cut it), dropped (the queued run will not run), engineReady, and engineGone (a reset, or another tab took the engine:
-// nothing of the old engine is in memory).
+// it started, opened the download prompt (there is no engine: nothing runs, and nothing is kept to run later), or was
+// refused; the state machine decides. What happens to a run and to the engine reaches this file through `handlers`, which
+// main.tsx gives to the engine controller (connectRun): began (a run started), log (a chunk of its log), ended (its
+// result, also when the machine cut it), engineReady, and engineGone (a reset, or another tab took the engine: nothing of
+// the old engine is in memory).
 //
 // The log streams: the worker sends chunks while the run prints, and they grow one text item. When the result comes, its
 // `log` replaces that item's text, never adds to it: the stream can stop short of the log with no marker (the log cap,
@@ -39,62 +39,49 @@ let runs = 0; // runs so far in this page: each run's items carry its number
 let sessionRuns = 0; // runs since the engine started: the first one's run-head says "(first run: none yet)"
 let graphCount = 0; // graphs drawn since the log was cleared: their numbers
 let current: Current | null = null;
-let pending: ((result: RunResult | null) => void) | null = null; // the queued run's promise: began() or dropped() settles it
 
 /** What the engine controller calls (main.tsx: connectRun(handlers)). */
-export const handlers: engine.RunHandlers = { began, log: streamed, ended, dropped, engineReady, engineGone };
+export const handlers: engine.RunHandlers = { began, log: streamed, ended, engineReady, engineGone };
 
-/** Ask the engine controller for a run. `done`: the run's promise when it started now; when it was queued, its result
- *  once it has run, or null when the machine drops it (the effect drop-run: "Not now", a failed start, the lock lost);
- *  when it was refused, null at once. The machine holds one queued run at most. */
-function request(
-  code: string,
-  head: RunHead,
-): { how: "started" | "queued" | "refused"; done: Promise<RunResult | null> } {
+/** What asking for a run gave, known at once. "started": the engine was ready and the run began; `done` settles with its
+ *  result (after the after-run reads). "asked": there was no engine (`none`, `declined`): the download prompt opened,
+ *  titled for a run, and nothing runs, now or once the engine is ready. "refused": any other state (the page load, a
+ *  start or a run in progress, no engine that can start); nothing happens. `done` is null at once for both. */
+export type Requested =
+  | { how: "started"; done: Promise<RunResult> }
+  | { how: "asked" | "refused"; done: Promise<null> };
+
+/** Ask the engine controller for a run (the state machine decides; engine.run()). */
+function request(code: string, head: RunHead): Requested {
   const how = engine.run(code, head);
-  if (how === "started" && current) return { how, done: current.promise };
-  if (how === "queued") {
-    pending?.(null);
-    return { how, done: new Promise((ok) => (pending = ok)) };
-  }
-  return { how, done: Promise.resolve(null) };
+  if (how !== "started") return { how, done: Promise.resolve(null) };
+  // the effect send-run called began() in the step that run() made, so the run is `current`
+  if (!current) throw new Error("a run started and run.ts was not told: connectRun(handlers) was not called");
+  return { how, done: current.promise };
 }
 
-/** The queued run will not run (the effect drop-run). */
-function dropped() {
-  const settle = pending;
-  pending = null;
-  settle?.(null);
-}
-
-/** Run `code` as `head` says (section 4). With no engine yet (`none`, `declined`) the download prompt opens titled for a
- *  run, and the code runs when the engine has started. In any other state but `ready` (the page load, a start or a run
- *  in progress, no engine that can start) it does nothing. Resolves with the result, or null when it did not run (refused,
- *  or queued and then dropped). */
+/** Run `code` as `head` says (section 4). Resolves with the result, or null when it did not run (see Requested: with no
+ *  engine the download prompt opens and the code does not run). */
 export function runCode(code: string, head: RunHead): Promise<RunResult | null> {
-  return requestRun(code, head).done;
+  return request(code, head).done;
 }
 
-/** runCode, and whether the run was taken: `accepted` is true when it started now or was queued for the engine (`none`,
- *  `declined`), false when it was refused (nothing happens). The editor's Ctrl/Cmd+Enter says why in a toast then. */
-export function requestRun(code: string, head: RunHead): { accepted: boolean; done: Promise<RunResult | null> } {
-  const { how, done } = request(code, head);
-  return { accepted: how !== "refused", done };
+/** runCode, and what it gave at once (Requested): the editor's Ctrl/Cmd+Enter says why in a toast when it was refused. */
+export function requestRun(code: string, head: RunHead): Requested {
+  return request(code, head);
 }
 
 /** One command, as the command line, Load and Import send it (section 4): run with kind "command" and the locals kept.
- *  `accepted` (known at once) is true when the command runs now (`ready`) or is queued for the engine (`none`,
- *  `declined`: the prompt opens, and it runs when the engine has started); only then is it added to `history` (not twice
- *  in a row), also when the run ends in an error, and the command line clears its field. In any other state (the page
- *  load, a start or a run in progress, no engine that can start) it is refused: not in `history`, and the text stays in
- *  the field. An empty command is refused. `done`: as runCode's (a queued command's settles when it runs or is dropped). */
-export function runCommand(text: string): { accepted: boolean; done: Promise<RunResult | null> } {
+ *  Only a command that runs ("started": the engine is `ready`) is added to `history` (not twice in a row), also when the
+ *  run ends in an error, and only then does the command line clear its field. One that does not run ("asked": no engine,
+ *  the prompt opens; "refused") is not in `history`, and its text stays in the field. An empty command is refused. */
+export function runCommand(text: string): Requested {
   const command = text.trim();
-  if (!command) return { accepted: false, done: Promise.resolve(null) };
-  const { how, done } = request(command, { kind: "command", fresh_locals: false });
-  if (how === "refused") return { accepted: false, done };
-  if (W.history.value.at(-1) !== command) W.history.value = [...W.history.value, command];
-  return { accepted: true, done };
+  if (!command) return { how: "refused", done: Promise.resolve(null) };
+  const requested = request(command, { kind: "command", fresh_locals: false });
+  if (requested.how === "started" && W.history.value.at(-1) !== command)
+    W.history.value = [...W.history.value, command];
+  return requested;
 }
 
 /** A run started (the effect `send-run`): its items go into the log. `theme`: what the run is sent as plot_theme. */
@@ -106,14 +93,9 @@ function began(head: RunHead, theme: "light" | "dark") {
   const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for S 15's note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");
-  const adopted = pending; // a queued run that starts now: its caller's promise settles with this run's
-  pending = null;
   let done!: (result: RunResult) => void;
   const promise = new Promise<RunResult>((ok) => {
-    done = (r) => {
-      ok(r);
-      adopted?.(r);
-    };
+    done = ok;
   });
   current = { id, head, theme, t0: performance.now(), streamed: "", promise, done };
 }

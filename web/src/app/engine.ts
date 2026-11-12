@@ -89,7 +89,6 @@ export interface RunHandlers {
   began(head: RunHead, theme: "light" | "dark"): void;
   log(text: string): void;
   ended(result: RunResult): void;
-  dropped(): void; // the queued run will not run (the effect drop-run)
   engineReady(): void;
   engineGone(): void;
 }
@@ -115,7 +114,7 @@ const DROPS_KEPT = 200;
 // The two handles. Each is made by one effect and released by another; neither decides a state.
 let breakTimer: ReturnType<typeof setTimeout> | undefined; // start-break-timer, cancel-break-timer
 let download: { n: Ticket; stop: AbortController } | null = null; // start-download, abort-download
-let runs: RunHandlers = { began() {}, log() {}, ended() {}, dropped() {}, engineReady() {}, engineGone() {} };
+let runs: RunHandlers = { began() {}, log() {}, ended() {}, engineReady() {}, engineGone() {} };
 
 /** Wire the controller to the page's transport and tab lock. `snapshot`: the snapshot start (not ?snapshot=0). `manual`:
  *  ?test=manual, no start until the test calls start(). `graceMs`: how long Break waits before the engine is reset.
@@ -242,7 +241,7 @@ function apply(step: Step, event: Event | null) {
   }
 }
 
-/** The state as views see it: the same tag, without the tickets and the queued run, with the visitor's words. The one
+/** The state as views see it: the same tag, without the tickets, with the visitor's words. The one
  *  writer of the `engine` signal. It drops and adds fields; it maps no names. */
 function view(state: State): EngineState {
   switch (state.s) {
@@ -255,7 +254,7 @@ function view(state: State): EngineState {
     case "other-tab-taking":
       return { s: state.s };
     case "asking":
-      return { s: "asking", forRun: state.queued !== null };
+      return { s: "asking", forRun: state.forRun };
     case "downloading":
       return { s: "downloading", received: state.received, total: state.total, t0: state.t0 };
     case "starting-list":
@@ -372,8 +371,6 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         return;
       case "end-run":
         return runs.ended(effect.result);
-      case "drop-run":
-        return runs.dropped();
       case "engine-ready":
         return runs.engineReady();
       case "engine-gone":
@@ -451,18 +448,18 @@ export function keepWaiting(): void {
 }
 
 /** Run `code` (run.ts calls this; views call run.ts). "started": the engine was ready, and the run began (run.ts has been
- *  told). "queued": there is no engine yet (`none`, `declined`): the download prompt is open, titled for a run, and the
- *  run begins when the engine has started. "refused": any other state; nothing happens.
+ *  told). "asked": there is no engine (`none`, `declined`): the download prompt is open, titled for a run, and nothing
+ *  runs, now or when the engine is ready (the visitor runs it again then). "refused": any other state; nothing happens.
  *  It must not be called while a step is in progress (from a handler given to connectRun): it throws, before anything is
  *  queued. Code that wants to run something when a run ends does it after the run's promise resolves. */
-export function run(code: string, head: RunHead): "started" | "queued" | "refused" {
+export function run(code: string, head: RunHead): "started" | "asked" | "refused" {
   if (stepping)
     throw new Error(
       "run() was called while a step of the engine's state machine is in progress: call it after the step, for example when the run's promise has resolved",
     );
   const step = dispatch({ type: "run", code, head });
   if (step?.outcome !== "taken") return "refused";
-  return step.effects.some((effect) => effect.do === "send-run") ? "started" : "queued";
+  return step.effects.some((effect) => effect.do === "send-run") ? "started" : "asked";
 }
 
 /** A read op (describe, browse, matrix, macros, memory, describe_file): the page's one way to ask the engine for data.
