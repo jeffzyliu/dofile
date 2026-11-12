@@ -274,8 +274,15 @@ place and Load or Import and Copy are off (`web/src/stata/quote.ts`).
 
 ### 3.12 Landing page, commands page, sample (P1, step 5)
 - Build `L` as drawn, desktop and phone. The banner and the do-file drawing are `aria-hidden`, with a hidden plain-text copy
-  that holds no link. Each Copy button names what it copies; "Copied" shows beside it for 2 s and the live region says "Copied
-  to the clipboard". `pip install dofile` keeps its label "with the first release".
+  that holds no link. Each Copy button names what it copies; it shows a clipboard icon and "Copy", and for 2 s after a press
+  a check and "Copied" in its place (both faces in one cell, so it keeps its width; its name does not change), and the live
+  region says "Copied to the clipboard". It fits inside its code box (26 px high, taking one code line's height; WCAG 2.2's
+  24 px target, also with a finger). `pip install dofile` keeps its label "with the first release". The theme button keeps
+  its word at every width (System, Light, Dark) and its icon says the choice: a screen, a sun, a moon (`.i-theme` in `ui.css`,
+  from `<html data-theme>`, so the editor's theme button shows the same three). welcome.do (desktop) and "What a run looks
+  like" keep their lines and scroll sideways where their column is too narrow (each a `<section>` in the tab order, named
+  "welcome.do" and by its heading), never the page. The phone's banner is five block lines with nothing between them in
+  the `<pre>` (a line break there drew an empty line between each two rows, and the strokes no longer joined).
 - **Strings to change** (the runtime now comes from the page's own origin): delete " from a public CDN" in `S 1` ("…the
   engine: **about 48 MB** from a public CDN. Later visits…"), in `L`'s hidden desktop copy ("…about 48 MB) from a public
   CDN.") and in `L`'s welcome.do line 18 ("* WebAssembly, about 48 MB) from a public CDN."); delete " from a CDN" in `L`'s
@@ -1457,7 +1464,7 @@ questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below
   the compressed total in MB, the editor prompt's number: in dev from `public/`, in a build from the editor's
   `start-files.json`), `{{editor-url}}` (section 8, "URLs") and the commands list.
 - **Landing page** as drawn (`L`): desktop two columns, the phone's hero, both banner drawings and `welcome.do` hidden from
-  screen readers with a plain copy that holds no link; Copy buttons that name what they copy ("Copied" beside the button for
+  screen readers with a plain copy that holds no link; Copy buttons that name what they copy (the button says "Copied" for
   2 s, the live region says "Copied to the clipboard" once); " from a public CDN" and " from a CDN" are gone; "48 MB" is the
   build's number in every place. Added: the section `#browsers` ("Browsers that work", the target of the editor's banner link and
   of the section's own heading), full width under the two columns.
@@ -1523,6 +1530,9 @@ questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below
   the commands page's first list is "Command names" and its last link "Open the editor →"; "Home" stays. The Log head's "Clear"
   and the menus' "Clear log" take the danger color (`.danger`).
 
+- **Words of the landing page's fix round** (2026-11-12, drafts for the maintainer): the Copy button's face "Copied" (was
+  beside the button; same word); the scrolling regions' names "welcome.do" and "What a run looks like" (its heading). The
+  theme icons (a screen for System, a sun for Light, a moon for Dark) are drafts too.
 - **Words not in the sources** (drafts for the maintainer): the dialog "Restore the sample?" / "helpers.do differs from the
   sample. Replacing it discards your changes. Your other files are untouched." (plural: "analysis.do, helpers.do differ from
   the sample. Replacing them discards your changes. …") / **Cancel** (focused), **Replace** (`.btn.stop.live`); the toasts

@@ -159,7 +159,34 @@ test("the theme button cycles System, Light, Dark; the choice is the editor's to
   expect(await theme()).toBeNull();
 });
 
-test("Copy: the text is copied, Copied shows beside the button, and the live region says it once", async ({ page }) => {
+test("the theme button shows its word and a different icon for each choice, at this width too", async ({ page }) => {
+  await page.goto("/");
+  const button = page.getByRole("button", { name: /^Theme:/ });
+  const word = button.locator(".label-text");
+  const icon = () =>
+    button.locator(".ico").evaluate((e) => {
+      const s = getComputedStyle(e);
+      return s.maskImage || s.webkitMaskImage;
+    });
+  const icons = new Set<string>();
+  for (const name of ["System", "Light", "Dark"]) {
+    await expect(word).toHaveText(name);
+    await expect(word).toBeVisible(); // a phone too: the word is not hidden
+    const box = (await word.boundingBox())!;
+    expect(box.width).toBeGreaterThan(15);
+    const ico = await icon();
+    expect(ico).toContain("data:image/svg+xml");
+    icons.add(ico);
+    await button.click();
+  }
+  expect(icons.size).toBe(3);
+  await expect(word).toHaveText("System"); // round again
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("Copy: the text is copied, the button says Copied without changing size, and the live region says it once", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     (window as any).copied = [];
     Object.defineProperty(navigator, "clipboard", {
@@ -168,22 +195,109 @@ test("Copy: the text is copied, Copied shows beside the button, and the live reg
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Copy pip install dofile" }).click();
-  await expect(page.locator(".copied").first()).toBeVisible();
+  const pip = page.getByRole("button", { name: "Copy pip install dofile" });
+  const before = (await pip.boundingBox())!;
+  await expect(pip.locator(".copy-idle")).toBeVisible();
+  await expect(pip.locator(".copy-idle .i-copy")).toBeVisible(); // the clipboard icon
+  await expect(pip.locator(".copy-done")).toBeHidden();
+  await pip.click();
+  await expect(pip.locator(".copy-done")).toBeVisible();
+  await expect(pip.locator(".copy-done")).toHaveText("Copied");
+  await expect(pip.locator(".copy-idle")).toBeHidden();
+  await expect(pip).toHaveAccessibleName("Copy pip install dofile"); // the name stays
+  const after = (await pip.boundingBox())!;
+  expect(after.width).toBeCloseTo(before.width, 1);
+  expect(after.height).toBeCloseTo(before.height, 1);
   await expect(page.locator("#copy-status")).toHaveText("Copied to the clipboard");
+  // "Copied" in the ok color on the button reads in both themes (the axe tests below run with no button pressed)
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    const { violations } = await new AxeBuilder({ page }).include(".cmd").withRules(["color-contrast"]).analyze();
+    expect(
+      violations.map((v) => v.id),
+      colorScheme,
+    ).toEqual([]);
+  }
   await page.getByRole("button", { name: "Copy the MCP command" }).click();
   const copied = await page.evaluate(() => (window as any).copied);
   expect(copied[0]).toBe("pip install dofile");
   expect(copied[1]).toBe(
     'claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"',
   );
-  await expect(page.locator(".copied").first()).toBeHidden({ timeout: 4000 }); // after 2 s
+  await expect(pip.locator(".copy-done")).toBeHidden({ timeout: 4000 }); // after 2 s
+  await expect(pip.locator(".copy-idle")).toBeVisible();
+});
+
+test("each Copy button fits inside its code box, and the one-line box is as high as its line", async ({ page }) => {
+  await page.goto("/");
+  for (const name of ["Copy pip install dofile", "Copy the MCP command"]) {
+    const button = page.getByRole("button", { name });
+    const b = (await button.boundingBox())!;
+    const box = (await button.locator("xpath=..").boundingBox())!;
+    expect(b.y, name).toBeGreaterThanOrEqual(box.y);
+    expect(b.y + b.height, name).toBeLessThanOrEqual(box.y + box.height);
+    expect(b.height, name).toBeGreaterThanOrEqual(24); // WCAG 2.2's target size
+  }
+  // pip install: the box is one line of code plus its padding and border, as if it had no button
+  const cmd = page.locator(".cmd").first();
+  const line = await cmd.locator("code").evaluate((e) => e.getBoundingClientRect().height);
+  const box = (await cmd.boundingBox())!;
+  expect(box.height).toBeLessThanOrEqual(line + 2 * 8 + 2 + 0.5);
+});
+
+test("the banner's rows are one line apart, so its slanted strokes join", async ({ page }) => {
+  // on a phone the hero's banner (each row a block in a <pre>); wider, welcome.do's first five numbered lines
+  await page.goto("/");
+  const rows = await page.evaluate((phoneLayout) => {
+    const lines = phoneLayout
+      ? [...document.querySelectorAll(".hero .art .art-skew")]
+      : [...document.querySelectorAll(".file.desktop-only .art-ln")];
+    const lh = Number.parseFloat(getComputedStyle(lines[0]).lineHeight);
+    return { lh, tops: lines.map((l) => l.getBoundingClientRect().top), shown: lines[0].getClientRects().length > 0 };
+  }, phone(page));
+  expect(rows.shown).toBe(true);
+  expect(rows.tops).toHaveLength(5);
+  for (let i = 1; i < 5; i++) expect(rows.tops[i] - rows.tops[i - 1]).toBeCloseTo(rows.lh, 0);
+});
+
+test("welcome.do and the run's log scroll sideways where they are too wide, by keyboard; the page does not", async ({
+  page,
+}) => {
+  // the two-column layout at a width where both are cut (as an iPhone shows the page in its desktop mode, about 980 px)
+  await page.setViewportSize({ width: 980, height: 900 });
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
+  for (const [name, region] of [
+    ["welcome.do", page.getByRole("region", { name: "welcome.do" })],
+    ["What a run looks like", page.getByRole("region", { name: "What a run looks like" })],
+  ] as const) {
+    await expect(region, name).toBeVisible();
+    await expect(region, name).toHaveAttribute("tabindex", "0");
+    const size = await region.evaluate((e) => ({
+      scroll: e.scrollWidth,
+      client: e.clientWidth,
+      x: getComputedStyle(e).overflowX,
+    }));
+    expect(size.x, name).toBe("auto");
+    expect(size.scroll, name).toBeGreaterThan(size.client);
+    await region.focus();
+    // one press at a time until it moves: WebKit animates a key's scroll, and a burst of presses can leave it at 0
+    await expect
+      .poll(async () => {
+        await page.keyboard.press("ArrowRight");
+        return region.evaluate((e) => e.scrollLeft);
+      }, name)
+      .toBeGreaterThan(0);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 for (const scheme of ["light", "dark"] as const) {
   test(`axe finds nothing on the landing and commands pages, ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
-    for (const url of ["/", "/commands/"]) {
+    // the project's own width, then 980 px, where welcome.do and the run's log scroll sideways (their regions checked too)
+    for (const url of ["/", "/commands/", "/#980"]) {
+      if (url === "/#980") await page.setViewportSize({ width: 980, height: 900 });
       await page.goto(url);
       await page.evaluate(() => document.fonts.ready);
       const { violations } = await new AxeBuilder({ page })

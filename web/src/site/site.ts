@@ -39,7 +39,7 @@ function themeButton() {
   apply();
 }
 
-/** Copy buttons: `data-copy` is the text; "Copied" shows beside the button for 2 s and the live region says it once. */
+/** Copy buttons: `data-copy` is the text; the button shows "Copied" for 2 s and the live region says it once. */
 async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -62,20 +62,17 @@ function copyButtons() {
     b.hidden = false; // hidden in the HTML: without this script it would do nothing
     let timer: ReturnType<typeof setTimeout> | undefined;
     b.addEventListener("click", async () => {
-      const shown = b.parentElement?.querySelector<HTMLElement>(".copied");
       if (!(await copyText(b.dataset.copy ?? ""))) {
         if (status) status.textContent = "Couldn't copy: select the text and copy it by hand";
         return;
       }
-      if (shown) shown.hidden = false;
+      b.classList.add("done"); // the button's face says Copied (site.css); its name stays "Copy …"
       if (status) status.textContent = ""; // so the same words are read again on a second press
       setTimeout(() => {
         if (status) status.textContent = "Copied to the clipboard";
       }, 50);
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (shown) shown.hidden = true;
-      }, 2000);
+      timer = setTimeout(() => b.classList.remove("done"), 2000);
     });
   }
 }
