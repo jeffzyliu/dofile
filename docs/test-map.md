@@ -4,7 +4,7 @@ What the tests are for, by function. Counts are test functions (`def test_` / `i
 as of 2026-11-11, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1300-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-360-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-370-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,300 tests)
@@ -95,7 +95,7 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 360 tests)
+## Web (about 370 tests)
 
 ### Unit and integration (`node --test`, `web/test/`, 295)
 
@@ -115,7 +115,7 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `editor.test.ts` | 30 | The editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/csv.ts`, `ranover.ts` and `words.ts`): the .log tokenizer (echoes, a loop's body and continued lines, a list row that is output, the error's message and `r(N);`, Break, a nested do-file's end, the hint and its bold words and help link, the path shim's note, a log file's head, and the same lines after an echo as output), Download log's text, where each code line is echoed (blank lines, block comments, a loop, `///`, the same text twice, nested do-files; from the engine's own logs: a do-file run from a loop or an `if 0` block, a mata block and `#delimit`, `capture noisily do` and `quietly do`; a do-file run from a loop or a program followed by a line its file holds too, a do-file that runs a do-file from a loop, `cap n do`, `include` and `noi do`, the silent body of a `quietly { }` or `capture { }` and the echoed one in a loop, a program or `noisily { }`, a line in a `/* */` comment equal to the next one; which lines are inside blocks, and a local's braces), the file a `do` names (with prefixes) and the unsaved file it is, pasted lines (an ordinary paste; the lines joined to the field's text; in turn, the next after the one before; stopping at a refused, dropped or failed line, Break too, and before a block's, a `/*` comment's, a lone `program define` or `mata`, or a `///` line; the toast's words), Find's matches, the error a run ended with (`runError`: the last, not one `capture noisily` caught), a .csv's columns, the run-head, last-run, time and memory words; one line pasted with its line break is an ordinary paste; the error mark's rule (`editor/errormark.ts`: set by the file's last run, cleared by a new run of that file, a reset or the line's deletion, left by a command or another file's run); what a run's version of an open file does to its tab (`editor/ranover.ts`: texts compared with line breaks as `\n`, so a clean `\r\n` tab is shown the run's rows; the same rows with other breaks are the same text; one change for a grown, filled or emptied file; edits or a version that is not text kept, and clean again when the run wrote the editor's text); a file's form, which Save keeps (`formOf`, `lineBreakOf`, `fileText`: `\r\n` or `\n`, the more common one in a mixed file, `\n` on a tie, empty or with none, a lone `\r` not counted; a BOM noted and never in the editor's text; a `\r\n` or `\n` text, with or without a BOM, written back byte for byte; a `.do` or `.ado` file, case ignored, written without its BOM and with its line break, other names with it (`dropsBom`, `savedForm`)); Save's key (`editor/keys.ts`: Ctrl or Cmd with S on QWERTY, AZERTY, Dvorak and a Cyrillic or Greek layout, by the key that types s or, typing no Latin letter, the key in S's place; never with Alt, AltGr or Shift). |
 | `output.test.ts` | 14 | The Output tabs' logic (`app/output/format.ts`): numbers to 8 digits and the exponent form, missing values, matrix as tab-separated text, the Results sections and groups (defaults, system globals, no Functions group), a long Browse cell cut short, a graph's label and alt text with its number when a command is shared, sizes. |
 | `states.test.ts` | 9 | Step 4d's plain logic (`app/states/words.ts`): Reset asked only with data or results, always during a run, and after a run only once the memory is described again (a run that made data and no results is asked about; a description that fails asks; a run a reset cut asks nothing), the stopping countdown at 0 s, the memory banner with no size, the times, the reset banner's words by kind, the running banner's name of a run, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile, which the engine's own line says). |
-| `imports.test.ts` | 12 | Architecture rules enforced by scanning source: import layering, single writers, single instances, one `postMessage` site; no old state flag outside the machine (step 4b's `editor/clock.ts` may read `breaking`'s `resetAt`). |
+| `imports.test.ts` | 12 | Architecture rules enforced by scanning source: import layering, single writers, single instances, one `postMessage` site; no old state flag outside the machine (step 4b's `editor/clock.ts` and step 4d's `states/banners.tsx` may read `breaking`'s `resetAt`). |
 | `snapshot.test.ts` | 5 | Snapshot inflate and unpack. |
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
@@ -222,7 +222,7 @@ view; the phone ⋯'s Save in the three desktop profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (52, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (76, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.

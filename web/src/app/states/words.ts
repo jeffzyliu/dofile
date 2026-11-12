@@ -141,7 +141,7 @@ export const twiceWords = (reason: FailReason): { head: string; rest: string } =
   rest: "It won't restart by itself, since each try can use a lot of a phone's memory. Your files are safe.",
 });
 
-// ---- OQ-10: the three notes in the page's own words (DRAFT; nobody shows them yet: see SPEC 8, "Step 4d") ----
+// ---- OQ-10: the two notes in the page's own words (DRAFT; log/LogView.tsx shows them: see SPEC 8, "Step 4d") ----
 
 /** Community commands the engine does not have (F 3.5). */
 export const COMMUNITY = ["reghdfe", "esttab", "estout", "outreg2", "ivreg2", "xtivreg2", "ftools", "winsor2"];

@@ -388,6 +388,7 @@ export type Effect =
   | { do: "start-break-timer"; n: Ticket; ms: number }
   | { do: "cancel-break-timer" }
   | { do: "end-run"; result: RunResult }
+  | { do: "drop-run" } // the queued run will not run: transition() adds it (added in step 4)
   | { do: "engine-ready" }
   | { do: "engine-gone" }
   | { do: "show-dialog"; dialog: "download"; forRun: boolean } | { do: "show-dialog"; dialog: "other-tab" }
@@ -504,6 +505,7 @@ column is the effect's row in `Answers`: what the performer may say back through
 | Break timer | `start-break-timer {n, ms}` | `setTimeout` | `break-timeout` |
 | Break timer | `cancel-break-timer` | `clearTimeout` | none |
 | `web/src/app/run.ts` | `end-run {result}` | hand the result over. Always the last effect of its step. | none |
+| `web/src/app/run.ts` | `drop-run` | settle the queued run's promise with null (the handler `dropped`): the run will not run. Added by `transition()` itself (`dropRun`), as the last effect of any step that lets go of the queued run without `send-run`: "Not now", "Stop download", a failed start, the lock lost (added after step 3.5, in step 4) | none |
 | `web/src/app/run.ts` | `engine-ready` | ask `memory` (today `web/src/app/run.ts:37-39`) | none |
 | `web/src/app/run.ts` | `engine-gone` | clear `results`, `macros`, `data`, `rows`, `memory`, `lastRun`, `sessionRuns` (today `web/src/app/run.ts:30-36`). This is the plan's "the engine was replaced". | none |
 | Signals (`web/src/app/state.ts`) | `show-dialog` | write `dialog` | none |

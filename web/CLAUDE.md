@@ -36,8 +36,10 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   `// @ts-expect-error` covers one line: if Biome would split the statement under it, put a `// biome-ignore format:`
   line above. The tests that read source text (`test/imports.test.ts`) must not depend on how a line is wrapped.
 - **The page is Preact with signals, in `src/app/`** (`src/main.tsx` wires it). The state is one module of signals,
-  `src/app/state.ts` (SPEC section 8; types in `src/app/types.ts`); each signal has one owner and is exported
-  `ReadonlySignal`, so a view that assigns one fails `npm run check`. The controllers own most of them and are `.ts` files that
+  `src/app/state.ts` (SPEC section 8; types in `src/app/types.ts`); a signal with one owner is exported
+  `ReadonlySignal`, so a view that assigns one fails `npm run check`, and the others (`tabs`, `activeTab`, `dialog`,
+  `split`, `outputTab`, `phoneTab`, `graphIndex`, `graphFull`, `pickedVar`, `theme`, `layout`, `isolated`) are plain
+  signals that views write. The controllers own most of them and are `.ts` files that
   import no `.tsx`, tested in Node (`test/app.test.ts`): `engine.ts` (the only caller of the state machine, below; the tab
   lock; asking at load unless `client.cached()` finds this build's start files all in the Cache; there is no "downloaded"
   flag), `run.ts` (runs, the log, results, graphs, the after-run calls; it reads no engine state, the engine controller tells

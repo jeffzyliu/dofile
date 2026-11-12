@@ -28,8 +28,8 @@
 //    `other-tab-idle` or `other-tab-taking`. A view that treats a pair alike writes two `case`s; CSS keyed on
 //    <html data-engine> matches by prefix.
 //  - A signal with one owner is a ReadonlySignal: assigning it in a view fails `npm run check`. Views write `graphIndex`,
-//    `graphFull`, `dialog`, `tabs`, `activeTab`, `split`, `outputTab`, `phoneTab`, `pickedVar`, `theme`; the rest through
-//    the controllers' actions and state.ts's helpers.
+//    `graphFull`, `dialog`, `tabs`, `activeTab`, `split`, `outputTab`, `phoneTab`, `pickedVar`, `theme` (and main.tsx
+//    `layout`; `isolated` is set once at load); the rest through the controllers' actions and state.ts's helpers.
 //  - There is no `about` signal: env.ts ABOUT (dofile, engine_commit, stata_version) is compiled in, there from the
 //    first paint. engine.ts no longer maps the worker's status texts to stages (the worker sends typed stage ids): the
 //    words of each Stage are stageStatus (the status bar) and stageWords (the live region).
@@ -45,34 +45,40 @@
 //      3.10), files/banners.tsx (not-text).
 //      Writes `tabs` (not `dirty`), `activeTab`, `dialog` (its four kinds), `banners` (not-text); openFile writes
 //      `phoneTab` = "editor" on a phone when a text or .dta tab opens, and for a .png `outputTab` = "graph" (desktop) or
-//      `graphFull` (phone). Calls store.* (app/store.ts), files.ts downloadAll() and saveAs, editorCommands.open, reload,
-//      renamed, closed, save(path) (editor/commands.ts), run.ts addFileGraph(path, png) and runCommand(text) (Import),
-//      state.ts addBanner, dismiss, showToast. downloadAll() makes no zip and resolves false when the store has no file
+//      `graphFull` (phone); the phone's FileSwitcher writes `phoneTab` = "files" ("Show all files"). Calls store.*
+//      (app/store.ts), files.ts downloadAll() and saveAs, editorCommands.open, reload, renamed, closed, save(path) and
+//      focus (after a tab closes) (editor/commands.ts), run.ts addFileGraph(path, png) and runCommand(text) (Import),
+//      state.ts addBanner, dismiss, showToast, say. The plain logic: files/tree.ts, files/actions.ts. downloadAll() makes no zip and resolves false when the store has no file
 //      (folders do not count): disable your "Download all (.zip)" while state.ts `hasFiles` is false, as the ⋯ menu
 //      does; a failure shows by itself (files.ts adds the banner download-failed). No tab can be dirty before 4b's
 //      editor exists: 4a's tests of the close-tab and reload paths call state.ts setDirty(path, true) themselves.
 //   4b editor/Editor.tsx, editor/commands.ts (fills editorCommands and `selection`), editor/RunControls.tsx,
-//      editor/StatusBar.tsx, editor/banners.tsx (save-failed), log/LogView.tsx, log/CommandLine.tsx (CommandLine,
-//      LogActions, logMenuItems for the phone's ⋯, PhoneStrip).
-//      Writes `tabs[].dirty` only through state.ts setDirty(path, on), `banners` (save-failed), `graphIndex` and
-//      `outputTab` (a graph link), `graphFull` (a tap on an inline graph, phone). Calls run.ts runCode(code, head) and
-//      runCommand(text), engine.ts breakRun, keepWaiting, reset, files/open.ts openFile (goToLine on a closed file),
-//      store.write (Save), showToast. Reads the log's per-run data on each text item (`unsaved`, `end`: types.ts LogItem).
+//      editor/StatusBar.tsx, editor/banners.tsx (save-failed, run-changed), log/LogView.tsx, log/CommandLine.tsx
+//      (CommandLine, LogActions, logMenuItems for the phone's ⋯, PhoneStrip). The plain logic: editor/cm.ts, clock.ts,
+//      csv.ts, errormark.ts, keys.ts, ranover.ts, words.ts; log/align.ts, classify.ts, find.ts, paste.ts, pasterun.ts.
+//      Writes `tabs[].dirty` only through state.ts setDirty(path, on), `banners` (addBanner for save-failed; dismiss for
+//      save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; "log" when Find opens unsplit),
+//      `graphFull` (a tap on an inline graph, phone), `phoneTab` = "log" (a tap on the phone's Break pill). Calls run.ts
+//      runCode(code, head) and runCommand(text), engine.ts breakRun and reset ("Reset now"), files/open.ts openFile
+//      (goToLine on a closed file), store.write (Save), files.ts saveAs (Download log, the save-failed banner's Download)
+//      and textInStore with editorCommands.reload (the run-changed banner's "Reload from the run"), showToast, say. Reads the log's per-run data on each text item (`unsaved`, `end`: types.ts LogItem).
 //      The command line: runCommand(text) returns { accepted, done } at once; clear the field only when `accepted` (it
 //      ran, or was queued with no engine; then it is in `history`, an error too); refused (the page load, a start or a
 //      run in progress): the text stays, and `history` is unchanged. A queued run goes from `starting-worker` straight to
 //      `running`. The log's head ("dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax") takes its values from env.ts ABOUT.
-//   4c output/tabs.tsx (GraphTab, DataTab, ResultsTab), output/FullSize.tsx (FullSize), output/DtaView.tsx (DtaView).
+//   4c output/tabs.tsx (re-exports GraphTab, DataTab, ResultsTab from GraphTab.tsx, DataTab.tsx, ResultsTab.tsx),
+//      output/FullSize.tsx (FullSize), output/DtaView.tsx (DtaView); the plain logic: output/format.ts, clip.ts, view.ts.
 //      Writes `graphIndex`, `graphFull`, `pickedVar`. Not `rows`: "Show 50 more" calls run.ts moreRows(), which appends
 //      (run.ts is the one writer of `rows`), and no view calls `browse`. Calls engine.ts call(op, args) (matrix,
 //      describe_file: the read ops a view alone shows), run.ts moreRows() and runCommand(text) (Load), showToast ("Copied").
 //   4d states/DownloadDialog.tsx (the other-tab dialog's "Close editor" goes to env.ts LANDING_URL, step 5's page),
 //      states/ResetDialog.tsx (askReset), states/banners.tsx (the engine-state banners, reset, storage, memory, and
-//      download-failed, built in step 3: 4d may restyle or reword it). Writes `dialog` (reset; it closes download and
+//      download-failed, built in step 3 and reworded by 4d). Writes `dialog` (reset; it closes download and
 //      other-tab), `banners` (only dismiss()). Calls engine.ts start (also "Try again"), ask() (the declined banner's
 //      "Download the engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,
 //      and a second press does nothing), keepWaiting, reset; editorCommands.runFile ("Run the file
-//      again"); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner
+//      again") and editorCommands.focus (states/focus.ts focusStable); run.ts refreshData (Reset describes the memory
+//      again after a run: states/words.ts resetDecision); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner
 //      download-failed, which a later download that works removes; with no file to put in it, false and nothing shown).
 //      A failed start's `message` is the visitor's words; its `detail` is the developer's cause (types.ts EngineState).
 // editorCommands is filled field by field when 4b's editor mounts: every part calls through the object
