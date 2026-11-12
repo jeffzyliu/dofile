@@ -24,6 +24,7 @@ import * as S from "./app/state.ts";
 import { store } from "./app/store.ts";
 import { applyTheme } from "./app/theme.ts";
 import { watchViewport } from "./app/viewport.ts";
+import { watchWakeLock } from "./app/wakelock.ts";
 import { EngineClient } from "./engine/client.ts";
 import { tabLock } from "./engine/tab.ts";
 
@@ -57,6 +58,8 @@ effect(() => {
   S.isPhone.value;
   viewport.update();
 });
+// the screen stays awake while the engine works (app/wakelock.ts)
+watchWakeLock();
 // the engine's state on <html>, for the tests and for CSS that needs it
 effect(() => {
   document.documentElement.dataset.engine = S.engine.value.s;

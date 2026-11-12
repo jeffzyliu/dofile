@@ -1328,6 +1328,17 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   tallest at that width. The editor page's viewport meta has `minimum-scale=1, maximum-scale=1, user-scalable=no` (the maintainer's choice on 2026-11-12, to steady the phone keyboard; it limits pinch zoom, and axe's `meta-viewport` would flag it if axe ran on the editor). The theme button's labels for light and dark follow the spec's for system:
   "Theme: light. Press for dark, then to follow the system." and "Theme: dark. Press to follow the system, then light."
   A tab controls its panel only while selected (`aria-controls`).
+- **Screen wake lock (`app/wakelock.ts`).** On a phone a locked screen suspends the page and the browser may discard it,
+  which would lose a download of about 48 MB, an engine start or a long run. So while the engine is working for the
+  visitor the page asks the browser to keep the screen awake (`navigator.wakeLock.request("screen")`). The policy is one
+  table in that file, `WAKE_LOCK`, over the sixteen state names (a new state does not compile until it has an answer):
+  wanted in `downloading`, `starting-list`, `starting-worker`, `running`, `breaking` and `waiting`; not wanted in
+  `checking-lock`, `checking-cache`, `none`, `asking`, `declined`, `ready`, `failed`, `failed-twice`, `other-tab-idle`
+  and `other-tab-taking`. The lock is asked for when a state first wants it and let go when none does. The browser lets it
+  go by itself when the page is hidden, so the page asks again when it is visible again and the lock is still wanted; a
+  request that is refused is ignored, with no message; at most one lock is held, and one that arrives after it is no
+  longer wanted is let go. A browser without the API gets nothing. No setting, no toast. The module only reads the
+  `engine` signal; `main.tsx` starts it once.
 - **Tests.** `web/test/app.test.ts` (the controllers on a stand-in transport, and `viewport.ts` on a stand-in
   `visualViewport`), `web/e2e/shell.spec.ts` (the shell: the toolbar's boxes in every engine state at three widths, one
   height for the desktop toolbar's buttons and for the pane heads' controls, the phone ⋯'s Theme that keeps the menu
