@@ -123,26 +123,36 @@ body.landing main {
   color: var(--tok-macro);
   font-weight: var(--w-bold-mono);
 }
+/* Copy fits inside its box: 26 px high, with negative margins that make it take one code line's height, so the box is
+   as high as its text alone (also with a finger: 26 px is above WCAG 2.2's 24 px target size). Its two faces, "Copy"
+   and "Copied" (2 s after a press; the button keeps its name and the live region speaks), share one grid cell, so the
+   button keeps the width of the wider one and nothing moves. */
 .cmd .copy {
+  display: inline-grid;
+  height: 26px;
+  margin-block: -4px;
+  padding: 0 8px;
   font: var(--w-bold-ui) 11.5px / 1 var(--font-ui);
-  padding: 4px 8px;
   flex: none;
   color: var(--ink);
 }
-/* after Copy: "Copied" beside the button for 2 s (the button keeps its name; the live region speaks). It comes before
-   the button in the markup so the button stays at the right edge. */
-.cmd .copied {
-  order: 1;
-  flex: none;
+.cmd .copy > span {
+  grid-area: 1 / 1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding-top: 4px;
-  font: var(--w-bold-ui) 11.5px / 1 var(--font-ui);
-  color: var(--ok);
 }
-.cmd .copy {
-  order: 2;
+.cmd .copy .ico {
+  font-size: 12px;
+}
+.cmd .copy .copy-done,
+.cmd .copy.done .copy-idle {
+  visibility: hidden;
+}
+.cmd .copy.done .copy-done {
+  visibility: visible;
+  color: var(--ok);
 }
 .label {
   font-size: var(--text-sm);
@@ -164,11 +174,18 @@ body.landing main {
   display: flex;
   flex-direction: column;
 }
+/* the two drawings of code, welcome.do and the run's log, keep their lines: where the column is too narrow for them they
+   scroll sideways (by touch, and by keyboard: each scroller is a named region in the tab order), never the page */
+.landing .file.desktop-only .pane-body,
+.sample-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 .sample {
   font: 11px / 1.45 var(--font-mono);
   margin: 0;
   white-space: pre;
-  overflow: hidden; /* as drawn: at a width too narrow for its 80 columns the right edge is cut (the phone does not show it) */
+  width: max-content;
 }
 .sample .echo {
   font-weight: var(--w-bold-mono);
@@ -313,9 +330,6 @@ footer a {
   .top nav {
     gap: var(--s3);
   }
-  .theme .label-text {
-    display: none;
-  }
   body.landing main {
     grid-template-columns: minmax(0, 1fr);
     padding: var(--s3);
@@ -372,7 +386,7 @@ footer a {
   }
 }
 
-/* a finger: the links in the bar and the Copy buttons are 44 px high */
+/* a finger: the links in the bar and the theme button are 44 px high (Copy stays inside its box: above) */
 @media (pointer: coarse) {
   html {
     --bar-h: 69px;
@@ -382,7 +396,6 @@ footer a {
     align-items: center;
     min-height: 44px;
   }
-  .cmd .copy,
   .site .theme {
     min-height: 44px;
     min-width: 44px;
