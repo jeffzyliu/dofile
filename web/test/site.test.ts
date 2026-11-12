@@ -156,6 +156,14 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     assert.match(probe.replace("/app", EDITOR_BASE.slice(0, -1)), spelled, probe);
   assert.doesNotMatch(`"${EDITOR_BASE.slice(0, -1)}s/"`, spelled, "another name that starts the same");
   for (const f of files) assert.doesNotMatch(web(f), spelled, f);
+  // and no e2e test opens the editor's flags at the site's root ("/?test" is the landing page): the editor's addresses are
+  // relative to Playwright's baseURL, which ends in the base
+  for (const f of files.filter((f) => f.startsWith("e2e/")))
+    assert.doesNotMatch(
+      web(f),
+      /["'`]\/\?(test|sample|snapshot|brotli)\b/,
+      `${f}: an editor address at the site's root`,
+    );
 });
 
 test("the filter keeps the names that contain what was typed, ignoring case and outer spaces", () => {

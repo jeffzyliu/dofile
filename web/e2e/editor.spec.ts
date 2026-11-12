@@ -1371,7 +1371,7 @@ test("S 15's note under a nested do in a loop: one note, after the loop's echo o
   await setUp(
     page,
     { "sub.do": "display 1\n", "main.do": "forvalues i = 1/2 {\n    do sub.do\n}\ndisplay 2\n" },
-    "/?test",
+    "?test",
   );
   await startEngine(page);
   await ready(page);
