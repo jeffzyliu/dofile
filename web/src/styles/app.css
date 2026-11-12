@@ -723,6 +723,308 @@ input.filter::placeholder {
   }
 }
 
+/* Step 4b: the editor, the log, the command line, the status bar and the phone's strip (app/editor/, app/log/). The log's
+   line kinds (.echo, .err, .hint, .note, .runhead, .head, .glink, .jump) and the editor's tokens (.k .s .c .m .num) are
+   ui.css's; this block styles CodeMirror on the tokens, the editor's line marks (ui.css draws them on .code .ln; here
+   on CodeMirror's lines), a .csv's columns and a .log's lines in the editor, the log's buttons, Find, the banner art,
+   the phone's strip, inline graphs and hint block, and the command line's height on a phone, which places the toast. */
+.editor-cm {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.editor-cm .cm-editor {
+  flex: 1;
+  min-height: 0;
+  font: var(--code) / 1.6 var(--font-mono);
+  color: var(--ink);
+  background: var(--surface);
+}
+.editor-cm .cm-editor.cm-focused {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.editor-cm .cm-scroller {
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+.editor-cm .cm-content {
+  padding: var(--s2) 0;
+  caret-color: var(--ink);
+}
+.editor-cm .cm-cursor {
+  border-left: 2px solid var(--ink);
+}
+.editor-cm .cm-gutters {
+  background: var(--surface);
+  color: var(--muted);
+  border: 0;
+}
+.editor-cm .cm-lineNumbers .cm-gutterElement {
+  min-width: 4ch;
+  padding: 0 1.5ch 0 10px;
+}
+.editor-cm .cm-activeLineGutter {
+  background: transparent;
+  color: var(--ink);
+}
+.editor-cm .cm-selectionBackground,
+.editor-cm .cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.editor-cm .cm-sel-line {
+  background: var(--accent-soft);
+}
+/* the lines a run is running: the accent bar and bold number; the error line: the red bar and tint, bold number */
+.editor-cm .cm-run-line {
+  box-shadow: inset var(--bar) 0 0 var(--accent);
+}
+.editor-cm .cm-gutterElement.cm-run-n {
+  color: var(--accent);
+  font-weight: var(--w-bold-mono);
+  box-shadow: inset var(--bar) 0 0 var(--accent);
+}
+.editor-cm .cm-err-line {
+  background: var(--error-soft);
+}
+.editor-cm .cm-gutterElement.cm-err-n {
+  color: var(--error);
+  font-weight: var(--w-bold-mono);
+  background: var(--error-soft);
+  box-shadow: inset var(--bar) 0 0 var(--error);
+}
+/* a .csv's columns (P/.csv) and a .log's lines (P/.log), in the editor */
+.csv-c0 {
+  color: var(--ink);
+}
+.csv-c1 {
+  color: var(--accent);
+}
+.csv-c2 {
+  color: var(--tok-string);
+}
+.csv-c3 {
+  color: var(--tok-macro);
+}
+.csv-c4 {
+  color: var(--warn);
+}
+.csv-d {
+  color: var(--muted);
+}
+.lg-echo {
+  font-weight: var(--w-bold-mono);
+}
+.lg-err {
+  color: var(--error);
+  font-weight: var(--w-bold-mono);
+}
+.lg-hint,
+.lg-note {
+  color: var(--muted);
+}
+/* no file open: the editor's place says so, and takes the focus the editor would */
+.editor-empty {
+  flex: 1;
+  padding: var(--s4) var(--s3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.editor-empty:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  outline: 2px solid transparent;
+}
+
+/* the log's buttons: the graph link, Go to line, a hint's help link */
+.log button.glink {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--accent);
+  background: var(--surface);
+  cursor: pointer;
+}
+.log button.jump,
+.log button.help-link,
+.phone-strip button.jump {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+.log button.help-link {
+  font-family: var(--font-mono);
+  font-size: inherit;
+}
+@media (hover: hover) {
+  .log button.glink:hover {
+    background: var(--accent-soft);
+  }
+}
+.log mark {
+  background: var(--warn-soft);
+  color: inherit;
+  border-radius: 2px;
+}
+.log mark.on {
+  outline: 2px solid var(--warn);
+}
+/* Find: a field over the log, kept in view while the log scrolls */
+.findbar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.findbar .field {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.findbar .count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 6ch;
+}
+/* the banner B2 (book+drop+skew): each line slanted, moved right by its height above the last, so the strokes join */
+.log .head .art {
+  line-height: 1.1;
+}
+.log .head .art > .art-skew {
+  display: block;
+  width: max-content;
+  transform: translateX(calc(var(--k) * 0.55em)) skewX(-12deg);
+}
+.art-ink {
+  color: var(--accent);
+}
+.art-drop {
+  text-shadow: 1px 1px 0 var(--border-strong);
+}
+
+/* the command line: the typed text in the ink color (ui.css draws the mockup's empty field muted) */
+.cmdline .field {
+  color: var(--ink);
+  min-width: 0;
+}
+.cmdline .field::placeholder {
+  color: var(--muted);
+}
+.statusbar .last-run {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* the phone: the strip under the top bar, a graph in the log, the hint as a block, the wide-table note */
+.phone-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 5px var(--s3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.phone-strip b {
+  color: var(--ink);
+  font-weight: var(--w-bold-ui);
+}
+.phone-strip .rc-err {
+  color: var(--error);
+  font-weight: var(--w-bold-ui);
+}
+.log button.inline-graph {
+  display: block;
+  width: calc(100% - 2px);
+  max-width: 480px;
+  height: 150px;
+  margin: var(--s1) 0;
+  padding: var(--s1);
+  background: var(--graph-card);
+  border-radius: var(--radius);
+}
+.log button.inline-graph img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.log .explain {
+  display: block;
+  white-space: normal;
+  max-width: 60ch;
+  margin: var(--s1) 0;
+  padding: var(--s2) var(--s3);
+  border-left: var(--bar) solid var(--error);
+  background: var(--error-soft);
+  border-radius: var(--radius);
+  font: var(--text-sm) / 1.45 var(--font-ui);
+  color: var(--ink);
+}
+.log .explain b {
+  font-weight: var(--w-bold-ui);
+}
+.log .hscroll {
+  display: block;
+  font: var(--text-xs) / 1.6 var(--font-ui);
+  color: var(--muted);
+}
+/* the command line's height on a phone, which the toast is placed against: above it and the tab bar (8 + 44 + 8 px and
+   its edge, and the safe area), and with the keyboard open above it at the visible area's foot */
+.app[data-layout="phone"] {
+  --cmdline-h: 3.25rem;
+}
+.app[data-layout="phone"] .cmdline {
+  height: var(--cmdline-h);
+  box-sizing: border-box;
+}
+.app[data-layout="phone"] .toasts {
+  bottom: calc(var(--cmdline-h) + 61px + env(safe-area-inset-bottom, 0px) + var(--s2));
+}
+:root[data-keyboard] .app[data-layout="phone"] .toasts {
+  top: calc(var(--vv-top) + var(--vv-height) - var(--cmdline-h) - var(--s2));
+}
+/* a phone zooms in on a focused text field under 16 px: the editor's text and its numbers too, so they stay in line */
+@media (max-width: 699.98px) {
+  .editor-cm .cm-editor {
+    font-size: max(16px, var(--code));
+  }
+}
+@media (forced-colors: active) {
+  .editor-cm .cm-run-line,
+  .editor-cm .cm-gutterElement.cm-run-n {
+    border-left: var(--bar) solid Highlight;
+  }
+  .editor-cm .cm-err-line,
+  .editor-cm .cm-gutterElement.cm-err-n {
+    forced-color-adjust: none;
+    background: Mark;
+    color: MarkText;
+  }
+  .log mark.on {
+    outline-color: Highlight;
+  }
+}
+
 /* Step 4d: dialogs and states (app/states/). The dialog, banner, progress and stage list are ui.css's; this block adds the
    progress dialog's header row (the take-over button's disabled look is ui.css's `.btn.off`). */
 .dialog .row {

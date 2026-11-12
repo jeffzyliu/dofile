@@ -1,4 +1,4 @@
-// STEP 4b fills this in. What the other parts ask of the editor: the toolbar, the phone's top bar, the keyboard, the engine
+// What the other parts ask of the editor: the toolbar, the phone's top bar, the keyboard, the engine
 // controller (4b, step 3), the file tree and tabs (4a), the log's "Go to line" (4b) and the reset banner (4d). The editor
 // (Editor.tsx, CodeMirror 6) replaces each function when it mounts and keeps `selection` current; until then they do
 // nothing, so the shell runs without an editor and 4a can call them before 4b exists. Run sends the active tab's text
@@ -15,6 +15,12 @@
 // The editor fills `editorCommands` field by field when it mounts. Call through the object (`editorCommands.save(path)`),
 // never destructure it or keep a field (`const { save } = editorCommands`): the copy would keep the no-op.
 import { signal } from "@preact/signals-core";
+import type { RunHead } from "../types.ts";
+
+/** The code each run of the editor sent, by its head (the object run.ts keeps in the run-head item): the log puts each
+ *  graph's link after the echo of its line (log/align.ts), which needs the lines that were sent. Kept only as long as
+ *  the log keeps the run-head. */
+export const codeOf = new WeakMap<RunHead, string>();
 
 /** The selected lines of the active editor tab, 1-based and whole (OQ-21), or null with no selection. Run selection is
  *  enabled only with one; the phone's Run says "Run 6–7". Owner: the editor. */

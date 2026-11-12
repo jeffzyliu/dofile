@@ -1,7 +1,8 @@
 // The toolbar's Run, Run selection, Break and Save (docs/design/SPEC.md, sections 3.4 and 5), and the phone's one Run
 // button that Break replaces while a run is on. Step 3 built what the engine states decide (enabled, disabled,
-// aria-disabled, the labels); STEP 4b finishes it: the running time on the phone's Break pill, and anything the editor
-// adds. The actions are editor/commands.ts's (the editor fills them in) and app/engine.ts's.
+// aria-disabled, the labels); step 4b added the running time on the phone's Break pill ("Break" "3.4 s", on Break and
+// "Break (reset)"; editor/words.ts pillTime, with the sizer PILL_WIDEST). The actions are editor/commands.ts's (the
+// editor fills them in) and app/engine.ts's.
 // Each button holds all its labels in one cell (ui/Icon.tsx Labels), so it keeps one size in every engine state, with or
 // without a selection or unsaved edits, and nothing in the toolbar moves (e2e/shell.spec.ts measures it). Keep it so: a
 // new label goes into the button's list, and the pill's time ("Break" "3.4 s") goes in with a sizer of its widest form.
@@ -11,7 +12,9 @@
 import * as eng from "../engine.ts";
 import { activeTab, engine, isolated, tabs } from "../state.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
+import { since } from "./clock.ts";
 import { editorCommands, selection } from "./commands.ts";
+import { PILL_WIDEST, pillTime } from "./words.ts";
 
 // The play icon says Run and the stop icon says Break, so the state labels are short; the words a screen reader hears
 // start with the shown ones (NAME).
@@ -151,6 +154,7 @@ export function PhoneRun() {
     brk = breakState(),
     sel = running ? null : selection.value;
   const range = sel && !run.disabled ? (sel[0] === sel[1] ? `${sel[0]}` : `${sel[0]}–${sel[1]}`) : null;
+  const time = running ? pillTime(since(st.t0)) : "";
   const all = [
     ...RUN.map((l) => (
       <>
@@ -166,12 +170,17 @@ export function PhoneRun() {
       <>
         <Icon name="stop" />
         {l}
+        {l.startsWith("Break") && <span class="t">{time}</span>}
       </>
     )),
     <>
       <Icon name="play" />
       Run {range}
     </>,
+    <>
+      <Icon name="stop" />
+      Break (reset)<span class="t">{PILL_WIDEST}</span>
+    </>, // the sizer: the widest the pill can be
   ];
   if (running) {
     return (
@@ -179,7 +188,7 @@ export function PhoneRun() {
         type="button"
         class={`btn stop${brk.live ? " live" : ""} pill run-ctl`}
         disabled={brk.disabled}
-        aria-label={NAME[brk.label]}
+        aria-label={NAME[brk.label] ?? brk.label}
         onClick={() => {
           if (Date.now() - st.t0 >= 600) pressBreak();
         }}
@@ -197,7 +206,7 @@ export function PhoneRun() {
       aria-label={name}
       onClick={() => (sel ? editorCommands.runSelection() : editorCommands.runFile())}
     >
-      <Labels at={range ? all.length - 1 : RUN.indexOf(run.label)} labels={all} />
+      <Labels at={range ? all.length - 2 : RUN.indexOf(run.label)} labels={all} />
     </button>
   );
 }

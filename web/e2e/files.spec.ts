@@ -1,8 +1,8 @@
 // Prototype 1, step 4a: the file tree, the editor's tabs, upload and its name clashes, the row menus, opening files
 // (docs/design/SPEC.md, sections 3.1, 3.2, 3.10, 3.11). No engine is needed (?test=manual): files go in through the test
 // hook's store or the upload inputs. There is no editor until step 4b, so no tab can become dirty by typing: the tests
-// make the edits with the hook's state.setDirty(path, true), and the close-tab dialog's Save leaves the tab open (the
-// stand-in editor's save resolves false).
+// make the edits with the hook's state.setDirty(path, true); the close-tab dialog's Save saves through step 4b's editor
+// and closes the tab (e2e/editor.spec.ts types real edits).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
@@ -143,9 +143,20 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     await expect(ask).toBeVisible();
   };
   await again();
-  await ask.getByRole("button", { name: "Save", exact: true }).click(); // no editor (step 4b): save resolves false, the tab stays
+  await ask.getByRole("button", { name: "Save", exact: true }).click(); // step 4b's editor saves it, then the tab closes
   await expect(ask).toBeHidden();
-  expect(await openTabs(page)).toEqual(["a.do", "b.do"]);
+  await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
+  await expect(page.locator(".toast")).toHaveText("Saved a.do");
+  // open it again, with edits, for Don't save
+  if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  await row(page, /^a\.do/).click();
+  await expect.poll(() => openTabs(page)).toEqual(["b.do", "a.do"]);
+  await setDirty(page, "a.do");
+  if (!isPhone(page))
+    await page
+      .getByRole("tablist", { name: "Open files" })
+      .getByRole("tab", { name: /^a\.do/ })
+      .focus();
   await again();
   await ask.getByRole("button", { name: "Don't save" }).click();
   await expect.poll(() => openTabs(page)).toEqual(["b.do"]);

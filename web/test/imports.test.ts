@@ -409,13 +409,19 @@ test("no counter or flag outside the machine decides a state: the old ones are g
   // What is left of those names. The machine's own: the `queued` field of its states, and `resetAt` of `breaking`, which
   // views read. The controller's handle on the Break timer, which decides no state. And in the worker, `was`, a local
   // name in saveRun for the files as they were before a run.
+  // And step 4b's clock (app/editor/clock.ts), which reads `resetAt` of `breaking` for the status bar's "resets in 4 s".
   assert.deepEqual(Object.keys(found).sort(), [
+    "src/app/editor/clock.ts",
     "src/app/engine.ts",
     "src/app/states/banners.tsx", // reads `resetAt` of `breaking` for the Break countdown
     "src/app/types.ts",
     "src/engine/machine.ts",
     "src/engine/worker.ts",
   ]);
+  assert.equal(
+    count(source("src/app/editor/clock.ts", true), gone),
+    count(source("src/app/editor/clock.ts", true), /\bresetAt\b/),
+  );
   assert.equal(
     count(source("src/engine/worker.ts", true), gone),
     count(source("src/engine/worker.ts", true), /\bwas\b/),
