@@ -62,7 +62,7 @@ jobs:
             echo "::warning::$f is $(wc -c < "$f") bytes, over 23 MiB (24117248 bytes); the limit is 25 MiB"
           done
           if [ -n "$(find dist -type f -size +26214400c)" ]; then exit 1; fi
-      - uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
