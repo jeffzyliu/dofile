@@ -67,12 +67,12 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
 
 **Desktop B, split** (`E`, 1440 x 900): toolbar; columns `230px | 1fr | 660px` with `--s2` gaps; status bar. The right column
 is two panes: Log above (`1.35fr`, the command line at its foot) and, below (`1fr`), a tablist "Output": Graph, Data, Results
-(Help is P2: leave the tab out). The Log head has "Find", "Download log", "Clear" (accessible name "Clear log") and "Split"/"Unsplit" (an icon left of its word); in the unsplit head, when it is narrow, the three log actions collapse into one "Log actions" ⋯ menu button and the tabs are never clipped. Unsplit exists only as a wireframe
+(Help is P2: leave the tab out). The Log head has "Find", "Download log", "Clear…" (accessible name "Clear log…"; it asks first, 3.10, and is disabled when there is nothing to clear) and "Split"/"Unsplit" (an icon left of its word); in the unsplit head, when it is narrow, the three log actions collapse into one "Log actions" ⋯ menu button and the tabs are never clipped. Unsplit exists only as a wireframe
 (`WB`): one pane with tabs Log, Graph, Data, Results and "Split"; the choice is kept in the browser (OQ-15). Focus order:
 toolbar, files, editor, output, command line, lower pane (`WB`).
 
 **Phone** (`PH`, `WP`; under 700 px): top bar, the view, the command line (on the Log view only: `WP 1`, the Editor view,
-has none), and a bottom tablist "Views": Files, Editor, Log, Data, Results. The top bar has a title (on the Editor tab it is the file switcher, `WP 1`), ⋯ and one Run button. The strip under it carries a button at its right end: "Files ⋯" (accessible name "File actions") on the Files view and "Log ⋯" ("Log actions": Find, Download log, Clear log) on the Log view; the word is hidden when the strip is narrow, leaving the ⋯ (UI fix round, 2026-11-12; it replaces the file actions in the top bar's ⋯). Graphs show
+has none), and a bottom tablist "Views": Files, Editor, Log, Data, Results. The top bar has a title (on the Editor tab it is the file switcher, `WP 1`), ⋯ and one Run button. The strip under it carries a button at its right end: "Files ⋯" (accessible name "File actions") on the Files view and "Log ⋯" ("Log actions": Find, Download log, Clear log…; the last asks first and is disabled with nothing to clear) on the Log view; the word is hidden when the strip is narrow, leaving the ⋯ (UI fix round, 2026-11-12; it replaces the file actions in the top bar's ⋯). Graphs show
 inline in the log; a tap opens the full-size view (`WP 3`, `WP 6`). Dialogs are bottom sheets (`S 8`). Only the Log tab and
 the prompt sheet are drawn in high fidelity; from 700 px the desktop layout is used "with the file list folded away": OQ-14.
 
@@ -231,6 +231,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Another tab | `WS 6` (wireframe) | Sections 5 and 7. |
 | Close a tab with unsaved edits (4a) | not drawn; words decided 2026-11-10 | "Save changes to clean.do?" (the file's name) / **Save** (focused), **Don't save**, **Cancel**. Esc is Cancel. Save saves, then closes the tab; Don't save closes it and drops the edits. |
 | Delete all files (4a) | not drawn; words decided 2026-11-10 | "Delete all 12 files?" (the count of files, not folders) / "This removes every file dofile keeps in this browser. This can't be undone." / **Cancel** (focused), **Delete all** (`.btn.stop.live`). |
+| Clear the log (step 4d fix round) | not drawn; words are drafts (section 8, "Clear log dialog: draft words") | `role="alertdialog"`. "Clear the log?" / "This removes the log and the graphs. Your data and your files stay." / **Cancel** (focused), **Clear log** (`.btn.stop.live`). Opened by the Log head's "Clear…" and the menus' "Clear log…"; those are disabled when the log holds only its head (or only the running run's text) and there are no graphs. Esc is Cancel. A run in progress keeps its text item. |
 | Load over changed data | not drawn | P2 (OQ-6). |
 
 - **Banners** sit in a pane above its content until their cause goes or they are dismissed; warning and error banners carry
@@ -813,7 +814,7 @@ type LogItem = { t: "head" } | { t: "runhead"; run: RunHead; first: boolean }
 interface Graph { n: number; png: string; theme: "light" | "dark"; from: "run" | "file"; path?: string;
                   command?: string; line?: number | null; run?: number }
 type Dialog = null | { d: "download"; forRun: boolean } | { d: "clash"; path: string; index: number; total: number }
-            | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "reset" }
+            | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "clear-log" } | { d: "reset" }
             | { d: "close-tab"; path: string } | { d: "other-tab" };
 type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user" } | { b: "storage" }
             | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
@@ -1213,6 +1214,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     temporary name from an earlier run (r(601) naming the engine's temporary file): the engine's own line after `r(601);`
     says it (`browser.py` TEMPFILE_HINT, "(a tempfile lasts one run: save it under a name to use it in a later run)"), so
     the draft "A tempfile, tempvar or tempname lasts one run. …" was dropped when 4b and 4d were joined.
+  - **Clear log dialog: draft words**, for the maintainer to approve (UI fix round): the title "Clear the log?", the body
+    "This removes the log and the graphs. Your data and your files stay.", the buttons "Clear log" (danger) and "Cancel"
+    (focused, as Delete all's); the Log head's button "Clear…" (accessible name "Clear log…") and the menus' item "Clear
+    log…" (the "…" says it asks first). They are disabled when `canClearLog()` (`run.ts`) is false: no log item but the
+    head and the streaming run's text, and no graph. The view is `log/ClearLogDialog.tsx`. The focus goes back to the
+    opener (a menu's item: the menu's button); when the answer disabled the opener (the head's "Clear…"), `ui/Dialog.tsx`
+    gives it to the editor or "More actions" (`focusStable`), as for an opener that has left the page.
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
     on a phone every view draws it (download-failed, run-changed); the hidden views are `display: none`, so it is read and tabbed once.
@@ -1228,7 +1236,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   destructure it or keep a field, or the caller keeps the no-op.
 - **Slots in `App.tsx`.** `FileBar` above the editor; the editor sits in `.editor-slot`, hidden (never unmounted) while a
   `dta` tab shows `DtaView`; `FullSize` once, after `main`; on a phone the Log head is hidden, so its actions are in the strip's "Log ⋯"
-  button through `logMenuItems()` while the Log view is shown (the phone's top bar, `PhoneTopBar` in `App.tsx`, which also
+  button through `logMenuItems()` (its "Clear log…" asks first) while the Log view is shown (the phone's top bar, `PhoneTopBar` in `App.tsx`, which also
   places `PhoneRun` and `FileSwitcher`; `PhoneStrip` goes under it); the command line is at the Log pane's foot,
   so on a phone it shows on the Log view only (section 2).
 - **Dialogs.** The host keys each view on the whole `dialog` value, so a new value (clash 2 after clash 1) is a new
