@@ -32,7 +32,7 @@ export function stateWords(st: EngineState): [ComponentChildren, ComponentChildr
     case "asking":
       return [null, "No engine yet"];
     case "declined":
-      return ["No engine", " · Run downloads it first"];
+      return ["No engine", " · Start engine downloads it"];
     case "downloading":
       return ["Starting", " · downloading"];
     case "starting-list":

@@ -3,8 +3,8 @@
 // files (a .dta tab's bars are output/DtaView.tsx's).
 //  - .csv, .tsv: bar 1 "data/raw/survey.csv · 1,204 rows" (the lines that are not empty, of the file as the store has
 //    it, which is what Import reads); bar 2 `import delimited "data/raw/survey.csv", clear`, "Import" (run.ts
-//    runCommand; disabled unless the engine is `ready`, where the command runs, or `none` or `declined`, where it opens
-//    the download prompt and imports nothing, as Run does), "Copy"
+//    runCommand; disabled unless the engine is `ready`; with no engine, start.ts, it is off, aria-disabled and `.off`,
+//    still focusable, and a press only says why in a toast, "Start the engine to import survey.csv"), "Copy"
 //    (aria-label "Copy the import command"; output/clip.ts copyText, toast "Copied"). The command comes from
 //    stata/quote.ts fileCommand (`$` escaped); for a name a command cannot hold (a backquote, a line break, `"'`) bar 2
 //    says why in place of the command, and Import and Copy are off.
@@ -15,15 +15,15 @@ import { useEffect, useState } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
 import { copyText } from "../output/clip.ts";
 import { runCommand } from "../run.ts";
-import { activeTab, engine, files, fresh, tabs } from "../state.ts";
+import { noEngine, startFirst } from "../start.ts";
+import { activeTab, engine, files, fresh, showToast, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import { Icon } from "../ui/Icon";
 import { downloadEntry } from "./actions.ts";
 import { decodeText } from "./open.ts";
-import { extOf, rowCount } from "./tree.ts";
+import { baseName, extOf, rowCount } from "./tree.ts";
 
 const TABLE = new Set([".csv", ".tsv"]);
-const CAN_RUN = new Set(["ready", "none", "declined"]); // the command runs (`ready`), or the download prompt opens
 
 /** The row count of a table file, read again when the store's copy changes (its size or time in `files`). */
 function useRows(path: string | null) {
@@ -75,6 +75,7 @@ export function FileBar() {
     );
   const made = fileCommand("import delimited", path);
   const command = "command" in made ? made.command : null;
+  const off = noEngine(); // Import is off, and says why when pressed
   return (
     <>
       <div class="filebar">
@@ -93,10 +94,13 @@ export function FileBar() {
         <span class="spacer" />
         <button
           type="button"
-          class="btn"
-          disabled={command === null || !CAN_RUN.has(engine.value.s)}
+          class={`btn${off ? " off" : ""}`}
+          disabled={command === null || (!off && engine.value.s !== "ready")}
+          aria-disabled={off ? "true" : undefined}
           onClick={() => {
-            if (command !== null) runCommand(command);
+            if (command === null) return;
+            if (off) showToast(startFirst(`import ${baseName(path)}`), "error");
+            else runCommand(command);
           }}
         >
           Import

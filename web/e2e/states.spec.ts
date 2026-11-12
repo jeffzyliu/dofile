@@ -2,7 +2,7 @@
 // With `?test=manual` the machine is in `none` and takes no step by itself, so a test sets the `engine` signal through the
 // hook to show a state that is hard to reach (a failed start of each reason, Break pending, ...); that is a view test, not
 // a machine test (test/machine.test.ts decides the states). The real machine is used where it is cheap: the prompt's
-// "Not now" and the declined banner's "Download the engine" go through ask() and decline(). One test starts a real engine
+// "Not now" and the declined banner's "Start engine" go through ask() and decline(). One test starts a real engine
 // for Reset: its dialog (asked only with data in memory), Cancel, Reset, the reset banner. Where the focus goes when a
 // banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the stand-in and
 // for 4b's CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
@@ -39,9 +39,9 @@ test("no engine: the banner brings the prompt back; Not now leads to the banner 
   const banner = page.locator(".banner", { hasText: "The engine isn't downloaded." });
   await expect(banner).toBeVisible();
   await expect(banner).toContainText("You can open, edit, upload and download files; running code needs the engine");
-  await expect(banner.getByRole("button", { name: "Download the engine" })).toBeVisible();
+  await expect(banner.getByRole("button", { name: "Start engine" })).toBeVisible();
   // the real machine is in `none`, where ask() is valid: the prompt opens
-  await banner.getByRole("button", { name: "Download the engine" }).click();
+  await banner.getByRole("button", { name: "Start engine" }).click();
   await expect.poll(() => engineIs(page)).toBe("asking");
   const prompt = page.getByRole("dialog", { name: "Download the engine?" });
   await expect(prompt).toBeVisible();
@@ -60,7 +60,7 @@ test("the progress dialog: the download with its time and bytes, then the stages
   await page.evaluate(() => {
     const s = window.__dofile.state;
     s.engine.value = { s: "downloading", received: 14.2e6, total: 48e6, t0: Date.now() - 6000 };
-    s.dialog.value = { d: "download", forRun: false };
+    s.dialog.value = { d: "download" };
   });
   const dlg = page.getByRole("dialog", { name: "Getting the engine ready" });
   await expect(dlg).toBeVisible();
@@ -111,6 +111,42 @@ test("another tab: the take-over button is aria-disabled while it is in progress
   const before = await page.evaluate(() => window.__dofile.drops().length);
   await use.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
   expect(await page.evaluate(() => window.__dofile.drops().length)).toBe(before);
+});
+
+test("a second tab: Start engine goes into the take-over dialog, never straight to a start; the dialog's button takes over", async ({
+  page,
+  context,
+}) => {
+  // `page` holds the tab lock (the real machine, in `none`). A second tab of the same browser does not get it.
+  const second = await context.newPage();
+  await second.goto("?test=manual");
+  await expect.poll(() => engineIs(second)).toBe("other-tab-idle");
+  const dlg = second.getByRole("alertdialog", { name: "dofile is open in another tab" });
+  await expect(dlg).toBeVisible();
+  // the dialog is blocking, so the buttons under it cannot be pressed; should another dialog have taken its place and
+  // closed, the page offers "Start engine" (the toolbar's buttons are hidden while another tab has the engine: the
+  // command line's is there)
+  await second.evaluate(() => {
+    window.__dofile.state.dialog.value = null;
+  });
+  await expect(dlg).toHaveCount(0);
+  if (phone(second)) await second.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
+  const field = second.getByRole("textbox", { name: "Command" });
+  await expect(field).toBeDisabled();
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  await second.locator(".cmdline").getByRole("button", { name: "Start engine" }).click();
+  // the take-over dialog again; nothing started, here or in the first tab, which still has the lock
+  await expect(dlg).toBeVisible();
+  await expect(dlg.getByRole("button", { name: "Close editor" })).toBeFocused();
+  expect(await engineIs(second)).toBe("other-tab-idle");
+  expect(await engineIs(page)).toBe("none");
+  expect(await second.evaluate(() => window.__dofile.drops())).toEqual([]);
+  // the visitor's choice in the dialog takes over
+  await dlg.getByRole("button", { name: "Use dofile in this tab" }).click();
+  await expect.poll(() => engineIs(second)).toBe("none"); // ?test=manual: the lock is this tab's, and nothing starts
+  await expect.poll(() => engineIs(page)).toBe("other-tab-idle");
+  await expect(dlg).toHaveCount(0);
+  await second.close();
 });
 
 test("a failed start: the words and the first action follow the reason", async ({ page }) => {

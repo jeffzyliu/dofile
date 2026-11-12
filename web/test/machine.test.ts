@@ -169,9 +169,8 @@ function go(at: At, f: Feed, o: { n?: Ticket; at?: number } = {}): At {
   return next;
 }
 
-type Options = { env?: Partial<Env>; forRun?: boolean; crashed?: boolean };
-/** The machine in row `name`, by the shortest path: a normal load for most. `forRun`: `asking` after a Run opened the
- *  prompt (no other row knows of it: the run is not kept). `crashed`: with the crash count at 1 (ruling 2: it survives a failed start and "Try again"): the
+type Options = { env?: Partial<Env>; crashed?: boolean };
+/** The machine in row `name`, by the shortest path: a normal load for most. `crashed`: with the crash count at 1 (ruling 2: it survives a failed start and "Try again"): the
  *  starting rows after a crash, and `failed`, `downloading`, `declined` and `asking` by the events after it (a crash,
  *  the list, a start that fails, "Try again", "Stop download", the prompt). Every row can be reached. */
 function row(name: RowName, o: Options = {}): At {
@@ -181,7 +180,7 @@ function row(name: RowName, o: Options = {}): At {
   return at;
 }
 function reach(name: RowName, o: Options): At {
-  const plain = { ...o, forRun: false, crashed: false };
+  const plain = { ...o, crashed: false };
   switch (name) {
     case "checking-lock":
       return begin(o.env);
@@ -190,11 +189,9 @@ function reach(name: RowName, o: Options): At {
     case "none":
       return go(begin({ ...o.env, manual: true }), { type: "lock-answered", owned: true });
     case "asking":
-      return o.forRun
-        ? go(row("declined", { ...o, forRun: false }), RUN)
-        : o.crashed
-          ? go(row("declined", o), { type: "ask" })
-          : go(row("checking-cache", o), { type: "cache-checked", cached: false });
+      return o.crashed
+        ? go(row("declined", o), { type: "ask" })
+        : go(row("checking-cache", o), { type: "cache-checked", cached: false });
     case "declined":
       return o.crashed
         ? go(row("downloading", o), { type: "stop-download" })
@@ -289,9 +286,9 @@ const wantDownload = ({ old, at, next }: Ctx): Want => ({
   state: { s: "downloading", download: next, received: 0, total: old.env.engineBytes ?? 0, t0: at },
   effects: [{ do: "start-download", n: next }],
 });
-const wantAsk = (forRun: boolean) => (): Want => ({
-  state: { s: "asking", forRun },
-  effects: [{ do: "show-dialog", dialog: "download", forRun }],
+const wantAsk = (): Want => ({
+  state: { s: "asking" },
+  effects: [{ do: "show-dialog", dialog: "download" }],
 });
 const wantOwn =
   (before: Effect[]) =>
@@ -467,16 +464,6 @@ const CELLS = {
   ],
   LOST: (r) => [
     { name: "", from: row(r), feed: { type: "lock-lost" }, want: wantLost },
-    ...(r === "asking"
-      ? [
-          {
-            name: "after a Run opened the prompt",
-            from: row(r, { forRun: true }),
-            feed: { type: "lock-lost" } as const,
-            want: wantLost,
-          },
-        ]
-      : []),
     ...(CAN_HAVE_CRASHED.has(r)
       ? [
           {
@@ -490,7 +477,7 @@ const CELLS = {
   ],
   CACHE: (r) => [
     { name: "cached", from: row(r), feed: { type: "cache-checked", cached: true }, want: wantDownload },
-    { name: "not cached", from: row(r), feed: { type: "cache-checked", cached: false }, want: wantAsk(false) },
+    { name: "not cached", from: row(r), feed: { type: "cache-checked", cached: false }, want: wantAsk },
   ],
   DOWNLOAD: (r) => [
     { name: "", from: row(r), feed: { type: "start" }, want: wantDownload },
@@ -506,39 +493,33 @@ const CELLS = {
       feed: { type: "start" },
       want: wantDownload,
     })),
-    ...(r === "asking"
-      ? [
-          {
-            name: "after a Run opened the prompt: the same download, and no run waits for it",
-            from: row(r, { forRun: true }),
-            feed: { type: "start" } as const,
-            want: wantDownload,
-          },
-        ]
-      : []),
   ],
+  // "Start engine" with no engine (none, declined), and in `asking` the prompt again
   ASK: (r) => [
-    { name: "", from: row(r), feed: { type: "ask" }, want: wantAsk(false) },
+    { name: "", from: row(r), feed: { type: "ask" }, want: wantAsk },
     ...afterCrash(r, () => ({
       name: KEPT,
       from: row(r, { crashed: true }),
       feed: { type: "ask" },
-      want: wantAsk(false),
+      want: wantAsk,
     })),
   ],
-  "ASK(run)": (r) => [
-    { name: "the prompt titled for a run; the run is not kept", from: row(r), feed: RUN, want: wantAsk(true) },
-    ...afterCrash(r, () => ({ name: KEPT, from: row(r, { crashed: true }), feed: RUN, want: wantAsk(true) })),
+  // "Start engine" while another tab has the engine: the take-over dialog again, and nothing else (no lock is taken)
+  "ASK(take-over)": (r) => [
+    {
+      name: "the take-over dialog; the state stays, and no ticket is issued",
+      from: row(r),
+      feed: { type: "ask" },
+      want: (): Want => ({ state: { s: "other-tab-idle" }, effects: [{ do: "show-dialog", dialog: "other-tab" }] }),
+    },
   ],
   "NOT-NOW": (r) =>
-    [false, true]
-      .flatMap((forRun) => VARIETIES.map(({ crashed }) => ({ forRun, crashed })))
-      .map(({ forRun, crashed }) => ({
-        name: [forRun ? "after a Run opened the prompt" : "", crashed ? KEPT : ""].filter(Boolean).join("; "),
-        from: row(r, { forRun, crashed }),
-        feed: { type: "decline" } as const,
-        want: (): Want => ({ state: { s: "declined" }, effects: [closeDownload()] }),
-      })),
+    VARIETIES.map(({ crashed }) => ({
+      name: crashed ? KEPT : "",
+      from: row(r, { crashed }),
+      feed: { type: "decline" } as const,
+      want: (): Want => ({ state: { s: "declined" }, effects: [closeDownload()] }),
+    })),
   STOP: (r, t) =>
     VARIETIES.map(({ crashed }) => ({
       name: crashed ? KEPT : "",
@@ -862,7 +843,7 @@ const A: Record<RowName, Record<"start" | "ask" | "decline" | "stop-download" | 
   "checking-lock": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
   "checking-cache": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
   none: { start: "DOWNLOAD", ask: "ASK", decline: _, "stop-download": _, reset: _, "take-over": _ },
-  asking: { start: "DOWNLOAD", ask: _, decline: "NOT-NOW", "stop-download": _, reset: _, "take-over": _ },
+  asking: { start: "DOWNLOAD", ask: "ASK", decline: "NOT-NOW", "stop-download": _, reset: _, "take-over": _ },
   declined: { start: "DOWNLOAD", ask: "ASK", decline: _, "stop-download": _, reset: _, "take-over": _ },
   downloading: { start: _, ask: _, decline: "STOP", "stop-download": "STOP", reset: _, "take-over": _ },
   "starting-list": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
@@ -873,7 +854,14 @@ const A: Record<RowName, Record<"start" | "ask" | "decline" | "stop-download" | 
   waiting: { start: _, ask: _, decline: _, "stop-download": _, reset: "RESET(user)", "take-over": _ },
   failed: { start: "DOWNLOAD", ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
   "failed-twice": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
-  "other-tab-idle": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": "TAKE-OVER" },
+  "other-tab-idle": {
+    start: _,
+    ask: "ASK(take-over)",
+    decline: _,
+    "stop-download": _,
+    reset: _,
+    "take-over": "TAKE-OVER",
+  },
   "other-tab-taking": { start: _, ask: _, decline: _, "stop-download": _, reset: _, "take-over": _ },
 };
 // B. Tab lock and cache check
@@ -996,9 +984,9 @@ const E: Record<
 > = {
   "checking-lock": { run: _, break: _, "keep-waiting": _, "run-ended": _, "run-failed": _, "break-timeout": _ },
   "checking-cache": { run: _, break: _, "keep-waiting": _, "run-ended": _, "run-failed": _, "break-timeout": _ },
-  none: { run: "ASK(run)", break: _, "keep-waiting": _, "run-ended": X, "run-failed": X, "break-timeout": X },
+  none: { run: _, break: _, "keep-waiting": _, "run-ended": X, "run-failed": X, "break-timeout": X },
   asking: { run: _, break: _, "keep-waiting": _, "run-ended": X, "run-failed": X, "break-timeout": X },
-  declined: { run: "ASK(run)", break: _, "keep-waiting": _, "run-ended": X, "run-failed": X, "break-timeout": X },
+  declined: { run: _, break: _, "keep-waiting": _, "run-ended": X, "run-failed": X, "break-timeout": X },
   downloading: { run: _, break: _, "keep-waiting": _, "run-ended": _, "run-failed": _, "break-timeout": _ },
   "starting-list": { run: _, break: _, "keep-waiting": _, "run-ended": _, "run-failed": _, "break-timeout": _ },
   "starting-worker": { run: _, break: _, "keep-waiting": _, "run-ended": _, "run-failed": _, "break-timeout": _ },
@@ -1189,7 +1177,9 @@ test("the matrix built from transition() has the grid's cells: not valid, stale,
   assert.equal(built.running.break, "breaking | starting-list");
   assert.equal(built.breaking["run-ended"], "ready");
   assert.equal(built["starting-worker"].started, "ready");
-  assert.equal(built.declined.run, "asking");
+  assert.equal(built.declined.run, "·"); // with no engine a run is not valid: "Start engine" is the event `ask`
+  assert.equal(built.declined.ask, "asking");
+  assert.equal(built["other-tab-idle"].ask, "other-tab-idle");
 });
 
 // ---- SPEC section 5's transition matrix (step E, rulings 10 and 12) ----
@@ -1395,7 +1385,7 @@ const SCENARIOS: Record<string, () => At[]> = {
   },
   "2. the lock lost during a download: no worker is ever started": () => {
     const p = play(row("asking"));
-    assert.deepEqual([p.at.m.state, p.at.m.issued], [{ s: "asking", forRun: false }, 2]);
+    assert.deepEqual([p.at.m.state, p.at.m.issued], [{ s: "asking" }, 2]);
     p.go({ type: "start" }, { s: "downloading", download: 3 }, [{ do: "start-download", n: 3 }])
       .go({ type: "lock-lost" }, { s: "other-tab-idle" }, [{ do: "abort-download", n: 3 }, ...blocked], { crashes: 0 })
       .drop({ type: "download-progress", received: 5, total: 9 }, "stale", 3)
@@ -1620,11 +1610,13 @@ const SCENARIOS: Record<string, () => At[]> = {
         [],
       ).at,
   ],
-  "12. Run with no engine opens the prompt and runs nothing: not when the engine is ready, nor after a crash on the way; Run then runs":
+  "12. with no engine a run is not valid; Start engine (ask) opens the prompt and nothing runs: not when the engine is ready, nor after a crash on the way; Run then runs":
     () => {
       const p = play(row("declined"))
-        .go(RUN, { s: "asking", forRun: true }, [{ do: "show-dialog", dialog: "download", forRun: true }])
-        .drop(RUN, "not-valid") // a second Run while the prompt asks
+        .drop(RUN, "not-valid") // no engine: a run does nothing, and opens no prompt
+        .go({ type: "ask" }, { s: "asking" }, [{ do: "show-dialog", dialog: "download" }]) // "Start engine"
+        .drop(RUN, "not-valid") // nor while the prompt asks
+        .go({ type: "ask" }, { s: "asking" }, [{ do: "show-dialog", dialog: "download" }]) // again: the prompt again
         .go({ type: "start" }, { s: "downloading", download: 3 }, [{ do: "start-download", n: 3 }])
         .drop(RUN, "not-valid") // Run during the download is refused, as before
         .go({ type: "download-done", build: BUILD }, { s: "starting-worker", worker: 4 }, [
@@ -1645,11 +1637,25 @@ const SCENARIOS: Record<string, () => At[]> = {
       );
       p.go(RUN, { s: "running", worker: 5, run: HEAD }, [{ do: "send-run", n: 5, code: "display 1", head: HEAD }]);
       assert.equal(p.at.trail.length, before + 1);
-      // "Not now" after a Run: the prompt closes, and nothing is left to drop
+      // "Not now" after Start engine: the prompt closes, and nothing is left to drop
       const notNow = play(row("none"))
-        .go(RUN, { s: "asking", forRun: true }, [{ do: "show-dialog", dialog: "download", forRun: true }])
+        .drop(RUN, "not-valid")
+        .go({ type: "ask" }, { s: "asking" }, [{ do: "show-dialog", dialog: "download" }])
         .go({ type: "decline" }, { s: "declined" }, [closed]).at;
-      return [p.at, notNow];
+      // after a failed start a run is not valid either, and Start engine there is `start` (the banner's "Try again")
+      const failed = play(row("failed"))
+        .drop(RUN, "not-valid")
+        .drop({ type: "ask" }, "not-valid")
+        .go({ type: "start" }, { s: "downloading", download: 4, received: 0 }, [{ do: "start-download", n: 4 }]).at;
+      // another tab has the engine: Start engine goes into the take-over dialog, never to a start; the visitor's
+      // choice there takes the lock
+      const other = play(row("other-tab-idle"))
+        .drop(RUN, "not-valid")
+        .drop({ type: "start" }, "not-valid")
+        .go({ type: "ask" }, { s: "other-tab-idle" }, [{ do: "show-dialog", dialog: "other-tab" }])
+        .go({ type: "take-over" }, { s: "other-tab-taking", take: 2 }, [{ do: "take-lock", n: 2, steal: true }])
+        .drop({ type: "ask" }, "not-valid").at; // the take-over is in progress: the button is off
+      return [p.at, notNow, failed, other];
     },
   "13. Download or Run pressed at load, before the lock or the cache check answers: refused": () => [
     play(row("checking-lock"))
@@ -1660,9 +1666,7 @@ const SCENARIOS: Record<string, () => At[]> = {
       .drop({ type: "start" }, "not-valid")
       .drop(RUN, "not-valid")
       .drop({ type: "ask" }, "not-valid")
-      .go({ type: "cache-checked", cached: false }, { s: "asking", forRun: false }, [
-        { do: "show-dialog", dialog: "download", forRun: false },
-      ]).at,
+      .go({ type: "cache-checked", cached: false }, { s: "asking" }, [{ do: "show-dialog", dialog: "download" }]).at,
   ],
   "14. the list fetch of a restart fails, or the lock is lost meanwhile: no worker is made": () => {
     const restart = () =>

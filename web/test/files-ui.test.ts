@@ -479,10 +479,10 @@ test("a second upload waits for the first: it writes nothing and asks nothing un
 
 test("a clash never replaces another dialog: it waits until that one has closed", async () => {
   await reset({ "a.do": "old a" });
-  S.dialog.value = { d: "download", forRun: false };
+  S.dialog.value = { d: "download" };
   const done = A.upload([{ path: "a.do", data: enc("new a") }]);
   await sleep(30);
-  assert.deepEqual(S.dialog.value, { d: "download", forRun: false });
+  assert.deepEqual(S.dialog.value, { d: "download" });
   S.dialog.value = null;
   await until(() => clashOf() === "a.do", "the clash is asked once the other dialog has closed");
   give("stop");

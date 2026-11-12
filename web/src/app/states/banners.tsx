@@ -1,6 +1,7 @@
 // STEP 4d: the banners of the engine's states and of the reset (docs/design/SPEC.md, sections 3.10 and 5), drawn with
 // ui/Live.tsx's <Banner>.
-//  - EditorStateBanners: above the editor, from `engine` alone (not in `banners`): no engine (`declined`, S 5), did not
+//  - EditorStateBanners: above the editor, from `engine` alone (not in `banners`): no engine (`declined`, S 5; its
+//    button is "Start engine", as the toolbar's, and opens the download prompt), did not
 //    start (`failed`, S 6, role alert), failed twice (S 7, role alert). The action follows the `reason` (words.ts
 //    failedActions), never the text: no-wasm "Browsers that work"; download "Try again"; updated "Reload the
 //    page"; unknown both. "Download all (.zip)" is off while the store has no file (`hasFiles`).
@@ -139,7 +140,7 @@ function DeclinedBanner() {
             eng.ask();
           }}
         >
-          Download the engine
+          Start engine
         </button>
       }
     >

@@ -3,8 +3,20 @@
 import { effect } from "@preact/signals-core";
 import type { RunResult } from "../../engine/types.ts";
 import { runCommand } from "../run.ts";
+import { noEngine } from "../start.ts";
 import { lastRun } from "../state.ts";
-import type { RunOne } from "./paste.ts";
+import { type InTurn, pastedLines, type RunOne } from "./paste.ts";
+
+/** The lines a paste into the command line runs, or null for an ordinary paste: text with no line break (paste.ts
+ *  pastedLines), and any text while there is no engine (start.ts). The engine is checked first: the field is disabled
+ *  then, so this guards the instant before it is drawn so, and a paste never opens a prompt or runs a line. */
+export const linesToRun = (before: string, pasted: string, after: string): string[] | null =>
+  noEngine() ? null : pastedLines(before, pasted, after);
+
+/** The line to put back into the field after pasted lines stopped (`r`), or null: a refused line, when the field is
+ *  empty (`fieldText`) and not disabled. With no engine the field is disabled, and nothing is put into it. */
+export const putBack = (lines: readonly string[], r: InTurn, fieldText: string): string | null =>
+  r.stop?.why === "refused" && !fieldText && !noEngine() ? lines[r.stop.line - 1] : null;
 
 /** Wait for the end of a command that started: its rc once it has run (lastRun is a new run), or "taken" when its run was
  *  cut because another tab took the engine (`done` settles with the machine's rc 9998 result of kind "stopped", and
@@ -39,5 +51,5 @@ function whenEnds(before: unknown, done: Promise<RunResult>): Promise<number | "
 export const runOne: RunOne = (line) => {
   const before = lastRun.value;
   const run = runCommand(line);
-  return run.how === "started" ? { how: "started", done: whenEnds(before, run.done) } : { how: run.how };
+  return run.how === "started" ? { how: "started", done: whenEnds(before, run.done) } : { how: "refused" };
 };

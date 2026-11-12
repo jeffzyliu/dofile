@@ -174,8 +174,8 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
    `@codemirror/lang-json`).
 4. What becomes of a queued command is decided by the state machine: a step that lets go of the queued run without
    sending it ends with the effect `drop-run`, which settles the command's `done` with null (`engine/machine.ts`).
-   (2026-11-12: the held run is gone, see Post-merge review: with no engine a command opens the prompt and does not
-   run, so there is no queued command and no `drop-run`.)
+   (2026-11-12: the held run is gone, see Post-merge review: there is no queued command and no `drop-run`. With no
+   engine the command line is disabled and the page offers "Start engine"; a command opens no prompt.)
 5. The engine's hint for an unclosed block still names OpenDTA's Command window and Shift+Enter: left as is (ODT-33). A
    multi-line command line (Shift+Enter starts a new line, so a block or a `///` command can be typed or pasted and run
    as one) is future work; today such a paste stops with a toast that points to the editor.
@@ -208,7 +208,7 @@ Reviewed after the merge: see Post-merge review.
 3. Pasted lines stop at the first line that is refused, that was queued and then dropped, that ends with any rc but 0
    (Break's rc 1 too), or whose run is cut because another tab took the engine; and before a line that opens a block
    (`{` at its end, a lone `program define` or `mata`), opens a `/*` comment it does not close, or holds `///` (not sent).
-   A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.)
+   A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.) (2026-11-12, with the queued run's removal: no line is queued or dropped any more, so that stop is gone; with no engine a paste is an ordinary paste into the disabled field, and no line runs.)
 4. Load on a phone's .dta tab shows only its toast ("Loaded wages.dta"); the Log view does not open.
 5. Reset asks whenever a run is in progress. Otherwise it resets at once while the engine is ready with no data in
    memory and no e() or r() scalar, macro or matrix; after a run it first describes the memory again, and asks when
@@ -337,7 +337,9 @@ merge of steps 4 and 5. They are reviewed after it:
 - [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy.
 - [x] Remove the queued run (asked for by the maintainer, 2026-11-12). Done on the branch `claude/remove-queued-run`: no
       state holds a run, `started` always leads to `ready`, `drop-run`, run.ts's `pending` and `dropped` are gone, and with no
-      engine every way to run opens the prompt and runs nothing (`docs/web-page-flows.md`, section 2). Today a Run or a command with no engine (`none`,
+      engine nothing offers to run: Run is "Start engine" (the prompt, a new try, or the take-over dialog), the command
+      line is disabled, and Load, Import and the help links are off (`docs/web-page-flows.md`, section 2). What follows
+      is the request as written on 2026-11-12, before it was done ("today" is the code before this change): Today a Run or a command with no engine (`none`,
       `declined`) is accepted, opens the download prompt and is held until the engine starts; the machine drops it
       (`drop-run`) when the visitor says "Not now", the start fails or another tab takes the engine. The simpler model: with
       no engine, Run only opens the prompt and runs nothing, and the visitor presses Run again when the engine is ready. That

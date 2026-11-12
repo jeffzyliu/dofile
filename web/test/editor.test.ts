@@ -578,7 +578,7 @@ test("a paste with no line break is an ordinary paste; with breaks, each non-emp
 });
 
 /** A runner that answers from a script: per line, how it was taken (started unless named) and the rc. */
-function script(answers: Record<string, { how?: "asked" | "refused"; rc?: number | "taken" }>) {
+function script(answers: Record<string, { how?: "refused"; rc?: number | "taken" }>) {
   const ran: string[] = [];
   const runOne: RunOne = (line) => {
     const a = answers[line] ?? {};
@@ -589,7 +589,7 @@ function script(answers: Record<string, { how?: "asked" | "refused"; rc?: number
   return { ran, runOne };
 }
 
-test("pasted lines run in turn and stop at the first refused, asked (no engine), or failed one", async () => {
+test("pasted lines run in turn and stop at the first refused or failed one", async () => {
   let s = script({});
   assert.deepEqual(await runInTurn(["a", "b", "c"], s.runOne), { total: 3, ran: 3, stop: null });
   assert.deepEqual(s.ran, ["a", "b", "c"]);
@@ -608,11 +608,11 @@ test("pasted lines run in turn and stop at the first refused, asked (no engine),
   assert.deepEqual(refused, { total: 3, ran: 1, stop: { line: 2, why: "refused" } });
   assert.equal(inTurnWords(refused), "2 of 3 pasted lines not run: the engine can't take a command now");
 
-  s = script({ a: { how: "asked" } }); // no engine: the line opened the download prompt, and nothing runs
-  const asked = await runInTurn(["a", "b"], s.runOne);
-  assert.deepEqual(asked, { total: 2, ran: 0, stop: { line: 1, why: "asked" } });
+  s = script({ a: { how: "refused" } }); // the first line refused: nothing runs, and the toast counts every line
+  const none = await runInTurn(["a", "b"], s.runOne);
+  assert.deepEqual(none, { total: 2, ran: 0, stop: { line: 1, why: "refused" } });
   assert.deepEqual(s.ran, []);
-  assert.equal(inTurnWords(asked), null, "no toast over the download prompt");
+  assert.equal(inTurnWords(none), "2 of 2 pasted lines not run: the engine can't take a command now");
 
   s = script({ a: { rc: "taken" } }); // another tab took the engine during the line's run
   const taken = await runInTurn(["a", "b", "c"], s.runOne);
@@ -934,13 +934,13 @@ test("Save's key (editor/keys.ts): Ctrl or Cmd with S on any layout, the key tha
   assert.equal(press("d", "KeyD", { ctrl: true }), false);
 });
 
-test("a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or opens the download prompt", () => {
+test("a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or the key does what Start engine does (the download prompt, the take-over dialog)", () => {
   const by = (states: string[]) => states.map((s) => refusedRunWords(s as Parameters<typeof refusedRunWords>[0]));
-  assert.deepEqual(by(["ready", "none", "declined"]), [null, null, null]);
+  assert.deepEqual(by(["ready", "none", "asking", "declined", "other-tab-idle"]), [null, null, null, null, null]);
   for (const s of by(["running", "breaking", "waiting"]))
     assert.equal(s, "Run is not available until the current run ends");
-  for (const s of by(["checking-lock", "checking-cache", "asking", "downloading", "starting-list", "starting-worker"]))
+  for (const s of by(["checking-lock", "checking-cache", "downloading", "starting-list", "starting-worker"]))
     assert.equal(s, "The engine is starting. Try again when it is ready.");
-  for (const s of by(["failed", "failed-twice", "other-tab-idle", "other-tab-taking"]))
+  for (const s of by(["failed", "failed-twice", "other-tab-taking"]))
     assert.equal(s, "Run is not available: the engine isn't running in this tab");
 });

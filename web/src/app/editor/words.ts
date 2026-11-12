@@ -67,14 +67,17 @@ export const jumpLine = (r: LastRun): number | null =>
   r.rc !== 0 && r.line !== null && r.kind !== "command" && r.path ? r.line : null;
 
 /** The toast when Ctrl/Cmd+Enter in the editor asks for a run the engine does not take, by the state, as the status bar
- *  picks its words (drafts for the maintainer, from the Run button's own: SPEC section 8). null where a run is not
- *  refused: `ready` runs it, and `none` and `declined` open the download prompt, which says why nothing runs (the
- *  visitor runs it again once the engine is ready). */
+ *  picks its words (drafts for the maintainer, from the Run button's own: SPEC section 8). null where the key does
+ *  something: `ready` runs, and with no engine it does what "Start engine" does (`none`, `asking`, `declined`: the
+ *  download prompt; `other-tab-idle`: the take-over dialog; a `failed` start that can be tried again is tried, and one
+ *  that cannot has the words below). */
 export function refusedRunWords(s: EngineState["s"]): string | null {
   switch (s) {
     case "ready":
     case "none":
+    case "asking":
     case "declined":
+    case "other-tab-idle":
       return null;
     case "running":
     case "breaking":
@@ -82,14 +85,12 @@ export function refusedRunWords(s: EngineState["s"]): string | null {
       return "Run is not available until the current run ends";
     case "checking-lock":
     case "checking-cache":
-    case "asking":
     case "downloading":
     case "starting-list":
     case "starting-worker":
       return "The engine is starting. Try again when it is ready.";
     case "failed":
     case "failed-twice":
-    case "other-tab-idle":
     case "other-tab-taking":
       return "Run is not available: the engine isn't running in this tab";
   }

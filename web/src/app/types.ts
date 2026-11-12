@@ -40,7 +40,7 @@ export type EngineState =
   | { s: "checking-lock" } // the page load: waiting for the tab lock
   | { s: "checking-cache" } // then for the cache check
   | { s: "none" } // only with ?test=manual
-  | { s: "asking"; forRun: boolean } // forRun: a Run opened the prompt (it did not run, and nothing is kept to run)
+  | { s: "asking" } // the download prompt is open
   | { s: "declined" }
   | { s: "downloading"; received: number; total: number; t0: number }
   | { s: "starting-list"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> } // a restart fetches the build's list; no worker yet
@@ -118,7 +118,7 @@ export interface Graph {
  *  A new value with another payload (clash 1, then clash 2) draws a new dialog (dialogs.tsx keys on the whole value). */
 export type Dialog =
   | null
-  | { d: "download"; forRun: boolean }
+  | { d: "download" }
   | { d: "clash"; path: string; index: number; total: number }
   | { d: "delete"; paths: string[] }
   | { d: "delete-all"; count: number }

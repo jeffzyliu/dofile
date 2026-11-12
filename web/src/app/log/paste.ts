@@ -4,12 +4,12 @@
 //    (pastedLines answers null); the browser then pastes it as it is, and a one-line field drops the breaks;
 //  - the field's text before and after the cursor joins the first and the last pasted line, as a paste would put them;
 //  - lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too;
-//  - the lines stop at the first one that is not run (refused: the page load, a start or a run in progress; or asked:
-//    there is no engine, so the line opened the download prompt and nothing runs), that ends with an error (any rc but
-//    0, Break's rc 1 too), or whose run is cut because another tab took the engine (the rest never go to the engine
-//    this tab gets back). The rest are not run, and the page says how many in a toast, except after "asked", where the
-//    download prompt is the answer (a toast under the prompt would be read over it and gone before it closes); a line
-//    that did not run (refused or asked) goes back into the field, as a typed one stays;
+//  - with no engine (start.ts) no pasted line runs: the paste is an ordinary paste (pasterun.ts linesToRun checks the
+//    engine first), into a field that is disabled then;
+//  - the lines stop at the first one that is not run (refused: the page load, a start or a run in progress), that ends
+//    with an error (any rc but 0, Break's rc 1 too), or whose run is cut because another tab took the engine (the rest
+//    never go to the engine this tab gets back). The rest are not run, and the page says how many in a toast; a refused
+//    line goes back into the field, as a typed one stays, unless the field is disabled by then (pasterun.ts putBack);
 //  - a block (`forvalues i = 1/3 {` ... `}`, `program define` ... `end`, `mata` ... `end`), a comment that goes on to
 //    the next lines (`/*` ... `*/`) or a command continued with `///` cannot run this way, one line at a time (a pasted
 //    `/*`, `drop _all`, `*/` would run `drop _all`): the lines stop before the line that opens it (it is not sent), and
@@ -26,15 +26,13 @@ export function pastedLines(before: string, pasted: string, after: string): stri
 
 /** What running one line gave, at once (runCommand's `how`): when it started, `done` is the run's rc, or "taken" when
  *  another tab took the engine during it. */
-export type RunOne = (
-  line: string,
-) => { how: "started"; done: Promise<number | "taken"> } | { how: "asked" | "refused" };
+export type RunOne = (line: string) => { how: "started"; done: Promise<number | "taken"> } | { how: "refused" };
 
 /** How a pasted run of lines ended. `ran`: the lines run (an error's line counts). `stop`: why the rest did not run. */
 export interface InTurn {
   total: number;
   ran: number;
-  stop: null | { line: number; why: "refused" | "asked" | "error" | "block" | "taken"; rc?: number }; // line: 1-based, of the paste
+  stop: null | { line: number; why: "refused" | "error" | "block" | "taken"; rc?: number }; // line: 1-based, of the paste
 }
 
 /** Whether a `/*` comment is still open at the end of `line` (strings left out). */
@@ -72,9 +70,9 @@ export async function runInTurn(lines: readonly string[], runOne: RunOne): Promi
 }
 
 /** The toast after a pasted run that stopped with lines left, or null when every line ran (or the last one failed, with
- *  nothing left: its error is in the log), or when a line opened the download prompt ("asked": the prompt says why). */
+ *  nothing left: its error is in the log). */
 export function inTurnWords(r: InTurn): string | null {
-  if (!r.stop || r.stop.why === "asked") return null;
+  if (!r.stop) return null;
   const left = r.total - r.ran;
   if (left <= 0) return null;
   const lines = `${left} of ${r.total} pasted lines`;

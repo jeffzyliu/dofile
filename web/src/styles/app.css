@@ -886,6 +886,11 @@ input.filter::placeholder {
   font-family: var(--font-mono);
   font-size: inherit;
 }
+/* off with no engine (aria-disabled, still focusable): the disabled look of ui.css's .btn.off */
+.log button.help-link.off {
+  opacity: var(--disabled-opacity);
+  cursor: default;
+}
 @media (hover: hover) {
   .log button.glink:hover {
     background: var(--accent-soft);
@@ -960,6 +965,35 @@ input.filter::placeholder {
 }
 .cmdline .field::placeholder {
   color: var(--muted);
+}
+/* no engine: the field is off. Its hint and a typed draft stay readable (the muted color at full opacity, which meets
+   the text contrast on this ground: WCAG exempts a disabled control, the words here are still to be read) */
+.cmdline .field:disabled {
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted); /* Safari draws a disabled field's text in its own grey */
+  background: var(--surface-2);
+  opacity: 1;
+  cursor: default;
+}
+.cmdline .field:disabled::placeholder {
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted);
+  opacity: 1;
+}
+/* "Start engine" in the command line: as wide as its words (no width is reserved: the field takes what is left) */
+.cmdline .start {
+  flex: none;
+  white-space: nowrap;
+}
+.app[data-layout="phone"] .cmdline .start {
+  min-height: 44px;
+}
+/* beside that button the phone's field is narrow: the hint is set in the UI font, smaller, so it shows whole */
+.app[data-layout="phone"] .cmdline .field:disabled::placeholder {
+  font: var(--text-sm) / 1.2 var(--font-ui);
+}
+.cmdline .field:disabled {
+  text-overflow: ellipsis;
 }
 /* the phone's Run button: 44 px square, the primary color; while the field is empty it looks off (aria-disabled, so a tap
    still keeps the keyboard open) */

@@ -8,8 +8,12 @@
 // new label goes into the button's list, and the pill's time ("Break" "3.4 s") goes in with a sizer of its widest form.
 // The phone's Run and Break pill are two buttons with the same list (PHONE_LABELS), so they are the same width. In
 // `other-tab-idle` and `other-tab-taking` the buttons stay in place, hidden (app.css), so the bar keeps its height.
+// With no engine (start.ts startOffer) Run is "Start engine": a press does what the state offers (the download prompt,
+// a new try after a failed start, the take-over dialog) and runs nothing, and Run selection is off. "Start engine" is
+// one of Run's labels, so the button is as wide with "Run" as with it and the toolbar does not move.
 
 import * as eng from "../engine.ts";
+import { startEngine, startOffer } from "../start.ts";
 import { activeTab, engine, isolated, phoneTab, tabs } from "../state.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { since } from "./clock.ts";
@@ -18,7 +22,7 @@ import { PILL_WIDEST, pillTime } from "./words.ts";
 
 // The play icon says Run and the stop icon says Break, so the state labels are short; the words a screen reader hears
 // start with the shown ones (NAME).
-const RUN = ["Run", "Starting…", "Not started"] as const;
+const RUN = ["Run", "Start engine", "Starting…", "Not started"] as const;
 const BREAK = ["Break", "Break (reset)", "Stopping…", "Reset now"] as const;
 const NAME: Partial<Record<string, string>> = {
   "Starting…": "Starting… Run is not available until the engine is ready",
@@ -26,16 +30,25 @@ const NAME: Partial<Record<string, string>> = {
   "Break (reset)": "Break (reset): Break resets the engine on this page",
 };
 
-/** Run's label and whether it can be pressed, by engine state (section 5's Run column). */
-function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boolean } {
-  const s = engine.value.s;
-  if (s === "ready" || s === "declined") return { label: "Run", disabled: false, busy: false };
+/** Run's label and whether it can be pressed, by engine state (section 5's Run column). `start`: the button is "Start
+ *  engine" (there is no engine, and a press starts it: start.ts), not a run. */
+function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boolean; start: boolean } {
+  const st = engine.value,
+    s = st.s;
+  const offer = startOffer(st);
+  if (offer !== null) {
+    // no engine. A start that cannot be tried again from here (the banner says to reload, or to use another browser)
+    // keeps "Not started"; while a take-over is in progress the button is off, with the label it had
+    if (offer === "off" && s !== "other-tab-taking")
+      return { label: "Not started", disabled: true, busy: false, start: false };
+    return { label: "Start engine", disabled: offer === "off", busy: false, start: true };
+  }
+  if (s === "ready") return { label: "Run", disabled: false, busy: false, start: false };
   if (s === "running" || s === "breaking" || s === "waiting")
-    return { label: "Run", disabled: s !== "running", busy: true };
+    return { label: "Run", disabled: s !== "running", busy: true, start: false };
   if (s === "downloading" || s === "starting-list" || s === "starting-worker")
-    return { label: "Starting…", disabled: true, busy: false };
-  if (s === "failed" || s === "failed-twice") return { label: "Not started", disabled: true, busy: false };
-  return { label: "Run", disabled: true, busy: false }; // the page load (checking-lock, checking-cache), none, asking, other-tab-idle, other-tab-taking
+    return { label: "Starting…", disabled: true, busy: false, start: false };
+  return { label: "Run", disabled: true, busy: false, start: false }; // the page load (checking-lock, checking-cache)
 }
 
 /** Break's label and look (section 5's Break column). Not isolated, Break resets at once: "Break (reset)". */
@@ -60,7 +73,7 @@ export function RunControls() {
   const tab = tabs.value.find((t) => t.path === activeTab.value);
   const dirty = tab?.dirty ?? false;
   const text = tab?.kind === "text"; // Save saves a text tab; a .dta tab has nothing to save
-  const usable = !run.disabled && !run.busy;
+  const usable = !run.disabled && !run.busy && !run.start; // a run can be sent
   // new elements for each label (one vnode is not placed twice)
   const play = () => <Icon name="play" />,
     stop = () => <Icon name="stop" />,
@@ -76,9 +89,10 @@ export function RunControls() {
         disabled={run.disabled}
         aria-label={NAME[run.label]}
         aria-disabled={run.busy || undefined}
-        aria-keyshortcuts={usable && !sel ? modShortcut("Enter") : undefined}
+        aria-keyshortcuts={(usable && !sel) || (run.start && !run.disabled) ? modShortcut("Enter") : undefined}
         onClick={() => {
-          if (!run.busy) editorCommands.runFile();
+          if (run.start) startEngine();
+          else if (!run.busy) editorCommands.runFile();
         }}
       >
         <Labels
@@ -156,7 +170,7 @@ export function PhoneRun() {
   const run = runState(),
     brk = breakState(),
     sel = running ? null : selection.value;
-  const range = sel && !run.disabled ? (sel[0] === sel[1] ? `${sel[0]}` : `${sel[0]}–${sel[1]}`) : null;
+  const range = sel && !run.disabled && !run.start ? (sel[0] === sel[1] ? `${sel[0]}` : `${sel[0]}–${sel[1]}`) : null;
   const time = running ? pillTime(since(st.t0)) : "";
   const all = [
     ...RUN.map((l) => (
@@ -209,7 +223,11 @@ export function PhoneRun() {
       class="btn primary run-ctl"
       disabled={run.disabled}
       aria-label={name}
-      onClick={() => (sel ? editorCommands.runSelection() : editorCommands.runFile())}
+      onClick={() => {
+        if (run.start) startEngine();
+        else if (sel) editorCommands.runSelection();
+        else editorCommands.runFile();
+      }}
     >
       <Labels at={range ? all.length - 2 : RUN.indexOf(run.label)} labels={all} />
     </button>
