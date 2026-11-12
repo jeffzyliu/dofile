@@ -8,6 +8,7 @@
 import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo } from "../engine/types.ts";
 import { editorCommands } from "./editor/commands.ts";
+import { seedSample } from "./sample.ts";
 import * as S from "./state.ts";
 import { filesWriter as W } from "./state.ts";
 
@@ -23,6 +24,7 @@ type Storage = Parameters<typeof keepFiles>[0];
 let store: Store | null = null;
 let storage: Storage; // navigator.storage, or the tests' own
 let warned = false; // the storage banner was added in this visit
+let seeding = false; // the first visit's sample is being written (sample.ts): its changes bring no storage banner
 
 /** The store the page uses (main.tsx), and the browser's storage manager (the tests give theirs). The store's changes
  *  list it again. */
@@ -43,6 +45,12 @@ export function own() {
   store.blocked = false;
   keep(storage);
   refresh();
+  // a first visit with no files: the sample (sample.ts). Writing it is not a change of the visitor's, so it does not bring
+  // the storage banner (S 19) before they have done anything
+  seeding = true;
+  seedSample().finally(() => {
+    seeding = false;
+  });
 }
 
 /** The effect `block-store`: another tab took the tab lock. This tab writes nothing from now on. */
@@ -52,7 +60,7 @@ export function block() {
 
 // the files changed (the page's change, or a run's): S 19's banner, once per visit, if the browser may clear them
 function changed() {
-  if (warned || S.persisted.value !== false) return;
+  if (seeding || warned || S.persisted.value !== false) return;
   warned = true;
   S.addBanner({ b: "storage" });
 }

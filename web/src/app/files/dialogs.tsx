@@ -15,6 +15,7 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import { editorCommands } from "../editor/commands.ts";
+import { replaceWithSample } from "../sample.ts";
 import { dialog, files } from "../state.ts";
 import { Dialog } from "../ui/Dialog";
 import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries } from "./actions.ts";
@@ -154,6 +155,37 @@ export function DeleteAllDialog({ dialog: d }: { dialog: DialogOf<"delete-all"> 
       }
     >
       <p>This removes every file dofile keeps in this browser. It can't be undone.</p>
+    </Dialog>
+  );
+}
+
+/** Step 5: "Restore the sample" found files of the sample with other contents. Not drawn in the mockups; the words are a
+ *  draft (SPEC 8, step 5). Cancel is focused. */
+export function RestoreSampleDialog({ dialog: d }: { dialog: DialogOf<"restore-sample"> }) {
+  const replace = () => {
+    close();
+    replaceWithSample();
+  };
+  return (
+    <Dialog
+      role="alertdialog"
+      title="Restore the sample?"
+      onCancel={close}
+      actions={
+        <>
+          <button type="button" class="btn" data-autofocus onClick={close}>
+            Cancel
+          </button>
+          <button type="button" class="btn stop live" onClick={replace}>
+            Replace
+          </button>
+        </>
+      }
+    >
+      <p>
+        {d.paths.join(", ")} {d.paths.length === 1 ? "differs" : "differ"} from the sample. Replacing{" "}
+        {d.paths.length === 1 ? "it discards" : "them discards"} your changes. Your other files are not touched.
+      </p>
     </Dialog>
   );
 }

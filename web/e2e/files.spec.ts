@@ -283,7 +283,7 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
   const head = await fileActions(page, isMobile);
   if (isMobile) {
     await expect(page.locator(".files-pane > .pane-head")).toBeHidden();
-    for (const name of ["New .do file", "New folder", "Upload a folder", "Delete all files…"])
+    for (const name of ["New .do file", "New folder", "Upload a folder", "Restore the sample", "Delete all files…"])
       await expect(head.getByRole("menuitem", { name })).toBeVisible();
     await expect(head.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveCount(1); // the ⋯'s own, not twice
   } else {
@@ -292,6 +292,7 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
       "New folder",
       "Upload a folder",
       "Download all (.zip)",
+      "Restore the sample", // step 5, above Delete all files… (OQ-13)
       "Delete all files…",
     ]);
   }

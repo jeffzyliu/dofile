@@ -434,10 +434,11 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
     "first-tab.do",
   ]);
 
-  // "Close editor" leaves for the landing page (step 5 builds it: only the request is checked here)
+  // "Close editor" leaves for the landing page, and the landing page is what answers (e2e/landing.spec.ts too)
   const leaving = page.waitForRequest(
     (r) => r.isNavigationRequest() && new URL(r.url()).pathname.endsWith("/landing.html"),
   );
   await otherTab(page).getByRole("button", { name: "Close editor" }).click();
   await leaving;
+  await expect(page.getByRole("heading", { level: 2, name: "Browsers that work" })).toBeVisible();
 });

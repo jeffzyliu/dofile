@@ -10,6 +10,7 @@
       "!.dofile",
       "!playwright-report",
       "!src/stata/commands.json",
+      "!src/app/sample-files.ts",
       "!src/styles/fonts"
     ]
   },

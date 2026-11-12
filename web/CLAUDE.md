@@ -22,7 +22,8 @@ npm run check-pytest [-- --ios]        # OpenDTA's unit tests inside Pyodide (~2
 npm run check             # Biome (format, import order, lint errors), then TypeScript
 npm run format            # Biome: fix the layout and the import order, apply the safe lint fixes
 npm run lint:strict       # Biome as CI runs it: warnings fail too (npm run lint: the findings only)
-npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
+npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/ (the mockups, from file: URLs)
+npm run sample            # the sample's data (uv run python sample/make_sample.py) and src/app/sample-files.ts
 ```
 
 ## Rules
@@ -145,6 +146,14 @@ npm run axe | tabwalk | contrast | fonts   # the design checks over docs/design/
   upstream build; committed so CI and a fresh checkout need no Emscripten build, a choice rather than a limit; rebuild with
   `sh web/wheels/pyreadstat/build.sh`, see its README). `scripts/install-engine.ts` installs them in Node as `worker.ts` does
   in the page.
+
+- **The landing and commands pages (step 5) are static HTML entries beside the editor's** (`landing.html`, `commands.html`; the
+  editor is `index.html`, the site's root). Their code is `src/site/` and imports nothing from `src/app/` (no signals, no store, no
+  tab lock). The build fills `{{version}}`, `{{engine-mb}}` and the commands list into them (`scripts/site-pages.ts`; the commands
+  come from `src/stata/commands.json`, `npm run commands`); a token left unfilled fails `test/site.test.ts`. `appType: "mpa"`
+  makes a missing `.html` a 404. The sample project is `sample/` (do-files, and `data/wages.dta` made by `sample/make_sample.py`
+  with a fixed seed); `npm run sample` rebuilds the data and the generated `src/app/sample-files.ts` that the page loads
+  (`src/app/sample.ts`; a test fails when that file is stale). Under `?test` the first-visit sample is off unless the URL has `?sample`.
 
 ## Python files the page runs (in `src/dofile/`, web demo only)
 

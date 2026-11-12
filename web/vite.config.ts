@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Connect, defineConfig } from "vite";
 import checker from "vite-plugin-checker";
 import { about, buildId, inputs as readInputs, staleness } from "./scripts/build-id.ts";
+import { deniedInBrowser, engineMB, fillCommands, fillTokens } from "./scripts/site-pages.ts";
 import { engineBytesMeta, listStartFiles, RUNTIME_FILES, writeStartFiles } from "./scripts/start-files.ts";
+import commandData from "./src/stata/commands.json" with { type: "json" };
 
 // What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in ../dist, `npm run wheel`), the extra
 // wheels (web/wheels/: pyreadstat built for Pyodide) and the Pyodide version, with their hashes.
@@ -69,7 +71,29 @@ const isolate: Connect.NextHandleFunction = (_req, res, next) => {
   next();
 };
 
+// The landing and commands pages (step 5): static HTML, sibling entries of the editor's page. The version, the download
+// size and the commands list are filled in here (scripts/site-pages.ts). In a build the size is known only once the bundle
+// is written (the start-files step below), so closeBundle fills it into dist/.
+const SITE_PAGES = ["landing.html", "commands.html"];
+const sitePage = (path: string) => SITE_PAGES.find((p) => path.endsWith(`/${p}`));
+const fillSite = (html: string, name: string) =>
+  name === "commands.html"
+    ? fillCommands(fillTokens(html, { version: about(inputs).dofile }), commandData, deniedInBrowser())
+    : fillTokens(html, { version: about(inputs).dofile });
+
 export default defineConfig({
+  // No fallback to the editor for a path that is not a file: a link to a page that does not exist is a 404, in `dev` and in
+  // `preview` as on the host (the editor is the page at /; the site was never a single-page app)
+  appType: "mpa",
+  build: {
+    rollupOptions: {
+      input: {
+        index: fileURLToPath(new URL("./index.html", import.meta.url)),
+        landing: fileURLToPath(new URL("./landing.html", import.meta.url)),
+        commands: fileURLToPath(new URL("./commands.html", import.meta.url)),
+      },
+    },
+  },
   define: {
     __WHEEL__: JSON.stringify(wheel),
     __EXTRA_WHEELS__: JSON.stringify(extraWheels),
@@ -98,6 +122,21 @@ export default defineConfig({
       overlay: { initialIsOpen: "error" },
     }),
     {
+      name: "site-pages",
+      transformIndexHtml: {
+        order: "pre",
+        handler(html, ctx) {
+          const name = sitePage(ctx.path);
+          if (!name) return html;
+          const filled = fillSite(html, name);
+          // dev: the size is known now; a build leaves {{engine-mb}} for closeBundle
+          return ctx.server
+            ? fillTokens(filled, { engineMB: engineMB(JSON.parse(devStartFiles()).compressed) })
+            : filled;
+        },
+      },
+    },
+    {
       name: "start-files-dev",
       apply: "serve",
       configureServer: (server) => {
@@ -107,15 +146,23 @@ export default defineConfig({
         });
       },
       // the download size, in the page as in a build (there the total has the page's own files too)
-      transformIndexHtml: (html) =>
-        html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).compressed)}\n</head>`),
+      transformIndexHtml: (html, ctx) =>
+        sitePage(ctx.path)
+          ? html
+          : html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).compressed)}\n</head>`),
     },
     {
       name: "start-files",
       apply: "build",
       // dist/ is complete: the page's files have their final names and sizes. An error here fails the build.
       closeBundle(error?: Error) {
-        if (!error) writeStartFiles(distDir, { stamp, inputs });
+        if (error) return;
+        const list = writeStartFiles(distDir, { stamp, inputs });
+        // the landing and commands pages say the download size as the editor's prompt does
+        for (const name of SITE_PAGES) {
+          const file = `${distDir}/${name}`;
+          writeFileSync(file, fillTokens(readFileSync(file, "utf8"), { engineMB: engineMB(list.compressed) }));
+        }
       },
     },
   ],

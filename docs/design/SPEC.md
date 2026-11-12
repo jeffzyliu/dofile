@@ -95,7 +95,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Row menu** (`S 13`): "Open", "Rename" (hint F2; edits the name in place), "Download", rule, "Delete…" (asks, 3.10). From
   the row's ⋯ (on the hovered, focused or open row; always on touch), right click, Shift+F10 or the menu key.
 - **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload a folder", "Download all (.zip)",
-  "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`) is not in that list: OQ-13.
+  "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`, OQ-13; built in step 5) sits above "Delete all files…", after a rule.
 - **States:** drawn: open, unsaved dot, hover, folder open and closed, size, new badge (`E`), row menu (`S 13`). In the flows'
   list, not drawn: drop target, upload count (`WS 4`), inline rename and "name already exists" (DS-7), could not save, too big
   (OQ-16).
@@ -321,7 +321,7 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 | `waiting` | "**Waiting** · Break after this command", the run's time | `S 9b`, a banner with `tabindex="-1"` that takes the focus: "**Waiting for this command to end.** The Break is still pending: the run stops after this command, with the data kept. If it never ends, **Reset now** resets the engine: the data in memory is lost; your files are kept." | disabled | "Reset now", live; asks nothing |
 | `failed` | "**Stopped** · the engine didn't start" | `S 6`, `role="alert"`: "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Try again", after a message that says "Close other tabs, then try again" (`FAILED` in `engine.ts`). | "Stopped" (the play icon; named "Stopped: the engine didn't start, so Run is off"), disabled | disabled |
 | `failed-twice` | "**Stopped** · failed twice" | `S 7`: "**The engine stopped after failing twice** (it ran out of memory). It won't restart by itself, since each try can use a lot of a phone's memory. Your files are safe." / "Reload the page", "Download all (.zip)" | "Stopped" (the play icon; named "Stopped: the engine didn't start, so Run is off"), disabled | disabled |
-| `other-tab-idle`, `other-tab-taking` | "paused" | `WS 6`, blocking: "dofile is open in another tab" / "Only one tab can use your files at a time, so they are not overwritten. The other tab keeps its data until you take over here." / "Close editor" (focused, so a stray Enter does not take over), "Use dofile in this tab". WS 6 draws "Close this tab", but a page may close only a tab a script opened: "Close editor" goes to the landing page (step 5 builds it) | none | none |
+| `other-tab-idle`, `other-tab-taking` | "paused" | `WS 6`, blocking: "dofile is open in another tab" / "Only one tab can use your files at a time, so they are not overwritten. The other tab keeps its data until you take over here." / "Close editor" (focused, so a stray Enter does not take over), "Use dofile in this tab". WS 6 draws "Close this tab", but a page may close only a tab a script opened: "Close editor" goes to the landing page (`landing.html`, built in step 5) | none | none |
 
 
 ### Transition matrix
@@ -965,8 +965,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     2026-11-11). A drop of files anywhere on the page uploads them (3.1); the Files pane is outlined meanwhile (OQ-16), except while a
     dialog is open or another tab has the files, when the drop uploads nothing and there is no outline (C 16 of the
     plan's list).
-    When the folded list is opened (700 to 1199 px) the focus goes to the tree's row in the tab order. "Restore the sample" is not in the head menu until step 5's sample
-    exists (OQ-13 puts it above "Delete all files…"). A new folder is `folder` (`folder-2`, ...) in inline rename. The
+    When the folded list is opened (700 to 1199 px) the focus goes to the tree's row in the tab order. "Restore the sample" (OQ-13) is in the head menu since step 5, above "Delete all files…". A new folder is `folder` (`folder-2`, ...) in inline rename. The
     phone's `FileSwitcher` is one button as wide as the title in every state ("Editor" with no open file, so the top
     bar's boxes never move); its menu lists the open files, then "Close <name>" (the phone has no ×) and "Show all
     files" (the Files view). Words the spec does not
@@ -1143,7 +1142,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     rows · read only"; the live region's "More rows shown" (Show 50 more) and "Copied" (Copy image in the full-size
     view).
   - **4d** `states/DownloadDialog.tsx` (the prompt and "dofile is open in another tab", built as far as the start and the
-    tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, a dead link until step 5),
+    tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, the landing page since step 5),
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
     banners above the editor and the log, and the reset, storage and memory banners; `DownloadFailedBanner` was built in
     step 3, "Try again" (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d
@@ -1211,8 +1210,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     reset now:** the data in memory is lost; your files are kept." Memory banner with no measured size: "**Memory is near
     its limit of about 2 GB.**" (then the drawn sentences). Progress rows: "Downloading the engine",
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
-    of M". OQ-18: "Browsers that work" goes to `landing.html#browsers` (`BROWSERS_URL` in `states/banners.tsx`), a section
-    step 5 builds listing the browsers that run dofile, opened in a new tab; a dead link until then. OQ-10, the
+    of M". OQ-18: "Browsers that work" goes to `landing.html#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
+    step 5 built listing the browsers that run dofile, opened in a new tab. OQ-10, the
     notes (`noteFor(rc, error)` in `words.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
     error, where `error` is the error the run ended with, its last error line that is not `r(N);`, not one an earlier
     `capture noisily` caught: `log/classify.ts` `runError`): `restore` with nothing preserved (r(622);
@@ -1334,6 +1333,67 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 - **Design-system items done here:** DS-5 (text sizes in rem; at a 20 px default the log's 80 columns scroll sideways),
   DS-8 (`--dur-fast`, `--dur`, `--z-menu` < `--z-toast` < `--z-dialog`), DS-7's bottom sheet and tab bar (drawn in
   `system/index.html`).
+
+### As built in step 5 (landing, commands, sample; branch `prototype1-step5`)
+
+- **Pages and URLs.** Three entries of one Vite build, each static HTML at the site's top level: `index.html` (the editor,
+  the site's root `/`), `landing.html` and `commands.html` (`build.rollupOptions.input` in `vite.config.ts`). `appType: "mpa"`
+  makes a path that is not a file a 404 in `npm run dev` and `npm run preview` (Vite's single-page fallback answered the
+  editor for a missing `.html`, so "Close editor" and "Browsers that work" could not have been told from a dead link by their
+  URL). The deployed host (Cloudflare Workers static assets) serves the three pages; its `html_handling` may redirect
+  `/landing.html` to `/landing` (relative links in the pages work from either). Links between the pages are relative
+  (`landing.html`, `commands.html`, `./` for the editor); the editor's `LANDING_URL` (`env.ts`) is `${BASE_URL}landing.html`.
+  **To make the landing page the root:** move `index.html` to another name, give it a new entry key, point the landing page's
+  "Open the editor" at it, and change the e2e `goto("/")` calls; nothing else knows the editor's path.
+- **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
+  the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `landing.ts`; `commands.ts` and
+  `filter.ts`, the filter). These import nothing from `src/app/`: no signals, no store, no tab lock, so reading the landing
+  page never touches the editor's files. `web/scripts/site-pages.ts` fills the pages at build time (a plugin in
+  `vite.config.ts`): `{{version}}` (the package's version, `0.1.0.dev1`, OQ-20), `{{engine-mb}}` (`Math.round` of the
+  compressed total in MB, the editor prompt's number: in dev at once, in a build in `closeBundle`, after `writeStartFiles`),
+  and the commands list.
+- **Landing page** as drawn (`L`): desktop two columns, the phone's hero, both banner drawings and `welcome.do` hidden from
+  screen readers with a plain copy that holds no link; Copy buttons that name what they copy ("Copied" beside the button for
+  2 s, the live region says "Copied to the clipboard" once); " from a public CDN" and " from a CDN" are gone; "48 MB" is the
+  build's number in every place. Added: the section `#browsers` ("Browsers that work", the target of the editor's banner link and
+  of the section's own heading), full width under the two columns.
+- **Commands page** (OQ-18): the landing page's top bar and footer, one column of text, then every name of
+  `src/stata/commands.json` (`npm run commands` makes it from the engine's registry) in columns, written into the HTML by the
+  build, so the list is there with no script. In each name the shortest form you can type is bold. Names `browser.py` turns off
+  (`DENIED`, read from the source text) carry "off in the browser". A second list holds the prefixes: the six the interpreter
+  handles itself (`OWN_PREFIXES` in `scripts/site-pages.ts`, a test compares them with `src/stata/language.ts`) and the
+  registry's. A filter field (shown only when the script runs) keeps the names that contain the text and says "N of M commands".
+  No descriptions and no links to help pages: a name's meaning is the visitor's own knowledge or a search away, and the
+  clean-room risk of 515 descriptions is not worth it (`R` round 1).
+- **Sample** (`F 2.1`, `F 2.4`; OQ-21's names): `web/sample/analysis.do` (the main do-file: `use`, `describe`, `summarize`,
+  `tabulate`, `tabstat`, `regress`, a `foreach` loop, `do helpers.do`, a `scatter`), `web/sample/helpers.do` (a `program` that
+  compares two groups' average wage), `web/sample/data/wages.dta` (500 rows: `id age educ female region wage`, made by
+  `web/sample/make_sample.py` with numpy's `default_rng(2026)` and written by the engine itself; `--check` says whether the committed
+  file is what the script makes). `npm run sample` runs the script and `scripts/make-sample.ts`, which writes the generated
+  module `src/app/sample-files.ts` (text as strings, the .dta as base64) so the sample is in the page's own bundle and needs no
+  request. `src/app/sample.ts`: `seedSample()` is called by `files.ts own()` once the tab lock is this tab's; it writes the three
+  files and opens `analysis.do` when the store has no entry at all and the localStorage mark `dofile.sample` is not set, and sets
+  the mark. A store with a file of the visitor's is never written (the mark is set so it never will be); a visitor who deleted
+  everything is not given it again. With `?test` in the URL it does nothing unless the URL has `?sample` too, so the e2e specs
+  start from an empty store. "Restore the sample" (`fileMenuItems`, above "Delete all files…" after a rule): writes the missing
+  files with no question and the toast "Sample restored"; if any file of the sample is there with other contents, the dialog
+  `restore-sample` ({ d, paths }; `files/dialogs.tsx`, `role="alertdialog"`) asks first. Other files are never touched.
+- **Words not in the sources** (drafts for the maintainer): the dialog "Restore the sample?" / "helpers.do differs from the
+  sample. Replacing it discards your changes. Your other files are not touched." (plural: "analysis.do, helpers.do differ from
+  the sample. Replacing them discards your changes. …") / **Cancel** (focused), **Replace** (`.btn.stop.live`); the toasts
+  "Sample restored", "The sample is already here", "Couldn't restore the sample"; the Copy failure line in the live region
+  "Couldn't copy: select the text and copy it by hand"; the section "Browsers that work"; the commands page's text (below the
+  title, the Filter label and its placeholder "for example: reg", "No command starts with or contains that.", "off in the
+  browser", "Prefixes", "Back to the start", "Open the editor"). Their exact text is in the two HTML files and in
+  `docs/prototype1-plan.md`, "Step 5: the clean-room record".
+- **Tests.** Node: `web/test/site.test.ts` (placeholders, the commands list against `commands.json`, `DENIED`, the six prefixes,
+  the filter, the clean-room greps), `web/test/sample.test.ts` (the first visit, never over a visitor's files, Restore and its
+  dialog on the real store module; the generated module is current), `web/test/sample-run.test.ts` (both do-files run with
+  rc 0 in Pyodide, draw one graph, and the landing page's regression output is a line-for-line subset of that run's log).
+  e2e: `landing.spec.ts` (content, 404 for a missing page, the links in both directions and from the other-tab dialog and the
+  failed-start banner, the build's size, the theme, Copy, axe in both themes on both pages, no sideways scroll, forced colors),
+  `commands.spec.ts`, `sample.spec.ts` (first load, a later visit, never over files, Restore with its dialog, a run in the real
+  engine).
 
 ## 9. Tests (step 6)
 

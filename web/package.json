@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "commands": "cd .. && uv run python -c \"import json; from dofile._vendor.opendta.session import Session; from dofile._vendor.opendta.commands.registry import REGISTRY as R; print(json.dumps({'commands': {k: v.min_abbrev for k, v in sorted(R.items())}, 'prefixes': sorted(k for k, v in R.items() if v.prefix)}, indent=0))\" > web/src/stata/commands.json",
+    "sample": "cd .. && uv run python web/sample/make_sample.py && cd web && node scripts/make-sample.ts",
     "wheel": "cd .. && uv build --wheel -q",
     "snapshot": "npm run wheel && node scripts/make-snapshot.mjs",
     "check-snapshot": "node scripts/check-snapshot.mjs",

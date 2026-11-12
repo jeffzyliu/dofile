@@ -19,5 +19,7 @@ export const testMode = q.get("test"); // null: no hook
 /** ?brotli=wasm: brotli-wasm instead of the browser's own decoder for the snapshot (to compare them). */
 export const brotli = q.get("brotli") ?? undefined;
 
-/** The landing page (step 5 builds it): the wordmark and "About dofile" go there. */
+/** The landing page (web/landing.html, step 5): the wordmark, "About dofile" and the other-tab dialog's "Close editor" go
+ *  there. The editor is the page at the site's root (`./` from the landing page); to make the landing page the root
+ *  instead, move index.html and change these two paths (the e2e tests open the editor at `/`). */
 export const LANDING_URL = `${import.meta.env.BASE_URL}landing.html`;

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>dofile: run Stata-syntax code in your browser</title>
+  <meta name="description" content="Run Stata-syntax do-files in your browser. No license, no account: the engine runs inside the page, on your own computer.">
+  <!-- the theme the visitor chose (site/site.ts keeps it), before the first paint, so a dark page does not flash light -->
+  <script>try { const t = localStorage.getItem("dofile.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
+  <!-- {{version}} and {{engine-mb}} are filled in by the build (vite.config.ts, scripts/site-pages.ts): the package's version and the download size of the start -->
+</head>
+<body class="site landing">
+<header class="top">
+  <a class="wordmark" href="landing.html">do<span>file</span></a>
+  <span class="spacer"></span>
+  <nav aria-label="Site"><a href="commands.html">Commands</a><a href="https://github.com/jeffzyliu/dofile">GitHub</a>
+    <button type="button" class="theme" id="theme" hidden aria-label="Theme: follows the system. Press for light, then dark."><span class="ico i-theme"></span><span class="label-text">System</span></button></nav>
+</header>
+
+<main>
+  <h1 class="visually-hidden">dofile: run Stata-syntax do-files in your browser</h1>
+  <!-- phone only: the pitch, the button and pip install on the first screen -->
+  <section class="hero" aria-label="Introduction">
+    <pre class="art" aria-hidden="true"><span class="art-skew" style="--k:4"><span class="art-ink art-drop">     ██            ▄█▀▀  ▄▄  ██</span></span>
+<span class="art-skew" style="--k:3"><span class="art-ink art-drop">     ██            ██        ██</span></span>
+<span class="art-skew" style="--k:2"><span class="art-ink art-drop">▄█▀▀▀██  ▄█▀▀▀█▄  ▀██▀▀  ██  ██   ▄█▀▀▀█▄</span></span>
+<span class="art-skew" style="--k:1"><span class="art-ink art-drop">██   ██  ██   ██   ██    ██  ██   ██▀▀▀▀▀</span></span>
+<span class="art-skew" style="--k:0"><span class="art-ink art-drop">▀█▄▄▄██  ▀█▄▄▄█▀   ██    ██  ▀█▄  ▀█▄▄▄▄▄</span></span></pre>
+    <div class="ver">{{version}}</div>
+    <p>Run Stata-syntax do-files in your browser. No license, no account: the engine runs inside this page, on your own computer.</p>
+    <a class="btn primary try" href="./">Open the editor →</a>
+    <p class="small">With a sample project, or bring your own files. Your files stay in this browser. The first visit downloads
+      the engine, about {{engine-mb}} MB: on a phone, Wi-Fi is best.</p>
+  </section>
+
+  <section class="pane file desktop-only" aria-labelledby="about-h">
+    <h2 id="about-h" class="visually-hidden">About dofile</h2>
+    <!-- screen readers get this plain copy; the do-file drawing below (line numbers, asterisks, banner) is hidden from them -->
+    <div class="visually-hidden">
+      <p>Run Stata-syntax do-files in your browser. No license, no account: the engine runs inside this page, on your own computer.</p>
+      <p>What it is: an open-source interpreter for Stata-syntax code, built on OpenDTA (MIT). It reads and writes .dta files,
+        fits the common estimators and draws graphs. Not every command exists yet: the list is under Commands, at the top of the page.</p>
+      <p>Your files: files you open stay in this browser; they are not sent anywhere. The first visit downloads the engine
+        (Python compiled to WebAssembly, about {{engine-mb}} MB).</p>
+      <p>Also on your computer, and for AI agents: the same engine as a command line (dofile run) and as an MCP server, so an
+        AI agent can run do-files for you.</p>
+      <p>Where it comes from: the interpreter is OpenDTA, by its own authors. dofile adds the sandbox, this page, the command
+        line and the MCP server.</p>
+    </div>
+    <div class="pane-head" aria-hidden="true"><span class="tab on">welcome.do</span></div>
+    <div class="pane-body" aria-hidden="true"><pre class="code"><span class="ln art-ln"><span class="n">1</span><span class="art-skew" style="--k:4"><span class="art-ink art-drop">     ██            ▄█▀▀  ▄▄  ██</span></span></span><span class="ln art-ln"><span class="n">2</span><span class="art-skew" style="--k:3"><span class="art-ink art-drop">     ██            ██        ██</span></span></span><span class="ln art-ln"><span class="n">3</span><span class="art-skew" style="--k:2"><span class="art-ink art-drop">▄█▀▀▀██  ▄█▀▀▀█▄  ▀██▀▀  ██  ██   ▄█▀▀▀█▄</span></span></span><span class="ln art-ln"><span class="n">4</span><span class="art-skew" style="--k:1"><span class="art-ink art-drop">██   ██  ██   ██   ██    ██  ██   ██▀▀▀▀▀</span></span></span><span class="ln art-ln"><span class="n">5</span><span class="art-skew" style="--k:0"><span class="art-ink art-drop">▀█▄▄▄██  ▀█▄▄▄█▀   ██    ██  ▀█▄  ▀█▄▄▄▄▄</span></span>   <span class="c">{{version}}</span></span><span class="ln"><span class="n">6</span></span><span class="ln"><span class="n">7</span><span class="c lead">* Run Stata-syntax do-files in your browser. No license, no account:</span></span><span class="ln"><span class="n">8</span><span class="c lead">* the engine runs inside this page, on your own computer.</span></span><span class="ln"><span class="n">9</span></span><span class="ln"><span class="n">10</span><span class="k">// What it is</span></span><span class="ln"><span class="n">11</span><span class="c">* An open-source interpreter for Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">12</span><span class="c">* (MIT). It reads and writes .dta files, fits the common estimators</span></span><span class="ln"><span class="n">13</span><span class="c">* and draws graphs. Not every command exists yet: see <a href="commands.html" tabindex="-1">the list</a>.</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Your files</span></span><span class="ln"><span class="n">16</span><span class="c">* Files you open stay in this browser; they are not sent anywhere.</span></span><span class="ln"><span class="n">17</span><span class="c">* The first visit downloads the engine (Python compiled to</span></span><span class="ln"><span class="n">18</span><span class="c">* WebAssembly, about {{engine-mb}} MB).</span></span><span class="ln"><span class="n">19</span></span><span class="ln"><span class="n">20</span><span class="k">// Also on your computer, and for AI agents</span></span><span class="ln"><span class="n">21</span><span class="c">* The same engine as a command line (dofile run) and as an MCP</span></span><span class="ln"><span class="n">22</span><span class="c">* server, so an AI agent can run do-files for you.</span></span><span class="ln"><span class="n">23</span></span><span class="ln"><span class="n">24</span><span class="k">// Where it comes from</span></span><span class="ln"><span class="n">25</span><span class="c">* The interpreter is OpenDTA, by its own authors. dofile adds the</span></span><span class="ln"><span class="n">26</span><span class="c">* sandbox, this page, the command line and the MCP server.</span></span></pre></div>
+  </section>
+
+  <div class="side">
+    <section class="card cta-card">
+      <p class="lede">Open the editor with a sample project, or bring your own do-files and data.</p>
+      <a class="btn primary try" href="./">Open the editor →</a>
+      <p class="small">The first visit downloads the engine, about {{engine-mb}} MB, and asks before it starts; later visits start in a few
+        seconds. Your files are kept in this browser between visits.</p>
+    </section>
+
+    <section class="card">
+      <h2>On your computer</h2>
+      <div class="label">Command line and MCP server <span class="soon">with the first release</span></div>
+      <div class="cmd"><code>pip install dofile</code><span class="copied" hidden aria-hidden="true"><span class="ico i-check"></span>Copied</span><button type="button" class="btn copy" data-copy="pip install dofile" aria-label="Copy pip install dofile">Copy</button></div>
+      <div class="label">Today, from the source</div>
+      <div class="cmd"><code>claude mcp add dofile -- uv run <span class="nb">--directory</span> <span class="ph">/path/to/dofile</span> <span class="nb">--extra mcp</span> dofile-mcp <span class="nb">--workdir "$PWD"</span></code><span class="copied" hidden aria-hidden="true"><span class="ico i-check"></span>Copied</span><button type="button" class="btn copy" data-copy='claude mcp add dofile -- uv run --directory /path/to/dofile --extra mcp dofile-mcp --workdir "$PWD"' aria-label="Copy the MCP command">Copy</button></div>
+      <p class="small" style="margin-top:0">Replace <span class="mono ph">/path/to/dofile</span> with the folder you cloned dofile into.</p>
+      <p class="small">Setup and the MCP tools: <a href="https://github.com/jeffzyliu/dofile#readme">README on GitHub</a></p>
+      <!-- Copy: "Copied" shows beside the button for 2 s; the button's name stays "Copy …", and only this region speaks, once -->
+      <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
+    </section>
+
+    <!-- phone only: the rest of welcome.do, wrapped for a narrow screen -->
+    <section class="pane file phone-only" aria-label="About dofile">
+      <div class="visually-hidden">
+        <p>What it is: an open-source interpreter for Stata-syntax code, built on OpenDTA (MIT). It reads and writes .dta files,
+          fits the common estimators and draws graphs. Not every command exists yet: the list is under Commands, at the top of the page.</p>
+        <p>Your files: files you open stay in this browser; they are not sent anywhere. The first visit downloads the engine
+          (Python compiled to WebAssembly, about {{engine-mb}} MB).</p>
+        <p>Also for AI agents: the same engine as a command line (dofile run) and as an MCP server, so an AI agent can run
+          do-files for you.</p>
+      </div>
+      <div class="pane-head" aria-hidden="true"><span class="tab on">welcome.do</span></div>
+      <div class="pane-body" aria-hidden="true"><pre class="code"><span class="ln"><span class="n">1</span><span class="k">// What it is</span></span><span class="ln"><span class="n">2</span><span class="c">* An open-source interpreter for</span></span><span class="ln"><span class="n">3</span><span class="c">* Stata-syntax code, built on OpenDTA</span></span><span class="ln"><span class="n">4</span><span class="c">* (MIT). It reads and writes .dta files,</span></span><span class="ln"><span class="n">5</span><span class="c">* fits the common estimators and draws</span></span><span class="ln"><span class="n">6</span><span class="c">* graphs. Not every command exists yet:</span></span><span class="ln"><span class="n">7</span><span class="c">* see <a href="commands.html" tabindex="-1">the list</a>.</span></span><span class="ln"><span class="n">8</span></span><span class="ln"><span class="n">9</span><span class="k">// Your files</span></span><span class="ln"><span class="n">10</span><span class="c">* Files you open stay in this browser;</span></span><span class="ln"><span class="n">11</span><span class="c">* they are not sent anywhere. The first</span></span><span class="ln"><span class="n">12</span><span class="c">* visit downloads the engine (Python</span></span><span class="ln"><span class="n">13</span><span class="c">* compiled to WebAssembly, ~{{engine-mb}} MB).</span></span><span class="ln"><span class="n">14</span></span><span class="ln"><span class="n">15</span><span class="k">// Also for AI agents</span></span><span class="ln"><span class="n">16</span><span class="c">* The same engine as a command line</span></span><span class="ln"><span class="n">17</span><span class="c">* (dofile run) and as an MCP server, so</span></span><span class="ln"><span class="n">18</span><span class="c">* an AI agent can run do-files for you.</span></span></pre></div>
+    </section>
+
+    <section class="card sample-card">
+      <h2>What a run looks like</h2>
+      <!-- the sample project's own run (web/sample/analysis.do): test/site.test.ts checks these numbers against a run of it -->
+<pre class="sample"><span class="echo">. use data/wages, clear</span>
+<span class="echo">. regress wage age educ female</span>
+
+      Source |       SS           df       MS      Number of obs   =       500
+-------------+----------------------------------   F(3, 496)       =    201.72
+       Model |  4827.16746         3  1609.05582   Prob &gt; F        =    0.0000
+    Residual |  3956.52906       496   7.9768731   R-squared       =    0.5496
+-------------+----------------------------------   Adj R-squared   =    0.5468
+       Total |  8783.69651       499  17.6025982   Root MSE        =    2.8243
+
+------------------------------------------------------------------------------
+        wage |      Coef.   Std. Err.      t    P&gt;|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+         age |   .1064929   .0104691    10.17   0.000     .0859235    .1270622
+        educ |   .8702212   .0395402    22.01   0.000     .7925343    .9479081
+      female |  -.9074708   .2534544    -3.58   0.000    -1.405447   -.4094941
+       _cons |   3.814012   .7730822     4.93   0.000     2.295092    5.332932
+------------------------------------------------------------------------------</pre>
+    </section>
+  </div>
+
+  <section class="browsers" id="browsers" aria-labelledby="browsers-h">
+    <h2 id="browsers-h">Browsers that work</h2>
+    <p>dofile runs in the page, so the browser needs WebAssembly, IndexedDB (where your files are kept) and enough memory
+      for the engine, which needs a little over 1 GB while it starts.</p>
+    <ul>
+      <li><b>Chrome, Edge, Firefox and Safari on a computer.</b> Checked by automatic tests in Chromium, Firefox and WebKit
+        (the engine Safari is built on).</li>
+      <li><b>iPhone and iPad (Safari).</b> Tried by hand on one iPhone, once, and the tests run an iPhone-sized window. Not
+        checked on other models: a phone with little memory may fail to start the engine, and the page then says so.</li>
+      <li><b>Android (Chrome, Firefox).</b> Expected to work the same way. Not tried on a real phone yet.</li>
+    </ul>
+    <p>The Break button needs a page the browser treats as isolated from other sites; this site is served that way. If a
+      browser or a network does not allow it, Break resets the engine instead of stopping the run. Your files stay in the
+      browser's own storage: if a browser clears it or refuses it, the page says so, and "Download all (.zip)" in the
+      file menu keeps a copy.</p>
+  </section>
+</main>
+
+<footer>
+  <span>dofile is open source (MIT). The interpreter is <a href="https://github.com/yaskepalhares/opendta">OpenDTA</a> (MIT).</span>
+  <span>Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.</span>
+</footer>
+<script type="module" src="/src/site/landing.ts"></script>
+</body>
+</html>

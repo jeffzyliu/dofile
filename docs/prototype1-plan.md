@@ -15,6 +15,16 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   differs from `main`. Before the merge the maintainer goes through "Step 4: decisions and open questions" (below) and
   the draft words in `docs/design/SPEC.md` section 8. Step 5 is on its own branch, `prototype1-step5`, in draft pull
   request #18 over step 4. The step 4 bullets below are the record of that work.
+- **Step 5 is built on `prototype1-step5`, a branch stacked on `prototype1-step4`** (its own pull request, after step 4's):
+  the landing page (`web/landing.html`), the commands page (`web/commands.html`), the sample project (`web/sample/`, loaded on a
+  first visit, "Restore the sample" in the file menu), and the clean-room check of all text (the record at the end of this
+  file). What was built, the URLs, the words the sources do not give and the decisions left open are in SPEC section 8, "As
+  built in step 5". **Decisions for the maintainer:** (1) the editor stays the site's root `/`, with the landing page at
+  `/landing.html` (easy to swap: SPEC 8, step 5); (2) the commands page has names and no descriptions; (3) the sample's first
+  load is off under `?test` unless the URL has `?sample`; (4) writing the sample on a first visit does not bring the storage banner (S 19)
+  (`files.ts` ignores the changes made while it seeds); the visitor's own first change does; (5) the draft
+  words listed in SPEC 8 and the "Browsers that work" section.
+
 - **Steps 3 and 3.5 are merged into `main`**, with the formatting and linting work, by pull request #13 (the merge commit
   `aff60a5`, 2026-11-11). `main` is pushed and protected (root `CLAUDE.md`, Rules): every change is a pull request, and a
   merge deploys the page. Checked before the merge, locally and in CI (Ubuntu and macOS, Python 3.12
@@ -400,8 +410,9 @@ Decided in the step 2 review:
   download works.
   It sits above the editor on desktop; on a phone every view draws it (`banners.tsx`, `phone: "every"`), so it is seen
   whichever view "Download all" was started from.
-- **Step 5:** the other-tab dialog's "Close editor" goes to `LANDING_URL` (`web/src/app/env.ts`, `landing.html`), and
-  "Browsers that work" to its `#browsers` section: "Step 4: decisions and open questions", C 6.
+- **Step 5 (done, to review):** the other-tab dialog's "Close editor" and the banner's "Browsers that work" go to
+  `landing.html` and `landing.html#browsers`, which now exist; the e2e tab-lock test (`step2.spec.ts`) checks the request and
+  that the landing page's section answers; `e2e/landing.spec.ts` checks both links ("Step 4: decisions and open questions", C 6).
 - **Step 4c:**
   - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decided
     (2026-11-11): accepted as it is; a graph is drawn in the run's theme whatever colors its command names. A rule that
@@ -417,3 +428,66 @@ Decided in the step 2 review:
 - **Step 6:** one Playwright test of a streamed run in a real browser (step 1 checked streaming in Node `worker_threads` only).
   From the second review of step 3: check Tab out of the open ⋯ menu at phone width too (`e2e/shell.spec.ts` checks it on
   desktop only). New specs import `test` from `e2e/fixtures.ts` (storage kept, no storage banner unless turned off).
+
+## Step 5: the clean-room record (2026-11-11)
+
+The check of every word the site shows a visitor against `LICENSE-POLICY.md`: nothing copied from StataCorp's files, manuals,
+help text or example datasets; "Stata" used as the policy allows (the policy's own forms are "runs Stata-syntax code" and
+"Stata-compatible"; the registered-trademark line is on the landing and commands pages). Done by the step 5 agent; the
+maintainer's review of the doubtful items below is still open.
+
+**What was checked**
+1. `web/landing.html` and `web/commands.html`: all text, including the text only a screen reader gets, the page titles and
+   descriptions, the "Browsers that work" section, and the output block "What a run looks like" (it is the sample's own run:
+   `web/test/sample-run.test.ts` compares it line by line with a run of `analysis.do`).
+2. The sample: `web/sample/analysis.do`, `helpers.do` (every comment and string), `make_sample.py`, and `data/wages.dta` (its
+   variable names, labels and values).
+3. The editor page: every label, menu item, banner, dialog, toast, note and status word in `web/src/app/**` (the views, and the
+   words in `states/words.ts`, `editor/words.ts`, `log/classify.ts`, `files/*.ts`), and the draft words of SPEC section 8
+   ("Step 4d: draft words" and the 4a and 4c lists), and the words step 5 added (the restore dialog, its toasts).
+4. The command names on the commands page.
+
+**How**
+- Read each string against the policy's two tests: is it text from a manual, help page or example (then it must not be there),
+  or is it our own sentence describing what this page does (then it is fine)? This was done in full for the landing and
+  commands pages and the sample, and for `states/words.ts` and the dialogs, banners, menus and toasts that SPEC sections 3.10
+  and 8 list. For the rest of the editor page (the CodeMirror, log, output and file views) it was done through the searches
+  below and the SPEC's lists, not by reading every source file line by line: a reviewer who wants that should read the string
+  literals of `web/src/app/**/*.tsx`. What was read names a control of dofile's own page or says what dofile did; none
+  describes how a Stata command works, so none can be a paraphrase of a manual. The only strings about Stata's behavior are
+  the two notes of `states/words.ts` (a `restore` with nothing preserved; a community command): each is one sentence of our own
+  about what dofile does.
+- Searched `web/src`, `web/*.html` and `web/sample` for `sysuse`, `webuse`, `auto.dta`, `nlsw`, `census`, `lifeexp`, `citytemp`,
+  `manual`, `sthlp`, `.ado`, `stata.com` and every use of "Stata": the only hits are the product-name uses listed under "Doubtful"
+  and code comments. `test/site.test.ts` and `e2e/commands.spec.ts` repeat the searches that apply to the two pages and the sample,
+  so a later edit that brings one in fails a test.
+- The data: `make_sample.py` draws every value from numpy's seeded generator (`default_rng(2026)`) and writes the file with
+  dofile's own engine; the script is committed beside its output (`--check` proves they match). Variables are `id age educ female
+  region wage`, regions are North, East, South and West, `id` is a counter: no person's name, no real record, nothing taken from
+  a Stata or other dataset. The names are common words, not a copy of any example dataset's variable list.
+- The sample's do-files use ordinary commands in our own comments (`use`, `describe`, `summarize`, `tabulate`, `tabstat`,
+  `regress`, `foreach`, `program`, `scatter`); they were written for this page and run as written (rc 0, in the page's engine).
+- The command names are facts about the language and are read from the engine's registry, not typed in.
+
+**Result: nothing found that is copied from StataCorp's material.**
+
+**Doubtful, for the maintainer**
+1. **"Stata 14 syntax" in the log's head** (`log/LogView.tsx`, from `ABOUT.stata_version`) and "Stata 14" on the commands page
+   ("checked against results recorded from Stata 14 for a set of test programs"). It names the product to say which behavior the
+   engine follows, which is a statement of fact, but the policy's own forms are "Stata-syntax" and "Stata-compatible", so a version
+   number is a small step beyond them. The editor page carries no "not affiliated with StataCorp" line (the landing and commands
+   pages do); consider one in the About section or the log's head.
+2. **Text the engine prints is not the page's text and was not re-audited here:** the error messages and output layouts of the
+   engine (behavior it reproduces), `help <topic>` (the page suggests "Try: help regress"; the engine reads OpenDTA's own
+   173 `help/*.sthlp` pages, written by OpenDTA under its own clean-room policy; the extension is the format's, but a reader
+   may take them for StataCorp's files), and `sysuse`, which loads OpenDTA's own synthetic datasets (`cohort`, `diet`,
+   `growth`; its docstring says Stata's example datasets are not included). They are covered by `CLEAN_ROOM_POLICY.md` of OpenDTA, the
+   vendor's; `sysuse` and `help` are in the commands page's list like any command.
+3. **Claims the page makes that rest on a source I could not test:** the iPhone line of "Browsers that work" ("tried by hand on
+   one iPhone, once": `docs/pyodide-snapshot.md`, 2026-11-08), the Android line ("expected to work", untried), and "a little over
+   1 GB while it starts" (the 1.25 GB peak in the same file, measured on one phone). Each says what it rests on; reword if the
+   maintainer has better figures.
+4. **The commands page lists the `shell` and `webuse` names marked "off in the browser"** (read from `browser.py`'s `DENIED`),
+   which is true of the page; the CLI and MCP server turn off a longer list. Not a clean-room matter.
+5. The mockups and flows under `docs/design/` (not shipped to visitors) hold a Stata-style `regress` table in the landing
+   mockup; its numbers were from dofile's own run of a synthetic file, and the page now shows the real sample's run instead.

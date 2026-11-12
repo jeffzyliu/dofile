@@ -1,8 +1,9 @@
 // The file panel (docs/design/SPEC.md, section 3.1). App.tsx draws the pane, its head ("Files") and its banners; this
 // file fills the head's right side and the body.
 //  - FilesHead: the head menu "File actions" (fileMenuItems): New .do file, New folder, Upload a folder, Download all
-//    (.zip) (files.ts downloadAll; disabled while `hasFiles` is false), Delete all files… (dialog delete-all). "Restore
-//    the sample" (OQ-13) goes above Delete all files… with step 5's sample; it is not in the menu until then.
+//    (.zip) (files.ts downloadAll; disabled while `hasFiles` is false), Restore the sample (OQ-13, step 5: sample.ts
+//    restoreSample; asks first through the dialog restore-sample when a sample file differs), Delete all files… (dialog
+//    delete-all).
 //  - FilesBody: the tree, the dropzone ("Drop files or folders", Upload, New .do file) and "Download all (.zip)".
 //    The tree (role="tree", flat rows with aria-level; tree.ts treeRows): folders first, then files, each by name;
 //    folders fold (aria-expanded); sizes; the open file's mark (aria-selected); the unsaved dot; the "new" badge from
@@ -25,6 +26,7 @@
 import { signal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
 import { downloadAll } from "../files.ts";
+import { restoreSample } from "../sample.ts";
 import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import { Icon } from "../ui/Icon";
@@ -165,6 +167,12 @@ export const fileMenuItems = (): MenuItem[] => [
     },
   },
   "rule",
+  {
+    label: "Restore the sample",
+    onSelect: () => {
+      restoreSample();
+    },
+  },
   {
     label: "Delete all files…",
     danger: true,

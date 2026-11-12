@@ -1,0 +1,397 @@
+/* The landing and commands pages (step 5; docs/design/mockups/landing.html is the drawing). Components are ui.css's; this file
+   holds only these two pages' own layout. The editor page does not load it. */
+
+body.site {
+  min-height: 100%;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s3) var(--s5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.top .spacer {
+  flex: 1;
+}
+.top nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  font-size: var(--text-sm);
+}
+/* muted links on the surface: the ink is what makes 4.5:1 in both themes, so the nav takes it and underlines on hover */
+.top nav a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.top nav a:hover,
+.top nav a[aria-current="page"] {
+  text-decoration: underline;
+}
+body.landing main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--s5);
+  align-items: stretch;
+  padding: var(--s5);
+  max-width: 1360px;
+  width: 100%;
+  margin: 0 auto;
+}
+.landing .file .pane-body {
+  padding-bottom: var(--s2);
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+.card,
+.browsers {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--s4) var(--s5);
+}
+.card h2,
+.browsers h2 {
+  font: var(--w-bold-ui) var(--text-xs) / 1 var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 var(--s3);
+}
+.try {
+  font-size: var(--text-lg);
+  padding: 12px 20px;
+}
+.lede {
+  font-size: var(--text-lg);
+  margin: 0 0 var(--s3);
+  line-height: 1.45;
+}
+.small {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  margin: var(--s2) 0 0;
+}
+.cmd {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  font: var(--text-sm) / 1.4 var(--font-mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin: 6px 0;
+  overflow: hidden;
+}
+/* long commands wrap (at spaces, or anywhere if a part is too long) rather than being cut off */
+.cmd code {
+  flex: 1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cmd .nb {
+  white-space: nowrap; /* an option stays whole: browsers break after a hyphen */
+}
+.ph {
+  color: var(--tok-macro);
+  font-weight: var(--w-bold-mono);
+}
+.cmd .copy {
+  font: var(--w-bold-ui) 11.5px / 1 var(--font-ui);
+  padding: 4px 8px;
+  flex: none;
+  color: var(--ink);
+}
+/* after Copy: "Copied" beside the button for 2 s (the button keeps its name; the live region speaks). It comes before
+   the button in the markup so the button stays at the right edge. */
+.cmd .copied {
+  order: 1;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 4px;
+  font: var(--w-bold-ui) 11.5px / 1 var(--font-ui);
+  color: var(--ok);
+}
+.cmd .copied[hidden] {
+  display: none;
+}
+.cmd .copy {
+  order: 2;
+}
+.label {
+  font-size: var(--text-sm);
+  margin-top: var(--s3);
+}
+.label:first-of-type {
+  margin-top: 0;
+}
+.label .soon {
+  font: var(--w-bold-ui) 10.5px / 1 var(--font-ui);
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: 3px;
+  padding: 3px 5px;
+  margin-left: 6px;
+}
+.sample-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.sample {
+  font: 11px / 1.45 var(--font-mono);
+  margin: 0;
+  white-space: pre;
+  overflow: hidden; /* as drawn: at a width too narrow for its 80 columns the right edge is cut (the phone does not show it) */
+}
+.sample .echo {
+  font-weight: var(--w-bold-mono);
+}
+/* the pitch's first lines in ink: the page's message, not a comment */
+.code .lead {
+  color: var(--ink);
+}
+.hero,
+.phone-only {
+  display: none;
+}
+
+/* the banner B2 (book+drop+skew): each line slanted, moved right by its height above the last, so the strokes join */
+.landing .art {
+  line-height: 1.1;
+  margin: 0;
+}
+.landing .art-skew {
+  display: block;
+  width: max-content;
+  transform: translateX(calc(var(--k) * 0.55em)) skewX(-12deg);
+}
+/* in the do-file drawing each banner line is a numbered line: the slanted text sits on the number's line */
+.landing .code .art-ln {
+  line-height: 1.1;
+}
+.landing .code .art-ln .art-skew {
+  display: inline-block;
+  vertical-align: top;
+}
+.art-ink {
+  color: var(--accent);
+}
+.art-drop {
+  text-shadow: 1px 1px 0 var(--border-strong);
+}
+
+/* "Browsers that work": the target of the editor's banner link, under the two columns */
+.browsers {
+  grid-column: 1 / -1;
+  scroll-margin-top: var(--s4);
+}
+.browsers p,
+.browsers li {
+  line-height: 1.5;
+}
+.browsers ul {
+  padding-left: var(--s5);
+}
+.browsers :target,
+.browsers:target {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+footer {
+  padding: var(--s4) var(--s5);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s5);
+}
+footer a {
+  color: var(--ink);
+}
+
+/* the commands page: one column of text, the names in columns under it */
+.doc {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s5);
+}
+.doc h1 {
+  font: var(--w-bold-ui) 28px / 1.2 var(--font-ui);
+  margin: 0 0 var(--s3);
+}
+.doc h2 {
+  font: var(--w-bold-ui) var(--text-xs) / 1 var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: var(--s5) 0 var(--s3);
+}
+.doc code {
+  font: var(--text-sm) / 1.4 var(--font-mono);
+}
+.finder {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin: var(--s4) 0 0;
+  position: sticky;
+  top: 0;
+  padding: var(--s2) 0;
+  background: var(--bg);
+}
+.finder[hidden] {
+  display: none;
+}
+.finder input {
+  font: var(--text-md) / 1.2 var(--font-ui);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  width: min(24rem, 100%);
+}
+.finder .count {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  columns: 11rem;
+  column-gap: var(--s4);
+}
+.names li {
+  padding: 2px 0;
+  break-inside: avoid;
+}
+.names li[hidden],
+.names[hidden] {
+  display: none;
+}
+.names b {
+  font-weight: var(--w-bold-mono);
+  color: var(--accent);
+}
+.names .note {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.none {
+  margin: var(--s4) 0;
+}
+
+@media (max-width: 700px) {
+  .top {
+    padding: var(--s3) var(--s4);
+  }
+  .top nav {
+    gap: var(--s3);
+  }
+  .theme .label-text {
+    display: none;
+  }
+  body.landing main {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--s3);
+    gap: var(--s3);
+  }
+  /* the phone's first screen: what dofile is, the button, pip install */
+  .hero {
+    display: block;
+    padding: var(--s2) var(--s1) 0;
+  }
+  .hero .art {
+    font-size: 13px;
+  }
+  .hero .ver {
+    font: var(--text-sm) / 1 var(--font-mono);
+    color: var(--muted);
+    margin: var(--s3) 0;
+  }
+  .hero p {
+    font-size: var(--text-lg);
+    line-height: 1.45;
+    margin: 0 0 var(--s3);
+  }
+  .hero p.small {
+    font-size: var(--text-sm);
+    margin: var(--s2) 0 0;
+  }
+  .side {
+    display: contents;
+  }
+  .cta-card,
+  .sample-card,
+  .desktop-only {
+    display: none;
+  }
+  .phone-only {
+    display: block;
+  }
+  .card,
+  .browsers {
+    padding: var(--s3) var(--s4);
+  }
+  .landing .code {
+    font-size: 12px;
+  }
+  footer {
+    padding: var(--s3) var(--s4);
+  }
+  .doc {
+    padding: var(--s4);
+  }
+  .names {
+    columns: 9rem;
+  }
+}
+
+/* a finger: the links in the bar and the Copy buttons are 44 px high */
+@media (pointer: coarse) {
+  .top nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .cmd .copy,
+  .site .theme {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@media (forced-colors: active) {
+  .art-ink,
+  .art-drop {
+    forced-color-adjust: none;
+    color: CanvasText;
+    text-shadow: none;
+  }
+  .names b {
+    color: CanvasText;
+  }
+  .card,
+  .browsers,
+  .cmd {
+    border: 1px solid CanvasText;
+  }
+}

@@ -123,6 +123,7 @@ export type Dialog =
   | { d: "delete-all"; count: number }
   | { d: "reset" }
   | { d: "close-tab"; path: string }
+  | { d: "restore-sample"; paths: string[] }
   | { d: "other-tab" };
 export type DialogName = NonNullable<Dialog>["d"];
 
