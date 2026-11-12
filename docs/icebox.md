@@ -18,9 +18,6 @@ To weigh first in the post-merge review:
 - **The row menu is out of reach without a keyboard or a pointer.** The file tree row's ⋯ (`files/FilesPane.tsx` `TreeRow`)
   is `aria-hidden` and opens only on a click, so the row menu needs Shift+F10, the menu key or a right click. A touch
   screen-reader user may have no way to it. Left because a control inside a `treeitem` would be nested. 2026-11-11.
-- **Alt+Left (the browser's Back on Windows) is swallowed** where the focus is in the file tree (`TreeRow`), a `Tablist`
-  (`ui/Tablist.tsx`) or the open-file tabs (`files/EditorTabs.tsx`): their arrow, Home and End handlers do not check the
-  modifier keys. The menu (`ui/Menu.tsx`) takes no Left, but its Up, Down, Home and End do not check them either. 2026-11-11.
 
 The rest:
 - **The tree's rows say no position.** Its flat rows (`TreeRow`) have `aria-level` but no `aria-setsize` or

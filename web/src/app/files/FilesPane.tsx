@@ -285,6 +285,7 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
   };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.target !== e.currentTarget) return; // keys typed in the rename field
+    if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back; Shift stays (Shift+F10 is the menu)
     const i = rows.indexOf(row);
     const go = (j: number) => {
       e.preventDefault();
