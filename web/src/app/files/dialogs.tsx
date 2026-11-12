@@ -126,8 +126,8 @@ export function DeleteDialog({ dialog: d }: { dialog: DialogOf<"delete"> }) {
     >
       <p>
         {folder
-          ? "The folder and everything in it are kept only in this browser; there is no undo."
-          : "It's kept only in this browser; there is no undo."}
+          ? "The folder and its files exist only in this browser. This can't be undone."
+          : "It exists only in this browser. This can't be undone."}
       </p>
     </Dialog>
   );
@@ -154,7 +154,7 @@ export function DeleteAllDialog({ dialog: d }: { dialog: DialogOf<"delete-all"> 
         </>
       }
     >
-      <p>This removes every file dofile keeps in this browser. It can't be undone.</p>
+      <p>This removes every file dofile keeps in this browser. This can't be undone.</p>
     </Dialog>
   );
 }
@@ -184,7 +184,7 @@ export function RestoreSampleDialog({ dialog: d }: { dialog: DialogOf<"restore-s
     >
       <p>
         {d.paths.join(", ")} {d.paths.length === 1 ? "differs" : "differ"} from the sample. Replacing{" "}
-        {d.paths.length === 1 ? "it discards" : "them discards"} your changes. Your other files are not touched.
+        {d.paths.length === 1 ? "it discards" : "them discards"} your changes. Your other files are untouched.
       </p>
     </Dialog>
   );

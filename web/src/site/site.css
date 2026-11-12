@@ -13,7 +13,18 @@ body.site {
   display: flex;
   flex-direction: column;
 }
+/* the bar stays at the top of the window: --bar-h is its height (the commands page's filter sticks under it, and anchors
+   scroll to just below it) */
+html {
+  --bar-h: 52px;
+  scroll-padding-top: calc(var(--bar-h) + var(--s3));
+}
 .top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-sizing: border-box;
+  min-height: var(--bar-h);
   display: flex;
   align-items: center;
   gap: var(--s4);
@@ -199,7 +210,6 @@ body.landing main {
 /* "Browsers that work": the target of the editor's banner link, under the two columns */
 .browsers {
   grid-column: 1 / -1;
-  scroll-margin-top: var(--s4);
 }
 .browsers p,
 .browsers li {
@@ -255,7 +265,8 @@ footer a {
   gap: var(--s3);
   margin: var(--s4) 0 0;
   position: sticky;
-  top: 0;
+  top: var(--bar-h);
+  z-index: 5;
   padding: var(--s2) 0;
   background: var(--bg);
 }
@@ -363,6 +374,9 @@ footer a {
 
 /* a finger: the links in the bar and the Copy buttons are 44 px high */
 @media (pointer: coarse) {
+  html {
+    --bar-h: 69px;
+  }
   .top nav a {
     display: inline-flex;
     align-items: center;

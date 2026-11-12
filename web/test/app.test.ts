@@ -104,7 +104,7 @@ const result = (more: object = {}) =>
     ...more,
   }) as unknown as RunResult;
 const failure = (message: string, more: object) => Object.assign(new Error(message), more);
-const SENTENCE = (reason: string) => `session reset: ${reason}. Data in memory is gone; your files are kept.`;
+const SENTENCE = (reason: string) => `session reset: ${reason}. Data in memory is lost; your files are kept.`;
 const BUILD: Build = {
   built: 777,
   files: { snapshot: { name: "heap.bin", raw: 4, size: 2 }, bundle: { name: "bundle.bin", raw: 4, size: 2 } },
@@ -417,7 +417,7 @@ test("an answer given while its effect is being performed waits for the step's o
   assert.deepEqual(client.worker.ended, { kind: "failed", reason: "this browser has no WebAssembly support" });
   assert.equal(
     await heard(),
-    "Download the engine. The engine didn't start",
+    "Downloading the engine. The engine didn't start",
     "the first step's last effect (its stage is said) came before the failure's",
   );
 });
@@ -1015,7 +1015,7 @@ test('an updated site fails with reason "updated", from download() at once or fr
     ["updated", engine.UPDATED],
     "plain words: a newer version, reload",
   );
-  assert.match(engine.UPDATED, /newer version.*reload the page/);
+  assert.match(engine.UPDATED, /newer version.*Reload the page/);
   assert.equal(client.workers.length, 0, "no worker after an updated download");
 
   // a page that was open when the site was deployed again: its next restart finds the list of another build
@@ -1290,6 +1290,17 @@ test("call(): a read op with no worker is rejected (no-engine); one that waits b
   client.waiting[0].ok({ nobs: 60 }); // the worker reaches it in its queue
   await tick();
   assert.deepEqual(answer, { nobs: 60 });
+});
+
+test("Clear log keeps the head (the banner and versions a fresh page shows) and drops the rest", () => {
+  writable(S.log).value = [
+    { t: "head" },
+    { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: false },
+    { t: "text", run: 1, text: ". display 1\n1\n" },
+    { t: "note", text: "n" },
+  ];
+  clearLog();
+  assert.deepEqual(logItems(), [{ t: "head" }]);
 });
 
 test("Clear log during a run keeps the run's text item, so its log still arrives; the graph numbers start again", async () => {
@@ -1640,6 +1651,21 @@ test("showToast, holdToast; addBanner replaces one of a kind and path, dismiss r
     assert.equal(S.toast.value, "Saved a.do");
     mock.timers.tick(1);
     assert.equal(S.toast.value, null);
+    // an error: the warning icon's flag, and 6 s at least; a long text stays by its length, 10 s at most
+    S.showToast("Couldn't copy: the browser refused", "error");
+    assert.equal(S.toastError.value, true);
+    mock.timers.tick(5999);
+    assert.equal(S.toast.value, "Couldn't copy: the browser refused");
+    mock.timers.tick(1);
+    assert.equal(S.toast.value, null);
+    S.showToast("Saved b.do");
+    assert.equal(S.toastError.value, false, "a confirmation clears the flag");
+    mock.timers.tick(50); // say()'s timer, before reset() drops it
+    assert.equal(S.toastMs("x".repeat(100)), 6000, "60 ms a character");
+    assert.equal(S.toastMs("x".repeat(100), true), 6000);
+    assert.equal(S.toastMs("x".repeat(500)), S.TOAST_MAX_MS);
+    assert.equal(S.toastMs("Saved a.do"), S.TOAST_MIN_MS);
+    assert.equal(S.toastMs("Saved a.do", true), S.TOAST_ERROR_MIN_MS);
   } finally {
     mock.timers.reset();
   }

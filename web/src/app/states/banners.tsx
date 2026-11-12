@@ -324,8 +324,8 @@ export function DownloadFailedBanner({ banner }: { banner: BannerOf<"download-fa
         </>
       }
     >
-      <b>Your files couldn't be downloaded.</b> This browser wouldn't open the storage where dofile keeps them, so the
-      .zip couldn't be made. Try again; if it fails again, reload the page.
+      <b>Your files couldn't be downloaded.</b> This browser wouldn't open the storage where dofile keeps your files.
+      Try again, or reload the page.
     </Banner>
   );
 }

@@ -112,6 +112,15 @@ export function graphAlt(g: Graph, all: Graph[]): string {
   return shared ? `Graph ${g.n}: ${subject}` : `Graph: ${subject}`;
 }
 
+/** The phone's inline graph button's name: "Open graph full size: scatter y x" (a shared command: "Open graph 2 full size: …";
+ *  no command: "Open graph 3 full size"). One colon: the alt text's own is not repeated. */
+export function graphOpenName(g: Graph, all: Graph[]): string {
+  const subject = graphSubject(g);
+  if (!subject) return `Open graph ${g.n} full size`;
+  const shared = all.some((x) => x.n !== g.n && graphSubject(x) === subject);
+  return `Open graph${shared ? ` ${g.n}` : ""} full size: ${subject}`;
+}
+
 // ---- Results: sections and groups ----
 
 export interface ResultRow {

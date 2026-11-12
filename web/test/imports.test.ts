@@ -432,6 +432,7 @@ test("each signal has one writer: a writer object is named only by state.ts and 
     "phoneTab",
     "pickedVar",
     "theme",
+    "wrap",
     "layout",
     "isolated",
     "graphIndex",
@@ -439,7 +440,7 @@ test("each signal has one writer: a writer object is named only by state.ts and 
   ]) {
     assert.match(state, new RegExp(`export const ${name} = signal[<(]`), `${name} stays writable`);
   }
-  assert.equal(count(state, /export const \w+ = signal[<(]/), 12, "no other signal is exported writable");
+  assert.equal(count(state, /export const \w+ = signal[<(]/), 13, "no other signal is exported writable");
 });
 
 test("no counter or flag outside the machine decides a state: the old ones are gone from web/src", () => {

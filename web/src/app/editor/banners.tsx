@@ -47,9 +47,9 @@ export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }
 // place of a question: several files at once, a dialog already open and the phone made a dialog the harder path; on a
 // phone it shows on every view, banners.tsx). The editor keeps its text and the tab stays unsaved, so a Save then
 // replaces the run's version knowingly. Draft words: "The run changed t.csv. Your unsaved edits are still in the
-// editor; saving them replaces the run's version." / "Reload from the run" (the store's version, the edits dropped),
+// editor; saving them overwrites the file the run wrote." / "Reload from the run" (the store's version, the edits dropped),
 // "Dismiss"; when the run's version is not text: "The run changed t.csv, and it is no longer text. The editor still
-// shows your text; saving it replaces the run's version." / "Dismiss". A save or a reload of the file removes it; a close
+// shows your text; saving it overwrites the file the run wrote." / "Dismiss". A save or a reload of the file removes it; a close
 // or a delete of the file removes it, and a rename moves it to the new name (Editor.tsx).
 export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }) => {
   const name = baseName(banner.path);
@@ -80,12 +80,12 @@ export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }
       {text ? (
         <>
           <b>{`The run changed ${name}.`}</b>{" "}
-          {"Your unsaved edits are still in the editor; saving them replaces the run's version."}
+          {"Your unsaved edits are still in the editor; saving them overwrites the file the run wrote."}
         </>
       ) : (
         <>
           <b>{`The run changed ${name}, and it is no longer text.`}</b>{" "}
-          {"The editor still shows your text; saving it replaces the run's version."}
+          {"The editor still shows your text; saving it overwrites the file the run wrote."}
         </>
       )}
     </Banner>

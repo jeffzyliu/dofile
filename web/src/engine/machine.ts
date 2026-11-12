@@ -242,7 +242,7 @@ export type Reply<K extends Answered> = (answer: Answer<K>) => void;
 
 /** The sentence of a session that was reset. */
 export const lost = (reason: string): string =>
-  `session reset: ${reason}. Data in memory is gone; your files are kept.`;
+  `session reset: ${reason}. Data in memory is lost; your files are kept.`;
 
 /** What a run that was cut ends with: every RunResult field and no timing, plus `kind` (why). */
 export const cutResult = (error: string, kind: CutKind): RunResult => ({

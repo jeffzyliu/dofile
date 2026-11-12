@@ -6,7 +6,7 @@ import type { ComponentChildren } from "preact";
 
 export interface TabSpec<T extends string> {
   id: T;
-  label: ComponentChildren;
+  label: string;
   marker?: ComponentChildren;
 }
 
@@ -57,7 +57,9 @@ export function Tablist<T extends string>({
           onClick={() => onChange(t.id)}
         >
           {t.marker}
-          {t.label}
+          <span class="tl" data-label={t.label}>
+            {t.label}
+          </span>
         </button>
       ))}
     </div>

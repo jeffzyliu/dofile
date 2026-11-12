@@ -268,9 +268,10 @@ export async function moreRows(count = 50): Promise<boolean> {
   return true;
 }
 
-/** "Clear log": the log and the graphs, not the data. A run in progress keeps its text item, so its log still arrives. */
+/** "Clear log": the log and the graphs, not the data. The head (banner and versions) stays, as a fresh page shows it. A run
+ *  in progress keeps its text item, so its log still arrives. */
 export function clearLog() {
-  W.log.value = W.log.value.filter((i) => i.t === "text" && i.streaming);
+  W.log.value = W.log.value.filter((i) => i.t === "head" || (i.t === "text" && i.streaming));
   W.graphs.value = [];
   S.graphIndex.value = 0;
   graphCount = 0;

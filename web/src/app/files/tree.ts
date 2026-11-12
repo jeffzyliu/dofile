@@ -85,13 +85,16 @@ export function freeName(dir: string, name: string, taken: Iterable<string>): st
   }
 }
 
+/** The inline rename's sentence for a name that is not allowed (the tree's own rule, and a refusal from the store). */
+export const NAME_NOT_ALLOWED = "That name isn't allowed.";
+
 /** What is wrong with `name` as a new name in folder `dir`, in the words the inline rename shows, or null when it can be
  *  used. `taken`: the paths in the store. The path itself (`self`) does not count as taken. */
 export function nameProblem(name: string, dir: string, taken: Iterable<string>, self?: string): string | null {
-  if (name.trim() === "") return "Type a name.";
+  if (name.trim() === "") return "Enter a name.";
   if (name.includes("/") || name.includes("\\")) return "A name can't contain / or \\.";
-  if (CONTROL.test(name)) return "A name can't contain a line break or another control character.";
-  if (name === "." || name === "..") return "That name isn't allowed.";
+  if (CONTROL.test(name)) return "A name can't contain a line break.";
+  if (name === "." || name === "..") return NAME_NOT_ALLOWED;
   if (!dir && name === ".dofile") return "That name is dofile's own.";
   const path = joinPath(dir, name);
   for (const t of taken) if (t === path && t !== self) return `${name} already exists here.`;

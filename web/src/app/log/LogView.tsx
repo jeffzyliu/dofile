@@ -23,10 +23,10 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import { codeOf, editorCommands } from "../editor/commands.ts";
 import { jumpLine, runheadWords } from "../editor/words.ts";
 import { ABOUT } from "../env";
-import { graphAlt } from "../output/format.ts";
+import { graphOpenName } from "../output/format.ts";
 import { cardTheme } from "../output/GraphTab";
 import { runCommand } from "../run.ts";
-import { graphFull, graphIndex, graphs, isPhone, log, outputTab, split } from "../state.ts";
+import { graphFull, graphIndex, graphs, isPhone, log, outputTab, split, wrap } from "../state.ts";
 import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
@@ -93,7 +93,7 @@ function GraphLink({ g }: { g: Graph }) {
         type="button"
         class="inline-graph"
         data-theme={cardTheme(g)}
-        aria-label={`${graphAlt(g, all)}: open full size`}
+        aria-label={graphOpenName(g, all)}
         onClick={() => {
           graphIndex.value = i;
           graphFull.value = true;
@@ -256,7 +256,7 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
   if (end?.skipped?.length)
     out.push(
       <span key="skipped" class="note endnote">
-        {`Not kept: ${end.skipped.join(", ")}. Its folder was renamed or deleted during the run.`}
+        {`Not kept: ${end.skipped.join(", ")}. ${end.skipped.length === 1 ? "Its" : "Their"} folder was renamed or deleted during the run.`}
         {"\n"}
       </span>,
     );
@@ -328,7 +328,7 @@ function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) 
         }}
       />
       <span class="count" aria-live="polite">
-        {findText.value ? (total ? `${at} of ${total}` : "none") : ""}
+        {findText.value ? (total ? `${at} of ${total}` : "no match") : ""}
       </span>
       <button type="button" class="head-link" onClick={close}>
         {"Close"}
@@ -402,11 +402,47 @@ export function LogView() {
   useLayoutEffect(() => {
     const box = pre.current?.parentElement;
     if (!box) return;
+    // The visitor leaves the end only by an upward scroll that follows their own input (wheel, touch, a press on the
+    // scrollbar, a key; Find's jump to a match counts too). The browser scrolls the box itself as well: it clamps scrollTop
+    // when the box grows (the running banner above it goes) and the box shrinks again before the scroll event is
+    // delivered, so such an event can read "up, and not at the end" with no visitor in it (a paste runs lines in turn: a
+    // banner goes and comes back for each). Such a scroll leaves the flag as it is; the next render puts the end in view.
+    let last = box.scrollTop;
+    let input = -1e9;
+    let held = false; // a pointer is down on the box (dragging the scrollbar can last longer than any window)
+    const touched = () => {
+      input = performance.now();
+    };
+    const press = () => {
+      held = true;
+    };
+    const release = () => {
+      held = false;
+    };
     const onScroll = () => {
-      stick.current = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+      const top = box.scrollTop;
+      if (top + box.clientHeight >= box.scrollHeight - 8) stick.current = true;
+      else if ((held || performance.now() - input < 500 || findOpen.value) && top < last - 0.5) stick.current = false;
+      last = box.scrollTop;
     };
     box.addEventListener("scroll", onScroll, { passive: true });
-    return () => box.removeEventListener("scroll", onScroll);
+    for (const t of ["wheel", "touchmove", "keydown"]) box.addEventListener(t, touched, { passive: true });
+    box.addEventListener("pointerdown", press, { passive: true });
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    // the box changed size with no new text (the banner, the pane, a scrollbar): the end stays in view while following
+    const resized = new ResizeObserver(() => {
+      if (stick.current && !findOpen.value) box.scrollTop = box.scrollHeight;
+    });
+    resized.observe(box);
+    return () => {
+      box.removeEventListener("scroll", onScroll);
+      for (const t of ["wheel", "touchmove", "keydown"]) box.removeEventListener(t, touched);
+      box.removeEventListener("pointerdown", press);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      resized.disconnect();
+    };
   }, []);
   useLayoutEffect(() => {
     const box = pre.current?.parentElement;
@@ -423,7 +459,7 @@ export function LogView() {
   return (
     <>
       <FindBar total={total} pre={pre.current} />
-      <pre class="log" role="log" aria-label="Log" ref={pre} tabIndex={-1}>
+      <pre class={wrap.value ? "log wrap" : "log"} role="log" aria-label="Log" ref={pre} tabIndex={-1}>
         {body}
       </pre>
     </>

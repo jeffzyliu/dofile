@@ -18,8 +18,8 @@
 //  fields are 16 px or more on a phone (app.css), so iOS does not zoom in on focus: 4b's command line and editor too.
 //
 // Each step 4 part edits only its own files; this file only places them (two changes were made here when 4a was joined,
-// on the maintainer's word: the phone's ⋯ holds 4a's fileMenuItems on the Files view, whose head app.css hides on a
-// phone, and the unfolded file list gives the focus to the tree's row; and one when 4b and 4d were joined: the phone ⋯'s
+// on the maintainer's word: 4a's fileMenuItems are a "Files ⋯" button in the phone strip's right end on the Files view
+// (the Files head is hidden on a phone), and the unfolded file list gives the focus to the tree's row; and one when 4b and 4d were joined: the phone ⋯'s
 // Save is off unless the active tab is a text tab, as the toolbar's). Per part: the files,
 // the signals it writes (state.ts), what it calls, and the slots here it fills. Every part reads any signal.
 // Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8):
@@ -56,7 +56,7 @@
 //      editor exists: 4a's tests of the close-tab and reload paths call state.ts setDirty(path, true) themselves.
 //   4b editor/Editor.tsx, editor/commands.ts (fills editorCommands and `selection`), editor/RunControls.tsx,
 //      editor/StatusBar.tsx, editor/banners.tsx (save-failed, run-changed), log/LogView.tsx, log/CommandLine.tsx
-//      (CommandLine, LogActions, logMenuItems for the phone's ⋯, PhoneStrip). The plain logic: editor/cm.ts, clock.ts,
+//      (CommandLine, LogActions, logMenuItems for the phone strip's "Log ⋯" button, PhoneStrip). The plain logic: editor/cm.ts, clock.ts,
 //      csv.ts, errormark.ts, keys.ts, ranover.ts, words.ts; log/align.ts, classify.ts, find.ts, paste.ts, pasterun.ts.
 //      Writes `tabs[].dirty` only through state.ts setDirty(path, on), `banners` (addBanner for save-failed; dismiss for
 //      save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; "log" when Find opens unsplit),
@@ -88,7 +88,7 @@
 // Slots placed here: FilesHead, FilesBody, EditorTabs, FileBar, Editor (hidden, not unmounted, while a .dta tab shows
 // DtaView in its place), StatusBar, LogView, LogActions, CommandLine, GraphTab, DataTab, ResultsTab, FullSize
 // (once, over the page, every width); Toolbar places RunControls; PhoneTopBar places FileSwitcher and PhoneRun, and
-// logMenuItems in its ⋯; PhoneStrip goes under it; PhoneOutputViews places the phone's DataTab and ResultsTab; the
+// PhoneStrip goes under it, with "Files ⋯" or "Log ⋯" at its right end; PhoneOutputViews places the phone's DataTab and ResultsTab; the
 // dialogs and banners are drawn through dialogs.tsx and banners.tsx. RunControls and PhoneRun keep one size in every
 // state (ui/Icon.tsx Labels: every label in one cell); keep it so when adding to them, with short labels, since the
 // widest sets the width. The toolbar's buttons share one height (tokens.css --control), a pane head's controls another
@@ -102,7 +102,7 @@ import { editorCommands } from "./editor/commands.ts";
 import { Editor } from "./editor/Editor";
 import { PhoneRun, RunControls } from "./editor/RunControls";
 import { StatusBar } from "./editor/StatusBar";
-import { ABOUT, LANDING_URL } from "./env";
+import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
 import { FilesBody, FilesHead, fileMenuItems } from "./files/FilesPane";
@@ -112,7 +112,6 @@ import { LogView } from "./log/LogView";
 import { DtaView } from "./output/DtaView";
 import { FullSize } from "./output/FullSize";
 import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
-import { clearLog } from "./run.ts";
 import {
   activeTab,
   engine,
@@ -126,6 +125,7 @@ import {
   split,
   tabs,
   theme,
+  wrap,
 } from "./state.ts";
 import { askReset } from "./states/ResetDialog";
 import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
@@ -139,6 +139,9 @@ import { Tablist, tabpanelProps } from "./ui/Tablist";
 
 const engineUp = () => ["ready", "running", "breaking", "waiting"].includes(engine.value.s);
 
+/** The "Wrap lines" switch of both ⋯ menus; it leaves the menu open, so the visitor sees it flip. */
+const wrapItem = (): MenuItem => ({ label: "Wrap lines", checked: wrap.value, onSelect: toggleWrap, keepOpen: true });
+
 /** S 12: the desktop's ⋯ menu ("More actions"). */
 const moreItems = (): MenuItem[] => [
   {
@@ -148,16 +151,16 @@ const moreItems = (): MenuItem[] => [
       downloadAll();
     },
   },
-  { label: "Clear log", onSelect: clearLog },
+  wrapItem(), // no "Clear log": the Log head has it (on a phone, the strip's "Log ⋯")
   { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
   "rule",
+  { label: "Commands", href: COMMANDS_URL },
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
 ];
 
-/** The phone's ⋯ menu: Save and the theme (OQ-14); on the Log view the Log head's Find and Download log (4b's
- *  logMenuItems) and on the Files view the Files head's "File actions" (4a's fileMenuItems), since the phone hides
- *  those heads; then the desktop's items. Theme cycles and keeps the menu open. */
-const isDownloadAll = (i: MenuItem) => i !== "rule" && i.label === "Download all (.zip)"; // the ⋯ has its own
+/** The phone's ⋯ menu: Save and the theme (OQ-14), Wrap lines, Reset, Commands, About. The phone hides the Files and Log heads: their
+ *  actions are a button at the right of the phone strip, "Files ⋯" on the Files view (4a's fileMenuItems) and "Log ⋯" on
+ *  the Log view (4b's logMenuItems), the word hidden when the strip is narrow. Theme cycles and keeps the menu open. */
 const phoneMoreItems = (): MenuItem[] => [
   {
     label: "Save",
@@ -175,18 +178,10 @@ const phoneMoreItems = (): MenuItem[] => [
     onSelect: cycleTheme,
     keepOpen: true,
   },
-  ...(phoneTab.value === "log" ? logMenuItems() : []),
-  ...(phoneTab.value === "files" ? [...fileMenuItems().filter((i) => !isDownloadAll(i)), "rule" as const] : []),
-  {
-    label: "Download all (.zip)",
-    disabled: !hasFiles.value,
-    onSelect: () => {
-      downloadAll();
-    },
-  },
-  { label: "Clear log", onSelect: clearLog },
+  wrapItem(),
   { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
   "rule",
+  { label: "Commands", href: COMMANDS_URL },
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
 ];
 
@@ -295,6 +290,11 @@ function FilesToggle() {
   );
 }
 
+function toggleWrap() {
+  wrap.value = !wrap.value;
+  saved.set("dofile.wrap", wrap.value ? "1" : null);
+}
+
 function setSplit(on: boolean) {
   split.value = on;
   saved.set("dofile.split", on ? null : "0");
@@ -319,7 +319,7 @@ function LogPane() {
   const tab = outputTab.value;
   return (
     <Pane view="log" class="log-pane" label={unsplit ? "Output" : "Log"}>
-      <div class="pane-head">
+      <div class={unsplit ? "pane-head tabbed" : "pane-head"}>
         {unsplit ? (
           <Tablist
             label="Output"
@@ -335,8 +335,15 @@ function LogPane() {
         )}
         <span class="spacer" />
         <LogActions />
-        <button type="button" class="head-link" onClick={() => setSplit(!split.value)}>
-          {split.value ? "Unsplit" : "Split"}
+        <button
+          type="button"
+          class="head-link split-toggle"
+          aria-label={split.value ? "Unsplit" : "Split"}
+          title={split.value ? "Unsplit" : "Split"}
+          onClick={() => setSplit(!split.value)}
+        >
+          <Icon name={split.value ? "unsplit" : "split"} />
+          <span class="split-word">{split.value ? "Unsplit" : "Split"}</span>
         </button>
       </div>
       <BannerSlot place="log" />
@@ -426,7 +433,22 @@ export function App() {
   return (
     <div class="app" data-layout={layout.value}>
       {phone ? <PhoneTopBar /> : <Toolbar />}
-      {phone && <PhoneStrip />}
+      {phone && (
+        <PhoneStrip>
+          {phoneTab.value === "files" && (
+            <MenuButton label="File actions" class="head-link strip-actions" items={fileMenuItems}>
+              <span class="strip-word">Files</span>
+              <Icon name="more" />
+            </MenuButton>
+          )}
+          {phoneTab.value === "log" && (
+            <MenuButton label="Log actions" class="head-link strip-actions" items={logMenuItems}>
+              <span class="strip-word">Log</span>
+              <Icon name="more" />
+            </MenuButton>
+          )}
+        </PhoneStrip>
+      )}
       {/* no data-files on a phone: there the file list is a view, never folded */}
       <main
         class="main"

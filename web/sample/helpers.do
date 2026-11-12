@@ -1,5 +1,8 @@
-* Helpers for analysis.do: a small program that compares the average wage of two groups.
-* Define a program once, then call it by name. analysis.do loads this file with `do helpers.do`.
+* Helpers for analysis.do:
+* a small program that compares the average
+* wage of two groups. Define a program once,
+* then call it by name. analysis.do loads
+* this file with `do helpers.do`.
 
 capture program drop wagegap
 program define wagegap

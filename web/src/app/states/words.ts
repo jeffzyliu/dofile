@@ -91,7 +91,7 @@ export const memoryHead = (heapBytes: number | null | undefined): string =>
 /** The reset banner (P/Notices, OQ-9): `head` in bold, then `rest`. `reason` is the machine's, the developer's words for what
  *  happened ("the engine crashed (<cause>)"); the visitor sees it with a cause in parentheses cut off. DRAFT (OQ-9, OQ-19c). */
 export function resetWords(kind: ResetKind, reason: string, isolated: boolean): { head: string; rest: string } {
-  const kept = "The data in memory is gone; your files are kept.";
+  const kept = "The data in memory is lost; your files are kept.";
   if (kind === "user") return { head: "You reset the engine.", rest: kept };
   if (kind === "break" && !isolated)
     return {
@@ -99,6 +99,13 @@ export function resetWords(kind: ResetKind, reason: string, isolated: boolean): 
       rest: `This page can't ask a run to stop, so Break resets it. ${kept}`,
     };
   const why = reason.replace(/\s*\(.*\)\s*$/, "").trim();
+  if (kind === "crash")
+    return {
+      head: /file storage/.test(why)
+        ? "The browser closed the file storage, and the engine was reset."
+        : "The engine crashed and was reset.",
+      rest: kept,
+    };
   return { head: `The engine was reset: ${why}.`, rest: kept };
 }
 
@@ -137,8 +144,8 @@ export function failedActions(reason: FailReason): FailedAction[] {
 
 /** The second line of S 7 (failed twice), with the reason when it is memory. */
 export const twiceWords = (reason: FailReason): { head: string; rest: string } => ({
-  head: `The engine stopped after failing twice${reason === "memory" ? " (it ran out of memory)" : ""}.`,
-  rest: "It won't restart by itself, since each try can use a lot of a phone's memory. Your files are safe.",
+  head: `The engine stopped after failing twice${reason === "memory" ? " (out of memory)" : ""}.`,
+  rest: "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe.",
 });
 
 // ---- OQ-10: the two notes in the page's own words (DRAFT; log/LogView.tsx shows them: see SPEC 8, "Step 4d") ----
@@ -153,9 +160,9 @@ export const COMMUNITY = ["reghdfe", "esttab", "estout", "outreg2", "ivreg2", "x
 export function noteFor(rc: number, error: string | null): string | null {
   if (!error) return null;
   if (rc === 622 && /nothing to restore/.test(error))
-    return "Nothing was preserved in this run. A run restores the data it preserved when it ends, so put preserve and restore in the same run.";
+    return "Nothing was preserved. A run restores its data when it ends, so put preserve and restore in the same run.";
   const m = rc === 199 ? /command (\S+) is unrecognized/.exec(error) : null;
   if (m && COMMUNITY.includes(m[1]))
-    return `${m[1]} is a community command: it isn't part of Stata itself, and dofile doesn't have it.`;
+    return `${m[1]} is a community command. OpenDTA, the engine behind dofile, doesn't include it.`;
   return null;
 }

@@ -52,7 +52,8 @@ export function DtaView({ path }: { path: string }) {
     if (!accepted) return;
     const r = await done;
     const name = baseName(path);
-    if (r) showToast(r.rc === 0 ? `Loaded ${name}` : `Couldn't load ${name}: r(${r.rc})`);
+    if (r)
+      showToast(r.rc === 0 ? `Loaded ${name}` : `Couldn't load ${name}: r(${r.rc})`, r.rc === 0 ? undefined : "error");
   };
   return (
     <div class="dta-view">

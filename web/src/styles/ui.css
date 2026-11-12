@@ -51,13 +51,13 @@ button {
 }
 /* keyboard focus: the --focus ring on everything focusable; inside panes that clip (overflow: hidden) an inset ring */
 /* the transparent outline is drawn only in forced colors (Windows High Contrast), which removes box shadows */
-:where(a, button, input, select, textarea, [tabindex], [role="tab"], [role="menuitem"]):focus-visible {
+:where(a, button, input, select, textarea, [tabindex], [role="tab"], [role^="menuitem"]):focus-visible {
   outline: 2px solid transparent;
   outline-offset: 2px;
   box-shadow: var(--focus);
 }
 :where(.pane, .files, .rs, .t, .menu)
-  :where(a, button, input, [tabindex], [role="tab"], [role="menuitem"]):focus-visible {
+  :where(a, button, input, [tabindex], [role="tab"], [role^="menuitem"]):focus-visible {
   box-shadow: inset 0 0 0 2px var(--accent);
   outline-offset: -2px;
 }
@@ -114,6 +114,14 @@ button {
 }
 .i-warn {
   --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 1.5 15 14H1zm-.8 4.3v4.4h1.6V5.8zm0 5.6v1.5h1.6v-1.5z'/%3E%3C/svg%3E");
+}
+/* the pane head's Split / Unsplit: a rounded rectangle, with a line across its middle (the Log and the output stacked) or a
+   short line across its top (one pane under a tab row) */
+.i-split {
+  --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2.5' y='2.5' width='11' height='11' rx='1.5' fill='none' stroke='black' stroke-width='1.4'/%3E%3Crect x='3' y='7.3' width='10' height='1.4'/%3E%3C/svg%3E");
+}
+.i-unsplit {
+  --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2.5' y='2.5' width='11' height='11' rx='1.5' fill='none' stroke='black' stroke-width='1.4'/%3E%3Crect x='3' y='5.2' width='10' height='1.4'/%3E%3C/svg%3E");
 }
 .dot {
   display: inline-block;
@@ -325,10 +333,35 @@ button {
   align-items: center;
   gap: 2px;
   padding: 0 var(--s2);
-  min-height: 36px;
+  min-height: var(--pane-head);
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   font-size: var(--text-sm);
+}
+/* the Log pane's head (the Output tabs unsplit, or the Log title) is a size container. As it narrows: first the three log
+   links give way to one "Log actions" ⋯ menu button (LogActions; both are drawn, one is display: none), then Split's word
+   goes and its icon stays (App.tsx: aria-label and title keep the word). The tabs are never clipped. */
+.log-pane > .pane-head {
+  container-type: inline-size;
+}
+.head-link.log-more {
+  display: none;
+}
+.head-link.split-toggle {
+  gap: 5px;
+}
+@container (max-width: 424px) {
+  .tabbed .head-link.log-link {
+    display: none;
+  }
+  .tabbed .head-link.log-more {
+    display: inline-flex;
+  }
+}
+@container (max-width: 290px) {
+  .split-word {
+    display: none;
+  }
 }
 .pane-title {
   font: var(--w-bold-ui) var(--text-xs) / 1 var(--font-ui);
@@ -355,6 +388,16 @@ button {
   color: var(--ink);
   font-weight: var(--w-bold-ui);
   border-bottom-color: var(--accent);
+}
+/* a tab's label keeps its bold width while it is not bold, so no tab moves when it becomes the selected one: a hidden bold
+   copy (visibility: hidden keeps it out of the tab's name) */
+.tl::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--w-bold-ui);
 }
 /* a tablist inside a pane head: a real flex box (not display: contents, which older WebKit strips of its role) */
 .tabstrip {
@@ -396,6 +439,9 @@ button {
 }
 .head-link:hover {
   text-decoration: underline;
+}
+.head-link.danger {
+  color: var(--error); /* a destructive link in a pane head ("Clear"), as the menus' .danger */
 }
 .head-link.icon {
   color: var(--muted);
@@ -496,7 +542,7 @@ button {
 /* touch: rows, menu items and small icon buttons get a finger-sized (44 px) target */
 @media (pointer: coarse) {
   .files li,
-  .menu [role="menuitem"] {
+  .menu [role^="menuitem"] {
     min-height: 44px;
   }
   .files .row-more {
@@ -1234,7 +1280,7 @@ dialog.dialog.sheet {
   min-width: 210px;
   font-size: var(--text-row);
 }
-.menu [role="menuitem"] {
+.menu [role^="menuitem"] {
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -1242,11 +1288,11 @@ dialog.dialog.sheet {
   padding: 6px 10px;
   border-radius: var(--radius);
 }
-.menu [role="menuitem"]:hover,
-.menu [role="menuitem"].hover {
+.menu [role^="menuitem"]:hover,
+.menu [role^="menuitem"].hover {
   background: var(--accent-soft);
 }
-.menu [role="menuitem"] .aside {
+.menu [role^="menuitem"] .aside {
   margin-left: auto;
   color: var(--muted);
   font-size: var(--text-xs);
@@ -1259,11 +1305,42 @@ dialog.dialog.sheet {
   border-top: 1px solid var(--border);
   margin: 4px 2px;
 }
-.menu a[role="menuitem"] {
+.menu a[role^="menuitem"] {
   color: inherit;
   text-decoration: none;
 }
-.menu [role="menuitem"][aria-disabled="true"] {
+/* a switch item (role=menuitemcheckbox): a track with a knob; on = knob right and track filled */
+.menu .switch {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+.menu .switch::after {
+  content: "";
+  box-sizing: border-box;
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+  border: 1.5px solid var(--muted);
+  background: radial-gradient(circle 6px at 7px 50%, var(--muted) 98%, transparent) no-repeat;
+}
+.menu [aria-checked="true"] .switch::after {
+  border-color: var(--accent);
+  background: radial-gradient(circle 6px at 21px 50%, var(--surface) 98%, transparent) no-repeat var(--accent);
+}
+@media (forced-colors: active) {
+  .menu .switch::after {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background: radial-gradient(circle 6px at 7px 50%, CanvasText 98%, transparent) no-repeat;
+  }
+  .menu [aria-checked="true"] .switch::after {
+    border-color: Highlight;
+    background: radial-gradient(circle 6px at 21px 50%, HighlightText 98%, transparent) no-repeat Highlight;
+    forced-color-adjust: none;
+  }
+}
+.menu [role^="menuitem"][aria-disabled="true"] {
   opacity: var(--disabled-opacity);
   cursor: default;
   background: none;
@@ -1418,6 +1495,8 @@ dialog.dialog.sheet {
   transform: translateX(-50%);
   z-index: var(--z-toast);
   pointer-events: none;
+  width: max-content; /* a long text wraps at the viewport's width less a margin, not at half of it */
+  max-width: calc(100vw - 2 * var(--s4));
 }
 .toast {
   display: inline-flex;
@@ -1430,9 +1509,9 @@ dialog.dialog.sheet {
   font-size: var(--text-row);
   box-shadow: var(--shadow-menu);
   pointer-events: auto;
-  white-space: nowrap;
 }
 .toast .ico {
+  flex: none;
   font-size: 14px;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -1517,7 +1596,7 @@ dialog.dialog.sheet {
   dialog.dialog {
     border: 1px solid CanvasText;
   }
-  .menu [role="menuitem"]:is(:hover, .hover) {
+  .menu [role^="menuitem"]:is(:hover, .hover) {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }

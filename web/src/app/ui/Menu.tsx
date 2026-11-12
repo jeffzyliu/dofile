@@ -22,12 +22,13 @@ export type MenuItem =
   | {
       label: ComponentChildren;
       onSelect?: () => void;
-      href?: string; // a link instead of an action (opens in this tab)
+      href?: string; // a link instead of an action (opens in a new tab: leaving the editor would end the engine)
       hint?: ComponentChildren; // at the right: a key ("F2") or a value (the version)
       hintIsKey?: boolean; // the hint names a key: hidden from sight on a phone (class key-hint), kept in the item's name
       danger?: boolean;
       disabled?: boolean;
       keepOpen?: boolean; // picking it leaves the menu open
+      checked?: boolean; // a switch: role="menuitemcheckbox", aria-checked, a track and knob at the right
     };
 type Items = MenuItem[] | (() => MenuItem[]);
 
@@ -132,7 +133,7 @@ export function MenuHost() {
     if (x + w > innerWidth - pad) x = Math.max(pad, (r ? r.right : x) - w);
     if (y + h > innerHeight - pad) y = Math.max(pad, (r ? r.top - 4 : y) - h);
     Object.assign(el.style, { left: `${x}px`, top: `${y}px` });
-    const items = [...el.querySelectorAll<HTMLElement>("[role=menuitem]:not([aria-disabled=true])")];
+    const items = [...el.querySelectorAll<HTMLElement>("[role^=menuitem]:not([aria-disabled=true])")];
     (m.focus === "last" ? items.at(-1) : items[0])?.focus();
 
     const outside = (e: PointerEvent) => {
@@ -152,7 +153,7 @@ export function MenuHost() {
 
   if (!m) return null;
   const onKeyDown = (e: KeyboardEvent) => {
-    const items = [...ref.current!.querySelectorAll<HTMLElement>("[role=menuitem]:not([aria-disabled=true])")];
+    const items = [...ref.current!.querySelectorAll<HTMLElement>("[role^=menuitem]:not([aria-disabled=true])")];
     const i = items.indexOf(document.activeElement as HTMLElement);
     const go = (n: number) => {
       e.preventDefault();
@@ -197,6 +198,8 @@ export function MenuHost() {
             role="menuitem"
             tabIndex={-1}
             href={item.href}
+            target="_blank"
+            rel="noopener"
             class={item.danger ? "danger" : undefined}
             onClick={() => closeMenu(false)}
           >
@@ -207,7 +210,9 @@ export function MenuHost() {
           <button
             key={i}
             type="button"
-            role="menuitem"
+            {...(item.checked === undefined
+              ? { role: "menuitem" }
+              : { role: "menuitemcheckbox", "aria-checked": item.checked })}
             tabIndex={-1}
             class={item.danger ? "danger" : undefined}
             aria-disabled={item.disabled || undefined}
@@ -215,6 +220,7 @@ export function MenuHost() {
           >
             {item.label}
             {item.hint && <Hint item={item} />}
+            {item.checked !== undefined && <span class="switch" aria-hidden="true" />}
           </button>
         ),
       )}

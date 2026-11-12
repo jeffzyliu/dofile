@@ -296,7 +296,7 @@ async function uploadNow(items: Incoming[]): Promise<string[]> {
   if (shown !== null && dialog.value === shown) dialog.value = null;
   if (written.length || failed) {
     const done = `${written.length} ${plural(written.length, "file", "files")} uploaded`;
-    showToast(failed ? `${done} · ${failed} couldn't be` : done);
+    showToast(failed ? `${done} · ${failed} failed` : done, failed ? "error" : undefined);
   }
   return written;
 }

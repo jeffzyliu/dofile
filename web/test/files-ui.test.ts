@@ -105,7 +105,7 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.equal(T.nameProblem("clean.do", "", taken, "clean.do"), null, "its own name is not taken");
   assert.equal(T.nameProblem("wages.dta", "data", taken), "wages.dta already exists here.");
   assert.equal(T.nameProblem("wages.dta", "", taken), null);
-  assert.equal(T.nameProblem("  ", "", taken), "Type a name.");
+  assert.equal(T.nameProblem("  ", "", taken), "Enter a name.");
   assert.match(T.nameProblem("a/b.do", "", taken) ?? "", /can't contain/);
   assert.match(T.nameProblem("..", "", taken) ?? "", /isn't allowed/);
   assert.match(T.nameProblem(".dofile", "", taken) ?? "", /dofile's own/);
@@ -119,7 +119,7 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.equal(T.rowCount(`${"x\n".repeat(1204)}`), "1,204 rows");
   assert.equal(T.rowCount("x"), "1 row");
   assert.match(T.nameProblem("a\nb.do", "", taken) ?? "", /line break/);
-  assert.match(T.nameProblem("a\tb.do", "", taken) ?? "", /control character/);
+  assert.match(T.nameProblem("a\tb.do", "", taken) ?? "", /line break/);
   assert.equal(T.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
   assert.equal(T.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
   assert.equal(T.extOf("data/Wages.DTA"), ".dta");
@@ -422,7 +422,7 @@ test("upload: a file the store refuses is counted in the toast; a path given twi
   } finally {
     console.warn = warn;
   }
-  assert.equal(S.toast.value, "1 file uploaded · 1 couldn't be");
+  assert.equal(S.toast.value, "1 file uploaded · 1 failed");
   assert.equal(await textOf("y.do"), "second");
   await sleep(0);
 });
@@ -440,10 +440,7 @@ test("a path in the use and import commands: quoted, compound quotes for a doubl
   for (const bad of ["a`x'.dta", 'x.csv", clear\nerase main.do\n*.csv', "a\rb.dta", "a\tb.dta", "a\"'b.dta"])
     assert.ok("problem" in fileCommand("use", bad), JSON.stringify(bad));
   const made = fileCommand("import delimited", "a`b'.csv");
-  assert.equal(
-    "problem" in made && made.problem,
-    "Its name has a character a command can't hold: rename the file to use it here.",
-  );
+  assert.equal("problem" in made && made.problem, "Its name has a character a command can't use: rename the file.");
 });
 
 // ---- actions.ts: the clash flow with other dialogs and other uploads ----
@@ -576,7 +573,7 @@ test("upload: a name with a control character is refused and counted", async () 
   } finally {
     console.warn = warn;
   }
-  assert.equal(S.toast.value, "1 file uploaded · 1 couldn't be");
+  assert.equal(S.toast.value, "1 file uploaded · 1 failed");
   assert.deepEqual(
     (await store.list()).map((f) => f.path),
     ["ok.do"],

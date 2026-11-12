@@ -18,11 +18,11 @@ import { PILL_WIDEST, pillTime } from "./words.ts";
 
 // The play icon says Run and the stop icon says Break, so the state labels are short; the words a screen reader hears
 // start with the shown ones (NAME).
-const RUN = ["Run", "Starting…", "Stopped"] as const;
+const RUN = ["Run", "Starting…", "Not started"] as const;
 const BREAK = ["Break", "Break (reset)", "Stopping…", "Reset now"] as const;
 const NAME: Partial<Record<string, string>> = {
-  "Starting…": "Starting… Run is off until the engine is ready",
-  Stopped: "Stopped: the engine didn't start, so Run is off",
+  "Starting…": "Starting… Run is not available until the engine is ready",
+  "Not started": "Not started: the engine didn't start, so Run is not available",
   "Break (reset)": "Break (reset): Break resets the engine on this page",
 };
 
@@ -34,7 +34,7 @@ function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boo
     return { label: "Run", disabled: s !== "running", busy: true };
   if (s === "downloading" || s === "starting-list" || s === "starting-worker")
     return { label: "Starting…", disabled: true, busy: false };
-  if (s === "failed" || s === "failed-twice") return { label: "Stopped", disabled: true, busy: false };
+  if (s === "failed" || s === "failed-twice") return { label: "Not started", disabled: true, busy: false };
   return { label: "Run", disabled: true, busy: false }; // the page load (checking-lock, checking-cache), none, asking, other-tab-idle, other-tab-taking
 }
 

@@ -8,11 +8,14 @@
 //    before has ended; the lines stop at one that is refused, does not run, or ends with an error, and before a block's
 //    line; a toast says how many were not run, and a refused line goes back into the field).
 //  - LogActions: the Log head's "Find" (log/find.ts) and "Download log" (the runs' text only, as dofile.log; no head,
-//    run-head or note). App.tsx adds Split / Unsplit after them. The phone hides the Log head, so the same two are
-//    logMenuItems(), which the phone's ⋯ shows on the Log view.
+//    run-head or note) and "Clear". It draws both forms: the three links (.log-link) and one "Log actions" ⋯ menu button
+//    (.log-more, logMenuItems()); ui.css shows one by a container query on the head's width (the unsplit head, .tabbed, only: the
+//    split layout's Log head always has room), so the tabs are never clipped.
+//    App.tsx adds Split / Unsplit after them, always visible (icon and word; the word goes first when the head is very narrow). The phone hides the Log head, so the same logMenuItems()
+//    are the phone's "Log ⋯" button in the strip, shown on the Log view.
 //  - PhoneStrip: under the phone's top bar (PH), on every view (the phone has no status bar): after a run "r(111)",
 //    "line 17 · 0.38 s", "Mem 612 MB", "Go to line 17"; while running "Running lines 14–15", "Mem 612 MB"; otherwise the
-//    state's words (the status bar's).
+//    state's words (the status bar's). Its children go at its right end (App.tsx: "Files ⋯" on the Files view, "Log ⋯" on the Log view).
 import { signal } from "@preact/signals-core";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
@@ -21,9 +24,10 @@ import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryWords, seconds } from "../editor/words.ts";
 import { saveAs } from "../files.ts";
-import { runCommand } from "../run.ts";
+import { clearLog, runCommand } from "../run.ts";
 import { engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
-import type { MenuItem } from "../ui/Menu";
+import { Icon } from "../ui/Icon";
+import { MenuButton, type MenuItem } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
 import { openFind } from "./LogView";
 import { inTurnWords, pastedLines, runInTurn } from "./paste.ts";
@@ -37,7 +41,7 @@ async function runPasted(lines: string[]) {
   const r = await runInTurn(lines, runOne);
   if (r.stop?.why === "refused" && !field.value) field.value = lines[r.stop.line - 1];
   const words = inTurnWords(r);
-  if (words) showToast(words);
+  if (words) showToast(words, "error");
 }
 
 /** Run what the field holds (Enter, "Run command"). */
@@ -125,22 +129,30 @@ function downloadLog() {
 
 export const LogActions = () => (
   <>
-    <button type="button" class="head-link" onClick={(e) => openFind(e.currentTarget as HTMLElement)}>
+    <button type="button" class="head-link log-link" onClick={(e) => openFind(e.currentTarget as HTMLElement)}>
       Find
     </button>
-    <button type="button" class="head-link" onClick={downloadLog}>
+    <button type="button" class="head-link log-link" onClick={downloadLog}>
       Download log
     </button>
+    <button type="button" class="head-link log-link danger" aria-label="Clear log" onClick={clearLog}>
+      Clear
+    </button>
+    <MenuButton label="Log actions" class="head-link icon log-more" items={logMenuItems}>
+      <Icon name="more" />
+    </MenuButton>
   </>
 );
 
-/** The phone's ⋯ menu items for the Log view: Find and Download log, as LogActions does them. */
+/** The Log head's actions as menu items, in the head's order (as LogActions does them): the phone's "Log ⋯" button in the
+ *  strip, since the phone hides the Log head. */
 export const logMenuItems = (): MenuItem[] => [
   { label: "Find", onSelect: () => openFind(null) },
   { label: "Download log", onSelect: downloadLog },
+  { label: "Clear log", danger: true, onSelect: clearLog },
 ];
 
-export function PhoneStrip() {
+export function PhoneStrip({ children }: { children?: ComponentChildren }) {
   const st = engine.value;
   const r = lastRun.value;
   const mem = memory.value;
@@ -160,7 +172,7 @@ export function PhoneStrip() {
         <span>
           {r.line !== null && r.rc !== 0 && r.kind !== "command"
             ? `${r.rc === 1 ? "before line" : "line"} ${r.line} · ${seconds(r.seconds)}`
-            : `${r.rc === 0 ? "Last run " : ""}${seconds(r.seconds)}`}
+            : `${r.rc === 0 ? "Last run: " : ""}${seconds(r.seconds)}`}
         </span>
         {mem && <span>{memoryWords(mem, true)}</span>}
         <span class="spacer" />
@@ -185,6 +197,7 @@ export function PhoneStrip() {
     <div class="phone-strip">
       {parts}
       {!(st.s === "ready" && r) && mem && <span>{memoryWords(mem, true)}</span>}
+      {children}
     </div>
   );
 }

@@ -25,10 +25,8 @@ const unblocked = (page: Page) => page.waitForFunction(() => (window as any).__d
 async function menu(page: Page) {
   if (phone(page)) {
     await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
-    await page.getByRole("button", { name: "More actions" }).click();
-    return page.getByRole("menu", { name: "More actions" });
   }
-  await page.getByRole("button", { name: "File actions" }).click();
+  await page.getByRole("button", { name: "File actions" }).click(); // on a phone the "Files ⋯" button in the strip
   return page.getByRole("menu", { name: "File actions" });
 }
 

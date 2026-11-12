@@ -23,3 +23,6 @@ export const brotli = q.get("brotli") ?? undefined;
  *  "Close editor" go there. The build sets it (scripts/urls.ts SITE_URL: "/" while the editor is under /app/ on the same
  *  origin, a whole URL once the editor has its own). The editor's own files are under import.meta.env.BASE_URL. */
 export const LANDING_URL = __SITE_URL__;
+
+/** The commands page ("Commands" in the ⋯ menus): the site's /commands/, from the landing page's address (which ends in /). */
+export const COMMANDS_URL = `${LANDING_URL}commands/`;

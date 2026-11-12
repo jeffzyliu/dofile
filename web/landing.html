@@ -112,24 +112,19 @@
 
   <section class="browsers" id="browsers" aria-labelledby="browsers-h">
     <h2 id="browsers-h">Browsers that work</h2>
-    <p>dofile runs in the page, so the browser needs WebAssembly, IndexedDB (where your files are kept) and enough free
-      memory to start the engine.</p>
+    <p>dofile runs entirely in your browser. It needs a recent browser and enough free memory to start the engine.</p>
     <ul>
-      <li><b>On a computer.</b> Automatic tests run the page in the three browser engines: Chromium (Chrome, Edge), Firefox
-        and WebKit (Safari). Each browser was not also tried by hand.</li>
-      <li><b>iPhone (Safari).</b> Tried by hand on one iPhone 13; the automatic tests also run an iPhone-sized WebKit window.
-        Other iPhones and iPads were not tried: one with little memory may fail to start the engine.</li>
-      <li><b>Android.</b> Not tried yet.</li>
+      <li><b>Computers.</b> Tested automatically in Chrome and Edge (Chromium), Firefox, and Safari (WebKit).</li>
+      <li><b>iPhone.</b> Checked by hand on an iPhone 13 in Safari. Older iPhones and iPads with less memory may not start the engine.</li>
+      <li><b>Android.</b> Not tested yet.</li>
     </ul>
-    <p>The Break button needs a page the browser treats as isolated from other sites; this site is served that way. If a
-      browser or a network does not allow it, Break resets the engine instead of stopping the run. Your files stay in the
-      browser's own storage: if a browser clears it or refuses it, the page says so, and "Download all (.zip)" in the
-      file menu keeps a copy.</p>
+    <p>Your files are stored in this browser only. If the browser clears its storage they are lost, so use "Download all (.zip)" in the file menu to keep a copy.</p>
+    <p>On some networks the Break button can't stop a run in place: it resets the engine instead.</p>
   </section>
 </main>
 
 <footer>
-  <span>dofile is open source (MIT). The interpreter is <a href="https://github.com/yaskepalhares/opendta">OpenDTA</a> (MIT).</span>
+  <span>dofile is <a href="https://github.com/jeffzyliu/dofile">open source</a> (MIT). The interpreter is <a href="https://github.com/yaskepalhares/opendta">OpenDTA</a> (MIT).</span>
   <span>Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.</span>
 </footer>
 <script type="module" src="/src/site/landing.ts"></script>

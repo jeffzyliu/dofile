@@ -43,7 +43,7 @@ import {
   upload,
 } from "./actions.ts";
 import { openFile } from "./open.ts";
-import { formatSize, joinPath, nameProblem, parentOf, type Row, treeRows } from "./tree.ts";
+import { formatSize, joinPath, NAME_NOT_ALLOWED, nameProblem, parentOf, type Row, treeRows } from "./tree.ts";
 
 // ---- the panel's own state (not shared: state.ts holds what other parts read) ----
 
@@ -75,9 +75,9 @@ function focusRow(path: string, tries = 20) {
   );
 }
 
-const fail = (what: string) => (e: unknown) => {
+const fail = (what: string, said: string) => (e: unknown) => {
   console.warn(`[dofile] ${what}: ${(e as Error)?.message ?? e}`);
-  say(`${what} didn't work`);
+  say(said);
 };
 
 function toggle(path: string, open?: boolean) {
@@ -118,7 +118,7 @@ async function endRename(name: string | null) {
     } catch (e) {
       // the list was not current: the store says why
       return keep(
-        (e as Error)?.message?.includes("already exists") ? `${name} already exists here.` : "This name can't be used.",
+        (e as Error)?.message?.includes("already exists") ? `${name} already exists here.` : NAME_NOT_ALLOWED,
       );
     } finally {
       ending = false;
@@ -133,7 +133,7 @@ async function makeDoFile() {
   try {
     startRename(await newDoFile(), true);
   } catch (e) {
-    fail("New .do file")(e);
+    fail("New .do file", "Couldn't create the file")(e);
   }
 }
 
@@ -141,20 +141,20 @@ async function makeFolder() {
   try {
     startRename(await newFolder());
   } catch (e) {
-    fail("New folder")(e);
+    fail("New folder", "Couldn't create the folder")(e);
   }
 }
 
 function send(items: Promise<Incoming[]>) {
-  items.then(upload).catch(fail("The upload"));
+  items.then(upload).catch(fail("The upload", "The upload failed"));
 }
 
 const askDelete = (path: string) => {
   dialog.value = { d: "delete", paths: [path] };
 };
 
-/** The head menu "File actions" (S 13's caption). On a phone the Files head is hidden and App.tsx puts these in the top
- *  bar's ⋯ while the Files view is shown (less "Download all", which the ⋯ has itself). */
+/** The head menu "File actions" (S 13's caption). On a phone the Files head is hidden and App.tsx gives these to the "Files ⋯"
+ *  button at the right of the phone strip while the Files view is shown. */
 export const fileMenuItems = (): MenuItem[] => [
   { label: "New .do file", onSelect: makeDoFile },
   { label: "New folder", onSelect: makeFolder },
@@ -337,6 +337,7 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
       class={cls || undefined}
       style={row.depth ? { "--d": row.depth } : undefined}
       data-path={row.path}
+      title={r ? undefined : row.path}
       aria-level={row.depth + 1}
       aria-expanded={row.dir ? row.expanded : undefined}
       aria-selected={row.dir ? undefined : open}
