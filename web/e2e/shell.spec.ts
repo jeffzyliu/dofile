@@ -35,7 +35,7 @@ async function writeFile(page: Page, path: string) {
 const settled = (page: Page) =>
   page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
-test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; a run asks again, titled for a run, and Not now drops it", async ({
+test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; a run asks again, titled for a run, and runs nothing", async ({
   page,
 }) => {
   await page.goto("?test");
@@ -53,13 +53,14 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
   const run = page.locator(".toolbar").getByRole("button", { name: /^Run$/ });
   await expect(run).toBeEnabled();
   expect(await page.evaluate(() => caches.keys())).toEqual([]); // nothing downloaded: the next visit asks again
-  // a run through the run controller, as Run does it (the editor's Run button is step 4b's): the prompt again, for a run
-  const asked = page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.run('display "RAN"'));
+  // a run through the run controller, as Run does it: the prompt again, for a run; the run is not kept, so its promise
+  // settles with null at once, before the prompt is answered
+  const asked = await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.run('display "RAN"'));
+  expect(asked).toBeNull();
   const forRun = page.getByRole("dialog", { name: "Download the engine to run code" });
   await expect(forRun).toBeVisible();
   await forRun.getByRole("button", { name: "Not now" }).click();
   await expect(forRun).toBeHidden();
-  expect(await asked).toBeNull(); // the queued run was dropped: its promise settles with null
   expect(await state(page)).toBe("declined");
 });
 

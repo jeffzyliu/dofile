@@ -3,12 +3,12 @@
 //    ones"; phone: "Type a command"), "Run command" (a text button; on a phone a compact icon button, .send, that keeps
 //    the field's focus so the keyboard stays open, and has aria-disabled while the field is empty). Typed curly quotes
 //    and the em dash become ' " and -- (stata/straighten.ts; a paste is left as pasted). Enter
-//    runs through run.ts's runCommand(text): when it answers `accepted` (it runs, or is queued while there is no engine)
-//    the field clears; when refused (the page load, a start or a run in progress) the text stays. ↑ ↓ recall `history`,
-//    and ↓ past the newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
+//    runs through run.ts's runCommand(text): when the command runs ("started") the field clears; when it does not
+//    ("asked": no engine, the download prompt opens; "refused": the page load, a start or a run in progress) the text
+//    stays. ↑ ↓ recall `history`, and ↓ past the newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
 //    Pasted text with line breaks runs each line in turn (log/paste.ts says the rules: the next line only once the one
-//    before has ended; the lines stop at one that is refused, does not run, or ends with an error, and before a block's
-//    line; a toast says how many were not run, and a refused line goes back into the field).
+//    before has ended; the lines stop at one that does not run or ends with an error, and before a block's line; a toast
+//    says how many were not run, but not over the download prompt; a line that did not run goes back into the field).
 //  - LogActions: the Log head's "Find" (log/find.ts) and "Download log" (the runs' text only, as dofile.log; no head,
 //    run-head or note) and "Clear…" (asks first: ClearLogDialog; disabled when canClearLog() is false). It draws both forms: the three links (.log-link) and one "Log actions" ⋯ menu button
 //    (.log-more, logMenuItems()); ui.css shows one by a container query on the head's width (the unsplit head, .tabbed, only: the
@@ -42,14 +42,14 @@ let typed = ""; // what was being typed before ↑
 
 async function runPasted(lines: string[]) {
   const r = await runInTurn(lines, runOne);
-  if (r.stop?.why === "refused" && !field.value) field.value = lines[r.stop.line - 1];
+  if ((r.stop?.why === "refused" || r.stop?.why === "asked") && !field.value) field.value = lines[r.stop.line - 1];
   const words = inTurnWords(r);
   if (words) showToast(words, "error");
 }
 
 /** Run what the field holds (Enter, "Run command"). */
 function submit() {
-  if (runCommand(field.value).accepted) {
+  if (runCommand(field.value).how === "started") {
     field.value = "";
     recall = -1;
   }

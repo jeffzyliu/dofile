@@ -2,7 +2,7 @@
 // editor's place while the active tab is { kind: "dta" } (4a's files/open.ts adds it); the editor stays mounted, hidden.
 //  - Bar 1: "data/wages.dta · 500 obs · 3 vars · 8 KB". Bar 2: `use "data/wages.dta", clear`, "Load" (primary: it runs
 //    the command as the command line does, run.ts runCommand; off unless the engine is ready or can be asked to
-//    start) and "Copy" (the command goes to the clipboard, to paste into a do-file). The command comes from
+//    start: with no engine, `none` or `declined`, it opens the download prompt and loads nothing, as Run does) and "Copy" (the command goes to the clipboard, to paste into a do-file). The command comes from
 //    stata/quote.ts fileCommand (`$` escaped); for a name a command cannot hold (a backquote, a line break, `"'`) bar 2
 //    says why in place of the command, and Load and Copy are off. The size is the tree's (files/tree.ts formatSize).
 //    When Load ends a toast says "Loaded wages.dta" or "Couldn't load wages.dta: r(601)" (the file's name, SPEC 8).
@@ -25,7 +25,7 @@ import { dtaInfo } from "./view.ts";
 const NOTE = " the data in memory is untouched until you press Load.";
 // engine states in which a worker is there, or on its way, to answer a read
 const UP = new Set(["starting-worker", "ready", "running", "breaking", "waiting"]);
-// engine states in which Load can run a command (now, or after the download prompt)
+// engine states in which Load does something: runs the command (`ready`), or opens the download prompt (no engine)
 const CAN_LOAD = new Set(["ready", "none", "declined"]);
 
 export function DtaView({ path }: { path: string }) {
@@ -48,12 +48,11 @@ export function DtaView({ path }: { path: string }) {
   const command = "command" in made ? made.command : null;
   const load = async () => {
     if (command === null) return;
-    const { accepted, done } = runCommand(command);
-    if (!accepted) return;
-    const r = await done;
+    const run = runCommand(command);
+    if (run.how !== "started") return; // it did not run: refused, or no engine (the download prompt opened)
+    const r = await run.done;
     const name = baseName(path);
-    if (r)
-      showToast(r.rc === 0 ? `Loaded ${name}` : `Couldn't load ${name}: r(${r.rc})`, r.rc === 0 ? undefined : "error");
+    showToast(r.rc === 0 ? `Loaded ${name}` : `Couldn't load ${name}: r(${r.rc})`, r.rc === 0 ? undefined : "error");
   };
   return (
     <div class="dta-view">

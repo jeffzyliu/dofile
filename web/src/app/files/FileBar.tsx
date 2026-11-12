@@ -3,7 +3,8 @@
 // files (a .dta tab's bars are output/DtaView.tsx's).
 //  - .csv, .tsv: bar 1 "data/raw/survey.csv · 1,204 rows" (the lines that are not empty, of the file as the store has
 //    it, which is what Import reads); bar 2 `import delimited "data/raw/survey.csv", clear`, "Import" (run.ts
-//    runCommand; disabled unless the engine is `ready`, `none` or `declined`, where a command runs or is queued), "Copy"
+//    runCommand; disabled unless the engine is `ready`, where the command runs, or `none` or `declined`, where it opens
+//    the download prompt and imports nothing, as Run does), "Copy"
 //    (aria-label "Copy the import command"; output/clip.ts copyText, toast "Copied"). The command comes from
 //    stata/quote.ts fileCommand (`$` escaped); for a name a command cannot hold (a backquote, a line break, `"'`) bar 2
 //    says why in place of the command, and Import and Copy are off.
@@ -22,7 +23,7 @@ import { decodeText } from "./open.ts";
 import { extOf, rowCount } from "./tree.ts";
 
 const TABLE = new Set([".csv", ".tsv"]);
-const CAN_RUN = new Set(["ready", "none", "declined"]); // a command runs now, or is queued while the prompt asks
+const CAN_RUN = new Set(["ready", "none", "declined"]); // the command runs (`ready`), or the download prompt opens
 
 /** The row count of a table file, read again when the store's copy changes (its size or time in `files`). */
 function useRows(path: string | null) {

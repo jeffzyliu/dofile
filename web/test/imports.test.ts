@@ -445,10 +445,10 @@ test("each signal has one writer: a writer object is named only by state.ts and 
 
 test("no counter or flag outside the machine decides a state: the old ones are gone from web/src", () => {
   const gone =
-    /\b(gen|attempt|lockGen|errorRestarts|taking|was|queued|hadEngine|stageAt|STAGE_OF|StatusText|onRestart|onStatus|resetResult|breakTimer|resetAt|STARTABLE|RESETTABLE)\b/;
+    /\b(gen|attempt|lockGen|errorRestarts|taking|was|queued|QueuedRun|dropRun|drop-run|hadEngine|stageAt|STAGE_OF|StatusText|onRestart|onStatus|resetResult|breakTimer|resetAt|STARTABLE|RESETTABLE)\b/;
   const found = having(SRC, gone);
-  // What is left of those names. The machine's own: the `queued` field of its states, and `resetAt` of `breaking`, which
-  // views read. The controller's handle on the Break timer, which decides no state. And in the worker, `was`, a local
+  // What is left of those names. The machine's own: `resetAt` of `breaking`, which views read (`queued`, the run the
+  // machine once held for an engine that was not there, is gone: no name of it is left in web/src). The controller's handle on the Break timer, which decides no state. And in the worker, `was`, a local
   // name in saveRun for the files as they were before a run.
   // And step 4b's clock (app/editor/clock.ts), which reads `resetAt` of `breaking` for the status bar's "resets in 4 s".
   assert.deepEqual(Object.keys(found).sort(), [
@@ -468,7 +468,7 @@ test("no counter or flag outside the machine decides a state: the old ones are g
     count(source("src/engine/worker.ts", true), /\bwas\b/),
   );
   assert.match(source("src/engine/worker.ts"), /const was = new Map\(before\.map/);
-  assert.equal(count(source(ENGINE, true), gone), count(source(ENGINE, true), /\b(breakTimer|resetAt|queued)\b/));
+  assert.equal(count(source(ENGINE, true), gone), count(source(ENGINE, true), /\b(breakTimer|resetAt)\b/));
   assert.equal(count(source("src/app/types.ts", true), gone), count(source("src/app/types.ts", true), /\bresetAt\b/));
   assert.equal(
     count(source("src/app/states/banners.tsx", true), gone),
@@ -476,7 +476,7 @@ test("no counter or flag outside the machine decides a state: the old ones are g
   );
   assert.equal(
     count(source("src/engine/machine.ts", true), gone),
-    count(source("src/engine/machine.ts", true), /\b(queued|resetAt)\b/),
+    count(source("src/engine/machine.ts", true), /\bresetAt\b/),
   );
   // run.ts does not read the engine's state, and the transport knows no state name
   assert.equal(count(source("src/app/run.ts", true), /S\.engine\b|\.subscribe\(/), 0, "run.ts subscribes to nothing");
