@@ -57,8 +57,9 @@ export const opensEndBlock = (line: string) => {
   return PROGRAM.test(rest) || MATA.test(rest);
 };
 
-/** The code's line as an echo shows it, or null for a line that is not an echo. */
-function echoed(l: LogLine): string | null {
+/** The code's line as an echo shows it, in any of the echo's forms (`. `, a loop's or program's body `  2. `, a continued
+ *  `> `), or null for a line that is not an echo. LogView reads a nested `do` from it for S 15's note. */
+export function echoed(l: LogLine): string | null {
   if (l.kind !== "echo") return null;
   const t = l.text;
   if (t === "." || t === ">") return "";

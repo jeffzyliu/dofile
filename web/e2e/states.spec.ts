@@ -192,6 +192,31 @@ test("a banner that goes with the focus in it hands the focus on: the editor, or
   await handedOn();
 });
 
+test("the editor's and the Files pane's banners hand the focus on too: save-failed, run-changed (Dismiss, Reload from the run), not-text", async ({
+  page,
+}) => {
+  const ph = phone(page);
+  const more = page.getByRole("button", { name: "More actions" });
+  // run-changed with no such file open or stored: "Reload from the run" reads nothing and only dismisses it
+  const cases = [
+    { banner: { b: "save-failed", path: "a.do", message: "the disk is full" }, words: "a.do couldn't be saved" },
+    { banner: { b: "run-changed", path: "t.csv" }, words: "The run changed t.csv." },
+    { banner: { b: "run-changed", path: "t.csv" }, words: "The run changed t.csv.", button: "Reload from the run" },
+    { banner: { b: "not-text", path: "s.xlsx" }, words: "s.xlsx can't be opened in the editor.", view: "files" },
+  ];
+  for (const { banner, words, button = "Dismiss", view = "editor" } of cases) {
+    if (ph) await page.evaluate((v) => (window.__dofile.state.phoneTab.value = v), view);
+    await page.evaluate((b) => window.__dofile.state.addBanner(b), banner);
+    const press = page.locator(".banner", { hasText: words }).getByRole("button", { name: button });
+    await press.focus(); // the keyboard's way: a click does not focus a button in Safari
+    await page.keyboard.press("Enter");
+    await expect(press).toHaveCount(0);
+    // on a phone the Files view hides the editor: More actions takes the focus there
+    if (ph && view !== "editor") await expect(more, `${banner.b}: ${button}`).toBeFocused();
+    else await expect.poll(() => inEditor(page), `${banner.b}: ${button}`).toBe(true);
+  }
+});
+
 test("a dialog whose opener has left the page gives the focus to the editor, or More actions, not to the page", async ({
   page,
 }) => {

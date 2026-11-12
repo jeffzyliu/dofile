@@ -880,7 +880,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     ready and the run began), `"queued"` (no engine yet, `none` or `declined`: the prompt opens, titled for a run, and the run
     begins when the engine has started) or `"refused"` (any other state); views call `runCode` and `runCommand`, not `run`. It
     throws, before it queues anything, when called while a step of the machine is in progress: inside a handler given to
-    `connectRun`, and also inside a signal effect on `engine`, `lastRun` or `log`, which are written during a step. Start the
+    `connectRun`, and also inside a signal effect on `engine` or `lastRun`, which are written only during a step, or on a
+    `log` write a step makes (a run's start and end; a streamed chunk and "Clear log" write `log` outside a step, where the
+    call does not throw: during a run it is refused). Start the
     next run after the step, for example when the run's promise has resolved. `call(op, args)` is the page's one provider of
     read ops (`ViewOp`: `describe`, `describe_file`, `matrix`, `macros`, `browse`, `memory`); views use `matrix` and
     `describe_file`. It raises no event, and rejects with kind `no-engine` with no worker and `reset` when a reset cut it.
@@ -1014,11 +1016,12 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page, the
     editor too, and Ctrl/Cmd+Enter runs, each with Ctrl or Cmd on every platform; S is the key that types "s" or, on a
     layout whose key there types no Latin letter (Cyrillic, Greek...), the key in S's place (`editor/keys.ts`); a held
-    Ctrl/Cmd+S saves once; with a dialog open it saves the active tab behind it (an open question: C 8 of the plan's list); a failed save adds the banner `save-failed`; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    Ctrl/Cmd+S saves once; with a dialog open it saves the active tab behind it (an open question: C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast); Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
     place to change it; the joining agent's, for the maintainer to approve: plan, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
-    of that same file starts, when the engine is reset or restarted (`lastRun` becomes null), and when the marked line is
+    of that same file starts, when the engine is reset or restarted (the effect `engine-gone` sets `lastRun` to null, which
+    clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line), and when the marked line is
     deleted; it moves with edits; a command from the command line and a run of another file leave it; a file closed with
     its mark and no unsaved edits has it again when it is opened with the same text (closed with edits, or opened with
     other text, it has none). **A run that
@@ -1052,7 +1055,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     again (an open question: C 7 of the plan's list). `editorCommands.focus()` focuses at once and never changes
     the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
     `[data-editor]`); with a .dta tab active, that tab in "Open files" when it is shown, else its view's first enabled
-    button (Load), else the focus does not move (for the maintainer to confirm, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) it does not move.
+    button (Load), else the focus does not move (for the maintainer to confirm, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) it makes no check of its own: it focuses the same element, which the browser does not focus under `display: none`, so the focus does not move.
     Decisions where this spec is silent: a whole-file run marks no running
     lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
     N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
@@ -1161,7 +1164,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     before the run, so a run that made data and no r() or e() would otherwise be reset with no question; a description
     that fails asks, and a press while the check is pending does nothing. The dialog closes itself if the engine can no
     longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
-    under "Don't reset: wait for it") hands the focus to the editor (`editorCommands.focus()`, which must focus at once; with a .dta tab
+    under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (`editorCommands.focus()`, which must focus at once; with a .dta tab
     active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
     focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/Dialog.tsx` uses
     the same `focusStable` when a dialog closes and its opener has left the page (a banner's button: another tab took

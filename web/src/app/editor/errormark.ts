@@ -1,8 +1,9 @@
 // The error mark of a file (the red bar and tint on a line): the rule, in one place (the join of step 4, on the coordinator's
 // word; the maintainer may change it here). The mark belongs to the file's last run:
 //  - set when a run of that file (whole or a selection) ends with an error on a line (any rc but 0 and Break's 1);
-//  - cleared when a new run of that same file starts, when the engine is reset or restarted (run.ts clears `lastRun`:
-//    the effect engine-gone), and when the marked line is deleted;
+//  - cleared when a new run of that same file starts, when the engine is reset or restarted (the effect engine-gone sets
+//    `lastRun` to null, which clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no
+//    line, so no mark comes back), and when the marked line is deleted;
 //  - it moves with edits (editor/cm.ts maps it through the changes);
 //  - a file closed with its mark and no unsaved edits has it again when it is opened with the same text (Editor.tsx
 //    keeps the line it was on); closed with unsaved edits, or opened with other text, it has none;

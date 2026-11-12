@@ -40,7 +40,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   identity, the journal as the only channel; steps A to E; merged by pull request #13).
   Its plan and status: [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md). How the engine code works as built, and what
   is still open: [web-engine-data-flow.md](web-engine-data-flow.md).
-- **How the editor page's focus, runs, open files and log links work, as built at `d94bb5e`:** [web-page-flows.md](web-page-flows.md).
+- **How the editor page's focus, runs, open files and log links work, as built on `prototype1-step4`:** [web-page-flows.md](web-page-flows.md).
 - **Formatting and linting were added on the branch after step 3.5 and before the merge:** Biome for `web/`, ruff for dofile's own
   Python, width 120. Two commits are layout only (`.git-blame-ignore-revs` lists them); the lint fixes change no behavior; the gates
   are `npm run check` (Biome, then `tsc`), `npm run lint:strict`, `uv run poe lint` and a CI job for each. Decisions, rules turned

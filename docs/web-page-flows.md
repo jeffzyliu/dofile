@@ -1,6 +1,6 @@
 # Flows of the editor page
 
-**This describes the code as built on branch `prototype1-step4` at commit `d94bb5e` (pull request #17, 2026-11-11).** It
+**This describes the code as built on branch `prototype1-step4` (pull request #17, 2026-11-11).** It
 is a sibling of [web-engine-data-flow.md](web-engine-data-flow.md), which covers the engine under the page. This
 document covers four parts of the editor page that no single file shows: where the focus goes, a run as the views see
 it, an open file's state in the editor, and where the log puts graph links and notes. Each spans several modules and
@@ -41,8 +41,9 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
      the same. The browser does not
      focus an element under `display: none`, so the focus does not move, and `focusStable` goes on to "More actions".
 4. **A dialog gives the focus back to its opener** (what had the focus when it opened). When the opener has left the
-   page, or it had none, the dialog calls `focusStable()`. `<body>` is never an opener. A dialog that opens while another one is still
-   handing the focus back takes that one's opener as its own (`ui/Dialog.tsx`, the module variable `leaving`).
+   page, or it had none, the dialog calls `focusStable()`. `<body>` is never an opener. A dialog that opens while
+   another one is still handing the focus back takes that one's opener as its own (`ui/Dialog.tsx`, the module variable
+   `leaving`).
 5. **A view that takes the focus when it appears takes it in a layout effect:** a dialog (`ui/Dialog.tsx`), the
    stopping banner's "Don't reset: wait for it", and the waiting banner itself (`states/banners.tsx`). So a hand-off
    that waits for a microtask finds the focus already taken.
@@ -170,13 +171,13 @@ sequenceDiagram
   F->>F: microtask, the focus is on body, focusStable()
 ```
 
-Dismiss on a banner that uses `useFocusOnLeave` (reset, storage, download-failed, the failed-start banners) follows the
-last two lines. With a `.dta` tab active, `editorCommands.focus()` puts the focus on that tab, so `focusStable` stops
-there and the focus moves once.
+Dismiss on a banner that uses `useFocusOnLeave` (reset, storage, download-failed, the failed-start banners, the
+editor's save-failed and run-changed, the Files pane's not-text) follows the last two lines, and so does run-changed's
+"Reload from the run". With a `.dta` tab active, `editorCommands.focus()` puts the focus on that tab, so `focusStable`
+stops there and the focus moves once.
 
 The banners that hold no control (running, memory) do not use it, nor does the declined banner, which calls
-`focusStable()` itself before it goes. Neither do the editor's banners (`editor/banners.tsx`: save-failed, run-changed) or
-the Files pane's (`files/banners.tsx`: not-text).
+`focusStable()` itself before it goes.
 
 ### A tab closes from the close-tab dialog
 
@@ -238,13 +239,14 @@ sequenceDiagram
 
 - `web/e2e/states.spec.ts`:
   - "a banner that goes with the focus in it hands the focus on: the editor, or More actions when it is hidden"
+  - "the editor's and the Files pane's banners hand the focus on too: save-failed, run-changed (Dismiss, Reload from the
+    run), not-text"
   - "a dialog whose opener has left the page gives the focus to the editor, or More actions, not to the page"
   - "with a .dta tab active, a banner that goes with the focus hands it to that tab, in one move"
   - "from the stopping banner to the waiting banner the focus goes straight across, never through the editor"
   - "the banners above the log: running, stopping (focus on Don't reset), waiting (takes the focus)"
 - `web/e2e/files.spec.ts`:
-  - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save". Its "Save that
-    fails keeps it open" means the tab: the dialog closes and the save-failed banner shows.
+  - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save"
   - "a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it
     before the first, not the page"
 - `web/e2e/editor.spec.ts`:
@@ -522,6 +524,8 @@ The editor (`editor/Editor.tsx`) keeps, per open text tab, keyed by path:
 - `states`: the `EditorState`. The shown one lives in the view and is copied back when the tab is hidden.
 - `savedText`: the store's text in the editor's form, or null when the store's version is not text.
 - `forms`: the noted line break and BOM.
+- `saving`: each Save in progress with the path its tab has now (`renamed` moves it, `closed` sets it to null), so a
+  Save that answers after a rename leaves its outcome on the renamed tab.
 
 `tabs[].dirty` (the unsaved dot) is written only through `state.ts` `setDirty`. The file code (`files/open.ts`,
 `files/actions.ts`) changes `tabs` and `activeTab` first, then calls the editor through `editorCommands`.
@@ -559,19 +563,19 @@ flowchart LR
 | **Open** (`openFile` → `open`) | `editorText` of the file | the same | `formOf` the file | off (the tab is added clean) | back on its line if the file was closed with one, clean, and opens with the same text | none (`openFile` dismisses any not-text banner) | read only |
 | **Edit** | changed | unchanged | unchanged | on when the text differs from the saved text (`follow`, on each change) | moves with the text; gone when its line is deleted (`cm.ts` `lineMarksField`, `errormark.ts` `lineDeleted`) | unchanged | unchanged |
 | **Undo back to the saved text** | equals the saved text | unchanged | unchanged | off | mapped as any edit | unchanged | unchanged |
-| **Save succeeds** (`save`) | unchanged | the text Save wrote | `savedForm`: a `.do` or `.ado` loses its BOM | off, unless the text changed while it was written | unchanged | both dismissed for that path; toast "Saved name" | `fileText` bytes |
-| **Save fails** | unchanged | unchanged | unchanged | stays on | unchanged | save-failed added (one per path); the live region says it | unchanged |
-| **Rename** (`renameEntry` → `renamed`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path | the same bytes under the new name |
+| **Save succeeds** (`save`) | unchanged | the text Save wrote | `savedForm`: a `.do` or `.ado` loses its BOM, by the name it was written under | off, unless the text changed while it was written | unchanged | both dismissed for the tab's path; toast "Saved name". A tab renamed while it was written gets all of this under its new path. | `fileText` bytes |
+| **Save fails** | unchanged | unchanged | unchanged | stays on | unchanged | save-failed added (one per path, under the tab's path at the time it fails; none for a tab closed meanwhile); the live region says it | unchanged |
+| **Rename** (`renameEntry` → `renamed`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (`saving`) | the same bytes under the new name |
 | **Rename across a `.do` name** | as Rename | as Rename | `a.txt` with a BOM renamed `a.do`: the next Save writes no BOM. `a.do` with a BOM, never saved here, renamed `a.txt`: the next Save keeps it. | kept | kept | moved | the same bytes |
 | **Rename to a name that opens another way** | a clean tab is closed and opened again in its place (as Close, then Open); a tab with edits stays as it is; a `.png` name closes a clean tab | | | | | | |
 | **Close** (`closeTab` → `closed`) | dropped | dropped | dropped | the tab is gone | noted (line and text) when it had one and no unsaved edits | both dismissed | unchanged ("Don't save" loses the edits) |
-| **Upload and "Replace with uploaded"** (`reopen` → `reload`) | the uploaded text, a new state (undo history gone) | the same | `formOf` the upload | off | gone (new state) | run-changed dismissed; save-failed stays | the uploaded bytes. Not text: the tab closes. |
+| **Upload and "Replace with uploaded"** (`reopen` → `reload`) | the uploaded text, a new state (undo history gone) | the same | `formOf` the upload | off | gone (new state) | both dismissed | the uploaded bytes. Not text: the tab closes. |
 | **A run writes the same text** (in the editor's form) | unchanged | unchanged | unchanged, even if the run wrote other line breaks | unchanged (a tab with edits stays unsaved) | unchanged | unchanged | the run's bytes |
 | **A run writes other text, tab clean** | the run's text, as one change where the two differ: caret, selection and undo kept | the run's text | `formOf` the run's text | off | mapped through the change | run-changed dismissed | the run's bytes |
 | **A run writes other text, tab unsaved** | kept | the run's text | `formOf` the run's text; unchanged when the run wrote exactly the editor's text | on. When the run wrote exactly the editor's text: off, and the answer is "same". | unchanged | run-changed added (files.ts, on "kept"); when "same", dismissed | the run's bytes |
 | **A run writes something that is not text** | kept | null (`savedIsText` is false) | unchanged | on | unchanged | run-changed in its not-text words, with no "Reload from the run" | the run's bytes. A later run that writes the editor's text makes the tab clean and removes the banner. |
 | **A run deletes the file** | unchanged (`followOpen` skips `removed`) | unchanged | unchanged | unchanged | unchanged | unchanged | removed; the file leaves the list, and Save writes it again |
-| **"Reload from the run"** (`textInStore` → `reload`) | the store's text, a new state | the same | `formOf` it | off | gone | run-changed dismissed. When the store gives no text: only dismissed. | unchanged |
+| **"Reload from the run"** (`textInStore` → `reload`) | the store's text, a new state | the same | `formOf` it | off | gone | both dismissed. When the store gives no text: only run-changed, dismissed. | unchanged |
 | **The file's own run starts** | sent as it is, edits included, never saved first | unchanged | unchanged | unchanged | this file's mark cleared (`onRunStart`); a selection run marks its lines while the state is `running`, `breaking` or `waiting` | unchanged | unchanged |
 | **It ends with an error** | unchanged | unchanged | unchanged | unchanged | set on `lastRun.line` (the file's line: a selection's offset added in `run.ts`) when rc is not 0 or 1 and the line exists. The number is applied to the text as it is then. | unchanged | what the run wrote follows (rows above), after this step |
 | **A command-line command runs** | unchanged | unchanged | unchanged | unchanged | unchanged (`onRunStart`, `onLastRun`: a command changes no mark) | unchanged | as the run rows, if it writes the file |
@@ -615,6 +619,9 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
   - "rename: a .dta tab renamed to .csv opens again as text in its place; …"
 - `web/e2e/editor.spec.ts`:
   - "the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast, a failed save shows a banner; …"
+  - "a failed save's banner goes when the editor's text is replaced: Reload from the run, Replace with uploaded"
+  - "a rename while Save writes: the save follows the tab to its new name (clean, its toast), and so does a failed
+    save's banner"
   - "Save keeps a file's form: …"
   - "the error line keeps to its text when the tab is left and shown again"
   - "the error line comes back when its file is closed and opened again with the same text"
@@ -632,6 +639,8 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
   new name and showed the empty view.
 - **A rename must keep `savedText`'s null.** Code such as `savedText.get(from) ?? ""` would make a not-text tab look
   like an empty saved text.
+- **A Save answers for the path its tab has when the store answers** (`saving`). Code that awaits between taking a
+  tab's path and writing the editor's maps under it must follow a rename the same way, or it writes under the old name.
 
 ---
 
@@ -755,13 +764,15 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
 
 - **Graph links.** Each graph of this run (`graphs` with `from: "run"` and this `run`) goes after
   `commandEnd(lines, echoes.get(g.line))`, the last `> ` line of that command. When the line has no echo, or the graph
-  has no line, it goes after the item's last line (the one before the text's final line break, which may be blank). A graph drawn inside its run's text is not drawn
-  again by its `{t: "graph"}` log item (`placed`).
+  has no line, it goes after the item's last line (the one before the text's final line break, which may be blank). A
+  graph drawn inside its run's text is not drawn again by its `{t: "graph"}` log item (`placed`).
 - **S 15's note.** The item keeps `unsaved`, the open files with unsaved edits when the run started (`run.ts`
-  `began`). For each found echo, `nestedTarget` reads the echo's text with a leading `. ` removed. The note "Note:
-  name has unsaved edits in the editor; do runs the saved file. …" goes after that command when `unsavedTarget` finds
-  the file: the same path, else the one unsaved file with that name. A loop's or program's body echo keeps its
-  `  2. ` prefix, which `nestedTarget` does not read as a `do`, so only top-level echoes get the note.
+  `began`). For each found echo, `nestedTarget` reads the command `align.ts` `echoed` gives (the echo without its
+  `. `, `  2. ` or `> ` prefix, the one rule the walk uses too). The note "Note: name has unsaved edits in the editor;
+  do runs the saved file. …" goes after that command when `unsavedTarget` finds the file: the same path, else the one
+  unsaved file with that name. A loop's or program's body is echoed once, where it is defined, so a `do` there gets
+  one note after that echo, however many passes run the file (for a program, at its definition, not its call). A `do`
+  continued on a `> ` line gets none: its first line holds no file name.
 - **OQ-10's note.** When the run ended with rc above 1, `states/words.ts` `noteFor(end.rc, runError(lines))` picks
   the note, which goes at the run's end, after "Go to line" when that is there (Break's note is rc 1's, so never with
   it).
@@ -811,13 +822,15 @@ later identical line, and a graph's link then goes in the wrong place (`docs/pro
   - "echoLines: a line in a /* */ comment is not taken for the echo of the same line after it; a comment's continued
     line is"
   - "inBlocks: a local or global's braces open no block"
-  - "nestedTarget and unsavedTarget: the file a do or include runs, and the open file with unsaved edits it is"
+  - "nestedTarget and unsavedTarget: the file a do or include runs, and the open file with unsaved edits it is" (also
+    `echoed` on a top-level and a body echo)
   - "runError: the error a run ended with is its last error line, not one capture noisily caught before it"
   - the three ".log tokenizer" tests
 - `web/e2e/editor.spec.ts`:
   - "Run: the run-head, the graph after its echo, the error line marked, Go to line, the last run; Run selection keeps
     locals"
   - "the log: under an error, the OQ-10 note where the engine's own words do not say it"
+  - "S 15's note under a nested do in a loop: one note, after the loop's echo of that line, however many passes run it"
 - `web/e2e/shell.spec.ts`: "key hints: … the Editor and Log views with a nested do's note …"
 
 ### If you change this

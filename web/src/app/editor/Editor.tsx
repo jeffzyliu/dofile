@@ -8,7 +8,8 @@
 //    without one (commands.ts focus(), and the engine's dialog that closes by itself, focus there). With a .dta tab
 //    active, focus() goes to that tab, or its view's Load, outside `[data-editor]` (see focus()).
 //  - The unsaved dot: setDirty(path, text differs from the saved text) on each edit, so undoing back to the saved text
-//    clears it; a save clears it unless the text changed while it was being written.
+//    clears it; a save clears it unless the text changed while it was being written. A save that answers after its tab
+//    was renamed answers for the new name (`saving`).
 //  - Save keeps the file's form (ranover.ts formOf, noted at open, reload and a run's new version): its line break and
 //    its UTF-8 byte order mark. The editor's text, which has "\n" only and never a BOM, is written with "\r\n" for a
 //    "\r\n" file and with the BOM for a file that had one, except a .do or .ado file (fileText, dropsBom: by the name it
@@ -224,25 +225,37 @@ function errorLineOf(st: EditorState): number | null {
 
 // ---- save ----
 
+// The saves in progress, each with the path its tab has now: renamed() moves it and closed() ends it (null), so a save
+// that answers after its tab was renamed leaves its outcome on the tab (the saved text, the form, the dot, the banners,
+// the toast), not under the old name. The store has the bytes under the new name: its rename comes after the write.
+const saving = new Set<{ path: string | null }>();
+
 async function save(path: string | undefined = activeTab.value ?? undefined): Promise<boolean> {
   const st = path ? current(path) : undefined;
   if (!path || !st) return false;
   const text = st.doc.toString();
+  const at: { path: string | null } = { path };
+  saving.add(at);
   try {
     await store.write(path, new TextEncoder().encode(fileText(text, forms.get(path) ?? PLAIN, path)));
   } catch (e) {
     const message = (e as Error)?.message ?? String(e);
-    addBanner({ b: "save-failed", path, message });
-    say(`${baseName(path)} couldn't be saved`);
+    if (at.path !== null) addBanner({ b: "save-failed", path: at.path, message }); // not for a tab closed meanwhile
+    say(`${baseName(at.path ?? path)} couldn't be saved`);
     return false;
+  } finally {
+    saving.delete(at);
   }
-  savedText.set(path, text);
-  // the form as written (a do-file's BOM dropped), unless the tab was closed or renamed while it was written
-  const form = forms.get(path);
-  if (form) forms.set(path, savedForm(form, path));
-  if (current(path)?.doc.toString() === text) setDirty(path, false);
-  for (const b of banners.value) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === path) dismiss(b);
-  showToast(`Saved ${baseName(path)}`);
+  const now = at.path; // the tab's path now, or null when it was closed while the file was written
+  if (now !== null) {
+    savedText.set(now, text);
+    // the form as written: the name it was written under decided whether the BOM was dropped
+    const form = forms.get(now);
+    if (form) forms.set(now, savedForm(form, path));
+    if (current(now)?.doc.toString() === text) setDirty(now, false);
+    for (const b of banners.value) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === now) dismiss(b);
+  }
+  showToast(`Saved ${baseName(now ?? path)}`);
   return true;
 }
 
@@ -273,7 +286,8 @@ function reload(path: string, file: string) {
     selection.value = null;
   }
   setDirty(path, false);
-  for (const b of banners.value) if (b.b === "run-changed" && b.path === path) dismiss(b);
+  // the editor has the store's text again: neither a run's banner nor a failed save's (its edits are gone) applies
+  for (const b of banners.value) if ((b.b === "run-changed" || b.b === "save-failed") && b.path === path) dismiss(b);
 }
 
 function ranOver(path: string, text: string | null): "same" | "shown" | "kept" {
@@ -325,6 +339,7 @@ function renamed(from: string, to: string) {
     view.dispatch({ effects: language.reconfigure(named(to)) });
   }
   if (marked?.path === from) marked = { ...marked, path: to };
+  for (const at of saving) if (at.path === from) at.path = to; // a save in progress answers for the new name
   // 4a changes `activeTab` before it calls this: the editor then had no state for the new path and showed none
   if (activeText() === to && shown.value !== to) show(to);
 }
@@ -346,6 +361,7 @@ function closed(path: string) {
     selection.value = null;
   }
   if (marked?.path === path) marked = null;
+  for (const at of saving) if (at.path === path) at.path = null;
 }
 
 async function goToLine(line: number, path: string | undefined = activeTab.value ?? undefined) {
@@ -365,7 +381,8 @@ async function goToLine(line: number, path: string | undefined = activeTab.value
  *  - no tab open: the empty view, "No file is open" (`[data-editor]` then);
  *  - a .dta tab active (no editor shows): its tab in "Open files" when that is shown, else the first enabled button of
  *    its view (Load); the focus is then not in `[data-editor]`, and when neither is shown it does not move;
- *  - the Editor pane hidden (a phone on another view): the focus does not move. */
+ *  - the Editor pane hidden (a phone on another view): the focus does not move (no check here: the same element is
+ *    focused, and the browser focuses none under `display: none`). */
 function focus() {
   if (view && shown.value) {
     view.focus();

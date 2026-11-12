@@ -8,7 +8,8 @@
 //  - after the echo of the line that drew it (RunResult.graph_lines, placed by log/align.ts; at the run's end when the
 //    line is not found), each graph: a link "graph 1" (.glink) that shows it in the Graph tab, or on a phone the graph
 //    itself on the card of its run's theme (4c's cardTheme), which opens full size when tapped;
-//  - after the echo of a nested `do` or `include` of a file that had unsaved edits when the run started, S 15's note;
+//  - after the echo of a nested `do` or `include` of a file that had unsaved edits when the run started, S 15's note (a
+//    loop's or program's body line too, which is echoed once: one note, however many passes run the file);
 //  - at the run's end: "Go to line 17" (.jump) after its r(N); (an error in the file, not in a command); after Break,
 //    "Stopped by Break before line 17. The data is as the last complete command left it." (OQ-9) with "Go to line 17"
 //    and no error mark (a command from the command line names no line: "Stopped by Break. The data is ..."); the
@@ -29,7 +30,7 @@ import { graphFull, graphIndex, graphs, isPhone, log, outputTab, split } from ".
 import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
-import { commandEnd, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
+import { commandEnd, echoed, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
 import { classify, hintParts, type LogLine, runError } from "./classify.ts";
 import { findAt, findOpen, findText, matches } from "./find.ts";
 
@@ -155,9 +156,11 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
     const at = g.line != null ? echoes.get(g.line) : undefined;
     put(at === undefined ? last : commandEnd(lines, at), <GraphLink key={`g${g.n}`} g={g} />);
   }
+  // one note per `do` line of the code, after its echo: a loop's body is echoed once however many passes run the file
   if (item.unsaved?.length)
     for (const at of echoes.values()) {
-      const target = nestedTarget(lines[at].text.replace(/^\. /, ""));
+      const command = echoed(lines[at]); // the echo in any of its forms: `. do x`, a loop's or program's `  2. do x`
+      const target = command === null ? null : nestedTarget(command);
       const file = target ? unsavedTarget(target, item.unsaved) : null;
       if (!file) continue;
       const name = file.slice(file.lastIndexOf("/") + 1);

@@ -36,7 +36,8 @@ export const editorCommands = {
   save(_path?: string): Promise<boolean> {
     return Promise.resolve(false);
   },
-  /** Put the focus in the editor (after the engine's dialog closes by itself, "Go to line"). */
+  /** Put the focus in the editor, at once (after the engine's dialog closes by itself; states/focus.ts focusStable, for a
+   *  banner or a dialog's opener that left; files/EditorTabs.tsx focusAfterClose). "Go to line" focuses CodeMirror itself. */
   focus() {
     ((globalThis.document?.querySelector("[data-editor]") ?? null) as HTMLElement | null)?.focus();
   },

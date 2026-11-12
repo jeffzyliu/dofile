@@ -326,6 +326,117 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   expect(await bytes("f.do")).toBe("a,b\r\n1,2\r\n3,4");
 });
 
+test("a failed save's banner goes when the editor's text is replaced: Reload from the run, Replace with uploaded", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1\n" });
+  await open(page, "a.do");
+  const content = page.locator(".cm-content");
+  const failed = page.locator(".banner", { hasText: "a.do couldn't be saved" });
+  const failSave = async () => {
+    await content.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.insertText("display 2");
+    await page.evaluate(() => {
+      const s = window.__dofile.store as any;
+      const real = s.write;
+      s.write = () => {
+        s.write = real; // this one write fails
+        return Promise.reject(new Error("the disk is full"));
+      };
+    });
+    await page.keyboard.press("ControlOrMeta+s");
+    await expect(failed).toBeVisible();
+  };
+  // Reload from the run: a run's version in the store and its banner, as files.ts afterRun leaves them
+  await failSave();
+  await page.evaluate(async () => {
+    await window.__dofile.store.write("a.do", new TextEncoder().encode("display 3\n"));
+    window.__dofile.state.addBanner({ b: "run-changed", path: "a.do" });
+  });
+  await page
+    .locator(".banner:visible", { hasText: "The run changed a.do." })
+    .getByRole("button", { name: "Reload from the run" })
+    .click();
+  await expect(content).toHaveText("display 3");
+  await expect(failed).toHaveCount(0);
+  // Replace with uploaded
+  await failSave();
+  await page
+    .locator('input[data-upload="files"]')
+    .setInputFiles({ name: "a.do", mimeType: "text/plain", buffer: Buffer.from("display 4\n") });
+  await page
+    .getByRole("alertdialog", { name: "a.do is already here" })
+    .getByRole("button", { name: "Replace with uploaded" })
+    .click();
+  await expect(content).toHaveText("display 4");
+  await expect(failed).toHaveCount(0);
+  expect(await page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
+});
+
+test("a rename while Save writes: the save follows the tab to its new name (clean, its toast), and so does a failed save's banner", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1\n" });
+  await open(page, "a.do");
+  const content = page.locator(".cm-content");
+  const tabs = () => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => [t.path, t.dirty]));
+  /** The next store.write answers when the test calls window.__answer(): it writes at once (the rename's transaction
+   *  then comes after it, as when the store is slow), or with `fail` it writes nothing and rejects. */
+  const hold = (fail: boolean) =>
+    page.evaluate((fail) => {
+      const s = window.__dofile.store as any;
+      const real = s.write;
+      let answer!: () => void;
+      const gate = new Promise<void>((ok) => (answer = ok));
+      (window as any).__answer = answer;
+      s.write = (...a: unknown[]) => {
+        s.write = real;
+        if (fail) return gate.then(() => Promise.reject(new Error("the disk is full")));
+        return real.apply(s, a).then(async (x: unknown) => {
+          await gate;
+          return x;
+        });
+      };
+    }, fail);
+  const rename = async (from: string, to: string) => {
+    if (isPhone(page)) await view(page, "Files");
+    await page
+      .getByRole("tree", { name: "Files" })
+      .getByRole("treeitem", { name: new RegExp(`^${from.replace(".", "\\.")}`) })
+      .focus();
+    await page.keyboard.press("F2");
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type(to);
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => t.path)))
+      .toEqual([to]);
+    if (isPhone(page)) await view(page, "Editor");
+  };
+  // a save that works and answers after the rename: the renamed tab is clean, and the toast names it
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display 2");
+  await hold(false);
+  await page.keyboard.press("ControlOrMeta+s");
+  await rename("a.do", "b.do");
+  await page.evaluate(() => (window as any).__answer());
+  await expect(page.locator(".toast")).toHaveText("Saved b.do");
+  await expect.poll(tabs).toEqual([["b.do", false]]);
+  expect(await stored(page, "b.do")).toBe("display 1\ndisplay 2");
+  // a save that fails and answers after the rename: the banner is the tab's, under its new name
+  await content.click();
+  await page.keyboard.insertText("!");
+  await hold(true);
+  await page.keyboard.press("ControlOrMeta+s");
+  await rename("b.do", "c.do");
+  await page.evaluate(() => (window as any).__answer());
+  await expect(page.locator(".banner", { hasText: "c.do couldn't be saved" })).toBeVisible();
+  await expect(page.locator(".banner", { hasText: "b.do couldn't be saved" })).toHaveCount(0);
+  expect(await tabs()).toEqual([["c.do", true]]);
+});
+
 test("the editor: a .csv's columns have their colors, a .log's lines their kinds, .md and .json their tokens; a file dropped on it uploads and leaves its text", async ({
   page,
 }) => {
@@ -1252,4 +1363,36 @@ test("a file's form follows the store's text the editor takes: a run's version (
   const after = await nested();
   expect(after.rc, after.log).toBe(0);
   expect(after.log).toContain("42");
+});
+
+test("S 15's note under a nested do in a loop: one note, after the loop's echo of that line, however many passes run it", async ({
+  page,
+}) => {
+  await setUp(
+    page,
+    { "sub.do": "display 1\n", "main.do": "forvalues i = 1/2 {\n    do sub.do\n}\ndisplay 2\n" },
+    "/?test",
+  );
+  await startEngine(page);
+  await ready(page);
+  await open(page, "sub.do");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display 3"); // unsaved: the nested do runs the saved file
+  await open(page, "main.do");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await ready(page);
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
+  const log = page.getByRole("log", { name: "Log" });
+  const note = log.locator(".warn", {
+    hasText: "Note: sub.do has unsaved edits in the editor; do runs the saved file.",
+  });
+  await expect(note).toHaveCount(1);
+  // the loop's body is echoed once, before its passes run sub.do twice: the note follows that echo
+  const echo = await note.evaluate((el) => {
+    let n = el.previousSibling;
+    while (n && n.nodeType === Node.TEXT_NODE) n = n.previousSibling;
+    return (n as Element | null)?.textContent;
+  });
+  expect(echo).toBe("  2.     do sub.do");
 });

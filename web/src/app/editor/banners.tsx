@@ -1,18 +1,22 @@
 // The banner above the editor when a save fails (OQ-16): { b: "save-failed", path, message }, an error banner. The
-// editor's Save adds it (one per file; a later save of that file that works removes it) and says it in the live region.
+// editor's Save adds it (one per file; a later save of that file that works removes it, and so does the editor's reload:
+// "Reload from the run", "Replace with uploaded") and says it in the live region.
 // Its words are drafts for the maintainer: "analysis.do couldn't be saved: <the store's reason>. Your edits are still in
 // the editor; download them to keep a copy." / "Download" (the editor's text, saved or not, with the file's line break,
-// as a file of that name), "Dismiss". banners.tsx (in app/) places it.
+// as a file of that name), "Dismiss". banners.tsx (in app/) places it. Both banners here hand the focus on when they go
+// with the focus in them (states/focus.ts useFocusOnLeave), as every banner with controls does.
 import type { BannerOf } from "../banners";
 import { baseName } from "../files/tree.ts";
 import { saveAs, textInStore } from "../files.ts";
 import { dismiss } from "../state.ts";
+import { useFocusOnLeave } from "../states/focus.ts";
 import { Banner } from "../ui/Live";
 import { editorCommands } from "./commands.ts";
 import { savedIsText, textOf } from "./Editor";
 
 export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }) => {
   const name = baseName(banner.path);
+  const ref = useFocusOnLeave<HTMLDivElement>(); // Dismiss by keyboard: the focus goes on, not to the page
   const download = () => {
     const text = textOf(banner.path);
     if (text !== null) saveAs(new Blob([text], { type: "text/plain" }), name);
@@ -20,6 +24,7 @@ export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }
   return (
     <Banner
       kind="error"
+      bannerRef={ref}
       actions={
         <>
           <button type="button" class="btn" onClick={download}>
@@ -49,6 +54,7 @@ export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }
 export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }) => {
   const name = baseName(banner.path);
   const text = savedIsText(banner.path);
+  const ref = useFocusOnLeave<HTMLDivElement>(); // Dismiss or "Reload from the run" by keyboard: the focus goes on
   const reload = async () => {
     const text = await textInStore(banner.path);
     if (text !== null) editorCommands.reload(banner.path, text);
@@ -57,6 +63,7 @@ export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }
   return (
     <Banner
       kind="warn"
+      bannerRef={ref}
       actions={
         <>
           {text && (

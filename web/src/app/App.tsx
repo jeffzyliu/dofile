@@ -37,8 +37,10 @@
 //    nothing): ask() in `none` and `declined`; decline in `asking` and `downloading`; start in `none`, `asking`,
 //    `declined`, `failed`; reset in `ready`, `running`, `breaking`, `waiting`; takeOver in `other-tab-idle`.
 //  - run.ts runCode and runCommand (through engine.ts run()) throw when called while a step of the state machine is in
-//    progress: inside a handler given to connectRun, and also inside a signal effect on `engine`, `lastRun` or `log`,
-//    which are written during a step. Start the next run after the step: when the run's promise has resolved, say.
+//    progress: inside a handler given to connectRun, and also inside a signal effect on `engine` or `lastRun`, which are
+//    written only during a step, or on a `log` write a step makes (a run's start and end; a streamed chunk and "Clear
+//    log" write `log` outside a step, where the call does not throw: during a run it is refused). Start the next run
+//    after the step: when the run's promise has resolved, say.
 //   4a files/FilesPane.tsx (FilesHead, FilesBody), files/EditorTabs.tsx (EditorTabs, the phone's FileSwitcher),
 //      files/FileBar.tsx (FileBar: the bars over a .csv, .tsv or .log), files/open.ts (openFile, decodeText),
 //      files/dialogs.tsx (clash, delete, delete-all, close-tab; the words of delete-all and close-tab are decided: SPEC

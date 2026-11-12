@@ -30,7 +30,7 @@ import {
   seconds,
   ticking,
 } from "../src/app/editor/words.ts";
-import { commandEnd, echoLines, inBlocks, nestedTarget, unsavedTarget } from "../src/app/log/align.ts";
+import { commandEnd, echoed, echoLines, inBlocks, nestedTarget, unsavedTarget } from "../src/app/log/align.ts";
 import { classify, hintParts, plainLog, runError } from "../src/app/log/classify.ts";
 import { matches } from "../src/app/log/find.ts";
 import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
@@ -543,6 +543,26 @@ test("nestedTarget and unsavedTarget: the file a do or include runs, and the ope
   assert.equal(unsavedTarget("C:/proj/clean.do", ["code/clean.do"]), "code/clean.do");
   assert.equal(unsavedTarget("clean.do", ["a/clean.do", "b/clean.do"]), null, "two files of that name: neither");
   assert.equal(unsavedTarget("clean.do", []), null);
+  // the log's echo of a nested do in each of its forms, as LogView reads it for S 15's note: a top-level `. `, a loop's
+  // or a program's body line `  2. `
+  const target = (log: string) =>
+    classify(log).map((l) => {
+      const x = echoed(l);
+      return x === null ? null : nestedTarget(x);
+    });
+  assert.deepEqual(target(". do a.do\n. forvalues i = 1/2 {\n  2.     do b\n  3. }\n"), [
+    "a.do",
+    null,
+    "b.do",
+    null,
+    null,
+  ]);
+  assert.deepEqual(target(". program define p\n  1.     capture noisily do c.do\n  2. end\n"), [
+    null,
+    "c.do",
+    null,
+    null,
+  ]);
 });
 
 test("a paste with no line break is an ordinary paste; with breaks, each non-empty line, joined to the field's text", () => {

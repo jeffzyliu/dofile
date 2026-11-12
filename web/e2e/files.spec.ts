@@ -109,7 +109,7 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect(row(page, /^a\.do/)).toHaveClass(/\bopen\b/);
 });
 
-test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel; Save that fails keeps it open; Save; Don't save); the focus goes to a tab or the tree, never the page, in one move after Save and Don't save", async ({
+test("tabs: a second file opens a second tab; a tab with no edits closes at once, one with unsaved edits asks (Cancel; Save that fails closes the dialog and keeps the tab open; Save; Don't save); the focus goes to a tab or the tree, never the page, in one move after Save and Don't save", async ({
   page,
 }) => {
   await setUp(page, { "a.do": "1\n", "b.do": "2\n", "c.do": "3\n" });
