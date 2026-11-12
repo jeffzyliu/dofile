@@ -232,7 +232,7 @@ sequenceDiagram
   C->>W: startup (timings)
   C-->>E: reply(started)
   E->>T: started
-  T-->>E: ready (or running, with a queued run)
+  T-->>E: ready (nothing runs by itself)
 ```
 
 Points that are not obvious:
@@ -308,8 +308,9 @@ sequenceDiagram
 
 Details:
 
-- **Who answers what.** `engine.run()` answers at once: `started` (the engine was ready and the run began), `queued` (no
-  engine yet; the prompt opens and the machine runs the code once the engine has started) or `refused` (any other state).
+- **Who answers what.** `engine.run()` answers at once: `started` (the engine was ready and the run began), `asked` (no
+  engine, `none` or `declined`: the prompt opens and nothing runs, then or once the engine is ready) or `refused` (any other
+  state).
   `run.ts` does not look at the state. It must not call `run()` while a step of the machine is in progress (inside a handler
   it was given): `run()` throws then, before it queues anything.
 - **Arguments.** `run.ts` builds a `RunHead` (`kind`: file, selection or command; `fresh_locals`). The controller adds
@@ -325,10 +326,11 @@ Details:
   run. For a result the machine made (rc 9998) there is no log, so the streamed text stays and the reason is added as a note.
 - **Error lines.** `error_line` is 1-based within the text sent. For a selection run, `run.ts` adds the selection's first
   line to map it back to the file.
-- **Run with no engine.** In `none` or `declined`, the machine goes to `asking` and keeps the run (`queued`); the prompt
-  opens titled for a run. When the engine has started, the machine goes from `starting-worker` straight to `running` and
-  sends the code. "Not now", "Stop download", a failed start and another tab take over drop it. A run pressed during the page
-  load (`checking-lock`, `checking-cache`) is refused.
+- **Run with no engine.** In `none` or `declined`, the machine goes to `asking` (with `forRun`) and the prompt opens titled
+  for a run; the run is not kept. When the engine has started the state is `ready` and nothing runs: the visitor runs the
+  code again. The command line keeps such a command in its field and out of `history`. A run pressed during the page load
+  (`checking-lock`, `checking-cache`) is refused. (Until 2026-11-12 the machine held the run and sent it once the engine had
+  started; the maintainer removed that.)
 
 ## 2.6 Flow: files
 
@@ -413,8 +415,8 @@ One event gives the run's cut result and the new state together: there is no ord
 keep.
 
 **Crash.** `worker.onerror` (cause `error`) or a closed database (cause `storage`) says `crashed`. From `ready`, `running`,
-`breaking` or `waiting` it is a reset of kind `crash`. During a start, the first crash is a reset too (a run queued for the
-start is kept, and no banner is added, since the engine had not been ready); a second one before any start has finished is
+`breaking` or `waiting` it is a reset of kind `crash`. During a start, the first crash is a reset too (no banner is added, since the
+engine had not been ready); a second one before any start has finished is
 `failed-twice`, so a phone does not loop through gigabyte allocations. The crash count is part of the machine; it survives a
 failed start and "Try again", and goes back to 0 when a start finishes, on `failed-twice` and when the tab lock is lost.
 
@@ -443,10 +445,8 @@ event that is not valid in its state, change nothing and are recorded (`drops()`
 `run.ts` subscribes to nothing and compares no state names. The engine controller calls the handlers it was given
 (`connectRun`):
 
-- `began` when a run starts (this one, or a queued one when its engine is up): the run-head and a text item go into the log.
+- `began` when a run starts (the effect `send-run`, only from `ready`): the run-head and a text item go into the log.
 - `log` for each chunk; `ended` with the result, always after the `engine` signal has the new state.
-- `dropped` when the queued run will not run (the machine's effect `drop-run`: "Not now", "Stop download", a failed
-  start, the lock lost): the queued run's promise (`runCode`'s and `runCommand`'s `done`) settles with null.
 - `engineReady`: it asks for `memory`.
 - `engineGone` (a reset, or another tab took the engine): it clears `results`, `macros`, `data`, `rows`, `memory`,
   `lastRun`, and the session's run count.

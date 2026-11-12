@@ -6,6 +6,8 @@ here are its names, and the transition tables in section 5 are its tables, cell 
 
 - **Status:** approved by the maintainer on 2026-11-11, with the design.
 - **Date:** 2026-11-10, revised 2026-11-11.
+- **Since 2026-11-12 there is no held run** (the design's note of that date): what these diagrams draw of a queued run
+  (`run (queued)`, `started, queued run`, `drop-run`) is the record of steps 3.5 and 4, not the code.
 - **Paths** are relative to the repository root; in the diagrams, `app/` and `engine/` stand for `web/src/app/` and
   `web/src/engine/`. A line number after "today" is the design's (commit a11033d), not the current code's: the reformat
   moved the lines.

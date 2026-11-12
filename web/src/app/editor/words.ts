@@ -67,8 +67,9 @@ export const jumpLine = (r: LastRun): number | null =>
   r.rc !== 0 && r.line !== null && r.kind !== "command" && r.path ? r.line : null;
 
 /** The toast when Ctrl/Cmd+Enter in the editor asks for a run the engine does not take, by the state, as the status bar
- *  picks its words (drafts for the maintainer, from the Run button's own: SPEC section 8). null where a run is taken or
- *  queued (`ready`; `none` and `declined` open the prompt). */
+ *  picks its words (drafts for the maintainer, from the Run button's own: SPEC section 8). null where a run is not
+ *  refused: `ready` runs it, and `none` and `declined` open the download prompt, which says why nothing runs (the
+ *  visitor runs it again once the engine is ready). */
 export function refusedRunWords(s: EngineState["s"]): string | null {
   switch (s) {
     case "ready":
