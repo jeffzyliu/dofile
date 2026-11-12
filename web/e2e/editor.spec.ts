@@ -1436,8 +1436,9 @@ test("Ctrl/Cmd+Enter that the engine does not take says why in a toast and start
   await page.waitForTimeout(200);
   expect(await runs()).toBe(1);
   await expect(toast).toHaveCount(0);
-  // during a run (a loop with no end, through the hook): refused, with the toast, and no run started
-  page.evaluate(() => window.__dofile.run("while 1 {\n  quietly display 1\n}"));
+  // during a run (a loop with no end, through the hook): refused, with the toast, and no run started. The run's promise
+  // is kept and awaited after Break (as engine.spec.ts does), so it settles before the test ends
+  const loop = page.evaluate(() => window.__dofile.run("while 1 {\n  quietly display 1\n}"));
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("running");
   await toEditor();
   await page.keyboard.press("ControlOrMeta+Enter");
@@ -1445,5 +1446,8 @@ test("Ctrl/Cmd+Enter that the engine does not take says why in a toast and start
   expect(await runs()).toBe(2);
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("running");
   await page.evaluate(() => window.__dofile.breakRun());
+  // Break stops it (rc 1), or resets the engine when the loop has not stopped within the grace (rc 9998: seen once in 20
+  // Firefox runs with six workers); either way the run has ended, and its promise has settled
+  expect([1, 9998]).toContain((await loop)?.rc);
   await ready(page);
 });
