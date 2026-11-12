@@ -250,12 +250,11 @@ function view(state: State): EngineState {
     case "checking-cache":
     case "none":
     case "declined":
+    case "asking":
     case "ready":
     case "other-tab-idle":
     case "other-tab-taking":
       return { s: state.s };
-    case "asking":
-      return { s: "asking", forRun: state.forRun };
     case "downloading":
       return { s: "downloading", received: state.received, total: state.total, t0: state.t0 };
     case "starting-list":
@@ -377,7 +376,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "engine-gone":
         return runs.engineGone();
       case "show-dialog":
-        S.dialog.value = effect.dialog === "download" ? { d: "download", forRun: effect.forRun } : { d: "other-tab" };
+        S.dialog.value = { d: effect.dialog };
         return;
       case "close-dialog":
         if (S.dialog.value?.d !== effect.dialog) return;
@@ -405,7 +404,9 @@ export function start(): void {
   dispatch({ type: "start" });
 }
 
-/** Show the download prompt (`asking`): the declined banner's "Download the engine". Acts in `none` and `declined`. */
+/** Show the engine's prompt: "Start engine" (start.ts startEngine) and the declined banner's button. In `none`, `asking`
+ *  and `declined` it is the download prompt (`asking`); in `other-tab-idle` the take-over dialog, where the visitor
+ *  chooses (the state stays). It starts nothing. */
 export function ask(): void {
   dispatch({ type: "ask" });
 }
@@ -448,19 +449,17 @@ export function keepWaiting(): void {
   dispatch({ type: "keep-waiting" });
 }
 
-/** Run `code` (run.ts calls this; views call run.ts). "started": the engine was ready, and the run began (run.ts has been
- *  told). "asked": there is no engine (`none`, `declined`): the download prompt is open, titled for a run, and nothing
- *  runs, now or when the engine is ready (the visitor runs it again then). "refused": any other state; nothing happens.
+/** Run `code` (run.ts calls this; views call run.ts). true: the engine was ready, and the run began (run.ts has been
+ *  told). false: any other state; nothing happens, now or later (with no engine the page offers "Start engine", not a
+ *  run: start.ts).
  *  It must not be called while a step is in progress (from a handler given to connectRun): it throws, before anything is
  *  queued. Code that wants to run something when a run ends does it after the run's promise resolves. */
-export function run(code: string, head: RunHead): "started" | "asked" | "refused" {
+export function run(code: string, head: RunHead): boolean {
   if (stepping)
     throw new Error(
       "run() was called while a step of the engine's state machine is in progress: call it after the step, for example when the run's promise has resolved",
     );
-  const step = dispatch({ type: "run", code, head });
-  if (step?.outcome !== "taken") return "refused";
-  return step.effects.some((effect) => effect.do === "send-run") ? "started" : "asked";
+  return dispatch({ type: "run", code, head })?.outcome === "taken";
 }
 
 /** A read op (describe, browse, matrix, macros, memory, describe_file): the page's one way to ask the engine for data.

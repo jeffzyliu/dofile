@@ -1084,6 +1084,11 @@ test("the command line: no autocorrect, capitals or suggestions, one Run button 
 }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  // the field is off with no engine: the `engine` signal is set to show `ready` (the machine stays in `none`; nothing is
+  // run here)
+  await page.evaluate(() => {
+    window.__dofile.state.engine.value = { s: "ready" };
+  });
   if (isPhone(page)) await view(page, "Log");
   const field = page.getByRole("textbox", { name: "Command" });
   for (const [name, value] of Object.entries({
@@ -1188,14 +1193,11 @@ test("a .dta tab: Save is off, and when the engine's dialog closes by itself the
   const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^d\.dta/ });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await expect(save).toBeDisabled();
-  // a command with no engine: the prompt opens and the command does not run (it stays in the field); the engine starts,
-  // the prompt closes by itself and gives the focus to the editor's place, here the .dta tab (no editor is shown), and
-  // nothing runs by itself
-  const field = page.getByRole("textbox", { name: "Command" });
-  await field.fill("display 1");
-  await field.press("Enter");
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(field).toHaveValue("display 1");
+  // no engine: the command line is off, and Start engine opens the prompt; the engine starts, the prompt closes by
+  // itself and gives the focus to the editor's place, here the .dta tab (no editor is shown), and nothing runs by itself
+  await expect(page.getByRole("textbox", { name: "Command" })).toBeDisabled();
+  await page.locator(".toolbar").getByRole("button", { name: "Start engine" }).click();
+  await expect(page.getByRole("dialog", { name: "Download the engine?" })).toBeVisible();
   await page.evaluate(() => (window as any).__dofile.start());
   await ready(page);
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -1493,42 +1495,247 @@ test("the phone's command line: the Run button runs the text as Enter does, an e
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 6*7"]);
 });
 
-test("the command line with no engine: pasted lines open the prompt and run nothing, with no toast; the first line stays in the field, and runs when Enter is pressed once the engine is ready", async ({
+/** The contrast ratio (WCAG) of an element's text, or of its placeholder, on its own background, as drawn. */
+const contrastOf = (page: Page, selector: string, pseudo: string | null) =>
+  page.evaluate(
+    ([selector, pseudo]) => {
+      const el = document.querySelector(selector as string)!;
+      const rgb = (color: string) => {
+        const c = document.createElement("canvas").getContext("2d")!;
+        c.fillStyle = color;
+        c.fillRect(0, 0, 1, 1);
+        return [...c.getImageData(0, 0, 1, 1).data].slice(0, 3);
+      };
+      const lum = (color: string) => {
+        const [r, g, b] = rgb(color).map((v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const text = getComputedStyle(el, pseudo as string | null),
+        ground = getComputedStyle(el);
+      if (Number(text.opacity) !== 1 || Number(ground.opacity) !== 1) return 0; // greyed by opacity: not measured here
+      const [a, b] = [lum(text.color), lum(ground.backgroundColor)].sort((x, y) => y - x);
+      return (a + 0.05) / (b + 0.05);
+    },
+    [selector, pseudo] as const,
+  );
+
+test("the command line with no engine: disabled, with the hint while it is empty; the button is Start engine; a paste is an ordinary paste; a typed draft stays through a loss of the engine and runs when the engine is back", async ({
   page,
 }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   if (isPhone(page)) await view(page, "Log");
   const field = page.getByRole("textbox", { name: "Command" });
-  await field.evaluate((el) => {
+  const line = page.locator(".cmdline");
+  await expect(field).toBeDisabled();
+  await expect(field).toHaveValue("");
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  // the hint is to be read: the text contrast (4.5), in both themes
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((t) => {
+      window.__dofile.state.theme.value = t;
+      document.documentElement.dataset.theme = t;
+    }, theme);
+    expect(await contrastOf(page, ".cmdline .field", "::placeholder"), `the hint, ${theme}`).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  }
+  // the hint shows whole, beside the phone's wider button too
+  const room = await field.evaluate((el: HTMLInputElement) => {
+    const c = document.createElement("canvas").getContext("2d")!;
+    const hint = getComputedStyle(el, "::placeholder"),
+      box = getComputedStyle(el);
+    c.font = `${hint.fontStyle} ${hint.fontWeight} ${hint.fontSize} ${hint.fontFamily}`;
+    return {
+      hint: c.measureText(el.placeholder).width,
+      field: el.clientWidth - Number.parseFloat(box.paddingLeft) - Number.parseFloat(box.paddingRight),
+    };
+  });
+  expect(room.hint, "the hint's width").toBeGreaterThan(50);
+  expect(room.hint, "the hint fits the field").toBeLessThanOrEqual(room.field);
+  // nothing offers to run: no Run command button, one Start engine button in the command line
+  await expect(page.getByRole("button", { name: "Run command" })).toHaveCount(0);
+  const start = line.getByRole("button", { name: "Start engine" });
+  await expect(start).toBeEnabled();
+  await expect(start).toHaveText("Start engine"); // in words on a phone too
+  const startWidth = (await start.boundingBox())!.width;
+  const fieldWidth = (await field.boundingBox())!.width;
+
+  // a paste of several lines, in the instant before the field is drawn disabled: an ordinary paste (not prevented),
+  // which runs nothing, opens no prompt, says nothing and reaches no machine
+  const prevented = await field.evaluate((el) => {
     const e = new Event("paste", { bubbles: true, cancelable: true });
     const dt = new DataTransfer();
     dt.setData("text/plain", "display 1\ndisplay 2");
     Object.defineProperty(e, "clipboardData", { value: dt });
     el.dispatchEvent(e);
+    return e.defaultPrevented;
   });
-  // the first line opens the prompt, titled for a run, and does not run; the second is not run either
-  const prompt = page.getByRole("dialog", { name: "Download the engine to run code" });
-  await expect(prompt).toBeVisible();
-  await expect(field).toHaveValue("display 1"); // a line that did not run goes back into the field
-  await expect(page.locator(".toast")).toHaveCount(0); // the prompt says why: no toast over it
-  await prompt.getByRole("button", { name: "Not now" }).click();
-  await expect(prompt).toBeHidden();
+  expect(prevented).toBe(false);
+  await page.waitForTimeout(100);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator(".toast")).toHaveCount(0);
+  await expect(field).toHaveValue("");
+  expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
-  // the engine starts: nothing runs by itself
+
+  // Start engine: the download prompt. The engine starts: the field is on, the button runs, and nothing ran
+  await start.click();
+  await expect(page.getByRole("dialog", { name: "Download the engine?" })).toBeVisible();
   await page.evaluate(() => (window as any).__dofile.start());
   await ready(page);
   await page.waitForTimeout(200);
   expect(await page.evaluate(() => window.__dofile.state.lastRun.value)).toBeNull();
-  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
-  await expect(field).toHaveValue("display 1");
-  // Enter runs it now
   if (isPhone(page)) await view(page, "Log");
+  await expect(field).toBeEnabled();
+  await expect(field).toHaveAttribute("placeholder", /^Type a command/);
+  await expect(line.getByRole("button", { name: "Start engine" })).toHaveCount(0);
+  const run = page.getByRole("button", { name: "Run command" });
+  await expect(run).toHaveCount(1);
+  if (isPhone(page)) {
+    // the phone's row: the icon button is as small as it can be (44 px), "Start engine" was wider, and the field takes
+    // what is left in each state
+    const runWidth = (await run.boundingBox())!.width;
+    expect(runWidth).toBe(44);
+    expect(startWidth).toBeGreaterThan(runWidth);
+    expect((await field.boundingBox())!.width).toBeGreaterThan(fieldWidth);
+  }
+
+  // a typed draft, then the engine is lost (the `engine` signal is set to show `declined`): the field is disabled and
+  // keeps the draft, greyed but readable; the hint does not show over it
+  await field.fill("display 6*7");
+  await page.evaluate(() => {
+    window.__dofile.state.engine.value = { s: "declined" };
+  });
+  await expect(field).toBeDisabled();
+  await expect(field).toHaveValue("display 6*7");
+  expect(await contrastOf(page, ".cmdline .field", null), "the draft").toBeGreaterThanOrEqual(4.5);
+  await expect(line.getByRole("button", { name: "Start engine" })).toBeVisible();
+  // the engine is back: the draft is still there, and Enter runs it
+  await page.evaluate(() => {
+    window.__dofile.state.engine.value = { s: "ready" };
+  });
+  await expect(field).toBeEnabled();
+  await expect(field).toHaveValue("display 6*7");
   await field.press("Enter");
-  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
-  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 1"]);
+  await expect(page.getByRole("log", { name: "Log" })).toContainText("42");
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual(["display 6*7"]);
   await expect(field).toHaveValue("");
+});
+
+test("with no engine nothing offers to run: Run is Start engine and Ctrl/Cmd+Enter does what it does, once while held; Run selection is off; nothing runs when the engine is ready", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1\ndisplay 2\n" });
+  expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  await open(page, "a.do");
+  const bar = page.locator(".toolbar");
+  const content = page.locator(".cm-content");
+  const start = bar.getByRole("button", { name: "Start engine" });
+  await expect(start).toBeEnabled();
+  await expect(bar.getByRole("button", { name: /^Run( lines? [\d–]+)?$/ })).toHaveCount(0);
+  // with a selection: Run selection stays off (the phone's one button stays "Start engine", not "Run 1–2")
+  if (isPhone(page)) await view(page, "Editor");
+  await content.click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await expect.poll(() => page.evaluate(() => window.__dofile.selection.value)).not.toBeNull();
+  if (!isPhone(page)) await expect(bar.getByRole("button", { name: "Run selection" })).toBeDisabled();
+  await expect(start).toBeEnabled();
+
+  // Ctrl/Cmd+Enter, held: the prompt opens, once; the repeats, which now land on the prompt's "Download" (it has the
+  // focus), do not press it: nothing downloads, and no toast
+  const prompt = page.getByRole("dialog", { name: "Download the engine?" });
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.down(mod);
+  await page.keyboard.down("Enter");
+  await expect(prompt).toBeVisible();
+  await expect(prompt.getByRole("button", { name: /^Download/ })).toBeFocused();
+  await page.keyboard.down("Enter"); // the key is still down: a repeat
+  await page.keyboard.down("Enter");
+  await page.keyboard.up("Enter");
+  await page.keyboard.up(mod);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("asking");
+  await expect(prompt).toBeVisible();
+  await expect(page.locator(".toast")).toHaveCount(0);
+  await prompt.getByRole("button", { name: "Not now" }).click();
+  await expect(prompt).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("declined");
+
+  // the button does the same; the engine starts, and nothing runs by itself
+  await start.click();
+  await expect(prompt).toBeVisible();
+  await page.evaluate(() => (window as any).__dofile.start());
+  await ready(page);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__dofile.state.lastRun.value)).toBeNull();
+  expect(await page.evaluate(() => window.__dofile.state.log.value.filter((i: any) => i.t === "text").length)).toBe(0);
+  expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
+  // now Run is Run, and Ctrl/Cmd+Enter runs
+  await expect(bar.getByRole("button", { name: "Start engine" })).toHaveCount(0);
+  if (isPhone(page)) await view(page, "Editor");
+  await content.click(); // the click also leaves the selection
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.kind)).toBe("file");
+});
+
+test("with no engine Import and the log's help links are off: aria-disabled and still focusable, and a press only says why", async ({
+  page,
+}) => {
+  await setUp(page, { "t.csv": "a,b\n1,2\n" });
+  await open(page, "t.csv");
+  await page.evaluate(() => {
+    window.__dofile.state.runWriter.log.value = [
+      { t: "head" },
+      {
+        t: "text",
+        run: 1,
+        text: '. summarize sex\nsex not found\n  → "sex" is not a variable.\n    Learn more: help summarize\nr(111);\n',
+        end: { kind: "command", fresh_locals: false, rc: 111, line: null, seconds: 0.1 },
+      },
+    ];
+  });
+  const toast = page.locator(".toast");
+  const quiet = async () => {
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+    expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
+    expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
+  };
+  // Import
+  if (isPhone(page)) await view(page, "Editor");
+  const imp = page.locator(".filebar").getByRole("button", { name: "Import", exact: true });
+  await expect(imp).toHaveAttribute("aria-disabled", "true");
+  await expect(imp).toHaveClass(/\boff\b/);
+  await expect(imp).not.toHaveAttribute("disabled");
+  await imp.focus();
+  await expect(imp).toBeFocused();
+  await imp.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
+  await expect(toast).toHaveText("Start the engine to import t.csv");
+  await quiet();
+  // the log's `help x` link
+  if (isPhone(page)) await view(page, "Log");
+  const help = page.getByRole("log", { name: "Log" }).getByRole("button", { name: "help summarize" });
+  await expect(help).toHaveAttribute("aria-disabled", "true");
+  await expect(help).toHaveClass(/\boff\b/);
+  await help.focus();
+  await expect(help).toBeFocused();
+  await help.click({ force: true });
+  await expect(toast).toHaveText("Start the engine to see help summarize");
+  await quiet();
+  // with an engine (the signal set to show `ready`) both are on
+  await page.evaluate(() => {
+    window.__dofile.state.engine.value = { s: "ready" };
+  });
+  await expect(help).not.toHaveAttribute("aria-disabled", "true");
+  await expect(help).not.toHaveClass(/\boff\b/);
+  if (isPhone(page)) await view(page, "Editor");
+  await expect(imp).not.toHaveAttribute("aria-disabled", "true");
+  await expect(imp).toBeEnabled();
 });
 
 test("a run that rewrites open files: a clean tab shows the run's version, keeping its selection and undo; the same text changes nothing; one with edits keeps them, unsaved, with a banner to reload (on every phone view); a version that is not text keeps the tab's text with its banner, which a run that writes the editor's text takes away, which follows a rename and goes with the tab", async ({

@@ -113,7 +113,9 @@ test("a .dta tab whose name a command can't hold says so, and Load and Copy are 
   await expect(view.getByRole("button", { name: "Copy the use command" })).toBeDisabled();
 });
 
-test("a .dta tab with no engine shows its two bars, copies the use command, and no table", async ({ page }) => {
+test("a .dta tab with no engine shows its two bars, copies the use command, and no table; Load is off and a press only says why", async ({
+  page,
+}) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
@@ -132,7 +134,20 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
   const view = page.locator(".dta-view");
   await expect(view.locator(".bar").first()).toHaveText("data/wages.dta · 2 KB"); // 2048 bytes, as the file tree says
   await expect(view.locator(".cmd")).toHaveText('use "data/wages.dta", clear');
-  await expect(view.getByRole("button", { name: "Load" })).toBeEnabled(); // the prompt opens when it is pressed, so it is not pressed here
+  // Load is off with no engine: aria-disabled and `.off`, not disabled, so it can still be focused; a press reaches no
+  // machine (no drop, no prompt, no run) and a toast says what to do
+  const load = view.getByRole("button", { name: "Load" });
+  await expect(load).toHaveAttribute("aria-disabled", "true");
+  await expect(load).toHaveClass(/\boff\b/);
+  await expect(load).not.toHaveAttribute("disabled");
+  await load.focus();
+  await expect(load).toBeFocused();
+  await load.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
+  await expect(page.locator(".toast")).toHaveText("Start the engine to load wages.dta");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
   await expect(view.locator("table")).toHaveCount(0);
   await view.getByRole("button", { name: "Copy the use command" }).click();
   expect(await copied(page)).toEqual(['use "data/wages.dta", clear']);

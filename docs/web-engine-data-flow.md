@@ -308,9 +308,8 @@ sequenceDiagram
 
 Details:
 
-- **Who answers what.** `engine.run()` answers at once: `started` (the engine was ready and the run began), `asked` (no
-  engine, `none` or `declined`: the prompt opens and nothing runs, then or once the engine is ready) or `refused` (any other
-  state).
+- **Who answers what.** `engine.run()` answers at once: true (the engine was ready and the run began) or false (any other
+  state: refused; nothing runs, then or once the engine is ready, and no prompt opens).
   `run.ts` does not look at the state. It must not call `run()` while a step of the machine is in progress (inside a handler
   it was given): `run()` throws then, before it queues anything.
 - **Arguments.** `run.ts` builds a `RunHead` (`kind`: file, selection or command; `fresh_locals`). The controller adds
@@ -326,11 +325,14 @@ Details:
   run. For a result the machine made (rc 9998) there is no log, so the streamed text stays and the reason is added as a note.
 - **Error lines.** `error_line` is 1-based within the text sent. For a selection run, `run.ts` adds the selection's first
   line to map it back to the file.
-- **Run with no engine.** In `none` or `declined`, the machine goes to `asking` (with `forRun`) and the prompt opens titled
-  for a run; the run is not kept. When the engine has started the state is `ready` and nothing runs: the visitor runs the
-  code again. The command line keeps such a command in its field and out of `history`. A run pressed during the page load
-  (`checking-lock`, `checking-cache`) is refused. (Until 2026-11-12 the machine held the run and sent it once the engine had
-  started; the maintainer removed that.)
+- **With no engine nothing offers to run.** A `run` is valid in `ready` alone. With no engine (`app/start.ts`: `none`,
+  `asking`, `declined`, `failed`, `failed-twice`, `other-tab-idle`, `other-tab-taking`) the page offers one action, "Start
+  engine": the event `ask` (the download prompt; in `other-tab-idle` the take-over dialog again) or, after a failed start
+  that can be tried again, `start`. Run is that button, Run selection and the command line are disabled (the command line
+  keeps its text), and Load, Import and the log's help links are off. When the engine has started the state is `ready` and
+  nothing runs: no state keeps a run, or a mark that one was wanted. A run pressed during the page load (`checking-lock`,
+  `checking-cache`) is refused. The table of states: `docs/web-page-flows.md`, section 2. (Until 2026-11-12 the machine
+  held the run and sent it once the engine had started; the maintainer removed that, and then the prompt a run opened.)
 
 ## 2.6 Flow: files
 

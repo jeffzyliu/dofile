@@ -8,7 +8,9 @@ the same table cells.
 - **Status:** approved by the maintainer on 2026-11-11, with the five additions listed under "Decisions".
 - **Date:** 2026-11-10, revised 2026-11-11.
 - **Since 2026-11-12 there is no held run.** The maintainer removed the queued run (`docs/prototype1-plan.md`, Post-merge
-  review): with no engine, `run` in `none` or `declined` is ASK with `forRun` and keeps nothing; `asking`, `downloading`,
+  review): with no engine a `run` is not valid, and the page's "Start engine" is the event `ask` (ASK in `none`, `asking`
+  and `declined`; in `other-tab-idle` it shows the take-over dialog again); `asking` has no field (`forRun` is gone too:
+  the prompt has one title), `downloading`,
   `starting-list` and `starting-worker` have no `queued` field, `started` always leads to `ready`, and the effect `drop-run`,
   run.ts's `pending` and the handler `dropped` are gone. What this design says of a queued run (ruling 5, the cells
   DOWNLOAD(queued), ASK(queued), RESET, `started`, scenario 12, the `drop-run` row) is the record of what was built in steps

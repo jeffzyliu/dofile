@@ -26,7 +26,8 @@ import { ABOUT } from "../env";
 import { graphOpenName } from "../output/format.ts";
 import { cardTheme } from "../output/GraphTab";
 import { runCommand } from "../run.ts";
-import { graphFull, graphIndex, graphs, isPhone, log, outputTab, split, wrap } from "../state.ts";
+import { noEngine, startFirst } from "../start.ts";
+import { graphFull, graphIndex, graphs, isPhone, log, outputTab, showToast, split, wrap } from "../state.ts";
 import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
@@ -123,15 +124,34 @@ const Jump = ({ line, path }: { line: number; path?: string }) => (
   </button>
 );
 
+/** A hint's `help x` link: it runs the command. With no engine (start.ts) it is off, aria-disabled and `.off`, still
+ *  focusable, and a press only says why in a toast ("Start the engine to see help regress"). */
+function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
+  const off = noEngine();
+  return (
+    <button
+      type="button"
+      class={`help-link${off ? " off" : ""}`}
+      aria-disabled={off ? "true" : undefined}
+      onClick={() => {
+        if (off) showToast(startFirst(`see ${command}`), "error");
+        else runCommand(command);
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** A hint line: its bold words and its `help x` link. */
 const hintLine = (text: string, m: Marker) =>
   hintParts(text).map((p, i) =>
     p.t === "bold" ? (
       <b key={i}>{marked(p.text, m)}</b>
     ) : p.t === "help" ? (
-      <button key={i} type="button" class="help-link" onClick={() => runCommand(p.text)}>
+      <HelpLink key={i} command={p.text}>
         {marked(p.text, m)}
-      </button>
+      </HelpLink>
     ) : (
       marked(p.text, m)
     ),

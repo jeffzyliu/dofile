@@ -59,6 +59,7 @@ const { runCode, runCommand, clearLog, canClearLog, addFileGraph, moreRows, hand
   "../src/app/run.ts"
 );
 const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.ts");
+const { startEngine } = await import("../src/app/start.ts");
 const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");
 const { decodeText } = await import("../src/app/files/open.ts");
 const { watchViewport, KEYBOARD } = await import("../src/app/viewport.ts");
@@ -338,8 +339,8 @@ test("with nothing cached the page asks; Download counts bytes, the stages come 
   assert.deepEqual(S.engine.value, { s: "checking-lock" }, "the page load is a state of its own");
   assert.equal(store.blocked, true, "nothing is written before the lock answers");
   await tick();
-  assert.deepEqual(S.engine.value, { s: "asking", forRun: false });
-  assert.deepEqual(S.dialog.value, { d: "download", forRun: false });
+  assert.deepEqual(S.engine.value, { s: "asking" });
+  assert.deepEqual(S.dialog.value, { d: "download" });
   assert.equal(store.blocked, false);
   assert.deepEqual(
     S.files.value.map((f) => f.path),
@@ -570,18 +571,22 @@ test("open() is once for each wiring, and an action before it throws", () => {
   assert.deepEqual(S.engine.value, { s: "checking-lock" });
 });
 
-test("Stop download declines; Run then opens the prompt titled for a run and runs nothing, not when the engine is ready either; Run then runs", async () => {
+test("Stop download declines; a run then is refused and opens no prompt; Start engine opens the prompt and runs nothing, not when the engine is ready either; Run then runs", async () => {
   await load();
   engine.start();
   engine.stopDownload();
   assert.deepEqual(S.engine.value, { s: "declined" });
   assert.equal(client.dl.signal.aborted, true);
   assert.equal(S.dialog.value, null);
-  const asked = runCode("display 1", FILE);
-  assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
-  assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
-  assert.equal(await asked, null, "it did not run: null at once");
+  const refused = runCode("display 1", FILE);
+  assert.equal(S.dialog.value, null, "a run with no engine opens no prompt");
+  assert.deepEqual(S.engine.value, { s: "declined" });
+  assert.equal(await refused, null, "it did not run: null at once");
   assert.deepEqual(logItems(), [], "no run-head, no text: nothing began");
+  expectDrops([{ type: "run", row: "declined", why: "not-valid" }]);
+  assert.equal(startEngine(), "prompt"); // the one action offered: "Start engine"
+  assert.deepEqual(S.dialog.value, { d: "download" });
+  assert.deepEqual(S.engine.value, { s: "asking" });
   engine.start();
   await begin();
   const seen: string[] = [];
@@ -677,7 +682,7 @@ test("failed twice for reason unknown or download deletes the cached start files
 
 test("an empty or partial cache asks; the lock lost while the cache check is pending starts nothing", async () => {
   await load({ cached: false }); // cached() is false for an empty cache and for a partly filled one alike
-  assert.deepEqual(S.engine.value, { s: "asking", forRun: false });
+  assert.deepEqual(S.engine.value, { s: "asking" });
   assert.equal(client.downloads.length, 0, "nothing downloads before the visitor says so");
 
   S.dialog.value = null;
@@ -1140,7 +1145,7 @@ test("the page's store is blocked until the tab lock answers", async () => {
   await assert.rejects(store.write("a.do", new Uint8Array(1)), /another tab/);
 });
 
-test("runCode while a run is on does nothing; with no engine a run opens the prompt and settles with null at once, and after Not now or a failed start nothing runs", async () => {
+test("runCode while a run is on does nothing; with no engine a run is refused, settles with null at once and opens no prompt, and after Start engine, Not now or a failed start nothing runs", async () => {
   await readyEngine();
   const first = runCode("a", FILE);
   assert.equal(await runCode("b", FILE), null);
@@ -1151,24 +1156,30 @@ test("runCode while a run is on does nothing; with no engine a run opens the pro
 
   await load(); // nothing cached: the prompt
   engine.decline();
-  const asked = runCode("not kept", FILE);
+  const refused = runCode("not kept", FILE);
   let settled = false;
-  asked.then(() => (settled = true));
+  refused.then(() => (settled = true));
   await Promise.resolve();
   assert.equal(settled, true, "it settles at once: nothing waits for the engine");
-  assert.equal(await asked, null);
-  assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
+  assert.equal(await refused, null);
+  assert.equal(S.dialog.value, null, "a run opens no prompt");
+  assert.equal(startEngine(), "prompt");
+  assert.deepEqual(S.dialog.value, { d: "download" });
   engine.decline();
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
   state("ready");
   assert.equal(client.worker.runs.length, 0, "after Not now: nothing ran");
+  expectDrops([{ type: "run", row: "declined", why: "not-valid" }]);
 
   await load();
   engine.decline();
   assert.equal(await runCode("not kept", FILE), null);
-  assert.deepEqual(S.engine.value, { s: "asking", forRun: true });
+  assert.deepEqual(S.engine.value, { s: "declined" });
+  expectDrops([{ type: "run", row: "declined", why: "not-valid" }]);
+  startEngine();
+  assert.deepEqual(S.engine.value, { s: "asking" });
   engine.start();
   await begin();
   client.worker.reply({ type: "start-failed", reason: "unknown", detail: "no" });
@@ -1209,7 +1220,7 @@ test("run() called while a step is in progress throws before it queues anything"
   state("ready");
   assert.deepEqual(engine.drops(), []);
   // after the step (the run's promise has resolved) it is an ordinary run
-  assert.equal(engine.run("the next one", FILE), "started");
+  assert.equal(engine.run("the next one", FILE), true);
   client.run1.done.ok(result());
 });
 
@@ -1417,7 +1428,7 @@ test("runCommand: added to history (not twice in a row), run as a command with t
   assert.equal(await empty.done, null);
 });
 
-test("runCommand: a command that does not run is not in history (so the field keeps it): refused, or asked with no engine; one that runs is, an error too", async () => {
+test("runCommand: a command that does not run is not in history (so the field keeps it): refused, with no engine too, where it opens no prompt; one that runs is, an error too", async () => {
   // the page load: refused, in both of its states
   setUp();
   engine.open();
@@ -1450,18 +1461,24 @@ test("runCommand: a command that does not run is not in history (so the field ke
     { type: "run", row: "starting-worker", why: "not-valid" },
   ]);
 
-  // no engine (declined): asked (the prompt opens, titled for a run), not in history, nothing sent; while the prompt
-  // asks, refused; once the engine is ready, nothing runs until the command is run again
+  // no engine (declined): refused, no prompt, not in history, nothing sent; the same while the prompt asks; once the
+  // engine is ready, nothing runs until the command is run again
   await load();
   engine.decline();
   writable(S.history).value = [];
-  const asked = runCommand("use wages");
-  assert.equal(asked.how, "asked");
-  assert.equal(await asked.done, null);
-  assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
+  const refused = runCommand("use wages");
+  assert.equal(refused.how, "refused");
+  assert.equal(await refused.done, null);
+  assert.equal(S.dialog.value, null, "a command with no engine opens no prompt");
   assert.deepEqual(S.history.value, [], "a command that did not run is not in history");
+  startEngine();
+  assert.deepEqual(S.dialog.value, { d: "download" });
   assert.equal(runCommand("summarize").how, "refused", "asking: refused");
   assert.deepEqual(S.history.value, []);
+  expectDrops([
+    { type: "run", row: "declined", why: "not-valid" },
+    { type: "run", row: "asking", why: "not-valid" },
+  ]);
   engine.start();
   await begin();
   client.worker.reply({ type: "started" });
@@ -1473,7 +1490,6 @@ test("runCommand: a command that does not run is not in history (so the field ke
   assert.deepEqual(S.history.value, ["use wages"]);
   client.run1.done.ok(result());
   assert.equal((await again.done)?.rc, 0);
-  expectDrops([{ type: "run", row: "asking", why: "not-valid" }]);
 });
 
 test('moreRows(): "Show 50 more" appends the next rows to `rows`; nothing is appended when a run or a new engine replaced `rows` meanwhile', async () => {
@@ -2088,23 +2104,163 @@ test("J1: pasted lines: a line cut because another tab took the engine stops the
   );
 });
 
-test("pasted lines with no engine: the first line opens the prompt and nothing runs, then or once the engine is ready; no toast", async () => {
-  const { runOne } = await import("../src/app/log/pasterun.ts");
-  const { runInTurn, inTurnWords } = await import("../src/app/log/paste.ts");
+test("a paste with no engine is an ordinary paste: the engine is checked first, no line runs, no prompt opens and the machine hears nothing; no line is put back into the disabled field", async () => {
+  const { linesToRun, putBack, runOne } = await import("../src/app/log/pasterun.ts");
+  const { runInTurn } = await import("../src/app/log/paste.ts");
+  const TEXT = "use wages\nsummarize\nregress y x";
   await load(); // nothing cached: the prompt
   engine.decline();
   writable(S.history).value = [];
-  const r = await runInTurn(["use wages", "summarize", "regress y x"], runOne);
-  assert.deepEqual(r, { total: 3, ran: 0, stop: { line: 1, why: "asked" } });
-  assert.equal(inTurnWords(r), null, "the download prompt is the answer: no toast over it");
-  assert.deepEqual(S.dialog.value, { d: "download", forRun: true });
-  assert.deepEqual(S.history.value, [], "no line is in history");
+  assert.equal(linesToRun("", TEXT, ""), null, "declined: an ordinary paste");
+  assert.equal(S.dialog.value, null, "no prompt");
+  assert.deepEqual(S.engine.value, { s: "declined" });
+  startEngine();
+  assert.equal(linesToRun("", TEXT, ""), null, "asking: an ordinary paste");
   engine.start();
+  assert.deepEqual(
+    linesToRun("", TEXT, ""),
+    ["use wages", "summarize", "regress y x"],
+    "a start in progress: not no engine",
+  );
   await begin();
   client.worker.reply({ type: "started" });
   await sleep(20);
   state("ready");
-  assert.equal(client.worker.runs.length, 0, "no pasted line ran once the engine was ready");
+  assert.equal(client.worker.runs.length, 0, "nothing ran once the engine was ready");
+  assert.deepEqual(S.history.value, [], "no line is in history");
+  assert.deepEqual(engine.drops(), [], "the paste reached no machine");
+  assert.deepEqual(linesToRun("display ", "1\ndisplay 2", ""), ["display 1", "display 2"], "ready: the lines run");
+  assert.equal(linesToRun("", "one line\n", ""), null, "no line break inside: an ordinary paste, as before");
+
+  // a refused line goes back into an empty field; not into one with text
+  const first = runCommand("regress y x"); // a run is on: the next line is refused
+  const r = await runInTurn(["a", "b"], runOne);
+  assert.deepEqual(r, { total: 2, ran: 0, stop: { line: 1, why: "refused" } });
+  assert.equal(putBack(["a", "b"], r, ""), "a");
+  assert.equal(putBack(["a", "b"], r, "typed since"), null);
+  client.run1.done.ok(result());
+  await first.done;
+  expectDrops([{ type: "run", row: "running", why: "not-valid" }]);
+
+  // the engine fails meanwhile (no engine: the field is disabled): nothing is put back
+  await load();
+  engine.start();
+  client.dl.done.no(failure("offline", { kind: "failed", reason: "download" }));
+  await tick();
+  state("failed");
+  assert.equal(putBack(["a", "b"], r, ""), null, "not into a disabled field");
+  assert.equal(linesToRun("", TEXT, ""), null, "failed: an ordinary paste");
+});
+
+test("Start engine: what each engine state offers (start.ts startOffer), every state named; the words of the off controls and the hint", async () => {
+  const { startOffer, startFirst, startHint } = await import("../src/app/start.ts");
+  const run = { kind: "file", fresh_locals: true } as const;
+  const stage = { stage: "download", t0: 0, done: {} } as const;
+  const failed = (reason: "no-wasm" | "download" | "memory" | "updated" | "unknown") =>
+    ({ s: "failed", reason, detail: "d", message: "m" }) as const;
+  const table: [Parameters<typeof startOffer>[0], ReturnType<typeof startOffer>][] = [
+    // not "no engine": the page load, a download or a start in progress, an engine that is up
+    [{ s: "checking-lock" }, null],
+    [{ s: "checking-cache" }, null],
+    [{ s: "downloading", received: 0, total: 1, t0: 0 }, null],
+    [{ s: "starting-list", ...stage }, null],
+    [{ s: "starting-worker", ...stage }, null],
+    [{ s: "ready" }, null],
+    [{ s: "running", run, t0: 0 }, null],
+    [{ s: "breaking", run, t0: 0, resetAt: 1 }, null],
+    [{ s: "waiting", run, t0: 0 }, null],
+    // no engine
+    [{ s: "none" }, "prompt"],
+    [{ s: "asking" }, "prompt"],
+    [{ s: "declined" }, "prompt"],
+    [failed("download"), "retry"], // the reasons whose banner has "Try again"
+    [failed("memory"), "retry"],
+    [failed("unknown"), "retry"],
+    [failed("updated"), "off"], // the banner says to reload
+    [failed("no-wasm"), "off"], // the banner says which browsers work
+    [{ s: "failed-twice", reason: "unknown", detail: "d", message: "m" }, "off"],
+    [{ s: "other-tab-idle" }, "take-over"],
+    [{ s: "other-tab-taking" }, "off"],
+  ];
+  for (const [st, offer] of table)
+    assert.equal(startOffer(st), offer, `${st.s}${"reason" in st ? ` (${st.reason})` : ""}`);
+  const names = new Set(table.map(([st]) => st.s));
+  assert.equal(names.size, 16, "every state of the machine is in the table");
+  assert.equal(startFirst("see help regress"), "Start the engine to see help regress");
+  assert.equal(startFirst("load wages.dta"), "Start the engine to load wages.dta");
+  assert.equal(startHint("prompt"), "Start the engine to run code");
+  assert.equal(startHint("retry"), "Start the engine to run code");
+  assert.equal(startHint("take-over"), "Start the engine to run code");
+  assert.equal(startHint("off"), "The engine isn't running");
+});
+
+test("Start engine pressed (startEngine, the buttons' and Ctrl/Cmd+Enter's one action) in each state: the prompt, a new try, the take-over dialog, or nothing; it never runs, and where it is off or there is an engine the machine hears nothing", async () => {
+  // none (?test=manual) and declined: the download prompt; asking: the prompt again, should it have been replaced
+  await load({ manual: true });
+  state("none");
+  assert.equal(startEngine(), "prompt");
+  assert.deepEqual([S.engine.value, S.dialog.value], [{ s: "asking" }, { d: "download" }]);
+  S.dialog.value = null; // another dialog took its place and closed
+  assert.equal(startEngine(), "prompt");
+  assert.deepEqual([S.engine.value, S.dialog.value], [{ s: "asking" }, { d: "download" }]);
+  engine.decline();
+  assert.equal(startEngine(), "prompt");
+  assert.deepEqual([S.engine.value, S.dialog.value], [{ s: "asking" }, { d: "download" }]);
+  assert.equal(client.downloads.length, 0, "the prompt starts nothing: the visitor answers it");
+
+  // a download or a start in progress, and an engine that is up: null, and nothing is done
+  engine.start();
+  assert.equal(startEngine(), null);
+  state("downloading");
+  await begin();
+  assert.equal(startEngine(), null);
+  client.worker.reply({ type: "started" });
+  state("ready");
+  assert.equal(startEngine(), null);
+  assert.equal(client.worker.runs.length, 0, "nothing ran");
+  const ran = runCode("display 1", FILE);
+  assert.equal(startEngine(), null);
+  state("running");
+  client.run1.done.ok(result());
+  await ran;
+  assert.deepEqual(engine.drops(), [], "no event reached the machine where the press does nothing");
+
+  // failed for a reason whose banner has "Try again": the same new try
+  await load();
+  engine.start();
+  client.dl.done.no(failure("offline", { kind: "failed", reason: "download" }));
+  await tick();
+  assert.equal(S.engine.value.s === "failed" && S.engine.value.reason, "download");
+  assert.equal(startEngine(), "retry");
+  state("downloading");
+  assert.equal(client.downloads.length, 2);
+
+  // failed for "updated" (the banner says to reload), and failed twice: off
+  await load();
+  engine.start();
+  client.dl.done.no(failure("dofile was updated: reload the page", { kind: "updated" }));
+  await tick();
+  assert.equal(S.engine.value.s === "failed" && S.engine.value.reason, "updated");
+  assert.equal(startEngine(), "off");
+  state("failed");
+  assert.equal(client.downloads.length, 1, "no new try");
+  assert.deepEqual(engine.drops(), []);
+
+  // another tab has the engine: the take-over dialog, never a start; the lock is taken only by the dialog's button
+  await load({ free: false, cached: true });
+  state("other-tab-idle");
+  S.dialog.value = null;
+  assert.equal(startEngine(), "take-over");
+  assert.deepEqual([S.engine.value, S.dialog.value], [{ s: "other-tab-idle" }, { d: "other-tab" }]);
+  assert.equal(lock.asked.filter((o) => o.steal).length, 0, "the press took no lock");
+  assert.deepEqual([client.downloads.length, client.workers.length], [0, 0], "and started nothing");
+  engine.takeOver();
+  state("other-tab-taking");
+  assert.equal(startEngine(), "off", "the take-over is in progress");
+  await tick();
+  assert.equal(lock.asked.filter((o) => o.steal).length, 1);
+  state("downloading");
+  assert.deepEqual(engine.drops(), []);
 });
 
 test("J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)", async () => {

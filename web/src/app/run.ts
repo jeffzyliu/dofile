@@ -4,8 +4,8 @@
 // add a .png opened from the files with addFileGraph(); they never write these signals themselves.
 //
 // It does not read the engine's state. A run goes to the engine controller (engine.run()), which answers at once whether
-// it started, opened the download prompt (there is no engine: nothing runs, and nothing is kept to run later), or was
-// refused; the state machine decides. What happens to a run and to the engine reaches this file through `handlers`, which
+// it started or was refused (the engine is not ready: nothing runs, and nothing is kept to run later); the state machine
+// decides. What happens to a run and to the engine reaches this file through `handlers`, which
 // main.tsx gives to the engine controller (connectRun): began (a run started), log (a chunk of its log), ended (its
 // result, also when the machine cut it), engineReady, and engineGone (a reset, or another tab took the engine: nothing of
 // the old engine is in memory).
@@ -44,24 +44,24 @@ let current: Current | null = null;
 export const handlers: engine.RunHandlers = { began, log: streamed, ended, engineReady, engineGone };
 
 /** What asking for a run gave, known at once. "started": the engine was ready and the run began; `done` settles with its
- *  result (after the after-run reads). "asked": there was no engine (`none`, `declined`): the download prompt opened,
- *  titled for a run, and nothing runs, now or once the engine is ready. "refused": any other state (the page load, a
- *  start or a run in progress, no engine that can start); nothing happens. `done` is null at once for both. */
-export type Requested =
-  | { how: "started"; done: Promise<RunResult> }
-  | { how: "asked" | "refused"; done: Promise<null> };
+ *  result (after the after-run reads). "refused": any other state (the page load, a start or a run in progress, no
+ *  engine); nothing happens, now or once the engine is ready, and `done` is null at once. With no engine the views offer
+ *  no run (start.ts: "Start engine"), so a refusal there is only a guard. */
+export type Requested = { how: "started"; done: Promise<RunResult> } | { how: "refused"; done: Promise<null> };
 
 /** Ask the engine controller for a run (the state machine decides; engine.run()). */
 function request(code: string, head: RunHead): Requested {
-  const how = engine.run(code, head);
-  if (how !== "started") return { how, done: Promise.resolve(null) };
-  // the effect send-run called began() in the step that run() made, so the run is `current`
-  if (!current) throw new Error("a run started and run.ts was not told: connectRun(handlers) was not called");
-  return { how, done: current.promise };
+  if (!engine.run(code, head)) return { how: "refused", done: Promise.resolve(null) };
+  // the effect send-run called began() in the step that run() made, so the run is `current`; it is not only when the
+  // engine controller tells other handlers than this module's (main.tsx: connectRun(handlers))
+  if (!current)
+    throw new Error(
+      "a run started and run.ts's began() was not called: the engine controller is not connected to run.ts's handlers (connectRun(handlers))",
+    );
+  return { how: "started", done: current.promise };
 }
 
-/** Run `code` as `head` says (section 4). Resolves with the result, or null when it did not run (see Requested: with no
- *  engine the download prompt opens and the code does not run). */
+/** Run `code` as `head` says (section 4). Resolves with the result, or null when it did not run (see Requested). */
 export function runCode(code: string, head: RunHead): Promise<RunResult | null> {
   return request(code, head).done;
 }
@@ -73,8 +73,8 @@ export function requestRun(code: string, head: RunHead): Requested {
 
 /** One command, as the command line, Load and Import send it (section 4): run with kind "command" and the locals kept.
  *  Only a command that runs ("started": the engine is `ready`) is added to `history` (not twice in a row), also when the
- *  run ends in an error, and only then does the command line clear its field. One that does not run ("asked": no engine,
- *  the prompt opens; "refused") is not in `history`, and its text stays in the field. An empty command is refused. */
+ *  run ends in an error, and only then does the command line clear its field. One that does not run ("refused") is not in
+ *  `history`, and its text stays in the field. An empty command is refused. */
 export function runCommand(text: string): Requested {
   const command = text.trim();
   if (!command) return { how: "refused", done: Promise.resolve(null) };

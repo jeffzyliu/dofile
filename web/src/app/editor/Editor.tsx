@@ -17,9 +17,10 @@
 //    The texts compared (the dot, a run's version) and the text Run sends stay in the editor's form.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
 //    is the one that applies (Ctrl or Cmd on every platform, as Save; held, it runs once). With no text tab shown, Run says so in a toast and runs nothing. A
-//    Ctrl/Cmd+Enter the engine does not take (a run on, a start, no engine that can run) says why in a toast
-//    (words.ts refusedRunWords); the buttons are disabled then. With no engine (`none`, `declined`) Run, Run selection and
-//    Ctrl/Cmd+Enter open the download prompt and run nothing, now or when the engine is ready. The code of each run is kept by its head (commands.ts
+//    Ctrl/Cmd+Enter the engine does not take (a run on, a start, an engine that cannot be started from here) says why in
+//    a toast (words.ts refusedRunWords); the buttons are disabled then. With no engine (start.ts) Run is "Start engine",
+//    and Ctrl/Cmd+Enter does what that button does (the download prompt, a new try, the take-over dialog) and runs
+//    nothing, now or when the engine is ready. The code of each run is kept by its head (commands.ts
 //    codeOf) for the log's graph links.
 //  - Line marks (cm.ts): the running lines of a selection run (a whole-file run marks none: every line would be marked),
 //    and the error line of the file's last run (not for Break's rc 1, whose line is the command that did not start).
@@ -39,6 +40,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { openFile } from "../files/open.ts";
 import { baseName } from "../files/tree.ts";
 import { requestRun } from "../run.ts";
+import { startEngine } from "../start.ts";
 import {
   activeTab,
   addBanner,
@@ -188,8 +190,7 @@ function activeText(): string | null {
 }
 
 /** Send a run. `keyed`: Ctrl/Cmd+Enter, which has no disabled button to show that Run is off, so a run the engine does
- *  not take (run.ts requestRun: refused) says why in a toast, in the words of the engine's state (words.ts). One that
- *  opened the download prompt ("asked") has no toast: the prompt says why. */
+ *  not take (run.ts requestRun: refused) says why in a toast, in the words of the engine's state (words.ts). */
 function start(code: string, head: RunHead, keyed: boolean) {
   codeOf.set(head, code);
   if (requestRun(code, head).how !== "refused" || !keyed) return;
@@ -215,8 +216,12 @@ function runSelection(keyed = false) {
   start(code, { kind: "selection", path, lines, fresh_locals: false }, keyed);
 }
 
-/** Ctrl/Cmd+Enter: Run selection with a selection, else Run (the toolbar's chip says which). */
+/** Ctrl/Cmd+Enter: with no engine, what the "Start engine" button does (start.ts; where it can do nothing, a toast says
+ *  why); else Run selection with a selection, else Run (the toolbar's chip says which). */
 function runEither() {
+  const offer = startEngine();
+  if (offer === "off") showToast(refusedRunWords(engine.value.s) ?? "", "error");
+  if (offer !== null) return;
   if (selection.value) runSelection(true);
   else runFile(true);
 }

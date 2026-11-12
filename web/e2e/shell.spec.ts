@@ -1,5 +1,5 @@
 // Prototype 1, step 3: the app shell in real browsers. The layouts, the theme button, the ⋯ menu (Esc and Tab), the
-// download prompt's "Not now" and a run's way back to it (through the run controller); and two cases moved from the proof of concept's poc.spec.ts that do not need the
+// download prompt's "Not now", "Start engine" as the way back to it and a run that does nothing with no engine; and two cases moved from the proof of concept's poc.spec.ts that do not need the
 // editor: a stale snapshot is refused with reason "updated" (plain words in its message, the cause in its detail), and
 // ?snapshot=0 still starts. Also the phone toast's place and the failed "Download all" banner. Step 6 replaces these with
 // the flows' tests.
@@ -35,7 +35,7 @@ async function writeFile(page: Page, path: string) {
 const settled = (page: Page) =>
   page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
-test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; a run asks again, titled for a run, and runs nothing", async ({
+test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; Run is Start engine, which brings the prompt back; a run does nothing and opens no prompt", async ({
   page,
 }) => {
   await page.goto("?test");
@@ -48,19 +48,25 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
   await expect(prompt).toBeHidden();
   expect(await state(page)).toBe("declined");
   if ((page.viewportSize()?.width ?? 0) >= 700) {
-    await expect(page.locator(".statusbar")).toContainText("No engine · Run downloads it first");
+    await expect(page.locator(".statusbar")).toContainText("No engine · Start engine downloads it");
   }
-  const run = page.locator(".toolbar").getByRole("button", { name: /^Run$/ });
-  await expect(run).toBeEnabled();
+  // nothing offers to run: the toolbar's Run is "Start engine"
+  const bar = page.locator(".toolbar");
+  await expect(bar.getByRole("button", { name: /^Run$/ })).toHaveCount(0);
+  const start = bar.getByRole("button", { name: "Start engine" });
+  await expect(start).toBeEnabled();
   expect(await page.evaluate(() => caches.keys())).toEqual([]); // nothing downloaded: the next visit asks again
-  // a run through the run controller, as Run does it: the prompt again, for a run; the run is not kept, so its promise
-  // settles with null at once, before the prompt is answered
-  const asked = await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.run('display "RAN"'));
-  expect(asked).toBeNull();
-  const forRun = page.getByRole("dialog", { name: "Download the engine to run code" });
-  await expect(forRun).toBeVisible();
-  await forRun.getByRole("button", { name: "Not now" }).click();
-  await expect(forRun).toBeHidden();
+  // a run through the run controller: refused. Its promise settles with null at once, and no prompt opens
+  const refused = await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.run('display "RAN"'));
+  expect(refused).toBeNull();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await state(page)).toBe("declined");
+  // Start engine: the same prompt again (one title: no run is behind it), and Not now again
+  await start.click();
+  await expect(prompt).toBeVisible();
+  expect(await state(page)).toBe("asking");
+  await prompt.getByRole("button", { name: "Not now" }).click();
+  await expect(prompt).toBeHidden();
   expect(await state(page)).toBe("declined");
 });
 
@@ -240,7 +246,8 @@ test("?snapshot=0: the normal boot still starts and runs the sample", async ({ p
 
 // The toolbar keeps one size (each button holds all its labels): no engine state, selection or unsaved edit changes the
 // toolbar's box or any of its buttons' boxes, at a desktop, a mid and a phone width; and the page never gets wider.
-test("the toolbar does not move: its box and every button's box are the same in every engine state, with or without a selection or unsaved edits", async ({
+// Run's label is "Start engine" with no engine and "Run" with one, in the same box.
+test("the toolbar does not move: its box and every button's box are the same in every engine state, with or without a selection or unsaved edits; Run is Start engine with no engine", async ({
   page,
 }) => {
   await page.goto("?test=manual");
@@ -251,7 +258,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
     { s: "checking-lock" },
     { s: "checking-cache" },
     { s: "none" },
-    { s: "asking", forRun: false },
+    { s: "asking" },
     { s: "declined" },
     { s: "downloading", received: 1, total: 2, t0: 0 },
     { s: "starting-list", stage: "download", t0: 0, done: {} },
@@ -269,6 +276,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
   for (const width of [1440, 1024, 390]) {
     await page.setViewportSize({ width, height: 800 });
     const seen = new Map<string, string>();
+    const labels: Record<string, string> = {}; // Run's shown label in each state, with a file open and no selection
     for (const st of states) {
       for (const [tab, dirty, sel] of [
         [null, false, null],
@@ -302,8 +310,21 @@ test("the toolbar does not move: its box and every button's box are the same in 
           ].join(" | ");
         });
         seen.set(boxes, `${st.s}${tab ? " tab" : ""}${dirty ? " unsaved" : ""}${sel ? ` lines ${sel.join("-")}` : ""}`);
+        if (tab && !sel)
+          labels[st.s] = await page.evaluate(
+            () =>
+              document.querySelector("header.toolbar .run-ctl .label:not([aria-hidden])")?.textContent?.trim() ?? "",
+          );
       }
     }
+    // the label swap, in the one box: "Start engine" with no engine, "Run" with one
+    for (const s of ["none", "asking", "declined", "failed", "other-tab-idle", "other-tab-taking"])
+      expect(labels[s], `${s} at ${width} px`).toBe("Start engine");
+    expect(labels.ready, `ready at ${width} px`).toMatch(/^Run/);
+    expect(labels.ready).not.toContain("Start engine");
+    expect(labels["failed-twice"]).toBe("Not started"); // only a reload helps: nothing to start from here
+    for (const s of ["downloading", "starting-list", "starting-worker"]) expect(labels[s]).toBe("Starting…");
+    for (const s of ["checking-lock", "checking-cache"]) expect(labels[s]).toBe("Run"); // the page load: off, undecided
     expect(
       [...seen.entries()].map(([b, who]) => `${b} (${who})`),
       `at ${width} px the toolbar moved`,

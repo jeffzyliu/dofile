@@ -23,13 +23,13 @@ import { ofTotal, secs, stageNow } from "./words.ts";
 export const mb = (bytes: number) => `${Math.round(bytes / 1e6)} MB`;
 const size = engineBytes ? mb(engineBytes) : null;
 
-export function DownloadDialog({ dialog: d }: { dialog: DialogOf<"download"> }) {
+export function DownloadDialog(_: { dialog: DialogOf<"download"> }) {
   const st = engine.value;
   if (st.s === "asking" || st.s === "none" || st.s === "declined") {
     return (
       <Dialog
         key="ask"
-        title={d.forRun ? "Download the engine to run code" : "Download the engine?"}
+        title="Download the engine?"
         describedBy="download-what"
         actions={
           <>

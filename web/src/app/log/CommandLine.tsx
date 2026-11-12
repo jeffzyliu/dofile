@@ -4,11 +4,16 @@
 //    the field's focus so the keyboard stays open, and has aria-disabled while the field is empty). Typed curly quotes
 //    and the em dash become ' " and -- (stata/straighten.ts; a paste is left as pasted). Enter
 //    runs through run.ts's runCommand(text): when the command runs ("started") the field clears; when it does not
-//    ("asked": no engine, the download prompt opens; "refused": the page load, a start or a run in progress) the text
-//    stays. ↑ ↓ recall `history`, and ↓ past the newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
+//    ("refused": the page load, a start or a run in progress) the text stays. ↑ ↓ recall `history`, and ↓ past the
+//    newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
+//    With no engine (start.ts) the field is disabled and keeps its text, which is usable again when the engine is
+//    back; empty, it shows the hint "Start the engine to run code". The button is then "Start engine" (start.ts
+//    startEngine: the download prompt, a new try after a failed start, the take-over dialog), in words on a phone too,
+//    so it is wider there than the icon; no width is reserved for it, and the field takes what is left.
 //    Pasted text with line breaks runs each line in turn (log/paste.ts says the rules: the next line only once the one
 //    before has ended; the lines stop at one that does not run or ends with an error, and before a block's line; a toast
-//    says how many were not run, but not over the download prompt; a line that did not run goes back into the field).
+//    says how many were not run; a line that did not run goes back into the field). With no engine a paste is an
+//    ordinary paste (log/pasterun.ts linesToRun), and no line is put back into a disabled field (putBack).
 //  - LogActions: the Log head's "Find" (log/find.ts) and "Download log" (the runs' text only, as dofile.log; no head,
 //    run-head or note) and "Clear…" (asks first: ClearLogDialog; disabled when canClearLog() is false). It draws both forms: the three links (.log-link) and one "Log actions" ⋯ menu button
 //    (.log-more, logMenuItems()); ui.css shows one by a container query on the head's width (the unsplit head, .tabbed, only: the
@@ -28,13 +33,14 @@ import { stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryWords, seconds } from "../editor/words.ts";
 import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
+import { startEngine, startHint, startOffer } from "../start.ts";
 import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
 import { openFind } from "./LogView";
-import { inTurnWords, pastedLines, runInTurn } from "./paste.ts";
-import { runOne } from "./pasterun.ts";
+import { inTurnWords, runInTurn } from "./paste.ts";
+import { linesToRun, putBack, runOne } from "./pasterun.ts";
 
 const field = signal(""); // the command line's text (a signal: the pane may be drawn again when the layout changes)
 let recall = -1; // the history entry ↑ ↓ show, or -1 for the text being typed
@@ -42,7 +48,8 @@ let typed = ""; // what was being typed before ↑
 
 async function runPasted(lines: string[]) {
   const r = await runInTurn(lines, runOne);
-  if ((r.stop?.why === "refused" || r.stop?.why === "asked") && !field.value) field.value = lines[r.stop.line - 1];
+  const back = putBack(lines, r, field.value);
+  if (back !== null) field.value = back;
   const words = inTurnWords(r);
   if (words) showToast(words, "error");
 }
@@ -58,6 +65,7 @@ function submit() {
 export function CommandLine() {
   const input = useRef<HTMLInputElement>(null);
   const phone = isPhone.value;
+  const offer = startOffer(engine.value); // not null: no engine, so the field is off and the button starts the engine
   const onKey = (e: KeyboardEvent) => {
     const list = history.value;
     if (e.key === "Enter" && !e.isComposing) {
@@ -99,12 +107,12 @@ export function CommandLine() {
   const onPaste = (e: ClipboardEvent) => {
     const el = e.currentTarget as HTMLInputElement;
     const text = e.clipboardData?.getData("text/plain") ?? "";
-    const lines = pastedLines(
+    const lines = linesToRun(
       el.value.slice(0, el.selectionStart ?? el.value.length),
       text,
       el.value.slice(el.selectionEnd ?? el.value.length),
     );
-    if (!lines) return; // an ordinary paste
+    if (!lines) return; // an ordinary paste (no line break, or no engine)
     e.preventDefault();
     field.value = "";
     recall = -1;
@@ -120,7 +128,10 @@ export function CommandLine() {
         class="field"
         type="text"
         aria-label="Command"
-        placeholder={phone ? "Type a command" : "Type a command · ↑ ↓ for earlier ones"}
+        placeholder={
+          offer !== null ? startHint(offer) : phone ? "Type a command" : "Type a command · ↑ ↓ for earlier ones"
+        }
+        disabled={offer !== null}
         autocomplete="off"
         autocapitalize="off"
         // autoCorrect, not autocorrect: Preact sets a prop the element has as a property, and where a browser has
@@ -138,7 +149,19 @@ export function CommandLine() {
         onKeyDown={onKey}
         onPaste={onPaste}
       />
-      {phone ? (
+      {offer !== null ? (
+        // No engine: the one action is to start it. In words on a phone too (wider than the icon; the field shrinks).
+        <button
+          type="button"
+          class={`btn start${phone ? " primary" : ""}`}
+          disabled={offer === "off"}
+          onClick={() => {
+            startEngine();
+          }}
+        >
+          Start engine
+        </button>
+      ) : phone ? (
         // A tap must not take the focus from the field, or the keyboard closes: mousedown and pointerdown are cancelled
         // (a pressed button then takes no focus), and the click gives the focus back as a fallback. aria-disabled, not
         // disabled: a tap on a disabled button lands on the page and closes the keyboard.

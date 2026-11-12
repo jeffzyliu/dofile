@@ -65,8 +65,8 @@
 //      (goToLine on a closed file), store.write (Save), files.ts saveAs (Download log, the save-failed banner's Download)
 //      and textInStore with editorCommands.reload (the run-changed banner's "Reload from the run"), showToast, say. Reads the log's per-run data on each text item (`unsaved`, `end`: types.ts LogItem).
 //      The command line: runCommand(text) returns { how, done } at once; clear the field only when how is "started" (it
-//      runs; then it is in `history`, an error too); "asked" (no engine: the download prompt opens, and nothing runs, then
-//      or later) and "refused" (the page load, a start or a run in progress): the text stays, and `history` is unchanged.
+//      runs; then it is in `history`, an error too); "refused" (the page load, a start or a run in progress; with no
+//      engine the field is disabled and the button is "Start engine": start.ts): the text stays, and `history` is unchanged.
 //      The log's head ("dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax") takes its values from env.ts ABOUT.
 //   4c output/tabs.tsx (re-exports GraphTab, DataTab, ResultsTab from GraphTab.tsx, DataTab.tsx, ResultsTab.tsx),
 //      output/FullSize.tsx (FullSize), output/DtaView.tsx (DtaView); the plain logic: output/format.ts, clip.ts, view.ts.

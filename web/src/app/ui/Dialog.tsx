@@ -12,6 +12,7 @@
 //    opener as its own; <body> is never an opener (a dialog opened with the focus on nothing gives it to focusStable).
 //  - Unmounted with no answer (another dialog replaced it in the `dialog` signal): its owner treats that as Cancel.
 //  - A destructive button is `.btn.stop.live` and never the default.
+//  - A held Enter (its repeats) presses no button: the key that opened a dialog does not also answer it.
 // Render it while it should be open; the `dialog` signal decides that (app/dialogs.tsx maps each kind to its view):
 //   <Dialog title="Reset the engine?" role="alertdialog" onCancel={close}
 //     actions={<><button class="btn" data-autofocus onClick={close}>Cancel</button>
@@ -31,6 +32,12 @@ export interface DialogProps {
   class?: string;
   describedBy?: string; // id of the sentence that says what the dialog is about (default: none)
 }
+
+/** A held Enter presses no button of a dialog: the key that opened it (Ctrl/Cmd+Enter with no engine opens the download
+ *  prompt, whose "Download" has the focus) would answer it with its repeats. */
+const heldEnter = (e: KeyboardEvent) => {
+  if (e.repeat && e.key === "Enter") e.preventDefault();
+};
 
 // the opener of a dialog that has closed and not yet given the focus back (its timer below), for a dialog opened
 // meanwhile
@@ -104,6 +111,7 @@ export function Dialog({
       aria-describedby={describedBy}
       onCancel={onCancelEvent}
       onClose={onClose}
+      onKeyDown={heldEnter}
     >
       <h2 id={titleId}>{title}</h2>
       {children}

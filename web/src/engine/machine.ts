@@ -2,7 +2,7 @@
 // event does in each state. One pure function, transition(machine, event), gives the machine after the event and the
 // effects the caller must then perform. The design, with the tables this file holds cell for cell:
 // docs/prototype1-step3.5-c-design.md (items 1 to 5; less the run it held for an engine that was not there, removed on
-// 2026-11-12: with no engine a run only opens the prompt); the diagrams: docs/prototype1-step3.5-c-diagrams.md.
+// 2026-11-12: with no engine a run is not valid, and `ask`, the page's "Start engine", opens the prompt); the diagrams: docs/prototype1-step3.5-c-diagrams.md.
 //
 // How to read it: State (sixteen members, one per row of the table), Event (twenty-four), Effect; then the shorthands
 // (DOWNLOAD, ASK, STOP, OWN, BREAK, END, FAIL, TWICE, RESET, LOST), then TABLE, one row per state with a cell for each
@@ -41,7 +41,7 @@ export type State =
   | { s: "checking-lock"; id: Ticket }
   | { s: "checking-cache"; id: Ticket }
   | { s: "none" }
-  | { s: "asking"; forRun: boolean } // forRun: a Run opened the prompt (the run itself is not kept)
+  | { s: "asking" }
   | { s: "declined" }
   | { s: "downloading"; download: Ticket; received: number; total: number; t0: number }
   | { s: "starting-list"; worker: Ticket; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }
@@ -144,8 +144,7 @@ export type Effect =
   | { do: "end-run"; result: RunResult }
   | { do: "engine-ready" }
   | { do: "engine-gone" }
-  | { do: "show-dialog"; dialog: "download"; forRun: boolean }
-  | { do: "show-dialog"; dialog: "other-tab" }
+  | { do: "show-dialog"; dialog: "download" | "other-tab" }
   | { do: "close-dialog"; dialog: "download" | "other-tab"; focusEditor: boolean }
   | { do: "add-reset-banner"; reason: string; kind: ResetKind }
   | { do: "say"; line: Line }
@@ -304,10 +303,9 @@ function DOWNLOAD(m: Machine, at: number): Step {
   );
 }
 
-/** ASK(forRun): `asking`, and the download prompt, titled for a run when a Run opened it. The run is not kept: with no
- *  engine a Run only asks, and the visitor presses Run again once the engine is ready. */
-const ASK = (m: Machine, forRun: boolean): Step =>
-  step({ ...m, state: { s: "asking", forRun } }, [{ do: "show-dialog", dialog: "download", forRun }]);
+/** ASK: `asking`, and the download prompt. Nothing else is kept: no run and no reason for the prompt. With no engine
+ *  the page offers one action, "Start engine" (the event `ask`); a `run` is not valid there. */
+const ASK = (m: Machine): Step => step({ ...m, state: { s: "asking" } }, [{ do: "show-dialog", dialog: "download" }]);
 
 /** STOP: "Stop download", and "Not now" during the download. */
 const STOP = (m: In<"downloading">): Step =>
@@ -458,24 +456,23 @@ const TABLE: { [R in RowName]: Row<R> } = {
   },
   "checking-cache": {
     "lock-lost": LOST,
-    "cache-checked": (m, e) => (e.cached ? DOWNLOAD(m, e.at) : ASK(m, false)),
+    "cache-checked": (m, e) => (e.cached ? DOWNLOAD(m, e.at) : ASK(m)),
   },
   none: {
     start: (m, e) => DOWNLOAD(m, e.at),
-    ask: (m) => ASK(m, false),
-    run: (m) => ASK(m, true),
+    ask: ASK,
     "lock-lost": LOST,
   },
   asking: {
     start: (m, e) => DOWNLOAD(m, e.at),
+    ask: ASK, // the prompt again, should another dialog have taken its place
     decline: (m) =>
       step({ ...m, state: { s: "declined" } }, [{ do: "close-dialog", dialog: "download", focusEditor: false }]),
     "lock-lost": LOST,
   },
   declined: {
     start: (m, e) => DOWNLOAD(m, e.at),
-    ask: (m) => ASK(m, false),
-    run: (m) => ASK(m, true),
+    ask: ASK,
     "lock-lost": LOST,
   },
   downloading: {
@@ -586,6 +583,8 @@ const TABLE: { [R in RowName]: Row<R> } = {
     "lock-lost": LOST,
   },
   "other-tab-idle": {
+    // "Start engine" here goes into the take-over dialog, never to a start: the visitor chooses there
+    ask: (m) => step(m, [{ do: "show-dialog", dialog: "other-tab" }]),
     "take-over": (m) => {
       const next = issue(m);
       return step({ ...m, issued: next, state: { s: "other-tab-taking", take: next } }, [

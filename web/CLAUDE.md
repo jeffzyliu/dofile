@@ -44,7 +44,10 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   import no `.tsx`, tested in Node (`test/app.test.ts`): `engine.ts` (the only caller of the state machine, below; the tab
   lock; asking at load unless `client.cached()` finds this build's start files all in the Cache; there is no "downloaded"
   flag), `run.ts` (runs, the log, results, graphs, the after-run calls; it reads no engine state, the engine controller tells
-  it through the handlers given to `connectRun`), `files.ts` (the file list, `persisted`). Views read signals and call the
+  it through the handlers given to `connectRun`), `files.ts` (the file list, `persisted`), `start.ts` ("Start engine": with no engine nothing on the page offers to
+  run; `startOffer` is the one table of which states are "no engine" and what a press does in each, `startEngine()` the one
+  action of the Run buttons and Ctrl/Cmd+Enter then, and a control that runs code is off while `noEngine()`: the table is in
+  `docs/web-page-flows.md`, section 2). Views read signals and call the
   controllers' actions; they never call the transport or the machine. Each step 4 part has its own files, which `App.tsx` only places (its header lists
   them; each phone piece sits there next to its desktop counterpart, and components read `isPhone` rather than a `phone` prop); dialogs and banners are drawn through the registries `dialogs.tsx` and `banners.tsx`, one view per kind. The
   shared pieces are in `src/app/ui/`: `Dialog` (native `<dialog>`, a bottom sheet under 700 px), `Menu` (`MenuButton`,
