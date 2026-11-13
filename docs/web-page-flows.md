@@ -29,7 +29,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 ### The rules
 
 1. **A hand-off moves only a focus left on nothing** (`document.activeElement` is `<body>` or null). The dialog's
-   hand-back, `useFocusOnLeave` and Delete's `refocus` all check this first. So whoever places the focus first wins, and
+   hand-back and `useFocusOnLeave` check this first. So whoever places the focus first wins, and
    the focus moves once.
 2. **The fallback is `states/focus.ts` `focusStable()`:** first `editorCommands.focus()`, then, if that moved the focus
    nowhere, the first visible `button[aria-label="More actions"]`. It is never `<body>`.
@@ -50,37 +50,49 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    stopping banner's "Don't reset: wait for it", and the waiting banner itself (`states/banners.tsx`), and the inline
    rename field (`files/FilesPane.tsx`), the last three through `ui/focus-hooks.ts` `useFocusOnMount`. So a hand-off
    that waits for a microtask finds the focus already taken.
-6. **After a tab closes** (`files/EditorTabs.tsx` `focusAfterClose`, a timer) the focus goes to the selected tab, else
-   the file tree's row in the tab order, else `editorCommands.focus()`. When that moves nothing, the close-tab dialog's
-   own hand-back follows (its opener, else `focusStable`).
+6. **After a tab closes** (`files/EditorTabs.tsx` `focusAfterClose` sets `closeAsked`, which `EditorTabs` takes in a
+   layout effect of its next render) the focus goes to the selected tab (its `tabAsked` request), else the file tree's
+   row in the tab order when the tree is shown (`focusTree`), else `editorCommands.focus()`. When that moves nothing, the
+   close-tab dialog's own hand-back follows (its opener, else `focusStable`).
 7. **A focus request is taken by the render of the component that draws the target.** The action sets a signal (the
-   tree's `focusWanted`, the open-file tabs' `tabAsked`, a tablist's own, Find's `findAsked`); the target takes it in
-   a layout effect of its own render (`ui/focus-hooks.ts` `useFocusRequest`), and the request ends there, taken or
-   not. Each says whose focus it may take (`from`): only from inside its own list for the tablists, from the page body
-   or the tree for the tree's rows. Requests are set by keys, never by a click: Safari does not focus a tapped button
-   (`ui/Menu.tsx` focuses a `keepOpen` item itself for that reason), so a request from a click would move the focus
-   there where a click alone moves none.
+   tree's `focusWanted`, the open-file tabs' `tabAsked` and `closeAsked`, a tablist's own, Find's `findAsked`, the
+   editor's `editorAsked`); the target takes it in a layout effect of its own render (`ui/focus-hooks.ts`
+   `useFocusRequest`, or a plain layout effect where taking it is more than a focus: Go to line, a closed tab), and the
+   request ends there, taken or not. No timer stands in for that render: Preact renders the queued components
+   shallowest first, so `App` shows a pane, and the dialog host closes its dialog, before a deeper target takes its
+   request. Each says whose focus it may take (`from`): from inside its own list (or the page body, after a close) for
+   the tablists, from the page body or the tree for the tree's rows, from anywhere for the Files button's request, Find
+   and the editor. The tree's request names a row (`focusRow`) or none (`focusTree`: the row in the tab order, or with
+   no rows the head's File actions). It is set once its action has succeeded (a rename, a delete once the list has been
+   read again), and it also ends when a new one replaces it, a rename starts, or the visitor focuses or clicks another
+   row. A tablist's request is set by a key, never by a click: Safari does not focus a tapped button (`ui/Menu.tsx`
+   focuses a `keepOpen` item itself for that reason), so a request from a click on a tab would move the focus there
+   where a click alone moves none. The other requests follow an action that may be a click (the Files button, a
+   dialog's answer, "Go to line", Find), and so does a rename that a click elsewhere ends: the field's blur ends it and
+   `focusRow` asks for the renamed row, which takes the focus where that click left it on the page body (WebKit) and
+   not where the click focused something outside the tree.
 
 ### Who moves the focus
 
 | Who | When | Timing | Where to |
 |---|---|---|---|
 | `ui/Dialog.tsx`, opening | it mounts | layout effect | It blurs the opener, then calls `showModal()`. Then `[data-autofocus]`, else the first enabled button, link or input. |
-| `ui/Dialog.tsx`, closing | it unmounts | cleanup (blur inside, `close()`), then a timer; only a focus on nothing | the opener if it is still in the page, else `focusStable()` |
+| `ui/Dialog.tsx`, closing | it unmounts | cleanup (blur inside, `close()`), then a microtask, after the render's other layout effects; only a focus on nothing | the opener if it is still in the page, else `focusStable()` |
 | `states/focus.ts` `useFocusOnLeave` | a banner unmounts with the focus inside | layout cleanup, then a microtask; only a focus on nothing | `focusStable()` |
 | `StoppingBanner`, `WaitingBanner` (`states/banners.tsx`) | they mount | layout effect (`useFocusOnMount`) | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
 | `DeclinedBanner` (`states/banners.tsx`) | "Start engine" | synchronous, before `eng.ask()` | `focusStable()`, so the prompt takes the editor as its opener |
-| `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | a timer set in the step | `editorCommands.focus()` |
-| `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | a timer | selected tab, tree row, `editorCommands.focus()` |
-| `files/dialogs.tsx` `refocus` | Delete's store change is done | a 100 ms timer; only a focus on nothing | the tree's row in the tab order |
+| `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | sets `editorAsked` (`{}`) in the step; the Editor takes it in a layout effect of the render that removes the dialog | `editorCommands.focus()` |
+| `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | sets `closeAsked`; `EditorTabs` takes it in a layout effect of its next render | the selected tab (`tabAsked`), else the tree's row (`focusTree`) when the tree is shown, else `editorCommands.focus()` |
+| `files/dialogs.tsx` `DeleteDialog` | Delete's store change is done and the list read again (`files.ts` `refresh`) | `focusTree()`, taken by the tree's render; only a focus on nothing or in the tree | the tree's row in the tab order; with no rows, the head's File actions (`FilesHead`) |
+| `App.tsx` `foldFiles` | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere (the focus is on the button) | the tree's row in the tab order; with no rows, the head's File actions |
 | `ui/Menu.tsx` `closeMenu(true)` | Esc, Tab, a picked item (before its `onSelect`) | synchronous | the trigger (`restore`, else `anchor`). A click outside, a resize or the window's blur close it with no focus move. |
 | `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the menu's active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
 | `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
 | `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist (a click sets no request) | layout effect of the tab's render (`useFocusRequest`); the request ends there | the tab moved to, only while the focus is inside that tablist |
-| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new folder, the arrow keys) sets the roving path and the signal `focusWanted`; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and is dropped for a row that is no longer the roving one | the row, only while the focus is on the page body or inside the tree (the tree's `role`), never from a visitor who clicked elsewhere |
+| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new folder, the arrow keys) sets the roving path and the signal `focusWanted`; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and when a new one replaces it, a rename starts, or the visitor focuses or clicks another row | the row, only while the focus is on the page body or inside the tree (the tree's `role`), never from a visitor who clicked elsewhere |
 | `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | layout effect of the bar's render (`useFocusRequest`); once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
-| `editor/Editor.tsx` `goToLine` | "Go to line N" | a timer after `openFile` | CodeMirror, at the line |
+| `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
 
 A mouse click on a tab's × that closes a clean tab calls no `focusAfterClose` (`EditorTabs` passes `keyboard: false`).
 
@@ -102,13 +114,13 @@ sequenceDiagram
   V->>D: Cancel
   D->>S: dialog = null
   Note over S,D: microtask, the view unmounts
-  D->>D: cleanup, blur inside, close(), leaving = opener, set timer T
-  Note over D: T fires after the timers set before it
+  D->>D: cleanup, blur inside, close(), leaving = opener, queue microtask T
+  Note over D: T runs after the render, so after any layout effect that took the focus
   D->>D: focus on nothing, so opener.focus(), or focusStable() if the opener left the page
 ```
 
 The opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on `close()`.
-Only the timer gives it back, once.
+Only T gives it back, once.
 
 Step 5's `restore-sample` dialog (`files/dialogs.tsx`, from the file menu's "Restore the sample") follows the same rules:
 Cancel focused, the focus back to the menu's trigger; Replace opens `analysis.do`, which moves no focus.
@@ -129,17 +141,17 @@ sequenceDiagram
   V->>C1: Keep mine
   C1->>U: dialog = null, then answerClash
   Note over C1,D: microtask 1, clash 1 unmounts
-  D->>D: cleanup, close(), leaving = opener 1, set timer T1
+  D->>D: cleanup, close(), leaving = opener 1, queue microtask T1
   Note over U: microtask 2, the upload goes on
   U->>U: next clash, no dialog open, dialog = clash 2
   Note over C2,D: microtask 3, clash 2 mounts
   D->>D: layout effect, focus is on body, so opener = leaving = opener 1
-  Note over D: T1 fires, leaving is cleared, the focus is in clash 2, nothing moves
+  Note over D: T1 runs, leaving is cleared, the focus is in clash 2, nothing moves
   V->>C2: answers
-  D->>D: cleanup and timer T2, opener 1 gets the focus
+  D->>D: cleanup and microtask T2, opener 1 gets the focus
 ```
 
-After "Replace with uploaded" the upload first awaits `store.write`. If T1 fires before clash 2 opens, it gives the
+T1 can also run before the upload goes on (after "Replace with uploaded" the upload first awaits `store.write`). If T1 runs before clash 2 opens, it gives the
 focus to opener 1, and clash 2 takes opener 1 as the active element. The result is the same.
 
 ### A dialog whose opener leaves the page (other-tab over the stopping banner)
@@ -160,7 +172,7 @@ sequenceDiagram
   D->>D: showModal(), focus on Close editor
   F->>F: microtask, the focus is in the dialog, nothing moves
   Note over D: later, Use dofile in this tab, the take-over, close-dialog with focusEditor false
-  D->>D: cleanup timer, the opener has left the page or there is none
+  D->>D: cleanup microtask, the opener has left the page or there is none
   D->>F: focusStable(), the editor, else More actions
 ```
 
@@ -205,7 +217,7 @@ sequenceDiagram
   participant CT as CloseTabDialog
   participant Ed as editor/Editor.tsx
   participant A as files/actions.ts
-  participant ET as EditorTabs focusAfterClose
+  participant ET as files/EditorTabs.tsx
   participant D as ui/Dialog.tsx
   alt Save
     V->>CT: Save
@@ -213,19 +225,21 @@ sequenceDiagram
     Ed-->>CT: true
     CT->>CT: dialog = null
     CT->>A: closeTab(path), tabs and activeTab, then editorCommands.closed
-    CT->>ET: focusAfterClose(), set timer T1
+    CT->>ET: focusAfterClose(), closeAsked = true
   else Do not save
     V->>CT: Don't save
     CT->>CT: dialog = null
     CT->>A: closeTab(path)
-    CT->>ET: focusAfterClose(), set timer T1
+    CT->>ET: focusAfterClose(), closeAsked = true
   end
-  Note over D: microtask, the dialog unmounts, its cleanup sets timer T2
-  ET->>ET: T1, the selected tab, or the tree row, or editorCommands.focus()
-  D->>D: T2, the focus is not on body, nothing moves
+  Note over D,ET: one microtask renders both, the dialog host first (shallower)
+  D->>D: cleanup, blur inside, close(), queue microtask T
+  ET->>ET: layout effect, tabAsked for the selected tab (FileTab takes it in the same loop), or focusTree(), or editorCommands.focus()
+  D->>D: T, the focus is not on body, nothing moves
 ```
 
-T1 is set synchronously in the click handler and T2 in the render after it, so T1 runs first. When Save resolves false
+The three writes are made synchronously in the click handler, so one render takes them all and the request is taken
+before T runs. When Save resolves false
 (the store refused), the dialog closes, the tab stays and nothing calls `focusAfterClose`. T2 then gives the focus back
 to the opener (the tab).
 
@@ -249,7 +263,7 @@ sequenceDiagram
 |---|---|---|
 | A banner leaves, or a dialog's opener has left | the editor (or the `.dta` tab, or Load) | the editor (or a `.dta` tab's Load) on the Editor view; "More actions" on any other view |
 | Close-tab's Save or "Don't save" | the selected tab in "Open files" | the editor: "Open files" is not shown, and neither is the tree on the Editor view |
-| The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's timer gives the focus to its opener. Nothing runs then: with no engine the page offers only "Start engine", which opened the prompt, so the focus is not taken from the Log view by a run. |
+| The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's hand-back gives the focus to its opener. Nothing runs then: with no engine the page offers only "Start engine", which opened the prompt, so the focus is not taken from the Log view by a run. |
 | A dialog opened from a menu (Reset, Delete all, Clear log) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all, "Log actions" for Clear log | the ⋯ trigger for Reset; the strip's "Files ⋯" ("File actions") for Delete all; the strip's "Log ⋯" ("Log actions") for Clear log |
 | The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear) and cannot take the focus, so `ui/Dialog.tsx` hands it to `focusStable()`: the editor, or "More actions" |
 | Find opened from the phone strip's "Log ⋯" | (desktop: the Log head's Find button) | `openFind(null)` takes the focused element, the "Log ⋯" button that `closeMenu` just focused |
@@ -268,6 +282,7 @@ sequenceDiagram
   - "the banners above the log: running, stopping (focus on Don't reset), waiting (takes the focus)"
 - `web/e2e/files.spec.ts`:
   - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save"
+  - "the row menu (Shift+F10, right click, the ⋯): Delete asks, …" (the focus after Delete, on the tree's row)
   - "a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it
     before the first, not the page"
 - `web/e2e/editor.spec.ts`:
@@ -278,6 +293,7 @@ sequenceDiagram
 - `web/e2e/shell.spec.ts`:
   - "the layout: … the ⋯ menu works by keyboard"
   - "the folded file list: … Esc folds it and gives the focus back"
+  - "the folded file list with no files: opened by keyboard, the focus goes to the head's File actions, once"
 
 No Node test covers the focus. The rules hold only in a browser.
 
@@ -289,10 +305,13 @@ No Node test covers the focus. The rules hold only in a browser.
   `el.contains(activeElement)` is never true and nothing is handed on.
 - **`editorCommands.focus()` must focus synchronously.** `focusStable` reads `activeElement` right after it. A `.dta`
   tab's own target must win in that call, or the focus moves twice (the e2e test records every `focusin`).
-- **Place the focus before the dialog's timer is set.** An answer that places the focus itself must set its timer
-  synchronously, in the same turn as `dialog = null`. That is why the close-tab dialog stays open while Save writes:
-  after an `await` beyond T2, the dialog would give the focus to the opener first, and then the close would move it
-  again.
+- **An answer that places the focus sets its request in the same turn as `dialog = null`.** The render that closes
+  the dialog then takes the request before the dialog's microtask hand-back. That is why the close-tab dialog stays
+  open while Save writes: after an `await`, the dialog would give the focus to the opener first, and then the close
+  would move it again.
+- **No timer stands in for a render.** A request is a signal its target takes in its own render; a target drawn later
+  than the action (Delete's rows, once the list is read again) gets its request when that is done (Delete awaits a
+  fresh list), not after a guessed delay.
 - **Keep the opener's `blur()` before `showModal()`, and the `leaving` hand-over.** Without the first, WebKit gives the
   focus back on `close()` before an answer can place it. Without the second, a dialog that follows another takes
   `<body>` as its opener.
