@@ -1,17 +1,17 @@
 # Test map
 
 What the tests are for, by function. Counts are test functions (`def test_` / `it(` / `test(`) plus parametrized cases,
-as of 2026-11-12, and drift as tests are added; the file lists are the source of truth.
+as of 2026-11-13, and drift as tests are added; the file lists are the source of truth.
 
 - [Python](#python-about-1460-tests): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
-- [Web](#web-about-480-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
+- [Web](#web-about-500-tests): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
 - [Running them](#running-them).
 
 ## Python (about 1,460 tests)
 
 | Part | Where | Count |
 |---|---|---|
-| dofile's own tests | `tests/test_*.py` | 255 |
+| dofile's own tests | `tests/test_*.py` | 259 |
 | Conformance corpus | `tests/test_conformance.py`, `tests/conformance/` | 75 (63 value checks, 12 probes) |
 | Stata 14 log comparison (slow) | `tests/test_stata_compat.py`, `tests_opendta/compat/do/` | 97 (one per `.do` file with a Stata 14 log; `1920_models4` has none) |
 | OpenDTA's vendored suite | `tests_opendta/tests/` (71 files) | ~1,030 |
