@@ -71,6 +71,16 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    dialog's answer, "Go to line", Find), and so does a rename that a click elsewhere ends: the field's blur ends it and
    `focusRow` asks for the renamed row, which takes the focus where that click left it on the page body (WebKit) and
    not where the click focused something outside the tree.
+8. **On an iPhone the keyboard comes up only for a focus made while the tap is handled** (the tap's own microtasks
+   count: a signal set in the tap renders, and its layout effect runs, before the tap's dispatch ends; an `await` of
+   IndexedDB does not). A field that is to raise the keyboard is drawn in the tap, before anything is written or awaited.
+   That is why "New .do file" and "New folder" show their name field at once (a draft row) and write the file or folder
+   when the field is left (Enter or blur; Esc writes nothing), and why `startRename` and `startDraft` are synchronous.
+   The commit (`endDraft`) then awaits the store, reads the list again (`files.ts` `refresh`) and clears the draft in
+   the same tick, so the real row replaces the draft with no frame between, and the tree's row takes the focus
+   (`focusRow`) unless another field was started meanwhile (each field has an `id`; a commit that ends after another began
+   touches neither the state nor the focus). Nobody can test the keyboard in Playwright: the e2e test makes sure the
+   field has the focus within the tap's microtasks.
 
 ### Who moves the focus
 
@@ -87,9 +97,10 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `App.tsx` `foldFiles` | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere (the focus is on the button) | the tree's row in the tab order; with no rows, the head's File actions |
 | `ui/Menu.tsx` `closeMenu(true)` | Esc, Tab, a picked item (before its `onSelect`) | synchronous | the trigger (`restore`, else `anchor`). A click outside, a resize or the window's blur close it with no focus move. |
 | `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the menu's active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
-| `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
+| `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts. A New's field is a draft (`renaming.draft`): `startDraft` sets it in the tap, with nothing written and no `await` before it (rule 8) | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
+| `files/FilesPane.tsx` `endDraft` | Esc in a draft's field | `focusTree()`, taken by the tree's render; only a focus on nothing or in the tree | the tree's row in the tab order; with no rows, the head's File actions (hidden on a phone, as after Delete) |
 | `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist (a click sets no request) | layout effect of the tab's render (`useFocusRequest`); the request ends there | the tab moved to, only while the focus is inside that tablist |
-| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new folder, the arrow keys) sets the roving path and the signal `focusWanted`; `focusTree` (the Files button, Delete once the list is read again) sets a keyless request, taken by the row in the tab order, else File actions; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and when a new one replaces it, a rename starts, or the visitor focuses or clicks another row | the row, only while the focus is on the page body or inside the tree (the tree's `role`); on WebKit and the iPhone a click elsewhere leaves the focus on the body, so the row may take it (rule 7) |
+| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and the signal `focusWanted`; `focusTree` (the Files button, Delete once the list is read again) sets a keyless request, taken by the row in the tab order, else File actions; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and when a new one replaces it, a rename starts, or the visitor focuses or clicks another row | the row, only while the focus is on the page body or inside the tree (the tree's `role`); on WebKit and the iPhone a click elsewhere leaves the focus on the body, so the row may take it (rule 7) |
 | `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | layout effect of the bar's render (`useFocusRequest`); once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
@@ -284,6 +295,9 @@ sequenceDiagram
 - `web/e2e/files.spec.ts`:
   - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save"
   - "the row menu (Shift+F10, right click, the ⋯): Delete asks, …" (the focus after Delete, on the tree's row)
+  - "New .do file and New folder: the name field has the focus within the tap's microtasks, from the link and from the
+    menu" (rule 8), and the tests after it: Esc (the focus back on the tree's row), Enter, leaving the field, a name in
+    use, a second New while the first is written
   - "a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it
     before the first, not the page"
 - `web/e2e/editor.spec.ts`:
