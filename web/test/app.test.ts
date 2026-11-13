@@ -62,7 +62,9 @@ const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/f
 const { startEngine } = await import("../src/app/start.ts");
 const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");
 const { decodeText } = await import("../src/app/files/open.ts");
-const { watchViewport, KEYBOARD, KB_MODES, kbModeOf, PREDICT, HOLD } = await import("../src/app/viewport.ts");
+const { watchViewport, KEYBOARD, KB_MODES, kbModeOf, focusesItself, PREDICT, HOLD, SETTLE } = await import(
+  "../src/app/viewport.ts"
+);
 
 /** The engine's state, which must be `name`: that member of EngineState, with its own fields. */
 function state<N extends EngineStateName>(name: N): Extract<EngineState, { s: N }> {
@@ -2082,7 +2084,7 @@ function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
   let clock = 0,
     scrolled = false;
   const timers: { at: number; fn: () => void }[] = [];
-  const seen = { phone, unpans: 0, caretAt: null as number | null }; // what the page's callbacks read and count
+  const seen = { phone, unpans: 0, caretAt: null as number | null, reveals: [] as number[] }; // what the callbacks read and count
   const page = {
     vv,
     vars,
@@ -2127,6 +2129,7 @@ function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
       panned: () => scrolled,
       caret: () => seen.caretAt,
       later: (fn, ms = 0) => timers.push({ at: clock + ms, fn }),
+      reveal: (height) => seen.reveals.push(height),
     }),
   };
   return page;
@@ -2138,8 +2141,13 @@ const fieldEl = (scroller: { scrollTop: number } | null = null) => ({
 });
 const notField = { matches: () => false, closest: () => null };
 
-test("the keyboard experiment's flag: ?kb= names one of six strategies; none, an empty or an unknown value is the default, top", () => {
-  assert.deepEqual([...KB_MODES], ["top", "transform", "height", "unpan", "pre", "focus"]);
+test("the keyboard experiment's flag: ?kb= names one of eight strategies; none, an empty or an unknown value is the default, top", () => {
+  assert.deepEqual([...KB_MODES], ["top", "transform", "height", "unpan", "pre", "focus", "caret", "early"]);
+  assert.deepEqual(
+    KB_MODES.filter((m) => focusesItself(m)),
+    ["focus", "caret", "early"],
+    "the command line takes the focus itself",
+  );
   for (const m of KB_MODES) assert.equal(kbModeOf(new URLSearchParams(`?kb=${m}&kblog`)), m);
   for (const q of ["", "?kblog", "?kb=", "?kb=TOP", "?kb=bottom", "?test&slide"])
     assert.equal(kbModeOf(new URLSearchParams(q)), "top", q);
@@ -2472,5 +2480,39 @@ test("J5: a run's promise settles even when the after-run work throws (an open t
   } finally {
     Object.assign(editorCommands, kept);
     writable(S.tabs).value = [];
+  }
+});
+
+test("the keyboard experiment, round 2: caret and early scroll back a pan as unpan does and reveal the editor's caret once the keyboard has settled; early also at once when it opens", () => {
+  for (const mode of ["caret", "early"] as const) {
+    const p = keyboardPage(mode);
+    p.move(508); // the keyboard opens (no pan yet, as in the editor)
+    assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"], mode);
+    assert.deepEqual(p.seen.reveals, mode === "early" ? [508] : [], `${mode}: at the first resize`);
+    p.tick(SETTLE - 10);
+    p.pan(120); // Safari's pan, about 120 ms later: scrolled back; the settle timer starts again
+    assert.equal(p.seen.unpans, 1, mode);
+    assert.equal(p.vars.get("--vv-top"), "0px", mode);
+    p.tick(SETTLE - 1);
+    assert.equal(p.seen.reveals.length, mode === "early" ? 1 : 0, `${mode}: not settled yet`);
+    p.tick(1);
+    assert.deepEqual(p.seen.reveals, mode === "early" ? [508, 508] : [508], `${mode}: settled`);
+    p.pan(0); // a later event while open reveals again after it settles, but early's at-once reveal is only on opening
+    p.tick(SETTLE);
+    assert.equal(p.seen.reveals.length, mode === "early" ? 3 : 2, mode);
+    p.move(844); // closed: a pending timer reveals nothing
+    p.move(508);
+    p.move(844);
+    const before = p.seen.reveals.length;
+    p.tick(SETTLE);
+    assert.equal(p.seen.reveals.length, before, `${mode}: no reveal after the keyboard closed`);
+    assert.equal(p.vars.size, 0, mode);
+    p.stop();
+  }
+  for (const mode of ["top", "unpan", "pre", "focus"] as const) {
+    const p = keyboardPage(mode);
+    p.move(508);
+    p.tick(SETTLE);
+    assert.deepEqual(p.seen.reveals, [], `${mode} reveals nothing`);
   }
 });
