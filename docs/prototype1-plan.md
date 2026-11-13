@@ -617,6 +617,15 @@ Status values: `not started`, `running`, `to review`, `done`.
     Tablist, EditorTabs, the Results and Data tabs could use it, two hooks (focus on mount, return focus) would serve the
     banners and dialogs, and eight cross-component focus moves want a focus request owned by the target component. The
     maintainer asked for the hooks to live in one focus-hooks file.
+- **Step 6 (deployment, decided 2026-11-13): the site at `dofile.dev`, the editor at `app.dofile.dev`.** The maintainer asked
+  for this layout ("dofile.dev and app.dofile.dev later"). Order: buy the domain and run the first-deploy checks (SPEC
+  section 8, "To look at on the first real deploy") on the one-origin site, then split the two origins **before the site is
+  announced**. The browser keeps the visitors' files, the downloaded engine, the tab lock, the sample's mark and the theme per
+  origin, so a split after visitors have used `dofile.dev/app/` would leave their files behind (they would download a zip and
+  upload it again) and download the engine again; before anyone uses it, nothing is lost. The steps (two builds into two
+  folders, a second Wrangler config, `package.json` and `deploy.yml`, a second e2e server) are SPEC section 8, "URLs", "Its own
+  subdomain later"; no change to the page's code. The fallback with no build change: keep the editor at `dofile.dev/app/` and
+  make `app.dofile.dev` a redirect to it.
 - **Step 6:** `web/e2e/poc.spec.ts` is bound to the proof-of-concept page's element ids and is rewritten with the page.
   `axe`, `tabwalk` and `contrast` check the mockups today, not the real page.
 - **Step 7:** the 48 MB figure, Break on a long model fit in a browser, `pyreadstat` on a real iPhone, a phone over HTTPS
