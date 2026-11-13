@@ -193,3 +193,24 @@ From the overlay logs (four screenshots: the second b with b2, and the second c,
 By the logs, `early` is the better of the two: it puts the scroll-back and the caret scroll in the same frame. A
 script cannot stop the editor's pan on iOS 27. It is on screen for about one frame (`appTop` −138 or −189 in the
 `vv.resize` row, 0 in the next).
+
+What the tester saw:
+
+| | Caret above the keyboard? | Top bar off the screen? | Movements |
+|---|---|---|---|
+| `early` | yes, except for taps near the end of the file | about 3 px, then it jumps back down | one |
+| `caret` | almost always, except in a zone that could not be reproduced reliably | about 3 px, then back down | two: the page, then the editor's text |
+
+**Both failures were one bug: an empty line.** The caret's place was read from the DOM selection's box, and a caret on
+an empty line has no box (its bottom reads 0), so nothing was scrolled. The sample file ends with a line break, so its
+last line is empty too: hence "near the end of the file". An e2e test confirmed it: with that code, a caret on an empty
+line or on the last line stayed at y 774 behind a 400 px keyboard in every browser. Now the page asks CodeMirror
+(`EditorView.scrollIntoView` on the main selection, `nearest`, a 24 px margin), which knows where the caret is on any
+line and scrolls in its next frame, after the page's own scroll-back. On the file's last lines the editor is already
+scrolled to its end, so the caret sits at the editor's foot, a few px above the keyboard, not 24.
+
+## Round 3: `early` with the fix (about 5 minutes)
+
+Only `?kb=early&kblog` (and `?kb=caret&kblog` to compare if `early` is not clearly right). Tap the editor in the bottom
+third, on a line of text, on an empty line, and below the last line; tap the command line. Note whether the caret ends
+in sight above the keyboard each time. If it does, `early` becomes the default and the other modes go.

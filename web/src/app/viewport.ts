@@ -34,6 +34,8 @@
 //              first visualViewport resize, which in the editor comes about 120 ms before Safari's pan), so Safari may
 //              find nothing to reveal.
 
+import { EditorView } from "@codemirror/view";
+
 /** How much shorter than the layout viewport the visual viewport must be to count as a keyboard (a keyboard is about 260
  *  px or more; Safari's toolbars change the height by less). */
 export const KEYBOARD = 120;
@@ -99,8 +101,8 @@ export function watchViewport({
   /** pre: the bottom of the caret in `el` (or of the field), in px from the layout viewport's top; null if unknown */
   caret?: (el: Element) => number | null;
   later?: (fn: () => void, ms?: number) => unknown;
-  /** caret, early: scroll the focused editor's caret above `height` px from the top, if it is below */
-  reveal?: (height: number) => void;
+  /** caret, early: scroll the focused editor's caret into its visible part (the editor is above the keyboard) */
+  reveal?: () => void;
 } = {}): { update: () => void; stop: () => void } {
   if (!vv || !root) return { update: () => {}, stop: () => {} };
   let width = 0,
@@ -135,10 +137,10 @@ export function watchViewport({
       set(vv.height, follow ? vv.offsetTop : 0);
       if (unpan && (vv.offsetTop > 0 || panned())) scrollTop();
       if (reveals) {
-        if (opening && mode === "early") reveal(vv.height);
+        if (opening && mode === "early") reveal();
         const n = ++quiet;
         later(() => {
-          if (n === quiet && "keyboard" in root.dataset) reveal(vv.height);
+          if (n === quiet && "keyboard" in root.dataset) reveal();
         }, SETTLE);
       }
     } else if ("keyboard" in root.dataset && !(enabled() && now() < holdUntil)) {
@@ -182,17 +184,17 @@ export function watchViewport({
   };
 }
 
-/** caret, early: the focused editor's (CodeMirror's) caret, scrolled to `height` - CARET_MARGIN px from the top if it
- *  is below that. Nothing for a field that is not in an editor, or with no caret in it. */
-function revealCaret(height: number) {
-  const el = document.activeElement;
-  const scroller = el?.closest(".cm-scroller");
-  const sel = getSelection();
-  if (!el || !scroller || !sel?.rangeCount || !el.contains(sel.anchorNode)) return;
-  const range = sel.getRangeAt(0);
-  const bottom = (range.getClientRects()[0] ?? range.getBoundingClientRect()).bottom;
-  const limit = Math.min(scroller.getBoundingClientRect().bottom, height) - CARET_MARGIN;
-  if (bottom > limit) scroller.scrollTop += bottom - limit;
+/** caret, early: the focused editor's (CodeMirror's) caret scrolled into the editor's visible part, CARET_MARGIN px
+ *  clear of its edges; .app, and so the editor, ends above the keyboard. CodeMirror's own scrollIntoView, in its next
+ *  measure: the page's layout is final there (the pan scrolled back), and it knows where the caret is on any line,
+ *  where a DOM range has no box on an empty line. Nothing when the focus is not in an editor. */
+function revealCaret() {
+  const editor = document.activeElement?.closest<HTMLElement>(".cm-editor");
+  const view = editor ? EditorView.findFromDOM(editor) : null;
+  if (view)
+    view.dispatch({
+      effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "nearest", yMargin: CARET_MARGIN }),
+    });
 }
 
 /** The bottom of the caret when it is in `el` (editable content: CodeMirror), else of `el` (an input), in px from the

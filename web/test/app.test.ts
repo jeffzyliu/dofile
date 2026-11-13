@@ -2084,7 +2084,7 @@ function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
   let clock = 0,
     scrolled = false;
   const timers: { at: number; fn: () => void }[] = [];
-  const seen = { phone, unpans: 0, caretAt: null as number | null, reveals: [] as number[] }; // what the callbacks read and count
+  const seen = { phone, unpans: 0, caretAt: null as number | null, reveals: 0 }; // what the callbacks read and count
   const page = {
     vv,
     vars,
@@ -2129,7 +2129,7 @@ function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
       panned: () => scrolled,
       caret: () => seen.caretAt,
       later: (fn, ms = 0) => timers.push({ at: clock + ms, fn }),
-      reveal: (height) => seen.reveals.push(height),
+      reveal: () => seen.reveals++,
     }),
   };
   return page;
@@ -2488,24 +2488,24 @@ test("the keyboard experiment, round 2: caret and early scroll back a pan as unp
     const p = keyboardPage(mode);
     p.move(508); // the keyboard opens (no pan yet, as in the editor)
     assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"], mode);
-    assert.deepEqual(p.seen.reveals, mode === "early" ? [508] : [], `${mode}: at the first resize`);
+    assert.equal(p.seen.reveals, mode === "early" ? 1 : 0, `${mode}: at the first resize`);
     p.tick(SETTLE - 10);
     p.pan(120); // Safari's pan, about 120 ms later: scrolled back; the settle timer starts again
     assert.equal(p.seen.unpans, 1, mode);
     assert.equal(p.vars.get("--vv-top"), "0px", mode);
     p.tick(SETTLE - 1);
-    assert.equal(p.seen.reveals.length, mode === "early" ? 1 : 0, `${mode}: not settled yet`);
+    assert.equal(p.seen.reveals, mode === "early" ? 1 : 0, `${mode}: not settled yet`);
     p.tick(1);
-    assert.deepEqual(p.seen.reveals, mode === "early" ? [508, 508] : [508], `${mode}: settled`);
+    assert.equal(p.seen.reveals, mode === "early" ? 2 : 1, `${mode}: settled`);
     p.pan(0); // a later event while open reveals again after it settles, but early's at-once reveal is only on opening
     p.tick(SETTLE);
-    assert.equal(p.seen.reveals.length, mode === "early" ? 3 : 2, mode);
+    assert.equal(p.seen.reveals, mode === "early" ? 3 : 2, mode);
     p.move(844); // closed: a pending timer reveals nothing
     p.move(508);
     p.move(844);
-    const before = p.seen.reveals.length;
+    const before = p.seen.reveals;
     p.tick(SETTLE);
-    assert.equal(p.seen.reveals.length, before, `${mode}: no reveal after the keyboard closed`);
+    assert.equal(p.seen.reveals, before, `${mode}: no reveal after the keyboard closed`);
     assert.equal(p.vars.size, 0, mode);
     p.stop();
   }
@@ -2513,6 +2513,6 @@ test("the keyboard experiment, round 2: caret and early scroll back a pan as unp
     const p = keyboardPage(mode);
     p.move(508);
     p.tick(SETTLE);
-    assert.deepEqual(p.seen.reveals, [], `${mode} reveals nothing`);
+    assert.equal(p.seen.reveals, 0, `${mode} reveals nothing`);
   }
 });
