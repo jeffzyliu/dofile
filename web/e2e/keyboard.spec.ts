@@ -175,40 +175,59 @@ test("?kblog: the overlay lists the events with the strategy's name, takes no ta
 
 // ?kb=caret and ?kb=early (round 2): with the keyboard open, the editor's caret is scrolled above it, by early at once when
 // the keyboard is first seen, by both once it has settled (SETTLE, 300 ms). A stand-in visualViewport (set before the page
-// loads) plays the keyboard: its height drops to 400 px and it fires a resize.
+// loads) plays the keyboard: its height drops to 400 px and it fires a resize. Three taps under the coming keyboard: a
+// line of text, an empty line (a DOM range has no box there; the first build missed it) and the file's last line.
+const TAPS = ["a low line", "an empty line", "the last line"] as const;
 for (const mode of ["caret", "early"] as const)
-  test(`?kb=${mode}: the editor's caret, low on the page, is scrolled above the keyboard ${mode === "early" ? "at once" : "once it settles"}`, async ({
-    page,
-  }) => {
-    await page.addInitScript((height) => {
-      const vv = Object.assign(new EventTarget(), { height, width: 390, offsetTop: 0, offsetLeft: 0, scale: 1 });
-      Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
-      (window as any).__vv = vv;
-    }, PHONE.height);
-    await open(page, `&kb=${mode}&sample`);
-    const content = page.locator(".cm-content");
-    await expect(content).toContainText("summarize");
-    await content.click({ position: { x: 40, y: 600 - ((await content.boundingBox())?.y ?? 0) } });
-    await settled(page);
-    const caret = () =>
-      page.evaluate(() => {
-        const r = getSelection()!.getRangeAt(0);
-        return (r.getClientRects()[0] ?? r.getBoundingClientRect()).bottom;
+  for (const tap of TAPS)
+    test(`?kb=${mode}: the editor's caret on ${tap}, under the keyboard, is scrolled above it ${mode === "early" ? "at once" : "once it settles"}`, async ({
+      page,
+    }) => {
+      await page.addInitScript((height) => {
+        const vv = Object.assign(new EventTarget(), { height, width: 390, offsetTop: 0, offsetLeft: 0, scale: 1 });
+        Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
+        (window as any).__vv = vv;
+      }, PHONE.height);
+      await open(page, `&kb=${mode}&sample`);
+      const content = page.locator(".cm-content");
+      await expect(content).toContainText("summarize");
+      if (tap === "a low line") await content.click({ position: { x: 40, y: 600 - (await content.boundingBox())!.y } });
+      else {
+        const lines = content.locator(".cm-line");
+        const index = await lines.evaluateAll(
+          (ls, empty) =>
+            empty
+              ? ls
+                  .map((l, i) => [l, i] as const)
+                  .filter(([l]) => !l.textContent && l.getBoundingClientRect().top > 420)
+                  .at(-1)![1]
+              : ls.length - 1,
+          tap === "an empty line",
+        );
+        await lines.nth(index).click();
+      }
+      await settled(page);
+      // the bottom of the caret's line (the caret's own box is empty on an empty line), and whether it is shown above the
+      // keyboard: 20 px clear (the line is a few px taller than the caret, whose margin is 24), or, with the editor
+      // scrolled to its end so it can go no further, inside the editor
+      const caret = () =>
+        page.evaluate(() => {
+          const node = getSelection()!.focusNode!;
+          const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement!;
+          const bottom = el.closest(".cm-line")!.getBoundingClientRect().bottom;
+          const scroller = document.querySelector(".cm-scroller")!;
+          const atEnd = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
+          return { bottom, shown: bottom <= 400 - 20 || (atEnd && bottom <= scroller.getBoundingClientRect().bottom) };
+        });
+      expect((await caret()).bottom).toBeGreaterThan(400); // under the coming keyboard
+      await page.evaluate(() => {
+        const vv = (window as any).__vv;
+        vv.height = 400;
+        vv.dispatchEvent(new Event("resize"));
       });
-    expect(await caret()).toBeGreaterThan(400); // under the coming keyboard
-    const atOnce = await page.evaluate(() => {
-      const vv = (window as any).__vv;
-      vv.height = 400;
-      vv.dispatchEvent(new Event("resize"));
-      const r = getSelection()!.getRangeAt(0);
-      return {
-        open: "keyboard" in document.documentElement.dataset,
-        bottom: (r.getClientRects()[0] ?? r.getBoundingClientRect()).bottom,
-      };
+      expect(await page.evaluate(() => "keyboard" in document.documentElement.dataset)).toBe(true);
+      await settled(page); // CodeMirror scrolls in its next measure: early's reveal is done, caret's waits 300 ms more
+      expect((await caret()).shown).toBe(mode === "early");
+      await expect.poll(async () => (await caret()).shown).toBe(true);
+      expect((await caret()).bottom).toBeGreaterThan(300); // just above the keyboard, not further
     });
-    expect(atOnce.open).toBe(true);
-    if (mode === "early") expect(atOnce.bottom).toBeLessThanOrEqual(400 - 24 + 1);
-    else expect(atOnce.bottom).toBeGreaterThan(400);
-    await expect.poll(caret).toBeLessThanOrEqual(400 - 24 + 1);
-    expect(await caret()).toBeGreaterThan(300); // just above the keyboard, not further
-  });

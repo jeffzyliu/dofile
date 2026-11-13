@@ -143,7 +143,7 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
   (at 1440 px in sight, with the full sentence for screen readers and as its title, no link or tab stop; none at
   1199 px, the bar's height the same; at 1200 px, with the longest last run, memory and "Files may be cleared", no
   overflow and nothing cut in seven engine states; none on the iPhone, which has no status bar).
-- `keyboard.spec.ts` (6): the phone keyboard experiment (`?kb=`, `?slide`, `?kblog`), in every profile at 390 by 844 px,
+- `keyboard.spec.ts` (10): the phone keyboard experiment (`?kb=`, `?slide`, `?kblog`), in every profile at 390 by 844 px,
   with viewport.ts's attributes set by script (no profile has a real keyboard): for no flag, `top`, an unknown value and
   each strategy, `<html data-kb>` (none for the default), `.app` as the visible area (by a transform only under
   `transform`), the tab bar hidden, the command line at its foot and the toast above it, and `.app` filling the window once
