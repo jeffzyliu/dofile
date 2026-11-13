@@ -53,6 +53,9 @@ estimated splits) are the study's, not checked again here.
 - The closest fits: Zag.js (menu, tabs, tree; its Preact adapter imports `preact/compat`), and `@headless-tree/core`
   (framework-free, about 6.5 kB gzipped) for the tree. The case for the tree is behavior (typeahead, position in set), not
   lines.
+- **The focus system may be replaced as a whole** in a later iteration of the app. Until then the bar for focus code is
+  that it reads cleaner and holds fewer references to DOM elements (the maintainer, 2026-11-13, after the focus hooks of
+  `ui/focus-hooks.ts`, pull request #45).
 
 ## Infrastructure and CI (added 2026-11-12)
 
