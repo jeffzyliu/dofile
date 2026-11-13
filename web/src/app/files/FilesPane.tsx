@@ -18,7 +18,7 @@
 //    reason under it. "New .do file" and "New folder" draw the name field at once, filled in `untitled.do` (`folder`; the first
 //    free name), with nothing written (a draft: `renaming.draft`; OQ-21). Esc writes nothing; Enter, or leaving the field,
 //    writes it under the typed name, or under the free default when the name is empty or unchanged (a name that cannot be
-//    used keeps the field open on Enter, and makes the default on leaving), reads the list again and opens a new file.
+//    used keeps the field open on Enter, and makes the default on leaving), reads the list again and, after Enter only, opens a new file.
 //  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the page (SPEC 3.1; the
 //    Files pane gets the accent outline while a drag with files is over the page: data-drop, OQ-16; with the list
 //    folded away the files are uploaded all the same, and the toast says so). actions.ts upload() asks each clash. The
@@ -182,8 +182,9 @@ async function endRename(name: string | null, leaving = false) {
 
 /** The end of a draft's field. Esc writes nothing. Enter writes the typed name, or the free default (`untitled.do`,
  *  `folder`) when it is empty or unchanged; a name in use keeps the field open. Leaving the field always writes: a name
- *  that cannot be used makes the free default, and the live region says so. Then the list is read again, so the row
- *  replaces the draft in one render, and a file opens. */
+ *  that cannot be used makes the free default, and the live region says so, but nothing opens and the focus stays where
+ *  the visitor tapped (docs/web-page-flows.md, rule 8). Then the list is read again, so the row replaces the draft, and
+ *  after Enter a file opens and its row takes the focus. */
 async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   const kind = r.draft!;
   const what = kind === "file" ? "file" : "folder";
@@ -226,10 +227,10 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
     ending = false;
   }
   if (problem) say(`${problem} Made ${baseName(to)} instead.`);
-  if (kind === "file") openFile(to);
+  if (kind === "file" && !leaving) openFile(to); // leaving: the visitor's tap decides what is open and where the focus is
   if (renaming.value?.id !== r.id) return; // another field was started meanwhile
   renaming.value = null;
-  focusRow(to);
+  if (!leaving) focusRow(to);
 }
 
 function send(items: Promise<Incoming[]>) {
