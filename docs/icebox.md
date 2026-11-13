@@ -121,3 +121,12 @@ estimated splits) are the study's, not checked again here.
   it is how a visitor would crash the tab. The engine has no `max_memory` setting today, so it needs a hook in `browser.py` (or a
   patch) and the cap the worker sets; the loader reads the cap at each grow, so it can probably change while the engine runs
   (not checked). `docs/browser-engine.md`, "The memory cap". 2026-11-13.
+
+## Engine text (added 2026-11-13)
+
+- **Reword the few help lines that read close to Stata's manual** (step 5's C 3). A sampled audit (2026-11-13: about 15 help
+  topics and 20 to 30 error messages against 21 public manual entries and 17 online help pages) found no copied prose; the
+  matches are functional (syntax, option names, Stata's own error messages). Close: 3 help page titles ("Linear regression",
+  "Summary statistics", "Extensions to generate"), 2 more near them, and 2 or 3 one-line option descriptions (`beta`,
+  `level`, `noconstant`). A rewording is an engine patch; the maintainer: "no engine patches that are non critical for
+  correctness until phase 2(web editor) is done". A full audit of the 156 other help topics is about 3 to 5 hours. 2026-11-13.

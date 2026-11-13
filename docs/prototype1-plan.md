@@ -397,6 +397,7 @@ Reviewed after the merge: see Post-merge review.
 2. The first visit's sample brings no storage banner (S 19) for its own writes (of the sample's three paths); a change of
    the visitor's made while it is written, and the first one afterwards (a Save, an upload, a run that writes a file), do
    (`app/files.ts`, from the store's change row).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "b2 is okay, do not bring the banner on the initial sample write").
 3. The first-visit sample is off under `?test` unless the URL also has `?sample`, so the e2e tests start from an empty
    store.
    **Resolved (2026-11-13): kept as it is** (the maintainer: "change it if it helps, not important at all. current situation
@@ -421,9 +422,13 @@ Reviewed after the merge: see Post-merge review.
    headers on 304s; a tab of the old build left open across the deploy shows a failed download, not "updated").
 2. OpenDTA's `growth` dataset (`sysuse growth`) resembles Stata's `childweight` in theme only (children measured at several
    ages with a `girl` indicator; other variables, another measure, other values); its generator was read, not run.
+   **Resolved (2026-11-13): kept** (the maintainer: "keep growth"). Re-run of the generator matches the vendored data; the
+   resemblance is in theme only (a report of 2026-11-13, from public descriptions; Stata's file was not opened).
 3. The engine's own text was not audited again for step 5: its error messages and hints, and OpenDTA's help pages (`help`),
    are covered by the vendor's clean-room policy only; the clean-room check covered the site's pages, the sample and the
    editor's words.
+   **Iceboxed (2026-11-13)** (`docs/icebox.md`, "Engine text"): the maintainer: "no engine patches that are non critical for
+   correctness until phase 2(web editor) is done, icebox".
 4. `shell.spec.ts`'s `?snapshot=0` test (the normal boot from the CDN) has failed now and then in Firefox, not in the other
    profiles; not investigated.
 5. The design checks (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs, not the built pages;
