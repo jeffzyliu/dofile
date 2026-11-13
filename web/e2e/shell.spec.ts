@@ -637,9 +637,9 @@ test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ m
       await page.keyboard.press("Escape");
       await expect(page.getByRole("menu")).toHaveCount(0);
     }
-    // the nested do's note names the ⋯ menu's Save instead
+    // the nested do's note names the file dropdown's Save instead
     await expect(page.getByRole("log", { name: "Log" })).toContainText(
-      "Note: a.do has unsaved edits in the editor; do runs the saved file. Save it (⋯ › Save) to run your edits.",
+      "Note: a.do has unsaved edits in the editor; do runs the saved file. Save it (the file name's menu › Save) to run your edits.",
     );
   } else {
     await tree.getByRole("treeitem", { name: /^a\.do/ }).click();

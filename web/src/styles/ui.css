@@ -1317,6 +1317,12 @@ dialog.dialog.sheet {
 .menu .danger {
   color: var(--error);
 }
+/* the phone's open files: the tab list scrolls, so the items around it (Save, Close, Show all files) stay in reach */
+.menu-scroll {
+  max-height: 60dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .menu hr {
   border: 0;
   border-top: 1px solid var(--border);

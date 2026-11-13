@@ -1068,14 +1068,15 @@ input.filter::placeholder {
   display: flex;
   align-items: center;
   gap: var(--s2);
-  padding: 5px var(--s3);
+  height: var(--strip);
+  padding: 0 var(--s3);
   container-type: inline-size;
   font-size: var(--text-sm);
   color: var(--muted);
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
-  overflow: hidden;
+  overflow-x: clip; /* not overflow: hidden, which would cut the ⋯ button's tap target at the strip's edge */
 }
 /* the Files view's "Files ⋯" and the Log view's "Log ⋯" buttons (their head's actions, App.tsx): at the right end; the status text gives way to it with an
    ellipsis, and the word goes when the strip is narrow, leaving the ⋯ */
@@ -1089,6 +1090,11 @@ input.filter::placeholder {
 } /* the error code is never cut */
 .phone-strip .strip-actions {
   flex: none;
+  /* a 44 px tap target in a shorter strip: the button is taller than the strip and sticks out above and below it (nothing
+     is drawn there), over its neighbours */
+  position: relative;
+  height: 44px;
+  margin-block: calc((var(--strip) - 44px) / 2);
   margin-left: auto;
   gap: var(--s1);
 }

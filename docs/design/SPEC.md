@@ -46,7 +46,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
   ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
   name keeps it; a Results row's "↵ Copy" goes (a tap copies, and the toast says so; for the maintainer to confirm: plan, "Step 4: decisions and open questions", B 8); the nested-do note (`S 15`) names
-  the ⋯ menu's Save instead of the key. An icon-only button has an `aria-label`.
+  the file dropdown's Save instead of the key (on a phone). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
 - **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the
@@ -72,7 +72,7 @@ is two panes: Log above (`1.35fr`, the command line at its foot) and, below (`1f
 toolbar, files, editor, output, command line, lower pane (`WB`).
 
 **Phone** (`PH`, `WP`; under 700 px): top bar, the view, the command line (on the Log view only: `WP 1`, the Editor view,
-has none), and a bottom tablist "Views": Files, Editor, Log, Data, Results. The top bar has a title (on the Editor tab it is the file switcher, `WP 1`), ⋯ and one Run button. The strip under it carries a button at its right end: "Files ⋯" (accessible name "File actions") on the Files view and "Log ⋯" ("Log actions": Find, Download log, Clear log…; the last asks first and is disabled with nothing to clear) on the Log view; the word is hidden when the strip is narrow, leaving the ⋯ (UI fix round, 2026-11-12; it replaces the file actions in the top bar's ⋯). Graphs show
+has none), and a bottom tablist "Views": Files, Editor, Log, Data, Results. The top bar has a title (on the Editor tab it is the file switcher, `WP 1`: a menu with Save at the top, the open files in a list that scrolls (at most 60% of the window's height), then "Close <file>" and "Show all files", which stay in reach), ⋯ and one Run button. The strip under it carries a button at its right end: "Files ⋯" (accessible name "File actions") on the Files view and "Log ⋯" ("Log actions": Find, Download log, Clear log…; the last asks first and is disabled with nothing to clear) on the Log view; the word is hidden when the strip is narrow, leaving the ⋯; the strip is one height on every view, with or without the button, whose tap target is 44 px tall (UI fix round, 2026-11-12; it replaces the file actions in the top bar's ⋯). Graphs show
 inline in the log; a tap opens the full-size view (`WP 3`, `WP 6`). Dialogs are bottom sheets (`S 8`). Only the Log tab and
 the prompt sheet are drawn in high fidelity; from 700 px the desktop layout is used "with the file list folded away": OQ-14.
 
@@ -151,7 +151,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   keep their place, unseen.
 - **Phone** (`PH`, `PH?r`, `WP 1`, `WP 2`): one Run button; with a selection its label names the lines ("Run 6–7", "Run 6" for one line; named "Run lines 6–7", "Run line 6"). Run
   opens the Log tab. While running, Break takes Run's place as a pill with the time ("Break" "3.4 s") and ignores taps in its
-  first 600 ms. Save and Reset are in ⋯, which is Save, Theme, Wrap lines, Reset the engine…, Commands, About dofile. The theme button's place: OQ-14.
+  first 600 ms. Reset is in ⋯, which is Theme, Wrap lines, Reset the engine…, Commands, About dofile. The theme button's place: OQ-14.
 
 ### 3.5 Log pane and command line (P1, step 4b)
 - **Lines, top to bottom** (`DS` "Log"): the head (`.head`: banner B2, `book+drop+skew` in `mockups/art.js`, `aria-hidden`;
@@ -328,7 +328,7 @@ place and Load or Import and Copy are off (`web/src/stata/quote.ts`).
   `analysis.do`. One run at a time. Run does not save. Editing during a run is allowed and does not change the run.
 - `do` and `include` read the saved file in `/work`. When the log shows a nested `do` or `include` of a file that was open with
   unsaved edits when the run started, the page adds under that echo (`S 15`): "Note: clean.do has unsaved edits in the editor;
-  do runs the saved file. Save it (⌘ S) to run your edits." (Ctrl S off a Mac; on the phone layout "Save it (⋯ › Save) to
+  do runs the saved file. Save it (⌘ S) to run your edits." (Ctrl S off a Mac; on the phone layout "Save it (the file name's menu › Save) to
   run your edits.")
 - Load and Import run their shown command as if typed in the command line: echoed in the log, added to the history (↑ brings
   it back), never written into a do-file. Load does not ask first in P1 (OQ-6: P2). Copy puts the command on
@@ -984,7 +984,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (the store has a file; folders do not count).
 - **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
   three times in step 4, its header says which: the phone ⋯'s file actions and the focus on the tree's row when 4a was
-  joined, and the phone ⋯'s Save off on a .dta tab when 4b and 4d were joined.) A part reads any signal; it writes only those listed for it.
+  joined, and the phone's Save off on a .dta tab when 4b and 4d were joined.) A part reads any signal; it writes only those listed for it.
   - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
