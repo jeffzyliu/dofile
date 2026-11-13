@@ -77,3 +77,13 @@ estimated splits) are the study's, not checked again here.
   to 5, a guess that assumes 1.3 to 1.5 times slower tests from sharing the runner. More load may make the WebKit navigation
   hang and the memory-heavy Firefox runs worse. Left because the matrix of four projects (#32) paid more with less risk.
   2026-11-12.
+
+## Phone (added 2026-11-12)
+
+- **Zoom on the editor page needs an iPhone check before it comes back.** The editor page's viewport meta turns pinch zoom
+  off (`minimum-scale=1, maximum-scale=1, user-scalable=no` in `web/index.html`, set on 2026-11-12 to steady the phone
+  keyboard), and whether to turn it back on is the plan's decision 6. All three rounds of the keyboard experiment
+  (`docs/phone-keyboard-experiment.md`, #27) ran with zoom off, and `viewport.ts` does nothing while the page is zoomed (at a
+  scale other than 1 it counts no keyboard: no area above it, no scroll-back of Safari's pan, no caret reveal), so a tap
+  low in the editor while zoomed in may jump as before. If zoom comes back: one more sitting on an iPhone with `?kblog`,
+  including taps while zoomed in. Nothing to do while zoom stays off. 2026-11-12.

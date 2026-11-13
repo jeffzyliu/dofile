@@ -68,7 +68,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     that joined everything) and #29 (an earlier version of this section) are not for merging.
 - **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
   decisions: 1 to 5 are accepted (all built in #23 to #25; decision 5, the trackpad back-swipe, is to be checked once by
-  hand), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer, and 7 to 22 have no answer yet. Nothing they
+  hand), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer (the experiment ran with zoom off; turning it back on needs another iPhone check, `docs/icebox.md`, "Phone"), and 7 to 22 have no answer yet. Nothing they
   would release is started: Reset asking when only globals are held (C 1), "Run the file again" after a Reset the
   visitor asked for (C 3), the failed start announced twice (C 5), the two items below, `cls`, the later UI work, the
   document pass and step 6's scope.
