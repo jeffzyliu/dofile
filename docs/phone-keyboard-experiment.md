@@ -248,14 +248,27 @@ non-passive `touchmove` listener, with a passive `touchstart` listener for the f
   scroll the way the finger moves, on the axis it moves along most (a finger up scrolls towards the end); at its end a
   drag is cancelled, so it does not chain to the window;
 - there is more than one touch (a pinch; the page's zoom is off, but the browser's own is not touched);
-- the touch's target is in selected text (a non-collapsed `getSelection()` that contains it, or an `<input>` or
-  `<textarea>` target with a selected range, which `getSelection()` does not show), so a drag of a selection handle is
-  left to the browser.
+- the touch's target is in selected text: a non-collapsed `getSelection()` that contains it and does not itself contain
+  the selection's common ancestor, or an `<input>` or `<textarea>` target with a selected range (which
+  `getSelection()` does not show). So a drag of a selection handle may be left to the browser, but not a drag on what
+  holds the selection (`html`, `body`, `.app`, the editor's scroller and content): those stay cancelled, or any selected
+  word would switch the guard off for the whole page. Left as it is: a selection inside one run of text exempts no
+  element (a touch's target is an element), and a drag on content inside the selection's common ancestor is exempt.
 
-Not known without a device: whether iOS sends `touchmove` at all for a native selection handle or the caret loupe (the
-guard leaves such a touch alone if it does, and nothing is lost if it does not); whether the target of such a touch in
-the command line is the `<input>` itself; whether a horizontal drag on a command line that overflows is cancelled (an
-input is no `overflow` scroller; it is, with nothing lost, if iOS moves the text by a touch); whether Safari 27 honours
-`preventDefault()` on a `touchmove` that comes after the page has already started to scroll (React Aria relies on it).
+A move under 4 px on both axes (a first `touchmove` often is) gives no axis, so it counts as scrolling if the element can
+scroll along either axis (a zero move, in either direction). A bar still gets it cancelled. Judging it on the larger
+axis alone cancelled a scroller's first move now and then.
+
+The caret loupe is not exempt: a caret alone is not a selection, and the editor always holds one. A long-press drag
+that moves the caret, in a short file or in the command line, is cancelled wherever no scroller can follow it, if iOS
+sends those touches to the page at all.
+
+Not known without a device: whether iOS sends `touchmove` at all for a native selection handle or the caret loupe (a
+handle's may be exempt, the loupe's is not: see above; nothing is lost if iOS does not send them); whether the target of
+such a touch in the command line is the `<input>` itself; whether a horizontal drag on a command line that overflows is
+cancelled (an input is no `overflow` scroller; it is, with nothing lost, if iOS moves the text by a touch); whether Safari
+27 honours `preventDefault()` on a `touchmove` that comes after the page has already started to scroll (React Aria
+relies on it); whether a cancelled first `touchmove` ends native scrolling for the whole gesture. To check on the
+iPhone: long-press and drag the caret in a short file and in the command line.
 Unit tests (`app.test.ts`) and one e2e (`keyboard.spec.ts`) cover the
 logic with synthetic events; only an iPhone shows whether the page stays still.
