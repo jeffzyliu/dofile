@@ -317,6 +317,27 @@ test("a renamed row drawn after the visitor clicked another row leaves the focus
   await expect(row(page, /^c\.do/)).toBeFocused();
 });
 
+test("a menu's arrow keys skip a disabled item in the middle or at the end, and wrap around", async ({ page }) => {
+  await setUp(page, {}); // no files: "Download all (.zip)" and "Delete all files…" are disabled
+  const menu = await fileActions(page);
+  const item = (name: string) => menu.getByRole("menuitem", { name });
+  await expect(item("Download all (.zip)")).toHaveAttribute("aria-disabled", "true");
+  await expect(item("Delete all files…")).toHaveAttribute("aria-disabled", "true");
+  await expect(item("New .do file")).toBeFocused();
+  await page.keyboard.press("End"); // the last item is not the disabled one at the end
+  await expect(item("Restore the sample")).toBeFocused();
+  await page.keyboard.press("ArrowUp"); // past the disabled one in the middle
+  await expect(item("Upload a folder")).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(item("Restore the sample")).toBeFocused();
+  await page.keyboard.press("ArrowDown"); // past the disabled last one, round to the first
+  await expect(item("New .do file")).toBeFocused();
+  await page.keyboard.press("ArrowUp"); // and back round to the last
+  await expect(item("Restore the sample")).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(item("New .do file")).toBeFocused();
+});
+
 test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the default; a folder's menu; Delete all files asks with the count", async ({
   page,
   isMobile,

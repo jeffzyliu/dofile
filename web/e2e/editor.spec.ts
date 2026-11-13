@@ -475,7 +475,7 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
   expect(await tabs()).toEqual([["c.do", true]]);
 });
 
-test('a rename takes the reset banner\'s cut file to the new name, so "Run the file again" runs the renamed file', async ({
+test("a rename takes the reset banner's cut file to the new name (still one banner, under the new path)", async ({
   page,
 }) => {
   await setUp(page, { "a.do": "display 1\n" });
