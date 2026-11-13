@@ -370,11 +370,13 @@ Reviewed after the merge: see Post-merge review.
     **Iceboxed (2026-11-13)** with the drag-and-drop audit (`docs/icebox.md`, "Command line, log and files").
 17. The forced-colors rules of 4a, 4b and 4c (and the shell's fold button) are in `@media (forced-colors: active)` blocks
     inside each part's block of `app.css`, not in the block at the end of `ui.css` that SPEC section 1 names.
+    **Resolved (2026-11-13, #47):** SPEC section 1 now describes the rules where they are; no CSS change.
 18. "Restore the sample" is not in the Files head menu until step 5's sample exists (OQ-13 puts it above "Delete all
     files…"). (Step 5: it is there, above "Delete all files…".)
 19. A graph that keeps its own scheme (`scheme(s1mono)`) in the dark theme is a light image on a dark card. (2026-11-12: the card's image has a thin border from the tokens in the dark theme, so it looks intended; `app.css`.)
 20. The build's main JavaScript chunk is over Vite's 500 kB warning (about 525 kB raw, 173 kB gzip).
 21. A two-word `help` topic in a hint's link is unverified.
+    **Closed (2026-11-13, #47):** every engine hint's help topic is one word.
 22. From step 3: at 700 to about 855 px with a 20 px default font size the toolbar scrolls sideways instead of fitting
     (its compact form starts below 56em).
 
