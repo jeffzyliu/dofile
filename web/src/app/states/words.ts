@@ -107,6 +107,12 @@ export function resetWords(kind: ResetKind, reason: string, isolated: boolean): 
   return { head: `The engine was reset: ${why}.`, rest: kept };
 }
 
+/** The file "Run the file again" (the reset banner) runs: the file whose run the reset cut, when it was a run of a whole file
+ *  and not a Reset the visitor asked for (`kind` "user"); else null, and the banner has only "Dismiss". A cut selection or
+ *  command, or a reset with no run in progress, is not offered: running the file would not be what was cut. */
+export const rerunPath = (kind: ResetKind, run: RunHead | null): string | null =>
+  kind !== "user" && run?.kind === "file" && run.path ? run.path : null;
+
 /** What the running banner (E?r) calls the run: "lines 14–15", "analysis.do", "a command". DRAFT (E?r draws lines only). */
 export function runningWhat(run: RunHead): string {
   if (run.kind === "selection" && run.lines) {

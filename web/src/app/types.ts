@@ -130,12 +130,13 @@ export type Dialog =
 export type DialogName = NonNullable<Dialog>["d"];
 
 /** The banners in `banners`. Who adds each: reset: engine.ts on a reset of an engine that had been ready (`kind`: Break
- *  ran out of time or the page cannot ask a run to stop, the worker crashed, or Reset / "Reset now"); storage: files.ts,
+ *  ran out of time or the page cannot ask a run to stop, the worker crashed, or Reset / "Reset now"; `run`: the run it cut,
+ *  null when none was in progress); storage: files.ts,
  *  once per visit, when persisted() is false and the files change; download-failed: files.ts, when downloadAll() could
  *  not make the zip (removed when a later one works); not-text: 4a; save-failed: 4b; run-changed:
  *  files.ts afterRun, when a run rewrote an open file that has unsaved edits (a save or a reload of that file removes it). */
 export type Banner =
-  | { b: "reset"; reason: string; kind: ResetKind }
+  | { b: "reset"; reason: string; kind: ResetKind; run: RunHead | null }
   | { b: "storage" }
   | { b: "download-failed" }
   | { b: "not-text"; path: string }

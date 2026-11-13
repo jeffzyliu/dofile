@@ -27,8 +27,8 @@ export const codeOf = new WeakMap<RunHead, string>();
 export const selection = signal<[number, number] | null>(null);
 
 export const editorCommands = {
-  /** Run: the active tab's whole text, saved or not, with no locals (fresh_locals). */
-  runFile() {},
+  /** Run: the whole text of `path` (default: the active tab), saved or not, with no locals (fresh_locals). */
+  runFile(_path?: string) {},
   /** Run selection: the selected lines, keeping the locals of earlier runs. */
   runSelection() {},
   /** Save `path` (default: the active tab) with store.write; Ctrl/Cmd+S, the Save button, the close-tab dialog's Save.

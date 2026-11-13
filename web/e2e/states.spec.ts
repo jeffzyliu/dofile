@@ -315,7 +315,9 @@ test("a banner that goes with the focus in it hands the focus on: the editor, or
   await expect(wait).toHaveCount(0);
   await handedOn();
 
-  await page.evaluate(() => window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user" }));
+  await page.evaluate(() =>
+    window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user", run: null }),
+  );
   const dismiss = page
     .locator(".banner", { hasText: "You reset the engine." })
     .getByRole("button", { name: "Dismiss" });
@@ -389,7 +391,9 @@ test("with a .dta tab active, a banner that goes with the focus hands it to that
     .click();
   const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^d\.dta/ });
   await expect(tab).toHaveAttribute("aria-selected", "true");
-  await page.evaluate(() => window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user" }));
+  await page.evaluate(() =>
+    window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user", run: null }),
+  );
   const dismiss = page
     .locator(".banner", { hasText: "You reset the engine." })
     .getByRole("button", { name: "Dismiss" });
@@ -485,12 +489,12 @@ test("the storage, reset and download-failed banners", async ({ page }) => {
   if (phone(page)) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
   await page.evaluate(() => {
     const s = window.__dofile.state;
-    s.addBanner({ b: "reset", reason: "the code did not stop at Break", kind: "break" });
+    s.addBanner({ b: "reset", reason: "the code did not stop at Break", kind: "break", run: null });
   });
   const reset = page.locator(".banner", { hasText: "The engine was reset:" });
   await expect(reset).toContainText("The engine was reset: the code did not stop at Break.");
   await expect(reset).toContainText("The data in memory is lost; your files are kept.");
-  await expect(reset.getByRole("button", { name: "Run the file again" })).toBeDisabled(); // no engine, no open file
+  await expect(reset.getByRole("button", { name: "Run the file again" })).toHaveCount(0); // no run was cut: only Dismiss
   await reset.getByRole("button", { name: "Dismiss" }).click();
   await expect(reset).toHaveCount(0);
 });
@@ -552,20 +556,40 @@ test("Reset asks only with data in memory (described again after a run); Cancel 
   expect(await engineIs(page)).toBe("ready");
   expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs)).toBe(10);
 
-  // "Run the file again" with 4b's editor: on with the engine ready and a text tab active; it runs that file and goes
+  // "Run the file again" with 4b's editor: it runs the file whose run the reset cut, not the active tab; it is on with the
+  // engine ready and that file open as text, and it is not offered after a Reset the visitor asked for
   await page.evaluate(() => window.__dofile.store.write("again.do", new TextEncoder().encode("display 40+2\n")));
-  if (phone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
-  await page
-    .getByRole("tree", { name: "Files" })
-    .getByRole("treeitem", { name: /^again\.do/ })
-    .click();
-  await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: again.do");
+  await page.evaluate(() => window.__dofile.store.write("other.do", new TextEncoder().encode("display 7\n")));
+  for (const name of ["again.do", "other.do"]) {
+    if (phone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+    await page
+      .getByRole("tree", { name: "Files" })
+      .getByRole("treeitem", { name: new RegExp(`^${name.replace(".", "\\.")}`) })
+      .click();
+    await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", `Editor: ${name}`);
+  }
   await page.evaluate(() => {
     window.__dofile.state.dismiss({ b: "reset" });
-    window.__dofile.state.addBanner({ b: "reset", reason: "reset by you", kind: "user" });
+    window.__dofile.state.addBanner({
+      b: "reset",
+      reason: "reset by you",
+      kind: "user",
+      run: { kind: "file", path: "again.do", fresh_locals: true },
+    });
   });
   if (phone(page)) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
-  const again = page.locator(".banner", { hasText: "You reset the engine." });
+  const asked = page.locator(".banner", { hasText: "You reset the engine." });
+  await expect(asked).toBeVisible();
+  await expect(asked.getByRole("button", { name: "Run the file again" })).toHaveCount(0);
+  await page.evaluate(() => {
+    window.__dofile.state.addBanner({
+      b: "reset",
+      reason: "the code did not stop at Break",
+      kind: "break",
+      run: { kind: "file", path: "again.do", fresh_locals: true },
+    });
+  });
+  const again = page.locator(".banner", { hasText: "The engine was reset:" });
   await again.getByRole("button", { name: "Run the file again" }).click();
   await expect(again).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.path)).toBe("again.do");

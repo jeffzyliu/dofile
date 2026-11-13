@@ -10,6 +10,7 @@ import {
   nothingToLose,
   ofTotal,
   type ResetSnapshot,
+  rerunPath,
   resetAsks,
   resetDecision,
   resetIn,
@@ -18,7 +19,7 @@ import {
   secs,
   twiceWords,
 } from "../src/app/states/words.ts";
-import type { FailReason } from "../src/app/types.ts";
+import type { FailReason, RunHead } from "../src/app/types.ts";
 
 const empty = { scalars: {}, macros: {}, matrices: {} };
 const results = (r = empty, e = empty) => ({ e, r, e_changed: false, r_changed: false });
@@ -117,6 +118,16 @@ test("after a run, Reset describes the memory again before it resets with no que
     await decide(memory({ state: "running", data: null, results: null, lastRun: null }, "never-called")),
     ["ask", 0],
   );
+});
+
+test('the reset banner offers "Run the file again" only for a reset that was not asked for and cut a run of a file', () => {
+  const file: RunHead = { kind: "file", path: "data/a.do", fresh_locals: true };
+  assert.equal(rerunPath("break", file), "data/a.do", "the file whose run was cut, not the active tab");
+  assert.equal(rerunPath("crash", file), "data/a.do");
+  assert.equal(rerunPath("user", file), null, "a Reset the visitor asked for");
+  assert.equal(rerunPath("crash", null), null, "no run was in progress");
+  assert.equal(rerunPath("break", { kind: "command", fresh_locals: false }), null);
+  assert.equal(rerunPath("break", { kind: "selection", path: "a.do", lines: [2, 3], fresh_locals: false }), null);
 });
 
 test("the stopping banner's countdown never says In 0 s", () => {

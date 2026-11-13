@@ -112,7 +112,7 @@ scatter lwage yrsed`,
   await page.evaluate(() => window.__dofile.reset());
   await ready(page);
   expect(await page.evaluate(() => window.__dofile.state.banners.value)).toEqual([
-    { b: "reset", reason: "reset by you", kind: "user" },
+    { b: "reset", reason: "reset by you", kind: "user", run: null },
   ]);
   r = await run(page, 'display "N=" _N\nuse cps, clear\ndisplay "M=" _N');
   expect(r.log).toContain("N=0");

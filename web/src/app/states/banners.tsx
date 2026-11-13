@@ -10,8 +10,9 @@
 //    what Break does instead), stopping (S 9, once the Break has been pending 1 s, takes the focus on "Don't reset: wait
 //    for it"; at 0 s it says the reset is under way), waiting (S 9b, takes the focus). With no cross-origin isolation the
 //    running banner is a warning, as S 11 draws it.
-//  - ResetBanner { b: "reset", reason, kind } above the log (P/Notices): "Run the file again" (editorCommands.runFile,
-//    on while the engine is ready and a text file is open), "Dismiss". engine.ts adds it on a reset.
+//  - ResetBanner { b: "reset", reason, kind, run } above the log (P/Notices): "Run the file again" only when the reset cut
+//    a run of a file and the visitor did not ask for it (words.ts rerunPath); it runs that file (editorCommands.runFile(path),
+//    on while the engine is ready and the file is open as text). "Dismiss". engine.ts adds it on a reset.
 //  - StorageBanner { b: "storage" } above the editor (S 19).
 //  - DownloadFailedBanner { b: "download-failed" } above the editor (on a phone on every view; no role="alert": files.ts
 //    says it once in the live region).
@@ -24,7 +25,7 @@ import { editorCommands } from "../editor/commands.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
-import { activeTab, dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
+import { dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
 import { Banner } from "../ui/Live";
 import { useNow } from "./clock.ts";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
@@ -33,6 +34,7 @@ import {
   FILES_SAFE,
   failedActions,
   GRACE_S,
+  rerunPath,
   resetIn,
   resetWords,
   runningWhat,
@@ -239,8 +241,8 @@ function BreakingBanner({ t0, resetAt, run }: { t0: number; resetAt: number; run
 
 export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
   const w = resetWords(banner.kind, banner.reason, isolated.value);
-  const open = tabs.value.find((t) => t.path === activeTab.value);
-  const canRun = engine.value.s === "ready" && open?.kind === "text";
+  const path = rerunPath(banner.kind, banner.run);
+  const canRun = engine.value.s === "ready" && tabs.value.some((t) => t.path === path && t.kind === "text");
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (
     <Banner
@@ -248,17 +250,19 @@ export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
       kind={banner.kind === "crash" ? "error" : banner.kind === "break" ? "warn" : "info"}
       actions={
         <>
-          <button
-            type="button"
-            class="btn primary"
-            disabled={!canRun}
-            onClick={() => {
-              editorCommands.runFile();
-              dismiss(banner);
-            }}
-          >
-            Run the file again
-          </button>
+          {path && (
+            <button
+              type="button"
+              class="btn primary"
+              disabled={!canRun}
+              onClick={() => {
+                editorCommands.runFile(path);
+                dismiss(banner);
+              }}
+            >
+              Run the file again
+            </button>
+          )}
           <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
             Dismiss
           </button>

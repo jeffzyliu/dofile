@@ -444,7 +444,7 @@ test("a subscriber of the `engine` signal that throws does not stop the step: it
     [null, 1],
     "and the new start has begun: the list is being fetched",
   );
-  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user" }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user", run: FILE }]);
   const cut = (await done)!;
   assert.deepEqual(
     [cut.rc, cut.kind],
@@ -511,7 +511,7 @@ test("the controller on the real transport, with a scripted worker: ready, a run
   assert.deepEqual([cut.rc, cut.kind, cut.error], [9998, "crash", SENTENCE("the engine crashed (boom)")]);
   await until("ready"); // the real build() (no list: null), then start(): it would throw if the old worker were still live
   assert.deepEqual([workers.length, workers[0].terminated, transport.worker === workers[1]], [2, true, true]);
-  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (boom)", kind: "crash" }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (boom)", kind: "crash", run: FILE }]);
   // what the ended worker still says goes through its own reply, with its own ticket: the machine drops it
   workers[0].onmessage!({ data: { stage: "engine" } });
   state("ready");
@@ -813,7 +813,7 @@ test("a crash cuts a run: the new state first, then engine-gone, then the cut ru
     "run.ts gets the cut result after the `engine` signal has the new state, and after the engine is gone",
   );
   assert.deepEqual(old.ended, { kind: "reset", reset: "crash", reason: SENTENCE("the engine crashed (x)") });
-  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (x)", kind: "crash" }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (x)", kind: "crash", run: FILE }]);
   const cut = (await done)!;
   assert.deepEqual([cut.rc, cut.kind, cut.results], [9998, "crash", null], "the machine's own result");
   assert.equal(cut.error, SENTENCE("the engine crashed (x)"));
@@ -865,7 +865,7 @@ test("Break on a page that cannot ask a run to stop (no SharedArrayBuffer) reset
   state("starting-list");
   assert.deepEqual(client.interrupted, [], "there was nothing to ask");
   const reason = "Break reset the engine, because this page is not cross-origin isolated and cannot ask a run to stop";
-  assert.deepEqual(banners(), [{ b: "reset", reason, kind: "break" }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason, kind: "break", run: FILE }]);
   const r = (await done)!;
   assert.deepEqual([r.rc, r.kind, r.error], [9998, "break", SENTENCE(reason)]);
 });
@@ -910,7 +910,7 @@ test("the Break timer across two runs on one worker (a simulated clock): the fir
       reset: "break",
       reason: SENTENCE("the code did not stop at Break"),
     });
-    assert.deepEqual(banners(), [{ b: "reset", reason: "the code did not stop at Break", kind: "break" }]);
+    assert.deepEqual(banners(), [{ b: "reset", reason: "the code did not stop at Break", kind: "break", run: FILE }]);
     await micro();
     assert.deepEqual(
       [S.lastRun.value!.rc, logItems().at(-1)!.text],
@@ -1112,7 +1112,7 @@ test("Reset: the banner carries the kind; the reason is the user's; the old work
   await readyEngine();
   const old = client.worker;
   engine.reset();
-  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user" }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user", run: null }]);
   assert.deepEqual(old.ended, { kind: "reset", reset: "user", reason: SENTENCE("reset by you") });
   assert.deepEqual(
     [state("starting-list").stage, client.lists.length, client.live],
@@ -1716,8 +1716,8 @@ test("showToast, holdToast; addBanner replaces one of a kind and path, dismiss r
   }
   S.addBanner({ b: "not-text", path: "a.xlsx" });
   S.addBanner({ b: "not-text", path: "b.xlsx" });
-  S.addBanner({ b: "reset", reason: "one", kind: "crash" });
-  S.addBanner({ b: "reset", reason: "two", kind: "user" });
+  S.addBanner({ b: "reset", reason: "one", kind: "crash", run: null });
+  S.addBanner({ b: "reset", reason: "two", kind: "user", run: null });
   assert.deepEqual(
     banners().map((b) => b.path ?? b.reason),
     ["a.xlsx", "b.xlsx", "two"],
