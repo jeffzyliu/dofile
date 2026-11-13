@@ -95,7 +95,7 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 460 tests)
+## Web (about 470 tests)
 
 ### Unit and integration (`node --test`, `web/test/`, 346)
 
@@ -125,9 +125,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 124 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 128 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 496 cases, of which 460 run and 36 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 512 cases, of which 476 run and 36 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -205,6 +205,7 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
 - `commands.spec.ts` (3, step 5): every name of `commands.json` once and in order, in columns, the shortest form in bold, the prefixes, `shell` and `webuse` marked off; the filter (contains, case and spaces ignored, the count, a prefix-only match that hides the commands' section and counts "1 prefix", the empty message with the prefixes' note hidden, the list back); no link to a help page and no manual or help-file wording.
 - `sample.spec.ts` (5, step 5): a first visit lists the sample and opens `analysis.do`, a later visit writes nothing (the mark; a deleted file stays deleted); never over a visitor's files, and not under `?test` alone; Restore the sample (position above Delete all files…, the toast, "already here", the dialog on a changed file: Cancel focused, Cancel keeps it, Replace restores it, other files untouched); the sample runs in the real engine at `/app/` to a table and a graph; where the browser keeps no storage, the sample's write brings no storage banner and the visitor's own change does.
 - `step2.spec.ts` (6): download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
+- `fixtures.spec.ts` (4, no browser page: a stand-in page whose `goto` fails as scripted): `retryFirstGoto` in `fixtures.ts`, which the `page` fixture applies to every test's page (and three specs apply to a page they open themselves: the persistent context in `engine.spec.ts`, the second tab in `step2.spec.ts` and `states.spec.ts`). A timeout on a page still at `about:blank` is retried once with the same arguments and logs one line (works around WebKit bug 325840 on Linux CI, where a fresh page's first navigation is cancelled); a second timeout is thrown; an error that is not a timeout and a timeout on a page that has left `about:blank` are not retried. The CI log shows a retry as a "timed out on a fresh page" line.
 - `poc.spec.ts` (4, all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
 - `engine.spec.ts` (3): runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start.
 - `output.spec.ts` (5, step 4c): the three empty states and the reset wording; a .png from the files on the light card in the dark theme; a .dta tab whose name a command can't hold (the reason, Load and Copy off); a .dta tab with no engine (two bars, Copy, no table; Load off: `aria-disabled`, `.off`, still focusable, and a press only shows the toast "Start the engine to load wages.dta", with no prompt and no drop); and one test with an engine that runs code through the hook and checks the Graph tab (alt text with the graph number, foot, thumbnails), the full-size view (← → Esc, focus back, Tab kept inside, Copy image, Export PNG; on the phone, Previous, Next and Close), the Data tab (facts, filter, arrow keys, picking a name and the column scroll, Show 50 more, a cut cell shown whole, nothing written to the log), the Results tab (sections, copied values with every digit, the focused row's "↵ Copy" in sight on the desktop and hidden on a phone, Ctrl/Cmd+C, a matrix viewed, copied and hidden, closed by the next run) and a .dta tab with an engine (variables, `describe_file` leaves the data, Load). The full-size view's move is said in the live region. The clipboard is a recorder in every page.
@@ -250,7 +251,7 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (124, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (128, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.

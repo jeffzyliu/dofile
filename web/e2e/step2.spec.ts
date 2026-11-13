@@ -9,7 +9,7 @@
 // and reset (the engine controller's), drops (the events that changed nothing) }; with ?test=manual the page starts no
 // engine until start() is called. The store is blocked until the tab lock answers.
 import type { BrowserContext, Page } from "@playwright/test";
-import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type StartFiles = {
   built: number;
@@ -387,6 +387,7 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
 
   // a second tab: blocked, with the take-over dialog
   const second = await context.newPage();
+  retryFirstGoto(second);
   second.on("pageerror", (e) => console.log(`second tab error: ${e.message}`));
   await second.goto("?test");
   const otherTab = (p: Page) => p.getByRole("alertdialog", { name: "dofile is open in another tab" });

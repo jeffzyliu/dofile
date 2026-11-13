@@ -7,7 +7,7 @@
 // banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the stand-in and
 // for 4b's CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
 import type { Locator, Page } from "@playwright/test";
-import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type Hook = {
   run(code: string): Promise<{ rc: number; log: string } | null>;
@@ -119,6 +119,7 @@ test("a second tab: Start engine goes into the take-over dialog, never straight 
 }) => {
   // `page` holds the tab lock (the real machine, in `none`). A second tab of the same browser does not get it.
   const second = await context.newPage();
+  retryFirstGoto(second);
   await second.goto("?test=manual");
   await expect.poll(() => engineIs(second)).toBe("other-tab-idle");
   const dlg = second.getByRole("alertdialog", { name: "dofile is open in another tab" });

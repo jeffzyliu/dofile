@@ -4,7 +4,9 @@
 //   import { test, expect } from "./fixtures";
 //   test.use({ persisted: false });   // in a file or a describe: the browser's own answers
 // A context the test makes itself (launchPersistentContext, browser.newContext) is not covered: call keepFiles(context).
-import { type BrowserContext, test as base, expect, type Page } from "@playwright/test";
+// Every page goto is retried once when a fresh page's first navigation stalls (retryFirstGoto, below). A page the test
+// makes itself (context.newPage()) is not covered: call retryFirstGoto(page).
+import { type BrowserContext, test as base, errors, expect, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -38,8 +40,28 @@ export const keepFiles = (context: BrowserContext) =>
     storage.persist = async () => true;
   });
 
+/** Make `page.goto` retry once when it times out while the page is still at about:blank. On Linux, WebKit now and then
+ *  cancels a fresh page's first navigation (WebKit bug 325840) and goto waits out its timeout with nothing loaded. Nothing
+ *  else is retried: another error, a timeout on a page that has already left about:blank, a second timeout. */
+export function retryFirstGoto(page: Page) {
+  const goto = page.goto.bind(page);
+  page.goto = async (url, options) => {
+    try {
+      return await goto(url, options);
+    } catch (e) {
+      if (!(e instanceof errors.TimeoutError) || page.url() !== "about:blank") throw e;
+      console.log(`page.goto(${url}) timed out on a fresh page (still about:blank): retrying once`);
+      return goto(url, options);
+    }
+  };
+}
+
 export const test = base.extend<{ persisted: boolean }>({
   persisted: [true, { option: true }],
+  page: async ({ page }, use) => {
+    retryFirstGoto(page);
+    await use(page);
+  },
   context: async ({ context, persisted }, use) => {
     if (persisted) await keepFiles(context);
     await use(context);
