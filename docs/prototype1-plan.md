@@ -415,7 +415,7 @@ merge of steps 4 and 5. They are reviewed after it:
 - [ ] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan.
 - [ ] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand".
 - [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy.
-- [x] Remove the queued run (asked for by the maintainer, 2026-11-12). Done on the branch `claude/remove-queued-run`: no
+- [x] Remove the queued run (asked for by the maintainer, 2026-11-12). Done on the branch `claude/remove-queued-run`, merged as #26 on 2026-11-12: no
       state holds a run, `started` always leads to `ready`, `drop-run`, run.ts's `pending` and `dropped` are gone, and with no
       engine nothing offers to run: Run is "Start engine" (the prompt, a new try, or the take-over dialog), the command
       line is disabled, and Load, Import and the help links are off (`docs/web-page-flows.md`, section 2). What follows
@@ -444,7 +444,7 @@ Found in the UI fix round (2026-11-12), still open:
 
 ## Later UI work (the maintainer's ideas, 2026-11-12; not started)
 
-Suggested order: "Remove the queued run" (Post-merge review) before 1 and 6, since they change the same Run controls.
+"Remove the queued run" (Post-merge review) came before 1 and 6, since they change the same Run controls; it is merged (#26).
 
 1. Run only from a `.do` or `.ado` file (today any text file runs). Overlaps the refused-run toast (step 4 A 12) and C 3.
 2. Live syntax checking of the active editor buffer, with underlines, and a run refused on a syntax error; the same for the
