@@ -1,6 +1,6 @@
 // Prototype 1, step 5: the sample project (docs/design/SPEC.md, section 3.12; web/sample/) in real browsers. A first visit
 // to an empty store writes it and opens analysis.do; a visitor's own files are never written over; "Restore the sample"
-// is in the file menu and asks before it replaces a file that differs. The first-visit load is off under `?test` unless the
+// is in the file menu and is an upload of the sample (a file that differs is asked in the clash dialog). The first-visit load is off under `?test` unless the
 // URL also has `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE } from "../scripts/urls.ts";
@@ -70,15 +70,24 @@ test("never over a visitor's own files, and not under ?test alone", async ({ pag
   expect(await stored(page)).toEqual(["mine.do"]);
 });
 
-test("Restore the sample: what is missing comes back with a toast; a changed file is asked about first (Cancel keeps it, Replace restores it); other files stay", async ({
+test("Restore the sample is an upload of the sample: what is missing comes back with a toast; a changed file is asked about in the clash dialog (Keep mine, Replace with the sample); other files stay; analysis.do opens", async ({
   page,
 }) => {
   await page.goto("?test=manual&sample");
   await unblocked(page);
   await expect.poll(() => stored(page)).toEqual(ALL);
+  const active = () => page.evaluate(() => (window as any).__dofile.state.activeTab.value);
   await put(page, "mine.do", "display 1\n");
   await page.evaluate(() => (window as any).__dofile.store.remove("helpers.do"));
   await expect.poll(() => stored(page)).toEqual(["analysis.do", "data/wages.dta", "mine.do"]);
+  const restore = async () => (await menu(page)).getByRole("menuitem", { name: "Restore the sample" }).click();
+  // the visitor is in mine.do when they restore
+  await (await menu(page)).press("Escape");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /mine\.do/ })
+    .click();
+  await expect.poll(active).toBe("mine.do");
 
   // it sits above "Delete all files…"
   const items = await (await menu(page)).getByRole("menuitem").allInnerTexts();
@@ -88,23 +97,26 @@ test("Restore the sample: what is missing comes back with a toast; a changed fil
   await expect(page.locator(".toast")).toHaveText("Sample restored");
   expect(await stored(page)).toEqual([...ALL, "mine.do"].sort());
   expect(await textOf(page, "mine.do")).toBe("display 1\n");
+  await expect.poll(active).toBe("analysis.do"); // the sample's main do-file is shown, mine.do stays open
 
-  // nothing differs, nothing is missing
-  await (await menu(page)).getByRole("menuitem", { name: "Restore the sample" }).click();
+  // nothing differs, nothing is missing: not asked, not written
+  await restore();
   await expect(page.locator(".toast")).toHaveText("The sample is already here");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
 
-  // a file of the sample the visitor changed: asked first, named
+  // a file of the sample the visitor changed: asked first, in the clash dialog with the sample's words
   await put(page, "helpers.do", "* mine\n");
-  await (await menu(page)).getByRole("menuitem", { name: "Restore the sample" }).click();
-  const dlg = page.getByRole("alertdialog", { name: "Restore the sample?" });
-  await expect(dlg).toContainText("helpers.do differs from the sample.");
-  await expect(dlg.getByRole("button", { name: "Cancel" })).toBeFocused();
-  await dlg.getByRole("button", { name: "Cancel" }).click();
+  await restore();
+  const dlg = page.getByRole("alertdialog", { name: "helpers.do differs from the sample" });
+  await expect(dlg).toContainText("clash 1 of 1");
+  await expect(dlg.getByRole("button", { name: "Keep mine" })).toBeFocused();
+  await dlg.getByRole("button", { name: "Keep mine" }).click();
   await expect(dlg).toHaveCount(0);
   expect(await textOf(page, "helpers.do")).toBe("* mine\n");
-  await (await menu(page)).getByRole("menuitem", { name: "Restore the sample" }).click();
-  await dlg.getByRole("button", { name: "Replace" }).click();
+  await restore();
+  await dlg.getByRole("button", { name: "Replace with the sample" }).click();
   await expect(dlg).toHaveCount(0);
+  await expect(page.locator(".toast")).toHaveText("Sample restored");
   await expect.poll(() => textOf(page, "helpers.do")).toContain("a small program that compares");
   expect(await textOf(page, "mine.do")).toBe("display 1\n");
 });

@@ -2,7 +2,7 @@
 // file fills the head's right side and the body.
 //  - FilesHead: the head menu "File actions" (fileMenuItems): New .do file, New folder, Upload a folder, Download all
 //    (.zip) (files.ts downloadAll; disabled while `hasFiles` is false), Restore the sample (OQ-13, step 5: sample.ts
-//    restoreSample; asks first through the dialog restore-sample when a sample file differs), Delete all files… (dialog
+//    restoreSample, an upload of the sample's files: a clash dialog with the sample's words asks about a file that differs), Delete all files… (dialog
 //    delete-all).
 //  - FilesBody: the tree, the dropzone ("Drop files or folders", Upload, New .do file) and "Download all (.zip)".
 //    The tree (role="tree", flat rows with aria-level; tree.ts treeRows): folders first, then files, each by name;

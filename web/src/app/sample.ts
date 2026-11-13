@@ -6,14 +6,15 @@
 //    mark is set once the three files are written (or when the store has files of the visitor's): a seed that fails is
 //    tried again on the next visit if the store is still empty. With ?test in the URL it does nothing unless the URL also
 //    has ?sample (the e2e tests start from an empty store). It never rejects.
-//  - restoreSample(): the file menu's item. Files the visitor has not changed, or that are missing, are written with no
-//    question; if some differ from the sample, or are open with unsaved edits, the dialog restore-sample asks first and
-//    names them (dialogs: files/dialogs.tsx). Other files are never touched.
+//  - restoreSample(): the file menu's item, an upload of the sample's files (files/actions.ts upload(), with the sample's
+//    words) and then analysis.do opened: missing files are written with no question, a file that holds the sample's bytes
+//    is left alone, one that differs, or is open with unsaved edits, is asked in the clash dialog. Other files are never
+//    touched.
 // Plain TypeScript (no JSX), tested in Node (test/sample.test.ts).
-import { editorCommands } from "./editor/commands.ts";
-import { decodeText, openFile } from "./files/open.ts";
+import { upload } from "./files/actions.ts";
+import { openFile } from "./files/open.ts";
 import { SAMPLE } from "./sample-files.ts";
-import { dialog, saved, showToast, tabs } from "./state.ts";
+import { saved, showToast } from "./state.ts";
 import { store } from "./store.ts";
 
 /** The file the first visit opens. */
@@ -31,18 +32,9 @@ export const sampleFiles = (): { path: string; bytes: Uint8Array }[] =>
     bytes: f.base64 !== undefined ? decode(f.base64) : new TextEncoder().encode(f.text),
   }));
 
-const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
-
-async function put(only?: string[]) {
-  for (const f of sampleFiles()) {
-    if (only && !only.includes(f.path)) continue;
-    await store.write(f.path, f.bytes);
-    // an open tab of a file written over shows the sample's text, decoded as the editor reads a file (a BOM kept, so the
-    // editor notes the file's form): the sample's form, "\n" and no BOM, so a tab whose file had "\r\n" or a BOM saves
-    // the sample's form from then on, as the store now holds it
-    const tab = tabs.value.find((t) => t.path === f.path && t.kind === "text");
-    if (tab) editorCommands.reload(f.path, decodeText(f.bytes, true) ?? "");
-  }
+/** The first visit's write of the sample's files. */
+async function put() {
+  for (const f of sampleFiles()) await store.write(f.path, f.bytes);
 }
 
 /** First visit: write the sample into an empty store and open its main do-file. Resolves true when it did. */
@@ -66,52 +58,24 @@ export async function seedSample(): Promise<boolean> {
   }
 }
 
-/** Which of the sample's files are missing, and which are there with other contents. */
-export async function sampleState(): Promise<{ missing: string[]; changed: string[] }> {
-  const missing: string[] = [],
-    changed: string[] = [];
-  for (const f of sampleFiles()) {
-    // the store, not the signal: the list may be a moment old
-    try {
-      if (!same(await store.read(f.path), f.bytes)) changed.push(f.path);
-    } catch {
-      missing.push(f.path);
-    }
-  }
-  return { missing, changed };
-}
-
-/** The sample's files open in a tab with unsaved edits: Restore would drop the edits, so it counts them as changed. */
-const unsaved = () => SAMPLE_PATHS.filter((p) => tabs.value.some((t) => t.path === p && t.dirty));
-
-/** The file menu's "Restore the sample". Nothing is replaced without asking: a file whose stored copy differs from the
- *  sample, or that is open with unsaved edits, is named in the dialog restore-sample. */
+/** The file menu's "Restore the sample": an upload of the sample's files with the sample's words (actions.ts upload()), so
+ *  a file the visitor changed, or has open with unsaved edits, is asked about like an upload's clash, one that holds the
+ *  sample's bytes already is left alone, and the other files are never touched. Then analysis.do is opened, when the
+ *  store has it (a visitor who kept their own, or a write that failed, still gets the tab). */
 export async function restoreSample(): Promise<void> {
   try {
-    const state = await sampleState(),
-      missing = state.missing.filter((p) => !unsaved().includes(p)),
-      changed = SAMPLE_PATHS.filter((p) => state.changed.includes(p) || unsaved().includes(p));
-    if (changed.length) {
-      dialog.value = { d: "restore-sample", paths: changed };
-      return;
-    }
-    if (!missing.length) return void showToast("The sample is already here");
-    await put(missing);
-    showToast("Sample restored");
-  } catch (e) {
-    console.warn(`[dofile] restore the sample: ${(e as Error)?.message ?? e}`);
-    showToast("Couldn't restore the sample", "error");
-  }
-}
-
-/** The dialog's "Replace": write every file of the sample that is missing, differs or is open with unsaved edits (an open
- *  tab shows the sample's text, its edits dropped), then open the main do-file. */
-export async function replaceWithSample(): Promise<void> {
-  try {
-    const { missing, changed } = await sampleState();
-    await put([...missing, ...changed, ...unsaved()]);
-    showToast("Sample restored");
-    await openFile(SAMPLE_MAIN);
+    await upload(
+      sampleFiles().map((f) => ({ path: f.path, data: f.bytes })),
+      "sample",
+    );
+    // the store, not the list: it may be a moment old
+    if (
+      await store.read(SAMPLE_MAIN).then(
+        () => true,
+        () => false,
+      )
+    )
+      await openFile(SAMPLE_MAIN);
   } catch (e) {
     console.warn(`[dofile] restore the sample: ${(e as Error)?.message ?? e}`);
     showToast("Couldn't restore the sample", "error");

@@ -1,6 +1,7 @@
 // The sample project's page logic (src/app/sample.ts) on the page's real store over fake-indexeddb, no DOM: the first
 // visit writes it into an empty store and opens analysis.do, and never over a visitor's own files; "Restore the sample"
-// writes what is missing, asks before it replaces a file that differs, and touches no other file. Also: the generated
+// is an upload of it (writes what is missing, asks in the clash dialog before it replaces a file that differs, opens
+// analysis.do) and touches no other file. Also: the generated
 // module is what scripts/make-sample.ts makes from web/sample/, and the files are free of anything but our own words
 // (test/site.test.ts has the clean-room greps). test/sample-run.test.ts runs the do-files in the engine.
 
@@ -9,7 +10,9 @@ import { readFileSync } from "node:fs";
 import { beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import "fake-indexeddb/auto";
+import { effect } from "@preact/signals-core";
 import { moduleText } from "../scripts/make-sample.ts";
+import type { ClashAnswer } from "../src/app/files/actions.ts";
 
 // localStorage and a page's location, which Node lacks: state.ts reads the first at load, sample.ts the second when called
 const memory = new Map<string, string>();
@@ -26,6 +29,8 @@ const S = await import("../src/app/state.ts");
 const { store } = await import("../src/app/store.ts");
 const { afterRun, connectFiles, keep, own, refresh } = await import("../src/app/files.ts");
 const { editorCommands } = await import("../src/app/editor/commands.ts");
+const A = await import("../src/app/files/actions.ts");
+const { answerClash, clashNow } = A;
 const sample = await import("../src/app/sample.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -109,33 +114,62 @@ test("a blocked store (another tab has the files) is not written", async () => {
   assert.deepEqual(await names(), []);
 });
 
-test("Restore the sample: missing files are written with no question, other files are left alone", async () => {
+/** Answer the clash dialogs of a restore, in order; returns what each one showed. */
+function answering(answers: ClashAnswer[]) {
+  const seen: { dialog: unknown; words: unknown }[] = [];
+  const stop = effect(() => {
+    const d = S.dialog.value;
+    if (d?.d !== "clash") return;
+    seen.push({ dialog: d, words: clashNow()?.words });
+    queueMicrotask(() => {
+      S.dialog.value = null;
+      answerClash(answers.shift() ?? "stop");
+    });
+  });
+  return { seen, stop };
+}
+
+test("Restore the sample: missing files are written with no question, other files are left alone, analysis.do opens", async () => {
   await store.write("mine.do", enc("display 1"));
   await sample.restoreSample();
   assert.equal(S.dialog.value, null);
   assert.deepEqual(await names(), [...ALL, "mine.do"].sort());
   assert.equal(S.toast.value, "Sample restored");
   assert.equal(dec(await store.read("mine.do")), "display 1");
+  assert.equal(S.activeTab.value, "analysis.do");
+  S.tabs.value = [];
+  S.activeTab.value = null;
+  S.showToast("sentinel");
   await sample.restoreSample();
-  assert.equal(S.toast.value, "The sample is already here");
+  assert.equal(S.toast.value, "The sample is already here", "nothing to write, nothing asked");
+  assert.equal(S.activeTab.value, "analysis.do", "opened even when nothing was written");
 });
 
-test("Restore the sample asks before it replaces a file that differs, and names it; Replace writes the sample's version, then opens analysis.do", async () => {
+test("Restore the sample asks about a file that differs, in the clash dialog with the sample's words; Keep mine writes nothing, Replace writes the sample's version; analysis.do opens either way", async () => {
   await sample.seedSample();
   await store.write("helpers.do", enc("* mine"));
   S.tabs.value = [{ path: "helpers.do", kind: "text", dirty: false }];
+  S.activeTab.value = "helpers.do";
+  const keep = answering([{ replace: false, same: false }]);
   await sample.restoreSample();
-  assert.deepEqual(S.dialog.value, { d: "restore-sample", paths: ["helpers.do"] });
-  assert.equal(dec(await store.read("helpers.do")), "* mine", "nothing is replaced before the answer");
-  S.dialog.value = null; // Cancel
-  assert.equal(dec(await store.read("helpers.do")), "* mine");
-  await sample.replaceWithSample();
+  keep.stop();
+  assert.deepEqual(keep.seen, [
+    { dialog: { d: "clash", path: "helpers.do", index: 1, total: 1 }, words: A.WORDS.sample },
+  ]);
+  assert.equal(dec(await store.read("helpers.do")), "* mine", "kept");
+  assert.deepEqual(reloads, []);
+  assert.equal(S.activeTab.value, "analysis.do", "the tab of analysis.do, which the visitor never changed");
+  S.activeTab.value = "helpers.do";
+  const replace = answering([{ replace: true, same: false }]);
+  await sample.restoreSample();
+  replace.stop();
   assert.equal(dec(await store.read("helpers.do")), dec(sample.sampleFiles()[1].bytes));
   assert.deepEqual(
     reloads.map((r) => r[0]),
     ["helpers.do"],
     "the open tab shows the restored text",
   );
+  assert.equal(S.toast.value, "Sample restored");
   assert.equal(S.activeTab.value, "analysis.do");
 });
 
@@ -169,29 +203,34 @@ test("a seed whose opening of analysis.do throws resolves (no unhandled rejectio
   assert.deepEqual(await names(), ALL);
 });
 
-test("Restore the sample asks about a sample file open with unsaved edits, even when its stored copy is the sample's", async () => {
+test("Restore the sample asks about a sample file open with unsaved edits, even when its stored copy is the sample's; Replace shows the sample's text in the tab", async () => {
   await sample.seedSample();
   S.tabs.value = [{ path: "analysis.do", kind: "text", dirty: true }];
+  const { seen, stop } = answering([{ replace: true, same: false }]);
   await sample.restoreSample();
-  assert.deepEqual(S.dialog.value, { d: "restore-sample", paths: ["analysis.do"] });
-  assert.deepEqual(reloads, [], "nothing is reloaded before the answer");
-  S.dialog.value = null;
-  // missing too: still asked, not written silently over the edits
-  await store.remove("analysis.do");
-  await sample.restoreSample();
-  assert.deepEqual(S.dialog.value, { d: "restore-sample", paths: ["analysis.do"] });
-  assert.equal((await names()).includes("analysis.do"), false);
-  await sample.replaceWithSample();
+  stop();
+  assert.deepEqual(
+    seen.map((s) => s.dialog),
+    [{ d: "clash", path: "analysis.do", index: 1, total: 1 }],
+  );
   assert.deepEqual(
     reloads.map((r) => r[0]),
     ["analysis.do"],
-    "Replace shows the sample's text in the tab",
   );
   // the editor is given the file's text as it reads a file: the sample's own form, "\n" and no BOM (its Save then keeps it)
-  const given = (reloads as [string, string][])[0][1]; // (deepEqual above narrowed the array's type to empty)
+  const given = reloads[0][1];
   assert.equal(given, dec(sample.sampleFiles()[0].bytes));
   assert.ok(!given.includes("\r") && !given.startsWith("\uFEFF"));
-  assert.ok((await names()).includes("analysis.do"));
+});
+
+test("Restore the sample over an open tab whose file has \\r\\n and a BOM: the editor is given the sample's text", async () => {
+  await sample.seedSample();
+  await store.write("helpers.do", enc("\uFEFF* mine\r\n"));
+  S.tabs.value = [{ path: "helpers.do", kind: "text", dirty: false }];
+  const { stop } = answering([{ replace: true, same: false }]);
+  await sample.restoreSample();
+  stop();
+  assert.equal(reloads[0][1], dec(sample.sampleFiles()[1].bytes));
 });
 
 // S 19: where the browser may clear the files, the sample's own writes bring no storage banner; the visitor's first change does

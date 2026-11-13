@@ -1,8 +1,9 @@
 // The dialogs of the file panel (docs/design/SPEC.md, section 3.10), each drawn with ui/Dialog.tsx while `dialog` holds
 // its kind. dialogs.tsx (in app/) maps each kind to its view.
 //  - ClashDialog { d: "clash", path, index, total }: "data/wages.dta is already here" (role alertdialog; "Keep mine"
-//    focused, so Enter keeps this one). Its other facts come from actions.ts clashNow(); the answer goes to
-//    answerClash(), and upload() then writes and asks the next clash. Esc keeps yours for every clash left.
+//    focused, so Enter keeps this one). Its other facts, and its words (an upload's, or the sample's when "Restore the
+//    sample" asked), come from actions.ts clashNow(); the answer goes to answerClash(), and upload() then writes and asks
+//    the next clash. Esc keeps yours for every clash left.
 //  - DeleteDialog { d: "delete", paths }: "Delete clean.do?" (Cancel focused; Delete is .btn.stop.live).
 //  - DeleteAllDialog { d: "delete-all", count }: "Delete all 12 files?" / Cancel (focused), "Delete all".
 //  - CloseTabDialog { d: "close-tab", path }: "Save changes to clean.do?" / Save (focused), "Don't save", Cancel; Esc is
@@ -16,10 +17,9 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import { editorCommands } from "../editor/commands.ts";
 import { refresh } from "../files.ts";
-import { replaceWithSample } from "../sample.ts";
 import { dialog, files } from "../state.ts";
 import { Dialog } from "../ui/Dialog";
-import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries } from "./actions.ts";
+import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries, WORDS } from "./actions.ts";
 import { focusAfterClose } from "./EditorTabs";
 import { focusTree } from "./FilesPane";
 import { baseName, formatSize, shortDate } from "./tree.ts";
@@ -57,16 +57,17 @@ export function ClashDialog({ dialog: d }: { dialog: DialogOf<"clash"> }) {
   };
   const left = facts?.left ?? d.total - d.index;
   const others = facts?.others ?? 0;
+  const words = facts?.words ?? WORDS.upload;
   return (
     <Dialog
       role="alertdialog"
-      title={`${d.path} is already here`}
+      title={words.title(d.path)}
       describedBy="clash-question"
       onCancel={() => give("stop")}
       actions={
         <>
           <button type="button" class="btn" onClick={() => give({ replace: true, same })}>
-            Replace with uploaded
+            {words.replace}
           </button>
           <button type="button" class="btn primary" data-autofocus onClick={() => give({ replace: false, same })}>
             Keep mine
@@ -74,15 +75,13 @@ export function ClashDialog({ dialog: d }: { dialog: DialogOf<"clash"> }) {
         </>
       }
     >
-      <p id="clash-question">
-        The upload has a file with the same name. Keep yours, or replace it with the uploaded one?
-      </p>
+      <p id="clash-question">{words.question}</p>
       {facts?.unsaved && <p>{baseName(d.path)} is open with unsaved edits; replacing it discards them.</p>}
       <p class="meta">
         {facts && `Yours: ${formatSize(facts.yours.size)}, ${shortDate(facts.yours.mtime)} · `}
-        {facts && `uploaded: ${formatSize(facts.uploaded)} · `}
+        {facts && `${words.theirs}: ${formatSize(facts.uploaded)} · `}
         {`clash ${d.index} of ${d.total}`}
-        {others > 0 && ` · the other ${others === 1 ? "file is" : `${others} files are`} uploaded`}.
+        {others > 0 && ` · ${words.others(others)}`}.
       </p>
       {left > 0 && (
         <label class="check">
@@ -156,37 +155,6 @@ export function DeleteAllDialog({ dialog: d }: { dialog: DialogOf<"delete-all"> 
       }
     >
       <p>This removes every file dofile keeps in this browser. This can't be undone.</p>
-    </Dialog>
-  );
-}
-
-/** Step 5: "Restore the sample" found files of the sample with other contents. Not drawn in the mockups; the words are a
- *  draft (SPEC 8, step 5). Cancel is focused. */
-export function RestoreSampleDialog({ dialog: d }: { dialog: DialogOf<"restore-sample"> }) {
-  const replace = () => {
-    close();
-    replaceWithSample();
-  };
-  return (
-    <Dialog
-      role="alertdialog"
-      title="Restore the sample?"
-      onCancel={close}
-      actions={
-        <>
-          <button type="button" class="btn" data-autofocus onClick={close}>
-            Cancel
-          </button>
-          <button type="button" class="btn stop live" onClick={replace}>
-            Replace
-          </button>
-        </>
-      }
-    >
-      <p>
-        {d.paths.join(", ")} {d.paths.length === 1 ? "differs" : "differ"} from the sample. Replacing{" "}
-        {d.paths.length === 1 ? "it discards" : "them discards"} your changes. Your other files are untouched.
-      </p>
     </Dialog>
   );
 }

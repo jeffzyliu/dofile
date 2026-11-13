@@ -554,7 +554,7 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
   await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect(page.locator(".toast")).toHaveText("1 file uploaded");
+  await expect(page.locator(".toast")).toHaveText("2 files uploaded"); // z.do, and b.do: it holds these bytes, so it is not asked
   expect(await textOf(page, "a.do")).toBe("old a");
   // another dialog put over the question (another tab took the engine, say) unmounts it: that answers as Esc does
   await input.setInputFiles(["a.do", "b.do", "y.do", "y2.do"].map(file));
@@ -565,12 +565,25 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
       paths: ["c.do"],
     };
   });
-  await expect(page.locator(".toast")).toHaveText("2 files uploaded"); // y.do and y2.do; neither clash replaced
+  await expect(page.locator(".toast")).toHaveText("3 files uploaded"); // y.do and y2.do, and b.do (the same bytes); the clash over a.do kept
   const other = page.getByRole("alertdialog", { name: "Delete c.do?" });
   await expect(other).toBeVisible(); // the upload's end leaves the other dialog open
   await page.keyboard.press("Escape");
   await expect(other).toBeHidden();
   expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "new b.do"]);
+});
+
+test("an upload of a file whose bytes are already stored is not asked about, and counts in the toast; the clash left says 'clash 1 of 1'", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "same a", "b.do": "old b" });
+  const file = (name: string, text: string) => ({ name, mimeType: "text/plain", buffer: Buffer.from(text) });
+  await page.locator('input[data-upload="files"]').setInputFiles([file("a.do", "same a"), file("b.do", "new b")]);
+  const dlg = page.getByRole("alertdialog", { name: "b.do is already here" });
+  await expect(dlg).toContainText("clash 1 of 1 · the other file is uploaded.");
+  await dlg.getByRole("button", { name: "Replace with uploaded" }).click();
+  await expect(page.locator(".toast")).toHaveText("2 files uploaded");
+  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["same a", "new b"]);
 });
 
 test("a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it before the first, not the page", async ({

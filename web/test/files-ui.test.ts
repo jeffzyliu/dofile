@@ -362,7 +362,15 @@ test("upload with clashes: the others are written first; each clash asks, Keep m
   assert.ok(seen[0].inStore.includes("new.do"), "the file that clashes with none is written before the first question");
   assert.deepEqual(
     { ...seen[0].now, yours: { ...seen[0].now!.yours, mtime: 0 } },
-    { path: "a.do", yours: { size: 5, mtime: 0 }, uploaded: 5, others: 1, left: 3, unsaved: false },
+    {
+      path: "a.do",
+      yours: { size: 5, mtime: 0 },
+      uploaded: 5,
+      others: 1,
+      left: 3,
+      unsaved: false,
+      words: A.WORDS.upload,
+    },
   );
   assert.deepEqual(await Promise.all(["a", "b", "c", "d", "new"].map((n) => textOf(`${n}.do`))), [
     "old a",
@@ -374,6 +382,98 @@ test("upload with clashes: the others are written first; each clash asks, Keep m
   assert.equal(S.toast.value, "4 files uploaded");
   assert.equal(S.dialog.value, null);
   assert.equal(A.clashNow(), null);
+});
+
+test("upload: a clash with the same bytes is not asked and not written, and counts as uploaded; the clashes left are numbered without it", async () => {
+  await reset({ "a.do": "same a", "b.do": "old b", "c.do": "old c" });
+  const before = (await store.list()).find((f) => f.path === "a.do")!;
+  const { seen, stop } = answering([
+    { replace: true, same: false },
+    { replace: false, same: false },
+  ]);
+  const written = await A.upload([
+    { path: "a.do", data: enc("same a") },
+    { path: "b.do", data: enc("new b") },
+    { path: "new.do", data: enc("n") },
+    { path: "c.do", data: enc("new c") },
+  ]);
+  stop();
+  assert.deepEqual(
+    seen.map((s) => s.dialog),
+    [
+      { d: "clash", path: "b.do", index: 1, total: 2 },
+      { d: "clash", path: "c.do", index: 2, total: 2 },
+    ],
+  );
+  assert.deepEqual([seen[0].now?.others, seen[0].now?.left], [2, 1], "the same file is one of the others: in place");
+  assert.deepEqual(written.sort(), ["b.do", "new.do"], "only what was written");
+  assert.equal((await store.list()).find((f) => f.path === "a.do")!.mtime, before.mtime, "a.do was not written");
+  assert.equal(S.toast.value, "3 files uploaded", "a.do counts: the store holds what was uploaded");
+  // all identical: nothing asked, the toast still says so
+  await A.upload([{ path: "a.do", data: enc("same a") }]);
+  assert.equal(S.toast.value, "1 file uploaded");
+  assert.equal(S.dialog.value, null);
+});
+
+test("upload: a clash with the same bytes but open with unsaved edits is still asked; a clean open one is not, and not reloaded", async () => {
+  await reset({ "a.do": "same a", "b.do": "same b" });
+  await openFile("a.do");
+  await openFile("b.do");
+  S.setDirty("a.do", true);
+  calls = [];
+  const { seen, stop } = answering([{ replace: true, same: false }]);
+  await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`same ${n}`) })));
+  stop();
+  assert.deepEqual(
+    seen.map((s) => [s.dialog, s.now?.unsaved]),
+    [[{ d: "clash", path: "a.do", index: 1, total: 1 }, true]],
+  );
+  assert.deepEqual(
+    calls.map((c) => [c.op, ...c.args]),
+    [["reload", "a.do", "same a"]],
+    "Replace drops the edits; b.do, clean and identical, is left as it is",
+  );
+});
+
+test("upload with the sample's words: the dialog's words, 'Sample restored', 'The sample is already here' when nothing was written or asked, and nothing said when all asked were kept", async () => {
+  await reset({ "a.do": "old a", "b.do": "same b" });
+  const { seen, stop } = answering([{ replace: false, same: false }]);
+  S.showToast("sentinel"); // the toast is not cleared by hand: what an upload says replaces it
+  await A.upload(
+    [
+      { path: "a.do", data: enc("new a") },
+      { path: "b.do", data: enc("same b") },
+    ],
+    "sample",
+  );
+  assert.equal(seen[0].now?.words, A.WORDS.sample);
+  assert.equal(seen.length, 1, "b.do holds the sample's bytes: not asked");
+  assert.equal(S.toast.value, "sentinel", "everything asked was kept, and nothing was written: no toast");
+  assert.equal(await textOf("a.do"), "old a");
+  // the visitor replaces
+  stop();
+  const again = answering([{ replace: true, same: false }]);
+  await A.upload([{ path: "a.do", data: enc("new a") }], "sample");
+  again.stop();
+  assert.equal(S.toast.value, "Sample restored");
+  // nothing to write, nothing to ask
+  await A.upload(
+    [
+      { path: "a.do", data: enc("new a") },
+      { path: "b.do", data: enc("same b") },
+    ],
+    "sample",
+  );
+  assert.equal(S.toast.value, "The sample is already here");
+  // a file the store refuses
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await A.upload([{ path: "a.do/x", data: enc("1") }], "sample");
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(S.toast.value, "Couldn't restore the sample");
 });
 
 test("upload: Esc keeps yours for every clash left and asks no more; Keep mine with Do the same keeps the rest too", async () => {
