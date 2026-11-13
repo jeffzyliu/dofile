@@ -10,39 +10,43 @@
 //    the open file is a text file), the open files (a list that scrolls), "Close <name>" (the phone has no ×) and "Show all files"; with no open file it says "Editor".
 // `dirty` is the editor's (state.ts setDirty); this file never sets it.
 import { signal } from "@preact/signals";
-import { useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import { editorCommands } from "../editor/commands.ts";
 import { activeTab, phoneTab, tabs } from "../state.ts";
 import type { OpenTab } from "../types.ts";
-import { useFocusRequest } from "../ui/focus-hooks.ts";
+import { fromNothing, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { askCloseTab } from "./actions.ts";
+import { focusTree, treeShown } from "./FilesPane";
 import { baseName, tabLabels } from "./tree.ts";
 
 const tabId = (i: number) => `file-tab-${i}`;
 const Unsaved = () => <span class="dot" role="img" aria-label="unsaved changes" />;
 
-// the tab a key moved to: it takes the focus when it is drawn (FileTab)
+// the tab a key moved to, or the tab selected after a close: it takes the focus when it is drawn (FileTab)
 const tabAsked = signal<string | null>(null);
+// a tab closed from the keyboard or the close-tab dialog: EditorTabs places the focus from its next render
+const closeAsked = signal(false);
 
-const shown = (el: HTMLElement | null): el is HTMLElement => el !== null && el.getClientRects().length > 0;
-
-/** After a tab closed (its element, which may have had the focus, is gone): focus the selected tab, else the file
- *  tree's row in the tab order when the list is shown, else the editor; never the page itself. */
+/** After a tab closed (its element, which may have had the focus, is gone): the selected tab takes the focus, else the
+ *  file tree's row in the tab order when the list is shown, else the editor; never the page itself. */
 export function focusAfterClose() {
-  setTimeout(() => {
-    const i = tabs.value.findIndex((t) => t.path === activeTab.value);
-    const tab = i >= 0 ? document.getElementById(tabId(i)) : null;
-    const row = document.querySelector<HTMLElement>('.files [role="treeitem"][tabindex="0"]');
-    if (shown(tab)) tab.focus();
-    else if (shown(row)) row.focus();
-    else editorCommands.focus();
-  });
+  closeAsked.value = true;
 }
 
 export function EditorTabs() {
   const strip = useRef<HTMLDivElement>(null);
+  const asked = closeAsked.value;
+  // from the render that drew the tabs left (docs/web-page-flows.md, section 1)
+  useLayoutEffect(() => {
+    if (!asked) return;
+    closeAsked.value = false;
+    const shown = (strip.current?.getClientRects().length ?? 0) > 0;
+    if (shown && activeTab.value !== null) tabAsked.value = activeTab.value;
+    else if (treeShown()) focusTree();
+    else editorCommands.focus();
+  }, [asked]);
   const list = tabs.value;
   if (!list.length) return null;
   const labels = tabLabels(list.map((t) => t.path));
@@ -97,7 +101,7 @@ function FileTab({
     () => {
       tabAsked.value = null;
     },
-    (focused) => !!focused && !!list.current?.contains(focused),
+    (at) => fromNothing(at) || !!list.current?.contains(at), // a closed tab leaves it on nothing
   );
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keys are the tablist's (arrows, Home, End, Delete); a tab holds the × (a click target of its own), so it is not a button
