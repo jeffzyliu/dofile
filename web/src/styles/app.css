@@ -798,10 +798,12 @@ input.filter::placeholder {
 .editor-cm .cm-cursor {
   border-left: 2px solid var(--ink);
 }
+/* the gutter in the page's tone with a divider, so the numbers read apart from the text (as GitHub, JetBrains) */
 .editor-cm .cm-gutters {
-  background: var(--surface);
+  background: var(--bg);
   color: var(--muted);
   border: 0;
+  border-right: 1px solid var(--border);
 }
 .editor-cm .cm-lineNumbers .cm-gutterElement {
   min-width: 4ch;
