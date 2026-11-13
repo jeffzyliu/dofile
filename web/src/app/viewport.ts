@@ -42,23 +42,30 @@ const isTextField = (el: Element | null | undefined) =>
     ),
   );
 
+/** A move shorter than this (px) on both axes gives no axis to judge by. */
+const TAP = 4;
+
 /** Whether `el` can still scroll in the drag's direction: (dx, dy) is the finger's last move, so a finger moving up
- *  (dy > 0) scrolls the content towards its end. Only the axis the finger mostly moves along counts. */
+ *  (dy > 0) scrolls the content towards its end. The axis counts that the finger mostly moves along; under TAP either
+ *  may go (a zero move, either way). */
 const scrolls = (el: Element, dx: number, dy: number) => {
-  const y = Math.abs(dy) >= Math.abs(dx),
-    style = getComputedStyle(el),
-    [overflow, at, end, move] = y
-      ? [style.overflowY, el.scrollTop, el.scrollHeight - el.clientHeight, dy]
-      : [style.overflowX, el.scrollLeft, el.scrollWidth - el.clientWidth, dx];
-  return /auto|scroll/.test(overflow) && (move > 0 ? at < end - 1 : at > 0);
+  const style = getComputedStyle(el),
+    room = (overflow: string, at: number, end: number, move: number) =>
+      /auto|scroll/.test(overflow) && (move > 0 ? at < end - 1 : move < 0 ? at > 0 : at > 0 || at < end - 1),
+    y = room(style.overflowY, el.scrollTop, el.scrollHeight - el.clientHeight, dy),
+    x = room(style.overflowX, el.scrollLeft, el.scrollWidth - el.clientWidth, dx);
+  return Math.max(Math.abs(dx), Math.abs(dy)) < TAP ? x || y : Math.abs(dy) >= Math.abs(dx) ? y : x;
 };
 
-/** Whether the touch is on text that is selected, in the page or in a field (a drag of a selection handle): left to the browser. */
+/** Whether the touch is on selected text, in the page or in a field (a drag of a selection handle): left to the browser.
+ *  Not on what holds the selection (the page, .app, the editor): that would switch the guard off. */
 const selecting = (target: Element) => {
   const selection = globalThis.getSelection?.(),
     field = target as HTMLInputElement; // a field's own selection is not in getSelection()
   return (
-    (selection?.isCollapsed === false && selection.containsNode(target, true)) || // a caret alone is not a selection
+    (selection?.isCollapsed === false && // a caret alone is not a selection
+      selection.containsNode(target, true) &&
+      !target.contains(selection.getRangeAt(0).commonAncestorContainer)) ||
     (field.selectionStart ?? 0) !== (field.selectionEnd ?? 0)
   );
 };

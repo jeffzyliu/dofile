@@ -2167,6 +2167,8 @@ test("the phone keyboard: the drag guard cancels a touchmove that no scroller un
     bar = { parentElement: page },
     pane = { parentElement: page, room: [-1, 1] },
     top = { parentElement: page, room: [1] }, // at its start: it can only go on
+    line = { parentElement: pane }, // a touch on something inside a scroller: the walk up finds it
+    dead = { parentElement: bar },
     touch = new EventTarget(),
     selected = new Set<unknown>(),
     p = keyboardPage({ touch, selected });
@@ -2194,6 +2196,9 @@ test("the phone keyboard: the drag guard cancels a touchmove that no scroller un
   assert.equal(drag(pane, down), false, "and towards its start");
   assert.equal(drag(top, up), false);
   assert.equal(drag(top, down), true, "a pane at its start, dragged further");
+  assert.equal(drag(line, up), false, "a child of a pane with room: the walk up finds the pane");
+  assert.equal(drag(dead, up), true, "a child of a bar");
+  assert.equal(drag({ parentElement: top }, down), true, "a child of a pane at its start, dragged further");
   assert.equal(drag(pane, across), true, "a pane that scrolls up and down, dragged sideways");
   assert.equal(drag(bar, up, 2), false, "a pinch (two touches)");
   selected.add(bar);

@@ -193,25 +193,27 @@ test("with the keyboard open a touchmove is cancelled unless a scroller under th
     const box = document.createElement("div"); // a scroller with room, over a bar's place
     box.id = "scroller";
     box.style.cssText = "position:fixed;top:60px;left:0;width:100px;height:50px;overflow-y:auto";
-    box.innerHTML = '<div style="height:500px"></div>';
+    box.innerHTML = '<div id="inner" style="height:500px"></div>';
     document.body.append(box);
   });
-  /** Whether a touchmove on `sel` that moves the finger by `dy` px (up when positive) was cancelled. */
-  const cancelled = (sel: string, dy: number) =>
+  /** Whether a touchmove on `sel` that moves the finger by `dy` px (up when positive) and `dx` (left) was cancelled. */
+  const cancelled = (sel: string, dy: number, dx = 0) =>
     page.evaluate(
-      ([s, d]) => {
+      ([s, d, h]) => {
         const target = document.querySelector(s as string)!;
         // a plain Event with a `touches` list: WebKit has no Touch constructor and Firefox no TouchEvent
         const fire = (type: string, y: number) => {
           const e = new Event(type, { bubbles: true, cancelable: true });
-          Object.defineProperty(e, "touches", { value: [{ clientX: 50, clientY: y }] });
+          Object.defineProperty(e, "touches", {
+            value: [{ clientX: type === "touchstart" ? 50 : 50 - (h as number), clientY: y }],
+          });
           target.dispatchEvent(e);
           return e.defaultPrevented;
         };
         fire("touchstart", 300);
         return fire("touchmove", 300 - (d as number));
       },
-      [sel, dy],
+      [sel, dy, dx],
     );
   expect(await cancelled(".topbar", 40)).toBe(false); // no keyboard yet
   await page.evaluate(() => {
@@ -224,11 +226,28 @@ test("with the keyboard open a touchmove is cancelled unless a scroller under th
   expect(await cancelled("html", -40)).toBe(true); // nor the page's edge
   expect(await cancelled("#scroller", 40)).toBe(false); // room to go on
   expect(await cancelled("#scroller", -40)).toBe(true); // at its start, dragged further
-  // selected text (a selection handle's drag) is left to the browser; a caret alone is not a selection
-  await page.evaluate(() => getSelection()!.selectAllChildren(document.querySelector(".topbar")!));
-  expect(await cancelled(".topbar", 40)).toBe(false);
+  expect(await cancelled("#inner", 40)).toBe(false); // a touch on a child: the walk up finds the scroller
+  expect(await cancelled("#inner", -40)).toBe(true);
+  // a move too short to give an axis is judged on both: a scroller that can go on is not cancelled, a bar is
+  expect(await cancelled("#scroller", 0)).toBe(false);
+  expect(await cancelled("#scroller", 1, 2)).toBe(false);
+  expect(await cancelled(".topbar", 0)).toBe(true);
+  expect(await cancelled(".topbar", 1, 2)).toBe(true);
+  // selected text (a selection handle's drag) is left to the browser, but not what holds it: the page, .app, or the
+  // text's common parent are still cancelled. A caret alone is not a selection.
+  await page.evaluate(() => {
+    const p = document.createElement("p");
+    p.id = "para";
+    p.innerHTML = '<span id="w1">some</span> text <span id="w2">words</span>';
+    document.querySelector(".app")!.append(p);
+    const [a, b] = [document.getElementById("w1")!.firstChild!, document.getElementById("w2")!.firstChild!];
+    getSelection()!.setBaseAndExtent(a, 0, b, 5);
+  });
+  expect(await cancelled("#w1", 40)).toBe(false);
+  for (const holder of ["#para", ".app", "body", "html"]) expect(await cancelled(holder, 40)).toBe(true);
   await page.evaluate(() => getSelection()!.collapseToStart());
-  expect(await cancelled(".topbar", 40)).toBe(true);
+  expect(await cancelled("#w1", 40)).toBe(true);
+  await page.evaluate(() => document.getElementById("para")!.remove());
   // the same in a text field, whose selection getSelection() does not show
   await page.evaluate(() => {
     const input = Object.assign(document.createElement("input"), { id: "field", value: "display 1" });
