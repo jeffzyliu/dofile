@@ -338,6 +338,41 @@ test("a menu's arrow keys skip a disabled item in the middle or at the end, and 
   await expect(item("New .do file")).toBeFocused();
 });
 
+test("an item that turns enabled while a menu is open does not move the focus", async ({ page }) => {
+  await setUp(page, {}); // no files: "Download all (.zip)", before the focused item, is disabled
+  const menu = await fileActions(page);
+  const item = (name: string) => menu.getByRole("menuitem", { name });
+  await page.keyboard.press("End");
+  await expect(item("Restore the sample")).toBeFocused();
+  await page.evaluate(async () => {
+    const { store } = (window as unknown as { __dofile: Hook }).__dofile; // as a run's output would
+    await store.write("a.do", new TextEncoder().encode("display 1\n"));
+  });
+  await expect(item("Download all (.zip)")).not.toHaveAttribute("aria-disabled", "true");
+  await page.waitForTimeout(300); // a late move of the focus would have come by now
+  await expect(item("Restore the sample")).toBeFocused();
+  await page.keyboard.press("ArrowUp"); // the keys go on from the focused item, and the one that turned enabled takes part
+  await expect(item("Download all (.zip)")).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(item("Restore the sample")).toBeFocused();
+});
+
+test("after a click on a disabled item, Home and the arrows go on from it", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", "a click on a button focuses nothing in Safari, so no key reaches the menu");
+  await setUp(page, {});
+  const menu = await fileActions(page);
+  const item = (name: string) => menu.getByRole("menuitem", { name });
+  await expect(item("New .do file")).toBeFocused();
+  await item("Download all (.zip)").click({ force: true }); // aria-disabled, so not "actionable": force; a browser may focus the clicked button, and the menu stays open
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Home");
+  await expect(item("New .do file")).toBeFocused();
+  await item("Download all (.zip)").click({ force: true });
+  await expect(item("Download all (.zip)")).toBeFocused();
+  await page.keyboard.press("ArrowDown"); // from the clicked item, not from the one before the click
+  await expect(item("Restore the sample")).toBeFocused();
+});
+
 test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the default; a folder's menu; Delete all files asks with the count", async ({
   page,
   isMobile,
