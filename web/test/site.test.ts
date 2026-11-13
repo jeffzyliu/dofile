@@ -76,7 +76,10 @@ test("commands.html and landing.html: no placeholder is left once filled, and ev
 test("the pages' links: the editor's address from the build, the site's pages by absolute path, the section the editor's banner links to", () => {
   for (const f of ["landing.html", "commands.html"]) {
     const html = web(f);
-    const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+    // a preload's href is a file of the page's own (the build rewrites ./src/ to the hashed asset), not a link
+    const preloads = [...html.matchAll(/<link rel="preload" href="([^"]*)"/g)].map((m) => m[1]);
+    for (const h of preloads) assert.match(h, /^\.\/src\/styles\/fonts\/[\w-]+\.woff2$/, `${f}: preload ${h}`);
+    const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]).filter((h) => !preloads.includes(h));
     for (const h of hrefs)
       assert.ok(
         ["/", "/commands/", "{{editor-url}}"].includes(h) || h.startsWith("https://"),
