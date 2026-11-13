@@ -458,16 +458,66 @@ test("the banners above the log: running, stopping (focus on Don't reset), waiti
   await expect(stopping).toContainText("This command can't stop until it ends.");
   await expect(stopping).toContainText(/In [23] s the engine is reset:/);
   await expect(stopping.getByRole("button", { name: "Don't reset: wait for it" })).toBeFocused();
-  // Break pending for 0.5 s only: the running banner still
+  // Break pending for 0.5 s only: "Stopping…" already, but no button and no focus moved yet (SPEC OQ-21)
   await show(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 4500 });
-  await expect(stopping).toHaveCount(0);
-  await expect(page.locator(".banner", { hasText: "Running lines 14–15" })).toBeVisible();
+  await expect(stopping).toBeVisible();
+  await expect(stopping.getByRole("button")).toHaveCount(0);
 
   await show(page, { s: "waiting", run, t0: Date.now() - 9000 });
   const waiting = page.locator(".banner", { hasText: "Waiting for this command to end." });
   await expect(waiting).toBeVisible();
   await expect(waiting).toBeFocused();
   await expect(waiting).toHaveAttribute("tabindex", "-1");
+});
+
+// A fake clock, so the page's one clock (editor/clock.ts) is read between its ticks, not across them. The Break pill (a
+// phone) or the status bar (else) and the banner must show the same time at every tick, with the same rounding.
+test("one clock: the Break pill, the status bar and the banners agree, and Stopping… shows from the press", async ({
+  page,
+}) => {
+  const T = 1_900_000_000_000;
+  await page.clock.install({ time: T });
+  await page.clock.pauseAt(T + 60_000);
+  const at = T + 60_000;
+  if (phone(page)) await page.evaluate(() => (window.__dofile.state.phoneTab.value = "log"));
+  const run = { kind: "selection", lines: [14, 15], fresh_locals: false };
+  const pill = page.locator(".btn.stop.pill .label:not([aria-hidden]) .pill-time");
+  const status = page.locator('.statusbar [data-state="running"]');
+  const banner = page.locator(".banner", { hasText: "Running lines 14–15" });
+  const fmt = (ms: number) => (ms < 10_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 1000)} s`);
+
+  // 9 s to 14 s in steps of 100 ms: the tenths below 10 s, then whole seconds, floored, on both
+  await show(page, { s: "running", run, t0: at - 9000 });
+  for (let k = 0; k <= 50; k++) {
+    const t = fmt(9000 + 100 * k);
+    await expect(banner.locator("b").first()).toHaveText(t);
+    if (phone(page)) await expect(pill).toHaveText(t);
+    else await expect(status).toHaveText(new RegExp(`· ${t.replace(".", "\\.")}$`));
+    await page.clock.runFor(100);
+  }
+
+  // Break pressed: both say "Stopping…" at once, the button waits 1 s, the countdowns agree, and it lasts until the
+  // engine confirms (here: ready)
+  const pressed = at + 5100;
+  await show(page, { s: "breaking", run, t0: pressed - 20_000, resetAt: pressed + 5000 });
+  const stopping = page.locator(".banner", { hasText: "Stopping…" });
+  const breakBtn = page.getByRole("button", { name: "Stopping…" });
+  const keep = stopping.getByRole("button", { name: "Don't reset: wait for it" });
+  for (let k = 0; k <= 40; k++) {
+    const left = Math.ceil((5000 - 100 * k) / 1000);
+    await expect(stopping).toBeVisible();
+    await expect(breakBtn).toBeVisible();
+    await expect(stopping).toContainText(
+      left > 0 ? `In ${left} s the engine is reset:` : "The engine is being reset now:",
+    );
+    if (!phone(page)) await expect(page.locator(".statusbar")).toContainText(`resets in ${left} s`);
+    if (k < 10) await expect(keep).toHaveCount(0);
+    else if (k > 10) await expect(keep).toBeFocused();
+    await page.clock.runFor(100);
+  }
+  await show(page, { s: "ready" });
+  await expect(stopping).toHaveCount(0);
+  await expect(breakBtn).toHaveCount(0);
 });
 
 test("the storage, reset and download-failed banners", async ({ page }) => {

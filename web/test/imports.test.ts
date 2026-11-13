@@ -454,7 +454,6 @@ test("no counter or flag outside the machine decides a state: the old ones are g
   assert.deepEqual(Object.keys(found).sort(), [
     "src/app/editor/clock.ts",
     "src/app/engine.ts",
-    "src/app/states/banners.tsx", // reads `resetAt` of `breaking` for the Break countdown
     "src/app/types.ts",
     "src/engine/machine.ts",
     "src/engine/worker.ts",

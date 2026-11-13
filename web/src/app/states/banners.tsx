@@ -7,8 +7,8 @@
 //    failedActions), never the text: no-wasm "Browsers that work"; download "Try again"; updated "Reload the
 //    page"; unknown both. "Download all (.zip)" is off while the store has no file (`hasFiles`).
 //  - LogStateBanners: above the log, from `engine` and `isolated`: running (E?r; with no cross-origin isolation S 11 says
-//    what Break does instead), stopping (S 9, once the Break has been pending 1 s, takes the focus on "Don't reset: wait
-//    for it"; at 0 s it says the reset is under way), waiting (S 9b, takes the focus). With no cross-origin isolation the
+//    what Break does instead), stopping (S 9, from the Break press until the engine confirms; once the Break has been pending
+//    1 s it has "Don't reset: wait for it" and takes the focus on it; at 0 s left it says the reset is under way), waiting (S 9b, takes the focus). With no cross-origin isolation the
 //    running banner is a warning, as S 11 draws it.
 //  - ResetBanner { b: "reset", reason, kind, run } above the log (P/Notices): "Run the file again" only when the reset cut
 //    a run of a file and the visitor did not ask for it (words.ts rerunPath); it runs that file (editorCommands.runFile(path),
@@ -21,14 +21,16 @@
 // The words the spec does not give are drafts (words.ts; SPEC section 8, "Step 4d: draft words").
 import { useRef } from "preact/hooks";
 import type { BannerOf } from "../banners";
+import { breakPending, resetsIn, since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
+import { ticking } from "../editor/words.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
 import { dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
+import type { EngineState } from "../types.ts";
 import { useFocusOnMount } from "../ui/focus-hooks.ts";
 import { Banner } from "../ui/Live";
-import { useNow } from "./clock.ts";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
 import {
   FAILED_HEAD,
@@ -40,7 +42,6 @@ import {
   resetWords,
   runningWhat,
   STOPPING_AFTER_S,
-  secs,
   twiceWords,
 } from "./words.ts";
 
@@ -164,8 +165,7 @@ export function EditorStateBanners() {
 // ---- above the log ----
 
 function RunningBanner({ t0, run }: { t0: number; run: Parameters<typeof runningWhat>[0] }) {
-  const now = useNow(200);
-  const time = secs(Math.max(0, (now - t0) / 1000));
+  const time = ticking(since(t0)); // the clock and the formatter of the status bar and the Break pill
   return (
     <Banner kind={isolated.value ? "info" : "warn"}>
       {isolated.value ? (
@@ -184,32 +184,33 @@ function RunningBanner({ t0, run }: { t0: number; run: Parameters<typeof running
   );
 }
 
-function StoppingBanner({ resetAt }: { resetAt: number }) {
-  const now = useNow(200);
-  const left = Math.max(0, Math.ceil((resetAt - now) / 1000));
+/** "Don't reset: wait for it". It takes the focus when it appears (useFocusOnMount). */
+function KeepWaitingButton() {
   const button = useRef<HTMLButtonElement>(null);
-  const ref = useFocusOnLeave<HTMLDivElement>();
   useFocusOnMount(button);
   return (
-    <Banner
-      kind="warn"
-      bannerRef={ref}
-      actions={
-        <button
-          ref={button}
-          type="button"
-          class="btn"
-          data-autofocus
-          onClick={() => {
-            eng.keepWaiting();
-          }}
-        >
-          Don't reset: wait for it
-        </button>
-      }
+    <button
+      ref={button}
+      type="button"
+      class="btn"
+      data-autofocus
+      onClick={() => {
+        eng.keepWaiting();
+      }}
     >
-      <b>Stopping…</b> This command can't stop until it ends. <b>{resetIn(left)}</b> the data in memory is lost; your
-      files are kept.
+      Don't reset: wait for it
+    </button>
+  );
+}
+
+/** `breaking`, from the press until the engine confirms (the run ends, or a reset). Its button and the focus come after
+ *  STOPPING_AFTER_S, so a Break that lands at once flashes no button (SPEC OQ-21). */
+function StoppingBanner({ st }: { st: Extract<EngineState, { s: "breaking" }> }) {
+  const ref = useFocusOnLeave<HTMLDivElement>();
+  return (
+    <Banner kind="warn" bannerRef={ref} actions={breakPending(st) >= STOPPING_AFTER_S && <KeepWaitingButton />}>
+      <b>Stopping…</b> This command can't stop until it ends. <b>{resetIn(resetsIn(st))}</b> the data in memory is lost;
+      your files are kept.
     </Banner>
   );
 }
@@ -229,15 +230,8 @@ export function LogStateBanners() {
   const st = engine.value;
   if (st.s === "running") return <RunningBanner t0={st.t0} run={st.run} />;
   if (st.s === "waiting") return <WaitingBanner />;
-  if (st.s === "breaking") return <BreakingBanner t0={st.t0} resetAt={st.resetAt} run={st.run} />;
+  if (st.s === "breaking") return <StoppingBanner st={st} />;
   return null;
-}
-
-/** `breaking`: the running banner for the first second (a run that stops at once never shows S 9), then S 9. */
-function BreakingBanner({ t0, resetAt, run }: { t0: number; resetAt: number; run: Parameters<typeof runningWhat>[0] }) {
-  const now = useNow(200);
-  const pending = GRACE_S - (resetAt - now) / 1000;
-  return pending >= STOPPING_AFTER_S ? <StoppingBanner resetAt={resetAt} /> : <RunningBanner t0={t0} run={run} />;
 }
 
 export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
