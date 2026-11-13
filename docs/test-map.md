@@ -277,6 +277,10 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   and 43350296329 attempt 1 (`[webkit]`). Now skipped in the two WebKit projects (#34).
 - **`shell.spec.ts` "the toolbar does not move"** fails about 3 runs in 8 on the phone profile (the sightings' dates were not
   recorded).
+- **`engine.test.ts` "engine worker: files, run, describe, matrix, Break, a new worker after end()"** failed once when
+  Pyodide's CDN did not answer: loading `micropip` gave `fetch failed`, and the start failed with `ModuleNotFoundError`
+  (run 43381169730, `types, unit tests, build`, on #27 `ad1d85e`, a commit that changed only an e2e test and docs). The
+  other engine tests in the job loaded their packages. Passed on the next run. 2026-11-13.
 - `editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main` (suspected cause and the test
   changes: `docs/prototype1-plan.md`, post-merge review).
 
