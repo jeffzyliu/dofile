@@ -272,12 +272,15 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
 - **WebKit cancels a fresh page's first navigation on Linux.** The first `page.goto` stays on `about:blank` until the test
   times out. 4 sightings: runs 43274922368 (attempt 1), 43295867614, 43301235068 and 43354934486 (`[iphone]`
   `sample.spec.ts:73`, on main `e8f16d2`, 60 s). Cause (likely, not reproduced): WebKit bug 325840. The 60 s timeout
-  (#31) caps the cost, and the test still fails; a one-retry in `web/e2e/fixtures.ts` is in its own pull request, not
-  merged. See `docs/prototype1-plan.md`, "Where things stand".
+  (#31) caps the cost. The `page` fixture's one retry (`web/e2e/fixtures.ts`, merged) fired twice in the 42 WebKit and
+  iPhone jobs since it landed (runs 43497316688 `[webkit]` and 43503620201 `[iphone]`, 2026-11-13), and the test passed both
+  times. See `docs/prototype1-plan.md`, "Where things stand".
 - **`?snapshot=0` normal boot stalls at "Loading packages" in WebKit on Linux.** 2 sightings: runs 43295867614 (`[iphone]`)
   and 43350296329 attempt 1 (`[webkit]`). Now skipped in the two WebKit projects (#34).
-- **`shell.spec.ts` "the toolbar does not move"** fails about 3 runs in 8 on the phone profile (the sightings' dates were not
-  recorded).
+- **`shell.spec.ts` "the toolbar does not move"** failed about 3 runs in 8 on the phone profile (locally 5 in 8, 2026-11-13; no
+  CI sighting in 133 runs): its first measurement could be taken before the web fonts had arrived, in the fallback font.
+  Fixed 2026-11-13: it and the next test wait for `document.fonts.ready`, and the Latin fonts are preloaded with
+  `font-display: optional` (32 of 32 passed on the phone profile, locally).
 - **`engine.test.ts` "engine worker: files, run, describe, matrix, Break, a new worker after end()"** failed once when
   Pyodide's CDN did not answer: loading `micropip` gave `fetch failed`, and the start failed with `ModuleNotFoundError`
   (run 43381169730, `types, unit tests, build`, on #27 `ad1d85e`, a commit that changed only an e2e test and docs). The

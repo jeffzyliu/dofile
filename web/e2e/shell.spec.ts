@@ -264,6 +264,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
 }) => {
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
+  await page.evaluate(() => document.fonts.ready); // measured in the page's fonts, not a fallback that is still showing
   const head = { kind: "file", fresh_locals: true };
   // the sixteen states of the engine's state machine (src/app/types.ts, EngineState)
   const states = [
@@ -357,6 +358,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
 test("the desktop toolbar's buttons are all one height, and so are the pane heads' controls", async ({ page }) => {
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
+  await page.evaluate(() => document.fonts.ready); // measured in the page's fonts, not a fallback that is still showing
   for (const width of [1440, 1024]) {
     await page.setViewportSize({ width, height: 800 });
     for (const sel of [null, [6, 7]]) {

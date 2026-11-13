@@ -6,29 +6,32 @@
    text >= 4.5:1; the focus ring, control and input borders and the progress bar >= 3:1. --border is for dividers
    only, never the only edge of a control. Components: docs/design/system/. */
 
+/* The Latin subsets: optional, so the text is never drawn again in another font once shown. The pages preload them
+   (index.html, landing.html, commands.html), so they are there for the first paint; a load that is too slow keeps the
+   system font for that page view and has them from the cache on the next. */
 @font-face {
   font-family: "IBM Plex Mono";
   src: url(fonts/ibm-plex-mono-400.woff2) format("woff2");
   font-weight: 400;
-  font-display: swap;
+  font-display: optional;
 }
 @font-face {
   font-family: "IBM Plex Mono";
   src: url(fonts/ibm-plex-mono-700.woff2) format("woff2");
   font-weight: 700;
-  font-display: swap;
+  font-display: optional;
 }
 @font-face {
   font-family: "IBM Plex Sans";
   src: url(fonts/ibm-plex-sans-400.woff2) format("woff2");
   font-weight: 400;
-  font-display: swap;
+  font-display: optional;
 }
 @font-face {
   font-family: "IBM Plex Sans";
   src: url(fonts/ibm-plex-sans-600.woff2) format("woff2");
   font-weight: 600;
-  font-display: swap;
+  font-display: optional;
 }
 /* The files above are Latin subsets. Arrows (U+2190-21FF), box drawing and block elements (U+2500-259F: the banner)
    come from the complete, unmodified files (the OFL reserves the name "Plex", so we don't make subsets of our own).
