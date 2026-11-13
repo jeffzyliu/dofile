@@ -133,12 +133,12 @@ inputs, and needs the repo secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare 
 
 ## CI
 
-`.github/workflows/web.yml` runs four jobs on every pull request. A push to `main` runs only the first two (the fast ones), and it can be started by hand:
+`.github/workflows/web.yml` runs four jobs on every pull request and on every push to `main` (one run per commit, so a merge's tree is tested; a pull request that changes nothing under `web/` or the Python build inputs skips the test jobs), and it can be started by hand. `deploy.yml` does not wait for it:
 
 - **types, unit tests, build:** `npm run check`, a check that `commands.json` is up to date, `npm test`, `npm run build`.
 - **format and lint (Biome):** `npm run lint:strict`: the format, the import order and the lint rules; a warning fails.
-- **browsers:** `npm run e2e` (Chromium, Firefox, WebKit, iPhone profile) on Ubuntu; Playwright's results are kept as an
-  artifact on failure.
+- **browsers:** `npm run e2e` on Ubuntu, a matrix of four jobs, one Playwright project each (Chromium, Firefox, WebKit,
+  iPhone profile), each on its own runner with a 30-minute limit; Playwright's results are kept as an artifact on failure.
 - **memory snapshot:** `npm run snapshot`, then `npm test` (so the native-library test runs) and `npm run check-snapshot`.
 
 `check-pytest` and `check-numeric` are run by hand. The Python suite is `.github/workflows/ci.yml`.

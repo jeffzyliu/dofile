@@ -210,7 +210,7 @@ warning about an unset local; unpacking a .zip on upload. This narrows the lists
    The checks exist and are run by hand (`check-snapshot` about 4 minutes, `check-pytest` about 2, `check-numeric` about 4,
    `npm test` and `npm run e2e` about 1 each); `.github/workflows/web.yml` (2026-11-08) runs on pull requests: `npm run check`,
    a check that `commands.json` is current, `npm test`, `build`, `e2e` in four browser profiles, and `npm run snapshot` with
-   `npm test` and `check-snapshot` (a push to `main` runs only the first job, and since the formatter was added (`docs/formatting-proposal.md`) a Biome job `format and lint` too; a pull request that changes nothing under `web/`, `src/` or the
+   `npm test` and `check-snapshot` (a push to `main` runs every job, one run per commit, since #33; the formatter's Biome job `format and lint` was added with `docs/formatting-proposal.md`; the `e2e` job is a matrix of four, one per browser profile, since #32; a pull request that changes nothing under `web/`, `src/` or the
    Python build files skips the test jobs but still reports through the `web ok` job, which is the one to require in branch protection; `ci.yml` has the same
    `ci ok`, with its own filter: `src/`, `tests/`, `tests_opendta/`, `scripts/` and the Python build files). `check-pytest` and `check-numeric` stay by hand. `check-snapshot` needs a built snapshot only for its default
    mode; `--normal` does not. First runs on GitHub found: the runner is slower than a laptop (1908_models2 took over 300 s

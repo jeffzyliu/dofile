@@ -256,7 +256,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Download prompt, progress | `S 1`, `S 8`; `S 2`, `S 3` | Section 5. Download is the default (Enter) on purpose (UX-037). The bar is `role="progressbar"` with `aria-valuetext`; screen readers hear the stages, not the megabytes. |
 | Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is asked even after "Do the same" with Replace (not after Esc, or "Do the same" with Keep mine: keeping it loses nothing; an open question: plan, "Step 4: decisions and open questions", C 14). |
 | Delete (4a) | `P/Notices` | "Delete clean.do?" / "It exists only in this browser. This can't be undone." / Cancel (focused), Delete. `DS` words it differently: OQ-19. |
-| Reset | `S 14` | `role="alertdialog"`. "Reset the engine?" / "The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset. Not asked with no data in memory and no results. |
+| Reset | `S 14` | `role="alertdialog"`. "Reset the engine?" / "The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset. Not asked while the engine is new or just reset (nothing has run on it since it started). |
 | Upload report | `P/Upload report` | Drawn with P2 content only. P1: the toast "3 files uploaded" (OQ-19). |
 | Another tab | `WS 6` (wireframe) | Sections 5 and 7. |
 | Close a tab with unsaved edits (4a) | not drawn; words decided 2026-11-10 | "Save changes to clean.do?" (the file's name) / **Save** (focused), **Don't save**, **Cancel**. Esc is Cancel. Save saves, then closes the tab; Don't save closes it and drops the edits. |
@@ -335,7 +335,7 @@ place and Load or Import and Copy are off (`web/src/stata/quote.ts`).
   the clipboard.
 - After every run the page calls `describe`, `browse`, `macros` and `memory`, and lists the store.
 - An error stops the run; the data is as the last complete command left it. "Run the file again" (the reset banner) runs the
-  whole active file.
+  whole file whose run the reset cut (a Break or a crash during a file run; not after a Reset the visitor asked for).
 
 ## 5. Engine states (P1; step 2 for the client, 4b and 4d for the views; the machine, step 3.5 C)
 
@@ -358,8 +358,8 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 | `running` | "**Running** lines 14–15 · 3.4 s" (`E?r`); "**Running** · 12 s" (`S 11`) | Log banner (`E?r`): "Running lines 14–15 · **3.4 s**. Break stops between commands. If one long command doesn't stop within 5 s, the engine is reset: **the data in memory is lost**; your files are kept." | `aria-disabled` | "Break", live |
 | `breaking` | "**Stopping** · resets in 4 s", the run's time | `S 9`, once it takes a moment: "**Stopping…** This command can't stop until it ends. **In 4 s the engine is reset:** the data in memory is lost; your files are kept." / "Don't reset: wait for it" (focused) | disabled | "Stopping…", disabled |
 | `waiting` | "**Waiting** · Break after this command", the run's time | `S 9b`, a banner with `tabindex="-1"` that takes the focus: "**Waiting for this command to end.** The Break is still pending: the run stops after this command, with the data kept. If it never ends, **Reset now** resets the engine: the data in memory is lost; your files are kept." | disabled | "Reset now", live; asks nothing |
-| `failed` | "**Not started** · the engine didn't start" | `S 6`, `role="alert"`: "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Try again", after a message that says "Close other tabs, then try again" (`FAILED` in `engine.ts`). | "Start engine" where the banner has "Try again" (download, memory, unknown): the same new try. Else (no-wasm, updated) "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
-| `failed-twice` | "**Stopped** · failed twice" | `S 7`: "**The engine stopped after failing twice (out of memory).** It won't restart by itself, since each attempt can use a lot of memory. Your files are safe." / "Reload the page", "Download all (.zip)" | "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
+| `failed` | "**Not started** · the engine didn't start" | `S 6` (not `role="alert"`: the live region says "The engine didn't start" once): "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Try again", after a message that says "Close other tabs, then try again" (`FAILED` in `engine.ts`). | "Start engine" where the banner has "Try again" (download, memory, unknown): the same new try. Else (no-wasm, updated) "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
+| `failed-twice` | "**Stopped** · failed twice" | `S 7` (not `role="alert"`; the live region says it once): "**The engine stopped after failing twice (out of memory).** It won't restart by itself, since each attempt can use a lot of memory. Your files are safe." / "Reload the page", "Download all (.zip)" | "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
 | `other-tab-idle`, `other-tab-taking` | "**Paused** · another tab has the engine" | `WS 6`, blocking: "dofile is open in another tab" / "Only one tab can use your files at a time, so they are not overwritten. The other tab keeps its data until you take over here." / "Close editor" (focused, so a stray Enter does not take over), "Use dofile in this tab". WS 6 draws "Close this tab", but a page may close only a tab a script opened: "Close editor" goes to the landing page (`landing.html`, built in step 5) | none shown (hidden, under the blocking dialog). "Start engine" in `other-tab-idle` (Ctrl/Cmd+Enter, the command line's button, should the dialog not be up) opens this dialog again and takes no lock; off in `other-tab-taking` | none |
 
 **With no engine nothing offers to run** (decided 2026-11-12). "No engine" is `none`, `asking`, `declined`, `failed`,
@@ -519,7 +519,7 @@ What the cells mean as a visitor meets them:
 | `ready`, `running` | a run starts; its result arrives; Break | `running`; `ready`; `breaking`. |
 | `breaking` | the run ends with rc 1; 5 s pass; "Don't reset: wait for it" | `ready` (the log has "--Break--", "r(1);" and the note of `S 10`, OQ-9; a run that had ended before a safe point keeps its own rc); reset; `waiting`. |
 | `waiting` | the run ends; "Reset now" | `ready`; reset. |
-| `ready`, `running`, `breaking`, `waiting`, and `starting-worker` for a crash | reset (rc 9998): Break did not stop it, the worker crashed, Reset confirmed, "Reset now" | The run in progress ends with rc 9998; the worker is ended and the build's list is fetched afresh (`starting-list`), then a new worker starts by itself (`starting-worker`, `ready`). Above the log (`P/Notices`), for an engine that had been `ready`: "**The engine was reset: it ran out of memory.** The data in memory is gone; your files are kept." / "Run the file again", "Dismiss" (the reason's wording: OQ-9). A crash during a start adds no banner. A second worker crash before a start finishes: `failed-twice`, never a loop. A page that cannot ask a run to stop resets at once on Break. |
+| `ready`, `running`, `breaking`, `waiting`, and `starting-worker` for a crash | reset (rc 9998): Break did not stop it, the worker crashed, Reset confirmed, "Reset now" | The run in progress ends with rc 9998; the worker is ended and the build's list is fetched afresh (`starting-list`), then a new worker starts by itself (`starting-worker`, `ready`). Above the log (`P/Notices`), for an engine that had been `ready`: "**The engine was reset: it ran out of memory.** The data in memory is gone; your files are kept." / "Run the file again" (only after a Break or a crash that cut a file run: it runs that file, and is on while the engine is `ready` and the file is open as a text tab), "Dismiss" (the reason's wording: OQ-9). A crash during a start adds no banner. A second worker crash before a start finishes: `failed-twice`, never a loop. A page that cannot ask a run to stop resets at once on Break. |
 | `failed` | "Try again" (`start`) | `downloading`. `failed-twice` has no way out but a reload. |
 
 **Not cross-origin isolated** (no `SharedArrayBuffer`) is a flag, not a state. Break reads "Break (reset)" (`S 11`'s "Break · resets", shortened; its name is "Break (reset): Break resets the engine on this page") and resets
@@ -863,7 +863,7 @@ interface Graph { n: number; png: string; theme: "light" | "dark"; from: "run" |
 type Dialog = null | { d: "download" } | { d: "clash"; path: string; index: number; total: number }
             | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "clear-log" } | { d: "reset" }
             | { d: "close-tab"; path: string } | { d: "other-tab" };
-type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user" } | { b: "storage" }
+type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user"; run: RunHead | null } | { b: "storage" }
             | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
             | { b: "run-changed"; path: string };
 
@@ -1196,8 +1196,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
     same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `editorCommands.focus` (through
-    `states/focus.ts` `focusStable`), `downloadAll`, and run.ts `refreshData` (Reset describes the memory again after a
-    run).
+    `states/focus.ts` `focusStable`), `downloadAll`, and run.ts `refreshData`.
     **As built (4d, to review).** `states/words.ts` holds the logic and the words with no view (Node-tested:
     `test/states.test.ts`), `states/clock.ts` the `useNow` timer (the machine has no clock; a view reads `Date.now()`).
     S 2 and S 3 are one progress dialog: while `downloading` the header row "Downloading  14.2 of 48 MB · 6 s", the bar
@@ -1205,14 +1204,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     bytes on the current stage; from `starting-*` the row "Loading packages  step 4 of 5 · 9 s" (a stage seen twice adds up),
     no bar, done stages keep their time (the download's as "48 MB · 7.1 s"). "Use dofile in this tab" is `aria-disabled`
     and `.off` (same label; ui.css's disabled look, as Run's) in `other-tab-taking`, and a press then does nothing.
-    Reset (for the maintainer to confirm, B 5 of the plan's list; C 1 there asks about globals and scalars): `askReset()`
-    resets at once only while the engine is `ready`, `data` has no variables or observations and
-    `results` has no scalar, macro or matrix (macros and graphs are not counted: S 14 says "no data in memory and no
-    results"; `words.ts` `resetAsks`). A run in progress always asks (its data and results are known only when it
-    ends). After a run, "nothing to lose" is checked again once run.ts `refreshData()` has described the memory afresh
-    (`words.ts` `resetDecision`): until the run's own refreshData answers, `data` may still describe the memory from
-    before the run, so a run that made data and no r() or e() would otherwise be reset with no question; a description
-    that fails asks, and a press while the check is pending does nothing. The dialog closes itself if the engine can no
+    Reset (the maintainer settled it with C 1, 2026-11-13: B 5 and C 1 of the plan's list): `askReset()` is synchronous and
+    resets at once only while the engine is `ready` and nothing has run on it since it started (`state.ts` `engineRuns`, a
+    count of runs begun on the live engine, 0 after a reset; `words.ts` `resetAsks`). Anything that has run asks, so a run
+    that left only a global or a scalar asks too; it no longer describes the memory again. The dialog closes itself if the engine can no
     longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
     under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (`editorCommands.focus()`, which must focus at once; with a .dta tab
     active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
@@ -1236,8 +1231,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the machine's `graceMs` is not visible to views: a shared constant, or the time Break was pressed in the `breaking`
     view, would need engine.ts: C 4 of the plan's list; the focus goes to "Don't reset: wait for it"; at 0 s, until the reset lands, the bold part
     reads "The engine is being reset now:" instead of "In 0 s"), waiting (takes
-    the focus), the reset banner ("Run the file again" is on while the engine is `ready` and a text tab is active, runs the active
-    tab, and dismisses the banner: C 3 of the plan's list). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "next error",
+    the focus), the reset banner ("Run the file again" is drawn only after a Break or a crash that cut a file run, runs that file, is on while the engine is `ready` and the file is open as a text tab, and dismisses the banner: C 3 of the plan's list, fixed 2026-11-13). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "next error",
     the memory banner (not in prototype 1: no limit is measured, OQ-8; its unused view was removed in the post-merge review, C 12 of the plan's list). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
     **Step 4d: draft words**, for the maintainer to approve (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
     Reset banner by kind: user "You reset the engine." / break "The engine was reset: the code did not stop at Break."
@@ -1306,7 +1300,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   opener has left the page, to the editor or "More actions" (`states/focus.ts` `focusStable`), after the timers its answer
   set and only for a focus left on nothing, so it moves once; a bottom sheet
   under 700 px); `MenuButton` and `openMenu({label, items, anchor | at})` (one menu at a time, in the top layer, arrows,
-  Home, End, Esc returns focus, Tab closes and moves on from the trigger; an item is `{label, onSelect | href, hint,
+  Home, End (the menu owns its active item, a position among all its items; an item takes the focus from its own render), Esc returns focus, Tab closes and moves on from the trigger; an item is `{label, onSelect | href, hint,
   danger, disabled, keepOpen}` or `"rule"`; `keepOpen` leaves the menu open with the focus on the item, as the phone's
   "Theme: ◐ System" does to cycle the theme; `items` may be a function, called at each render of the open menu, so the
   signals it reads keep the labels current); `Tablist` (roving focus, arrows select; `tabpanelProps(prefix, id)` for the panel);
@@ -1338,7 +1332,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     ticket on an event themselves: they answer through a `reply` bound to their effect.
   - **Resets.** A reset ends the worker, fetches the build's list afresh (`starting-list`), then starts a new worker; every
     reset goes that way, and its first stage is not announced (it reads the cache; "Download the engine" would mislead). A
-    reset of an engine that had been ready adds `{b: "reset", reason, kind}` and says "Engine reset"; a crash during a start
+    reset of an engine that had been ready adds `{b: "reset", reason, kind, run}` (`run`: the run the reset cut, or null) and says "Engine reset"; a crash during a start
     adds nothing. Reset and "Reset now" give the reason "reset by you" (4d's words may
     change it). A page that cannot ask a run to stop (no `SharedArrayBuffer`) resets at once on Break. Every exit from
     `breaking` cancels the Break timer.

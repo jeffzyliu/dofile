@@ -88,6 +88,24 @@ estimated splits) are the study's, not checked again here.
   low in the editor while zoomed in may jump as before. If zoom comes back: one more sitting on an iPhone with `?kblog`,
   including taps while zoomed in. Nothing to do while zoom stays off. 2026-11-12.
 
+## Command line, log and files (decided in the post-merge review, 2026-11-13)
+
+- **A multi-line command line.** Shift+Enter would start a new line, so a block or a `///` command could be typed or pasted
+  and run as one; today such a paste stops with a toast that points to the editor (plan, step 4 A 5 and B 3). The
+  maintainer: "making it expand for multiline inputs should be considered, but not at this time. priority is just making
+  this single line one reliable with sensible defaults." 2026-11-13.
+- **Two commands on one line in `#delimit ;` mode (step 4's C 11).** Both are echoed as the whole line twice, and the second
+  echo can be matched to a later identical line, which puts a graph's link in the wrong place. Left as rare. 2026-11-13.
+- **"Restore the sample" and uploads write outside the file-change turn (step 5's C 6).** A Save in progress of the same
+  file, with the restore, or with an upload that replaces an open file (`files/actions.ts` `fileTurn` covers rename and
+  delete only): the store's writes run in the order they began, so a Save that begins during the write ends after the
+  `reload`, and the store holds the Save's text while the tab shows the sample or the upload with no unsaved dot. A window
+  of milliseconds, read from the code and not tested. To be looked at in the step 6 audit. 2026-11-13.
+- **A "(deleted)" mark on a tab whose file a run deleted.** The tab stays, as in other editors, and Save writes the file again
+  (step 4's C 7, kept); a mark would tell the visitor the file is gone. 2026-11-13.
+- **A close button (×) on each row of the phone's file dropdown.** The desktop tab has one; on the phone the dropdown has
+  "Close <file>" for the open file only. A control inside a menu item needs focus logic the menu does not have. 2026-11-13.
+
 ## Engine memory (added 2026-11-13)
 
 - **The engine unloads itself after a long idle time or while the visitor is away.** After a long period of inactivity, or
