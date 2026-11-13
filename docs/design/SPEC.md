@@ -278,7 +278,7 @@ place and Load or Import and Copy are off (`web/src/stata/quote.ts`).
   a check and "Copied" in its place (both faces in one cell, so it keeps its width; its name does not change), and the live
   region says "Copied to the clipboard". It fits inside its code box (26 px high, taking one code line's height; WCAG 2.2's
   24 px target, also with a finger). `pip install dofile` keeps its label "with the first release". The theme button keeps
-  its word at every width (System, Light, Dark) and its icon says the choice: a screen, a sun, a moon (`.i-theme` in `ui.css`,
+  its word (System, Light, Dark) down to 360 px; below that it shows the icon only, its `aria-label` unchanged (at 320 px the word pushed it past the edge) and its icon says the choice: a screen, a sun, a moon (`.i-theme` in `ui.css`,
   from `<html data-theme>`, so the editor's theme button shows the same three). welcome.do (desktop) and "What a run looks
   like" keep their lines and scroll sideways where their column is too narrow (each a `<section>` in the tab order, named
   "welcome.do" and by its heading), never the page. The phone's banner is five block lines with nothing between them in

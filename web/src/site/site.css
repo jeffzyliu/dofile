@@ -402,6 +402,13 @@ footer a {
   }
 }
 
+/* below 360 px the bar has no room for the word (it ended at 327.8 px at 320): the icon stays and the aria-label names the button */
+@media (max-width: 359px) {
+  .site .theme .label-text {
+    display: none;
+  }
+}
+
 @media (forced-colors: active) {
   .art-ink,
   .art-drop {
