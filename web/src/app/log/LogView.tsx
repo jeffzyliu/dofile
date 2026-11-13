@@ -18,6 +18,7 @@
 // On a phone the hint is a block (.explain), and a block of output wider than the screen is followed by "← wide table:
 // swipe sideways →". The head, run-heads and the page's notes are shown only: Download log has the runs' text alone.
 // The pane follows the end of the log unless the visitor has scrolled up. role="log".
+import { signal } from "@preact/signals";
 import { type ComponentChildren, Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { codeOf, editorCommands } from "../editor/commands.ts";
@@ -30,6 +31,7 @@ import { startFirst, startOffer } from "../start.ts";
 import { engine, graphFull, graphIndex, graphs, isPhone, log, outputTab, showToast, split, wrap } from "../state.ts";
 import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
+import { fromAnywhere, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon, isMac } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { commandEnd, echoed, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
@@ -319,6 +321,16 @@ function logHead(m: Marker) {
 
 /** Find's field, over the log (log/find.ts). */
 function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) {
+  const field = useRef<HTMLInputElement>(null);
+  // once per openFind: a LogView drawn again with Find open (another Output tab and back) takes no focus
+  useFocusRequest(
+    findOpen.value && findAsked.value,
+    field,
+    () => {
+      findAsked.value = false;
+    },
+    fromAnywhere,
+  );
   if (!findOpen.value) return null;
   const at = total ? (findAt.value % total) + 1 : 0;
   const close = () => {
@@ -339,12 +351,7 @@ function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) 
         autocapitalize="off"
         spellcheck={false}
         value={findText.value}
-        ref={(el) => {
-          if (el && findFocus) {
-            findFocus = false;
-            el.focus();
-          }
-        }}
+        ref={field}
         onInput={(e) => {
           findText.value = (e.target as HTMLInputElement).value;
           findAt.value = 0;
@@ -368,14 +375,14 @@ function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) 
     </div>
   );
 }
-let findFocus = false;
+const findAsked = signal(false); // openFind asks; the field takes it when drawn
 let findReturn: HTMLElement | null = null;
 /** Open Find (the Log head's button, the phone's ⋯): the field takes the focus; Esc and Close give it back to `from`
  *  (the phone's ⋯ passes none: the focus is then on the ⋯ button, which the menu gave it back to). On the desktop with
  *  the Output pane unsplit and Graph, Data or Results showing, the Log tab is shown first, so the field can be seen. */
 export function openFind(from: HTMLElement | null) {
   findReturn = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  findFocus = true;
+  findAsked.value = true;
   if (!isPhone.value && !split.value && outputTab.value !== "log") outputTab.value = "log";
   findOpen.value = true;
 }
