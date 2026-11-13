@@ -32,7 +32,7 @@ const rect = (page: Page, sel: string) =>
     return b?.width ? { top: b.top, bottom: b.bottom, height: b.height } : null;
   }, sel);
 
-// height, unpan and pre keep --vv-top at 0 (viewport.ts), so they are set so here; the others follow the pan
+// height, unpan, pre, caret and early keep --vv-top at 0 (viewport.ts), so they are set so here; the others follow the pan
 const MODES = [
   { query: "", kb: undefined, top: 100 },
   { query: "&kb=top", kb: undefined, top: 100 },
@@ -42,6 +42,8 @@ const MODES = [
   { query: "&kb=height", kb: "height", top: 0 },
   { query: "&kb=unpan", kb: "unpan", top: 0 },
   { query: "&kb=pre", kb: "pre", top: 0 },
+  { query: "&kb=caret", kb: "caret", top: 0 },
+  { query: "&kb=early", kb: "early", top: 0 },
   { query: "&kb=nonsense", kb: undefined, top: 100 },
 ];
 
@@ -170,3 +172,43 @@ test("?kblog: the overlay lists the events with the strategy's name, takes no ta
   await expect(log).toContainText("focusin");
   expect(await page.evaluate(() => document.activeElement?.id)).not.toBe("kblog");
 });
+
+// ?kb=caret and ?kb=early (round 2): with the keyboard open, the editor's caret is scrolled above it, by early at once when
+// the keyboard is first seen, by both once it has settled (SETTLE, 300 ms). A stand-in visualViewport (set before the page
+// loads) plays the keyboard: its height drops to 400 px and it fires a resize.
+for (const mode of ["caret", "early"] as const)
+  test(`?kb=${mode}: the editor's caret, low on the page, is scrolled above the keyboard ${mode === "early" ? "at once" : "once it settles"}`, async ({
+    page,
+  }) => {
+    await page.addInitScript((height) => {
+      const vv = Object.assign(new EventTarget(), { height, width: 390, offsetTop: 0, offsetLeft: 0, scale: 1 });
+      Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
+      (window as any).__vv = vv;
+    }, PHONE.height);
+    await open(page, `&kb=${mode}&sample`);
+    const content = page.locator(".cm-content");
+    await expect(content).toContainText("summarize");
+    await content.click({ position: { x: 40, y: 600 - ((await content.boundingBox())?.y ?? 0) } });
+    await settled(page);
+    const caret = () =>
+      page.evaluate(() => {
+        const r = getSelection()!.getRangeAt(0);
+        return (r.getClientRects()[0] ?? r.getBoundingClientRect()).bottom;
+      });
+    expect(await caret()).toBeGreaterThan(400); // under the coming keyboard
+    const atOnce = await page.evaluate(() => {
+      const vv = (window as any).__vv;
+      vv.height = 400;
+      vv.dispatchEvent(new Event("resize"));
+      const r = getSelection()!.getRangeAt(0);
+      return {
+        open: "keyboard" in document.documentElement.dataset,
+        bottom: (r.getClientRects()[0] ?? r.getBoundingClientRect()).bottom,
+      };
+    });
+    expect(atOnce.open).toBe(true);
+    if (mode === "early") expect(atOnce.bottom).toBeLessThanOrEqual(400 - 24 + 1);
+    else expect(atOnce.bottom).toBeGreaterThan(400);
+    await expect.poll(caret).toBeLessThanOrEqual(400 - 24 + 1);
+    expect(await caret()).toBeGreaterThan(300); // just above the keyboard, not further
+  });

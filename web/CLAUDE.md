@@ -54,7 +54,7 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   `openMenu`; an item with `keepOpen` leaves the menu open), `Tablist`, `Live` (the live region `say()`, the toast `showToast()` and `Banner`), `Icon` (and `Key`), `Labels` (a control's
   labels in one cell, so the toolbar never changes size; keep labels short, the widest sets the width). Toolbar buttons
   share one height (`--control` in `tokens.css`), a pane head's controls another (`--control-sm`). `src/app/viewport.ts` sizes the page to the area above a phone's
-  on-screen keyboard. For an experiment on a real iPhone (`docs/phone-keyboard-experiment.md`), `?kb=transform|height|unpan|pre|focus`
+  on-screen keyboard. For an experiment on a real iPhone (`docs/phone-keyboard-experiment.md`), `?kb=transform|height|unpan|pre|focus|caret|early`
   picks another way to follow the keyboard (`<html data-kb>`), `?slide` eases `.app` to its place and `?kblog` loads an overlay
   of the viewport's events (`src/app/kblog.ts`, imported only with the flag); without them the page is as before (`top`).
   `src/app/wakelock.ts` keeps the screen awake (Screen Wake Lock) while the engine

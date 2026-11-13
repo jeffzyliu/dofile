@@ -27,24 +27,34 @@
 //              (the visible height seen last at this width, else PREDICT of the layout viewport), and an editor's
 //              caret scrolled above it, so the browser may find nothing to reveal; then as unpan. With no keyboard
 //              within HOLD ms (a hardware keyboard) the prediction goes;
-//   focus      for the command line (log/CommandLine.tsx), which takes the focus itself; here the same as top.
+//   focus      for the command line (log/CommandLine.tsx), which takes the focus itself; here the same as top;
+//   caret      round 2: the command line as focus, everything else as unpan; and once the keyboard has settled (no
+//              viewport event for SETTLE ms) an editor's caret is scrolled above it, since undoing the pan hides it;
+//   early      as caret, and the caret is scrolled above the keyboard at once when the keyboard is first seen (the
+//              first visualViewport resize, which in the editor comes about 120 ms before Safari's pan), so Safari may
+//              find nothing to reveal.
 
 /** How much shorter than the layout viewport the visual viewport must be to count as a keyboard (a keyboard is about 260
  *  px or more; Safari's toolbars change the height by less). */
 export const KEYBOARD = 120;
 
 /** The keyboard experiment's strategies (?kb=…, above); "top" is the default. */
-export const KB_MODES = ["top", "transform", "height", "unpan", "pre", "focus"] as const;
+export const KB_MODES = ["top", "transform", "height", "unpan", "pre", "focus", "caret", "early"] as const;
 export type KbMode = (typeof KB_MODES)[number];
 /** The strategy a URL's query names; without one, or an unknown one, "top". */
 export const kbModeOf = (query: URLSearchParams): KbMode => KB_MODES.find((m) => m === query.get("kb")) ?? "top";
+/** Whether the command line takes the focus itself, with preventScroll, under this strategy (log/CommandLine.tsx). */
+export const focusesItself = (mode: KbMode) => mode === "focus" || mode === "caret" || mode === "early";
 
 /** pre: the share of the layout viewport's height predicted to stay above the keyboard before one was seen at a width,
  *  and how long a prediction is held without a keyboard (ms). */
 export const PREDICT = 0.55;
 export const HOLD = 1000;
-/** pre: how far above the predicted keyboard an editor's caret is put (px). */
+/** pre, caret, early: how far above the keyboard an editor's caret is put (px). */
 const CARET_MARGIN = 24;
+/** caret, early: how long the viewport must be quiet before the keyboard counts as settled (ms). In round 1 the last
+ *  event of an opening came about 380 ms after the tap. */
+export const SETTLE = 300;
 
 /** Whether `el` takes typing: a text input, a textarea, or editable content (CodeMirror). */
 const isTextField = (el: Element | null | undefined) =>
@@ -71,6 +81,7 @@ export function watchViewport({
   panned = () => (globalThis.scrollY ?? 0) > 0,
   caret = caretBottom,
   later = (fn: () => void, ms = 0) => setTimeout(fn, ms),
+  reveal = revealCaret,
 }: {
   vv?: VisualViewport | null;
   root?: HTMLElement;
@@ -88,6 +99,8 @@ export function watchViewport({
   /** pre: the bottom of the caret in `el` (or of the field), in px from the layout viewport's top; null if unknown */
   caret?: (el: Element) => number | null;
   later?: (fn: () => void, ms?: number) => unknown;
+  /** caret, early: scroll the focused editor's caret above `height` px from the top, if it is below */
+  reveal?: (height: number) => void;
 } = {}): { update: () => void; stop: () => void } {
   if (!vv || !root) return { update: () => {}, stop: () => {} };
   let width = 0,
@@ -95,7 +108,9 @@ export function watchViewport({
     holdUntil = -Infinity; // pre: a prediction stands until then without a keyboard
   const seen = new Map<number, number>(); // pre: the visible height with the keyboard open, by layout width
   const follow = mode === "top" || mode === "transform" || mode === "focus"; // .app follows offsetTop
-  const unpan = mode === "unpan" || mode === "pre";
+  const reveals = mode === "caret" || mode === "early";
+  const unpan = mode === "unpan" || mode === "pre" || reveals;
+  let quiet = 0; // caret, early: counts the updates, so only the last one's timer reveals
   const set = (height: number, top: number) => {
     root.style.setProperty("--vv-height", `${height}px`);
     root.style.setProperty("--vv-top", `${top}px`);
@@ -114,10 +129,18 @@ export function watchViewport({
     const shrunk = typing() && tallest - h > KEYBOARD; // or the browser shrank the layout viewport for it
     const open = enabled() && unzoomed && (covered || shrunk);
     if (open) {
+      const opening = !("keyboard" in root.dataset);
       holdUntil = -Infinity;
       seen.set(w, vv.height);
       set(vv.height, follow ? vv.offsetTop : 0);
       if (unpan && (vv.offsetTop > 0 || panned())) scrollTop();
+      if (reveals) {
+        if (opening && mode === "early") reveal(vv.height);
+        const n = ++quiet;
+        later(() => {
+          if (n === quiet && "keyboard" in root.dataset) reveal(vv.height);
+        }, SETTLE);
+      }
     } else if ("keyboard" in root.dataset && !(enabled() && now() < holdUntil)) {
       holdUntil = -Infinity;
       root.style.removeProperty("--vv-height");
@@ -157,6 +180,19 @@ export function watchViewport({
       root.removeEventListener?.("focusout", soon);
     },
   };
+}
+
+/** caret, early: the focused editor's (CodeMirror's) caret, scrolled to `height` - CARET_MARGIN px from the top if it
+ *  is below that. Nothing for a field that is not in an editor, or with no caret in it. */
+function revealCaret(height: number) {
+  const el = document.activeElement;
+  const scroller = el?.closest(".cm-scroller");
+  const sel = getSelection();
+  if (!el || !scroller || !sel?.rangeCount || !el.contains(sel.anchorNode)) return;
+  const range = sel.getRangeAt(0);
+  const bottom = (range.getClientRects()[0] ?? range.getBoundingClientRect()).bottom;
+  const limit = Math.min(scroller.getBoundingClientRect().bottom, height) - CARET_MARGIN;
+  if (bottom > limit) scroller.scrollTop += bottom - limit;
 }
 
 /** The bottom of the caret when it is in `el` (editable content: CodeMirror), else of `el` (an input), in px from the
