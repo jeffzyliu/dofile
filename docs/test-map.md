@@ -261,7 +261,7 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (154, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (156, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
