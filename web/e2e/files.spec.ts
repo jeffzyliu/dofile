@@ -718,6 +718,8 @@ test("the phone's file dropdown: Save (on for a text file) at the top, Close and
   const first = menu.getByRole("menuitem", { name: /^file01\.do/ });
   await expect(save).toBeVisible();
   await expect(save).not.toHaveAttribute("aria-disabled", "true");
+  await expect(menu.getByRole("menuitem", { name: /^file14\.do/ })).toBeInViewport({ ratio: 1 }); // the open file, in view
+  await expect(first).not.toBeInViewport(); // ... so the top of the list is the part that is scrolled away
   const box = async (l: typeof save) => (await l.boundingBox())!;
   const view = page.viewportSize()!;
   // the list scrolls: it is cut at 60-70% of the window, and Save and Close stay inside the window
@@ -741,6 +743,37 @@ test("the phone's file dropdown: Save (on for a text file) at the top, Close and
   await page.getByRole("button", { name: "More actions" }).click();
   await expect(page.getByRole("menu", { name: "More actions" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Save", exact: true })).toHaveCount(0);
+});
+
+test("the phone's file dropdown on a landscape phone: Save, the tab list, Close and Show all files all fit in the window", async ({
+  page,
+}) => {
+  test.skip(!isPhone(page), "the phone's file dropdown");
+  await page.setViewportSize({ width: 667, height: 375 });
+  const names = Array.from({ length: 14 }, (_, i) => `file${String(i + 1).padStart(2, "0")}.do`);
+  await setUp(page, Object.fromEntries(names.map((n) => [n, "1\n"])));
+  await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  for (const n of names) {
+    await row(page, new RegExp(`^${n}`)).click();
+    await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  }
+  await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Editor" }).click();
+  await page.getByRole("button", { name: /\. Open files/ }).click();
+  const menu = page.getByRole("menu", { name: "Open files" });
+  await expect(menu).toBeVisible();
+  const view = page.viewportSize()!;
+  for (const item of [
+    menu.getByRole("menuitem", { name: "Save", exact: true }),
+    menu.getByRole("menuitem", { name: "Close file14.do" }),
+    menu.getByRole("menuitem", { name: "Show all files" }),
+  ]) {
+    const b = (await item.boundingBox())!;
+    expect(b.y).toBeGreaterThanOrEqual(0);
+    expect(b.y + b.height).toBeLessThanOrEqual(view.height);
+  }
+  const list = (await menu.locator(".menu-scroll").boundingBox())!;
+  expect(list.height).toBeGreaterThan(60); // and the list keeps a usable height
+  expect(list.y + list.height).toBeLessThanOrEqual(view.height);
 });
 
 test("desktop is unchanged: the open files are tabs, the ⋯ menu has no Save and no scroll box", async ({ page }) => {

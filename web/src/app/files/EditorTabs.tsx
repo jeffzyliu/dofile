@@ -130,6 +130,7 @@ const switcherItems = (): MenuItem[] => {
             </span>
           ),
           hint: t.path === active ? "open" : undefined,
+          current: t.path === active,
           onSelect: () => {
             activeTab.value = t.path;
           },
