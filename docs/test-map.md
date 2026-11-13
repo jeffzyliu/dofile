@@ -126,9 +126,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 154 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 155 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 616 cases, of which 559 run and 57 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 620 cases, of which 563 run and 57 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the capped normal boot outside Chromium; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -136,7 +136,7 @@ view and nothing of the editor shows; the banner's hand-off to a .dta tab on the
 view; the phone's file dropdown (Save, the strip's height and tap target, the landscape fit) in the three desktop profiles, and the desktop-only tests (a tab's tablist with no scroll group, a renamed row drawn late, the unsplit Output tabs by keyboard) on the iPhone; a menu item's click focus in WebKit and the iPhone, where Safari does not focus a button on a click; the phone command line's Run button in the three desktop
 profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its package load stalls now and then on Linux).
 
-- `shell.spec.ts` (13): desktop and phone layout (Unsplit shows the Log, also from another tab), the first visit (Not now; Run is "Start engine", which brings the prompt back; a run through the hook does nothing and opens no prompt), toolbar stability (at 1440, 1024, 900, 800, 700 and 390 px: the same boxes in all sixteen engine states, the toolbar never wider than its row, with Run's label "Start engine" with no engine, "Run" with one, "Starting…" and "Not started"), panes never remounted, banners, toast position;
+- `shell.spec.ts` (14): desktop and phone layout (Unsplit shows the Log, also from another tab), the first visit (Not now; Run is "Start engine", which brings the prompt back; a run through the hook does nothing and opens no prompt), toolbar stability (at 1440, 1024, 900, 800, 700 and 390 px: the same boxes in all sixteen engine states, the toolbar never wider than its row, with Run's label "Start engine" with no engine, "Run" with one, "Starting…" and "Not started"), panes never remounted, banners, toast position; the folded file list opened by keyboard with no files (the focus on the head's File actions, and a file that appears later does not take it);
   no text that names a key in sight on a phone (any text node with ⌘, Ctrl, Esc, F1 to F12, ↵ or ↩ whose box is in
   sight: the top bar, ⋯ menu on the Editor and Log views, a file's menu, whose Rename keeps "F2" in its name out of
   sight, and a nested do's unsaved note, which says "⋯ › Save"), and on the desktop the toolbar's Save chip with its
