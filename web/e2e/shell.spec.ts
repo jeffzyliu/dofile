@@ -442,6 +442,24 @@ test("the folded file list: the Files button says what it does and how many file
   await expect(pane).toBeVisible();
 });
 
+test("the folded file list with no files: opened by keyboard, the focus goes to the head's File actions, once", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await page.goto("?test=manual");
+  const button = page.getByRole("button", { name: "Files", exact: true });
+  const pane = page.getByRole("region", { name: "Files" });
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(pane).toBeVisible();
+  await expect(pane.getByRole("button", { name: "File actions" })).toBeFocused();
+  // the request ended there: a file that appears now does not take the focus
+  await page.evaluate(() => (window as any).__dofile.store.write("a.do", new TextEncoder().encode("1\n")));
+  await expect(pane.getByRole("treeitem", { name: /^a\.do/ })).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(pane.getByRole("button", { name: "File actions" })).toBeFocused();
+});
+
 // On a phone the page itself never scrolls: only panes do (an iPhone scrolled the page a few px). The emulated iPhone has
 // no real keyboard or toolbars, and Playwright cannot make a real touch scroll, so this guards the layout: the document is
 // no taller or wider than the window, and a scroll by script (and a wheel, where the browser takes one) leaves it at the

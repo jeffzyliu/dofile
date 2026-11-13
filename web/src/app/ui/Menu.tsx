@@ -89,14 +89,17 @@ export function MenuButton({
   class: cls = "btn quiet icon",
   children,
   title,
+  ref: given,
 }: {
   label: string;
   items: Items;
   class?: string;
   children: ComponentChildren;
   title?: string;
+  ref?: { current: HTMLButtonElement | null }; // the owner's, for a focus request of its own (Preact passes `ref` on)
 }) {
-  const ref = useRef<HTMLButtonElement>(null);
+  const own = useRef<HTMLButtonElement>(null);
+  const ref = given ?? own;
   const open = openMenuState.value?.anchor != null && openMenuState.value.anchor === ref.current;
   const show = (focus: "first" | "last") => openMenu({ label, items, anchor: ref.current, focus });
   return (

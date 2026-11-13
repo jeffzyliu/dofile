@@ -15,24 +15,18 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import { editorCommands } from "../editor/commands.ts";
+import { refresh } from "../files.ts";
 import { replaceWithSample } from "../sample.ts";
 import { dialog, files } from "../state.ts";
 import { Dialog } from "../ui/Dialog";
 import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries } from "./actions.ts";
 import { focusAfterClose } from "./EditorTabs";
+import { focusTree } from "./FilesPane";
 import { baseName, formatSize, shortDate } from "./tree.ts";
 
 const close = () => {
   dialog.value = null;
 };
-
-/** After a delete the row that opened the dialog is gone and the focus with it: give it to the tree's row in the tab
- *  order, once the list has been read again. */
-const refocus = () =>
-  setTimeout(() => {
-    if (document.activeElement && document.activeElement !== document.body) return;
-    document.querySelector<HTMLElement>('.files [role="treeitem"][tabindex="0"]')?.focus();
-  }, 100);
 
 /** Run `cancel` when the view is unmounted before it answered. Returns `answered()`, to call when it answers. A layout
  *  effect, so the cleanup is there from the first render: an effect runs after the paint, and a view replaced before
@@ -106,7 +100,14 @@ export function DeleteDialog({ dialog: d }: { dialog: DialogOf<"delete"> }) {
   const folder = d.paths.some((p) => dirs.has(p));
   const remove = () => {
     close();
-    deleteEntries(d.paths).then(refocus, (e) => console.warn(`[dofile] delete: ${e?.message ?? e}`));
+    // the row that opened the dialog goes, and the focus with it: the tree's row in the tab order takes it once the list
+    // has been read again (a list made after the delete, so the row is gone from it)
+    deleteEntries(d.paths)
+      .then(refresh)
+      .then(
+        () => focusTree(),
+        (e) => console.warn(`[dofile] delete: ${e?.message ?? e}`),
+      );
   };
   return (
     <Dialog
