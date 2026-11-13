@@ -159,10 +159,12 @@ before Safari pans. If Safari then finds the caret already in sight, there is no
 Steps, for `?kb=caret&kblog` and then `?kb=early&kblog` (reload with the new address each time):
 
 - a. Editor view: tap a line in the top third. Hide the keyboard.
-- b. Editor view: tap a line in the bottom third. Hide the keyboard.
-- b2. With the keyboard still open after b, tap another line low in the visible text.
+- b. Editor view: tap a line in the bottom third, then (b2), with the keyboard still open, tap another line low in
+  the visible text. Then hide the keyboard.
 - c. Log view: tap the command line, type `di 1`, press Go. Hide the keyboard.
-- Do each twice. Take a screenshot of the overlay after the second b and the second c.
+- Do each twice. Take a screenshot of the overlay after the second b (once the keyboard is hidden: the b2 tap does not
+  start a new list, so one screenshot holds b, b2 and the closing) and after the second c. If the list is too long and
+  its first rows (`touch`, `focusin`) are gone, take one more screenshot of a b without b2.
 
 For each try note: whether the top bar ever leaves the screen; whether the caret ends in sight just above the keyboard;
 whether the text jumps more than once; whether all comes back when the keyboard closes.
