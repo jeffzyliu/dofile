@@ -550,22 +550,24 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
     "new c.do",
     "new new.do",
   ]);
-  await input.setInputFiles(["a.do", "b.do", "z.do"].map(file));
-  await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toBeVisible();
+  // other bytes from here on, so a.do and b.do are both clashes again
+  const again = (name: string) => ({ ...file(name), buffer: Buffer.from(`newer ${name}`) });
+  await input.setInputFiles(["a.do", "b.do", "z.do"].map(again));
+  await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toContainText("clash 1 of 2");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect(page.locator(".toast")).toHaveText("2 files uploaded"); // z.do, and b.do: it holds these bytes, so it is not asked
-  expect(await textOf(page, "a.do")).toBe("old a");
+  await expect(page.locator(".toast")).toHaveText("1 file uploaded"); // z.do; Esc kept a.do and b.do
+  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "new b.do"]);
   // another dialog put over the question (another tab took the engine, say) unmounts it: that answers as Esc does
-  await input.setInputFiles(["a.do", "b.do", "y.do", "y2.do"].map(file));
-  await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toBeVisible();
+  await input.setInputFiles(["a.do", "b.do", "y.do", "y2.do"].map(again));
+  await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toContainText("clash 1 of 2");
   await page.evaluate(() => {
     (window as unknown as { __dofile: { state: { dialog: { value: unknown } } } }).__dofile.state.dialog.value = {
       d: "delete",
       paths: ["c.do"],
     };
   });
-  await expect(page.locator(".toast")).toHaveText("3 files uploaded"); // y.do and y2.do, and b.do (the same bytes); the clash over a.do kept
+  await expect(page.locator(".toast")).toHaveText("2 files uploaded"); // y.do and y2.do; both clashes kept
   const other = page.getByRole("alertdialog", { name: "Delete c.do?" });
   await expect(other).toBeVisible(); // the upload's end leaves the other dialog open
   await page.keyboard.press("Escape");
