@@ -250,7 +250,7 @@ profiles).
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (116, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (124, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
