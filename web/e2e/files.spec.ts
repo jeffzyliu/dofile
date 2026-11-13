@@ -127,6 +127,11 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Editor" }).click();
     const switcher = page.getByRole("button", { name: /c\.do\. Open files/ });
     await switcher.click();
+    await expect(page.getByRole("menu", { name: "Open files" })).toBeVisible();
+    await switcher.click(); // a second tap closes it, a third opens it again
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(switcher).toHaveAttribute("aria-expanded", "false");
+    await switcher.click();
     await page.getByRole("menuitem", { name: "Close c.do" }).click();
     await expect.poll(() => openTabs(page)).toEqual(["a.do", "b.do"]);
     await page.getByRole("button", { name: /\. Open files/ }).click();

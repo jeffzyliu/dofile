@@ -16,7 +16,7 @@ import { activeTab, phoneTab, tabs } from "../state.ts";
 import type { OpenTab } from "../types.ts";
 import { fromNothing, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
-import { type MenuItem, openMenu, openMenuState } from "../ui/Menu";
+import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { askCloseTab } from "./actions.ts";
 import { focusTree, treeShown } from "./FilesPane";
 import { baseName, tabLabels } from "./tree.ts";
@@ -183,19 +183,22 @@ const switcherItems = (): MenuItem[] => {
 };
 
 /** The phone's top bar title on the Editor view: the open file's name (or "Editor" with none) and ▾; a tap opens the
- *  menu: Save, the open files, "Close <name>" and "Show all files" (the Files view). One button in every case, as wide as the
+ *  menu: Save, the open files, "Close <name>" and "Show all files" (the Files view); a second tap closes it. One button in every case, as wide as the
  *  title, so the top bar's boxes never move (e2e/shell.spec.ts). */
 export function FileSwitcher() {
   const active = tabs.value.find((t) => t.path === activeTab.value);
   const label = active ? tabLabels(tabs.value.map((t) => t.path))[tabs.value.indexOf(active)] : "Editor";
+  const open = openMenuState.value?.label === "Open files";
   return (
     <button
       type="button"
       class="file-switcher"
       aria-haspopup="menu"
-      aria-expanded={openMenuState.value?.label === "Open files"}
+      aria-expanded={open}
       aria-label={`${label}${active?.dirty ? ", unsaved changes" : ""}. Open files`}
-      onClick={(e) => openMenu({ label: "Open files", items: switcherItems, anchor: e.currentTarget })}
+      onClick={(e) =>
+        open ? closeMenu() : openMenu({ label: "Open files", items: switcherItems, anchor: e.currentTarget })
+      }
     >
       <span class="name">{label}</span>
       {active?.dirty && <span class="dot" aria-hidden="true" />}
