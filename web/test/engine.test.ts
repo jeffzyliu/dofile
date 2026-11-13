@@ -442,6 +442,57 @@ test("a heap cap on a snapshot start: a big allocation fails as r(909), the data
   eng.worker!.terminate();
 });
 
+test("a heap cap on a snapshot start: small objects fill the heap, the run ends as r(909) (nothing escapes), a following command runs", {
+  timeout: 300_000,
+  skip: !haveSnapshot && "no current snapshot: npm run snapshot",
+}, async () => {
+  const CAP_MB = 400;
+  const { store, createWorker } = pageStore();
+  const eng = new EngineClient({
+    createWorker,
+    wheel,
+    extraWheels,
+    buildId: buildId(STAMP, current),
+    startFiles: startFiles!,
+    snapshot: new URL("../public/snapshot/", import.meta.url).href,
+    memcap: CAP_MB,
+    store,
+  });
+  await startWorker(eng, await eng.build());
+  // Globals of 1000 characters: each pass adds about 115 MB of strings, none of them large enough to be refused alone.
+  // The heap fills wherever the next allocation is: in a command (r(909) by ODT-28), or in the interpreter's own work
+  // between commands (a loop, or Python looking up a module file: OSError ENOMEM), which was rc 9999 and, with the
+  // ballast still held, a PythonError "Error in sys.excepthook: MemoryError" out of the run. After the first refusal the
+  // heap stays full, so more passes meet the other places too. Each ends as r(909) (or fits); the page's memory query still answers.
+  const big = "x".repeat(1000);
+  const fill = (name: string, n: number) => runOn(eng, `forvalues i = 1/${n} {\n global ${name}_\`i' "${big}"\n}`);
+  let r = await runOn(eng, "display 1");
+  for (let pass = 0; pass < 6 && r.rc === 0; pass++) {
+    r = await fill(`g${pass}`, 100_000);
+    await eng.query("memory");
+  }
+  const refused = (x: Awaited<ReturnType<typeof runOn>>) => {
+    assert.equal(x.rc, 909, x.log.slice(-300));
+    assert.match(x.error ?? "", /refuses to provide memory/);
+    assert.match(x.log, /\nr\(909\);\n$/);
+  };
+  refused(r);
+  const { heap_bytes } = await eng.query("memory");
+  assert.ok(heap_bytes <= CAP_MB * 1024 * 1024, `the heap (${heap_bytes}) is within the cap`);
+  for (let again = 0; again < 4; again++) {
+    const more = await fill(`h${again}`, 20_000); // the full heap refuses, whichever allocation comes first
+    if (more.rc !== 0) refused(more); // (a pass may fit in what a freed ballast left)
+    await eng.query("memory");
+  }
+  for (const code of ["display 2", "describe, short", "display 3"]) {
+    const after = await runOn(eng, code);
+    assert.equal(after.rc, 0, `${code}: ${after.log.slice(-300)}`);
+  }
+  const kept = await runOn(eng, 'display length("${g0_1}")');
+  assert.match(kept.log, /\n1000\n/, "the macros are kept");
+  eng.worker!.terminate();
+});
+
 test('a list of another build is refused with kind "updated" before any worker is made', {
   timeout: 60_000,
   skip: !manifest && "no snapshot",
