@@ -29,6 +29,7 @@ import { downloadAll } from "../files.ts";
 import { restoreSample } from "../sample.ts";
 import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
 import { store } from "../store.ts";
+import { fromNothing, useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem, openMenu } from "../ui/Menu";
 import {
@@ -210,6 +211,12 @@ function rowItems(row: Row): MenuItem[] {
 const menuLabel = (row: Row) => `Actions for ${row.path}${row.dir ? "/" : ""}`;
 
 function RenameField({ r, row }: { r: Renaming; row: Row }) {
+  const field = useRef<HTMLInputElement>(null);
+  useFocusOnMount(field);
+  useLayoutEffect(() => {
+    const dot = row.dir ? -1 : row.name.lastIndexOf(".");
+    field.current?.setSelectionRange(0, dot > 0 ? dot : row.name.length); // the name without its extension
+  }, []);
   return (
     <>
       <input
@@ -222,17 +229,7 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
-        ref={(el) => {
-          if (!el || el.dataset.ready) return;
-          el.dataset.ready = "1";
-          const take = () => {
-            el.focus();
-            const dot = row.dir ? -1 : row.name.lastIndexOf(".");
-            el.setSelectionRange(0, dot > 0 ? dot : row.name.length); // the name without its extension
-          };
-          take();
-          if (document.activeElement !== el) setTimeout(take); // not in the document yet
-        }}
+        ref={field}
         onInput={() => {
           if (r.problem) renaming.value = { ...r, problem: null };
         }}
@@ -268,16 +265,17 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
   );
 }
 
-/** A row that focusRow asked for takes the focus once it is drawn, if it is still the roving one and the focus is free. */
+/** A row that focusRow asked for takes the focus once it is drawn, if it is still the roving one and the focus is free
+ *  (on the page body, where the removed rename field leaves it, or in the tree); docs/web-page-flows.md, section 1. */
 function useRovingFocus(path: string, li: { current: HTMLElement | null }, renaming: boolean) {
-  const asked = focusWanted.value === path && !renaming; // a row being renamed keeps the request until the field is gone
-  useLayoutEffect(() => {
-    if (!asked) return;
-    focusWanted.value = null; // the request ends here, taken or not
-    if (rovingPath.value !== path) return; // the visitor made another row roving meanwhile
-    const at = document.activeElement; // the body is where the focus goes when the rename field is removed
-    if (!at || at === document.body || li.current?.closest('[role="tree"]')?.contains(at)) li.current?.focus();
-  }, [asked]);
+  useFocusRequest(
+    focusWanted.value === path && !renaming, // a row being renamed keeps the request until the field is gone
+    li,
+    () => {
+      focusWanted.value = null;
+    },
+    (at) => rovingPath.value === path && (fromNothing(at) || !!li.current?.closest('[role="tree"]')?.contains(at)),
+  );
 }
 
 function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: Row[] }) {
