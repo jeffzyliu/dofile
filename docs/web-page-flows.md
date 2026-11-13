@@ -626,7 +626,10 @@ The editor (`editor/Editor.tsx`) keeps, per open text tab, keyed by path:
 - `savedText`: the store's text in the editor's form, or null when the store's version is not text.
 - `forms`: the noted line break and BOM.
 - `saving`: each Save in progress with the path its tab has now (`renamed` moves it, `closed` sets it to null), so a
-  Save that answers after a rename leaves its outcome on the renamed tab.
+  Save that answers after a rename leaves its outcome on the renamed tab. A Save writes in its turn
+  (`files/actions.ts` `fileTurn`): a rename or a delete keeps the turn until the tabs have followed it, so a Save pressed
+  meanwhile writes under the new name, or nothing when its tab was closed; a Save's turn ends once its write is issued,
+  and the store applies changes in the order they are called, so a rename after it moves the bytes it wrote.
 
 `tabs[].dirty` (the unsaved dot) is written only through `state.ts` `setDirty`. The file code (`files/open.ts`,
 `files/actions.ts`) changes `tabs` and `activeTab` first, then calls the editor through `editorCommands`.
@@ -725,6 +728,8 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
   - "a failed save's banner goes when the editor's text is replaced: Reload from the run, Replace with uploaded"
   - "a rename while Save writes: the save follows the tab to its new name (clean, its toast), and so does a failed
     save's banner"
+  - "a Save pressed while a rename is being written saves under the new name, not the old one"
+  - "a Save pressed while a delete is being written does not bring the file back"
   - "Save keeps a file's form: …"
   - "the error line keeps to its text when the tab is left and shown again"
   - "the error line comes back when its file is closed and opened again with the same text"
@@ -744,6 +749,9 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
   like an empty saved text.
 - **A Save answers for the path its tab has when the store answers** (`saving`). Code that awaits between taking a
   tab's path and writing the editor's maps under it must follow a rename the same way, or it writes under the old name.
+- **A change that tabs follow takes a turn** (`fileTurn`). A new action that renames, moves or removes files and then
+  updates the tabs must hold a turn until the tabs have followed it, or a Save pressed in between writes under the old
+  name (and brings a deleted file back).
 
 ---
 

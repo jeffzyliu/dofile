@@ -97,7 +97,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   // is kept away (the default prevented); a held key (repeats) saves once. Events made in the page: Playwright's keyboard
   // has no such layout.
   await page.keyboard.insertText("?");
-  const held = await page.evaluate(() => {
+  const held = await page.evaluate(async () => {
     const s = window.__dofile.store as any;
     const real = s.write;
     let writes = 0;
@@ -119,6 +119,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
       return e.defaultPrevented;
     };
     const prevented = [fire(false), fire(true), fire(true)];
+    await new Promise((ok) => setTimeout(ok)); // a Save issues its write in its turn (files/actions.ts fileTurn)
     s.write = real;
     return { writes, prevented };
   });
@@ -473,6 +474,86 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
   await expect(page.locator(".banner", { hasText: "c.do couldn't be saved" })).toBeVisible();
   await expect(page.locator(".banner", { hasText: "b.do couldn't be saved" })).toHaveCount(0);
   expect(await tabs()).toEqual([["c.do", true]]);
+});
+
+/** The next `store[method]` (rename, remove) changes the store at once, and its promise answers when the test calls
+ *  window.__answer(): the window in which the page has changed the store but not yet its tabs. */
+const holdAnswer = (page: Page, method: "rename" | "remove") =>
+  page.evaluate((method) => {
+    const s = window.__dofile.store as any;
+    const real = s[method];
+    let answer!: () => void;
+    const gate = new Promise<void>((ok) => (answer = ok));
+    (window as any).__answer = answer;
+    s[method] = (...a: unknown[]) => {
+      s[method] = real;
+      return real.apply(s, a).then(async (x: unknown) => {
+        await gate;
+        return x;
+      });
+    };
+  }, method);
+
+test("a Save pressed while a rename is being written saves under the new name, not the old one", async ({ page }) => {
+  await setUp(page, { "a.do": "display 1\n" });
+  await open(page, "a.do");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display 2");
+  await holdAnswer(page, "rename");
+  if (isPhone(page)) await view(page, "Files");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^a\.do/ })
+    .focus();
+  await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "New name for a.do" })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("b.do");
+  await page.keyboard.press("Enter");
+  // the store has b.do now, the tab is still a.do: Save
+  await expect
+    .poll(() => page.evaluate(async () => (await window.__dofile.store.list()).map((f: any) => f.path).sort()))
+    .toEqual(["b.do"]);
+  await page.keyboard.press("ControlOrMeta+s");
+  await page.evaluate(() => (window as any).__answer());
+  await expect(page.locator(".toast")).toHaveText("Saved b.do");
+  await expect
+    .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => [t.path, t.dirty])))
+    .toEqual([["b.do", false]]);
+  expect(await stored(page, "b.do")).toBe("display 1\ndisplay 2");
+  expect(await page.evaluate(async () => (await window.__dofile.store.list()).map((f: any) => f.path))).toEqual([
+    "b.do",
+  ]);
+});
+
+test("a Save pressed while a delete is being written does not bring the file back", async ({ page }) => {
+  await setUp(page, { "a.do": "display 1\n", "b.do": "display 2\n" });
+  await open(page, "a.do");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display 3");
+  await holdAnswer(page, "remove");
+  if (isPhone(page)) await view(page, "Files");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^a\.do/ })
+    .focus();
+  await page.keyboard.press("Shift+F10");
+  await page.getByRole("menu", { name: "Actions for a.do" }).getByRole("menuitem", { name: "Delete…" }).click();
+  await page.getByRole("alertdialog", { name: "Delete a.do?" }).getByRole("button", { name: "Delete" }).click();
+  // the store has no a.do now, the tab is still open: Save
+  await expect
+    .poll(() => page.evaluate(async () => (await window.__dofile.store.list()).map((f: any) => f.path).sort()))
+    .toEqual(["b.do"]);
+  await page.keyboard.press("ControlOrMeta+s");
+  await page.evaluate(() => (window as any).__answer());
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value.length)).toBe(0);
+  await page.waitForTimeout(300); // a write that was issued would have landed by now
+  expect(await page.evaluate(async () => (await window.__dofile.store.list()).map((f: any) => f.path))).toEqual([
+    "b.do",
+  ]);
+  await expect(page.locator(".toast", { hasText: "Saved" })).toHaveCount(0);
 });
 
 test("the editor: a .csv's columns have their colors, a .log's lines their kinds, .md and .json their tokens; a file dropped on it uploads and leaves its text", async ({
