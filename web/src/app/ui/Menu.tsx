@@ -32,6 +32,7 @@ export type MenuItem =
       disabled?: boolean;
       keepOpen?: boolean; // picking it leaves the menu open
       checked?: boolean; // a switch: role="menuitemcheckbox", aria-checked, a track and knob at the right
+      current?: boolean; // the open file in a list of files: the menu scrolls it into view when it opens
     };
 type Items = MenuItem[] | (() => MenuItem[]);
 
@@ -139,6 +140,7 @@ export function MenuHost() {
     Object.assign(el.style, { left: `${x}px`, top: `${y}px` });
     const items = [...el.querySelectorAll<HTMLElement>("[role^=menuitem]:not([aria-disabled=true])")];
     (m.focus === "last" ? items.at(-1) : items[0])?.focus();
+    el.querySelector("[aria-current]")?.scrollIntoView({ block: "nearest" }); // a scroll group opens on its current item
 
     const outside = (e: PointerEvent) => {
       if (!el.contains(e.target as Node) && !m.anchor?.contains(e.target as Node)) closeMenu(false);
@@ -216,6 +218,7 @@ export function MenuHost() {
         tabIndex={-1}
         class={item.danger ? "danger" : undefined}
         aria-disabled={item.disabled || undefined}
+        aria-current={item.current || undefined}
         onClick={(e) => pick(item, e.currentTarget)}
       >
         {item.label}

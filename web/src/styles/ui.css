@@ -1319,7 +1319,7 @@ dialog.dialog.sheet {
 }
 /* the phone's open files: the tab list scrolls, so the items around it (Save, Close, Show all files) stay in reach */
 .menu-scroll {
-  max-height: 60dvh;
+  max-height: min(60dvh, 100dvh - 12rem); /* a short (landscape) phone: Save, Close and Show all files fit around it */
   overflow-y: auto;
   overscroll-behavior: contain;
 }
