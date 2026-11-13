@@ -76,10 +76,15 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    IndexedDB does not). A field that is to raise the keyboard is drawn in the tap, before anything is written or awaited.
    That is why "New .do file" and "New folder" show their name field at once (a draft row) and write the file or folder
    when the field is left (Enter or blur; Esc writes nothing), and why `startRename` and `startDraft` are synchronous.
-   The commit (`endDraft`) then awaits the store, reads the list again (`files.ts` `refresh`) and clears the draft in
-   the same tick, so the real row replaces the draft with no frame between, and the tree's row takes the focus
-   (`focusRow`) unless another field was started meanwhile (each field has an `id`; a commit that ends after another began
-   touches neither the state nor the focus). Nobody can test the keyboard in Playwright: the e2e test makes sure the
+   The commit (`endDraft`) then awaits the store and reads the list again (`files.ts` `refresh`). The store's change
+   already refreshes the list, so for a render the tree may hold both the field and the new row; then the draft goes.
+   What happens next depends on how the field ended. After Enter the file opens and its row takes the focus
+   (`focusRow`), unless another field was started meanwhile (each field has an `id`; a commit that ends after another
+   began touches neither the state nor the focus). After a blur (a tap elsewhere, the keyboard's hide key) it only
+   writes: nothing opens, and the focus and the phone's view stay where the visitor tapped (a tap on another row opens
+   that row's file, a tap on the Log view shows the log, a tap on "Files ⋯" opens its menu), because the commit ends
+   after the tap's own click and would otherwise open the new file on top of it.
+   Nobody can test the keyboard in Playwright: the e2e test makes sure the
    field has the focus within the tap's microtasks.
 
 ### Who moves the focus
@@ -296,8 +301,9 @@ sequenceDiagram
   - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save"
   - "the row menu (Shift+F10, right click, the ⋯): Delete asks, …" (the focus after Delete, on the tree's row)
   - "New .do file and New folder: the name field has the focus within the tap's microtasks, from the link and from the
-    menu" (rule 8), and the tests after it: Esc (the focus back on the tree's row), Enter, leaving the field, a name in
-    use, a second New while the first is written
+    menu" (rule 8), and the tests after it: Esc (the focus back on the tree's row), Enter, leaving the field (writes only;
+    a tap on a row, on the phone's Log view or on "Files ⋯" keeps what it chose), a name in use, a second New while the
+    first is written
   - "a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it
     before the first, not the page"
 - `web/e2e/editor.spec.ts`:

@@ -13,6 +13,8 @@ type Hook = {
     setDirty(path: string, on: boolean): void;
     tabs: { value: { path: string; dirty: boolean }[] };
     activeTab: { value: string | null };
+    phoneTab: { value: string };
+    files: { value: { path: string }[] };
   };
   store: {
     blocked: boolean;
@@ -531,6 +533,13 @@ const storePaths = (page: Page) =>
   );
 const newFile = (page: Page) => page.getByRole("button", { name: "New .do file" });
 // opening a file takes a phone to the Editor view: the Files view again, for what is drawn there
+const listHas = (page: Page, path: string) =>
+  page.waitForFunction(
+    (p) => (window as unknown as { __dofile: Hook }).__dofile.state.files.value.some((f) => f.path === p),
+    path,
+  );
+const phoneTab = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.phoneTab.value);
 const showFiles = async (page: Page) => {
   if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
 };
@@ -598,17 +607,59 @@ test("a new file: Esc writes nothing and the focus goes back to the tree; Enter 
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled-2.do", "untitled.do"]);
 });
 
-test("a new file: leaving the field writes it (the typed name, else untitled.do) and opens it", async ({ page }) => {
+test("a new file: leaving the field writes it (the typed name, else untitled.do) and opens nothing", async ({
+  page,
+}) => {
   await setUp(page, { "a.do": "1\n" });
   await newFile(page).click();
   await page.keyboard.type("b");
   await row(page, /^a\.do/).click();
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "b.do"]);
-  await expect.poll(() => openTabs(page)).toContain("b.do");
+  await listHas(page, "b.do");
+  expect(await openTabs(page)).toEqual(["a.do"]); // the tap opened a.do; the new file is only written
   await showFiles(page);
   await newFile(page).click();
   await row(page, /^a\.do/).click();
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "b.do", "untitled.do"]);
+});
+
+// Leaving the field writes the file and does not open it or move the focus or the view: what the visitor tapped stays
+// (docs/web-page-flows.md, rule 8). The tests wait for the list to hold the new file, which is when the commit's tail ran.
+test("a new file left by a tap on a row: the tapped file is the active one, and untitled.do is written, not opened", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n" });
+  await newFile(page).click();
+  await row(page, /^a\.do/).click();
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
+  await listHas(page, "untitled.do");
+  expect(await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.activeTab.value)).toBe(
+    "a.do",
+  );
+  expect(await openTabs(page)).toEqual(["a.do"]);
+});
+
+test("on a phone, a new file left by a tap on the Log view: the view stays Log", async ({ page }) => {
+  test.skip(!isPhone(page), "the phone's views");
+  await setUp(page, { "a.do": "1\n" });
+  await newFile(page).click();
+  await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
+  await listHas(page, "untitled.do");
+  expect(await phoneTab(page)).toBe("log");
+  expect(await openTabs(page)).toEqual([]);
+});
+
+test("on a phone, a new file left by a tap on Files ⋯: the Files view stays, with the menu open", async ({ page }) => {
+  test.skip(!isPhone(page), "the phone's Files ⋯");
+  await setUp(page, { "a.do": "1\n" });
+  await newFile(page).click();
+  const menu = await fileActions(page);
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
+  await listHas(page, "untitled.do");
+  expect(await phoneTab(page)).toBe("files");
+  await expect(menu).toBeVisible();
+  expect(await openTabs(page)).toEqual([]);
 });
 
 test("a new file named a file that exists: Enter keeps the field open with the reason and writes nothing over it; leaving makes untitled.do and says so", async ({
@@ -658,7 +709,6 @@ test("a second New while the first one is being written: the second field stays,
     await null;
   });
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
-  if (isPhone(page)) return; // the first file opens in the editor, and the phone's Files view goes with the field
   await expect(nameField(page, "untitled.do")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled-2.do", "untitled.do"]);
