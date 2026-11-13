@@ -151,3 +151,43 @@ these failures through the floating-point "invalid" flag, which WebAssembly cann
     entries 1.0060e14 on CPython and 9.95e13 in Pyodide. Only exactly or nearly collinear regressors can show it.
 
 Not tried: Break on a long fit in the browser.
+
+## The memory cap (phones)
+
+iOS kills the tab when the engine's WebAssembly heap grows past what it allows (seen near 1 GB on an iPhone; WebKit never
+answers a failed `memory.grow`, it kills or reloads). So on phones the engine never asks: the heap is capped, and a big
+allocation fails inside Python as `MemoryError`, which OpenDTA's ODT-28 patch turns into r(909) "op. sys. refuses to provide
+memory". The run ends with an ordinary error, the data stays, and the next command runs.
+
+- **How.** This Pyodide builds its memory inside `pyodide.asm.wasm` (480 pages to 4 GB), so `INITIAL_MEMORY`, `MAXIMUM_MEMORY`
+  and `wasmMemory` cannot cap it. What can be capped is malloc's growth: the loader's `emscripten_resize_heap` refuses a request over
+  `getHeapMax()` and clamps its own over-growth to it. `snapshot.ts` (`HEAP_MAX`) patches the loader's text,
+  `getHeapMax=()=>4294901760` becoming `getHeapMax=()=>Module["dofileHeapMax"]??4294901760`; the worker sets `dofileHeapMax`
+  in the module's configuration before it starts the module (`withHeapCap`). The patch is in `patchAsm`, so the snapshot's
+  loader has it (the build sets no cap: 4 GB as before) and a snapshot start reads the cap from the page. The normal boot
+  (`?snapshot=0`) imports Pyodide's own loader, so with a cap the worker fetches `pyodide.asm.mjs` from the runtime's URL, applies
+  the same one-line patch and imports it as a blob (`importCapped`); with no cap it is untouched. The snapshot restore's own
+  `growMemory` bypasses the cap, so a cap below the restored heap (130 MB) does not stop the start but leaves no room to work.
+  A wrapper over `instantiateWasm` that replaces `emscripten_resize_heap` also works, but it cannot stop Emscripten's own
+  over-growth (up to 96 MB past the request), which a cap near 1 GB cannot spare.
+- **Which devices** (`engine/memcap.ts`, by device, never by layout width): 900 MB (`PHONE_CAP_MB`) when the user agent has
+  iPhone, iPad or iPod, or says Macintosh with `navigator.maxTouchPoints > 1` (an iPad asking for the desktop site; every iOS
+  browser is WebKit), or `navigator.userAgentData.mobile` is true, or `navigator.deviceMemory` is 4 or less. Anything else has no
+  cap (the browser's own limit). `?memcap=<MB>` in the URL overrides it either way (0: no cap), to try a cap on a real phone or a
+  desktop; a value that is not a whole number is ignored. The page logs one line at start: `[dofile] engine memory cap: 900 MB,
+  iOS or iPadOS`. The Playwright iPhone profile has an iPhone user agent, so the e2e tests of that project run under the 900 MB cap.
+- **The ballast** (`browser.py`): a 20 MB `bytearray` kept in reserve. When the heap is full even the interpreter's error handling
+  and the next call's compile need room; a script that filled the heap with small objects left every later `runPython`
+  failing with "lost sys.stderr", so the session could not recover until a reset (the same hazard exists at the 4 GB limit; the
+  cap does not cause it). A run that ends in rc 909 (or in 9999 with a MemoryError outside a command) frees the ballast, and a MemoryError that escapes the
+  engine itself (the heap filled while it reported the error) is caught in `browser.run`, frees it first and is answered as r(909); so the
+  result and the page's next calls (memory, describe, browse) have room, and the next run takes it again if it can. A big
+  numpy request that is refused (the usual case) leaves the free memory as it was and needs none of this. It adds 20 MB to the
+  heap's baseline on every device. Not found: a Stata command that exhausts the heap with small objects, so the ballast's
+  effect there is only checked on its logic (`tests/test_browser.py`) and on the report's script run, not on the engine.
+- **What a cap buys.** The heap is 3.5 to 6 times the data (80 MB column: the heap went 196 to 516 MB in `generate double x1 = 1` on
+  10 million rows; 320 MB of data took 1.1 GB in all), because `generate` and `replace` copy a column, and wasm memory never
+  shrinks. So 900 MB holds about 150 to 250 MB of data, not 900. Fewer copies in `generate` is the lever, and is not done.
+- **Not checked:** a real iPhone or WebKit's behaviour (the cap means the engine never asks for the grow that WebKit would kill the
+  tab over; 900 MB is chosen from reports of about 1.5 GB per tab on iPhones and of tabs dying near 1 GB, not measured on a device).
+  `merge`, `reshape`, `regress`, sort and graphs near the cap were not exercised.

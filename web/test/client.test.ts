@@ -913,6 +913,7 @@ test("build(): the list, fetched fresh, gives what mount needs; start() puts it 
       fetch,
       indexURL: "https://cdn.test/",
       brotli: "wasm",
+      memcap: 900,
     },
   );
   const build = await eng.build();
@@ -928,6 +929,7 @@ test("build(): the list, fetched fresh, gives what mount needs; start() puts it 
   assert.deepEqual(sent.find((m) => m.op === "mount")!.args, {
     indexURL: "https://cdn.test/",
     brotli: "wasm",
+    memcap: 900,
     snapshot: `${BASE}snapshot/`,
     built: 777,
     files: LIST.snapshot,
@@ -948,6 +950,7 @@ test("build(): the list, fetched fresh, gives what mount needs; start() puts it 
   assert.deepEqual(sent.filter((m) => m.op === "mount").at(-1)!.args, {
     indexURL: "https://cdn.test/",
     brotli: undefined,
+    memcap: undefined,
   });
 });
 

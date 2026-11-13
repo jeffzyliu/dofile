@@ -17,7 +17,7 @@ import { render } from "preact";
 import { App } from "./app/App";
 import { selection } from "./app/editor/commands.ts";
 import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
-import { brotli, kbLog, snapshotStart, testMode } from "./app/env";
+import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
 import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
 import * as S from "./app/state.ts";
@@ -26,6 +26,7 @@ import { applyTheme } from "./app/theme.ts";
 import { watchViewport } from "./app/viewport.ts";
 import { watchWakeLock } from "./app/wakelock.ts";
 import { EngineClient } from "./engine/client.ts";
+import { capLine } from "./engine/memcap.ts";
 import { tabLock } from "./engine/tab.ts";
 
 const here = (path: string) => new URL(`${import.meta.env.BASE_URL}${path}`, location.href).href;
@@ -42,7 +43,9 @@ const client = new EngineClient({
   // the memory snapshot `npm run snapshot` builds; no fallback when it is missing or stale: the engine is `failed`, with the cause
   snapshot: snapshotStart ? here("snapshot/") : undefined,
   brotli,
+  memcap: memcap.mb,
 });
+console.info(capLine(memcap));
 
 applyTheme();
 // the layout follows the width: the phone's under 700 px (SPEC section 2)

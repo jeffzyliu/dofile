@@ -73,18 +73,39 @@ const SKIPS = [
   ],
 ];
 
+// The most the heap may grow to. This Pyodide creates its WebAssembly memory inside pyodide.asm.wasm (480 pages to 4 GB), so no
+// Emscripten option caps it; what can be capped is malloc's growth: the loader's emscripten_resize_heap refuses a request over
+// getHeapMax() and clamps its own overgrowth to it. A big allocation then fails inside Python (MemoryError, which the engine
+// reports as r(909)) instead of the browser killing the tab (iOS does not return a failed grow). The cap is read from the
+// module's configuration when it is called, `dofileHeapMax` (bytes), so the snapshot's build, which sets none, keeps 4 GB.
+// The restore's own growMemory() bypasses it, so the cap must leave room above the restored heap (130 MB) to work in.
+const HEAP_MAX = ["getHeapMax=()=>4294901760", 'getHeapMax=()=>Module["dofileHeapMax"]??4294901760'] as const;
+
+function replaceAll(src: string, pairs: readonly (readonly string[])[]): string {
+  for (const [from, to] of pairs) {
+    if (!src.includes(from))
+      throw snapshotError("pyodide.asm.mjs is not the version the snapshot patch was written for");
+    src = src.replace(from, to);
+  }
+  return src;
+}
+
+/** pyodide.asm.mjs's text with only the heap cap added: the normal boot's loader when a cap is set (`?snapshot=0`). */
+export const patchHeapMax = (src: string): string => replaceAll(src, [HEAP_MAX]);
+
+/** `create` with the heap capped at `bytes`: the loader's `dofileHeapMax` is set in the module's configuration. */
+export const withHeapCap =
+  (create: CreateModule, bytes: number): CreateModule =>
+  (cfg) =>
+    create(Object.assign(cfg, { dofileHeapMax: bytes }));
+
 // A snapshot that cannot be used (damaged, cut short, made for another Pyodide): worker.ts passes the name on, and the page
 // decides from it, not from the text.
 const snapshotError = (message: string) => Object.assign(new Error(message), { name: "SnapshotError" });
 
 // pyodide.asm.mjs's text -> the same with the library log and the re-link. Throws if Pyodide's loader looks different.
 export function patchAsm(src: string, { noTrampoline = false } = {}): string {
-  for (const [from, to] of [[ALLOC, ALLOC_PATCHED], ...SKIPS, ...(noTrampoline ? [NO_TRAMPOLINE] : [])]) {
-    if (!src.includes(from))
-      throw snapshotError("pyodide.asm.mjs is not the version the snapshot patch was written for");
-    src = src.replace(from, to);
-  }
-  return src;
+  return replaceAll(src, [[ALLOC, ALLOC_PATCHED], ...SKIPS, HEAP_MAX, ...(noTrampoline ? [NO_TRAMPOLINE] : [])]);
 }
 
 // Pyodide writes the pointer of a WebAssembly trampoline function into the Python runtime (in the heap) at start, except on
