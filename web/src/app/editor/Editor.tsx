@@ -59,6 +59,7 @@ import {
 } from "../state.ts";
 import { store } from "../store.ts";
 import type { RunHead } from "../types.ts";
+import { openMenuState } from "../ui/Menu.tsx";
 import {
   languageOf,
   leaveFileDrops,
@@ -458,12 +459,23 @@ function onKey(e: KeyboardEvent) {
   editorCommands.save();
 }
 
+const TEXT_LESS_INPUTS = new Set(["button", "checkbox", "color", "file", "image", "radio", "range", "reset", "submit"]);
+
+/** Whether `target` takes typed text: a textarea, an input of a text-like type, or an editable element (`isContentEditable`
+ *  is false under contenteditable="false", and true under an editable ancestor). A checkbox, radio or button does not. */
+function isTextEntry(target: EventTarget | null): boolean {
+  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLInputElement) return !TEXT_LESS_INPUTS.has(target.type);
+  return target instanceof HTMLElement && target.isContentEditable;
+}
+
 /** Ctrl/Cmd+Enter anywhere on the page does what the toolbar's Run does (runEither). Not with a dialog open, and not when
  *  the focus is in another text field (the command line, a rename field, Find in the log), which keeps the key. In the
  *  editor CodeMirror's keymap has run it already and marked the event handled. A held key runs once. */
 function onRunKey(e: KeyboardEvent) {
-  if (e.defaultPrevented || dialog.value) return;
-  if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+  if (e.defaultPrevented || e.isComposing || dialog.value) return;
+  if (openMenuState.value) return e.preventDefault(); // an open menu: nothing runs, and its focused item is not picked
+  if (isTextEntry(e.target)) return;
   e.preventDefault(); // also keeps a focused button from taking the Enter as a press
   if (!e.repeat) runEither();
 }

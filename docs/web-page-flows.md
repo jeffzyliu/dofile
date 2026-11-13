@@ -316,15 +316,15 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 | State | `startOffer` | The toolbar's Run | A press, or Ctrl/Cmd+Enter | The command line |
 |---|---|---|---|---|
 | `checking-lock`, `checking-cache` (the page load) | null | "Run", off | the button and Ctrl/Cmd+Enter: toast "The engine is starting. Try again when it is ready." | on; "Run command", off; Enter and the off button: the same toast, and the text stays |
-| `none` (only `?test=manual`), `declined` | `prompt` | "Start engine" | `ask`: the download prompt (`asking`) | off, hint "Start the engine to type commands"; "Start engine" |
+| `none` (only `?test=manual`), `declined` | `prompt` | "Start engine" | `ask`: the download prompt (`asking`) | off, hint "Start the engine to run code"; "Start engine" |
 | `asking` | `prompt` | "Start engine" (under the blocking prompt) | `ask`: the prompt again, should another dialog have taken its place | the same |
 | `downloading`, `starting-list`, `starting-worker` | null | "Starting…", off | the "starting" toast | on; "Run command", off; Enter and the off button: the "starting" toast, and the text stays |
 | `ready` | null | "Run" | a run | on; "Run command" |
 | `running`, `breaking`, `waiting` | null | "Run", off | the button: nothing (a second Enter on a focused Run must stay silent). Ctrl/Cmd+Enter: toast "Run is not available until the current run ends" | on; "Run command", off; Enter and the off button: that toast, and the text stays |
-| `failed`, reason `download`, `memory` or `unknown` (the banner has "Try again") | `retry` | "Start engine" | `start`: a new try, as the banner's "Try again" | off, hint "Start the engine to type commands"; "Start engine" |
+| `failed`, reason `download`, `memory` or `unknown` (the banner has "Try again") | `retry` | "Start engine" | `start`: a new try, as the banner's "Try again" | off, hint "Start the engine to run code"; "Start engine" |
 | `failed`, reason `updated` or `no-wasm` (the banner says to reload, or which browsers work) | `off` | "Not started", off | toast "Run is not available: the engine isn't running in this tab"; no event reaches the machine | off, hint "The engine isn't running"; "Start engine", off: a press says the hint in a toast |
 | `failed-twice` | `off` | "Not started", off | the same | the same |
-| `other-tab-idle` | `take-over` | "Start engine" (hidden with the other run controls, and under the blocking dialog) | `ask`: the take-over dialog again (the state stays; no lock is taken, nothing starts). Only its "Use dofile in this tab" takes over | off, hint "Start the engine to type commands"; "Start engine" |
+| `other-tab-idle` | `take-over` | "Start engine" (hidden with the other run controls, and under the blocking dialog) | `ask`: the take-over dialog again (the state stays; no lock is taken, nothing starts). Only its "Use dofile in this tab" takes over | off, hint "Start the engine to run code"; "Start engine" |
 | `other-tab-taking` | `off` | "Start engine", off (hidden) | nothing started; the "isn't running in this tab" toast | off, hint "The engine isn't running"; "Start engine", off |
 
 "Off" in this table is never the `disabled` attribute. The toolbar's Run and the command line's button are

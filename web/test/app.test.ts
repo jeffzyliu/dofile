@@ -2300,9 +2300,9 @@ test("Start engine: what each engine state offers (start.ts startOffer), every s
   assert.equal(startFirst("off", "see help regress"), "The engine isn't running: can't see help regress");
   assert.equal(startFirst("off", "load wages.dta"), "The engine isn't running: can't load wages.dta");
   assert.equal(startFirst("off", "import survey.csv"), "The engine isn't running: can't import survey.csv");
-  assert.equal(startHint("prompt"), "Start the engine to type commands");
-  assert.equal(startHint("retry"), "Start the engine to type commands");
-  assert.equal(startHint("take-over"), "Start the engine to type commands");
+  assert.equal(startHint("prompt"), "Start the engine to run code");
+  assert.equal(startHint("retry"), "Start the engine to run code");
+  assert.equal(startHint("take-over"), "Start the engine to run code");
   assert.equal(startHint("off"), "The engine isn't running");
 });
 
