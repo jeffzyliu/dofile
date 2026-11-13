@@ -84,9 +84,9 @@ connectEngine({ client, lock: tabLock({ onLost: lost }), snapshot: snapshotStart
 // cached() and download()), the store, the controller's start (download, then the worker), persisted(), the download
 // size; the state signals, a run through the controller, and the controller's Break and Reset (so `breaking` and the
 // reset banner run as Break and Reset run them), the editor's `selection` signal (what Run selection and the phone's
-// "Run 6–7" read), drops() (the events that changed nothing), and the Files pane's `focusWanted`. With ?test=manual the page starts no engine until the
-// test calls start(). Without the flag the object does not exist. The store is blocked until the tab lock answers: wait
-// for `!store.blocked` before writing.
+// "Run 6–7" read), drops() (the events that changed nothing), and the Files pane's `focusWanted`. With ?test=manual the
+// page starts no engine until the test calls start(). Without the flag the object does not exist. The store is blocked
+// until the tab lock answers: wait for `!store.blocked` before writing.
 if (testMode !== null) {
   Object.assign(window, {
     __dofile: {

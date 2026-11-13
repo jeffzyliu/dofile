@@ -35,8 +35,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     (Load, Import, help links at 0.45 opacity) measure 2.2 to 3.8 to 1, under 4.5 (WCAG exempts disabled controls); a
     multi-line paste while an engine exists and is not ready is refused whole with the field untouched; a held Enter is
     ignored in every dialog; the declined banner's button reads "Start engine"; a retry from a failed start downloads with no
-    prompt, as "Try again" does. **Not verified:** a real OS key repeat (the held-Enter guard was checked with a synthesized
-    repeated keydown in Chromium, Firefox and WebKit); a held Enter on a banner button that hands the focus to the editor
+    prompt, as "Try again" does. **Held Enter:** the guard was checked with a synthesized repeated keydown in Chromium,
+    Firefox and WebKit, and (2026-11-13) by the maintainer on real keyboards: "good on all browsers". **Not verified:** a held Enter on a banner button that hands the focus to the editor
     ("Try again", "Run the file again"), where the repeats may type newlines into CodeMirror (older than this change); nothing
     merged today was tried on a real phone. Stale after #26 and not yet edited: SPEC's toast "… not run: line 1 didn't run",
     and this plan's lines on the held run (step 4's list B item 3 and decision 4).
@@ -61,7 +61,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
       instantiations per boot); WebKit bug 208368 records a flaky case like it on Linux. Rate about 4% of WebKit runs of the
       test (2 in about 49), none in Chromium or Firefox. #34 skips the test in WebKit. A product gap stays: nothing times out
       the `starting-worker` state (`docs/icebox.md`).
-  - **Not merged:** #27 `claude/phone-keyboard-experiment`, rebased on `main`. Three rounds on an iPhone (iOS 27.0.1;
+  - **#27 is merged** (`claude/phone-keyboard-experiment`, rebased on `main`). Three rounds on an iPhone (iOS 27.0.1;
     `docs/phone-keyboard-experiment.md`) settled the keyboard: the phone's command line takes a tap's focus itself with
     `preventScroll`, Safari's pan is scrolled straight back with `.app` kept at the top, and the editor's caret is scrolled
     above the keyboard through CodeMirror. The `?kb=` and `?slide` flags are gone; `?kblog` stays. The closed #28 (a draft
@@ -69,18 +69,29 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 - **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
   decisions: 1 to 5 are accepted (all built in #23 to #25; decision 5, the trackpad back-swipe, is to be checked once by
   hand), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer (the experiment ran with zoom off; turning it back on needs another iPhone check, `docs/icebox.md`, "Phone"), and 7 to 22 have no answer yet. Nothing they
-  would release is started: Reset asking when only globals are held (C 1), "Run the file again" after a Reset the
-  visitor asked for (C 3), the failed start announced twice (C 5), the two items below, `cls`, the later UI work, the
+  would release is started: `cls`, the later UI work, the
   document pass and step 6's scope.
-  - Found by reading the code, not fixed: a Save pressed right after a rename's Enter, before the rename's write ends,
-    leaves the old text under the new name and the new text under the old name, with the tab shown as saved
-    (`files/actions.ts` `renameEntry`, `editor/Editor.tsx` `save`); the file tree's focus retry after a rename
-    (`files/FilesPane.tsx` `focusRow`) can take the focus from a visitor who clicks into the editor within a second.
+  - Found by reading the code, **fixed in #40 (2026-11-13)**: a Save pressed right after a rename's Enter, before the
+    rename's write ends, left the old text under the new name and the new text under the old name, with the tab shown as
+    saved (`files/actions.ts` `renameEntry`, `editor/Editor.tsx` `save`); a Save after a delete, the same race, brought the
+    deleted file back. A Save now waits for the change the tabs follow (`files/actions.ts` `fileTurn`) and writes under
+    the new name, or nothing for a deleted file. The file tree's focus retry after a rename (`files/FilesPane.tsx`
+    `focusRow`, a 50 ms poll) could take the focus from a visitor who clicked into the editor within a second; the row
+    now takes the focus from its own render (`focusWanted`), only while the focus is on the page or in the tree, and the
+    row-focus logic is the hook `useRovingFocus`.
+  - **Post-merge fixes, #40 (`postmerge-fixes`, 2026-11-13):** the two bugs above; step 4's B 1, B 5 and C 1, C 3, C 5
+    (marked in the lists below); step 4's C 7 and C 11 and step 5's C 6 decided (kept, or moved to `docs/icebox.md`);
+    and three phone UI changes: the strip under the top bar has one height on every view, with a 44 px tap target for its
+    ⋯; Save moved from the phone's ⋯ menu into the file dropdown, which has Save above a scrolling list of the open files
+    and Close and Show all files below it (the list is capped so all of it fits a landscape phone, and the open file is
+    scrolled into view when the menu opens); and the menu (`ui/Menu.tsx`) owns its active item (a position among all its
+    items), which an item takes the focus from its own render, with no `querySelectorAll`. Not tried on a real phone.
+    No fresh-context review of the second fix round: the orchestrator checked it.
   - Reported by the maintainer (2026-11-12), not investigated: dofile seems to crash Firefox on the desktop, perhaps
     through its memory use. The `?snapshot=0` e2e test's failures in Firefox may share the cause (the investigation above saw
     its failures in WebKit only). To look at: the report in `about:crashes` (an out-of-memory crash is marked), and whether
     the tab or the whole browser goes.
-  - Waiting on the maintainer: the review of #27; decisions 7 to 22; the iPhone sitting (the phone command line, the wake
+  - Waiting on the maintainer: decisions 7 to 22; the iPhone sitting (the phone command line, the wake
     lock with the phone locked 30 s; the keyboard experiment is done, #27); the deployed site's address for the first-deploy checks; the
     draft words of SPEC section 8; how they saw Home open `analysis.do` (see "Later UI work", 8).
   - Known flaky tests, with their sightings: `docs/test-map.md`, "Known flaky tests".
@@ -279,16 +290,21 @@ Reviewed after the merge: see Post-merge review.
    on a line (not Break's rc 1); cleared by a new run of that file, a reset or a restart of the engine, or deleting the
    marked line; a command from the command line and a run of another file leave it; a file closed with its mark and no
    unsaved edits has it again when it is opened with the same text (`editor/errormark.ts`).
+   **Resolved (2026-11-13, #40): confirmed, and changed.** The maintainer: "this should be cleared in those situations, it is
+   ephemeral." The mark lives in the tab's editor state: it goes when the tab closes (a file opened again has none) and stays
+   with a renamed tab; the extra `closedMarks` map is gone.
 2. On a phone, a tap on the Break pill also shows the Log view, where Break's countdown and its outcome are
    (`editor/RunControls.tsx`).
 3. Pasted lines stop at the first line that is refused, that was queued and then dropped, that ends with any rc but 0
    (Break's rc 1 too), or whose run is cut because another tab took the engine; and before a line that opens a block
    (`{` at its end, a lone `program define` or `mata`), opens a `/*` comment it does not close, or holds `///` (not sent).
    A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.) (2026-11-12, with the queued run's removal: no line is queued or dropped any more, so that stop is gone; with no engine a paste is an ordinary paste into the disabled field, and no line runs.)
+   **Resolved (2026-11-13, #40): "fine for now"** (the maintainer). A multi-line command line is in `docs/icebox.md`.
 4. Load on a phone's .dta tab shows only its toast ("Loaded wages.dta"); the Log view does not open.
 5. Reset asks whenever a run is in progress. Otherwise it resets at once while the engine is ready with no data in
    memory and no e() or r() scalar, macro or matrix; after a run it first describes the memory again, and asks when
    that fails (`states/words.ts` `resetDecision`).
+   **Resolved (2026-11-13, #40), settled with C 1:** Reset asks unless the engine is `ready` and nothing has run on it since it started; it no longer describes the memory again (`states/words.ts` `resetAsks`).
 6. With a .dta tab active, a focus hand-off (a banner with the focus that goes; a dialog whose opener has left the page)
    goes to that tab in "Open files", else to its Load button (`editor/Editor.tsx` `focus`).
 7. A run that writes something that is not text (binary, not UTF-8) over an open text tab keeps the tab's text, edits or
@@ -296,24 +312,31 @@ Reviewed after the merge: see Post-merge review.
 8. On a phone the Results view's "↵ Copy" hint is hidden, the word Copy with it (a tap copies, and the toast says so).
 9. A file with both kinds of line break is saved with the more common one (`\n` on a tie); a file whose breaks are lone
    `\r` is saved with `\n` (`editor/ranover.ts` `lineBreakOf`).
+   **Resolved (2026-11-13, #40): confirmed as it is** (it matches VS Code: the file's most common line break).
 
 **C. Open questions**
 Reviewed after the merge: see Post-merge review.
 1. Reset does not ask when only globals, Stata scalars or graphs are held: only data and e() or r() results count (S 14
    read literally), though the dialog says Reset clears macros and graphs.
+   **Fixed (2026-11-13, #40), with B 5:** Reset asks whenever anything has run on the engine since it started.
 2. The running banner shows on every run, though S 11's caption says "with the first run".
 3. "Run the file again" (the reset banner) runs the active text tab, not the file whose run the reset cut, and it is
    offered after a Reset the visitor asked for too.
+   **Fixed (2026-11-13, #40):** the button runs the file whose run the reset cut, and is drawn only after a Break or a crash
+   that cut a file run (not after a Reset the visitor asked for); it is enabled while the engine is ready and that file is
+   open as a text tab.
 4. The Break grace of 5 s is written twice: the machine's `graceMs` and 4d's `GRACE_S` (`states/words.ts`), which the
    banners' words count from. (Done: `BREAK_GRACE_MS` in `engine/types.ts` is the one place; `app/engine.ts` defaults `graceMs`
    to it and `GRACE_S` is derived from it; the machine still takes the grace through `env`.)
 5. A failed start is announced twice to a screen reader: the live region's "The engine didn't start" and the failed
    banner, which has `role="alert"`.
+   **Fixed (2026-11-13, #40):** the failed banners are not `role="alert"`; the live region says it once.
 6. "Browsers that work" (`landing.html#browsers`) and the other-tab dialog's "Close editor" (`landing.html`) are dead
    links until step 5 builds the landing page; check them then, and that the e2e tab-lock test's request still matches
    the page's path. (Step 5: they go to `/#browsers` and `/`, checked by `e2e/landing.spec.ts` and the tab-lock test.)
 7. A file a run deleted keeps its tab: it leaves the file list, the tab keeps its unsaved dot as it was, and Save writes
    the file again.
+   **Decided (2026-11-13, #40): kept, as other editors do.** A "(deleted)" mark on such a tab is in `docs/icebox.md`.
 8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog. (Done: with a dialog open it only keeps the browser's
    Save page away and saves nothing; `editor/Editor.tsx` `onKey`, one e2e case in `editor.spec.ts`.)
 9. The editor has no find of its own (no Ctrl/Cmd+F binding); Find searches the log only.
@@ -322,6 +345,7 @@ Reviewed after the merge: see Post-merge review.
     fixed; on a phone the toast is lower on the views with no command line.)
 11. In `#delimit ;` mode two commands on one line are echoed as the whole line twice, and the second echo can be matched
     to a later identical line, which puts a graph's link in the wrong place.
+    **Moved to `docs/icebox.md` (2026-11-13, #40).**
 12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.) The code is removed: `MemoryBanner`, its registry entry, `{ b: "memory" }`, `memoryHead` and their tests; the `memory` signal stays.)
 13. On a real iPhone: that the on-screen keyboard opens again when a dialog gives the focus back to the command line (the
     focus now comes back in a timer); the iPhone checks of step 3 ("To try on a real iPhone", above); and step 3.5's
@@ -398,6 +422,7 @@ Reviewed after the merge: see Post-merge review.
    holds the sample. A Save that begins while the restore's write is in progress ends after the `reload`: the store then holds
    the Save's text while the tab shows the sample with no unsaved dot (the Save sets the saved text to its own, and the dot
    only follows edits). A window of milliseconds; `reload` does not touch `saving`.
+   **Moved to `docs/icebox.md` (2026-11-13, #40), with uploads, which also write outside `fileTurn`.**
 
 ## Post-merge review (after steps 4 and 5 merge)
 
@@ -436,7 +461,8 @@ Found in the UI fix round (2026-11-12), still open:
   Changed (test code only): its `rename` helper now waits for the renamed row to have the focus before it returns, and the
   F2 steps in `editor.spec.ts` wait for the rename field to have the focus before Ctrl+A. The suspected cause (the tree's
   `focusRow` retrying every 50 ms and taking the focus from the editor, so the typed character is lost) is a suspicion
-  until Firefox runs confirm it. `shell.spec.ts`'s `?snapshot=0` test (a failure now and then in Firefox, cause unknown)
+  until Firefox runs confirm it. (2026-11-13: 24 Firefox runs each before and after the `focusRow` rewrite passed; the flake
+  did not reproduce, so the suspicion is neither confirmed nor ruled out.) `shell.spec.ts`'s `?snapshot=0` test (a failure now and then in Firefox, cause unknown)
   now waits until the state is not a starting state, asserts `ready` with the state's `reason` and `detail`, and prints
   the page's console in the failure; no retries.
 
@@ -555,6 +581,23 @@ Status values: `not started`, `running`, `to review`, `done`.
   for the engine; the file store removes that. The page does not call `navigator.storage.persist()` yet.
 - **Step 3:** `worker.js`, `client.js` and `snapshot.js` are plain JavaScript and `main.ts` casts their results; add a
   shared types file from the spec's declarations, without converting them (the Node tests run them directly).
+- **Step 6 (the "full-web-code audit", the maintainer's name for it, 2026-11-13):** look out for these, in the maintainer's
+  words.
+  - Preact lifecycle and raw DOM: "overly manual breaking of Preact lifecycle to achieve specific things on the DOM. rely on
+    render cycle as much as possible" and "we should avoid raw dom operations wherever possible". Look for `querySelector`
+    or `getElementById` reaching into rendered components, `setTimeout` or polling that waits for a render, and focus or
+    scroll moved from outside the component that owns the element.
+  - Code comments' scope and conciseness: "we have way too many top-of-file code comments that keep getting changed due to
+    unrelated file changes. that should not be happening. need to review for code comment scope and conciseness, and leave
+    heavy multi-module documentation in text files. link to relevant documentation files from code comments instead of
+    explaining everything bespoke". A comment says what its code does and why, and points to the doc for the rest.
+  - Spaghetti patterns: "small changes in app statefulness and order of asynchronous concurrent operations". Look for booleans
+    that patch an ordering, timers standing in for an event, and state duplicated across modules; the known case is uploads
+    and "Restore the sample" writing outside `fileTurn` (`docs/icebox.md`).
+  - Focus consolidation: about 38 `.focus()` calls in 18 files. `useRovingFocus` (so far inside `files/FilesPane.tsx`) now serves the file tree row;
+    Tablist, EditorTabs, the Results and Data tabs could use it, two hooks (focus on mount, return focus) would serve the
+    banners and dialogs, and eight cross-component focus moves want a focus request owned by the target component. The
+    maintainer asked for the hooks to live in one focus-hooks file.
 - **Step 6:** `web/e2e/poc.spec.ts` is bound to the proof-of-concept page's element ids and is rewritten with the page.
   `axe`, `tabwalk` and `contrast` check the mockups today, not the real page.
 - **Step 7:** the 48 MB figure, Break on a long model fit in a browser, `pyreadstat` on a real iPhone, a phone over HTTPS

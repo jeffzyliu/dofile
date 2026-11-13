@@ -89,9 +89,9 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   removing the types, so: imports spell the `.ts` extension, and only syntax that can be erased is allowed (no `enum`,
   no `namespace`, no constructor parameter properties; `npm run check` enforces it). Keep the types and the spec in step.
 - **The test hook stays, behind a flag.** With `?test` in the URL the page sets `window.__dofile = {engine, store, start,
-  persisted, engineBytes, state, run, breakRun, reset, selection, drops}` (the transport, the store, the controller's start,
+  persisted, engineBytes, state, run, breakRun, reset, selection, drops, focusWanted}` (the transport, the store, the controller's start,
   persisted(), the download size, the signals, a run through the controller, the controller's Break and Reset, the editor's
-  `selection` signal, the drop record); with `?test=manual` it starts no engine until the test calls
+  `selection` signal, the drop record, the Files pane's `focusWanted` signal); with `?test=manual` it starts no engine until the test calls
   `start()`. Without the flag the object does not exist. The store is blocked until the tab lock answers: a test waits
   for `!store.blocked` before it writes. `<html data-engine>` always holds the engine's state name. The e2e tests use
   both; the four tests left in `e2e/poc.spec.ts` (the proof-of-concept editor's) are marked fixme until step 6 rewrites them.
