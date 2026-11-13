@@ -15,7 +15,10 @@
 //  - Inline rename (DS-7): the name becomes a field; Enter renames, Esc cancels (preventDefault, so App.tsx's Esc that
 //    folds the list at 700 to 1199 px leaves it), leaving the field renames when the name can be used. A name in use
 //    ("clean.do already exists here.") or one that cannot be used keeps the field open, marked aria-invalid, with the
-//    reason under it. "New .do file" makes `untitled.do` and opens it in inline rename (OQ-21), then in the editor.
+//    reason under it. "New .do file" and "New folder" draw the name field at once, filled in `untitled.do` (`folder`; the first
+//    free name), with nothing written (a draft: `renaming.draft`; OQ-21). Esc writes nothing; Enter, or leaving the field,
+//    writes it under the typed name, or under the free default when the name is empty or unchanged (a name that cannot be
+//    used keeps the field open on Enter, and makes the default on leaving), reads the list again and opens a new file.
 //  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the page (SPEC 3.1; the
 //    Files pane gets the accent outline while a drag with files is over the page: data-drop, OQ-16; with the list
 //    folded away the files are uploaded all the same, and the toast says so). actions.ts upload() asks each clash. The
@@ -25,7 +28,7 @@
 // Files change through the store (actions.ts), never through the worker; a change lists the store again (files.ts).
 import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
-import { downloadAll } from "../files.ts";
+import { downloadAll, refresh } from "../files.ts";
 import { restoreSample } from "../sample.ts";
 import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
 import { store } from "../store.ts";
@@ -33,18 +36,28 @@ import { fromAnywhere, fromNothing, useFocusOnMount, useFocusRequest } from "../
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem, openMenu } from "../ui/Menu";
 import {
+  createEntry,
   downloadEntry,
   entriesOf,
   fromDrop,
   fromFileList,
   type Incoming,
-  newDoFile,
-  newFolder,
+  NEW_NAMES,
   renameEntry,
   upload,
 } from "./actions.ts";
 import { openFile } from "./open.ts";
-import { formatSize, joinPath, NAME_NOT_ALLOWED, nameProblem, parentOf, type Row, treeRows } from "./tree.ts";
+import {
+  baseName,
+  formatSize,
+  freeName,
+  joinPath,
+  NAME_NOT_ALLOWED,
+  nameProblem,
+  parentOf,
+  type Row,
+  treeRows,
+} from "./tree.ts";
 
 // ---- the panel's own state (not shared: state.ts holds what other parts read) ----
 
@@ -54,11 +67,13 @@ const rovingPath = signal<string | null>(null); // the row in the tab order, onc
 // no path the row in the tab order (with no rows, the head's File actions); `anywhere`: also from outside the tree
 export const focusWanted = signal<{ path: string | null; anywhere?: boolean } | null>(null); // the test hook reads it
 interface Renaming {
-  path: string;
+  id: number; // which field: a commit that ends after another one began leaves it alone
+  path: string; // a draft: the name it was offered, picked in the tap
   problem: string | null;
-  andOpen: boolean; // a new .do file: open it once named
+  draft?: keyof typeof NEW_NAMES; // a new file or folder: nothing is written until the field is left
 }
 const renaming = signal<Renaming | null>(null);
+let fields = 0;
 
 let pickFiles: HTMLInputElement | null = null; // the hidden file inputs
 let pickFolder: HTMLInputElement | null = null;
@@ -101,24 +116,44 @@ function toggle(path: string, open?: boolean) {
   folded.value = next;
 }
 
-function startRename(path: string, andOpen = false) {
-  renaming.value = { path, problem: null, andOpen };
+function startRename(path: string, draft?: Renaming["draft"]) {
+  renaming.value = { id: ++fields, path, problem: null, draft };
   rovingPath.value = path;
   focusWanted.value = null; // the field takes the focus: a waiting request ends
 }
 
+/** "New .do file" and "New folder": the name field is drawn at once, with nothing written (docs/web-page-flows.md,
+ *  section 1, rule 8: on iOS the focus that raises the keyboard has to be made in the tap). endRename writes it. */
+function startDraft(kind: keyof typeof NEW_NAMES) {
+  const what = kind === "file" ? "file" : "folder";
+  if (store.blocked)
+    return fail(`New ${what}`, `Couldn't create the ${what}`)(new Error("the files are another tab's"));
+  startRename(
+    freeName(
+      "",
+      NEW_NAMES[kind],
+      files.value.map((f) => f.path),
+    ),
+    kind,
+  );
+}
+
 let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
 
-/** End the inline rename: `name` is the new name, or null to cancel. Keeps the field open when the name cannot be used. */
-async function endRename(name: string | null) {
+/** Keep the field `r` open with `problem` under it, unless it has gone. */
+function keepOpen(r: Renaming, problem: string) {
+  if (renaming.value?.id === r.id) renaming.value = { ...r, problem };
+  say(problem);
+}
+
+/** End the inline rename: `name` is the new name, or null to cancel. Keeps the field open when the name cannot be used.
+ *  `leaving`: the field was left, not Enter pressed. A draft is written here, whatever the name (endDraft). */
+async function endRename(name: string | null, leaving = false) {
   const r = renaming.value;
   if (!r || ending) return;
+  if (r.draft) return endDraft(r, name, leaving);
   const dir = parentOf(r.path);
   const to = name === null ? r.path : joinPath(dir, name);
-  const keep = (problem: string) => {
-    renaming.value = { ...r, problem };
-    say(problem);
-  };
   if (to !== r.path) {
     const problem = nameProblem(
       name!,
@@ -126,38 +161,75 @@ async function endRename(name: string | null) {
       files.value.map((f) => f.path),
       r.path,
     );
-    if (problem) return keep(problem);
+    if (problem) return keepOpen(r, problem);
     ending = true;
     try {
       await renameEntry(r.path, to);
     } catch (e) {
       // the list was not current: the store says why
-      return keep(
+      return keepOpen(
+        r,
         (e as Error)?.message?.includes("already exists") ? `${name} already exists here.` : NAME_NOT_ALLOWED,
       );
     } finally {
       ending = false;
     }
   }
+  if (renaming.value?.id !== r.id) return; // another field was started meanwhile
   renaming.value = null;
   focusRow(to);
-  if (r.andOpen) openFile(to);
 }
 
-async function makeDoFile() {
-  try {
-    startRename(await newDoFile(), true);
-  } catch (e) {
-    fail("New .do file", "Couldn't create the file")(e);
+/** The end of a draft's field. Esc writes nothing. Enter writes the typed name, or the free default (`untitled.do`,
+ *  `folder`) when it is empty or unchanged; a name in use keeps the field open. Leaving the field always writes: a name
+ *  that cannot be used makes the free default, and the live region says so. Then the list is read again, so the row
+ *  replaces the draft in one render, and a file opens. */
+async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
+  const kind = r.draft!;
+  const what = kind === "file" ? "file" : "folder";
+  if (name === null) {
+    renaming.value = null;
+    focusTree();
+    return;
   }
-}
-
-async function makeFolder() {
+  const dir = parentOf(r.path);
+  const asked = name.trim() === "" || name === baseName(r.path) ? undefined : name;
+  let problem =
+    asked === undefined
+      ? null
+      : nameProblem(
+          asked,
+          dir,
+          files.value.map((f) => f.path),
+        );
+  if (problem && !leaving) return keepOpen(r, problem);
+  ending = true;
+  let to: string;
   try {
-    startRename(await newFolder());
+    try {
+      to = await createEntry(kind, dir, problem ? undefined : asked);
+    } catch (e) {
+      if (asked === undefined || problem || !(e as Error)?.message?.includes("already exists")) throw e;
+      problem = `${asked} already exists here.`; // the list was not current
+      if (!leaving) return keepOpen(r, problem);
+      to = await createEntry(kind, dir);
+    }
+    await refresh();
   } catch (e) {
-    fail("New folder", "Couldn't create the folder")(e);
+    fail(`New ${what}`, `Couldn't create the ${what}`)(e);
+    if (renaming.value?.id === r.id) {
+      renaming.value = null;
+      focusTree();
+    }
+    return;
+  } finally {
+    ending = false;
   }
+  if (problem) say(`${problem} Made ${baseName(to)} instead.`);
+  if (kind === "file") openFile(to);
+  if (renaming.value?.id !== r.id) return; // another field was started meanwhile
+  renaming.value = null;
+  focusRow(to);
 }
 
 function send(items: Promise<Incoming[]>) {
@@ -171,8 +243,8 @@ const askDelete = (path: string) => {
 /** The head menu "File actions" (S 13's caption). On a phone the Files head is hidden and App.tsx gives these to the "Files ⋯"
  *  button at the right of the phone strip while the Files view is shown. */
 export const fileMenuItems = (): MenuItem[] => [
-  { label: "New .do file", onSelect: makeDoFile },
-  { label: "New folder", onSelect: makeFolder },
+  { label: "New .do file", onSelect: () => startDraft("file") },
+  { label: "New folder", onSelect: () => startDraft("folder") },
   { label: "Upload a folder", onSelect: () => pickFolder?.click() },
   {
     label: "Download all (.zip)",
@@ -278,6 +350,8 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
         }}
         onBlur={(e) => {
           const name = e.currentTarget.value;
+          if (renaming.value?.id !== r.id) return;
+          if (r.draft) return void endRename(name, true); // a draft is written when the field is left
           // leaving the field: rename when the name can be used, else cancel
           const usable =
             name === row.name ||
@@ -287,7 +361,7 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
               files.value.map((f) => f.path),
               row.path,
             );
-          if (renaming.value?.path === row.path) endRename(usable ? name : null);
+          endRename(usable ? name : null);
         }}
       />
       {r.problem && (
@@ -406,7 +480,7 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
     >
       {row.dir && <Icon name={row.expanded ? "down" : "right"} />}
       {r ? (
-        <RenameField r={r} row={row} />
+        <RenameField key={r.id} r={r} row={row} /> // a field started over this one is a new field: it takes the focus
       ) : (
         <>
           <span class="name">
@@ -508,7 +582,12 @@ function useDrop(ref: { current: HTMLElement | null }) {
 export function FilesBody() {
   const ref = useRef<HTMLDivElement>(null);
   useDrop(ref);
-  const rows = treeRows(files.value, folded.value);
+  const draft = renaming.value?.draft ? renaming.value : null;
+  // a draft is a row of its own before anything is written; a real file at its path hides it (treeRows keeps the last)
+  const rows = treeRows(
+    draft ? [{ path: draft.path, dir: draft.draft === "folder", size: 0, mtime: 0 }, ...files.value] : files.value,
+    folded.value,
+  );
   const paths = rows.map((r) => r.path);
   const tabbable =
     [rovingPath.value, activeTab.value].find((p) => p !== null && paths.includes(p)) ?? rows[0]?.path ?? null;
@@ -535,7 +614,7 @@ export function FilesBody() {
           Upload
         </button>
         {" · "}
-        <button type="button" class="files-link" onClick={makeDoFile}>
+        <button type="button" class="files-link" onClick={() => startDraft("file")}>
           New .do file
         </button>
       </div>

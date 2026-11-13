@@ -270,11 +270,28 @@ test("fileTurn (the editor's Save): a turn taken while a rename or a delete is i
   assert.equal(await after, "next");
 });
 
-test("new .do file and new folder take the first free name; delete closes the tabs under the path; delete all empties the store", async () => {
-  await reset({ "untitled.do": "" });
-  assert.equal(await A.newDoFile(), "untitled-2.do");
-  assert.equal(await A.newFolder(), "folder");
-  assert.equal(await A.newFolder(), "folder-2");
+test("a new .do file and a new folder take the name asked for or the first free one, and never replace a file; delete closes the tabs under the path; delete all empties the store", async () => {
+  await reset({ "untitled.do": "keep", "a.do": "mine" });
+  assert.equal(await A.createEntry("file"), "untitled-2.do");
+  assert.equal(await A.createEntry("folder"), "folder");
+  assert.equal(await A.createEntry("folder"), "folder-2");
+  assert.equal(await A.createEntry("file", "", "clean.do"), "clean.do");
+  assert.equal(await A.createEntry("folder", "", "data"), "data");
+  assert.equal(await A.createEntry("file", "data", "b.do"), "data/b.do");
+  await assert.rejects(A.createEntry("file", "", "a.do"), /already exists/);
+  await assert.rejects(A.createEntry("folder", "", "a.do"), /already exists/);
+  assert.equal(
+    new TextDecoder().decode(await store.read("a.do")),
+    "mine",
+    "a name in use is refused, not written over",
+  );
+  const both = await Promise.all([A.createEntry("file"), A.createEntry("file")]);
+  assert.deepEqual(
+    both,
+    ["untitled-3.do", "untitled-4.do"],
+    "two started together take turns: neither takes the other's name",
+  );
+  await store.remove("data");
   await store.write("data/x.do", enc("1"));
   await store.write("data/y.do", enc("2"));
   await store.write("survey.xlsx", Uint8Array.from([0xff]));
