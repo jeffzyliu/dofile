@@ -299,6 +299,7 @@ function setSplit(on: boolean) {
   split.value = on;
   saved.set("dofile.split", on ? null : "0");
   if (on && outputTab.value === "log") outputTab.value = "graph";
+  if (!on) outputTab.value = "log"; // unsplit: the Log is what the visitor sees first
 }
 
 const OUTPUT_TABS = [

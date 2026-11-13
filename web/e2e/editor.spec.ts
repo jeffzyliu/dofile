@@ -1276,6 +1276,58 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
   if (!phone) await expect(page.locator(".statusbar")).toContainText("Last run: line 7 · ");
 });
 
+test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open and not in another text field; held, it runs once", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1" }, "?test");
+  await startEngine(page);
+  await ready(page);
+  await open(page, "a.do");
+  const lastKind = () => page.evaluate(() => window.__dofile.state.lastRun.value?.kind ?? null);
+  const forget = () =>
+    page.evaluate(() => {
+      (window.__dofile.state.lastRun as { value: unknown }).value = null;
+    });
+  const logLength = () => page.evaluate(() => window.__dofile.state.log.value.length);
+
+  // the focus on nothing (the page's body): the key runs the file
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect.poll(lastKind).toBe("file");
+  await ready(page);
+
+  // on the Log pane too (a button there), and a held key (repeats) runs once: one more run head in the log
+  await forget();
+  if (isPhone(page)) await view(page, "Log");
+  const before = await logLength();
+  await page.getByRole("log", { name: "Log" }).focus();
+  await page.keyboard.down("ControlOrMeta");
+  for (let i = 0; i < 4; i++) await page.keyboard.down("Enter");
+  await page.keyboard.up("Enter");
+  await page.keyboard.up("ControlOrMeta");
+  await expect.poll(lastKind).toBe("file");
+  await ready(page);
+  const heads = await page.evaluate(() => window.__dofile.state.log.value.filter((i: any) => i.t === "runhead").length);
+  expect(heads).toBe(2);
+  expect(await logLength()).toBeGreaterThan(before);
+
+  // another text field keeps the key: the command line runs nothing (the field's own key is Enter)
+  await forget();
+  await page.getByRole("textbox", { name: "Command" }).focus();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await page.waitForTimeout(300);
+  expect(await lastKind()).toBeNull();
+
+  // a dialog open: nothing runs
+  await page.evaluate(() => {
+    window.__dofile.state.dialog.value = { d: "close-tab", path: "a.do" };
+  });
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await page.waitForTimeout(300);
+  expect(await lastKind()).toBeNull();
+});
+
 test("Break: the run stops before a line, with a note, Go to line and no error mark; the Break pill's time on a phone", async ({
   page,
 }) => {
@@ -1532,7 +1584,7 @@ test("the command line with no engine: disabled, with the hint while it is empty
   const line = page.locator(".cmdline");
   await expect(field).toBeDisabled();
   await expect(field).toHaveValue("");
-  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to type commands");
   // the hint is to be read: the text contrast (4.5), in both themes
   for (const theme of ["light", "dark"]) {
     await page.evaluate((t) => {
@@ -1770,7 +1822,7 @@ test("while the engine starts, a command is refused with words and the draft sta
   await expect(field).toBeFocused();
   await clear();
   await page.keyboard.press("Enter");
-  await expect(toast).toHaveText("Start the engine to run code");
+  await expect(toast).toHaveText("Start the engine to type commands");
 
   // the command line's Start engine, by keyboard: a new try. The button in its place is the off "Run command", which
   // keeps the focus; a second press at the same spot starts nothing more and says why

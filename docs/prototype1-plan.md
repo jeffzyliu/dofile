@@ -460,6 +460,10 @@ Found in the UI fix round (2026-11-12), still open:
    Web Lock lets one tab own the engine; a second tab is blocked entirely and writes nothing), so the open tabs would have
    to be kept by the tab that holds the lock. Open question for the maintainer: how they saw Home open `analysis.do`; the
    code opens it on a first visit only (the sample's load), so the source of that sighting is unknown.
+9. A run whose first command is `clear all` restarts the engine first, which frees its WebAssembly memory (it never shrinks
+   otherwise; the status bar's "Engine memory" only grows until a restart). First step: measure how long a restart from the
+   cached snapshot takes; build it only if that is under about 2 s. `clear all` anywhere else in a run clears as today.
+   (2026-11-13.)
 
 How this relates to steps 6, 6r and 7. **Step 6** (e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages) is
 partly done inside steps 3 to 5: the e2e suite has 105 tests in four browser profiles (420 cases, 389 run, 31 skipped:

@@ -87,3 +87,11 @@ estimated splits) are the study's, not checked again here.
   scale other than 1 it counts no keyboard: no area above it, no scroll-back of Safari's pan, no caret reveal), so a tap
   low in the editor while zoomed in may jump as before. If zoom comes back: one more sitting on an iPhone with `?kblog`,
   including taps while zoomed in. Nothing to do while zoom stays off. 2026-11-12.
+
+## Engine memory (added 2026-11-13)
+
+- **The engine unloads itself after a long idle time or while the visitor is away.** After a long period of inactivity, or
+  while the page is hidden (a background tab), the engine would be ended to give its memory back: a browser returns a
+  WebAssembly memory only when the worker ends. Open: how long to wait; what is kept (the files are in storage; the data,
+  macros and results are lost, as after a restart); and how the page says so (a banner, the status bar, what the Run
+  button then offers). 2026-11-13.

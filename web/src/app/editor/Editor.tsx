@@ -16,7 +16,9 @@
 //    is saved under); the save-failed banner's Download too (textOf).
 //    The texts compared (the dot, a run's version) and the text Run sends stay in the editor's form.
 //  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
-//    is the one that applies (Ctrl or Cmd on every platform, as Save; held, it runs once). With no text tab shown, Run says so in a toast and runs nothing. A
+//    is the one that applies (Ctrl or Cmd on every platform, as Save; held, it runs once). It works anywhere on the page
+//    (one window listener, onRunKey), not with a dialog open and not in another text field; in the editor CodeMirror's
+//    keymap takes it first. With no text tab shown, Run says so in a toast and runs nothing. A
 //    Ctrl/Cmd+Enter the engine does not take (a run on, a start, an engine that cannot be started from here) says why in
 //    a toast (words.ts refusedRunWords); the buttons are disabled then. With no engine (start.ts) Run is "Start engine",
 //    and Ctrl/Cmd+Enter does what that button does (the download prompt, a new try, the take-over dialog) and runs
@@ -68,7 +70,7 @@ import {
 } from "./cm.ts";
 import { codeOf, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
-import { isSaveKey } from "./keys.ts";
+import { isRunKey, isSaveKey } from "./keys.ts";
 import { editorText, type FileForm, fileText, followRun, formOf, PLAIN, savedForm } from "./ranover.ts";
 import { refusedRunWords } from "./words.ts";
 
@@ -449,10 +451,21 @@ function focus() {
 /** Ctrl/Cmd+S anywhere on the page saves the active tab, once while the key is held (each repeat is only kept from the
  *  browser's own Save page). With a dialog open it only keeps the browser's Save page away. */
 function onKey(e: KeyboardEvent) {
+  if (isRunKey(e)) return onRunKey(e);
   if (!isSaveKey(e)) return;
   e.preventDefault();
   if (e.repeat || dialog.value) return;
   editorCommands.save();
+}
+
+/** Ctrl/Cmd+Enter anywhere on the page does what the toolbar's Run does (runEither). Not with a dialog open, and not when
+ *  the focus is in another text field (the command line, a rename field, Find in the log), which keeps the key. In the
+ *  editor CodeMirror's keymap has run it already and marked the event handled. A held key runs once. */
+function onRunKey(e: KeyboardEvent) {
+  if (e.defaultPrevented || dialog.value) return;
+  if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+  e.preventDefault(); // also keeps a focused button from taking the Enter as a press
+  if (!e.repeat) runEither();
 }
 
 /** Make the view in `host` and fill editorCommands. Called once, when Editor mounts. */

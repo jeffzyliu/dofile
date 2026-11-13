@@ -134,7 +134,7 @@ test("a second tab: Start engine goes into the take-over dialog, never straight 
   if (phone(second)) await second.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
   const field = second.getByRole("textbox", { name: "Command" });
   await expect(field).toBeDisabled();
-  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to type commands");
   await second.locator(".cmdline").getByRole("button", { name: "Start engine" }).click();
   // the take-over dialog again; nothing started, here or in the first tab, which still has the lock
   await expect(dlg).toBeVisible();
@@ -209,7 +209,7 @@ test("where nothing can start the engine from the page (a failed start that need
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
   // where a start is offered the words say to start it
   await show(page, failed("download"));
-  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to type commands");
   await expect(start).not.toHaveAttribute("aria-disabled", "true");
   await clear();
   await help.click({ force: true });
@@ -223,7 +223,7 @@ test("the phone's command line at 320 px with no engine: the hint shows whole be
   await show(page, { s: "declined" });
   await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
   const field = page.getByRole("textbox", { name: "Command" });
-  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to type commands");
   await expect(page.locator(".cmdline").getByRole("button", { name: "Start engine" })).toBeVisible();
   const room = await field.evaluate((el: HTMLInputElement) => {
     const c = document.createElement("canvas").getContext("2d")!;

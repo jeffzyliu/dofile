@@ -128,9 +128,13 @@ body {
   display: flex;
   flex-direction: column;
 }
+.pane {
+  --pane-inner: calc(var(--radius-lg) - 1px); /* the pane's corners inside its border, for a ring under its head */
+}
 .editor-host:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent); /* a large area: a 1 px ring, ui.css's 2 px is for small controls */
   outline: 2px solid transparent;
+  border-radius: 0 0 var(--pane-inner) var(--pane-inner); /* its top edge is the pane head's */
 }
 
 /* the folded file list (700 to 1199 px): the Editor head's "Files" button (with the count of files) unfolds it, and
@@ -178,8 +182,19 @@ body {
   }
 }
 .files-pane:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
   outline: 2px solid transparent;
+  border-radius: inherit;
+}
+/* the log and the command line's field are large areas too: a 1 px inset ring that follows the corners */
+.log-body .log:focus-visible,
+.cmdline .field:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  border-radius: inherit;
+}
+.cmdline .field:focus-visible {
+  border-radius: var(--radius);
+  border-color: var(--accent);
 }
 @media (max-width: 1199.98px) {
   .main {
@@ -219,6 +234,7 @@ body {
 .app[data-layout="phone"] .pane {
   border: 0;
   border-radius: 0;
+  --pane-inner: 0px;
 }
 .app[data-layout="phone"] .files-pane > .pane-head,
 .app[data-layout="phone"] .editor-pane > .pane-head,
@@ -767,7 +783,8 @@ input.filter::placeholder {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  box-shadow: inset 0 0 0 2px var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  border-radius: 0 0 var(--pane-inner) var(--pane-inner);
 }
 .editor-cm .cm-scroller {
   overscroll-behavior-x: none; /* no rubber-banding: the sticky gutter would move with the text */
@@ -972,8 +989,14 @@ input.filter::placeholder {
 .cmdline .field[aria-disabled="true"] {
   color: var(--muted);
   background: var(--surface-2);
-  cursor: default;
+  border-style: dashed;
+  cursor: not-allowed;
   text-overflow: ellipsis;
+}
+/* the ring of an off field is muted, not the accent: it can be focused but does nothing */
+.cmdline .field[aria-disabled="true"]:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--muted);
+  border-color: var(--muted);
 }
 .cmdline .field[aria-disabled="true"]::placeholder {
   color: var(--muted);
@@ -999,6 +1022,12 @@ input.filter::placeholder {
 /* beside that button the phone's field is narrow: the hint is set in the UI font, smaller, so it shows whole */
 .app[data-layout="phone"] .cmdline .field[aria-disabled="true"]::placeholder {
   font: var(--text-sm) / 1.2 var(--font-ui);
+}
+/* at 320 px "Start the engine to type commands" is a character too long at that size */
+@media (max-width: 359.98px) {
+  .app[data-layout="phone"] .cmdline .field[aria-disabled="true"]::placeholder {
+    font-size: 0.7rem;
+  }
 }
 /* the phone's Run button: 44 px square, the primary color; while the field is empty it looks off (aria-disabled, so a tap
    still keeps the keyboard open) */

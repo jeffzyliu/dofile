@@ -33,7 +33,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   for dialogs and menus where they fit. The editor is CodeMirror 6.
 - **Styles:** `web/src/styles/tokens.css` and `web/src/styles/ui.css` are the one source for the page and the design pages.
   Tokens, not literals. Bold is `--w-bold-ui` or `--w-bold-mono`. No text opacity below 1, disabled controls excepted.
-- **Accessibility:** WCAG AA (text 4.5:1; edges, bars and the focus ring 3:1). Everything works by keyboard and every focus
+- **Accessibility:** WCAG AA (text 4.5:1; edges, bars and the focus ring 3:1; the ring is 2 px on small controls and a 1 px inset ring on large areas: the editor, the log, the command line's field, the files pane). Everything works by keyboard and every focus
   stop is visible. The log is `role="log"`. The status bar is not a live region (its timer would be read every second): one
   hidden `role="status" aria-live="polite"` region says each change once ("Run started", "Run finished: error r(111) at line
   17", "Engine reset", "Engine ready", each start-up stage, each toast). Meaning is never color alone.
@@ -188,7 +188,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   a paste of several lines is refused whole then, with the field left exactly as it was and the toast "3 of 3 pasted
   lines not run: the engine can't take a command now". **With no engine** (section 5; `app/start.ts`) the field is off
   (`aria-disabled` and read-only, not `disabled`: a field that has the focus when a start fails keeps it),
-  with the hint "Start the engine to run code" as its placeholder, so the hint shows only while the field is empty.
+  with the hint "Start the engine to type commands" as its placeholder, a dashed border, `cursor: not-allowed` and a muted (not accent) focus ring, so the hint shows only while the field is empty.
   Enter in the off field says the hint in a toast. Turning the field off never changes its text: a typed draft stays, greyed, and is usable when the engine is back. The
   hint and the draft are the muted color at full opacity (the text contrast, 4.5), not the disabled opacity. The
   button is then "Start engine" (what the toolbar's does), in words on a phone too: no width is reserved for it, so
@@ -196,17 +196,17 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   into the field with no engine is an ordinary paste. The log's `help x` links are off then (`aria-disabled` and
   `.off`, still focusable): a press runs nothing and a toast says "Start the engine to see help regress", or, where nothing can
   start the engine from the page, "The engine isn't running: can't see help regress".
-- **Phone only** (`PH`): a strip under the top bar ("r(111)", "line 17 · 0.38 s", "Mem 612 MB", "Go to line 17"; running:
-  "Running lines 14–15", "Mem 612 MB"); the hint as a block (`.explain`); "← wide table: swipe sideways →".
+- **Phone only** (`PH`): a strip under the top bar ("r(111)", "line 17 · 0.38 s", "Engine 612 MB", "Go to line 17"; running:
+  "Running lines 14–15", "Engine 612 MB"); the hint as a block (`.explain`); "← wide table: swipe sideways →".
 - **States:** drawn: after an error (`E`, `PH`), first run running (`E?r`, `PH?r`), stopping and waiting (`S 9`, `9b`), stopped
   by Break (`S 10`), nested do with unsaved edits (`S 15`). Not drawn: the notes of OQ-10.
 
 ### 3.6 Status bar (P1, step 4b)
-- Left to right (`E`): state dot and word, the last run, "Memory 612 MB", spacer, "Not affiliated with StataCorp", "Files
+- Left to right (`E`): state dot and word, the last run, "Engine memory 612 MB" (a tooltip says it is the memory the engine has reserved, which a browser gives back only when the engine restarts), spacer, "Not affiliated with StataCorp", "Files
   are kept in this browser" (or "Files may be cleared by this browser", `S 19`). The affiliation line is muted text, no
   link, no tab stop, not a live region; screen readers get `LICENSE-POLICY.md`'s sentence, "Stata is a registered
   trademark of StataCorp LLC; dofile is not affiliated with StataCorp.", which is also the short text's `title`. It shows
-  from 1200 px only: at 1200 px the widest bar (ready, the longest last run, "Memory 4,096 MB", "Files may be cleared by
+  from 1200 px only: at 1200 px the widest bar (ready, the longest last run, "Engine memory 4,096 MB", "Files may be cleared by
   this browser") leaves about 143 px beside it, so under about 1060 px it would not fit; the phone has no status bar,
   and the landing page carries the line. State texts: section 5. Last run: "Last run: whole file (started with no locals)
   · r(111) at line 17 · 0.38 s" (`E`); "Last run: stopped by Break · r(1) · 18.4 s" (`S 10`); the rc in the error color.
@@ -878,7 +878,7 @@ export const persisted: ReadonlySignal<boolean | null>;  // file service, from s
 export const tabs: Signal<OpenTab[]>;            // editor tabs (4a); `dirty` only through setDirty(path, on) (the editor, 4b)
 export const activeTab: Signal<string | null>;   // editor tabs, and the file tree when it opens a file (4a, files/open.ts)
 export const split: Signal<boolean>;             // the Log head's Split and Unsplit; kept in localStorage
-export const outputTab: Signal<"log" | "graph" | "data" | "results" | "help">;   // the Output tablist; "log" only unsplit
+export const outputTab: Signal<"log" | "graph" | "data" | "results" | "help">;   // the Output tablist; "log" only unsplit; Unsplit always shows it
 export const phoneTab: Signal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar; Run sets "log";
                                                  // 4a's openFile sets "editor" (a text or .dta tab)
 export const log: ReadonlySignal<LogItem[]>;             // run controller; "Clear log" empties it but the head
@@ -1063,7 +1063,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     allows two view files to, this one and 4d's `states/banners.tsx`, for the Break countdown). The editor is one `EditorView`, mounted once, with one `EditorState` per
     open text tab; `data-editor` is on CodeMirror's content with a file shown and on the empty view without one. The unsaved
     dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page, the
-    editor too, and Ctrl/Cmd+Enter runs, each with Ctrl or Cmd on every platform; S is the key that types "s" or, on a
+    editor too, and Ctrl/Cmd+Enter runs from anywhere on the page too (not with a dialog open, not in another text field), each with Ctrl or Cmd on every platform; S is the key that types "s" or, on a
     layout whose key there types no Latin letter (Cyrillic, Greek...), the key in S's place (`editor/keys.ts`); a held
     Ctrl/Cmd+S saves once, and a held Ctrl/Cmd+Enter runs once; a Ctrl/Cmd+Enter that the engine does not take (run.ts
     `requestRun` answers it was refused, where the Run buttons are disabled) says why in a toast, in the words of the

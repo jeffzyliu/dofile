@@ -1,7 +1,7 @@
 // The status bar (docs/design/SPEC.md, sections 3.6 and 5). Not a live region: say() in state.ts announces changes.
 // Left to right: the state's dot and words, with its timer ("Running lines 14–15 · 3.4 s", "Stopping · resets in 4 s",
 // the start's stage and its seconds), the run's time while Break waits; when ready, the last run (`lastRun`: "Last
-// run: whole file (started with no locals) · r(111) at line 17 · 0.38 s", the rc in the error color); "Memory 612 MB"
+// run: whole file (started with no locals) · r(111) at line 17 · 0.38 s", the rc in the error color); "Engine memory 612 MB"
 // (`memory`, the last measured value, also during a run: OQ-8); then at the right "You can edit and upload while it
 // starts" while it starts, else "Files are kept in this browser" or "Files may be cleared by this browser"
 // (`persisted`; nothing while it is unknown), with "Not affiliated with StataCorp" before it (LICENSE-POLICY.md's
@@ -13,7 +13,7 @@ import { snapshotStart } from "../env";
 import { engine, lastRun, memory, persisted } from "../state.ts";
 import type { EngineState } from "../types.ts";
 import { resetsIn, since } from "./clock.ts";
-import { lastRunWords, linesWords, memoryWords, seconds, ticking } from "./words.ts";
+import { lastRunWords, linesWords, memoryTitle, memoryWords, seconds, ticking } from "./words.ts";
 
 const lines = (l?: [number, number]) => (l ? ` ${linesWords(l)}` : "");
 
@@ -96,7 +96,7 @@ export function StatusBar() {
       </span>
       {(st.s === "breaking" || st.s === "waiting") && <span>{seconds(since(st.t0))}</span>}
       {st.s === "ready" && <LastRunText />}
-      {mem && <span>{memoryWords(mem)}</span>}
+      {mem && <span title={memoryTitle}>{memoryWords(mem)}</span>}
       <span class="spacer" />
       <span class="affiliation">
         <span aria-hidden="true" title={AFFILIATION}>

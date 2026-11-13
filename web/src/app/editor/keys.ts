@@ -11,3 +11,9 @@ export function isSaveKey(e: KeyPress): boolean {
   const k = e.key.toLowerCase();
   return k === "s" || (!/^[a-z]$/.test(k) && e.code === "KeyS");
 }
+
+/** Which key press is Run (Ctrl or Cmd with Enter, on every platform, without Alt or Shift): the editor's keymap and the
+ *  page's window listener (Editor.tsx) both use it. */
+export function isRunKey(e: KeyPress): boolean {
+  return (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key === "Enter";
+}

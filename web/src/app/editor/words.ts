@@ -58,9 +58,9 @@ export function lastRunWords(r: LastRun): { what: string; rc: string | null; whe
   return { what, rc, where, time: seconds(r.seconds) };
 }
 
-/** "Memory 612 MB" (status bar) or "Mem 612 MB" (the phone's strip), from the heap the engine reports. */
+/** "Engine memory 612 MB" (status bar) or "Engine 612 MB" (the phone's strip), from the heap the engine reports. */
 export const memoryWords = (m: Memory, short = false) =>
-  `${short ? "Mem" : "Memory"} ${Math.round(m.heap_bytes / 1e6).toLocaleString("en")} MB`;
+  `${short ? "Engine" : "Engine memory"} ${Math.round(m.heap_bytes / 1e6).toLocaleString("en")} MB`;
 
 /** Whether a run's end goes to a line in its file ("Go to line 17"): an error or Break with a line, not a command's. */
 export const jumpLine = (r: LastRun): number | null =>
@@ -95,3 +95,6 @@ export function refusedRunWords(s: EngineState["s"]): string | null {
       return "Run is not available: the engine isn't running in this tab";
   }
 }
+
+/** The tooltip of the memory label. Draft words. */
+export const memoryTitle = "Memory the engine has reserved. A browser gives it back only when the engine restarts.";
