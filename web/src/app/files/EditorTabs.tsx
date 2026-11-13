@@ -9,8 +9,12 @@
 //  - FileSwitcher: the phone's top bar title on the Editor view (WP 1): the open file's name and ▾, a menu: Save (off unless
 //    the open file is a text file), the open files (a list that scrolls), "Close <name>" (the phone has no ×) and "Show all files"; with no open file it says "Editor".
 // `dirty` is the editor's (state.ts setDirty); this file never sets it.
+import { signal } from "@preact/signals";
+import { useRef } from "preact/hooks";
 import { editorCommands } from "../editor/commands.ts";
 import { activeTab, phoneTab, tabs } from "../state.ts";
+import type { OpenTab } from "../types.ts";
+import { useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { askCloseTab } from "./actions.ts";
@@ -19,13 +23,8 @@ import { baseName, tabLabels } from "./tree.ts";
 const tabId = (i: number) => `file-tab-${i}`;
 const Unsaved = () => <span class="dot" role="img" aria-label="unsaved changes" />;
 
-/** Focus the tab of `path` after the render that draws it. */
-function focusTab(path: string | null) {
-  setTimeout(() => {
-    const i = tabs.value.findIndex((t) => t.path === path);
-    document.getElementById(tabId(i))?.focus();
-  });
-}
+// the tab a key moved to: it takes the focus when it is drawn (FileTab)
+const tabAsked = signal<string | null>(null);
 
 const shown = (el: HTMLElement | null): el is HTMLElement => el !== null && el.getClientRects().length > 0;
 
@@ -43,13 +42,14 @@ export function focusAfterClose() {
 }
 
 export function EditorTabs() {
+  const strip = useRef<HTMLDivElement>(null);
   const list = tabs.value;
   if (!list.length) return null;
   const labels = tabLabels(list.map((t) => t.path));
   const at = list.findIndex((t) => t.path === activeTab.value);
   const select = (i: number) => {
+    tabAsked.value = list[i].path;
     activeTab.value = list[i].path;
-    focusTab(list[i].path);
   };
   const close = (path: string, keyboard: boolean) => {
     if (askCloseTab(path) && keyboard) focusAfterClose();
@@ -66,42 +66,72 @@ export function EditorTabs() {
     }
   };
   return (
-    <div role="tablist" aria-label="Open files" class="tabstrip file-tabs" onKeyDown={onKeyDown}>
+    <div ref={strip} role="tablist" aria-label="Open files" class="tabstrip file-tabs" onKeyDown={onKeyDown}>
       {list.map((t, i) => (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: the keys are the tablist's (arrows, Home, End, Delete); a tab holds the × (a click target of its own), so it is not a button
-        <div
-          key={t.path}
-          id={tabId(i)}
-          role="tab"
-          class={`tab${i === at ? " on" : ""}`}
-          aria-selected={i === at}
-          aria-keyshortcuts="Delete"
-          tabIndex={i === at || (at < 0 && i === 0) ? 0 : -1}
-          title={t.path}
-          onClick={() => {
-            activeTab.value = t.path;
-          }}
-          onAuxClick={(e) => {
-            if (e.button === 1) close(t.path, false); // the middle button, as browsers' own tabs
-          }}
-        >
-          <span class="tl" data-label={labels[i]}>
-            {labels[i]}
-          </span>
-          {t.dirty && <Unsaved />}
-          <span
-            class="x"
-            aria-hidden="true"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => {
-              e.stopPropagation();
-              close(t.path, false);
-            }}
-          >
-            ×
-          </span>
-        </div>
+        <FileTab key={t.path} t={t} i={i} at={at} label={labels[i]} close={close} list={strip} />
       ))}
+    </div>
+  );
+}
+
+/** One tab of "Open files"; it takes the focus when a key of the tablist asked for it (docs/web-page-flows.md, section 1). */
+function FileTab({
+  t,
+  i,
+  at,
+  label,
+  close,
+  list,
+}: {
+  t: OpenTab;
+  i: number;
+  at: number;
+  label: string;
+  close: (path: string, keyboard: boolean) => void;
+  list: { current: HTMLElement | null };
+}) {
+  const el = useRef<HTMLDivElement>(null);
+  useFocusRequest(
+    tabAsked.value === t.path,
+    el,
+    () => {
+      tabAsked.value = null;
+    },
+    (focused) => !!focused && !!list.current?.contains(focused),
+  );
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the keys are the tablist's (arrows, Home, End, Delete); a tab holds the × (a click target of its own), so it is not a button
+    <div
+      ref={el}
+      id={tabId(i)}
+      role="tab"
+      class={`tab${i === at ? " on" : ""}`}
+      aria-selected={i === at}
+      aria-keyshortcuts="Delete"
+      tabIndex={i === at || (at < 0 && i === 0) ? 0 : -1}
+      title={t.path}
+      onClick={() => {
+        activeTab.value = t.path;
+      }}
+      onAuxClick={(e) => {
+        if (e.button === 1) close(t.path, false); // the middle button, as browsers' own tabs
+      }}
+    >
+      <span class="tl" data-label={label}>
+        {label}
+      </span>
+      {t.dirty && <Unsaved />}
+      <span
+        class="x"
+        aria-hidden="true"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.stopPropagation();
+          close(t.path, false);
+        }}
+      >
+        ×
+      </span>
     </div>
   );
 }
