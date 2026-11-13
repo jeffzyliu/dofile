@@ -1,12 +1,5 @@
-// STEP 4d: where the focus goes when a banner that holds it goes away (its Dismiss, "Try again", the run ending under
-// "Don't reset: wait for it"), so it does not fall to <body>: the editor (editorCommands.focus(), which 4b's editor fills;
-// or with a .dta tab active its tab or Load), else, when the Editor pane is hidden (another phone view), the top bar's
-// "More actions" button, which every width shows and nothing disables. ui/Dialog.tsx uses it too, for a dialog whose
-// opener has left the page. Every banner with controls uses the hand-off (useFocusOnLeave): 4d's (states/banners.tsx:
-// the failed start, stopping, waiting, reset, storage, download-failed), the editor's (save-failed, run-changed) and the
-// Files pane's (not-text); the declined banner calls focusStable() itself, before it goes.
-// A view that takes the focus when it appears (the stopping and waiting banners, a dialog) does so in a useLayoutEffect, so
-// it has the focus before the hand-off below looks: the focus then goes straight to it, never through the editor.
+// Where the focus goes when what held it leaves the page (a banner, a dialog's opener): never <body>. The rules and who
+// uses this: docs/web-page-flows.md, section 1.
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { editorCommands } from "../editor/commands.ts";
 

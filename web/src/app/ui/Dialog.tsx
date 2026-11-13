@@ -64,7 +64,7 @@ export function Dialog({
     const active = document.activeElement;
     const opener = active instanceof HTMLElement && active !== document.body ? active : leaving;
     // the opener lets go of the focus first, so the browser keeps no element to give it back to on close() (WebKit
-    // does, before an answer can place it): the cleanup below gives it back, once
+    // does, before an answer can place it): the cleanup below gives it back, once. docs/web-page-flows.md, section 1
     opener?.blur();
     if (!d.open) d.showModal();
     (

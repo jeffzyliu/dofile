@@ -47,11 +47,19 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    another one is still handing the focus back takes that one's opener as its own (`ui/Dialog.tsx`, the module variable
    `leaving`).
 5. **A view that takes the focus when it appears takes it in a layout effect:** a dialog (`ui/Dialog.tsx`), the
-   stopping banner's "Don't reset: wait for it", and the waiting banner itself (`states/banners.tsx`). So a hand-off
+   stopping banner's "Don't reset: wait for it", and the waiting banner itself (`states/banners.tsx`), and the inline
+   rename field (`files/FilesPane.tsx`), the last three through `ui/focus-hooks.ts` `useFocusOnMount`. So a hand-off
    that waits for a microtask finds the focus already taken.
 6. **After a tab closes** (`files/EditorTabs.tsx` `focusAfterClose`, a timer) the focus goes to the selected tab, else
    the file tree's row in the tab order, else `editorCommands.focus()`. When that moves nothing, the close-tab dialog's
    own hand-back follows (its opener, else `focusStable`).
+7. **A focus request is taken by the render of the component that draws the target.** The action sets a signal (the
+   tree's `focusWanted`, the open-file tabs' `tabAsked`, a tablist's own, Find's `findAsked`); the target takes it in
+   a layout effect of its own render (`ui/focus-hooks.ts` `useFocusRequest`), and the request ends there, taken or
+   not. Each says whose focus it may take (`from`): only from inside its own list for the tablists, from the page body
+   or the tree for the tree's rows. Requests are set by keys, never by a click: Safari does not focus a tapped button
+   (`ui/Menu.tsx` focuses a `keepOpen` item itself for that reason), so a request from a click would move the focus
+   there where a click alone moves none.
 
 ### Who moves the focus
 
@@ -60,14 +68,17 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `ui/Dialog.tsx`, opening | it mounts | layout effect | It blurs the opener, then calls `showModal()`. Then `[data-autofocus]`, else the first enabled button, link or input. |
 | `ui/Dialog.tsx`, closing | it unmounts | cleanup (blur inside, `close()`), then a timer; only a focus on nothing | the opener if it is still in the page, else `focusStable()` |
 | `states/focus.ts` `useFocusOnLeave` | a banner unmounts with the focus inside | layout cleanup, then a microtask; only a focus on nothing | `focusStable()` |
-| `StoppingBanner`, `WaitingBanner` (`states/banners.tsx`) | they mount | layout effect | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
+| `StoppingBanner`, `WaitingBanner` (`states/banners.tsx`) | they mount | layout effect (`useFocusOnMount`) | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
 | `DeclinedBanner` (`states/banners.tsx`) | "Start engine" | synchronous, before `eng.ask()` | `focusStable()`, so the prompt takes the editor as its opener |
 | `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | a timer set in the step | `editorCommands.focus()` |
 | `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | a timer | selected tab, tree row, `editorCommands.focus()` |
 | `files/dialogs.tsx` `refocus` | Delete's store change is done | a 100 ms timer; only a focus on nothing | the tree's row in the tab order |
 | `ui/Menu.tsx` `closeMenu(true)` | Esc, Tab, a picked item (before its `onSelect`) | synchronous | the trigger (`restore`, else `anchor`). A click outside, a resize or the window's blur close it with no focus move. |
 | `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the menu's active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
-| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`) | `focusRow` (after a rename, a new folder, the arrow keys) sets the roving path and the signal `focusWanted`; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and is dropped for a row that is no longer the roving one | the row, only while the focus is on the page body or inside the tree (the tree's `role`), never from a visitor who clicked elsewhere |
+| `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
+| `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist (a click sets no request) | layout effect of the tab's render (`useFocusRequest`); the request ends there | the tab moved to, only while the focus is inside that tablist |
+| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new folder, the arrow keys) sets the roving path and the signal `focusWanted`; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and is dropped for a row that is no longer the roving one | the row, only while the focus is on the page body or inside the tree (the tree's `role`), never from a visitor who clicked elsewhere |
+| `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | layout effect of the bar's render (`useFocusRequest`); once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | a timer after `openFile` | CodeMirror, at the line |
 
@@ -262,6 +273,8 @@ sequenceDiagram
 - `web/e2e/editor.spec.ts`:
   - "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab"
   - "Find in the log: … Esc gives the focus back"
+  - "the Output tabs by keyboard: each key moves the focus to the tab it selects; with Find open, the Log tab drawn again
+    leaves the focus on the tab, not in Find's field"
 - `web/e2e/shell.spec.ts`:
   - "the layout: … the ⋯ menu works by keyboard"
   - "the folded file list: … Esc folds it and gives the focus back"
