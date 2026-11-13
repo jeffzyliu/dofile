@@ -240,9 +240,11 @@ sequenceDiagram
 | A dialog opened from a menu (Reset, Delete all, Clear log) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all, "Log actions" for Clear log | the ⋯ trigger for Reset; the strip's "Files ⋯" ("File actions") for Delete all; the strip's "Log ⋯" ("Log actions") for Clear log |
 | The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear) and cannot take the focus, so `ui/Dialog.tsx` hands it to `focusStable()`: the editor, or "More actions" |
 | Find opened from the phone strip's "Log ⋯" | (desktop: the Log head's Find button) | `openFind(null)` takes the focused element, the "Log ⋯" button that `closeMenu` just focused |
+| A tap on the command line while it does not have the focus | the browser's own focus | `log/CommandLine.tsx` takes the tap (`touchend`) and focuses the field itself with `preventScroll`, the caret at the end: the browser's focus would scroll the page up to the field, which iOS does before the page can stop it (`app/viewport.ts`, `docs/phone-keyboard-experiment.md`) |
 
 ### Tests that hold this
 
+- `web/e2e/keyboard.spec.ts`: "a tap on the phone's command line focuses it without scrolling the page, the caret at the end"
 - `web/e2e/states.spec.ts`:
   - "a banner that goes with the focus in it hands the focus on: the editor, or More actions when it is hidden"
   - "the editor's and the Files pane's banners hand the focus on too: save-failed, run-changed (Dismiss, Reload from the
