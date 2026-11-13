@@ -91,6 +91,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     through its memory use. The `?snapshot=0` e2e test's failures in Firefox may share the cause (the investigation above saw
     its failures in WebKit only). To look at: the report in `about:crashes` (an out-of-memory crash is marked), and whether
     the tab or the whole browser goes.
+    **Iceboxed (2026-11-13)** (`docs/icebox.md`, "Engine memory"): not reproduced locally; the maintainer: "icebox the firefox
+    crash, i'll revisit it if it happens again".
   - Waiting on the maintainer: decisions 7 to 22; the iPhone sitting (the phone command line, the wake
     lock with the phone locked 30 s; the keyboard experiment is done, #27); the deployed site's address for the first-deploy checks; the
     draft words of SPEC section 8; how they saw Home open `analysis.do` (see "Later UI work", 8).
