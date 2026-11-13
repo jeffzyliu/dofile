@@ -85,7 +85,9 @@ test("a tap on the phone's command line focuses it without scrolling the page, t
   test.skip(!hasTouch, "taps need a touch profile");
   await open(page);
   await page.evaluate(() => {
-    (window as any).__dofile.state.phoneTab.value = "log";
+    const s = (window as any).__dofile.state;
+    s.phoneTab.value = "log";
+    s.engine.value = { s: "ready" }; // with no engine the field is read-only
   });
   const field = page.locator(".cmdline input");
   await field.fill("display 1");
