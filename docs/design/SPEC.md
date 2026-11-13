@@ -1546,9 +1546,10 @@ questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below
   is asked in the clash dialog with the sample's words; Replace drops those edits. Other files are never touched. The toast is
   "Sample restored" when something was written, "The sample is already here" when nothing was written and nothing asked, no
   toast when what was asked was all kept (an upload says nothing then either), "Couldn't restore the sample" when a write
-  failed. It takes its turn with the other uploads. A restored file that is open is reloaded in its tab as an upload's Replace
+  failed. It takes its turn with the other uploads. A restored file that was in the store and is open is reloaded in its tab as an upload's Replace
   does (`reopen`: the text decoded as the editor reads a file, `decodeText(bytes, true)`), so the tab takes the sample's form, `\n`
-  and no BOM: a tab whose file had `\r\n` or a BOM saves the sample's form from then on, as the store holds it.
+  and no BOM: a tab whose file had `\r\n` or a BOM saves the sample's form from then on, as the store holds it. A missing file that is open in a tab is written with no reload: its tab keeps its text (an open question, kept with
+  the file-save rethink in `docs/icebox.md`).
 - **Words decided by the maintainer on 2026-11-12** (the UI fix round; the rest of the draft words stay drafts): "Home" (the
   commands page's link to the landing page, was "Back to the start"), "Clear" (accessible name "Clear log"), "Wrap lines",
   "Commands", "Files" / "File actions", "Log" / "Log actions", and the footers' "open source" link to the GitHub repository.
