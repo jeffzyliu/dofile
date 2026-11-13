@@ -125,9 +125,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 135 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 138 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 540 cases, of which 501 run and 39 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 552 cases, of which 513 run and 39 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -259,7 +259,7 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (135, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (138, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
