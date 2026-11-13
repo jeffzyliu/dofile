@@ -58,7 +58,7 @@ test("?memcap=<MB> overrides the rule in both directions, and 0 is no cap; anyth
 test("factsOf reads the navigator, and the console line says the cap and why", () => {
   const facts = factsOf({ userAgent: IPHONE, maxTouchPoints: 5, userAgentData: { mobile: true }, deviceMemory: 4 });
   assert.deepEqual(facts, { userAgent: IPHONE, maxTouchPoints: 5, mobile: true, deviceMemory: 4 });
-  assert.equal(capLine({ mb: 900, why: "iOS or iPadOS" }), "[dofile] engine memory cap: 900 MB, iOS or iPadOS");
+  assert.equal(capLine({ mb: 750, why: "iOS or iPadOS" }), "[dofile] engine memory cap: 750 MB, iOS or iPadOS");
   assert.match(capLine(chooseCap(device(), null)), /cap: none .*not iOS/);
 });
 

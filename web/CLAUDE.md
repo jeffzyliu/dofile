@@ -113,7 +113,7 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   rebuilds it before `vite build` when `node scripts/build-id.ts` says the cached one is stale.
 - **The snapshot's loader is a patched copy of Pyodide's** that re-links the native libraries. The patch throws if Pyodide's
   loader text changes: a Pyodide upgrade needs the patch updated. The two big files are unpacked with the browser's own brotli
-  decoder when it has one, else brotli-wasm. See `docs/pyodide-snapshot.md`. The loader also reads a cap on the WebAssembly heap (`dofileHeapMax`, set by the worker from the page's `memcap`: 900 MB on phones, `?memcap=<MB>` to override; `engine/memcap.ts`); the normal boot patches the same line when a cap is set. `docs/browser-engine.md`, "The memory cap".
+  decoder when it has one, else brotli-wasm. See `docs/pyodide-snapshot.md`. The loader also reads a cap on the WebAssembly heap (`dofileHeapMax`, set by the worker from the page's `memcap`: 750 MB on phones, `?memcap=<MB>` to override; `engine/memcap.ts`); the normal boot patches the same line when a cap is set. `docs/browser-engine.md`, "The memory cap".
 - **The files live in dofile's own store, not in the worker.** `src/engine/store.ts` (IndexedDB database `dofile`: `info`,
   `data`, `pending`) is the one place a file is kept. The page reads and writes it directly (`FileStore`), with no engine,
   during a run and after a failed start. `/work` in the worker is a plain in-memory copy: there is no IDBFS. **The journal is
