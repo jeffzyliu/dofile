@@ -53,3 +53,27 @@ estimated splits) are the study's, not checked again here.
 - The closest fits: Zag.js (menu, tabs, tree; its Preact adapter imports `preact/compat`), and `@headless-tree/core`
   (framework-free, about 6.5 kB gzipped) for the tree. The case for the tree is behavior (typeahead, position in set), not
   lines.
+
+## Infrastructure and CI (added 2026-11-12)
+
+- **Infrastructure as code, and branch previews.** One entry, three parts, put here by the maintainer. (a) A research report
+  on infrastructure as code (Terraform and the others) for a reader who knows nothing about Terraform; it should compare the
+  options with what the site does today (`deploy.yml` runs wrangler against Cloudflare, `web/wrangler.jsonc`). (b) A
+  requirement for it: branch previews, a preview deployment for each branch or pull request. (c) Block the deploy until main's
+  CI has passed: today `deploy.yml` deploys on the push to main without waiting for the `ci` and `web` runs. Not checked:
+  the release notes of `cloudflare/wrangler-action` (seen in #20) mention "Workers Previews", which needs Wrangler 4.136.3 or
+  later, so previews may need no Terraform at all; the report should say. Nothing is written yet.
+- **A watchdog for the engine start.** Nothing times out the `starting-worker` state: `machine.ts` has only the Break grace
+  timer, and `client.ts` `start()` waits on `mount`, `boot` and `startup` with no limit. A worker that stalls (the
+  `?snapshot=0` stall in `docs/prototype1-plan.md`) leaves a visitor on "Getting the engine ready" for good. Open question:
+  can the snapshot start, the page's default, stall the same way? The stall was seen only with `?snapshot=0`, and the code
+  has no automatic fallback from the snapshot to the normal boot (by grep, not a full read). The words a failed start shows
+  are the maintainer's. 2026-11-12.
+- **Split or skip `check-snapshot` in CI.** The `memory snapshot` job takes about 8 to 11 minutes, `check-snapshot` being
+  most of it, and `web ok` waits for it, so it is now the longest job on a pull request. Two ideas, neither tried: run it
+  only when the engine or the snapshot's inputs change, or split it into shards with its `--cases` and `--only` options. 2026-11-12.
+- **More Playwright workers.** The config sets no worker count, so a browsers job runs the default 2 workers; they are busy
+  about 97% of the time. The CI speed investigation replayed past runs: 3 workers saves 0 to 3 minutes and 4 workers about 4
+  to 5, a guess that assumes 1.3 to 1.5 times slower tests from sharing the runner. More load may make the WebKit navigation
+  hang and the memory-heavy Firefox runs worse. Left because the matrix of four projects (#32) paid more with less risk.
+  2026-11-12.

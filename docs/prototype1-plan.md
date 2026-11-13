@@ -7,7 +7,87 @@ Status column and the "Where things stand" section at the end of every session.
 To pick up after a break: read this file, then `docs/design/SPEC.md` (the build spec), then run `git status` and
 `git log --oneline -5`.
 
-## Where things stand (2026-11-11)
+## Where things stand (2026-11-12)
+
+- **Fix round 2 (2026-11-12): pull requests merged one by one, each on the maintainer's word, rebased in turn.** Merged
+  and deployed (each merge deploys): #22 (step 4's C 4, C 8 and C 12, every key with Alt, Ctrl or Cmd left to the browser in the
+  file tree, dead toast CSS, three flaky e2e tests), #23 ("Clear log" asks first; decision 1), #24 (the phone command line:
+  autocorrect off as an attribute, typed curly quotes straightened, a Run button; decisions 3 and 4), #25 (the screen stays
+  awake while the engine works; decision 2). None of the four has been tried on a real phone.
+  - **Merged later the same day:** #31 (a 60 s navigation timeout on the `webkit` and `iphone` projects, so a hung first
+    navigation fails in 60 s, not 10 minutes), #30 (landing page fixes: the logo, the theme switch's word kept on a phone with
+    an icon each, Copy buttons that turn to "Copied", the two panels scroll sideways), #32 (the browsers job is one job per
+    Playwright project, a matrix of four, each on its own runner, with a 30-minute limit; it went green only on a re-run), #20
+    (`cloudflare/wrangler-action` 3 to 4), #33 (every job also runs on a push to main, one run per commit, so a merge's tree is
+    tested), #21 (`actions/cache` 5 to 6; the maintainer merged it by hand, because the `gh` token has no `workflow` scope and
+    GitHub refused the merge), #26 (remove the queued run, below) and #34 (the `?snapshot=0` normal-boot test is skipped in
+    the two WebKit projects).
+  - **#26 "Remove the queued run" and "Start engine" is merged.** The maintainer approved the design ("i approve your
+    recommendations for 26"): with no engine nothing on the page offers to run. The toolbar's Run and the command line's
+    buttons read "Start engine"; Ctrl/Cmd+Enter does the same; the command line is off with the hint "Start the engine to run
+    code" and keeps its text; Run selection, Load, Import and the log's `help` links are off and say why in a toast. Widths,
+    in the maintainer's words: "navbar button should be wide enough, but let the mobile command line button expand. we want
+    it to be as small as it can in every situation". The state table is in `docs/web-page-flows.md` section 2 and
+    `web/src/app/start.ts`. Fresh-context reviews: the second commit's four findings were fixed; the fix commit
+    (`ae8af24`) was reviewed and accepted with no must-fix, and its one should-fix (the hint's `help x` link had no
+    held-Enter guard, so every repeat raised the refused-run toast and the next one ran `help x` when the engine was free)
+    was fixed in the last commit before the merge, which no second agent reviewed. Kept for the maintainer: the off controls
+    (Load, Import, help links at 0.45 opacity) measure 2.2 to 3.8 to 1, under 4.5 (WCAG exempts disabled controls); a
+    multi-line paste while an engine exists and is not ready is refused whole with the field untouched; a held Enter is
+    ignored in every dialog; the declined banner's button reads "Start engine"; a retry from a failed start downloads with no
+    prompt, as "Try again" does. **Not verified:** a real OS key repeat (the held-Enter guard was checked with a synthesized
+    repeated keydown in Chromium, Firefox and WebKit); a held Enter on a banner button that hands the focus to the editor
+    ("Try again", "Run the file again"), where the repeats may type newlines into CodeMirror (older than this change); nothing
+    merged today was tried on a real phone. Stale after #26 and not yet edited: SPEC's toast "… not run: line 1 didn't run",
+    and this plan's lines on the held run (step 4's list B item 3 and decision 4).
+  - **Causes found for two CI failures (investigations, 2026-11-12; neither reproduced).**
+    - *WebKit's first-navigation hang.* A fresh page's first `page.goto` to `/app/` stays on `about:blank` and waits until the
+      test times out. The trace holds the document request with no response, the screenshot is blank, and the other worker
+      keeps passing tests against the same server. Likely cause (medium-high confidence): WebKit bug 325840, a race in which a
+      late `DidStartProvisionalLoadForFrame` from the old web process cancels the new process's navigation when a
+      `Cross-Origin-Opener-Policy: same-origin` document forces a process swap. dofile serves that header on `/app/`
+      (`web/vite.config.ts`), for SharedArrayBuffer and Break. Upstream: Playwright issue #42957, closed as an upstream bug;
+      the WebKit fix (WebKit/WebKit#75569) was open, not merged, on 2026-11-10; no Playwright release has it (ours is 1.65.0).
+      Rate: about 1 navigation in 3,000, about 7% of full runs, from run counts and not measured. Ruled out: the preview
+      server, a service worker, a crash, a dofile change. Not reproduced on macOS in 2,000 navigations, which neither
+      confirms nor rules out the cause. #31 caps the cost at 60 s; the test still fails.
+      **A one-retry of a stalled first navigation (a `goto` that timed out while the page is on `about:blank` is called once
+      more, in `web/e2e/fixtures.ts`; test code only) is being built in its own pull request, not merged.** Unproven until a
+      CI log shows a retried navigation followed by a pass.
+    - *`?snapshot=0` stall.* The worker is stuck, not slow: in both failures the normal boot stopped inside Pyodide's
+      `loadPackage` ("Loading packages", step 4 of 5) after every download had finished, and stayed 312 s with the page alive;
+      passing runs take 17 to 34 s. Every request got a 200. Likely mechanism (moderate confidence): one package's
+      asynchronous `WebAssembly.instantiate` in the Worker never settles, which blocks the loader's one lock (about 136
+      instantiations per boot); WebKit bug 208368 records a flaky case like it on Linux. Rate about 4% of WebKit runs of the
+      test (2 in about 49), none in Chromium or Firefox. #34 skips the test in WebKit. A product gap stays: nothing times out
+      the `starting-worker` state (`docs/icebox.md`).
+  - **Not merged, not approved:** #27 `claude/phone-keyboard-experiment` (`?kb=`, `?slide`, `?kblog`; the default unchanged;
+    `docs/phone-keyboard-experiment.md`), made from `bc8a942`. The maintainer: "don't edit upstream 27 yet". It conflicts
+    with `main` in one place in `web/CLAUDE.md` and the test map's counts. The closed #28 (a draft that joined everything) and
+    #29 (an earlier version of this section) are not for merging.
+  - **A fresh-context review of #27 (2026-11-12) found nothing blocking.** With no flag the page is the same as `main`. To
+    fix before the iPhone sitting: the `?kblog` overlay covers the top bar and the top third of the screen, which the sitting
+    observes (`web/src/app/kblog.ts`); `?kb=pre` also shrinks the page on a focus set by script, where no keyboard opens;
+    `?slide` does nothing under `height`, `unpan` and `pre`. A local rebase over #25's content exists (`52eff98`, in a
+    worktree), with a dev server on port 5273 for the iPhone sitting; it is stale against `main`.
+- **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
+  decisions: 1 to 5 are accepted (all built in #23 to #25; decision 5, the trackpad back-swipe, is to be checked once by
+  hand), 6 (zoom on the editor page) waits on the keyboard experiment, and 7 to 22 have no answer yet. Nothing they
+  would release is started: Reset asking when only globals are held (C 1), "Run the file again" after a Reset the
+  visitor asked for (C 3), the failed start announced twice (C 5), the two items below, `cls`, the later UI work, the
+  document pass and step 6's scope.
+  - Found by reading the code, not fixed: a Save pressed right after a rename's Enter, before the rename's write ends,
+    leaves the old text under the new name and the new text under the old name, with the tab shown as saved
+    (`files/actions.ts` `renameEntry`, `editor/Editor.tsx` `save`); the file tree's focus retry after a rename
+    (`files/FilesPane.tsx` `focusRow`) can take the focus from a visitor who clicks into the editor within a second.
+  - Reported by the maintainer (2026-11-12), not investigated: dofile seems to crash Firefox on the desktop, perhaps
+    through its memory use. The `?snapshot=0` e2e test's failures in Firefox may share the cause (the investigation above saw
+    its failures in WebKit only). To look at: the report in `about:crashes` (an out-of-memory crash is marked), and whether
+    the tab or the whole browser goes.
+  - Waiting on the maintainer: the review of #27; decisions 7 to 22; the iPhone sitting (the keyboard experiment, the phone
+    command line, the wake lock with the phone locked 30 s); the deployed site's address for the first-deploy checks; the
+    draft words of SPEC section 8; how they saw Home open `analysis.do` (see "Later UI work", 8).
+  - Known flaky tests, with their sightings: `docs/test-map.md`, "Known flaky tests".
 
 - **UI fix round (2026-11-12), on `ui-lightning`:** the maintainer's UI bugs after the merge of steps 4 and 5. Editor: the
   focus ring over the gutters, a fainter lines-to-run mark with an accent bar, no sideways overscroll, tab labels that keep
@@ -378,6 +458,10 @@ Suggested order: "Remove the queued run" (Post-merge review) before 1 and 6, sin
    not flash; the internal state is unchanged. Subtle transitions later. Overlaps step 4 C 2 and the flash noted above.
 7. `cls` typed at the command line clears the log (Stata's command for it; the engine has none). `clear` keeps its meaning
    of dropping the data.
+8. Remember the open tabs across reloads. Today a tab without the engine's lock neither reads nor writes to storage (the
+   Web Lock lets one tab own the engine; a second tab is blocked entirely and writes nothing), so the open tabs would have
+   to be kept by the tab that holds the lock. Open question for the maintainer: how they saw Home open `analysis.do`; the
+   code opens it on a first visit only (the sample's load), so the source of that sighting is unknown.
 
 How this relates to steps 6, 6r and 7. **Step 6** (e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages) is
 partly done inside steps 3 to 5: the e2e suite has 105 tests in four browser profiles (420 cases, 389 run, 31 skipped:
