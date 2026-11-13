@@ -10,7 +10,9 @@ gone.** The command line takes a tap's focus itself with `preventScroll`, so Saf
 scrolled straight back (one frame on screen, about 3 px seen), `.app` stays at the top with the height of the visible
 area, and the editor's caret is scrolled above the keyboard through CodeMirror when the keyboard opens and again once it
 has settled. The code: `web/src/app/viewport.ts`, `web/src/app/log/CommandLine.tsx` and `web/src/styles/app.css`. The
-overlay stays behind `?kblog` (`web/src/app/kblog.ts`) for a later check on a new iOS. The flags and steps below are
+overlay stays behind `?kblog` (`web/src/app/kblog.ts`) for a later check on a new iOS. Every round ran with pinch zoom
+off (the editor page's viewport meta), and `viewport.ts` does nothing while the page is zoomed: turning zoom back on (the
+plan's decision 6) needs another sitting with `?kblog` that includes taps while zoomed in (`docs/icebox.md`, "Phone"). The flags and steps below are
 those of the experiment, kept as its record; the modes they name no longer exist.
 
 ## What the sources say, and what is not known
