@@ -33,20 +33,14 @@ export function ToastHost() {
 
 export interface BannerProps {
   kind?: "info" | "warn" | "error";
-  role?: "alert" | "status"; // "alert" for a failure the user must hear at once (S 6)
   children: ComponentChildren; // the sentence; its first words in <b> as drawn
   actions?: ComponentChildren; // buttons under it
   focusable?: boolean; // tabindex=-1, for a banner that takes the focus (S 9b)
   bannerRef?: Ref<HTMLDivElement>;
 }
 
-export const Banner = ({ kind = "info", role, children, actions, focusable, bannerRef }: BannerProps) => (
-  <div
-    ref={bannerRef}
-    class={`banner${kind === "info" ? "" : ` ${kind}`}`}
-    role={role}
-    tabIndex={focusable ? -1 : undefined}
-  >
+export const Banner = ({ kind = "info", children, actions, focusable, bannerRef }: BannerProps) => (
+  <div ref={bannerRef} class={`banner${kind === "info" ? "" : ` ${kind}`}`} tabIndex={focusable ? -1 : undefined}>
     {kind !== "info" && <Icon name="warn" />}
     <div>
       {children}

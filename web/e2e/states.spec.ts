@@ -254,8 +254,9 @@ test("a failed start: the words and the first action follow the reason", async (
   ];
   for (const [reason, words, actions] of cases) {
     await show(page, { s: "failed", reason, detail: "cause", message: `This browser: ${words}.` });
-    const banner = page.getByRole("alert").filter({ hasText: "The engine didn't start." });
+    const banner = page.locator(".banner").filter({ hasText: "The engine didn't start." });
     await expect(banner, reason).toBeVisible();
+    await expect(page.getByRole("alert"), "the live region says it once; the banner is no alert (C 5)").toHaveCount(0);
     await expect(banner).toContainText(words);
     await expect(banner).toContainText("Your files are safe: you can still edit and download them.");
     await expect(banner).not.toContainText("cause"); // the developer's cause is never shown
@@ -264,7 +265,8 @@ test("a failed start: the words and the first action follow the reason", async (
     await expect(banner.getByRole("button", { name: "Download all (.zip)" })).toBeVisible();
   }
   await show(page, { s: "failed-twice", reason: "memory", detail: "x", message: "x" });
-  const twice = page.getByRole("alert").filter({ hasText: "The engine stopped after failing twice" });
+  const twice = page.locator(".banner").filter({ hasText: "The engine stopped after failing twice" });
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(twice).toContainText("(out of memory)");
   await expect(twice.getByRole("button", { name: "Reload the page" })).toBeVisible();
   await expect(twice.getByRole("button", { name: "Download all (.zip)" })).toBeVisible();
@@ -277,7 +279,7 @@ test("Download all in the failure banner is off while the store has no file, and
   await page.waitForFunction(() => window.__dofile.store.blocked === false);
   expect(await page.evaluate(() => window.__dofile.state.files.value.length)).toBe(0);
   await show(page, { s: "failed", reason: "download", detail: "", message: "x" });
-  const button = page.getByRole("alert").getByRole("button", { name: "Download all (.zip)" });
+  const button = page.locator(".banner").getByRole("button", { name: "Download all (.zip)" });
   await expect(button).toBeDisabled();
   await page.evaluate(() => window.__dofile.store.write("a.do", new TextEncoder().encode("display 1\n")));
   await expect(button).toBeEnabled();
