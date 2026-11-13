@@ -257,6 +257,21 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
   `check-pytest` and `check-numeric` are run by hand.
 - Probes check rc 0 only, not output.
 
+## Known flaky tests
+
+Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Actions run of the `web` workflow.
+- **WebKit cancels a fresh page's first navigation on Linux.** The first `page.goto` stays on `about:blank` until the test
+  times out. 4 sightings: runs 43274922368 (attempt 1), 43295867614, 43301235068 and 43354934486 (`[iphone]`
+  `sample.spec.ts:73`, on main `e8f16d2`, 60 s). Cause (likely, not reproduced): WebKit bug 325840. The 60 s timeout
+  (#31) caps the cost, and the test still fails; a one-retry in `web/e2e/fixtures.ts` is in its own pull request, not
+  merged. See `docs/prototype1-plan.md`, "Where things stand".
+- **`?snapshot=0` normal boot stalls at "Loading packages" in WebKit on Linux.** 2 sightings: runs 43295867614 (`[iphone]`)
+  and 43350296329 attempt 1 (`[webkit]`). Now skipped in the two WebKit projects (#34).
+- **`shell.spec.ts` "the toolbar does not move"** fails about 3 runs in 8 on the phone profile (the sightings' dates were not
+  recorded).
+- `editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main` (suspected cause and the test
+  changes: `docs/prototype1-plan.md`, post-merge review).
+
 ## Running them
 
 See `CLAUDE.md` (Commands) for the full list. In short: `uv run poe test` (Python, parallel, skips the slow comparison),

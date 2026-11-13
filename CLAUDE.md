@@ -117,10 +117,14 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   that holds a reformat commit named in `.git-blame-ignore-revs` is merged with a merge commit, since a rebase or squash gives the
   commit a new hash and the file would name one that is not on `main`. A merge to `main` deploys the web page to Cloudflare
   (`deploy.yml`).
+- CI (`.github/workflows/`): `ci.yml` (the Python matrix), `web.yml` (the web demo) and `lint.yml`. In `web.yml` the browsers
+  job is a matrix of four Playwright projects (chromium, firefox, webkit, iphone), each on its own runner with a 30-minute
+  limit. Every job also runs on a push to main, one run per commit, so a merge's tree is tested. `deploy.yml` does not wait for
+  those runs.
 - Status and next steps: `docs/phase1-plan.md` (done), `docs/phase2-plan.md` (web demo; the history and gaps are in
   `docs/phase2-history.md`, `docs/browser-engine.md` and `docs/lazy-matplotlib.md`), `docs/phase3-plan.md` (hosted multi-user MCP
   server). `docs/prototype1-plan.md` (the build plan and status for prototype 1 of the web demo: read it first when picking that
-  work up; steps 0 to 3.5 are merged, step 4 is built on pull request #17, not merged, and step 5 is on pull request #18 over it; `docs/prototype1-step3.5-plan.md` is the record of step 3.5, and `docs/web-engine-data-flow.md` explains the web engine's data flow, `docs/web-page-flows.md` the editor page's focus, runs, open files and log links). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
+  work up; steps 0 to 3.5 are merged, and so are steps 4 and 5 (pull requests #17 and #18) and the fix rounds after them, while the post-merge review is mostly open; `docs/prototype1-step3.5-plan.md` is the record of step 3.5, and `docs/web-engine-data-flow.md` explains the web engine's data flow, `docs/web-page-flows.md` the editor page's focus, runs, open files and log links). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
   `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`. Things knowingly left for later: `docs/icebox.md` (nothing in it blocks a merge). Formatting and linting (Biome, ruff; merged with
   step 3.5 by pull request #13): `docs/formatting-proposal.md`.
 - Web demo design (moodboard, flows, wireframes, mockups): `docs/design/`. `docs/design/SPEC.md` is the build spec for the web
