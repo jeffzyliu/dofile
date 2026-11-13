@@ -1219,8 +1219,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     save") moves once. A dialog that opens while the one before it is still handing the focus back (the next clash after
     "Keep mine", other-tab over a dialog) takes that one's opener as its own, and `<body>` is never an opener (a dialog
     opened with the focus on nothing gives it to `focusStable` when it closes). The
-    hand-off waits for a microtask and moves only a focus left on nothing, and the banners that take the focus (stopping,
-    waiting) take it in a layout effect: so from the stopping banner to the waiting one the focus goes straight across,
+    hand-off waits for a microtask and moves only a focus left on nothing, and the banners that take the focus (the stopping
+    banner's button, the waiting banner) take it in a layout effect: so from the stopping banner to the waiting one the focus goes straight across,
     never through the editor. The declined banner's "Start engine" moves the focus to the editor before the prompt
     opens, so the prompt gives it back there. The banners above the editor follow the
     `reason` of a failed start (`failedActions`): no-wasm "Browsers that work" and Download all; download and memory "Try
