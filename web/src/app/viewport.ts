@@ -17,6 +17,10 @@
 // the top: the pan is on screen for one frame. The command line avoids it altogether by taking the focus itself, with
 // preventScroll (log/CommandLine.tsx). Scrolling back also hides the editor's caret again, so the caret is scrolled into
 // the editor's visible part (above the keyboard) when the keyboard opens, and again once it has settled.
+// iOS also lets a drag scroll the window by the keyboard's height, from anything that cannot scroll, even with
+// overflow: hidden (a bar, a short pane, the page's edge); the unpan above would only snap it back each frame. So while
+// the keyboard is open a touchmove guard cancels a drag that no scroller under the finger can follow (CSS touch-action
+// was not enough on an iPhone). The guard and its limits: docs/phone-keyboard-experiment.md, "The drag guard".
 // A real keyboard cannot be tested here: test/app.test.ts drives this with a fake visualViewport, and e2e/keyboard.spec.ts
 // with a stand-in one.
 import { EditorView } from "@codemirror/view";
@@ -38,6 +42,27 @@ const isTextField = (el: Element | null | undefined) =>
     ),
   );
 
+/** Whether `el` can still scroll in the drag's direction: (dx, dy) is the finger's last move, so a finger moving up
+ *  (dy > 0) scrolls the content towards its end. Only the axis the finger mostly moves along counts. */
+const scrolls = (el: Element, dx: number, dy: number) => {
+  const y = Math.abs(dy) >= Math.abs(dx),
+    style = getComputedStyle(el),
+    [overflow, at, end, move] = y
+      ? [style.overflowY, el.scrollTop, el.scrollHeight - el.clientHeight, dy]
+      : [style.overflowX, el.scrollLeft, el.scrollWidth - el.clientWidth, dx];
+  return /auto|scroll/.test(overflow) && (move > 0 ? at < end - 1 : at > 0);
+};
+
+/** Whether the touch is on text that is selected, in the page or in a field (a drag of a selection handle): left to the browser. */
+const selecting = (target: Element) => {
+  const selection = globalThis.getSelection?.(),
+    field = target as HTMLInputElement; // a field's own selection is not in getSelection()
+  return (
+    (selection?.isCollapsed === false && selection.containsNode(target, true)) || // a caret alone is not a selection
+    (field.selectionStart ?? 0) !== (field.selectionEnd ?? 0)
+  );
+};
+
 /** Start watching. `enabled()` says whether to act (the phone layout); call the returned `update()` when it changes. */
 export function watchViewport({
   vv = globalThis.visualViewport,
@@ -53,6 +78,9 @@ export function watchViewport({
   panned = () => (globalThis.scrollY ?? 0) > 0,
   later = (fn: () => void, ms = 0) => setTimeout(fn, ms),
   reveal = revealCaret,
+  touch = globalThis.document,
+  canScroll = scrolls,
+  onSelection = selecting,
 }: {
   vv?: VisualViewport | null;
   root?: HTMLElement;
@@ -67,11 +95,41 @@ export function watchViewport({
   later?: (fn: () => void, ms?: number) => unknown;
   /** scroll the focused editor's caret into its visible part (the editor is above the keyboard) */
   reveal?: () => void;
+  /** where the touches are heard: the drag guard's listeners go here while the keyboard is open */
+  touch?: EventTarget;
+  /** whether an element can scroll in a drag's direction (see `scrolls`) */
+  canScroll?: (el: Element, dx: number, dy: number) => boolean;
+  /** whether a touch's target is selected text (see `selecting`) */
+  onSelection?: (target: Element) => boolean;
 } = {}): { update: () => void; stop: () => void } {
   if (!vv || !root) return { update: () => {}, stop: () => {} };
   let width = 0,
     tallest = 0, // the tallest layout viewport seen at this width
     quiet = 0; // counts the updates, so only the last one's timer reveals
+  // the drag guard (docs/phone-keyboard-experiment.md): a touchmove nothing under the finger can scroll with is cancelled
+  let x = 0,
+    y = 0,
+    guarding = false;
+  const start = (e: Event) => {
+    ({ clientX: x, clientY: y } = (e as TouchEvent).touches[0]);
+  };
+  const drag = (e: Event) => {
+    const { touches } = e as TouchEvent;
+    if (touches.length !== 1) return; // a pinch
+    const [dx, dy] = [x - touches[0].clientX, y - touches[0].clientY];
+    ({ clientX: x, clientY: y } = touches[0]);
+    const target = e.target as Element;
+    if (onSelection(target)) return;
+    for (let el: Element | null = target; el; el = el.parentElement) if (canScroll(el, dx, dy)) return;
+    e.preventDefault();
+  };
+  const guard = (on: boolean) => {
+    if (on === guarding) return;
+    guarding = on;
+    const listen = on ? "addEventListener" : "removeEventListener";
+    touch?.[listen]("touchstart", start, { passive: true, capture: true });
+    touch?.[listen]("touchmove", drag, { passive: false, capture: true });
+  };
   const update = () => {
     const h = layoutHeight(),
       w = layoutWidth();
@@ -89,6 +147,7 @@ export function watchViewport({
       root.style.setProperty("--vv-height", `${vv.height}px`);
       root.dataset.keyboard = "";
       if (vv.offsetTop > 0 || panned()) scrollTop();
+      guard(true);
       if (opening) reveal();
       const n = ++quiet;
       later(() => {
@@ -97,6 +156,7 @@ export function watchViewport({
     } else if ("keyboard" in root.dataset) {
       root.style.removeProperty("--vv-height");
       delete root.dataset.keyboard;
+      guard(false);
     }
   };
   // resize: the keyboard opens or closes; scroll: the browser pans the visible area (to the focused field); focus: a
@@ -110,6 +170,7 @@ export function watchViewport({
   return {
     update,
     stop: () => {
+      guard(false);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       root.removeEventListener?.("focusin", soon);

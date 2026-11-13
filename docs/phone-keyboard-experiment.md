@@ -230,3 +230,32 @@ in sight above the keyboard each time. If it does, `early` becomes the default a
 
 With the caret revealed through CodeMirror, the tester found `early` good. It became the page's behavior and the flags
 went (see the outcome at the top).
+
+## The drag guard (2026-11-13)
+
+Found after the rounds above, on an iPhone: with the keyboard open, a drag from almost anywhere panned the whole page up.
+iOS lets the window scroll by the keyboard's height even with `overflow: hidden` on `html` and `body`, and a drag
+that starts on something that cannot scroll (a bar, a short or empty pane, the page's edge, the scroll bar's strip)
+chains to it; the unpan above snaps it back each frame, so the page jittered. CSS `touch-action: none` on the root,
+body and `.app` was tried first and was not enough on the phone (the bars resisted but gave way after many tries; an
+empty log pane and the right edge panned at once).
+
+So `viewport.ts` adds, while `data-keyboard` is set (and removes when it clears or on `stop()`), a capturing,
+non-passive `touchmove` listener, with a passive `touchstart` listener for the finger's last place: React Aria's
+`usePreventScroll` approach. It calls `preventDefault()` unless:
+
+- the touch is inside an element (between the target and the root) with `overflow` auto or scroll that can still
+  scroll the way the finger moves, on the axis it moves along most (a finger up scrolls towards the end); at its end a
+  drag is cancelled, so it does not chain to the window;
+- there is more than one touch (a pinch; the page's zoom is off, but the browser's own is not touched);
+- the touch's target is in selected text (a non-collapsed `getSelection()` that contains it, or an `<input>` or
+  `<textarea>` target with a selected range, which `getSelection()` does not show), so a drag of a selection handle is
+  left to the browser.
+
+Not known without a device: whether iOS sends `touchmove` at all for a native selection handle or the caret loupe (the
+guard leaves such a touch alone if it does, and nothing is lost if it does not); whether the target of such a touch in
+the command line is the `<input>` itself; whether a horizontal drag on a command line that overflows is cancelled (an
+input is no `overflow` scroller; it is, with nothing lost, if iOS moves the text by a touch); whether Safari 27 honours
+`preventDefault()` on a `touchmove` that comes after the page has already started to scroll (React Aria relies on it).
+Unit tests (`app.test.ts`) and one e2e (`keyboard.spec.ts`) cover the
+logic with synthetic events; only an iPhone shows whether the page stays still.
