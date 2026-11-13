@@ -110,6 +110,12 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
   // Unsplit: one pane with Log first; the choice is kept
   await page.getByRole("button", { name: "Unsplit" }).click();
   await expect(output.getByRole("tab")).toHaveText(["Log", "Graph", "Data", "Results"]);
+  await expect(output.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
+  await output.getByRole("tab", { name: "Data" }).click();
+  // split again, then unsplit with the Data tab shown: the Log shows, not the tab left behind
+  await page.getByRole("button", { name: "Split" }).click();
+  await page.getByRole("button", { name: "Unsplit" }).click();
+  await expect(output.getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
   await output.getByRole("tab", { name: "Data" }).click();
   await expect(page.getByRole("tabpanel", { name: "Data" })).toBeVisible();
   await page.reload();

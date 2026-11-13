@@ -72,4 +72,4 @@ export const startFirst = (offer: StartOffer, what: string): string =>
 /** The command line's hint while it is off, by the offer (its placeholder, so it shows while the field is empty; Enter in
  *  the field says it in a toast). Draft words. */
 export const startHint = (offer: StartOffer): string =>
-  offer === "off" ? "The engine isn't running" : "Start the engine to run code";
+  offer === "off" ? "The engine isn't running" : "Start the engine to type commands";

@@ -10,7 +10,7 @@
 //    draft can be typed; the button is off, and Enter, or a press of the off button, says why in a toast (the words
 //    Ctrl/Cmd+Enter gives: editor/words.ts refusedRunWords).
 //    With no engine (start.ts) the field is off and keeps its text, which is usable again when the engine is back;
-//    empty, it shows the hint "Start the engine to run code", and Enter in it says the hint in a toast. The button is
+//    empty, it shows the hint "Start the engine to type commands", and Enter in it says the hint in a toast. The button is
 //    then "Start engine" (start.ts startEngine: the download prompt, a new try after a failed start, the take-over
 //    dialog), in words on a phone too, so it is wider there than the icon; no width is reserved for it, and the field
 //    takes what is left.
@@ -29,7 +29,7 @@
 //    App.tsx adds Split / Unsplit after them, always visible (icon and word; the word goes first when the head is very narrow). The phone hides the Log head, so the same logMenuItems()
 //    are the phone's "Log ⋯" button in the strip, shown on the Log view.
 //  - PhoneStrip: under the phone's top bar (PH), on every view (the phone has no status bar): after a run "r(111)",
-//    "line 17 · 0.38 s", "Mem 612 MB", "Go to line 17"; while running "Running lines 14–15", "Mem 612 MB"; otherwise the
+//    "line 17 · 0.38 s", "Engine 612 MB", "Go to line 17"; while running "Running lines 14–15", "Engine 612 MB"; otherwise the
 //    state's words (the status bar's). Its children go at its right end (App.tsx: "Files ⋯" on the Files view, "Log ⋯" on the Log view).
 import { signal } from "@preact/signals-core";
 import type { ComponentChildren } from "preact";
@@ -38,7 +38,7 @@ import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
 import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
-import { jumpLine, linesWords, memoryWords, refusedRunWords, seconds } from "../editor/words.ts";
+import { jumpLine, linesWords, memoryTitle, memoryWords, refusedRunWords, seconds } from "../editor/words.ts";
 import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
@@ -305,7 +305,7 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
             ? `${r.rc === 1 ? "before line" : "line"} ${r.line} · ${seconds(r.seconds)}`
             : `${r.rc === 0 ? "Last run: " : ""}${seconds(r.seconds)}`}
         </span>
-        {mem && <span>{memoryWords(mem, true)}</span>}
+        {mem && <span title={memoryTitle}>{memoryWords(mem, true)}</span>}
         <span class="spacer" />
         {jump !== null && (
           <button type="button" class="jump" onClick={() => editorCommands.goToLine(jump, r.path)}>
@@ -327,7 +327,7 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
   return (
     <div class="phone-strip">
       {parts}
-      {!(st.s === "ready" && r) && mem && <span>{memoryWords(mem, true)}</span>}
+      {!(st.s === "ready" && r) && mem && <span title={memoryTitle}>{memoryWords(mem, true)}</span>}
       {children}
     </div>
   );

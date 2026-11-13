@@ -316,15 +316,15 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 | State | `startOffer` | The toolbar's Run | A press, or Ctrl/Cmd+Enter | The command line |
 |---|---|---|---|---|
 | `checking-lock`, `checking-cache` (the page load) | null | "Run", off | the button and Ctrl/Cmd+Enter: toast "The engine is starting. Try again when it is ready." | on; "Run command", off; Enter and the off button: the same toast, and the text stays |
-| `none` (only `?test=manual`), `declined` | `prompt` | "Start engine" | `ask`: the download prompt (`asking`) | off, hint "Start the engine to run code"; "Start engine" |
+| `none` (only `?test=manual`), `declined` | `prompt` | "Start engine" | `ask`: the download prompt (`asking`) | off, hint "Start the engine to type commands"; "Start engine" |
 | `asking` | `prompt` | "Start engine" (under the blocking prompt) | `ask`: the prompt again, should another dialog have taken its place | the same |
 | `downloading`, `starting-list`, `starting-worker` | null | "Starting…", off | the "starting" toast | on; "Run command", off; Enter and the off button: the "starting" toast, and the text stays |
 | `ready` | null | "Run" | a run | on; "Run command" |
 | `running`, `breaking`, `waiting` | null | "Run", off | the button: nothing (a second Enter on a focused Run must stay silent). Ctrl/Cmd+Enter: toast "Run is not available until the current run ends" | on; "Run command", off; Enter and the off button: that toast, and the text stays |
-| `failed`, reason `download`, `memory` or `unknown` (the banner has "Try again") | `retry` | "Start engine" | `start`: a new try, as the banner's "Try again" | off, hint "Start the engine to run code"; "Start engine" |
+| `failed`, reason `download`, `memory` or `unknown` (the banner has "Try again") | `retry` | "Start engine" | `start`: a new try, as the banner's "Try again" | off, hint "Start the engine to type commands"; "Start engine" |
 | `failed`, reason `updated` or `no-wasm` (the banner says to reload, or which browsers work) | `off` | "Not started", off | toast "Run is not available: the engine isn't running in this tab"; no event reaches the machine | off, hint "The engine isn't running"; "Start engine", off: a press says the hint in a toast |
 | `failed-twice` | `off` | "Not started", off | the same | the same |
-| `other-tab-idle` | `take-over` | "Start engine" (hidden with the other run controls, and under the blocking dialog) | `ask`: the take-over dialog again (the state stays; no lock is taken, nothing starts). Only its "Use dofile in this tab" takes over | off, hint "Start the engine to run code"; "Start engine" |
+| `other-tab-idle` | `take-over` | "Start engine" (hidden with the other run controls, and under the blocking dialog) | `ask`: the take-over dialog again (the state stays; no lock is taken, nothing starts). Only its "Use dofile in this tab" takes over | off, hint "Start the engine to type commands"; "Start engine" |
 | `other-tab-taking` | `off` | "Start engine", off (hidden) | nothing started; the "isn't running in this tab" toast | off, hint "The engine isn't running"; "Start engine", off |
 
 "Off" in this table is never the `disabled` attribute. The toolbar's Run and the command line's button are
@@ -369,7 +369,7 @@ once, and held in `ready` it runs `help x` once.
   (`start.ts` `startFirst`): where "Start engine" can start it, "Start the engine to load wages.dta", "Start the engine
   to import survey.csv", "Start the engine to see help regress"; where nothing can start it from the page (`off`), "The
   engine isn't running: can't load wages.dta" (and "can't import survey.csv", "can't see help regress").
-- **A held Ctrl/Cmd+Enter acts once.** The editor ignores the key's repeats, and a dialog ignores a repeated Enter
+- **A held Ctrl/Cmd+Enter acts once.** The key works anywhere on the page (one window listener in `Editor.tsx`; not with a dialog open, and not in another text field, which keeps it) and ignores the key's repeats, and a dialog ignores a repeated Enter
   (`ui/Dialog.tsx`), so the repeats do not press the prompt's "Download", which has the focus once the prompt is open.
 
 ### Where a run starts
@@ -378,7 +378,7 @@ once, and held in `ready` it runs `help x` once.
 |---|---|---|
 | Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready`; off in every other state with an engine or one on its way: `aria-disabled`, never `disabled`, so a focused Run keeps the focus and a second Enter cannot reach Break. With no engine it is "Start engine" or "Not started" (the table above) and runs nothing. |
 | Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | enabled in `ready` with a selection; `disabled` in every other state, `running` too (not `aria-disabled`) |
-| Ctrl/Cmd+Enter in the editor | `runEither()`: with no engine `startEngine()`; else Run selection with a selection, else Run; held, it acts once | in any state: with no engine it does what "Start engine" does (the table above); in `ready` it runs; in the other states the run is refused (`run.ts` `requestRun`), and a toast says why by the state (`editor/words.ts` `refusedRunWords`) |
+| Ctrl/Cmd+Enter (anywhere on the page) | `runEither()`: with no engine `startEngine()`; else Run selection with a selection, else Run; held, it acts once | in any state: with no engine it does what "Start engine" does (the table above); in `ready` it runs; in the other states the run is refused (`run.ts` `requestRun`), and a toast says why by the state (`editor/words.ts` `refusedRunWords`) |
 | Break | `running`: `breakRun()` ("Break", or "Break (reset)" with no cross-origin isolation); `waiting`: "Reset now", `eng.reset()` with no question | disabled in `breaking` ("Stopping…") and when no run is on |
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile()`, then the banner is dismissed | enabled in `ready` with a text tab active |

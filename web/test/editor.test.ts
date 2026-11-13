@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { ChangeSet, Text } from "@codemirror/state";
 import { CSV_COLORS, csvFields } from "../src/app/editor/csv.ts";
 import { lineDeleted, onLastRun, onRunStart } from "../src/app/editor/errormark.ts";
-import { isSaveKey } from "../src/app/editor/keys.ts";
+import { isRunKey, isSaveKey } from "../src/app/editor/keys.ts";
 import {
   dropsBom,
   editorText,
@@ -763,8 +763,8 @@ test("the words: run-heads, lines, times, the last run, memory", () => {
   assert.equal(jumpLine(run({ rc: 1, line: 3 })), 3, "Break: the line it stopped before");
   assert.equal(jumpLine(run({ rc: 0 })), null);
   assert.equal(jumpLine(run({ kind: "command", path: undefined, rc: 111, line: 1 })), null);
-  assert.equal(memoryWords({ heap_bytes: 612e6, data_bytes: 0 }), "Memory 612 MB");
-  assert.equal(memoryWords({ heap_bytes: 1612e6, data_bytes: 0 }, true), "Mem 1,612 MB");
+  assert.equal(memoryWords({ heap_bytes: 612e6, data_bytes: 0 }), "Engine memory 612 MB");
+  assert.equal(memoryWords({ heap_bytes: 1612e6, data_bytes: 0 }, true), "Engine 1,612 MB");
 });
 
 test("the error mark's rule (editor/errormark.ts): the file's last run sets it, a new run of that file, a reset or the line's deletion clears it; a command or another file leaves it", () => {
@@ -964,4 +964,22 @@ test("a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none wh
     assert.equal(s, "The engine is starting. Try again when it is ready.");
   for (const s of by(["failed", "failed-twice", "other-tab-taking"]))
     assert.equal(s, "Run is not available: the engine isn't running in this tab");
+});
+
+test("which key press is Run (keys.ts isRunKey): Ctrl or Cmd with Enter, no Alt, no Shift, on any layout", () => {
+  const press = (o: object) => ({
+    key: "Enter",
+    code: "Enter",
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...o,
+  });
+  assert.equal(isRunKey(press({ ctrlKey: true })), true);
+  assert.equal(isRunKey(press({ metaKey: true })), true);
+  assert.equal(isRunKey(press({})), false, "Enter alone");
+  assert.equal(isRunKey(press({ ctrlKey: true, shiftKey: true })), false);
+  assert.equal(isRunKey(press({ ctrlKey: true, altKey: true })), false);
+  assert.equal(isRunKey(press({ ctrlKey: true, key: "s", code: "KeyS" })), false);
 });
