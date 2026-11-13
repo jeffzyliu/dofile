@@ -38,7 +38,7 @@ import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
 import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
-import { jumpLine, linesWords, memoryTitle, memoryWords, refusedRunWords, seconds } from "../editor/words.ts";
+import { jumpLine, linesWords, memoryTitle, memoryWords, refusedRunWords, seconds, ticking } from "../editor/words.ts";
 import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
@@ -320,7 +320,7 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
       <span>
         {bold && <b>{bold}</b>}
         {rest}
-        {(st.s === "breaking" || st.s === "waiting") && ` · ${seconds(since(st.t0))}`}
+        {(st.s === "breaking" || st.s === "waiting") && ` · ${ticking(since(st.t0))}`}
       </span>
     );
   }

@@ -510,7 +510,10 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
     await expect(stopping).toContainText(
       left > 0 ? `In ${left} s the engine is reset:` : "The engine is being reset now:",
     );
-    if (!phone(page)) await expect(page.locator(".statusbar")).toContainText(`resets in ${left} s`);
+    if (!phone(page)) {
+      await expect(page.locator(".statusbar")).toContainText(`resets in ${left} s`);
+      await expect(page.locator(".statusbar")).toContainText(` ${fmt(20_000 + 100 * k)}`); // the run's time, in `ticking`'s words
+    }
     if (k < 10) await expect(keep).toHaveCount(0);
     else if (k > 10) await expect(keep).toBeFocused();
     await page.clock.runFor(100);
