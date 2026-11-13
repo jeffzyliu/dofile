@@ -2073,7 +2073,15 @@ test("the phone keyboard where the browser shrinks the layout viewport: open whi
 
 /** A watched page: a visualViewport as iOS Safari reports it (the layout viewport stays 844 px tall), timers run by
  *  hand, and the calls to scroll the page back and to reveal the editor's caret, counted. */
-function keyboardPage({ phone = true } = {}) {
+function keyboardPage({
+  phone = true,
+  touch,
+  selected,
+}: {
+  phone?: boolean;
+  touch?: EventTarget;
+  selected?: Set<unknown>;
+} = {}) {
   const vv = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 });
   const vars = new Map<string, string>();
   const root = Object.assign(new EventTarget(), {
@@ -2083,7 +2091,7 @@ function keyboardPage({ phone = true } = {}) {
   let clock = 0,
     scrolled = false;
   const timers: { at: number; fn: () => void }[] = [];
-  const seen = { phone, unpans: 0, reveals: 0 }; // what the page's callbacks read and count
+  const seen = { phone, unpans: 0, reveals: 0, selected }; // what the page's callbacks read and count
   return {
     vars,
     seen,
@@ -2118,6 +2126,13 @@ function keyboardPage({ phone = true } = {}) {
       panned: () => scrolled,
       later: (fn, ms = 0) => timers.push({ at: clock + ms, fn }),
       reveal: () => seen.reveals++,
+      touch,
+      // the elements of the drag guard's test: `room` lists the directions an element can scroll
+      canScroll: (el, dx, dy) => {
+        const room = (el as unknown as { room?: number[] }).room;
+        return Boolean(room?.includes(Math.abs(dy) >= Math.abs(dx) ? Math.sign(dy) : 0));
+      },
+      onSelection: (t) => Boolean(seen.selected?.has(t)),
     }),
   };
 }
@@ -2144,6 +2159,52 @@ test("the phone keyboard: Safari's pan is scrolled back while the keyboard is op
   p.move(508, 120);
   assert.equal(p.seen.unpans, 3, "off the phone");
   p.stop();
+});
+
+test("the phone keyboard: the drag guard cancels a touchmove that no scroller under the finger can follow, only while the keyboard is open", () => {
+  // elements as a chain of parents; `room` says which of them can scroll towards the end (+1), the start (-1), or neither
+  const page = { parentElement: null as unknown },
+    bar = { parentElement: page },
+    pane = { parentElement: page, room: [-1, 1] },
+    top = { parentElement: page, room: [1] }, // at its start: it can only go on
+    touch = new EventTarget(),
+    selected = new Set<unknown>(),
+    p = keyboardPage({ touch, selected });
+  // a touchstart at (x0, y0), then a touchmove to (x1, y1) with `touches` fingers; whether the touchmove was cancelled
+  const drag = (target: unknown, [x0, y0, x1, y1]: number[], touches = 1) => {
+    const send = (type: string, x: number, y: number) => {
+      const e = new Event(type, { cancelable: true });
+      const list = Array.from({ length: touches }, () => ({ clientX: x, clientY: y }));
+      Object.defineProperties(e, { target: { value: target }, touches: { value: list } });
+      touch.dispatchEvent(e);
+      return e;
+    };
+    send("touchstart", x0, y0);
+    return send("touchmove", x1, y1).defaultPrevented;
+  };
+  const up = [100, 300, 100, 250]; // the finger moves up: dy > 0
+  const down = [100, 250, 100, 300];
+  const across = [200, 300, 150, 295]; // left, a little up: dx > 0
+
+  assert.equal(drag(bar, up), false, "no keyboard: left alone");
+  p.move(508);
+  assert.equal(drag(bar, up), true, "a bar cannot scroll");
+  assert.equal(drag(page, down), true, "nor the page");
+  assert.equal(drag(pane, up), false, "a pane with room towards its end");
+  assert.equal(drag(pane, down), false, "and towards its start");
+  assert.equal(drag(top, up), false);
+  assert.equal(drag(top, down), true, "a pane at its start, dragged further");
+  assert.equal(drag(pane, across), true, "a pane that scrolls up and down, dragged sideways");
+  assert.equal(drag(bar, up, 2), false, "a pinch (two touches)");
+  selected.add(bar);
+  assert.equal(drag(bar, up), false, "selected text (a selection handle)");
+  selected.delete(bar);
+  p.move(844); // closed
+  assert.equal(drag(bar, up), false, "no longer guarded");
+  p.move(508);
+  assert.equal(drag(bar, up), true, "guarded again");
+  p.stop();
+  assert.equal(drag(bar, up), false, "stopped");
 });
 
 test("the phone keyboard: the editor's caret is revealed at once when the keyboard opens and again once it has settled, not after it closes", () => {

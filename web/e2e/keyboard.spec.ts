@@ -175,3 +175,74 @@ for (const tap of ["a low line", "an empty line", "the last line"] as const)
     expect((await caret()).shown).toBe(true);
     expect((await caret()).bottom).toBeGreaterThan(300); // just above the keyboard, not further
   });
+
+// While the keyboard is open a drag that no scroller under the finger can follow is cancelled (the drag guard,
+// app/viewport.ts), so iOS does not pan the page by the keyboard's height. Synthetic events: that Safari then does not
+// pan is for the real iPhone. The stand-in visualViewport plays the keyboard, as above; the guard is on only after
+// viewport.ts sees the keyboard open.
+test("with the keyboard open a touchmove is cancelled unless a scroller under the finger can follow it, and not after it closes", async ({
+  page,
+}) => {
+  await page.addInitScript((height) => {
+    const vv = Object.assign(new EventTarget(), { height, width: 390, offsetTop: 0, offsetLeft: 0, scale: 1 });
+    Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
+    (window as any).__vv = vv;
+  }, PHONE.height);
+  await open(page);
+  await page.evaluate(() => {
+    const box = document.createElement("div"); // a scroller with room, over a bar's place
+    box.id = "scroller";
+    box.style.cssText = "position:fixed;top:60px;left:0;width:100px;height:50px;overflow-y:auto";
+    box.innerHTML = '<div style="height:500px"></div>';
+    document.body.append(box);
+  });
+  /** Whether a touchmove on `sel` that moves the finger by `dy` px (up when positive) was cancelled. */
+  const cancelled = (sel: string, dy: number) =>
+    page.evaluate(
+      ([s, d]) => {
+        const target = document.querySelector(s as string)!;
+        // a plain Event with a `touches` list: WebKit has no Touch constructor and Firefox no TouchEvent
+        const fire = (type: string, y: number) => {
+          const e = new Event(type, { bubbles: true, cancelable: true });
+          Object.defineProperty(e, "touches", { value: [{ clientX: 50, clientY: y }] });
+          target.dispatchEvent(e);
+          return e.defaultPrevented;
+        };
+        fire("touchstart", 300);
+        return fire("touchmove", 300 - (d as number));
+      },
+      [sel, dy],
+    );
+  expect(await cancelled(".topbar", 40)).toBe(false); // no keyboard yet
+  await page.evaluate(() => {
+    const vv = (window as any).__vv;
+    vv.height = 400;
+    vv.dispatchEvent(new Event("resize"));
+  });
+  expect(await page.evaluate(() => "keyboard" in document.documentElement.dataset)).toBe(true);
+  expect(await cancelled(".topbar", 40)).toBe(true); // a bar cannot scroll
+  expect(await cancelled("html", -40)).toBe(true); // nor the page's edge
+  expect(await cancelled("#scroller", 40)).toBe(false); // room to go on
+  expect(await cancelled("#scroller", -40)).toBe(true); // at its start, dragged further
+  // selected text (a selection handle's drag) is left to the browser; a caret alone is not a selection
+  await page.evaluate(() => getSelection()!.selectAllChildren(document.querySelector(".topbar")!));
+  expect(await cancelled(".topbar", 40)).toBe(false);
+  await page.evaluate(() => getSelection()!.collapseToStart());
+  expect(await cancelled(".topbar", 40)).toBe(true);
+  // the same in a text field, whose selection getSelection() does not show
+  await page.evaluate(() => {
+    const input = Object.assign(document.createElement("input"), { id: "field", value: "display 1" });
+    document.body.append(input);
+    input.setSelectionRange(0, 3);
+  });
+  expect(await cancelled("#field", 40)).toBe(false);
+  await page.evaluate(() => (document.getElementById("field") as HTMLInputElement).setSelectionRange(3, 3));
+  expect(await cancelled("#field", 40)).toBe(true);
+  await page.evaluate(() => {
+    const vv = (window as any).__vv;
+    vv.height = 844;
+    vv.dispatchEvent(new Event("resize"));
+  });
+  expect(await page.evaluate(() => "keyboard" in document.documentElement.dataset)).toBe(false);
+  expect(await cancelled(".topbar", 40)).toBe(false);
+});
