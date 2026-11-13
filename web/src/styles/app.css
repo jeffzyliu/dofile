@@ -18,8 +18,9 @@
 /* The page itself never scrolls or bounces; only panes scroll. .app is fixed to the window, so the document has no
    height of its own to scroll, whatever made an iPhone scroll the page a few px before (likely the 100dvh grid in the
    flow against Safari's toolbars and the tab bar's safe-area padding; an emulated iPhone does not show it). While a
-   phone's keyboard is open (app/viewport.ts sets data-keyboard and the --vv-* variables) .app fills only the area above
-   the keyboard, and the tab bar is hidden, so the command line sits right on the keyboard. */
+   phone's keyboard is open (app/viewport.ts sets data-keyboard and --vv-height) .app fills only the area above the
+   keyboard, from the top (viewport.ts scrolls the browser's pan back), and the tab bar is hidden, so the command line
+   sits right on the keyboard. */
 html,
 body {
   overflow: hidden;
@@ -34,29 +35,7 @@ body {
 }
 :root[data-keyboard] .app {
   bottom: auto;
-  top: var(--vv-top, 0px);
   height: var(--vv-height, 100%);
-}
-/* The keyboard experiment (app/viewport.ts, docs/phone-keyboard-experiment.md; <html data-kb> only with ?kb=…, so none
-   of this applies without it). ?kb=transform moves .app by a transform instead of `top`. A transformed .app is the
-   containing block of its fixed children: the toasts (whose phone rules count from the layout viewport's top, adding
-   --vv-top) and the full-size graph (.viewer, inset: 0). So the toast takes --vv-top as 0 there and its place counts from
-   .app's top, the visible area's; the graph view fills .app, which is the visible area (with `top` it fills the layout
-   viewport, which holds the visible area: either way the visible area is covered). In height, unpan and
-   pre, viewport.ts keeps --vv-top at 0, so the rules above need nothing. ?slide eases .app to its place. */
-:root[data-kb="transform"][data-keyboard] .app {
-  top: 0;
-  transform: translateY(var(--vv-top, 0px));
-}
-:root[data-kb="transform"][data-keyboard] .app .toasts {
-  --vv-top: 0px;
-}
-@media (prefers-reduced-motion: no-preference) {
-  :root[data-kb-slide] .app {
-    transition:
-      top 0.2s ease-out,
-      transform 0.2s ease-out;
-  }
 }
 :root[data-keyboard] .app[data-layout="phone"] .views {
   display: none;
@@ -1174,14 +1153,14 @@ input.filter::placeholder {
   bottom: calc(61px + env(safe-area-inset-bottom, 0px) + var(--s2));
 }
 :root[data-keyboard] .app[data-layout="phone"] .toasts {
-  top: calc(var(--vv-top) + var(--vv-height) - var(--s2));
+  top: calc(var(--vv-height) - var(--s2));
 }
 .app[data-layout="phone"]:has(.log-pane:not([hidden])) .toasts {
   bottom: calc(var(--cmdline-h) + 61px + env(safe-area-inset-bottom, 0px) + var(--s2));
 }
 :root[data-keyboard] .app[data-layout="phone"]:has(.log-pane:not([hidden])) .toasts {
   bottom: auto;
-  top: calc(var(--vv-top) + var(--vv-height) - var(--cmdline-h) - var(--s2));
+  top: calc(var(--vv-height) - var(--cmdline-h) - var(--s2));
 }
 /* a phone zooms in on a focused text field under 16 px: the editor's text and its numbers too, so they stay in line */
 @media (max-width: 699.98px) {

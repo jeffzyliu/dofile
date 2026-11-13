@@ -558,19 +558,18 @@ test("phone: the toast is above the command line and the tab bar, and above the 
   const closed = await rects();
   expect(closed.toast!.bottom).toBeLessThanOrEqual(closed.cmdline!.top);
   expect(closed.toast!.bottom).toBeLessThanOrEqual(closed.views!.top);
-  // the keyboard: the visible area is the top 400 px, panned 100 px down
+  // the keyboard: the visible area is the top 400 px
   await page.evaluate(() => {
     const root = document.documentElement;
     root.style.setProperty("--vv-height", "400px");
-    root.style.setProperty("--vv-top", "100px");
     root.dataset.keyboard = "";
   });
   await settled(page);
   const open = await rects();
   expect(open.views).toBeNull(); // the tab bar is hidden
-  expect(open.cmdline!.bottom).toBeCloseTo(500, 0); // the command line sits at the visible area's foot
+  expect(open.cmdline!.bottom).toBeCloseTo(400, 0); // the command line sits at the visible area's foot
   expect(open.toast!.bottom).toBeLessThanOrEqual(open.cmdline!.top);
-  expect(open.toast!.top).toBeGreaterThanOrEqual(100);
+  expect(open.toast!.top).toBeGreaterThanOrEqual(0);
 });
 
 test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ menus, the Editor and Log views with a nested do's note), the shortcuts still stated; shown on the desktop", async ({

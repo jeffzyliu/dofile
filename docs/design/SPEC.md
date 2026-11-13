@@ -1378,12 +1378,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   height when the on-screen keyboard opens (only the visual viewport shrinks; the viewport meta sets no
   `interactive-widget`, so Android keeps that default), so on a phone `app/viewport.ts` follows `window.visualViewport`:
   while it is shorter than the layout viewport by more than 120 px at a zoom of 1, `<html data-keyboard>` is set with
-  `--vv-height` and `--vv-top`, `.app` takes that area, the tab bar is hidden, so the command line sits right above the
+  `--vv-height`, `.app` takes that height from the top, the tab bar is hidden, so the command line sits right above the
   keyboard, and the toast goes above the command line at that area's foot. A browser that shrinks the layout viewport
   instead counts the keyboard open while a text field has the focus and the page is more than 120 px shorter than its
-  tallest at that width. An experiment compares other ways to follow the keyboard on a real iPhone (`?kb=transform`,
-  `height`, `unpan`, `pre`, `focus`, `?slide`, and the event overlay `?kblog`; `docs/phone-keyboard-experiment.md`): the
-  default, what this paragraph describes, is unchanged until its result decides. The editor page's viewport meta has `minimum-scale=1, maximum-scale=1, user-scalable=no` (the maintainer's choice on 2026-11-12, to steady the phone keyboard; it limits pinch zoom, and axe's `meta-viewport` would flag it if axe ran on the editor). The theme button's labels for light and dark follow the spec's for system:
+  tallest at that width. Safari pans the page up to a focused field before the page hears of it, so while the keyboard
+  is open a pan is scrolled straight back; the phone's command line takes a tap's focus itself with `preventScroll`, so
+  it is never panned; and the editor's caret is scrolled above the keyboard when it opens and again once it has settled
+  (iPhone measurements: `docs/phone-keyboard-experiment.md`; `?kblog` shows the viewport's events on screen). The editor page's viewport meta has `minimum-scale=1, maximum-scale=1, user-scalable=no` (the maintainer's choice on 2026-11-12, to steady the phone keyboard; it limits pinch zoom, and axe's `meta-viewport` would flag it if axe ran on the editor). The theme button's labels for light and dark follow the spec's for system:
   "Theme: light. Press for dark, then to follow the system." and "Theme: dark. Press to follow the system, then light."
   A tab controls its panel only while selected (`aria-controls`).
 - **Screen wake lock (`app/wakelock.ts`).** On a phone a locked screen suspends the page and the browser may discard it,

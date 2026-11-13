@@ -1,10 +1,17 @@
 # The phone keyboard experiment
 
-On an iPhone the editor page jumps when the on-screen keyboard opens, mostly after a tap in the bottom half of the
-screen. This page is for one sitting with the phone. It compares six ways for the page to follow the keyboard and
-records the order of the browser's events on screen. Nothing here can be tested without a real iPhone: the e2e iPhone
-profile has no keyboard. The code is `web/src/app/viewport.ts` (the strategies), `web/src/app/kblog.ts` (the overlay)
-and `web/src/styles/app.css`. Without the flags the page behaves as before.
+On an iPhone the editor page jumped when the on-screen keyboard opened, mostly after a tap in the bottom half of the
+screen. This page is the record of three rounds with an iPhone that compared ways for the page to follow the keyboard,
+with the order of the browser's events shown on screen. Nothing here can be tested without a real iPhone: the e2e iPhone
+profile has no keyboard.
+
+**Outcome (2026-11-12, iOS 27.0.1): round 3's `early` is the page's behavior, and the `?kb=` and `?slide` flags are
+gone.** The command line takes a tap's focus itself with `preventScroll`, so Safari does not pan; elsewhere a pan is
+scrolled straight back (one frame on screen, about 3 px seen), `.app` stays at the top with the height of the visible
+area, and the editor's caret is scrolled above the keyboard through CodeMirror when the keyboard opens and again once it
+has settled. The code: `web/src/app/viewport.ts`, `web/src/app/log/CommandLine.tsx` and `web/src/styles/app.css`. The
+overlay stays behind `?kblog` (`web/src/app/kblog.ts`) for a later check on a new iOS. The flags and steps below are
+those of the experiment, kept as its record; the modes they name no longer exist.
 
 ## What the sources say, and what is not known
 
