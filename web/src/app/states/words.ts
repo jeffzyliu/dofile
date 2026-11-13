@@ -8,7 +8,7 @@ import type { EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../
 /** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by default). The page's words
  *  count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
 export const GRACE_S = BREAK_GRACE_MS / 1000;
-/** The stopping banner (S 9) shows once the Break has been pending this long: a run that stops at once never shows it. */
+/** The stopping banner's "Don't reset: wait for it" (S 9) and its focus come once the Break has been pending this long (SPEC OQ-21). */
 export const STOPPING_AFTER_S = 1;
 
 /** A time as the drawings write it: "6 s", "7.1 s" (under 10 s one decimal, else whole seconds). */

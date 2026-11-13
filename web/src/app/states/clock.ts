@@ -1,4 +1,4 @@
-// STEP 4d: a view that shows a running time (the download's, a stage's, the run's, the Break countdown) re-renders on a timer.
+// STEP 4d: the download dialog's times re-render on this timer; the run's and the Break's times use editor/clock.ts's `now`.
 // The machine has no clock (its events carry the time); a view may read Date.now().
 import { useEffect, useState } from "preact/hooks";
 
