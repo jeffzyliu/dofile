@@ -1,8 +1,9 @@
 name: web
 
 # The web demo (web/): the engine in Pyodide, the page, the memory snapshot. The Python suite is ci.yml.
-# Pull requests run all jobs. A push to main runs only the fast one (`unit`); e2e and snapshot are not repeated after the
-# merge (branch protection: require up-to-date branches).
+# Pull requests and pushes to main both run all jobs. The run on main tests what the merge made: a pull request may be
+# merged from a branch that is behind main (the ruleset does not require it to be up to date), and a merge commit is a
+# tree no pull request ran. deploy.yml does not wait for this run.
 on:
   push:
     branches: [main]
@@ -10,7 +11,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A new push to a pull request replaces that pull request's run. A push to main (or a manual run) has a group of its
+  # own, by commit, so it is never cancelled and never waits behind another: every merge gets a finished result.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 defaults:
@@ -86,7 +89,7 @@ jobs:
   e2e:
     name: browsers (Playwright, ${{ matrix.project }})
     needs: changes
-    if: github.event_name != 'push' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'   # always 'true' on a push to main
     runs-on: ubuntu-latest
     timeout-minutes: 30   # a project takes well under 10 minutes; GitHub's default limit is 6 hours
     # One job per Playwright project, each on its own runner with Playwright's default workers (2 on this runner): the four
@@ -126,7 +129,7 @@ jobs:
   snapshot:
     name: memory snapshot
     needs: changes
-    if: github.event_name != 'push' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'   # always 'true' on a push to main
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
