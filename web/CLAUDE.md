@@ -19,6 +19,7 @@ npm run snapshot          # the Pyodide memory snapshot the page starts from; `n
 npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide (~4 min; --normal: no snapshot; --cases a,b)
 npm run check-numeric     # e()/r() of all 98 Stata 14 programs at full precision (~4 min; the diff: header of scripts/compare_numeric.py)
 npm run check-pytest [-- --ios]        # OpenDTA's unit tests inside Pyodide (~2 min; --ios: an iPhone user agent, so Pyodide creates no trampoline; compare with CPython: scripts/compare-pytest.mjs)
+npm run test-counts [unit|e2e]   # test counts per file and in total (docs/test-map.md keeps none); unit runs the tests (needs the wheel), e2e is `playwright test --list`
 npm run check             # Biome (format, import order, lint errors), then TypeScript
 npm run format            # Biome: fix the layout and the import order, apply the safe lint fixes
 npm run lint:strict       # Biome as CI runs it: warnings fail too (npm run lint: the findings only)
