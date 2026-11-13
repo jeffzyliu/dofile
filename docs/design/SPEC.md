@@ -37,9 +37,10 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   stop is visible. The log is `role="log"`. The status bar is not a live region (its timer would be read every second): one
   hidden `role="status" aria-live="polite"` region says each change once ("Run started", "Run finished: error r(111) at line
   17", "Engine reset", "Engine ready", each start-up stage, each toast). Meaning is never color alone.
-- **Forced colors, touch, motion:** keep the forced-colors block at the end of `ui.css` and add new bars, icons and rings to
-  it. (Step 4's parts put their forced-colors rules in their own blocks of `app.css` instead: an open question, plan, "Step 4: decisions and open questions",
-  C 17.) Under `pointer: coarse`, rows and menu items are 44 px, the row ⋯ 44 px square, the tab × 32 px. Hover styles only
+- **Forced colors, touch, motion:** the primitives' forced-colors rules (icons, dots, bars, rings, the menu's switch) are in
+  the blocks at the end of `ui.css`; each part's own rules (the shell's fold button, the Results view's marks, the Files pane's drop target, the editor's
+  selected line) are in a `@media (forced-colors: active)` block beside that part in `app.css`. A new part follows the same
+  pattern: its rules in a block beside it, and a new primitive's in `ui.css`'s. Under `pointer: coarse`, rows and menu items are 44 px, the row ⋯ 44 px square, the tab × 32 px. Hover styles only
   under `hover: hover`. Reduced motion stops the spinner and the toast's animation.
 - **Glyphs:** ⌘ ▶ ■ ● ▾ ⋯ are SVG icons (`.ico`), never typed. Key chips say ⌘ on a Mac, Ctrl elsewhere; a disabled button
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
