@@ -104,7 +104,7 @@ import { StatusBar } from "./editor/StatusBar";
 import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
-import { FilesBody, FilesHead, fileMenuItems } from "./files/FilesPane";
+import { FilesBody, FilesHead, fileMenuItems, focusTree } from "./files/FilesPane";
 import { downloadAll } from "./files.ts";
 import { CommandLine, LogActions, logMenuItems, PhoneStrip } from "./log/CommandLine";
 import { LogView } from "./log/LogView";
@@ -242,16 +242,7 @@ let filesToggle: HTMLButtonElement | null = null;
 function foldFiles(open: boolean) {
   filesOpen.value = open;
   if (!open) filesToggle?.focus();
-  else
-    setTimeout(() => {
-      // after the render that shows the pane
-      const pane = document.getElementById("files-pane");
-      (
-        pane?.querySelector<HTMLElement>('[role="tree"] [tabindex="0"]') ??
-        pane?.querySelector<HTMLElement>("button:not([disabled]), [href], input") ??
-        pane
-      )?.focus();
-    });
+  else focusTree(true); // the tree's row in the tab order, from the render that shows the pane
 }
 
 /** Esc in the unfolded file list folds it, unless something in the list used that Esc (a rename, 4a: preventDefault). */

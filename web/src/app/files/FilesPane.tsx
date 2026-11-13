@@ -29,7 +29,7 @@ import { downloadAll } from "../files.ts";
 import { restoreSample } from "../sample.ts";
 import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
 import { store } from "../store.ts";
-import { fromNothing, useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
+import { fromAnywhere, fromNothing, useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem, openMenu } from "../ui/Menu";
 import {
@@ -50,8 +50,9 @@ import { formatSize, joinPath, NAME_NOT_ALLOWED, nameProblem, parentOf, type Row
 
 const folded = signal<ReadonlySet<string>>(new Set()); // the folded folders
 const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
-// the row waiting for the focus: it takes it when it is drawn (TreeRow), then this is null again
-export const focusWanted = signal<string | null>(null); // exported for the test hook (main.tsx)
+// the focus request (docs/web-page-flows.md, section 1): the row of `path` takes it when it is drawn (TreeRow), or with
+// no path the row in the tab order (with no rows, the head's File actions); `anywhere`: also from outside the tree
+export const focusWanted = signal<{ path: string | null; anywhere?: boolean } | null>(null); // the test hook reads it
 interface Renaming {
   path: string;
   problem: string | null;
@@ -61,12 +62,31 @@ const renaming = signal<Renaming | null>(null);
 
 let pickFiles: HTMLInputElement | null = null; // the hidden file inputs
 let pickFolder: HTMLInputElement | null = null;
+let treeList: HTMLUListElement | null = null; // the tree, drawn while it has rows
+const setTree = (el: HTMLUListElement | null) => {
+  treeList = el;
+};
+
+/** Whether the tree is on screen with its rows (not folded away, not on another phone view, not empty). */
+export const treeShown = () => (treeList?.getClientRects().length ?? 0) > 0;
 
 /** Make `path` the row in the tab order and have it take the focus when it is drawn (at once for a row on screen; after
  *  a rename, once the store has been listed again), unless the focus has gone out of the tree by then (TreeRow). */
 function focusRow(path: string) {
   rovingPath.value = path;
-  focusWanted.value = path;
+  focusWanted.value = { path };
+}
+
+/** Have the tree's row in the tab order take the focus when it is drawn (App's Files button with `anywhere`, a closed
+ *  tab, a delete once the list was read again). */
+export function focusTree(anywhere = false) {
+  focusWanted.value = { path: null, anywhere };
+}
+
+/** A visitor focused or clicked the row `path`: it is the roving one, and a request for another row ends there. */
+function rove(path: string) {
+  rovingPath.value = path;
+  if (focusWanted.value && focusWanted.value.path !== path) focusWanted.value = null;
 }
 
 const fail = (what: string, said: string) => (e: unknown) => {
@@ -84,6 +104,7 @@ function toggle(path: string, open?: boolean) {
 function startRename(path: string, andOpen = false) {
   renaming.value = { path, problem: null, andOpen };
   rovingPath.value = path;
+  focusWanted.value = null; // the field takes the focus: a waiting request ends
 }
 
 let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
@@ -177,11 +198,24 @@ export const fileMenuItems = (): MenuItem[] => [
   },
 ];
 
-export const FilesHead = () => (
-  <MenuButton label="File actions" class="head-link icon" items={fileMenuItems}>
-    <Icon name="more" />
-  </MenuButton>
-);
+export function FilesHead() {
+  const button = useRef<HTMLButtonElement>(null);
+  const w = focusWanted.value;
+  // with no rows a request for the row in the tab order comes here, the pane's first control
+  useFocusRequest(
+    w?.path === null && !files.value.length,
+    button,
+    () => {
+      focusWanted.value = null;
+    },
+    w?.anywhere ? fromAnywhere : fromNothing,
+  );
+  return (
+    <MenuButton ref={button} label="File actions" class="head-link icon" items={fileMenuItems}>
+      <Icon name="more" />
+    </MenuButton>
+  );
+}
 
 /** A row's menu (S 13; a folder's, OQ-21). */
 function rowItems(row: Row): MenuItem[] {
@@ -265,16 +299,18 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
   );
 }
 
-/** A row that focusRow asked for takes the focus once it is drawn, if it is still the roving one and the focus is free
- *  (on the page body, where the removed rename field leaves it, or in the tree); docs/web-page-flows.md, section 1. */
-function useRovingFocus(path: string, li: { current: HTMLElement | null }, renaming: boolean) {
+/** A row asked for (by its path, or as the row in the tab order) takes the focus once it is drawn, if the focus is free
+ *  (on the page body, where the removed rename field leaves it, or in the tree) or the request says `anywhere`;
+ *  docs/web-page-flows.md, section 1. */
+function useRovingFocus(path: string, li: { current: HTMLElement | null }, renaming: boolean, tabbable: boolean) {
+  const w = focusWanted.value;
   useFocusRequest(
-    focusWanted.value === path && !renaming, // a row being renamed keeps the request until the field is gone
+    !!w && (w.path === null ? tabbable : w.path === path) && !renaming, // a row being renamed waits for the field to go
     li,
     () => {
       focusWanted.value = null;
     },
-    (at) => rovingPath.value === path && (fromNothing(at) || !!li.current?.closest('[role="tree"]')?.contains(at)),
+    w?.anywhere ? fromAnywhere : (at) => fromNothing(at) || !!li.current?.closest('[role="tree"]')?.contains(at),
   );
 }
 
@@ -283,7 +319,7 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
   const open = !row.dir && activeTab.value === row.path;
   const r = renaming.value?.path === row.path ? renaming.value : null;
   const li = useRef<HTMLLIElement>(null);
-  useRovingFocus(row.path, li, r !== null);
+  useRovingFocus(row.path, li, r !== null, tabbable);
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor: at ? null : el, at, restore: el });
   const activate = () => {
@@ -352,11 +388,11 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
       aria-haspopup="menu"
       tabIndex={tabbable ? 0 : -1}
       onFocus={(e) => {
-        if (e.target === e.currentTarget) rovingPath.value = row.path;
+        if (e.target === e.currentTarget) rove(row.path);
       }}
       onClick={(e) => {
         if (r || (e.target as HTMLElement).closest(".rename-field")) return;
-        rovingPath.value = row.path;
+        rove(row.path);
         activate();
       }}
       onContextMenu={(e) => {
@@ -486,7 +522,7 @@ export function FilesBody() {
     <div class="files-body" ref={ref}>
       {rows.length > 0 && (
         // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the tree's rows are a list's items, as ui.css draws them (.files li)
-        <ul class="files" role="tree" aria-label="Files">
+        <ul class="files" role="tree" aria-label="Files" ref={setTree}>
           {rows.map((row) => (
             <TreeRow key={row.path} row={row} rows={rows} tabbable={row.path === tabbable} />
           ))}
