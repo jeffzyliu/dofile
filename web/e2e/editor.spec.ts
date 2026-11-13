@@ -829,6 +829,38 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
 
 // "Clear log…" asks first (SPEC 3.5, 3.10; log/ClearLogDialog.tsx): the head's "Clear…" button, and on a phone the strip's
 // "Log ⋯" menu item.
+test("the Output tabs by keyboard: each key moves the focus to the tab it selects; with Find open, the Log tab drawn again leaves the focus on the tab, not in Find's field", async ({
+  page,
+}) => {
+  test.skip(isPhone(page), "the unsplit Output tabs are the desktop's");
+  await page.goto("?test=manual");
+  await page.waitForFunction(() => "__dofile" in window);
+  await page.evaluate(() => {
+    window.__dofile.state.split.value = false;
+    window.__dofile.state.outputTab.value = "log";
+  });
+  await page.getByRole("button", { name: "Find" }).click();
+  const field = page.getByRole("searchbox", { name: "Find in the log" });
+  await expect(field).toBeFocused();
+  const tabs = page.getByRole("tablist", { name: "Output" });
+  const tab = (name: string) => tabs.getByRole("tab", { name });
+  await tab("Log").focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tab("Graph")).toBeFocused();
+  await expect(tab("Graph")).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("End");
+  await expect(tab("Results")).toBeFocused();
+  await page.keyboard.press("ArrowRight"); // wraps around
+  await expect(tab("Log")).toBeFocused();
+  await expect(field).toBeVisible(); // Find is still open, drawn again with the Log
+  await expect(field).not.toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(tab("Results")).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(tab("Log")).toBeFocused();
+  await expect(field).not.toBeFocused();
+});
+
 test("Clear log asks first: Cancel and Esc keep the log and the graphs, Clear log removes them and the head stays", async ({
   page,
 }) => {

@@ -192,7 +192,7 @@ export function MenuHost() {
   const pick = (item: Leaf, el: HTMLElement) => {
     if (item.disabled) return;
     if (item.keepOpen) {
-      el.focus(); // a tap does not focus a button in Safari: keep the focus on the item, as Enter does
+      el.focus(); // a tap does not focus a button in Safari (docs/web-page-flows.md, section 1): keep it on the item
       item.onSelect?.();
       return;
     }
