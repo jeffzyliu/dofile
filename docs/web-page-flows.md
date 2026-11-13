@@ -89,7 +89,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the menu's active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
 | `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
 | `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist (a click sets no request) | layout effect of the tab's render (`useFocusRequest`); the request ends there | the tab moved to, only while the focus is inside that tablist |
-| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new folder, the arrow keys) sets the roving path and the signal `focusWanted`; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and when a new one replaces it, a rename starts, or the visitor focuses or clicks another row | the row, only while the focus is on the page body or inside the tree (the tree's `role`), never from a visitor who clicked elsewhere |
+| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new folder, the arrow keys) sets the roving path and the signal `focusWanted`; `focusTree` (the Files button, Delete once the list is read again) sets a keyless request, taken by the row in the tab order, else File actions; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and when a new one replaces it, a rename starts, or the visitor focuses or clicks another row | the row, only while the focus is on the page body or inside the tree (the tree's `role`); on WebKit and the iPhone a click elsewhere leaves the focus on the body, so the row may take it (rule 7) |
 | `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | layout effect of the bar's render (`useFocusRequest`); once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
@@ -240,7 +240,7 @@ sequenceDiagram
 
 The three writes are made synchronously in the click handler, so one render takes them all and the request is taken
 before T runs. When Save resolves false
-(the store refused), the dialog closes, the tab stays and nothing calls `focusAfterClose`. T2 then gives the focus back
+(the store refused), the dialog closes, the tab stays and nothing calls `focusAfterClose`. T then gives the focus back
 to the opener (the tab).
 
 ### Phone variants

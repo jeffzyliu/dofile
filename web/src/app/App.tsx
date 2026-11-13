@@ -237,7 +237,7 @@ function Pane({ view, class: cls, label, children, ...rest }: PaneProps) {
 const filesOpen = signal(false);
 let filesToggle: HTMLButtonElement | null = null;
 
-/** Unfold the file list and move the focus into it (4a's tree: its row in the tab order; else the pane itself), or fold
+/** Unfold the file list and move the focus into it (4a's tree: its row in the tab order; else File actions), or fold
  *  it and give the focus back to the Files button. */
 function foldFiles(open: boolean) {
   filesOpen.value = open;
