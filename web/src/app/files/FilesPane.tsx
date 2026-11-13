@@ -24,7 +24,7 @@
 //    has the files (the store is blocked), uploads nothing. A drag that began in the page (a graph image) is no upload.
 // Files change through the store (actions.ts), never through the worker; a change lists the store again (files.ts).
 import { signal } from "@preact/signals";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { downloadAll } from "../files.ts";
 import { restoreSample } from "../sample.ts";
 import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
@@ -49,6 +49,8 @@ import { formatSize, joinPath, NAME_NOT_ALLOWED, nameProblem, parentOf, type Row
 
 const folded = signal<ReadonlySet<string>>(new Set()); // the folded folders
 const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
+// the row waiting for the focus: it takes it when it is drawn (TreeRow), then this is null again
+const focusWanted = signal<string | null>(null);
 interface Renaming {
   path: string;
   problem: string | null;
@@ -59,20 +61,11 @@ const renaming = signal<Renaming | null>(null);
 let pickFiles: HTMLInputElement | null = null; // the hidden file inputs
 let pickFolder: HTMLInputElement | null = null;
 
-const rowSelector = (path: string) => `.files [data-path="${CSS.escape(path)}"]`;
-
-/** Make `path` the row in the tab order and focus it once a render draws it (after a rename the row appears when the
- *  store has been listed again: up to about a second). */
-function focusRow(path: string, tries = 20) {
+/** Make `path` the row in the tab order and have it take the focus when it is drawn (at once for a row on screen; after
+ *  a rename, once the store has been listed again), unless the focus has gone out of the tree by then (TreeRow). */
+function focusRow(path: string) {
   rovingPath.value = path;
-  setTimeout(
-    () => {
-      const el = document.querySelector<HTMLElement>(rowSelector(path));
-      if (el) el.focus();
-      else if (tries > 0 && rovingPath.value === path) focusRow(path, tries - 1);
-    },
-    tries === 20 ? 0 : 50,
-  );
+  focusWanted.value = path;
 }
 
 const fail = (what: string, said: string) => (e: unknown) => {
@@ -279,6 +272,16 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
   const tab = tabs.value.find((t) => t.path === row.path);
   const open = !row.dir && activeTab.value === row.path;
   const r = renaming.value?.path === row.path ? renaming.value : null;
+  const li = useRef<HTMLLIElement>(null);
+  const wanted = focusWanted.value === row.path && !r;
+  useLayoutEffect(() => {
+    if (!wanted) return;
+    focusWanted.value = null;
+    // the focus is the visitor's once it is out of the tree (a click into the editor while the list was read): on the
+    // page (where it goes when the rename field is removed) or in the tree, the row takes it
+    const at = document.activeElement;
+    if (!at || at === document.body || li.current?.parentElement?.contains(at)) li.current?.focus();
+  }, [wanted]);
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor: at ? null : el, at, restore: el });
   const activate = () => {
@@ -336,10 +339,10 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
   const cls = [row.dir && "folder", open && "open", r && "renaming"].filter(Boolean).join(" ");
   return (
     <li
+      ref={li}
       role="treeitem"
       class={cls || undefined}
       style={row.depth ? { "--d": row.depth } : undefined}
-      data-path={row.path}
       title={r ? undefined : row.path}
       aria-level={row.depth + 1}
       aria-expanded={row.dir ? row.expanded : undefined}

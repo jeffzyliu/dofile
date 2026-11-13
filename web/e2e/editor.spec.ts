@@ -444,8 +444,7 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
     await expect
       .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => t.path)))
       .toEqual([to]);
-    // the rename is over when its row has the focus: the tree's focusRow keeps trying every 50 ms until the row is drawn,
-    // and a late try would take the focus from the editor that the test clicks next (and lose the character it types)
+    // the rename is over when its row has the focus (the row takes it when it is drawn)
     await expect(
       page
         .getByRole("tree", { name: "Files" })
