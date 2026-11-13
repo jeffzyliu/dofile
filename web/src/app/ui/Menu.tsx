@@ -163,25 +163,26 @@ export function MenuHost() {
 
   if (!m) return null;
   const items = typeof m.items === "function" ? m.items() : m.items;
-  const order = new Map<Leaf, number>(); // the items the arrow keys stop at, in the order they are drawn
+  const order = new Map<Leaf, number>(); // every item, the disabled ones too, in the order they are drawn
   const number = (list: MenuItem[]) => {
     for (const item of list)
       if (typeof item === "object" && "scroll" in item) number(item.scroll);
-      else if (item !== "rule" && !item.disabled) order.set(item, order.size);
+      else if (item !== "rule") order.set(item, order.size);
   };
   number(items);
-  const last = order.size - 1;
-  const at = Math.min(nav?.of === m ? nav.at : m.focus === "last" ? last : 0, last);
+  const on = [...order].flatMap(([item, n]) => (item.disabled ? [] : [n])); // the ones the arrow keys stop at
+  // The active item is a position among all the items: another item turning enabled or disabled leaves it where it is
+  const at = nav?.of === m ? nav.at : ((m.focus === "last" ? on.at(-1) : on[0]) ?? -1);
   const onKeyDown = (e: KeyboardEvent) => {
-    const go = (n: number) => {
+    const go = (n: number | undefined) => {
       e.preventDefault();
-      if (order.size) setNav({ of: m, at: (n + order.size) % order.size });
+      if (n !== undefined) setNav({ of: m, at: n });
     };
     const plain = !(e.altKey || e.ctrlKey || e.metaKey); // Alt+Left is the browser's Back; Esc and Tab are as they were
-    if (plain && e.key === "ArrowDown") go(at + 1);
-    else if (plain && e.key === "ArrowUp") go(at - 1);
-    else if (plain && e.key === "Home") go(0);
-    else if (plain && e.key === "End") go(last);
+    if (plain && e.key === "ArrowDown") go(on.find((n) => n > at) ?? on[0]);
+    else if (plain && e.key === "ArrowUp") go(on.findLast((n) => n < at) ?? on.at(-1));
+    else if (plain && e.key === "Home") go(on[0]);
+    else if (plain && e.key === "End") go(on.at(-1));
     else if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -213,7 +214,7 @@ export function MenuHost() {
         placed={placed === m}
         onFocus={() => {
           const n = order.get(item);
-          if (n !== undefined && n !== at) setNav({ of: m, at: n });
+          if (n !== undefined && n !== at) setNav({ of: m, at: n }); // any item, a disabled one a click focused too
         }}
         onPick={pick}
       />
