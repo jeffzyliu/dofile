@@ -16,16 +16,17 @@
 //  - StorageBanner { b: "storage" } above the editor (S 19).
 //  - DownloadFailedBanner { b: "download-failed" } above the editor (on a phone on every view; no role="alert": files.ts
 //    says it once in the live region).
-// A banner with controls hands the focus on when it goes with the focus inside it (focus.ts useFocusOnLeave); a banner that
-// takes the focus takes it in a useLayoutEffect, so the hand-off from the banner it replaces finds the focus taken.
+// Focus: a banner with controls hands it on as it goes (focus.ts useFocusOnLeave); one that takes it does so on mount
+// (useFocusOnMount). docs/web-page-flows.md, section 1.
 // The words the spec does not give are drafts (words.ts; SPEC section 8, "Step 4d: draft words").
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useRef } from "preact/hooks";
 import type { BannerOf } from "../banners";
 import { editorCommands } from "../editor/commands.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
 import { dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
+import { useFocusOnMount } from "../ui/focus-hooks.ts";
 import { Banner } from "../ui/Live";
 import { useNow } from "./clock.ts";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
@@ -188,7 +189,7 @@ function StoppingBanner({ resetAt }: { resetAt: number }) {
   const left = Math.max(0, Math.ceil((resetAt - now) / 1000));
   const button = useRef<HTMLButtonElement>(null);
   const ref = useFocusOnLeave<HTMLDivElement>();
-  useLayoutEffect(() => button.current?.focus(), []); // in a layout effect, so focus.ts finds the focus taken
+  useFocusOnMount(button);
   return (
     <Banner
       kind="warn"
@@ -215,7 +216,7 @@ function StoppingBanner({ resetAt }: { resetAt: number }) {
 
 function WaitingBanner() {
   const box = useFocusOnLeave<HTMLDivElement>();
-  useLayoutEffect(() => box.current?.focus(), []); // in a layout effect, so focus.ts finds the focus taken
+  useFocusOnMount(box);
   return (
     <Banner focusable bannerRef={box}>
       <b>Waiting for this command to end.</b> The Break is still pending: the run stops after this command, with the
