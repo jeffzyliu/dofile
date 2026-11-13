@@ -78,9 +78,9 @@
 //      download-failed, built in step 3 and reworded by 4d). Writes `dialog` (reset; it closes download and
 //      other-tab), `banners` (only dismiss()). Calls engine.ts start (also "Try again"), ask() (the declined banner's
 //      "Start engine"), decline, stopDownload, takeOver (the state is `other-tab-taking` while it is in progress,
-//      and a second press does nothing), keepWaiting, reset; editorCommands.runFile ("Run the file
-//      again") and editorCommands.focus (states/focus.ts focusStable); run.ts refreshData (Reset describes the memory
-//      again after a run: states/words.ts resetDecision); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner
+//      and a second press does nothing), keepWaiting, reset; editorCommands.runFile(path) ("Run the file
+//      again": the file whose run a reset cut) and editorCommands.focus (states/focus.ts focusStable); reads `engineRuns`
+//      (Reset asks once anything has run: states/words.ts resetAsks); files.ts downloadAll() (when the store cannot make the zip it resolves false and adds the banner
 //      download-failed, which a later download that works removes; with no file to put in it, false and nothing shown).
 //      A failed start's `message` is the visitor's words; its `detail` is the developer's cause (types.ts EngineState).
 // editorCommands is filled field by field when 4b's editor mounts: every part calls through the object

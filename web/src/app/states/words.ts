@@ -3,16 +3,7 @@
 // give are drafts, marked DRAFT here and listed in SPEC section 8 ("Step 4d: draft words") for the maintainer to approve.
 
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
-import type {
-  DataSummary,
-  EngineStateName,
-  FailReason,
-  LastRun,
-  ResetKind,
-  Results,
-  RunHead,
-  Stage,
-} from "../types.ts";
+import type { EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../types.ts";
 
 /** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by default). The page's words
  *  count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
@@ -36,51 +27,11 @@ export const stageNow: Record<Stage, string> = {
   engine: "Starting the engine",
 };
 
-/** Whether Reset has anything to lose: data in memory, or e() or r() results. Not asked when it has none (S 14). */
-export function nothingToLose(data: DataSummary | null, results: Results | null): boolean {
-  const dataInMemory = data !== null && !("error" in data) && (data.nobs > 0 || data.nvars > 0);
-  const has = (r: Results["e"]) =>
-    Object.keys(r.scalars).length + Object.keys(r.macros).length + Object.keys(r.matrices).length > 0;
-  const anyResults = results !== null && (has(results.e) || has(results.r));
-  return !dataInMemory && !anyResults;
-}
-
-/** Whether Reset asks first, on what is known now (S 14): it may reset at once only while the engine is `ready` with nothing
- *  to lose. A run in progress always asks: what it holds is known only when it ends. */
-export const resetAsks = (state: EngineStateName, data: DataSummary | null, results: Results | null): boolean =>
-  state !== "ready" || !nothingToLose(data, results);
-
-/** What Reset reads: the engine's state and what is in memory (state.ts `engine`, `data`, `results`, `lastRun`). */
-export interface ResetSnapshot {
-  state: EngineStateName;
-  data: DataSummary | null;
-  results: Results | null;
-  lastRun: LastRun | null;
-}
-
-/** What a press of "Reset the engine…" does: "ask" (the dialog), "reset" (at once) or "none" (the engine can no longer
- *  be reset). `read` gives the state now; `refresh` is run.ts refreshData. After a run, `data` may still describe the
- *  memory as it was before that run (run.ts sets `results` at the run's end and `data` only when refreshData answers), so
- *  "nothing to lose" after a run is checked again on a fresh description: a run that made data and no r() or e() is asked
- *  about. A description that does not come (`data` is the same object after `refresh`) asks. Before any run (`lastRun`
- *  null: a new engine, or one just reset) nothing is described again. */
-export async function resetDecision(
-  read: () => ResetSnapshot,
-  refresh: () => Promise<unknown>,
-): Promise<"ask" | "reset" | "none"> {
-  const before = read();
-  if (resetAsks(before.state, before.data, before.results)) return "ask";
-  if (before.lastRun === null) return "reset";
-  try {
-    await refresh();
-  } catch {
-    // no description: `data` is unchanged, so it asks
-  }
-  const now = read();
-  if (!["ready", "running", "breaking", "waiting"].includes(now.state)) return "none";
-  if (now.data === before.data) return "ask";
-  return resetAsks(now.state, now.data, now.results) ? "ask" : "reset";
-}
+/** Whether Reset asks first (S 14): it may reset at once only while the engine is `ready` and nothing has run on it since it
+ *  started (a new engine, or one just reset: `engineRuns` 0). Anything the dialog says it clears (data, e() and r(), macros,
+ *  Stata scalars and matrices, graphs) can only come from a run, so this asks whenever there may be something and needs no
+ *  question put to the engine. A run in progress asks: what it holds is known only when it ends. */
+export const resetAsks = (state: EngineStateName, engineRuns: number): boolean => state !== "ready" || engineRuns > 0;
 
 /** The bold part of the stopping banner's countdown (S 9). At 0 the reset is under way: no "In 0 s". DRAFT (the 0 case). */
 export const resetIn = (left: number): string =>

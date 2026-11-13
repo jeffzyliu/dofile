@@ -822,6 +822,11 @@ test("a crash cuts a run: the new state first, then engine-gone, then the cut ru
   assert.match(logItems().at(-1)!.text!, /session reset: the engine crashed/);
   assert.equal(S.results.value, null);
   assert.equal(S.lastRun.value!.rc, 9998, "the cut run is the last run");
+  assert.equal(
+    S.engineRuns.value,
+    0,
+    "but nothing has run on the new engine: Reset would not ask (engineRuns, not lastRun)",
+  );
   assert.equal(client.lists.length, 1, "a restart fetches the build's list fresh");
   await begin();
   assert.deepEqual(client.worker.build, BUILD);
@@ -829,6 +834,7 @@ test("a crash cuts a run: the new state first, then engine-gone, then the cut ru
   state("ready");
   // the new engine has no locals yet: its first run says so, although the cut run ended after the reset began
   runCode("display 1", { kind: "selection", path: "a.do", lines: [1, 1], fresh_locals: false });
+  assert.equal(S.engineRuns.value, 1, "a run begun on this engine: Reset now asks");
   assert.equal(
     logItems()
       .filter((i) => i.t === "runhead")

@@ -3,7 +3,7 @@
 // hook to show a state that is hard to reach (a failed start of each reason, Break pending, ...); that is a view test, not
 // a machine test (test/machine.test.ts decides the states). The real machine is used where it is cheap: the prompt's
 // "Not now" and the declined banner's "Start engine" go through ask() and decline(). One test starts a real engine
-// for Reset: its dialog (asked only with data in memory), Cancel, Reset, the reset banner. Where the focus goes when a
+// for Reset: its dialog (asked once anything has run on the engine), Cancel, Reset, the reset banner. Where the focus goes when a
 // banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the stand-in and
 // for 4b's CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
 import type { Locator, Page } from "@playwright/test";
@@ -499,7 +499,7 @@ test("the storage, reset and download-failed banners", async ({ page }) => {
   await expect(reset).toHaveCount(0);
 });
 
-test("Reset asks only with data in memory (described again after a run); Cancel keeps it; Reset clears it and the banner says so", async ({
+test("Reset asks once anything has run on the engine (data, a global, a scalar); Cancel keeps it; Reset clears it and the banner says so", async ({
   page,
 }) => {
   await page.goto("?test");
@@ -536,25 +536,22 @@ test("Reset asks only with data in memory (described again after a run); Cancel 
   await expect.poll(() => engineIs(page)).not.toBe("ready");
   await expect(page.locator(".banner", { hasText: "You reset the engine." })).toBeVisible();
 
-  // Reset right at the end of a run that made data and no r() or e(), before its refreshData has answered: `data` is still
-  // the description from before that run (set back here, as it is in that moment). It is described again: the dialog.
+  // anything a run leaves counts, not only data and e() or r() results: a run that made only a global and a Stata scalar asks
   await expect.poll(() => engineIs(page), { timeout: 300_000 }).toBe("ready");
-  expect((await page.evaluate(() => window.__dofile.run("display 1")))?.rc).toBe(0);
-  const before = await page.evaluate(() => window.__dofile.state.data.value);
-  expect(before?.nobs ?? 0).toBe(0);
-  expect((await page.evaluate(() => window.__dofile.run("set obs 10\ngen y = 1")))?.rc).toBe(0);
+  expect(await page.evaluate(() => window.__dofile.state.engineRuns.value)).toBe(0); // a new engine: nothing has run
+  expect((await page.evaluate(() => window.__dofile.run("global g hello\nscalar k = 3")))?.rc).toBe(0);
+  expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs ?? 0)).toBe(0); // no data
   const res = await page.evaluate(() => window.__dofile.state.results.value);
   for (const k of ["e", "r"]) {
     const r = res?.[k] ?? { scalars: {}, macros: {}, matrices: {} };
-    expect(Object.keys({ ...r.scalars, ...r.macros, ...r.matrices }), k).toEqual([]); // no results: only the data counts
+    expect(Object.keys({ ...r.scalars, ...r.macros, ...r.matrices }), k).toEqual([]); // and no e() or r() results
   }
-  await page.evaluate((d) => (window.__dofile.state.data.value = d), before);
   await more();
   await expect(dlg).toBeVisible();
   await dlg.getByRole("button", { name: "Cancel" }).click();
   await expect(dlg).toHaveCount(0);
   expect(await engineIs(page)).toBe("ready");
-  expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs)).toBe(10);
+  expect((await page.evaluate(() => window.__dofile.run('display "$g"')))?.rc).toBe(0); // Cancel kept the global
 
   // "Run the file again" with 4b's editor: it runs the file whose run the reset cut, not the active tab; it is on with the
   // engine ready and that file open as text, and it is not offered after a Reset the visitor asked for
