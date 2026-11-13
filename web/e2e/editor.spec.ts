@@ -1151,13 +1151,13 @@ test("the log: under an error, the OQ-10 note where the engine's own words do no
   ]);
 });
 
-test("the phone's ⋯: Save is on for a text tab and off for a .dta tab", async ({ page }) => {
-  test.skip(!isPhone(page), "the phone's ⋯ menu (the toolbar's Save is tested below)");
+test("the phone's file dropdown: Save is on for a text tab and off for a .dta tab", async ({ page }) => {
+  test.skip(!isPhone(page), "the phone's file dropdown (the toolbar's Save is tested below)");
   await setUp(page, { "d.dta": "not read here", "a.do": "display 1\n" });
   await open(page, "a.do");
   const save = async () => {
-    await page.getByRole("button", { name: "More actions" }).click();
-    const item = page.getByRole("menu", { name: "More actions" }).getByRole("menuitem", { name: "Save", exact: true });
+    await page.getByRole("button", { name: /\. Open files/ }).click();
+    const item = page.getByRole("menu", { name: "Open files" }).getByRole("menuitem", { name: "Save", exact: true });
     const off = await item.getAttribute("aria-disabled");
     await page.keyboard.press("Escape");
     return off === "true";

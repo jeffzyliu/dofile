@@ -668,3 +668,94 @@ test("a drag that began in the page (a graph image, which Chromium and WebKit li
   await expect(row(page, /^later\.do/)).toBeVisible();
   await expect(row(page, /^in-page\.do/)).toHaveCount(0);
 });
+
+test("the phone's strip is one height with or without the ⋯ button, and the button's tap target is 44 px", async ({
+  page,
+}) => {
+  test.skip(!isPhone(page), "the phone's strip");
+  await setUp(page, { "a.do": "1\n" }); // the Files view
+  const views = page.getByRole("tablist", { name: "Views" });
+  const strip = page.locator(".phone-strip");
+  const height = async () => (await strip.boundingBox())!.height;
+  const withMore = await height();
+  // the 44 px is a hit area, not only a box: the button sticks out of the strip, so a tap 2 px inside its top and bottom
+  // edges must land on it and not on the bar above or the view below
+  const tapTarget = async (name: string) => {
+    const b = page.getByRole("button", { name });
+    const box = (await b.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    for (const y of [box.y + 2, box.y + box.height - 2])
+      expect(
+        await b.evaluate((el, [x, y]) => el.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, y]),
+      ).toBe(true);
+  };
+  await tapTarget("File actions");
+  await views.getByRole("tab", { name: "Log" }).click();
+  await tapTarget("Log actions");
+  expect(await height()).toBe(withMore);
+  for (const name of ["Editor", "Data", "Results"]) {
+    await views.getByRole("tab", { name }).click();
+    await expect(strip.locator(".strip-actions")).toHaveCount(0);
+    expect(await height(), name).toBe(withMore);
+  }
+});
+
+test("the phone's file dropdown: Save (on for a text file) at the top, Close and Show all files below, and the tab list scrolls between them", async ({
+  page,
+}) => {
+  test.skip(!isPhone(page), "the phone's file dropdown");
+  const names = Array.from({ length: 14 }, (_, i) => `file${String(i + 1).padStart(2, "0")}.do`);
+  await setUp(page, Object.fromEntries(names.map((n) => [n, "1\n"])));
+  for (const n of names) {
+    await row(page, new RegExp(`^${n}`)).click();
+    await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  }
+  await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Editor" }).click();
+  await page.getByRole("button", { name: /\. Open files/ }).click();
+  const menu = page.getByRole("menu", { name: "Open files" });
+  const save = menu.getByRole("menuitem", { name: "Save", exact: true });
+  const close = menu.getByRole("menuitem", { name: "Close file14.do" });
+  const first = menu.getByRole("menuitem", { name: /^file01\.do/ });
+  await expect(save).toBeVisible();
+  await expect(save).not.toHaveAttribute("aria-disabled", "true");
+  const box = async (l: typeof save) => (await l.boundingBox())!;
+  const view = page.viewportSize()!;
+  // the list scrolls: it is cut at 60-70% of the window, and Save and Close stay inside the window
+  const list = await box(menu.locator(".menu-scroll"));
+  expect(list.height).toBeLessThanOrEqual(view.height * 0.7);
+  expect(list.height).toBeGreaterThan(view.height * 0.5);
+  expect(await menu.locator(".menu-scroll").evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+  expect((await box(save)).y + (await box(save)).height).toBeLessThanOrEqual(list.y); // above the tabs
+  expect((await box(close)).y).toBeGreaterThanOrEqual(list.y + list.height); // below them, not between
+  expect((await box(close)).y + (await box(close)).height).toBeLessThanOrEqual(view.height);
+  // roving focus walks every item, the pinned ones too: Home is Save, End is the last item, a Down from Save is the first tab
+  await expect(save).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(first).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(menu.getByRole("menuitem", { name: "Show all files" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(close).toBeFocused();
+  // Save is in the dropdown, not in the global ⋯
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menu", { name: "More actions" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Save", exact: true })).toHaveCount(0);
+});
+
+test("desktop is unchanged: the open files are tabs, the ⋯ menu has no Save and no scroll box", async ({ page }) => {
+  test.skip(isPhone(page), "the desktop layout");
+  await setUp(page, { "a.do": "1\n" });
+  await row(page, /^a\.do/).click();
+  await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: "a.do" })).toBeVisible();
+  await page.getByRole("button", { name: "More actions" }).click();
+  const menu = page.getByRole("menu", { name: "More actions" });
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Download all (.zip)",
+    "Reset the engine…",
+    "Commands",
+    /^About dofile/,
+  ]);
+  await expect(menu.getByRole("menuitemcheckbox")).toHaveText("Wrap lines");
+  await expect(menu.locator(".menu-scroll")).toHaveCount(0);
+});

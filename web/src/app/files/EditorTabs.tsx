@@ -6,8 +6,8 @@
 //    actions.ts askCloseTab). Ctrl/Cmd+W is the browser's: not bound. After a tab closes from the keyboard or the
 //    close-tab dialog, the focus goes to the tab now selected; with none left, to the file tree's row in the tab order
 //    (when the list is shown), else to the editor (focusAfterClose).
-//  - FileSwitcher: the phone's top bar title on the Editor view (WP 1): the open file's name and ▾, a menu of the open
-//    files, "Close <name>" (the phone has no ×) and "Show all files"; with no open file it says "Editor".
+//  - FileSwitcher: the phone's top bar title on the Editor view (WP 1): the open file's name and ▾, a menu: Save (off unless
+//    the open file is a text file), the open files (a list that scrolls), "Close <name>" (the phone has no ×) and "Show all files"; with no open file it says "Editor".
 // `dirty` is the editor's (state.ts setDirty); this file never sets it.
 import { editorCommands } from "../editor/commands.ts";
 import { activeTab, phoneTab, tabs } from "../state.ts";
@@ -111,20 +111,31 @@ const switcherItems = (): MenuItem[] => {
   const labels = tabLabels(list.map((t) => t.path));
   const active = activeTab.value;
   return [
-    ...list.map(
-      (t, i): MenuItem => ({
-        label: (
-          <span class="switch-item">
-            {labels[i]}
-            {t.dirty && <Unsaved />}
-          </span>
-        ),
-        hint: t.path === active ? "open" : undefined,
-        onSelect: () => {
-          activeTab.value = t.path;
-        },
-      }),
-    ),
+    {
+      label: "Save",
+      disabled: tabs.value.find((t) => t.path === active)?.kind !== "text", // as the toolbar's Save
+      onSelect: () => {
+        editorCommands.save();
+      },
+    },
+    "rule",
+    // the tab list scrolls (many open files); Save above and Close below stay in reach
+    {
+      scroll: list.map(
+        (t, i): MenuItem => ({
+          label: (
+            <span class="switch-item">
+              {labels[i]}
+              {t.dirty && <Unsaved />}
+            </span>
+          ),
+          hint: t.path === active ? "open" : undefined,
+          onSelect: () => {
+            activeTab.value = t.path;
+          },
+        }),
+      ),
+    },
     ...(list.length ? ["rule" as const] : []),
     ...(active ? [{ label: `Close ${baseName(active)}`, onSelect: () => askCloseTab(active) }] : []),
     {
@@ -137,7 +148,7 @@ const switcherItems = (): MenuItem[] => {
 };
 
 /** The phone's top bar title on the Editor view: the open file's name (or "Editor" with none) and ▾; a tap opens the
- *  menu of open files, "Close <name>" and "Show all files" (the Files view). One button in every case, as wide as the
+ *  menu: Save, the open files, "Close <name>" and "Show all files" (the Files view). One button in every case, as wide as the
  *  title, so the top bar's boxes never move (e2e/shell.spec.ts). */
 export function FileSwitcher() {
   const active = tabs.value.find((t) => t.path === activeTab.value);

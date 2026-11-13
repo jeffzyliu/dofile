@@ -5,6 +5,8 @@
 //    `danger`, with "…" in its label when it asks first.
 //  - The trigger has aria-haspopup="menu" and aria-expanded.
 // Two ways to open one:
+// A `{ scroll: [...] }` entry holds items in a scrolling box (`.menu-scroll`, max 60% of the window's height): the phone's
+// open files. The arrow keys and Home/End still walk every item, as they look for them in the whole menu.
 //   <MenuButton label="More actions" class="btn quiet icon" items={[...]}><Icon name="more" /></MenuButton>
 //   openMenu({ label: "Actions for clean.do", items, anchor: rowElement })            // Shift+F10, the menu key
 //   openMenu({ label: "Actions for clean.do", items, at: { x, y }, restore: rowEl })  // a right click
@@ -19,6 +21,7 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 
 export type MenuItem =
   | "rule"
+  | { scroll: MenuItem[] } // a run of items that scrolls when the menu is taller than the window; the ones around it stay in reach
   | {
       label: ComponentChildren;
       onSelect?: () => void;
@@ -171,7 +174,7 @@ export function MenuHost() {
       closeMenu();
     } else if (e.key === "Tab") closeMenu(); // focus back on the trigger first, then the browser's Tab moves on from it
   };
-  const pick = (item: Exclude<MenuItem, "rule">, el: HTMLElement) => {
+  const pick = (item: Exclude<MenuItem, "rule" | { scroll: MenuItem[] }>, el: HTMLElement) => {
     if (item.disabled) return;
     if (item.keepOpen) {
       el.focus(); // a tap does not focus a button in Safari: keep the focus on the item, as Enter does
@@ -182,6 +185,44 @@ export function MenuHost() {
     item.onSelect?.();
   };
   const items = typeof m.items === "function" ? m.items() : m.items;
+  const renderItem = (item: MenuItem, i: number): ComponentChildren =>
+    typeof item === "object" && "scroll" in item ? (
+      <div key={i} class="menu-scroll">
+        {item.scroll.map(renderItem)}
+      </div>
+    ) : item === "rule" ? (
+      <hr key={i} />
+    ) : item.href ? (
+      <a
+        key={i}
+        role="menuitem"
+        tabIndex={-1}
+        href={item.href}
+        target="_blank"
+        rel="noopener"
+        class={item.danger ? "danger" : undefined}
+        onClick={() => closeMenu(false)}
+      >
+        {item.label}
+        {item.hint && <Hint item={item} />}
+      </a>
+    ) : (
+      <button
+        key={i}
+        type="button"
+        {...(item.checked === undefined
+          ? { role: "menuitem" }
+          : { role: "menuitemcheckbox", "aria-checked": item.checked })}
+        tabIndex={-1}
+        class={item.danger ? "danger" : undefined}
+        aria-disabled={item.disabled || undefined}
+        onClick={(e) => pick(item, e.currentTarget)}
+      >
+        {item.label}
+        {item.hint && <Hint item={item} />}
+        {item.checked !== undefined && <span class="switch" aria-hidden="true" />}
+      </button>
+    );
   return (
     <div
       ref={ref}
@@ -191,41 +232,7 @@ export function MenuHost() {
       popover={hasPopover ? "manual" : undefined}
       onKeyDown={onKeyDown}
     >
-      {items.map((item, i) =>
-        item === "rule" ? (
-          <hr key={i} />
-        ) : item.href ? (
-          <a
-            key={i}
-            role="menuitem"
-            tabIndex={-1}
-            href={item.href}
-            target="_blank"
-            rel="noopener"
-            class={item.danger ? "danger" : undefined}
-            onClick={() => closeMenu(false)}
-          >
-            {item.label}
-            {item.hint && <Hint item={item} />}
-          </a>
-        ) : (
-          <button
-            key={i}
-            type="button"
-            {...(item.checked === undefined
-              ? { role: "menuitem" }
-              : { role: "menuitemcheckbox", "aria-checked": item.checked })}
-            tabIndex={-1}
-            class={item.danger ? "danger" : undefined}
-            aria-disabled={item.disabled || undefined}
-            onClick={(e) => pick(item, e.currentTarget)}
-          >
-            {item.label}
-            {item.hint && <Hint item={item} />}
-            {item.checked !== undefined && <span class="switch" aria-hidden="true" />}
-          </button>
-        ),
-      )}
+      {items.map(renderItem)}
     </div>
   );
 }

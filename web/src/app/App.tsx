@@ -19,8 +19,8 @@
 //
 // Each step 4 part edits only its own files; this file only places them (two changes were made here when 4a was joined,
 // on the maintainer's word: 4a's fileMenuItems are a "Files ⋯" button in the phone strip's right end on the Files view
-// (the Files head is hidden on a phone), and the unfolded file list gives the focus to the tree's row; and one when 4b and 4d were joined: the phone ⋯'s
-// Save is off unless the active tab is a text tab, as the toolbar's). Per part: the files,
+// (the Files head is hidden on a phone), and the unfolded file list gives the focus to the tree's row; and one when 4b and 4d were joined: the phone's
+// Save moved to the file switcher's menu, off unless the active tab is a text tab, as the toolbar's). Per part: the files,
 // the signals it writes (state.ts), what it calls, and the slots here it fills. Every part reads any signal.
 // Since step 3.5 C (the engine's state machine, engine/machine.ts; SPEC section 8):
 //  - `engine` has the machine's sixteen state names (types.ts EngineState): the page load is `checking-lock`, then
@@ -98,7 +98,6 @@ import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { BannerSlot } from "./banners";
 import { DialogHost } from "./dialogs";
-import { editorCommands } from "./editor/commands.ts";
 import { Editor } from "./editor/Editor";
 import { PhoneRun, RunControls } from "./editor/RunControls";
 import { StatusBar } from "./editor/StatusBar";
@@ -158,17 +157,10 @@ const moreItems = (): MenuItem[] => [
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
 ];
 
-/** The phone's ⋯ menu: Save and the theme (OQ-14), Wrap lines, Reset, Commands, About. The phone hides the Files and Log heads: their
+/** The phone's ⋯ menu: the theme (OQ-14), Wrap lines, Reset, Commands, About. The phone hides the Files and Log heads: their
  *  actions are a button at the right of the phone strip, "Files ⋯" on the Files view (4a's fileMenuItems) and "Log ⋯" on
  *  the Log view (4b's logMenuItems), the word hidden when the strip is narrow. Theme cycles and keeps the menu open. */
 const phoneMoreItems = (): MenuItem[] => [
-  {
-    label: "Save",
-    disabled: tabs.value.find((t) => t.path === activeTab.value)?.kind !== "text", // as the toolbar's Save (4b)
-    onSelect: () => {
-      editorCommands.save();
-    },
-  },
   {
     label: (
       <span>
