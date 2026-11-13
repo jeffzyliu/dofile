@@ -1,7 +1,8 @@
 name: ci
 
-# Pull requests run the full matrix. A push to main runs only `quick`; the matrix is not repeated after the merge
-# (branch protection: require up-to-date branches).
+# Pull requests and pushes to main both run the full matrix. The run on main tests what the merge made: a pull request
+# may be merged from a branch that is behind main (the ruleset does not require it to be up to date), and a merge commit
+# is a tree no pull request ran.
 on:
   push:
     branches: [main]
@@ -9,7 +10,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A new push to a pull request replaces that pull request's run. A push to main (or a manual run) has a group of its
+  # own, by commit, so it is never cancelled and never waits behind another: every merge gets a finished result.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 # A pull request that changes none of the files these tests cover (src/, tests/, tests_opendta/, scripts/, web/sample/,
@@ -43,17 +46,6 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "python=$python" >> "$GITHUB_OUTPUT"
 
-  quick:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    env:
-      UV_PYTHON: "3.14"   # pinned here, not left to .python-version; also reaches poe's nested `uv run`
-    steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
-      - run: uv sync --extra mcp
-      - run: uv run poe test   # ~35 s; skips the slow Stata comparison
-
   # ruff ([tool.ruff] in pyproject.toml) over dofile's own Python, never the vendored engine: the format, then the lint
   # rules. Also on a push to main. The fix: `uv run poe format`.
   lint:
@@ -71,7 +63,7 @@ jobs:
 
   test:
     needs: changes
-    if: github.event_name != 'push' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'   # always 'true' on a push to main
     strategy:
       fail-fast: false
       matrix:
@@ -92,7 +84,7 @@ jobs:
   ok:
     name: ci ok
     if: always()
-    needs: [changes, quick, lint, test]
+    needs: [changes, lint, test]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
