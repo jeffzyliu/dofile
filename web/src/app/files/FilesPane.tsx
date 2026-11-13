@@ -273,7 +273,8 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
   const open = !row.dir && activeTab.value === row.path;
   const r = renaming.value?.path === row.path ? renaming.value : null;
   const li = useRef<HTMLLIElement>(null);
-  const wanted = focusWanted.value === row.path && !r;
+  // still the row in the tab order: a visitor who clicked another row meanwhile made that one roving
+  const wanted = focusWanted.value === row.path && rovingPath.value === row.path && !r;
   useLayoutEffect(() => {
     if (!wanted) return;
     focusWanted.value = null;

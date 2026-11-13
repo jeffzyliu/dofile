@@ -83,8 +83,8 @@ export function runCommand(text: string): Requested {
 function began(head: RunHead, theme: "light" | "dark") {
   const id = ++runs;
   if (head.kind !== "command" && S.layout.value === "phone") S.phoneTab.value = "log"; // Run opens the Log tab
-  const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.peek() === 0 }];
-  W.engineRuns.value = W.engineRuns.peek() + 1; // peek: run() may be called from an effect, which must not depend on this. Now, not after the run: a reset that cuts it starts the count again, and the next run is first
+  const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.value === 0 }];
+  W.engineRuns.value++; // now, not after the run: a reset that cuts it starts the count again, and the next run is first
   const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for S 15's note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");

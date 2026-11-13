@@ -475,6 +475,37 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
   expect(await tabs()).toEqual([["c.do", true]]);
 });
 
+test('a rename takes the reset banner\'s cut file to the new name, so "Run the file again" runs the renamed file', async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1\n" });
+  await open(page, "a.do");
+  await page.evaluate(() =>
+    window.__dofile.state.addBanner({
+      b: "reset",
+      reason: "the code did not stop at Break",
+      kind: "break",
+      run: { kind: "file", path: "a.do", fresh_locals: true },
+    }),
+  );
+  if (isPhone(page)) await view(page, "Files");
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^a\.do/ })
+    .focus();
+  await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "New name for a.do" })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("b.do");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: /^b\.do/ })).toBeFocused();
+  const cut = () =>
+    page.evaluate(() =>
+      window.__dofile.state.banners.value.filter((b) => b.b === "reset").map((b: any) => b.run?.path ?? null),
+    );
+  expect(await cut()).toEqual(["b.do"]); // one banner, and it names the file as it is now
+});
+
 /** The next `store[method]` (rename, remove) changes the store at once, and its promise answers when the test calls
  *  window.__answer(): the window in which the page has changed the store but not yet its tabs. */
 const holdAnswer = (page: Page, method: "rename" | "remove") =>

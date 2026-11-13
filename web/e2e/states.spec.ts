@@ -495,6 +495,16 @@ test("the storage, reset and download-failed banners", async ({ page }) => {
   await expect(reset).toContainText("The engine was reset: the code did not stop at Break.");
   await expect(reset).toContainText("The data in memory is lost; your files are kept.");
   await expect(reset.getByRole("button", { name: "Run the file again" })).toHaveCount(0); // no run was cut: only Dismiss
+  // a cut run of a file, with no engine to run it: the button is there and off
+  await page.evaluate(() => {
+    window.__dofile.state.addBanner({
+      b: "reset",
+      reason: "the code did not stop at Break",
+      kind: "break",
+      run: { kind: "file", path: "gone.do", fresh_locals: true },
+    });
+  });
+  await expect(reset.getByRole("button", { name: "Run the file again" })).toBeDisabled();
   await reset.getByRole("button", { name: "Dismiss" }).click();
   await expect(reset).toHaveCount(0);
 });
@@ -587,6 +597,25 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
     });
   });
   const again = page.locator(".banner", { hasText: "The engine was reset:" });
+  // the engine is ready, but the cut file is not open as a tab: the button is off until it is
+  await page.evaluate(() => {
+    window.__dofile.state.addBanner({
+      b: "reset",
+      reason: "the code did not stop at Break",
+      kind: "break",
+      run: { kind: "file", path: "closed.do", fresh_locals: true },
+    });
+  });
+  await expect(again.getByRole("button", { name: "Run the file again" })).toBeDisabled();
+  await page.evaluate(() => {
+    window.__dofile.state.addBanner({
+      b: "reset",
+      reason: "the code did not stop at Break",
+      kind: "break",
+      run: { kind: "file", path: "again.do", fresh_locals: true },
+    });
+  });
+  await expect(again.getByRole("button", { name: "Run the file again" })).toBeEnabled();
   await again.getByRole("button", { name: "Run the file again" }).click();
   await expect(again).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.path)).toBe("again.do");
