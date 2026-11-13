@@ -62,9 +62,7 @@ const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/f
 const { startEngine } = await import("../src/app/start.ts");
 const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");
 const { decodeText } = await import("../src/app/files/open.ts");
-const { watchViewport, KEYBOARD, KB_MODES, kbModeOf, focusesItself, PREDICT, HOLD, SETTLE } = await import(
-  "../src/app/viewport.ts"
-);
+const { watchViewport, KEYBOARD, SETTLE } = await import("../src/app/viewport.ts");
 
 /** The engine's state, which must be `name`: that member of EngineState, with its own fields. */
 function state<N extends EngineStateName>(name: N): Extract<EngineState, { s: N }> {
@@ -1969,7 +1967,7 @@ test('C2: "Not now" during the download aborts it: no start follows, also when t
   expectDrops([{ type: "download-done", n: 3, row: "declined", why: "stale" }]);
 });
 
-test("the phone keyboard: watchViewport sets data-keyboard and --vv-height/--vv-top while the visual viewport is clearly shorter, not when zoomed or off the phone", () => {
+test("the phone keyboard: watchViewport sets data-keyboard and --vv-height while the visual viewport is clearly shorter, not when zoomed or off the phone", () => {
   // a visualViewport as iOS Safari reports it: the layout viewport stays 844 px tall when the keyboard opens
   const vv = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 });
   const vars = new Map<string, string>();
@@ -1983,6 +1981,7 @@ test("the phone keyboard: watchViewport sets data-keyboard and --vv-height/--vv-
     root: root as unknown as HTMLElement,
     layoutHeight: () => 844,
     enabled: () => phone,
+    later: () => {}, // the caret's timers: keyboardPage, below
   });
   const move = (height: number, offsetTop = 0, scale = 1) => {
     Object.assign(vv, { height, offsetTop, scale });
@@ -1995,11 +1994,7 @@ test("the phone keyboard: watchViewport sets data-keyboard and --vv-height/--vv-
   assert.equal("keyboard" in root.dataset, false);
   move(508); // the keyboard opens
   assert.equal("keyboard" in root.dataset, true);
-  assert.equal(vars.get("--vv-height"), "508px");
-  assert.equal(vars.get("--vv-top"), "0px");
-  Object.assign(vv, { offsetTop: 120 });
-  vv.dispatchEvent(new Event("scroll")); // Safari pans to the field
-  assert.equal(vars.get("--vv-top"), "120px");
+  assert.deepEqual([...vars], [["--vv-height", "508px"]]);
   move(844); // closed again: nothing set
   assert.equal("keyboard" in root.dataset, false);
   assert.equal(vars.size, 0);
@@ -2040,6 +2035,7 @@ test("the phone keyboard where the browser shrinks the layout viewport: open whi
     layoutHeight: () => h,
     layoutWidth: () => w,
     typing: () => focused,
+    later: () => {},
   });
   const resize = (height: number, width = w) => {
     h = height;
@@ -2054,7 +2050,6 @@ test("the phone keyboard where the browser shrinks the layout viewport: open whi
   resize(450); // the keyboard opens with a field focused
   assert.equal("keyboard" in root.dataset, true);
   assert.equal(vars.get("--vv-height"), "450px");
-  assert.equal(vars.get("--vv-top"), "0px");
   resize(800); // closed
   assert.equal("keyboard" in root.dataset, false);
   assert.equal(vars.size, 0);
@@ -2070,11 +2065,9 @@ test("the phone keyboard where the browser shrinks the layout viewport: open whi
   stop();
 });
 
-// The keyboard experiment's strategies (?kb=…, app/viewport.ts; docs/phone-keyboard-experiment.md). The default, "top",
-// is what the two tests above drive.
-/** A watched page for the strategies: a visualViewport as iOS Safari reports it (the layout viewport stays 844 px
- *  tall), a root that takes focusin, a clock and timers run by hand, and the calls to scroll the page back. */
-function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
+/** A watched page: a visualViewport as iOS Safari reports it (the layout viewport stays 844 px tall), timers run by
+ *  hand, and the calls to scroll the page back and to reveal the editor's caret, counted. */
+function keyboardPage({ phone = true } = {}) {
   const vv = Object.assign(new EventTarget(), { height: 844, offsetTop: 0, scale: 1 });
   const vars = new Map<string, string>();
   const root = Object.assign(new EventTarget(), {
@@ -2084,11 +2077,9 @@ function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
   let clock = 0,
     scrolled = false;
   const timers: { at: number; fn: () => void }[] = [];
-  const seen = { phone, unpans: 0, caretAt: null as number | null, reveals: 0 }; // what the callbacks read and count
-  const page = {
-    vv,
+  const seen = { phone, unpans: 0, reveals: 0 }; // what the page's callbacks read and count
+  return {
     vars,
-    root,
     seen,
     open: () => "keyboard" in root.dataset,
     move(height: number, offsetTop = 0, scale = 1) {
@@ -2099,12 +2090,6 @@ function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
       vv.offsetTop = offsetTop;
       scrolled = scrollY;
       vv.dispatchEvent(new Event("scroll"));
-    },
-    /** a focusin on `el`, as the page gets it (the event's target is the field) */
-    focus(el: object) {
-      const e = new Event("focusin");
-      Object.defineProperty(e, "target", { value: el });
-      root.dispatchEvent(e);
     },
     /** move the clock on by `ms` and run the timers due */
     tick(ms = 0) {
@@ -2119,135 +2104,65 @@ function keyboardPage(mode: (typeof KB_MODES)[number], { phone = true } = {}) {
       layoutHeight: () => 844,
       layoutWidth: () => 390,
       enabled: () => seen.phone,
-      mode,
-      now: () => clock,
       scrollTop: () => {
         seen.unpans++;
         vv.offsetTop = 0;
         scrolled = false;
       },
       panned: () => scrolled,
-      caret: () => seen.caretAt,
       later: (fn, ms = 0) => timers.push({ at: clock + ms, fn }),
       reveal: () => seen.reveals++,
     }),
   };
-  return page;
 }
-/** A text field as the focus handlers see it: an input, or CodeMirror's content inside its scroller. */
-const fieldEl = (scroller: { scrollTop: number } | null = null) => ({
-  matches: () => true,
-  closest: (sel: string) => (sel === ".cm-scroller" ? scroller : null),
-});
-const notField = { matches: () => false, closest: () => null };
 
-test("the keyboard experiment's flag: ?kb= names one of eight strategies; none, an empty or an unknown value is the default, top", () => {
-  assert.deepEqual([...KB_MODES], ["top", "transform", "height", "unpan", "pre", "focus", "caret", "early"]);
-  assert.deepEqual(
-    KB_MODES.filter((m) => focusesItself(m)),
-    ["focus", "caret", "early"],
-    "the command line takes the focus itself",
-  );
-  for (const m of KB_MODES) assert.equal(kbModeOf(new URLSearchParams(`?kb=${m}&kblog`)), m);
-  for (const q of ["", "?kblog", "?kb=", "?kb=TOP", "?kb=bottom", "?test&slide"])
-    assert.equal(kbModeOf(new URLSearchParams(q)), "top", q);
-});
-
-test("the keyboard experiment: transform and focus follow the pan as top does; height keeps .app at the top and never scrolls the page", () => {
-  for (const mode of ["top", "transform", "focus"] as const) {
-    const p = keyboardPage(mode);
-    p.move(508);
-    p.pan(120);
-    assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "120px"], mode);
-    p.focus(fieldEl()); // no prediction outside pre
-    p.tick(HOLD);
-    p.move(844);
-    assert.equal(p.open(), false, mode);
-    assert.equal(p.vars.size, 0, mode);
-    assert.equal(p.seen.unpans, 0, mode);
-  }
-  const p = keyboardPage("height");
-  p.move(508, 0);
-  p.pan(120, true);
-  assert.equal(p.open(), true);
-  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"]);
-  assert.equal(p.seen.unpans, 0, "height leaves the pan alone");
-  p.move(844);
-  assert.equal(p.vars.size, 0);
-});
-
-test("the keyboard experiment: unpan keeps .app at the top and scrolls the page back while the keyboard is open and the page is panned, not otherwise", () => {
-  const p = keyboardPage("unpan");
+test("the phone keyboard: Safari's pan is scrolled back while the keyboard is open and the page is panned, not otherwise; .app keeps its top", () => {
+  const p = keyboardPage();
   p.pan(0, true); // no keyboard: a scroll is left alone
   assert.equal(p.seen.unpans, 0);
   p.pan(0);
   p.move(508); // the keyboard, no pan
   assert.equal(p.seen.unpans, 0);
-  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"]);
+  assert.deepEqual([...p.vars], [["--vv-height", "508px"]]);
   p.pan(120); // Safari pans the visible area to the field
   assert.equal(p.seen.unpans, 1);
-  assert.equal(p.vars.get("--vv-top"), "0px");
   p.pan(0, true); // the page itself scrolled
   assert.equal(p.seen.unpans, 2);
+  p.move(844);
+  p.move(508, 189); // the pan in the keyboard's first resize (as on iOS 27): scrolled back at once
+  assert.equal(p.seen.unpans, 3);
   p.move(422, 200, 2); // a pinch: no keyboard, nothing set, nothing scrolled
   assert.equal(p.open(), false);
-  assert.equal(p.seen.unpans, 2);
+  assert.equal(p.seen.unpans, 3);
   p.seen.phone = false;
   p.move(508, 120);
-  assert.equal(p.seen.unpans, 2, "off the phone");
+  assert.equal(p.seen.unpans, 3, "off the phone");
   p.stop();
 });
 
-test("the keyboard experiment: pre sets the area above a predicted keyboard on a field's focus, puts an editor's caret above it, holds it until the keyboard comes, and drops it without one", () => {
-  const p = keyboardPage("pre");
-  const predicted = Math.round(844 * PREDICT);
-  p.focus(notField); // not a text field
-  assert.equal(p.open(), false);
-  // CodeMirror's content, the caret at 700 px: the scroller moves it 24 px above the predicted keyboard
-  const scroller = { scrollTop: 50 };
-  p.seen.caretAt = 700;
-  p.focus(fieldEl(scroller));
-  assert.equal(p.open(), true, "at once, in the focusin");
-  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], [`${predicted}px`, "0px"]);
-  assert.equal(scroller.scrollTop, 50 + 700 - (predicted - 24));
-  p.tick(); // the focus handler's update before the keyboard: the prediction holds
-  p.pan(0); // a scroll event before the keyboard: still held
-  assert.equal(p.open(), true);
-  p.move(508, 100); // the keyboard opens, panned: the real height, at the top, scrolled back
-  assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"]);
+test("the phone keyboard: the editor's caret is revealed at once when the keyboard opens and again once it has settled, not after it closes", () => {
+  const p = keyboardPage();
+  p.move(508); // the keyboard opens
+  assert.equal(p.seen.reveals, 1, "at the first resize");
+  p.tick(SETTLE - 10);
+  p.pan(120); // Safari's pan: scrolled back; the settle timer starts again
   assert.equal(p.seen.unpans, 1);
-  p.tick(HOLD); // the hold's timer finds the keyboard open: nothing changes
-  assert.equal(p.vars.get("--vv-height"), "508px");
-  p.move(844);
-  assert.equal(p.open(), false);
-  assert.equal(p.vars.size, 0);
-  // the next focus predicts the height seen at this width; a caret already above it is not scrolled
-  p.seen.caretAt = 300;
-  p.focus(fieldEl(scroller));
-  assert.equal(p.vars.get("--vv-height"), "508px");
-  assert.equal(scroller.scrollTop, 50 + 700 - (predicted - 24));
-  // no keyboard comes (a hardware keyboard): the prediction goes after HOLD ms
-  p.tick(HOLD - 1);
-  assert.equal(p.open(), true);
+  p.tick(SETTLE - 1);
+  assert.equal(p.seen.reveals, 1, "not settled yet");
   p.tick(1);
-  assert.equal(p.open(), false);
-  assert.equal(p.vars.size, 0);
-  // an input (no scroller), and a focus with the keyboard already open, set nothing new
-  p.seen.caretAt = 800;
-  p.focus(fieldEl());
-  assert.equal(p.vars.get("--vv-height"), "508px");
-  p.move(500);
-  p.focus(fieldEl());
-  assert.equal(p.vars.get("--vv-height"), "500px");
+  assert.equal(p.seen.reveals, 2, "settled");
+  p.pan(0); // a later event while open reveals again once settled, but not at once: the keyboard was already open
+  assert.equal(p.seen.reveals, 2);
+  p.tick(SETTLE);
+  assert.equal(p.seen.reveals, 3);
+  p.move(844); // closed: a pending timer reveals nothing
+  p.move(508);
   p.move(844);
-  // off the phone: nothing
-  p.seen.phone = false;
-  p.focus(fieldEl());
-  assert.equal(p.open(), false);
+  const before = p.seen.reveals;
+  p.tick(SETTLE);
+  assert.equal(p.seen.reveals, before, "no reveal after the keyboard closed");
+  assert.equal(p.vars.size, 0);
   p.stop();
-  p.seen.phone = true;
-  p.focus(fieldEl()); // no longer listening
-  assert.equal(p.open(), false);
 });
 
 // ---- the review of the step 4 join ----
@@ -2480,39 +2395,5 @@ test("J5: a run's promise settles even when the after-run work throws (an open t
   } finally {
     Object.assign(editorCommands, kept);
     writable(S.tabs).value = [];
-  }
-});
-
-test("the keyboard experiment, round 2: caret and early scroll back a pan as unpan does and reveal the editor's caret once the keyboard has settled; early also at once when it opens", () => {
-  for (const mode of ["caret", "early"] as const) {
-    const p = keyboardPage(mode);
-    p.move(508); // the keyboard opens (no pan yet, as in the editor)
-    assert.deepEqual([p.vars.get("--vv-height"), p.vars.get("--vv-top")], ["508px", "0px"], mode);
-    assert.equal(p.seen.reveals, mode === "early" ? 1 : 0, `${mode}: at the first resize`);
-    p.tick(SETTLE - 10);
-    p.pan(120); // Safari's pan, about 120 ms later: scrolled back; the settle timer starts again
-    assert.equal(p.seen.unpans, 1, mode);
-    assert.equal(p.vars.get("--vv-top"), "0px", mode);
-    p.tick(SETTLE - 1);
-    assert.equal(p.seen.reveals, mode === "early" ? 1 : 0, `${mode}: not settled yet`);
-    p.tick(1);
-    assert.equal(p.seen.reveals, mode === "early" ? 2 : 1, `${mode}: settled`);
-    p.pan(0); // a later event while open reveals again after it settles, but early's at-once reveal is only on opening
-    p.tick(SETTLE);
-    assert.equal(p.seen.reveals, mode === "early" ? 3 : 2, mode);
-    p.move(844); // closed: a pending timer reveals nothing
-    p.move(508);
-    p.move(844);
-    const before = p.seen.reveals;
-    p.tick(SETTLE);
-    assert.equal(p.seen.reveals, before, `${mode}: no reveal after the keyboard closed`);
-    assert.equal(p.vars.size, 0, mode);
-    p.stop();
-  }
-  for (const mode of ["top", "unpan", "pre", "focus"] as const) {
-    const p = keyboardPage(mode);
-    p.move(508);
-    p.tick(SETTLE);
-    assert.equal(p.seen.reveals, 0, `${mode} reveals nothing`);
   }
 });

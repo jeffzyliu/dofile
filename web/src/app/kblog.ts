@@ -31,9 +31,7 @@ export function showKbLog(): void {
     "overflow:hidden;max-height:50vh;user-select:none;-webkit-user-select:none";
   document.body.append(box);
   const version = navigator.userAgent.match(/OS [\d_]+|Version\/[\d.]+/g)?.join(" ") ?? navigator.userAgent;
-  const head =
-    `${version} kb=${root.dataset.kb ?? "top"}${"kbSlide" in root.dataset ? " slide" : ""}\n` +
-    "   ms event         offTop  vvH scrlY innrH clntH appTop";
+  const head = `${version}\n   ms event         offTop  vvH scrlY innrH clntH appTop`;
   const rows: string[] = [];
   let t0 = performance.now(),
     last = "",

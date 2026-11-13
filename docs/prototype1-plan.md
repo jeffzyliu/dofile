@@ -430,10 +430,10 @@ merge of steps 4 and 5. They are reviewed after it:
 Found in the UI fix round (2026-11-12), still open:
 - The "Running…" banner appears and goes for every short run and every pasted line (seen as a flash). The log no longer
   loses its place through it.
-- The phone keyboard's jump. The study's finding: Safari pans the visual viewport before the page hears of it. An
-  experiment to settle it in one sitting on the iPhone is built (`docs/phone-keyboard-experiment.md`): `?kb=top` (the
-  default), `transform`, `height`, `unpan`, `pre` and `focus` choose how the page follows the keyboard, `?slide` adds a
-  transition and `?kblog` an on-screen list of the viewport's events. Its result decides the default.
+- The phone keyboard's jump: settled by three rounds of measurements on an iPhone (iOS 27.0.1;
+  `docs/phone-keyboard-experiment.md`). The command line takes a tap's focus itself with `preventScroll` (no pan at
+  all); elsewhere Safari's pan is scrolled straight back (one frame, about 3 px seen) and the editor's caret is scrolled
+  above the keyboard through CodeMirror. `?kblog` stays, an on-screen list of the viewport's events.
 - `overscroll-behavior-x: none` on the editor and the log also stops a trackpad back-swipe that starts over them.
 
 - `e2e/editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main`.

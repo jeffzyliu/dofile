@@ -95,16 +95,16 @@ These test the Stata-language engine itself. Grouping is by file name.
 - **Stata 14 reference logs** (98, slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
-## Web (about 470 tests)
+## Web (about 480 tests)
 
-### Unit and integration (`node --test`, `web/test/`, 346)
+### Unit and integration (`node --test`, `web/test/`, 348)
 
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. The counts are what the runner reports:
 several files make their tests in a loop, so a file has more tests than `test(` lines.
 
 | File | Count | Function |
 |---|---|---|
-| `app.test.ts` | 63 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, "Clear log" keeping the log's head and `canClearLog` (nothing to clear: the head alone or a streaming run's text), toasts (their time by length, the error kind); banners; theme; the phone keyboard; with no engine a run or a command is refused, settles with null at once, opens no prompt and runs nothing, not when the engine is ready either (after Start engine and Not now, a failed start, or a start that works), and a command that did not run stays out of `history`; "Start engine" (`app/start.ts`): what each of the sixteen states offers (`startOffer`: the prompt, a new try after a failed start whose banner has "Try again", the take-over dialog, off, or null where there is an engine or one on its way), the words of the hint and of the off controls' toasts, and a press in each state on the real controllers (`startEngine`: the prompt in `none`, `declined` and again in `asking`; a new download after a failed one; nothing after "updated"; the take-over dialog in `other-tab-idle` with no lock taken and nothing started; nothing while a take-over is in progress, during a download or a start, when ready or running; no event reaches the machine where it does nothing); what a paste does is decided before anything changes (`log/pasterun.ts` `pastePlan`): with no engine an ordinary paste (the engine is checked first, no line runs, no prompt, no drop); with an engine that is not ready (a download, a start, a run) refused whole, with the toast's words and every line counted, the text around the cursor too, and nothing sent; ready, the lines run; a line refused part of the way is put back into an empty field but not into an off one (`putBack`); the off controls' toast by the offer (`startFirst`: "Start the engine to load wages.dta" where a start is offered, "The engine isn't running: can't load wages.dta" where none is); a run that rewrites an open file (the editor's `ranOver` for every open text tab, with `null` for a version that is not text; the run-changed banner where the editor kept its text; nothing for a store that cannot be read); a run's promise settles even when the after-run work throws; pasted lines (the command line's runner, `log/pasterun.ts`) stop when another tab takes the engine during a line, and no leftover line runs after a take-over and a later run. |
+| `app.test.ts` | 65 | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, "Clear log" keeping the log's head and `canClearLog` (nothing to clear: the head alone or a streaming run's text), toasts (their time by length, the error kind); banners; theme; the phone keyboard (`app/viewport.ts`: Safari's pan scrolled back only while the keyboard is open and the page is panned, the editor's caret revealed when the keyboard opens and again once it has settled, not after it closes); with no engine a run or a command is refused, settles with null at once, opens no prompt and runs nothing, not when the engine is ready either (after Start engine and Not now, a failed start, or a start that works), and a command that did not run stays out of `history`; "Start engine" (`app/start.ts`): what each of the sixteen states offers (`startOffer`: the prompt, a new try after a failed start whose banner has "Try again", the take-over dialog, off, or null where there is an engine or one on its way), the words of the hint and of the off controls' toasts, and a press in each state on the real controllers (`startEngine`: the prompt in `none`, `declined` and again in `asking`; a new download after a failed one; nothing after "updated"; the take-over dialog in `other-tab-idle` with no lock taken and nothing started; nothing while a take-over is in progress, during a download or a start, when ready or running; no event reaches the machine where it does nothing); what a paste does is decided before anything changes (`log/pasterun.ts` `pastePlan`): with no engine an ordinary paste (the engine is checked first, no line runs, no prompt, no drop); with an engine that is not ready (a download, a start, a run) refused whole, with the toast's words and every line counted, the text around the cursor too, and nothing sent; ready, the lines run; a line refused part of the way is put back into an empty field but not into an off one (`putBack`); the off controls' toast by the offer (`startFirst`: "Start the engine to load wages.dta" where a start is offered, "The engine isn't running: can't load wages.dta" where none is); a run that rewrites an open file (the editor's `ranOver` for every open text tab, with `null` for a version that is not text; the run-changed banner where the editor kept its text; nothing for a store that cannot be read); a run's promise settles even when the after-run work throws; pasted lines (the command line's runner, `log/pasterun.ts`) stop when another tab takes the engine during a line, and no leftover line runs after a take-over and a later run. |
 | `wakelock.test.ts` | 9 | The screen wake lock (`app/wakelock.ts`) with a fake `wakeLock` and document: the policy for every state name (the table has each name, and the working states are the download, the start's stages, a run and Break's waiting states); the lock taken at a run and let go at its end, kept through `breaking` and `waiting`; asked at once by a page that starts working; the browser's release when the page is hidden answered by a new request when it is shown, and none while hidden or when nothing is wanted; a refused request is silent and a later change works; a request that arrives late is let go, and a pending one is reused (never two locks); no API is a no-op; `stop()` lets go and removes the listeners. |
 | `files.test.ts` | 35 | Store and engine worker together: the journal, what a run changed, a worker that cannot open its store. |
 | `machine.test.ts` | 31 | State machine: the transition table, SPEC section 5 matching the code, invariants (stale events change nothing, one ticket issued once, one live worker, no run held: `send-run` only from a run in `ready`, and no state keeps a run's code), the race scenarios (with no engine a run is not valid; Start engine, the event `ask`, opens the prompt, again in `asking`, and nothing runs once the engine is ready, through a crash on the way; after a failed start `ask` is not valid and `start` tries again; in `other-tab-idle` `ask` shows the take-over dialog again and takes no lock). |
@@ -125,9 +125,9 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 | `linalgshim.test.ts` | 4 | The linalg shim in the Pyodide engine. |
 | `build-id.test.ts` | 3 | Build id and the staleness check. |
 
-### End-to-end (Playwright, `web/e2e/`, 128 tests in 4 browser profiles)
+### End-to-end (Playwright, `web/e2e/`, 135 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 512 cases, of which 476 run and 36 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 540 cases, of which 501 run and 39 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
@@ -143,13 +143,14 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
   (at 1440 px in sight, with the full sentence for screen readers and as its title, no link or tab stop; none at
   1199 px, the bar's height the same; at 1200 px, with the longest last run, memory and "Files may be cleared", no
   overflow and nothing cut in seven engine states; none on the iPhone, which has no status bar).
-- `keyboard.spec.ts` (10): the phone keyboard experiment (`?kb=`, `?slide`, `?kblog`), in every profile at 390 by 844 px,
-  with viewport.ts's attributes set by script (no profile has a real keyboard): for no flag, `top`, an unknown value and
-  each strategy, `<html data-kb>` (none for the default), `.app` as the visible area (by a transform only under
-  `transform`), the tab bar hidden, the command line at its foot and the toast above it, and `.app` filling the window once
-  the keyboard closes; the full-size graph view covering the visible area under `top` and `transform` (a transformed
-  `.app` holds it); `pre`'s predicted area set in the command line's focus and gone after the hold; the `?kblog` overlay
-  (the strategy's name, a focus listed, `pointer-events: none` with what is under it reached), and none without the flag.
+- `keyboard.spec.ts` (7): the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, in every profile
+  at 390 by 844 px (no profile has a real keyboard): with viewport.ts's attributes set by script, `.app` as the visible
+  area from the top, the tab bar hidden, the command line at its foot and the toast above it, `.app` filling the window
+  once the keyboard closes, and the full-size graph view covering the visible area; a tap on the command line focuses it
+  with the caret at the end and the page not scrolled (touch profiles only); the overlay (a focus listed,
+  `pointer-events: none` with what is under it reached), and none without the flag; with a stand-in `visualViewport`
+  playing the keyboard, the editor's caret tapped under the keyboard's place (on a line of text, on an empty line and on
+  the file's last line) ends just above it when the keyboard opens, or at the editor's foot when it is scrolled to its end.
 - `files.spec.ts` (14): the file tree by keyboard, arrow, Home, End and Delete keys with Alt, Ctrl or Cmd left to the browser (the tree, a tablist, the open-file tabs, a menu button and an open menu keep the focus and do not prevent the event), opening files in tabs, closing a tab with and without unsaved edits
   (a Save that fails keeps the tab open with the save-failed banner; Save saves through 4b's editor and closes the tab; the phone's file switcher; the focus after Save and after "Don't save", in one move to the tab now selected or, on a phone, the editor, and after Delete on the last tab), inline rename and "already exists", Esc in a rename at 1024 px (the folded list stays
   open), the row and head menus, delete (the focus back in the tree) and delete-all, a new .do file, upload with name
@@ -258,7 +259,7 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (128, in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (135, in four profiles); the unit tests drive the controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request (`web.yml`, the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.

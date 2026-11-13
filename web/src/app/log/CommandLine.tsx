@@ -39,7 +39,6 @@ import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryWords, refusedRunWords, seconds } from "../editor/words.ts";
-import { kbMode } from "../env";
 import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
@@ -47,7 +46,6 @@ import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } fro
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { MenuButton, type MenuItem } from "../ui/Menu";
-import { focusesItself } from "../viewport.ts";
 import { plainLog } from "./classify.ts";
 import { openFind } from "./LogView";
 import { inTurnWords, runInTurn } from "./paste.ts";
@@ -149,11 +147,12 @@ export function CommandLine() {
     recall = -1;
     if (plan.lines.length) runPasted(plan.lines);
   };
-  // ?kb=focus, caret, early (the keyboard experiment, app/viewport.ts): a tap on the unfocused field focuses it here, with
-  // preventScroll, instead of the browser's own focus and its scroll into view; the caret goes to the end
+  // on a phone a tap on the unfocused field focuses it here, with preventScroll, instead of the browser's own focus: that
+  // scrolls the page up to the field, which iOS does before the page can stop it (app/viewport.ts); with
+  // preventScroll it does not. The caret goes to the end
   const onTouchEnd = (e: TouchEvent) => {
     const el = input.current;
-    if (!focusesItself(kbMode) || !el || document.activeElement === el) return;
+    if (!el || document.activeElement === el) return;
     e.preventDefault();
     el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
@@ -190,7 +189,7 @@ export function CommandLine() {
         onInput={onInput}
         onKeyDown={onKey}
         onPaste={onPaste}
-        onTouchEnd={focusesItself(kbMode) ? onTouchEnd : undefined}
+        onTouchEnd={phone ? onTouchEnd : undefined}
       />
       {offer !== null ? (
         // No engine: the one action is to start it. In words on a phone too (wider than the icon; the field shrinks).
