@@ -2,7 +2,8 @@
 // ui/Live.tsx's <Banner>.
 //  - EditorStateBanners: above the editor, from `engine` alone (not in `banners`): no engine (`declined`, S 5; its
 //    button is "Start engine", as the toolbar's, and opens the download prompt), did not
-//    start (`failed`, S 6, role alert), failed twice (S 7, role alert). The action follows the `reason` (words.ts
+//    start (`failed`, S 6), failed twice (S 7); neither has role="alert": the machine's `say` says each once in the live
+//    region (a banner in the editor slot is display:none on a phone's other views, where an alert is never announced). The action follows the `reason` (words.ts
 //    failedActions), never the text: no-wasm "Browsers that work"; download "Try again"; updated "Reload the
 //    page"; unknown both. "Download all (.zip)" is off while the store has no file (`hasFiles`).
 //  - LogStateBanners: above the log, from `engine` and `isolated`: running (E?r; with no cross-origin isolation S 11 says
@@ -75,7 +76,6 @@ function FailedBanner({
   return (
     <Banner
       kind="error"
-      role="alert"
       bannerRef={ref}
       actions={actions.map((a) => {
         switch (a) {
