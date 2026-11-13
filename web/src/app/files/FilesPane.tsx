@@ -50,7 +50,7 @@ import { formatSize, joinPath, NAME_NOT_ALLOWED, nameProblem, parentOf, type Row
 const folded = signal<ReadonlySet<string>>(new Set()); // the folded folders
 const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
 // the row waiting for the focus: it takes it when it is drawn (TreeRow), then this is null again
-const focusWanted = signal<string | null>(null);
+export const focusWanted = signal<string | null>(null); // exported for the test hook (main.tsx)
 interface Renaming {
   path: string;
   problem: string | null;
@@ -268,21 +268,24 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
   );
 }
 
+/** A row that focusRow asked for takes the focus once it is drawn, if it is still the roving one and the focus is free. */
+function useRovingFocus(path: string, li: { current: HTMLElement | null }, renaming: boolean) {
+  const asked = focusWanted.value === path && !renaming; // a row being renamed keeps the request until the field is gone
+  useLayoutEffect(() => {
+    if (!asked) return;
+    focusWanted.value = null; // the request ends here, taken or not
+    if (rovingPath.value !== path) return; // the visitor made another row roving meanwhile
+    const at = document.activeElement; // the body is where the focus goes when the rename field is removed
+    if (!at || at === document.body || li.current?.closest('[role="tree"]')?.contains(at)) li.current?.focus();
+  }, [asked]);
+}
+
 function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: Row[] }) {
   const tab = tabs.value.find((t) => t.path === row.path);
   const open = !row.dir && activeTab.value === row.path;
   const r = renaming.value?.path === row.path ? renaming.value : null;
   const li = useRef<HTMLLIElement>(null);
-  // still the row in the tab order: a visitor who clicked another row meanwhile made that one roving
-  const wanted = focusWanted.value === row.path && rovingPath.value === row.path && !r;
-  useLayoutEffect(() => {
-    if (!wanted) return;
-    focusWanted.value = null;
-    // the focus is the visitor's once it is out of the tree (a click into the editor while the list was read): on the
-    // page (where it goes when the rename field is removed) or in the tree, the row takes it
-    const at = document.activeElement;
-    if (!at || at === document.body || li.current?.parentElement?.contains(at)) li.current?.focus();
-  }, [wanted]);
+  useRovingFocus(row.path, li, r !== null);
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor: at ? null : el, at, restore: el });
   const activate = () => {

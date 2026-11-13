@@ -315,6 +315,8 @@ test("a renamed row drawn after the visitor clicked another row leaves the focus
   await expect(row(page, /^b\.do/)).toBeVisible();
   await page.waitForTimeout(300); // a late focus of the renamed row would have come by now
   await expect(row(page, /^c\.do/)).toBeFocused();
+  // the request was ended when b.do was drawn, not left to fire when b.do is made the roving row some other way
+  expect(await page.evaluate(() => (window as any).__dofile.focusWanted.value)).toBeNull();
 });
 
 test("a menu's arrow keys skip a disabled item in the middle or at the end, and wrap around", async ({ page }) => {
