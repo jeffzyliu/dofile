@@ -61,15 +61,11 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
       instantiations per boot); WebKit bug 208368 records a flaky case like it on Linux. Rate about 4% of WebKit runs of the
       test (2 in about 49), none in Chromium or Firefox. #34 skips the test in WebKit. A product gap stays: nothing times out
       the `starting-worker` state (`docs/icebox.md`).
-  - **Not merged, not approved:** #27 `claude/phone-keyboard-experiment` (`?kb=`, `?slide`, `?kblog`; the default unchanged;
-    `docs/phone-keyboard-experiment.md`), made from `bc8a942`. The maintainer: "don't edit upstream 27 yet". It conflicts
-    with `main` in one place in `web/CLAUDE.md` and the test map's counts. The closed #28 (a draft that joined everything) and
-    #29 (an earlier version of this section) are not for merging.
-  - **A fresh-context review of #27 (2026-11-12) found nothing blocking.** With no flag the page is the same as `main`. To
-    fix before the iPhone sitting: the `?kblog` overlay covers the top bar and the top third of the screen, which the sitting
-    observes (`web/src/app/kblog.ts`); `?kb=pre` also shrinks the page on a focus set by script, where no keyboard opens;
-    `?slide` does nothing under `height`, `unpan` and `pre`. A local rebase over #25's content exists (`52eff98`, in a
-    worktree), with a dev server on port 5273 for the iPhone sitting; it is stale against `main`.
+  - **Not merged:** #27 `claude/phone-keyboard-experiment`, rebased on `main`. Three rounds on an iPhone (iOS 27.0.1;
+    `docs/phone-keyboard-experiment.md`) settled the keyboard: the phone's command line takes a tap's focus itself with
+    `preventScroll`, Safari's pan is scrolled straight back with `.app` kept at the top, and the editor's caret is scrolled
+    above the keyboard through CodeMirror. The `?kb=` and `?slide` flags are gone; `?kblog` stays. The closed #28 (a draft
+    that joined everything) and #29 (an earlier version of this section) are not for merging.
 - **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
   decisions: 1 to 5 are accepted (all built in #23 to #25; decision 5, the trackpad back-swipe, is to be checked once by
   hand), 6 (zoom on the editor page) waits on the keyboard experiment, and 7 to 22 have no answer yet. Nothing they
