@@ -104,6 +104,7 @@ export const isPhone = computed(() => layout.value === "phone");
 export const runWriter = {
   log: signal<LogItem[]>([{ t: "head" }]), // "Clear log" keeps the head
   lastRun: signal<LastRun | null>(null),
+  engineRuns: signal(0), // runs begun on the engine now live: 0 on a new or reset engine, whatever a run cut left (Reset's question)
   history: signal<string[]>([]), // runCommand(): the command line, Load and Import call it
   results: signal<Results | null>(null), // from each RunResult; null when the engine is gone (a reset, another tab)
   macros: signal<Macros | null>(null), // after each run; null when the engine is gone
@@ -114,6 +115,7 @@ export const runWriter = {
 };
 export const log: ReadonlySignal<LogItem[]> = runWriter.log;
 export const lastRun: ReadonlySignal<LastRun | null> = runWriter.lastRun;
+export const engineRuns: ReadonlySignal<number> = runWriter.engineRuns;
 export const history: ReadonlySignal<string[]> = runWriter.history;
 export const results: ReadonlySignal<Results | null> = runWriter.results;
 export const macros: ReadonlySignal<Macros | null> = runWriter.macros;

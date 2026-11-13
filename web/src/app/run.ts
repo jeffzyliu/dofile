@@ -36,7 +36,6 @@ type Current = {
 };
 
 let runs = 0; // runs so far in this page: each run's items carry its number
-let sessionRuns = 0; // runs since the engine started: the first one's run-head says "(first run: none yet)"
 let graphCount = 0; // graphs drawn since the log was cleared: their numbers
 let current: Current | null = null;
 
@@ -84,8 +83,8 @@ export function runCommand(text: string): Requested {
 function began(head: RunHead, theme: "light" | "dark") {
   const id = ++runs;
   if (head.kind !== "command" && S.layout.value === "phone") S.phoneTab.value = "log"; // Run opens the Log tab
-  const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: sessionRuns === 0 }];
-  sessionRuns++; // now, not after the run: a reset that cuts it starts the count again, and the next run is first
+  const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.peek() === 0 }];
+  W.engineRuns.value = W.engineRuns.peek() + 1; // peek: run() may be called from an effect, which must not depend on this. Now, not after the run: a reset that cuts it starts the count again, and the next run is first
   const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for S 15's note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");
@@ -159,7 +158,7 @@ function engineReady() {
 
 /** The engine is gone (the effect `engine-gone`): a reset, or another tab has it. Nothing of it is in memory. */
 function engineGone() {
-  sessionRuns = 0;
+  W.engineRuns.value = 0;
   W.results.value = W.macros.value = null;
   W.data.value = W.rows.value = null;
   W.memory.value = null;
