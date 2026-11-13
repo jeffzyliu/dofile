@@ -7,7 +7,7 @@
 
 /** The cap on a phone, in MiB. The heap is 3.5 to 6 times the data (generate and replace copy a column), so this holds
  *  roughly 150 to 250 MB of data. Above the restored heap (130 MB) with room to work, under where an iPhone died (1.1 GB). */
-export const PHONE_CAP_MB = 900;
+export const PHONE_CAP_MB = 750;
 
 /** What the rule reads of the browser. `mobile`: navigator.userAgentData?.mobile (Chromium); `deviceMemory`: navigator.deviceMemory
  *  (GB, rounded down to a power of two, at most 8; Chromium only, so Safari and Firefox have none). */

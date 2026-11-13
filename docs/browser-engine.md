@@ -170,12 +170,12 @@ memory". The run ends with an ordinary error, the data stays, and the next comma
   `growMemory` bypasses the cap, so a cap below the restored heap (130 MB) does not stop the start but leaves no room to work.
   A wrapper over `instantiateWasm` that replaces `emscripten_resize_heap` also works, but it cannot stop Emscripten's own
   over-growth (up to 96 MB past the request), which a cap near 1 GB cannot spare.
-- **Which devices** (`engine/memcap.ts`, by device, never by layout width): 900 MB (`PHONE_CAP_MB`) when the user agent has
+- **Which devices** (`engine/memcap.ts`, by device, never by layout width): 750 MB (`PHONE_CAP_MB`) when the user agent has
   iPhone, iPad or iPod, or says Macintosh with `navigator.maxTouchPoints > 1` (an iPad asking for the desktop site; every iOS
   browser is WebKit), or `navigator.userAgentData.mobile` is true, or `navigator.deviceMemory` is 4 or less. Anything else has no
   cap (the browser's own limit). `?memcap=<MB>` in the URL overrides it either way (0: no cap), to try a cap on a real phone or a
-  desktop; a value that is not a whole number is ignored. The page logs one line at start: `[dofile] engine memory cap: 900 MB,
-  iOS or iPadOS`. The Playwright iPhone profile has an iPhone user agent, so the e2e tests of that project run under the 900 MB cap.
+  desktop; a value that is not a whole number is ignored. The page logs one line at start: `[dofile] engine memory cap: 750 MB,
+  iOS or iPadOS`. The Playwright iPhone profile has an iPhone user agent, so the e2e tests of that project run under the 750 MB cap.
 - **The ballast** (`browser.py`): a 20 MB `bytearray` kept in reserve. When the heap is full even the interpreter's error handling
   and the next call's compile need room; a script that filled the heap with small objects left every later `runPython`
   failing with "lost sys.stderr", so the session could not recover until a reset (the same hazard exists at the 4 GB limit; the
@@ -193,7 +193,13 @@ memory". The run ends with an ordinary error, the data stays, and the next comma
   data or macros.
 - **What a cap buys.** The heap is 3.5 to 6 times the data (80 MB column: the heap went 196 to 516 MB in `generate double x1 = 1` on
   10 million rows; 320 MB of data took 1.1 GB in all), because `generate` and `replace` copy a column, and wasm memory never
-  shrinks. So 900 MB holds about 150 to 250 MB of data, not 900. Fewer copies in `generate` is the lever, and is not done.
-- **Not checked:** a real iPhone or WebKit's behaviour (the cap means the engine never asks for the grow that WebKit would kill the
-  tab over; 900 MB is chosen from reports of about 1.5 GB per tab on iPhones and of tabs dying near 1 GB, not measured on a device).
-  `merge`, `reshape`, `regress`, sort and graphs near the cap were not exercised.
+  shrinks. So the cap holds much less data than its size (on an iPhone 13, below). Fewer copies in `generate` is the lever, and is not done.
+- **Measured on an iPhone 13 (2026-11-13, by the maintainer, with `?memcap=` and 40 MB `generate double` steps):** cap 600:
+  r(909) at 360 MB of data, and an occasional crash after other runs in the same tab (memory outside the engine's heap, or a
+  leak: not looked into); cap 750 and 800: r(909) at 520 MB; cap 830: the tab crashed at 560 MB; cap 900: crashed near 560 MB.
+  So the phone default is 750 MB (`PHONE_CAP_MB`), below the 800 to 830 MB where the tab dies. Other phones not measured.
+- **Later (approved 2026-11-13, not built): `set max_memory`** lowers the cap for the session (`set max_memory 500m`), never above
+  the device's default, since raising it is how a visitor would crash the tab. The patch reads the cap at each grow, so it can
+  probably change while the engine runs (not checked). Also later: why the cap-600 tab crashed after other runs (a leak, or memory
+  outside the engine's heap).
+- **Not checked:** WebKit on other devices; `merge`, `reshape`, `regress`, sort and graphs near the cap were not exercised.
