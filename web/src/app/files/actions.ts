@@ -126,27 +126,22 @@ async function reopenAs(path: string) {
   phoneTab.value = view;
 }
 
-/** The head menu's and the dropzone's "New .do file": an empty `untitled.do` (`untitled-2.do`, ... when taken) at the
- *  top, which the tree then shows in inline rename. Returns its path. */
-export async function newDoFile(dir = ""): Promise<string> {
-  const path = freeName(
-    dir,
-    "untitled.do",
-    (await store.list()).map((f) => f.path),
-  );
-  await store.write(path, new Uint8Array(0));
-  return path;
-}
+/** What a new file or folder is called when the name field is left empty or unchanged. */
+export const NEW_NAMES = { file: "untitled.do", folder: "folder" } as const;
 
-/** "New folder": `folder` (`folder-2`, ...) at the top, then inline rename. Returns its path. */
-export async function newFolder(dir = ""): Promise<string> {
-  const path = freeName(
-    dir,
-    "folder",
-    (await store.list()).map((f) => f.path),
-  );
-  await store.mkdir(path);
-  return path;
+/** Make an empty file or a folder when the visitor leaves the name field of a draft row (FilesPane.tsx, docs/web-page-flows.md
+ *  section 1): `name` in `dir`, or with no `name` the first free `untitled.do` (`untitled-2.do`, ...) or `folder`. The store
+ *  is listed fresh and in a turn, so two quick ones cannot both take a name; a `name` in use rejects with "already exists"
+ *  (a write would replace it). Returns its path. */
+export function createEntry(kind: keyof typeof NEW_NAMES, dir = "", name?: string): Promise<string> {
+  return fileTurn(async () => {
+    const taken = (await store.list()).map((f) => f.path);
+    const path = name === undefined ? freeName(dir, NEW_NAMES[kind], taken) : joinPath(dir, name);
+    if (taken.includes(path)) throw new Error(`${path} already exists`);
+    if (kind === "file") await store.write(path, new Uint8Array(0));
+    else await store.mkdir(path);
+    return path;
+  });
 }
 
 /** Delete each path (a folder with everything under it) and close their tabs (in a turn: a Save pressed meanwhile finds

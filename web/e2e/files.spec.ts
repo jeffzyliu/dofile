@@ -522,14 +522,181 @@ test("the folded file list: Esc in an inline rename cancels the rename and leave
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
-test("New .do file: untitled.do in inline rename, then it opens", async ({ page }) => {
+// New .do file and New folder draw the name field at once, with nothing written (docs/web-page-flows.md, section 1, rule 8);
+// the file or folder is written when the field is left
+const nameField = (page: Page, name: string) => page.getByRole("textbox", { name: `New name for ${name}` });
+const storePaths = (page: Page) =>
+  page.evaluate(async () =>
+    (await (window as unknown as { __dofile: Hook }).__dofile.store.list()).map((f) => f.path).sort(),
+  );
+const newFile = (page: Page) => page.getByRole("button", { name: "New .do file" });
+// opening a file takes a phone to the Editor view: the Files view again, for what is drawn there
+const showFiles = async (page: Page) => {
+  if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+};
+
+test("New .do file: the name field is drawn with nothing written; Enter writes the typed name and opens it", async ({
+  page,
+}) => {
   await setUp(page, {});
-  await page.getByRole("button", { name: "New .do file" }).click();
-  const field = page.getByRole("textbox", { name: "New name for untitled.do" });
+  await newFile(page).click();
+  const field = nameField(page, "untitled.do");
   await expect(field).toBeFocused();
+  expect(await storePaths(page)).toEqual([]);
   await page.keyboard.type("clean");
   await page.keyboard.press("Enter");
   await expect.poll(() => openTabs(page)).toEqual(["clean.do"]);
+  expect(await storePaths(page)).toEqual(["clean.do"]);
+  await showFiles(page);
+  await expect(row(page, /^clean\.do/)).toHaveAttribute("aria-selected", "true");
+});
+
+// An iPhone raises the keyboard only for a focus made while it handles the tap: the field is in the page, focused,
+// before the microtask after the click ends (nothing is awaited between the tap and the field). No test here shows the keyboard.
+test("New .do file and New folder: the name field has the focus within the tap's microtasks, from the link and from the menu", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n" });
+  const inTheTap = (target: ReturnType<Page["locator"]>) =>
+    target.evaluate(async (el) => {
+      (el as HTMLElement).click();
+      await null;
+      const at = document.activeElement as HTMLInputElement | null;
+      return at?.matches("input.rename-field") ? at.value : null;
+    });
+  expect(await inTheTap(newFile(page))).toBe("untitled.do");
+  await page.keyboard.press("Escape");
+  await expect(nameField(page, "untitled.do")).toBeHidden();
+  let menu = await fileActions(page);
+  expect(await inTheTap(menu.getByRole("menuitem", { name: "New .do file" }))).toBe("untitled.do");
+  await page.keyboard.press("Escape");
+  menu = await fileActions(page);
+  expect(await inTheTap(menu.getByRole("menuitem", { name: "New folder" }))).toBe("folder");
+  expect(await storePaths(page)).toEqual(["a.do"]);
+});
+
+test("a new file: Esc writes nothing and the focus goes back to the tree; Enter on an empty or unchanged name writes untitled.do", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n" });
+  await newFile(page).click();
+  await expect(nameField(page, "untitled.do")).toBeFocused();
+  await page.keyboard.type("zzz");
+  await page.keyboard.press("Escape");
+  await expect(nameField(page, "untitled.do")).toBeHidden();
+  await expect(row(page, /^a\.do/)).toBeFocused();
+  expect(await storePaths(page)).toEqual(["a.do"]);
+  await newFile(page).click();
+  await page.keyboard.press("Enter"); // unchanged
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
+  await showFiles(page);
+  await newFile(page).click();
+  await expect(nameField(page, "untitled-2.do")).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Enter"); // empty: the free default, not "Enter a name."
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled-2.do", "untitled.do"]);
+});
+
+test("a new file: leaving the field writes it (the typed name, else untitled.do) and opens it", async ({ page }) => {
+  await setUp(page, { "a.do": "1\n" });
+  await newFile(page).click();
+  await page.keyboard.type("b");
+  await row(page, /^a\.do/).click();
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "b.do"]);
+  await expect.poll(() => openTabs(page)).toContain("b.do");
+  await showFiles(page);
+  await newFile(page).click();
+  await row(page, /^a\.do/).click();
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "b.do", "untitled.do"]);
+});
+
+test("a new file named a file that exists: Enter keeps the field open with the reason and writes nothing over it; leaving makes untitled.do and says so", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "mine" });
+  await newFile(page).click();
+  const field = nameField(page, "untitled.do");
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("a.do");
+  await page.keyboard.press("Enter");
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText("a.do already exists here.").first()).toBeVisible();
+  expect(await storePaths(page)).toEqual(["a.do"]);
+  expect(await textOf(page, "a.do")).toBe("mine");
+  await row(page, /^a\.do 4 B/).click(); // the file's row; the draft's has the field
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
+  expect(await textOf(page, "a.do")).toBe("mine");
+  await expect(page.getByRole("status").filter({ hasText: "Made untitled.do instead." })).toHaveCount(1);
+});
+
+test("a file with the offered name written while the field is open: Enter makes untitled-2.do and leaves it alone", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n" });
+  await newFile(page).click();
+  await expect(nameField(page, "untitled.do")).toBeFocused();
+  await page.evaluate(async () => {
+    const { store } = (window as unknown as { __dofile: Hook }).__dofile; // as a run's output would
+    await store.write("untitled.do", new TextEncoder().encode("a run wrote me"));
+  });
+  await page.keyboard.press("Enter");
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled-2.do", "untitled.do"]);
+  expect(await textOf(page, "untitled.do")).toBe("a run wrote me");
+});
+
+test("a second New while the first one is being written: the second field stays, and the two files get two names", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n" });
+  await page.evaluate(async () => {
+    const link = [...document.querySelectorAll("button")].find((b) => b.textContent === "New .do file") as HTMLElement;
+    link.click();
+    await null;
+    (document.activeElement as HTMLElement).blur(); // the first one is written from here, and takes its time
+    link.click(); // the second offers untitled.do too: the list does not have the first yet
+    await null;
+  });
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
+  if (isPhone(page)) return; // the first file opens in the editor, and the phone's Files view goes with the field
+  await expect(nameField(page, "untitled.do")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled-2.do", "untitled.do"]);
+});
+
+test("a new file the store cannot write: the live region says so and no field is left", async ({ page }) => {
+  await setUp(page, { "a.do": "1\n" });
+  await page.evaluate(() => {
+    const { store } = (window as unknown as { __dofile: Hook }).__dofile;
+    store.write = () => Promise.reject(new Error("the quota"));
+  });
+  await newFile(page).click();
+  await page.keyboard.press("Enter");
+  await expect(nameField(page, "untitled.do")).toBeHidden();
+  await expect(page.getByRole("status").filter({ hasText: "Couldn't create the file" })).toHaveCount(1);
+  expect(await storePaths(page)).toEqual(["a.do"]);
+});
+
+test("New folder: a draft too; Enter writes the typed name and opens no tab; Esc writes nothing; leaving writes `folder`", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n" });
+  const menuItem = async () => (await fileActions(page)).getByRole("menuitem", { name: "New folder" });
+  await (await menuItem()).click();
+  await expect(nameField(page, "folder")).toBeFocused();
+  expect(await storePaths(page)).toEqual(["a.do"]);
+  await page.keyboard.press("Escape");
+  await expect(nameField(page, "folder")).toBeHidden();
+  expect(await storePaths(page)).toEqual(["a.do"]);
+  await (await menuItem()).click();
+  await page.keyboard.type("data");
+  await page.keyboard.press("Enter");
+  await expect(row(page, /^data\//)).toBeVisible();
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "data"]);
+  expect(await openTabs(page)).toEqual([]);
+  await (await menuItem()).click();
+  await row(page, /^a\.do/).click();
+  await expect.poll(() => storePaths(page)).toEqual(["a.do", "data", "folder"]);
 });
 
 test("upload with name clashes: Enter keeps mine; Do the same with Replace replaces the rest; Esc keeps every one left; the toast counts", async ({
