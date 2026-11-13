@@ -71,6 +71,8 @@ Add them to the editor's address from `npm run dev` on the LAN, e.g. `http://<co
 
 ## Reading the overlay
 
+In the experiment the overlay's first line also named the mode (`kb=…`); without the flags it shows only the versions.
+
 One row per event. The rows start again at each tap made while no text field has the focus.
 
 | Column | Meaning |
@@ -221,3 +223,8 @@ scrolled to its end, so the caret sits at the editor's foot, a few px above the 
 Only `?kb=early&kblog` (and `?kb=caret&kblog` to compare if `early` is not clearly right). Tap the editor in the bottom
 third, on a line of text, on an empty line, and below the last line; tap the command line. Note whether the caret ends
 in sight above the keyboard each time. If it does, `early` becomes the default and the other modes go.
+
+## Results, round 3 (iOS 27.0.1)
+
+With the caret revealed through CodeMirror, the tester found `early` good. It became the page's behavior and the flags
+went (see the outcome at the top).
