@@ -34,7 +34,7 @@ import type {
 import { initial, RC_RESET, transition } from "../engine/machine.ts";
 import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
 import { BREAK_GRACE_MS } from "../engine/types.ts";
-import { editorAsked, editorCommands } from "./editor/commands.ts";
+import { editorAsked } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
 import { engineWriter } from "./state.ts";
