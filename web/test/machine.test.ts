@@ -321,7 +321,7 @@ const wantReset =
         ending: { kind: "reset", reset: kind, reason: SENTENCE(reason) },
       },
       "fetch-list": { do: "fetch-list", n: next },
-      "add-reset-banner": { do: "add-reset-banner", reason, kind },
+      "add-reset-banner": { do: "add-reset-banner", reason, kind, run: "run" in was ? was.run : null },
       say: { do: "say", line: "reset" },
       "engine-gone": { do: "engine-gone" },
       "end-run": { do: "end-run", result: CUT(SENTENCE(reason), kind) },
@@ -1344,8 +1344,8 @@ const endReset = (n: number, kind: ResetKind, reason: string): Plain<Effect> => 
   n,
   ending: { kind: "reset", reset: kind, reason: SENTENCE(reason) },
 });
-const banner = (kind: ResetKind, reason: string): Plain<Effect>[] => [
-  { do: "add-reset-banner", reason, kind },
+const banner = (kind: ResetKind, reason: string, run: RunHead | null = null): Plain<Effect>[] => [
+  { do: "add-reset-banner", reason, kind, run },
   { do: "say", line: "reset" },
   { do: "engine-gone" },
 ];
@@ -1458,7 +1458,7 @@ const SCENARIOS: Record<string, () => At[]> = {
           { do: "cancel-break-timer" },
           endReset(4, "break", "the code did not stop at Break"),
           { do: "fetch-list", n: 5 },
-          ...banner("break", "the code did not stop at Break"),
+          ...banner("break", "the code did not stop at Break", HEAD),
           { do: "end-run", result: CUT(SENTENCE("the code did not stop at Break"), "break") },
         ],
         { crashes: 0 },
@@ -1588,7 +1588,7 @@ const SCENARIOS: Record<string, () => At[]> = {
         [
           endReset(4, "crash", BOOM),
           { do: "fetch-list", n: 5 },
-          ...banner("crash", BOOM),
+          ...banner("crash", BOOM, HEAD),
           { do: "end-run", result: CUT(SENTENCE(BOOM), "crash") },
         ],
         { crashes: 1 },
@@ -1708,7 +1708,7 @@ const SCENARIOS: Record<string, () => At[]> = {
       play(row("running")).go({ type: "reset" }, { s: "starting-list", worker: 5 }, [
         endReset(4, "user", "reset by you"),
         { do: "fetch-list", n: 5 },
-        ...banner("user", "reset by you"),
+        ...banner("user", "reset by you", HEAD),
         { do: "end-run", result: CUT(SENTENCE("reset by you"), "user") },
       ]).at,
       play(row("running")).go({ type: "run-ended", result: ended }, { s: "ready", worker: 4 }, [

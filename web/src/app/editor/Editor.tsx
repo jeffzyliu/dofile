@@ -186,11 +186,13 @@ function update(path: string, effects: Parameters<EditorView["dispatch"]>[0]) {
 
 // ---- runs ----
 
-/** The active tab's path when it is a text tab the editor has. */
-function activeText(): string | null {
-  const path = activeTab.value;
+/** `path` when it is a text tab the editor has. */
+function openText(path: string | null): string | null {
   return path && tabs.value.some((t) => t.path === path && t.kind === "text") && states.has(path) ? path : null;
 }
+
+/** The active tab's path when it is a text tab the editor has. */
+const activeText = (): string | null => openText(activeTab.value);
 
 /** Send a run. `keyed`: Ctrl/Cmd+Enter, which has no disabled button to show that Run is off, so a run the engine does
  *  not take (run.ts requestRun: refused) says why in a toast, in the words of the engine's state (words.ts). */
@@ -201,8 +203,9 @@ function start(code: string, head: RunHead, keyed: boolean) {
   if (words) showToast(words, "error");
 }
 
-function runFile(keyed = false) {
-  const path = activeText();
+/** Run a whole file: `at`, or the active tab (the reset banner's "Run the file again" names the file whose run it cut). */
+function runFile(keyed = false, at?: string) {
+  const path = at === undefined ? activeText() : openText(at);
   if (!path) {
     showToast("No file is open to run", "error");
     return;
@@ -484,7 +487,7 @@ function onRunKey(e: KeyboardEvent) {
 function mount(host: HTMLElement, emptyView: HTMLElement) {
   empty = emptyView;
   view = new EditorView({ parent: host, state: emptyState });
-  editorCommands.runFile = () => runFile();
+  editorCommands.runFile = (path) => runFile(false, path);
   editorCommands.runSelection = () => runSelection();
   editorCommands.save = save;
   editorCommands.focus = focus;

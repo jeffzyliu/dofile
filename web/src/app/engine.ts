@@ -385,7 +385,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         if (effect.focusEditor) setTimeout(() => editorCommands.focus(), 0);
         return;
       case "add-reset-banner":
-        return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind });
+        return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind, run: effect.run });
       case "say":
         return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageWords[effect.line.stage]);
       case "warn":

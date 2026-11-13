@@ -146,7 +146,7 @@ export type Effect =
   | { do: "engine-gone" }
   | { do: "show-dialog"; dialog: "download" | "other-tab" }
   | { do: "close-dialog"; dialog: "download" | "other-tab"; focusEditor: boolean }
-  | { do: "add-reset-banner"; reason: string; kind: ResetKind }
+  | { do: "add-reset-banner"; reason: string; kind: ResetKind; run: RunHead | null } // run: the run this reset cut
   | { do: "say"; line: Line }
   | { do: "warn"; text: string };
 
@@ -395,7 +395,11 @@ function RESET(
     { do: "fetch-list", n: next },
   );
   if (old.s !== "starting-worker")
-    effects.push({ do: "add-reset-banner", reason, kind }, { do: "say", line: "reset" }, { do: "engine-gone" });
+    effects.push(
+      { do: "add-reset-banner", reason, kind, run: old.s === "ready" ? null : old.run },
+      { do: "say", line: "reset" },
+      { do: "engine-gone" },
+    );
   if (old.s === "running" || old.s === "breaking" || old.s === "waiting")
     effects.push({ do: "end-run", result: cutResult(lost(reason), kind) });
   return step(
