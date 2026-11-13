@@ -135,6 +135,21 @@ test("the download size in the text is the build's: the editor prompt's number, 
   expect(await page.locator("main").innerHTML()).not.toMatch(/CDN/);
 });
 
+test("the theme button fits the bar at 320 px (icon only, named); the word shows from 360 px", async ({ page }) => {
+  await page.goto("/");
+  const button = page.getByRole("button", { name: /^Theme:/ });
+  const word = button.locator(".label-text");
+  const right = async () => (await button.boundingBox())!.x + (await button.boundingBox())!.width;
+  await page.setViewportSize({ width: 320, height: 700 });
+  await expect(button).toBeVisible();
+  expect(await right()).toBeLessThanOrEqual(320);
+  await expect(word).toBeHidden();
+  await expect(button).toHaveAccessibleName(/^Theme:/);
+  await page.setViewportSize({ width: 360, height: 700 });
+  await expect(word).toBeVisible();
+  expect(await right()).toBeLessThanOrEqual(360);
+});
+
 test("the theme button cycles System, Light, Dark; the choice is the editor's too", async ({ page }) => {
   await page.goto("/");
   const button = page.getByRole("button", { name: /^Theme:/ });
