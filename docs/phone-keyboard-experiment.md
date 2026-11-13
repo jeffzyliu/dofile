@@ -171,3 +171,25 @@ whether the text jumps more than once; whether all comes back when the keyboard 
 
 What to look for in the overlay: under `early`, whether `offTop` stays 0 after a bottom tap (the early scroll stopped
 the pan) or still goes to about 130–180 (Safari decided the pan before the scroll); under both, `offTop` 0 throughout c.
+
+## Results, round 2 (iOS 27.0.1)
+
+From the overlay logs (four screenshots: the second b with b2, and the second c, under each mode):
+
+- **Command line, both modes: no pan.** `offTop` and `scrollY` stay 0 from the tap to the keyboard closing, and `.app`
+  never moves. With round 1's two `focus` logs, that makes four out of four. The keyboard left 369 px here, not 396
+  (a taller keyboard, probably with its suggestion bar); the page followed it.
+- **Editor, both modes: the pan comes in the first `vv.resize`** (`offTop` 138 and 189 at about 200 ms). In round 1
+  the editor's first `vv.resize` had `offTop` 0 and the pan came about 120 ms later. So that order is not reliable,
+  and `early` cannot get in before the pan. Under both modes the page scrolls back in the same event (`scrollY` 0 by
+  the next row, 2–3 ms later), and `offTop` reaches 0 about 100 ms later.
+- **The caret scroll ran as designed**, seen as element scrolls (`w.scroll` with `scrollY` 0). Under `early`, a second
+  `w.scroll` comes at 210 ms with the page's scroll-back, so there is one movement. Under `caret` it comes at 602 ms,
+  0.3 s after the last viewport event, as a second, separate movement.
+- **b2**, a tap on another line with the keyboard open, gives no event at all: no pan, nothing to undo.
+- The caret at `focusin` was stale again (a tap at y 514 read c168, y 574 read c142). Both modes read the caret only
+  at the `vv.resize` or later, so this does not matter to them.
+
+By the logs, `early` is the better of the two: it puts the scroll-back and the caret scroll in the same frame. A
+script cannot stop the editor's pan on iOS 27. It is on screen for about one frame (`appTop` −138 or −189 in the
+`vv.resize` row, 0 in the next).
