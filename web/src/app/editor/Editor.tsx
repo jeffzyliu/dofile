@@ -39,6 +39,7 @@ import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@cod
 import { effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
 import { useEffect, useRef } from "preact/hooks";
+import { fileTurn } from "../files/actions.ts";
 import { openFile } from "../files/open.ts";
 import { baseName } from "../files/tree.ts";
 import { requestRun } from "../run.ts";
@@ -278,9 +279,11 @@ function errorLineOf(st: EditorState): number | null {
 
 // ---- save ----
 
-// The saves in progress, each with the path its tab has now: renamed() moves it and closed() ends it (null), so a save
-// that answers after its tab was renamed leaves its outcome on the tab (the saved text, the form, the dot, the banners,
-// the toast), not under the old name. The store has the bytes under the new name: its rename comes after the write.
+// The saves in progress, each with the path its tab has now: renamed() moves it and closed() ends it (null). A save
+// writes in its turn (files/actions.ts fileTurn), after a rename or a delete pressed before it has moved or closed the
+// tab, under the tab's path then (closed: nothing is written). One that answers after its tab was renamed leaves its
+// outcome on the tab (the saved text, the form, the dot, the banners, the toast), not under the old name. The store has
+// the bytes under the new name: its rename is called after the write (the turn ends once the write is issued).
 const saving = new Set<{ path: string | null }>();
 
 async function save(path: string | undefined = activeTab.value ?? undefined): Promise<boolean> {
@@ -289,12 +292,20 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
   const text = st.doc.toString();
   const at: { path: string | null } = { path };
   saving.add(at);
+  let written = path; // the name the text is written under: the tab's when its turn comes
   try {
-    await store.write(path, new TextEncoder().encode(fileText(text, forms.get(path) ?? PLAIN, path)));
+    let write = null as Promise<unknown> | null;
+    await fileTurn(async () => {
+      if (at.path === null) return;
+      written = at.path;
+      write = store.write(written, new TextEncoder().encode(fileText(text, forms.get(written) ?? PLAIN, written)));
+    });
+    if (!write) return false; // its tab closed while it waited (a delete): nothing to write
+    await write;
   } catch (e) {
     const message = (e as Error)?.message ?? String(e);
     if (at.path !== null) addBanner({ b: "save-failed", path: at.path, message }); // not for a tab closed meanwhile
-    say(`${baseName(at.path ?? path)} couldn't be saved`);
+    say(`${baseName(at.path ?? written)} couldn't be saved`);
     return false;
   } finally {
     saving.delete(at);
@@ -304,11 +315,11 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
     savedText.set(now, text);
     // the form as written: the name it was written under decided whether the BOM was dropped
     const form = forms.get(now);
-    if (form) forms.set(now, savedForm(form, path));
+    if (form) forms.set(now, savedForm(form, written));
     if (current(now)?.doc.toString() === text) setDirty(now, false);
     for (const b of banners.value) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === now) dismiss(b);
   }
-  showToast(`Saved ${baseName(now ?? path)}`);
+  showToast(`Saved ${baseName(now ?? written)}`);
   return true;
 }
 

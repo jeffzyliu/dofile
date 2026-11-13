@@ -9,6 +9,10 @@
 //    time (a second waits for the first to end), and a clash waits while another dialog is open: it never replaces one.
 //    A clash over an open file with unsaved edits is asked even after "Do the same" with Replace (never after Esc or
 //    Keep mine for the rest: keeping it loses nothing).
+//  - The changes that tabs follow (a rename, a delete) and the editor's Save take turns (fileTurn): a rename or a delete
+//    keeps its turn until the tabs have followed it, so a Save pressed meanwhile writes under the tab's path as it is
+//    then (renamed, or closed: no write). A Save's turn only issues its write: the store applies changes in the order
+//    they are called (engine/store.ts `change`), so a rename that comes after it moves the bytes it wrote.
 import { effect } from "@preact/signals-core";
 import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
@@ -52,6 +56,17 @@ function closeUnder(top: string) {
   for (const b of banners.value) if (b.b === "not-text" && within(b.path, top)) dismiss(b);
 }
 
+// ---- turns ----
+
+let turns: Promise<unknown> = Promise.resolve(); // the changes that tabs follow, one after the other
+
+/** Run `fn` once the changes started before it have ended (a rejection ends one too). Resolves or rejects as `fn`. */
+export function fileTurn<T>(fn: () => Promise<T>): Promise<T> {
+  const run = turns.then(fn);
+  turns = run.catch(() => {});
+  return run;
+}
+
 // ---- rename, new, delete, download ----
 
 /** How a file opens by its name: a .dta tab, the editor (open.ts says which text files the editor takes), or no tab (a
@@ -66,7 +81,11 @@ const kindOf = (path: string) => {
  *  file to .dta) is opened again as its new name says, in its place, unless it has unsaved edits (the editor keeps
  *  them); one whose new name opens in no tab (a .png) just closes, and the Graph tab is left alone. Rejects as the store
  *  does (`to` exists, ...). */
-export async function renameEntry(from: string, to: string): Promise<void> {
+export function renameEntry(from: string, to: string): Promise<void> {
+  return fileTurn(() => renameNow(from, to)); // a Save pressed meanwhile waits for the tabs to have the new name
+}
+
+async function renameNow(from: string, to: string) {
   if (from === to) return;
   await store.rename(from, to);
   const moved = tabs.value.filter((t) => within(t.path, from)).map((t) => t.path);
@@ -124,12 +143,15 @@ export async function newFolder(dir = ""): Promise<string> {
   return path;
 }
 
-/** Delete each path (a folder with everything under it) and close their tabs. */
-export async function deleteEntries(paths: string[]): Promise<void> {
-  for (const p of paths) {
-    await store.remove(p);
-    closeUnder(p);
-  }
+/** Delete each path (a folder with everything under it) and close their tabs (in a turn: a Save pressed meanwhile finds
+ *  its tab closed and writes nothing). */
+export function deleteEntries(paths: string[]): Promise<void> {
+  return fileTurn(async () => {
+    for (const p of paths) {
+      await store.remove(p);
+      closeUnder(p);
+    }
+  });
 }
 
 /** "Delete all files…": every file and folder; every tab closes. */

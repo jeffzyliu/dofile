@@ -253,6 +253,23 @@ test("rename: an open file, and a folder with open files under it: the tabs foll
   assert.ok(S.files.value.some((f) => f.path === "input/raw/y.csv"));
 });
 
+test("fileTurn (the editor's Save): a turn taken while a rename or a delete is in progress sees the tabs they left; a refused one does not stop the next", async () => {
+  await reset({ "a.do": "1", "b.do": "2" });
+  for (const p of ["a.do", "b.do"]) await openFile(p);
+  const tabsNow = () => S.tabs.value.map((t) => t.path);
+  const renaming = A.renameEntry("a.do", "c.do");
+  const seen = A.fileTurn(async () => tabsNow());
+  await renaming;
+  assert.deepEqual(await seen, ["c.do", "b.do"], "the tab has its new name when the turn comes");
+  const deleting = A.deleteEntries(["b.do"]);
+  assert.deepEqual(await A.fileTurn(async () => tabsNow()), ["c.do"], "and the deleted file's tab is closed");
+  await deleting;
+  const refused = A.renameEntry("c.do", "c.do/x");
+  const after = A.fileTurn(async () => "next");
+  await assert.rejects(refused);
+  assert.equal(await after, "next");
+});
+
 test("new .do file and new folder take the first free name; delete closes the tabs under the path; delete all empties the store", async () => {
   await reset({ "untitled.do": "" });
   assert.equal(await A.newDoFile(), "untitled-2.do");
