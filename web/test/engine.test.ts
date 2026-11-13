@@ -412,6 +412,36 @@ test("engine from a memory snapshot: native code, graphs, files, Break; the work
   eng.worker!.terminate();
 });
 
+test("a heap cap on a snapshot start: a big allocation fails as r(909), the data and the session stay (the same cap as ?memcap=)", {
+  timeout: 180_000,
+  skip: !haveSnapshot && "no current snapshot: npm run snapshot",
+}, async () => {
+  const CAP_MB = 400; // above the restored heap (130 MB), well under what 10 million doubles and their copies need
+  const { store, createWorker } = pageStore();
+  const eng = new EngineClient({
+    createWorker,
+    wheel,
+    extraWheels,
+    buildId: buildId(STAMP, current),
+    startFiles: startFiles!,
+    snapshot: new URL("../public/snapshot/", import.meta.url).href,
+    memcap: CAP_MB,
+    store,
+  });
+  await startWorker(eng, await eng.build());
+  assert.equal((await runOn(eng, "clear\nset obs 10000000")).rc, 0);
+  const r = await runOn(eng, "generate double x1 = runiform()");
+  assert.equal(r.rc, 909, r.log);
+  assert.match(r.error ?? "", /refuses to provide memory/);
+  const { heap_bytes } = await eng.query("memory");
+  assert.ok(heap_bytes <= CAP_MB * 1024 * 1024, `the heap (${heap_bytes}) is within the cap`);
+  const after = await runOn(eng, "describe, short\ndisplay 1+1");
+  assert.equal(after.rc, 0, after.log);
+  assert.equal(after.nobs, 10_000_000, "the data is kept");
+  assert.match(after.log, /\n2\n/);
+  eng.worker!.terminate();
+});
+
 test('a list of another build is refused with kind "updated" before any worker is made', {
   timeout: 60_000,
   skip: !manifest && "no snapshot",

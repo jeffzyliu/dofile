@@ -1,4 +1,5 @@
 // What the page's URL and build say, read once at load.
+import { chooseCap, factsOf } from "../engine/memcap.ts";
 import type { About } from "../engine/types.ts";
 
 const q = new URLSearchParams(location.search);
@@ -18,6 +19,10 @@ export const testMode = q.get("test"); // null: no hook
 
 /** ?brotli=wasm: brotli-wasm instead of the browser's own decoder for the snapshot (to compare them). */
 export const brotli = q.get("brotli") ?? undefined;
+
+/** The cap on the engine's heap for this device (engine/memcap.ts): ?memcap=<MB> overrides the device rule (0: no cap), to try a
+ *  cap on a real phone. main.tsx logs it and gives it to the transport. */
+export const memcap = chooseCap(factsOf(navigator), q.get("memcap"));
 
 /** The landing page (web/landing.html, step 5), the site's root: the wordmark, "About dofile" and the other-tab dialog's
  *  "Close editor" go there. The build sets it (scripts/urls.ts SITE_URL: "/" while the editor is under /app/ on the same

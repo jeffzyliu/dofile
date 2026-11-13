@@ -71,7 +71,12 @@ export type BootArgs = { wheel: Wheel; extraWheels?: Wheel[]; interruptBuffer?: 
 /** `mount`'s arguments. A snapshot start has `snapshot` (the URL of its folder, ending in "/"), `built` (which names the
  *  Cache, `dofile-snapshot-<built>`) and `files` (its two big files): all three from the build's list, start-files.json,
  *  which the page has checked is of its own build. The worker fetches no manifest. `?snapshot=0` has none of the three. */
-export type MountArgs = { indexURL?: string; brotli?: string } & (
+export type MountArgs = {
+  indexURL?: string;
+  brotli?: string;
+  /** The cap on the WebAssembly heap in MiB (memcap.ts); absent or 0: none. */
+  memcap?: number;
+} & (
   | { snapshot: string; built: number; files: SnapshotFiles }
   | { snapshot?: undefined; built?: undefined; files?: undefined }
 );

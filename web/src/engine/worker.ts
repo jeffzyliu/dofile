@@ -12,8 +12,17 @@
 
 import type { BrotliWasmType } from "brotli-wasm";
 import { loadPyodide } from "pyodide";
+import { MIB } from "./memcap.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
-import { hasNativeBrotli, isStorageRefusal, openCache, restoreOptions, unpackAsync } from "./snapshot.ts";
+import {
+  hasNativeBrotli,
+  isStorageRefusal,
+  openCache,
+  patchHeapMax,
+  restoreOptions,
+  unpackAsync,
+  withHeapCap,
+} from "./snapshot.ts";
 import type { AppliedRun, FileStore, RunChange } from "./store.ts";
 import { openStore } from "./store.ts";
 import type {
@@ -338,6 +347,20 @@ async function importLoader(
   }
 }
 
+// The normal boot's loader (?snapshot=0) with the heap cap (snapshot.ts, HEAP_MAX): Pyodide's own pyodide.asm.mjs from the runtime's
+// URL, with that one change, as a module. Only used when there is a cap; with none, Pyodide imports its own loader.
+async function importCapped(indexURL: string | undefined, bytes: number): Promise<CreateModule> {
+  if (!indexURL) throw new Error("a memory cap on the normal boot needs the URL of Pyodide's runtime (indexURL)");
+  const url = `${indexURL.endsWith("/") ? indexURL : `${indexURL}/`}pyodide.asm.mjs`;
+  const src = patchHeapMax(new TextDecoder().decode(await fetchBytes(url)));
+  const blob = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+  try {
+    return withHeapCap((await import(/* @vite-ignore */ blob)).default, bytes);
+  } finally {
+    URL.revokeObjectURL(blob);
+  }
+}
+
 // The brotli-wasm decoder. In a browser it loads its wasm from the page's own files; in Node (the tests) the package's
 // own entry is the one that works (the browser entry fetches its wasm by URL, which Node's fetch cannot do for files).
 async function loadBrotli(): Promise<BrotliWasmType> {
@@ -357,6 +380,7 @@ async function loadFromSnapshot(
   indexURL: string | undefined,
   io: Io,
   brotliMode: string | undefined,
+  capBytes: number,
 ) {
   const t0 = performance.now();
   let last = t0;
@@ -422,7 +446,11 @@ async function loadFromSnapshot(
         `native brotli available ${hasNativeBrotli()}, hardwareConcurrency ${navigator.hardwareConcurrency}, deviceMemory ${(navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? "n/a"}`,
     );
     stage("python");
-    const options = restoreOptions(create, { snapshot, dso, index, blob }, lap);
+    const options = restoreOptions(
+      capBytes ? withHeapCap(create, capBytes) : create,
+      { snapshot, dso, index, blob },
+      lap,
+    );
     const loaded = (await Promise.race([loadPyodide({ indexURL, ...options, ...io }), fetches.failed])) as SnapshotPy;
     lap("copy the heap");
     console.info(
@@ -465,19 +493,24 @@ type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A :
 
 // The ops that change the engine: the transport sends them from start() and run() only.
 const lifecycle: Handlers<LifecycleOps> = {
-  async mount({ indexURL, snapshot, built, files, brotli: brotliMode }: MountArgs) {
+  async mount({ indexURL, snapshot, built, files, brotli: brotliMode, memcap }: MountArgs) {
     if (!snapshot) stage("python"); // a snapshot start names its own steps (loadFromSnapshot)
     const io: Io = { stdout: (l) => console.log(l), stderr: (l) => console.warn(l) };
     fromSnapshot = Boolean(snapshot);
     const tRuntime = performance.now();
+    const capBytes = (memcap ?? 0) * MIB;
     if (snapshot) {
-      const { loaded, summary } = await loadFromSnapshot(snapshot, built, files, indexURL, io, brotliMode);
+      const { loaded, summary } = await loadFromSnapshot(snapshot, built, files, indexURL, io, brotliMode, capBytes);
       py = loaded;
       Object.assign(startup, { mode: "snapshot", ...summary });
     } else {
       const fetches = watchFetch(); // a failed fetch ends the start with its error
       try {
-        py = (await Promise.race([loadPyodide({ indexURL, ...io }), fetches.failed])) as SnapshotPy;
+        const createPyodideModule = capBytes ? await importCapped(indexURL, capBytes) : undefined;
+        py = (await Promise.race([
+          loadPyodide({ indexURL, ...(createPyodideModule && { createPyodideModule }), ...io }),
+          fetches.failed,
+        ])) as SnapshotPy;
       } finally {
         fetches.restore();
       }

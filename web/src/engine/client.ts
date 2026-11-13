@@ -110,6 +110,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   declare indexURL: string | undefined;
   declare snapshot: string | undefined;
   declare brotli: string | undefined;
+  declare memcap: number | undefined;
   declare store: Pick<FileStore, "attach"> | null;
   declare startFiles: string | (StartFiles & { base?: string }) | undefined;
   declare fetch: typeof globalThis.fetch;
@@ -126,6 +127,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // snapshot: the URL (ending in "/") of a snapshot built by scripts/make-snapshot.mjs, to start from instead of
   // installing the packages. Its build (`built`, its two big files) comes from startFiles, which a snapshot start needs.
   // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.ts), to compare them
+  // memcap: the cap on the engine's WebAssembly heap in MiB (memcap.ts, the page's rule), sent to each worker with mount; none: no cap
   // extraWheels: more wheels installed after the dofile one (web/wheels/: pyreadstat), each a URL or {name, bytes} like `wheel`
   // buildId: the page's build id (scripts/build-id.ts, compiled in by vite.config.ts); a build's list with another one is of
   //   another build, or (in development) of a stale snapshot, and is refused (checkBuild)
@@ -141,6 +143,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     indexURL,
     snapshot,
     brotli,
+    memcap,
     store = null,
     startFiles = undefined,
     fetch = (...a) => globalThis.fetch(...a),
@@ -154,6 +157,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     indexURL?: string;
     snapshot?: string;
     brotli?: string;
+    memcap?: number;
     store?: Pick<FileStore, "attach"> | null;
     startFiles?: string | (StartFiles & { base?: string });
     fetch?: typeof globalThis.fetch;
@@ -168,6 +172,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       indexURL,
       snapshot,
       brotli,
+      memcap,
       store,
       startFiles,
       fetch,
@@ -427,11 +432,12 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         ? {
             indexURL: this.indexURL,
             brotli: this.brotli,
+            memcap: this.memcap,
             snapshot: this.snapshot,
             built: build.built,
             files: build.files,
           }
-        : { indexURL: this.indexURL, brotli: this.brotli };
+        : { indexURL: this.indexURL, brotli: this.brotli, memcap: this.memcap };
     // Two steps (see worker.ts), then where the start's time went. Every step goes through this worker's own record: one
     // that resumes after end() rejects with what end() said, and reaches no other worker.
     const steps = async () => {

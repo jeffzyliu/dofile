@@ -14,9 +14,16 @@ const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
 const SAMPLE =
   "clear\nset obs 200\nset seed 1\ngenerate x = rnormal()\ngenerate y = 1 + 2*x + rnormal()\nregress y x, robust\nscatter y x\n";
 
-type RunResult = { rc: number; log: string; error: string | null; images: string[]; timing?: Record<string, number> };
+type RunResult = {
+  rc: number;
+  log: string;
+  error: string | null;
+  nobs: number;
+  images: string[];
+  timing?: Record<string, number>;
+};
 type Hook = {
-  engine: { startup: { mode: string; fetched?: string } | null };
+  engine: { startup: { mode: string; fetched?: string } | null; query(op: "memory"): Promise<{ heap_bytes: number }> };
   store: {
     blocked: boolean;
     list(): Promise<{ path: string }[]>;
@@ -217,4 +224,49 @@ test("the default start: from the memory snapshot, runs native code and a graph,
     await context.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// The cap on the engine's heap (engine/memcap.ts, snapshot.ts HEAP_MAX): the page passes ?memcap=<MB> to the worker, a big
+// allocation fails inside Python as MemoryError, which the engine reports as r(909), and the data and the engine stay. The
+// iPhone project is capped by its user agent (900 MB) in every other test too. 400 MB is above the restored heap (130 MB)
+// and under what 10 million doubles and the copies `generate` makes need (about 1 GB uncapped).
+const CAP_MB = 400;
+async function overTheCap(page: Page, query: string) {
+  const logged: string[] = [];
+  page.on("console", (m) => logged.push(m.text()));
+  page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
+  await page.goto(query);
+  await startEngine(page);
+  await ready(page);
+  expect(logged).toContain(`[dofile] engine memory cap: ${CAP_MB} MB, ?memcap=${CAP_MB}`);
+  await run(page, "clear\nset obs 10000000");
+  const r = await run(page, "generate double x1 = runiform()", 909);
+  expect(r.error).toBe("op. sys. refuses to provide memory");
+  expect(r.log).toContain("r(909);");
+  const { heap_bytes } = await page.evaluate(() => window.__dofile.engine.query("memory"));
+  expect(heap_bytes).toBeLessThanOrEqual(CAP_MB * 1024 * 1024);
+  // an ordinary error: the engine is alive and ready (no reset), the data is kept, and a small command runs
+  expect(await engineState(page)).toBe("ready");
+  const after = await run(page, "describe, short\ndisplay 1+1");
+  expect(after.nobs).toBe(10_000_000);
+  expect(after.log).toMatch(/^2$/m);
+  // and it does real work again (a new small dataset: another 10-million-row generate would not fit under this cap either)
+  const small = await run(page, "clear\nset obs 1000\ngenerate x = _n\nsummarize x");
+  expect(small.nobs).toBe(1000);
+}
+
+test("?memcap=400: a big allocation fails as r(909) with the data kept and the engine alive", async ({ page }) => {
+  test.setTimeout(120_000);
+  await overTheCap(page, `?test&memcap=${CAP_MB}`);
+});
+
+// The same cap on the normal boot (Pyodide's own loader from the CDN, patched in the worker). Chromium only: the normal boot
+// loads about 60 MB from the CDN, and in WebKit it stalls now and then (see shell.spec.ts); the cap's code is the same there.
+test("?snapshot=0&memcap=400: the normal boot is capped too", async ({ page, browserName }) => {
+  test.skip(
+    browserName !== "chromium",
+    "the normal boot is slow and CDN-bound; the cap's code does not differ by browser",
+  );
+  test.setTimeout(300_000);
+  await overTheCap(page, `?snapshot=0&test&memcap=${CAP_MB}`);
 });
