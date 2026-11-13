@@ -664,7 +664,7 @@ flowchart LR
 
 | Event | Editor's text | Saved text | Noted form | Unsaved dot | Error mark | run-changed, save-failed | The store |
 |---|---|---|---|---|---|---|---|
-| **Open** (`openFile` → `open`) | `editorText` of the file | the same | `formOf` the file | off (the tab is added clean) | back on its line if the file was closed with one, clean, and opens with the same text | none (`openFile` dismisses any not-text banner) | read only |
+| **Open** (`openFile` → `open`) | `editorText` of the file | the same | `formOf` the file | off (the tab is added clean) | none (the mark lives in the tab's state, which a close drops) | none (`openFile` dismisses any not-text banner) | read only |
 | **Edit** | changed | unchanged | unchanged | on when the text differs from the saved text (`follow`, on each change) | moves with the text; gone when its line is deleted (`cm.ts` `lineMarksField`, `errormark.ts` `lineDeleted`) | unchanged | unchanged |
 | **Undo back to the saved text** | equals the saved text | unchanged | unchanged | off | mapped as any edit | unchanged | unchanged |
 | **Save succeeds** (`save`) | unchanged | the text Save wrote | `savedForm`: a `.do` or `.ado` loses its BOM, by the name it was written under | off, unless the text changed while it was written | unchanged | both dismissed for the tab's path; toast "Saved name". A tab renamed while it was written gets all of this under its new path. | `fileText` bytes |
@@ -672,7 +672,7 @@ flowchart LR
 | **Rename** (`renameEntry` → `renamed`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (`saving`) | the same bytes under the new name |
 | **Rename across a `.do` name** | as Rename | as Rename | `a.txt` with a BOM renamed `a.do`: the next Save writes no BOM. `a.do` with a BOM, never saved here, renamed `a.txt`: the next Save keeps it. | kept | kept | moved | the same bytes |
 | **Rename to a name that opens another way** | a clean tab is closed and opened again in its place (as Close, then Open); a tab with edits stays as it is; a `.png` name closes a clean tab | | | | | | |
-| **Close** (`closeTab` → `closed`) | dropped | dropped | dropped | the tab is gone | noted (line and text) when it had one and no unsaved edits | both dismissed | unchanged ("Don't save" loses the edits) |
+| **Close** (`closeTab` → `closed`) | dropped | dropped | dropped | the tab is gone | dropped with the tab's state | both dismissed | unchanged ("Don't save" loses the edits) |
 | **First visit's sample** (`sample.ts` `seedSample`: an empty store and no mark) | as Open, of `analysis.do`, once the three files are written | the same | `\n`, no BOM | off | none | none; the seed's own writes bring no storage banner (`files.ts`, by the store's change row) | the sample's three files |
 | **"Restore the sample" over an open tab** (`put` → `reload`) | the sample's text (`decodeText(bytes, true)`), a new state | the same | `formOf` it: `\n`, no BOM, so a `\r\n` or BOM tab saves the sample's form from then on | off | gone (new state) | both dismissed | the sample's bytes. Asked first (dialog `restore-sample`) when the file differs from the sample or the tab has unsaved edits; a missing file is written with no question. |
 | **Upload and "Replace with uploaded"** (`reopen` → `reload`) | the uploaded text, a new state (undo history gone) | the same | `formOf` the upload | off | gone (new state) | both dismissed | the uploaded bytes. Not text: the tab closes. |
@@ -732,7 +732,7 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
   - "a Save pressed while a delete is being written does not bring the file back"
   - "Save keeps a file's form: …"
   - "the error line keeps to its text when the tab is left and shown again"
-  - "the error line comes back when its file is closed and opened again with the same text"
+  - "the error line goes with its tab: a file closed and opened again with the same text has none"
   - "a run that rewrites open files: …"
   - "a clean tab of a .csv with \r\n line breaks follows a run that rewrites it: …"
   - "a file's form follows the store's text the editor takes: …"

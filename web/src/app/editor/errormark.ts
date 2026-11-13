@@ -5,8 +5,8 @@
 //    `lastRun` to null, which clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no
 //    line, so no mark comes back), and when the marked line is deleted;
 //  - it moves with edits (editor/cm.ts maps it through the changes);
-//  - a file closed with its mark and no unsaved edits has it again when it is opened with the same text (Editor.tsx
-//    keeps the line it was on); closed with unsaved edits, or opened with other text, it has none;
+//  - it lives in the tab's editor state, so it goes when the tab closes (a file opened again has none), and it stays
+//    with a tab that is renamed (a reload of the store's text, a new state, has none); nothing keeps it apart from the tab;
 //  - a command-line command and a run of another file leave it alone.
 // Plain TypeScript with no DOM (only @codemirror/state's types), tested in Node (test/editor.test.ts). Editor.tsx applies
 // what these answer.

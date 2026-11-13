@@ -950,7 +950,9 @@ test("the error line keeps to its text when the tab is left and shown again", as
   await expect(err).toHaveCount(0);
 });
 
-test("the error line comes back when its file is closed and opened again with the same text", async ({ page }) => {
+test("the error line goes with its tab: a file closed and opened again with the same text has none", async ({
+  page,
+}) => {
   await setUp(page, { "a.do": "line 1\nline 2\nline 3\n", "b.do": "other\n" });
   await open(page, "b.do");
   await open(page, "a.do");
@@ -981,12 +983,7 @@ test("the error line comes back when its file is closed and opened again with th
   };
   await close("a.do");
   await open(page, "a.do");
-  await expect(err).toHaveText("line 2");
-  // closed, then changed on disk: opened with other text, no mark
-  await close("a.do");
-  await page.evaluate(() => window.__dofile.store.write("a.do", new TextEncoder().encode("new 1\nline 1\nline 2\n")));
-  await open(page, "a.do");
-  await expect(page.locator(".cm-line").first()).toHaveText("new 1");
+  await expect(page.locator(".cm-line").nth(1)).toHaveText("line 2");
   await expect(err).toHaveCount(0);
 });
 
