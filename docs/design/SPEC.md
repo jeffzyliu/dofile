@@ -257,7 +257,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Dialog | Drawn | Content and rules |
 |---|---|---|
 | Download prompt, progress | `S 1`, `S 8`; `S 2`, `S 3` | Section 5. Download is the default (Enter) on purpose (UX-037). The bar is `role="progressbar"` with `aria-valuetext`; screen readers hear the stages, not the megabytes. |
-| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is asked even after "Do the same" with Replace (not after Esc, or "Do the same" with Keep mine: keeping it loses nothing; an open question: plan, "Step 4: decisions and open questions", C 14). |
+| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is asked even after "Do the same" with Replace (not after Esc, or "Do the same" with Keep mine: keeping it loses nothing; an open question: plan, "Step 4: decisions and open questions", C 14). A clash whose stored bytes are the uploaded bytes is not asked and not written (it counts as uploaded in the toast and among "the other n files"), unless the file is open with unsaved edits. "Restore the sample" asks its clashes in this dialog with the sample's words (3.12). |
 | Delete (4a) | `P/Notices` | "Delete clean.do?" / "It exists only in this browser. This can't be undone." / Cancel (focused), Delete. `DS` words it differently: OQ-19. |
 | Reset | `S 14` | `role="alertdialog"`. "Reset the engine?" / "The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset. Not asked while the engine is new or just reset (nothing has run on it since it started). |
 | Upload report | `P/Upload report` | Drawn with P2 content only. P1: the toast "3 files uploaded" (OQ-19). |
@@ -1004,8 +1004,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
     with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
     rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
-    are written first, then each clash is asked; what the clash dialog shows beyond the `dialog` value is
-    `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
+    are written first (so is none that holds the uploaded bytes already, unless it is open with unsaved edits), then each clash
+    is asked; what the clash dialog shows beyond the `dialog` value, its words included (`upload(items, "sample")` is "Restore
+    the sample"), is `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
     open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
     is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), both tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
@@ -1538,12 +1539,16 @@ questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below
   visitor's is never written (the mark is set so it never will be); a visitor who deleted everything is not given it again.
   The seed's own writes (of the sample's paths) bring no storage banner (S 19); any other change meanwhile, and the visitor's
   first change afterwards (a Save, an upload, a run that writes a file), does (`files.ts`, from the store's change row). With `?test` in the URL it does nothing unless the URL has `?sample` too, so the e2e specs
-  start from an empty store. "Restore the sample" (`fileMenuItems`, above "Delete all files…" after a rule): writes the missing
-  files with no question and the toast "Sample restored"; if any file of the sample is there with other contents, or is open
-  with unsaved edits, the dialog `restore-sample` ({ d, paths }; `files/dialogs.tsx`, `role="alertdialog"`) asks first and
-  Replace drops those edits. Other files are never touched. A restored file that is open is reloaded in its tab with the text
-  decoded as the editor reads a file (`decodeText(bytes, true)`), so the tab takes the sample's form, `\n` and no BOM: a tab
-  whose file had `\r\n` or a BOM saves the sample's form from then on, as the store holds it.
+  start from an empty store. "Restore the sample" (`fileMenuItems`, above "Delete all files…" after a rule) is an upload of the sample's three files
+  (`sample.ts restoreSample`: `upload(files, "sample")`, then `openFile("analysis.do")` when the store has it, so the tab
+  switches to it whatever the visitor answered): the missing files are written with no question, a file that holds the sample's
+  bytes already is neither asked nor written (an upload's rule, 3.10), and one with other contents, or open with unsaved edits,
+  is asked in the clash dialog with the sample's words; Replace drops those edits. Other files are never touched. The toast is
+  "Sample restored" when something was written, "The sample is already here" when nothing was written and nothing asked, no
+  toast when what was asked was all kept (an upload says nothing then either), "Couldn't restore the sample" when a write
+  failed. It takes its turn with the other uploads. A restored file that is open is reloaded in its tab as an upload's Replace
+  does (`reopen`: the text decoded as the editor reads a file, `decodeText(bytes, true)`), so the tab takes the sample's form, `\n`
+  and no BOM: a tab whose file had `\r\n` or a BOM saves the sample's form from then on, as the store holds it.
 - **Words decided by the maintainer on 2026-11-12** (the UI fix round; the rest of the draft words stay drafts): "Home" (the
   commands page's link to the landing page, was "Back to the start"), "Clear" (accessible name "Clear log"), "Wrap lines",
   "Commands", "Files" / "File actions", "Log" / "Log actions", and the footers' "open source" link to the GitHub repository.
@@ -1580,9 +1585,10 @@ questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below
 - **Words of the landing page's fix round** (2026-11-12, drafts for the maintainer): the Copy button's face "Copied" (was
   beside the button; same word); the scrolling regions' names "welcome.do" and "What a run looks like" (its heading). The
   theme icons (a screen for System, a sun for Light, a moon for Dark) are drafts too.
-- **Words not in the sources** (drafts for the maintainer): the dialog "Restore the sample?" / "helpers.do differs from the
-  sample. Replacing it discards your changes. Your other files are untouched." (plural: "analysis.do, helpers.do differ from
-  the sample. Replacing them discards your changes. …") / **Cancel** (focused), **Replace** (`.btn.stop.live`); the toasts
+- **Words not in the sources** (drafts for the maintainer): "Restore the sample"'s clash dialog (3.10's, with these words): the
+  title "helpers.do differs from the sample" / "Keep yours, or replace it with the sample's? Your other files are untouched." /
+  the meta line "Yours: 1 KB, 9 Nov · sample: 2 KB · clash 1 of 2 · the other file is in place." / **Replace with the sample**,
+  **Keep mine** (focused); the toasts
   "Sample restored", "The sample is already here", "Couldn't restore the sample"; the Copy failure line in the live region
   "Couldn't copy: select the text and copy it by hand"; the section "Browsers that work"; the commands page's text (below the
   title, the Filter label and its placeholder "for example: reg", the count "N of M commands, 1 prefix", "No command starts with

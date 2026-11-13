@@ -3,13 +3,13 @@
 //   download, other-tab: states/DownloadDialog.tsx (step 3 built them; step 4d finishes them)
 //   reset:               states/ResetDialog.tsx (step 4d)
 //   clear-log:           log/ClearLogDialog.tsx
-//   clash, delete, delete-all, close-tab: files/dialogs.tsx (step 4a); restore-sample: the same file (step 5)
+//   clash, delete, delete-all, close-tab: files/dialogs.tsx (step 4a)
 // A view draws itself with ui/Dialog.tsx. Add a kind here, in types.ts and in SPEC.md section 8 together.
 // The host keys each view on the whole value, so a new value (clash 1 of 5, then clash 2) is a new <Dialog>: its focus
 // starts again on the data-autofocus button. A dialog that another replaces (other-tab over a clash) is unmounted with no
 // answer: its view treats that as Cancel (an effect's cleanup that answers Cancel unless it has answered).
 import type { ComponentType } from "preact";
-import { ClashDialog, CloseTabDialog, DeleteAllDialog, DeleteDialog, RestoreSampleDialog } from "./files/dialogs";
+import { ClashDialog, CloseTabDialog, DeleteAllDialog, DeleteDialog } from "./files/dialogs";
 import { ClearLogDialog } from "./log/ClearLogDialog";
 import { dialog } from "./state.ts";
 import { DownloadDialog, OtherTabDialog } from "./states/DownloadDialog";
@@ -27,7 +27,6 @@ const VIEWS: { [K in DialogName]: ComponentType<{ dialog: DialogOf<K> }> } = {
   "delete-all": DeleteAllDialog,
   "clear-log": ClearLogDialog,
   "close-tab": CloseTabDialog,
-  "restore-sample": RestoreSampleDialog,
 };
 
 export function DialogHost() {

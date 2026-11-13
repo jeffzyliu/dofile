@@ -2,7 +2,7 @@
 
 **This describes the code as built on branch `prototype1-step4` (pull request #17, 2026-11-11), with what step 5
 (`prototype1-step5`, pull request #18) adds to these flows: the editor is served under `/app/`, and the sample's first-visit
-seed and "Restore the sample" (`sample.ts`) are events of section 3 and a dialog of section 1.** It
+seed and "Restore the sample" (`sample.ts`) are events of section 3 (the restore asks through the clash dialog of section 1).** It
 is a sibling of [web-engine-data-flow.md](web-engine-data-flow.md), which covers the engine under the page. This
 document covers four parts of the editor page that no single file shows: where the focus goes, a run as the views see
 it, an open file's state in the editor, and where the log puts graph links and notes. Each spans several modules and
@@ -122,8 +122,9 @@ sequenceDiagram
 The opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on `close()`.
 Only T gives it back, once.
 
-Step 5's `restore-sample` dialog (`files/dialogs.tsx`, from the file menu's "Restore the sample") follows the same rules:
-Cancel focused, the focus back to the menu's trigger; Replace opens `analysis.do`, which moves no focus.
+"Restore the sample" (`sample.ts`) is an upload (`upload(items, "sample")`), so its questions are the clash dialog with the
+sample's words and follow the clash rules below: "Keep mine" focused, the focus back to the menu's trigger. Once the upload
+has ended `analysis.do` is opened, which moves no focus.
 
 ### A dialog that follows another (the clash chain)
 
@@ -708,8 +709,8 @@ flowchart LR
 | **Rename to a name that opens another way** | a clean tab is closed and opened again in its place (as Close, then Open); a tab with edits stays as it is; a `.png` name closes a clean tab | | | | | | |
 | **Close** (`closeTab` → `closed`) | dropped | dropped | dropped | the tab is gone | dropped with the tab's state | both dismissed | unchanged ("Don't save" loses the edits) |
 | **First visit's sample** (`sample.ts` `seedSample`: an empty store and no mark) | as Open, of `analysis.do`, once the three files are written | the same | `\n`, no BOM | off | none | none; the seed's own writes bring no storage banner (`files.ts`, by the store's change row) | the sample's three files |
-| **"Restore the sample" over an open tab** (`put` → `reload`) | the sample's text (`decodeText(bytes, true)`), a new state | the same | `formOf` it: `\n`, no BOM, so a `\r\n` or BOM tab saves the sample's form from then on | off | gone (new state) | both dismissed | the sample's bytes. Asked first (dialog `restore-sample`) when the file differs from the sample or the tab has unsaved edits; a missing file is written with no question. |
-| **Upload and "Replace with uploaded"** (`reopen` → `reload`) | the uploaded text, a new state (undo history gone) | the same | `formOf` the upload | off | gone (new state) | both dismissed | the uploaded bytes. Not text: the tab closes. |
+| **"Restore the sample" over an open tab** (an upload: `reopen` → `reload`) | the sample's text (`decodeText(bytes, true)`), a new state | the same | `formOf` it: `\n`, no BOM, so a `\r\n` or BOM tab saves the sample's form from then on | off | gone (new state) | both dismissed | the sample's bytes. Asked first (the clash dialog, the sample's words) when the file differs from the sample or the tab has unsaved edits; a file that holds the sample's bytes, with no unsaved edits, is not written and its tab is left as it is; a missing file is written with no question. |
+| **Upload and "Replace with uploaded"** (`reopen` → `reload`) | the uploaded text, a new state (undo history gone) | the same | `formOf` the upload | off | gone (new state) | both dismissed | the uploaded bytes. Not text: the tab closes. A clash with the same bytes, no unsaved edits, is not written and its tab is left as it is. |
 | **A run writes the same text** (in the editor's form) | unchanged | unchanged | unchanged, even if the run wrote other line breaks | unchanged (a tab with edits stays unsaved) | unchanged | unchanged | the run's bytes |
 | **A run writes other text, tab clean** | the run's text, as one change where the two differ: caret, selection and undo kept | the run's text | `formOf` the run's text | off | mapped through the change | run-changed dismissed | the run's bytes |
 | **A run writes other text, tab unsaved** | kept | the run's text | `formOf` the run's text; unchanged when the run wrote exactly the editor's text | on. When the run wrote exactly the editor's text: off, and the answer is "same". | unchanged | run-changed added (files.ts, on "kept"); when "same", dismissed | the run's bytes |

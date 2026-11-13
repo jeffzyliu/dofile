@@ -8,7 +8,9 @@
 //    answerClash(). Esc, or another dialog put in the clash's place with no answer, keeps yours for every clash left. Uploads run one at a
 //    time (a second waits for the first to end), and a clash waits while another dialog is open: it never replaces one.
 //    A clash over an open file with unsaved edits is asked even after "Do the same" with Replace (never after Esc or
-//    Keep mine for the rest: keeping it loses nothing).
+//    Keep mine for the rest: keeping it loses nothing). A clash whose stored bytes are the uploaded bytes is neither
+//    asked nor written, unless the file is open with unsaved edits (replacing that discards them). The file menu's
+//    "Restore the sample" (sample.ts) is an upload of the sample's files with the sample's words (`WORDS`).
 //  - The changes that tabs follow (a rename, a delete) and the editor's Save take turns (fileTurn): a rename or a delete
 //    keeps its turn until the tabs have followed it, so a Save pressed meanwhile writes under the tab's path as it is
 //    then (renamed, or closed: no write). A Save's turn only issues its write: the store applies changes in the order
@@ -198,14 +200,37 @@ export interface Incoming {
   data: Uint8Array;
 }
 
+/** The words of an upload's clash dialog and toast: an upload's own, or the sample's (a restore, sample.ts). The
+ *  sample's are drafts (SPEC 8, step 5). */
+export const WORDS = {
+  upload: {
+    title: (path: string) => `${path} is already here`,
+    question: "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?",
+    replace: "Replace with uploaded",
+    theirs: "uploaded",
+    others: (n: number) => `the other ${n === 1 ? "file is" : `${n} files are`} uploaded`,
+  },
+  sample: {
+    title: (path: string) => `${path} differs from the sample`,
+    question: "Keep yours, or replace it with the sample's? Your other files are untouched.",
+    replace: "Replace with the sample",
+    theirs: "sample",
+    others: (n: number) => `the other ${n === 1 ? "file is" : `${n} files are`} in place`,
+  },
+};
+
+/** Whose words: "upload" (the default) or "sample". */
+export type WordsOf = keyof typeof WORDS;
+
 /** What the open clash dialog shows beyond the `dialog` value. */
 export interface ClashNow {
   path: string;
   yours: { size: number; mtime: number };
   uploaded: number; // its size
-  others: number; // the files of the upload that clashed with none (already written)
+  others: number; // the files of the upload that clashed with none, or with a file of the same bytes (in place)
   left: number; // the clashes after this one
   unsaved: boolean; // the file is open with unsaved edits
+  words: (typeof WORDS)[WordsOf];
 }
 
 /** The dialog's answer: replace this one or keep it; `same`: the box "Do the same for the other n clashes". "stop" is
@@ -241,19 +266,21 @@ const noDialog = () =>
 
 let uploads: Promise<unknown> = Promise.resolve(); // the uploads in progress, one after the other
 
-/** Upload `items` into the store. The files that clash with no file in the store are written first; then each clash is
+/** Upload `items` into the store. The files that clash with no file in the store are written first (one that clashes
+ *  with a file of the same bytes, not open with unsaved edits, is not: it counts as uploaded); then each other clash is
  *  asked (Keep mine is the default). Replacing an open file reloads it in the editor (F 3.3); one that is no longer
  *  UTF-8 text closes its tab. Ends with the toast "3 files uploaded". A file the store refuses (a path where a folder
  *  is, the browser's quota) or whose name holds a control character (a line break) is counted, and its reason goes to
  *  the console. Uploads run one at a time: a second one starts when the first has ended. Resolves with the paths
- *  written. */
-export function upload(items: Incoming[]): Promise<string[]> {
-  const run = uploads.then(() => uploadNow(items));
+ *  written. `words: "sample"` (a restore of the sample, sample.ts) has the dialog and the toast say the sample's words:
+ *  "Sample restored", "The sample is already here" (nothing to write and nothing asked), "Couldn't restore the sample". */
+export function upload(items: Incoming[], words: WordsOf = "upload"): Promise<string[]> {
+  const run = uploads.then(() => uploadNow(items, words));
   uploads = run.catch(() => {});
   return run;
 }
 
-async function uploadNow(items: Incoming[]): Promise<string[]> {
+async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
   if (!items.length) return [];
   const before = new Map((await store.list()).map((f) => [f.path, f]));
   const written: string[] = [];
@@ -272,18 +299,21 @@ async function uploadNow(items: Incoming[]): Promise<string[]> {
   };
   const last = new Map(items.map((it) => [it.path, it])); // the same path twice in one upload: the last one
   const clashes: Incoming[] = [];
+  let same = 0; // the clashes that hold the uploaded bytes already: not asked, not written
   for (const it of last.values()) {
-    if (before.get(it.path)?.dir === false && !CONTROL.test(it.path)) clashes.push(it);
-    else await put(it);
+    if (before.get(it.path)?.dir === false && !CONTROL.test(it.path)) {
+      if (!openUnsaved(it.path) && (await holds(it))) same++;
+      else clashes.push(it);
+    } else await put(it);
   }
-  const others = written.length;
+  const others = written.length + same;
   let sticky: boolean | null = null; // "Do the same": replace (true) or keep (false) every clash left
   let shown: Dialog = null; // the last clash dialog this upload opened
   for (const [i, it] of clashes.entries()) {
     let replace: boolean | null = sticky;
     // an open file with unsaved edits is asked before "Do the same" replaces it; keeping it (Esc, Keep mine for the
     // rest) needs no question
-    const unsaved = tabs.value.some((t) => t.path === it.path && t.dirty);
+    const unsaved = openUnsaved(it.path);
     if (replace === null || (replace === true && unsaved)) {
       const mine = before.get(it.path)!;
       while (dialog.value !== null) await noDialog(); // never over another dialog
@@ -294,6 +324,7 @@ async function uploadNow(items: Incoming[]): Promise<string[]> {
         others,
         left: clashes.length - i - 1,
         unsaved,
+        words: WORDS[words],
       };
       const ask: Dialog = { d: "clash", path: it.path, index: i + 1, total: clashes.length };
       shown = ask;
@@ -320,11 +351,28 @@ async function uploadNow(items: Incoming[]): Promise<string[]> {
     if (replace && (await put(it))) reopen(it);
   }
   if (shown !== null && dialog.value === shown) dialog.value = null;
-  if (written.length || failed) {
-    const done = `${written.length} ${plural(written.length, "file", "files")} uploaded`;
+  if (words === "sample") {
+    if (failed) showToast("Couldn't restore the sample", "error");
+    else if (written.length) showToast("Sample restored");
+    else if (!clashes.length) showToast("The sample is already here"); // none asked: what was asked and kept says nothing
+  } else if (written.length + same || failed) {
+    const done = `${written.length + same} ${plural(written.length + same, "file", "files")} uploaded`;
     showToast(failed ? `${done} · ${failed} failed` : done, failed ? "error" : undefined);
   }
   return written;
+}
+
+/** The file is open in a tab with unsaved edits. */
+const openUnsaved = (path: string) => tabs.value.some((t) => t.path === path && t.dirty);
+
+/** The store's copy of the file is the uploaded bytes (a copy that cannot be read is not). */
+async function holds({ path, data }: Incoming): Promise<boolean> {
+  try {
+    const mine = await store.read(path);
+    return mine.length === data.length && mine.every((x, i) => x === data[i]);
+  } catch {
+    return false;
+  }
 }
 
 // an upload replaced an open file: the editor shows the new text, or the tab closes if it is not text any more
