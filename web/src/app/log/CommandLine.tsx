@@ -10,7 +10,7 @@
 //    draft can be typed; the button is off, and Enter, or a press of the off button, says why in a toast (the words
 //    Ctrl/Cmd+Enter gives: editor/words.ts refusedRunWords).
 //    With no engine (start.ts) the field is off and keeps its text, which is usable again when the engine is back;
-//    empty, it shows the hint "Start the engine to type commands", and Enter in it says the hint in a toast. The button is
+//    empty, it shows the hint "Start the engine to run code", and Enter in it says the hint in a toast. The button is
 //    then "Start engine" (start.ts startEngine: the download prompt, a new try after a failed start, the take-over
 //    dialog), in words on a phone too, so it is wider there than the icon; no width is reserved for it, and the field
 //    takes what is left.

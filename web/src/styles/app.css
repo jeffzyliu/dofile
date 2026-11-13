@@ -1023,12 +1023,6 @@ input.filter::placeholder {
 .app[data-layout="phone"] .cmdline .field[aria-disabled="true"]::placeholder {
   font: var(--text-sm) / 1.2 var(--font-ui);
 }
-/* at 320 px "Start the engine to type commands" is a character too long at that size */
-@media (max-width: 359.98px) {
-  .app[data-layout="phone"] .cmdline .field[aria-disabled="true"]::placeholder {
-    font-size: 0.7rem;
-  }
-}
 /* the phone's Run button: 44 px square, the primary color; while the field is empty it looks off (aria-disabled, so a tap
    still keeps the keyboard open) */
 .cmdline .send {

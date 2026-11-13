@@ -188,7 +188,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   a paste of several lines is refused whole then, with the field left exactly as it was and the toast "3 of 3 pasted
   lines not run: the engine can't take a command now". **With no engine** (section 5; `app/start.ts`) the field is off
   (`aria-disabled` and read-only, not `disabled`: a field that has the focus when a start fails keeps it),
-  with the hint "Start the engine to type commands" as its placeholder, a dashed border, `cursor: not-allowed` and a muted (not accent) focus ring, so the hint shows only while the field is empty.
+  with the hint "Start the engine to run code" as its placeholder, a dashed border, `cursor: not-allowed` and a muted (not accent) focus ring, so the hint shows only while the field is empty.
   Enter in the off field says the hint in a toast. Turning the field off never changes its text: a typed draft stays, greyed, and is usable when the engine is back. The
   hint and the draft are the muted color at full opacity (the text contrast, 4.5), not the disabled opacity. The
   button is then "Start engine" (what the toolbar's does), in words on a phone too: no width is reserved for it, so

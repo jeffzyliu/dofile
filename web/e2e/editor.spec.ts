@@ -1328,6 +1328,85 @@ test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open 
   expect(await lastKind()).toBeNull();
 });
 
+test("Ctrl/Cmd+Enter with the focus on a toolbar button runs the file once and does not press that button", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1" }, "?test");
+  await startEngine(page);
+  await ready(page);
+  await open(page, "a.do");
+  // Save (on while a text file is open); the phone's toolbar has no Save, so its ⋯ button, whose press would open a menu
+  const button = page
+    .locator(".toolbar")
+    .getByRole("button", isPhone(page) ? { name: "More actions" } : { name: /^Save/ });
+  await expect(button).toBeEnabled();
+  await button.evaluate((b) => {
+    (window as any).__pressed = 0;
+    b.addEventListener("click", () => (window as any).__pressed++);
+  });
+  await button.focus();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.kind ?? null)).toBe("file");
+  await ready(page);
+  expect(await page.evaluate(() => (window as any).__pressed)).toBe(0);
+  const heads = await page.evaluate(() => window.__dofile.state.log.value.filter((i: any) => i.t === "runhead").length);
+  expect(heads).toBe(1);
+});
+
+test("Ctrl/Cmd+Enter: a checkbox, a button or a contenteditable=false area does not keep the key (the file runs); a text field, a textarea or an editable element does; an open menu blocks it", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1" }, "?test");
+  await startEngine(page);
+  await ready(page);
+  await open(page, "a.do");
+  const lastKind = () => page.evaluate(() => window.__dofile.state.lastRun.value?.kind ?? null);
+  const forget = () =>
+    page.evaluate(() => {
+      (window.__dofile.state.lastRun as { value: unknown }).value = null;
+    });
+  // elements the page itself has no outside a dialog: made here, focused, and removed
+  await page.evaluate(() => {
+    const host = document.createElement("div");
+    host.id = "probe";
+    host.innerHTML =
+      '<input id="p-check" type="checkbox"><input id="p-radio" type="radio"><input id="p-text" type="text">' +
+      '<textarea id="p-area"></textarea><div id="p-edit" contenteditable="true" tabindex="0">x</div>' +
+      '<div id="p-edit-off" contenteditable="false" tabindex="0">x</div>' +
+      '<div contenteditable="true"><span id="p-off-inside" contenteditable="false" tabindex="0">x</span></div>';
+    document.body.append(host);
+  });
+  for (const [id, runs] of [
+    ["p-check", true],
+    ["p-radio", true],
+    ["p-edit-off", true],
+    ["p-off-inside", true],
+    ["p-text", false],
+    ["p-area", false],
+    ["p-edit", false],
+  ] as const) {
+    await forget();
+    await page.locator(`#${id}`).focus();
+    await page.keyboard.press("ControlOrMeta+Enter");
+    if (runs) {
+      await expect.poll(lastKind, { message: id }).toBe("file");
+      await ready(page);
+    } else {
+      await page.waitForTimeout(200);
+      expect(await lastKind(), id).toBeNull();
+    }
+  }
+  await page.evaluate(() => document.getElementById("probe")?.remove());
+
+  // an open menu: nothing runs
+  await forget();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await page.waitForTimeout(300);
+  expect(await lastKind()).toBeNull();
+});
+
 test("Break: the run stops before a line, with a note, Go to line and no error mark; the Break pill's time on a phone", async ({
   page,
 }) => {
@@ -1584,7 +1663,7 @@ test("the command line with no engine: disabled, with the hint while it is empty
   const line = page.locator(".cmdline");
   await expect(field).toBeDisabled();
   await expect(field).toHaveValue("");
-  await expect(field).toHaveAttribute("placeholder", "Start the engine to type commands");
+  await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
   // the hint is to be read: the text contrast (4.5), in both themes
   for (const theme of ["light", "dark"]) {
     await page.evaluate((t) => {
@@ -1822,7 +1901,7 @@ test("while the engine starts, a command is refused with words and the draft sta
   await expect(field).toBeFocused();
   await clear();
   await page.keyboard.press("Enter");
-  await expect(toast).toHaveText("Start the engine to type commands");
+  await expect(toast).toHaveText("Start the engine to run code");
 
   // the command line's Start engine, by keyboard: a new try. The button in its place is the off "Run command", which
   // keeps the focus; a second press at the same spot starts nothing more and says why
