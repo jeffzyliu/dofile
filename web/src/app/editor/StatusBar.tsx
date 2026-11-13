@@ -13,7 +13,7 @@ import { snapshotStart } from "../env";
 import { engine, lastRun, memory, persisted } from "../state.ts";
 import type { EngineState } from "../types.ts";
 import { resetsIn, since } from "./clock.ts";
-import { lastRunWords, linesWords, memoryTitle, memoryWords, seconds, ticking } from "./words.ts";
+import { lastRunWords, linesWords, memoryTitle, memoryWords, ticking } from "./words.ts";
 
 const lines = (l?: [number, number]) => (l ? ` ${linesWords(l)}` : "");
 
@@ -94,7 +94,7 @@ export function StatusBar() {
         {bold && <b>{bold}</b>}
         {rest}
       </span>
-      {(st.s === "breaking" || st.s === "waiting") && <span>{seconds(since(st.t0))}</span>}
+      {(st.s === "breaking" || st.s === "waiting") && <span>{ticking(since(st.t0))}</span>}
       {st.s === "ready" && <LastRunText />}
       {mem && <span title={memoryTitle}>{memoryWords(mem)}</span>}
       <span class="spacer" />
