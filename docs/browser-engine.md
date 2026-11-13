@@ -179,12 +179,18 @@ memory". The run ends with an ordinary error, the data stays, and the next comma
 - **The ballast** (`browser.py`): a 20 MB `bytearray` kept in reserve. When the heap is full even the interpreter's error handling
   and the next call's compile need room; a script that filled the heap with small objects left every later `runPython`
   failing with "lost sys.stderr", so the session could not recover until a reset (the same hazard exists at the 4 GB limit; the
-  cap does not cause it). A run that ends in rc 909 (or in 9999 with a MemoryError outside a command) frees the ballast, and a MemoryError that escapes the
-  engine itself (the heap filled while it reported the error) is caught in `browser.run`, frees it first and is answered as r(909); so the
-  result and the page's next calls (memory, describe, browse) have room, and the next run takes it again if it can. A big
-  numpy request that is refused (the usual case) leaves the free memory as it was and needs none of this. It adds 20 MB to the
-  heap's baseline on every device. Not found: a Stata command that exhausts the heap with small objects, so the ballast's
-  effect there is only checked on its logic (`tests/test_browser.py`) and on the report's script run, not on the engine.
+  cap does not cause it). Where the heap fills is chance: in a command (a MemoryError there is r(909), ODT-28), or in the
+  interpreter's own work between commands (a loop's next pass; Python looking up a module file, which WebAssembly's file
+  system fails as `OSError` ENOMEM). The engine answers the second kind as r(909) too, and calls `Engine.on_memory_error`
+  first, where `browser.py` frees the ballast, so that the error report and the page's next calls (memory, describe,
+  browse) have room; before this the run was rc 9999 and, with the ballast still held, could end as "PythonError: Error in
+  sys.excepthook: MemoryError". A MemoryError that still escapes the engine (the heap filled again while it reported the
+  first) is caught in `browser.run`, which frees the ballast and answers r(909). A run that ends in rc 909 frees it too, and
+  the next run takes it again if it can. A big numpy request that is refused (the usual case) leaves the free memory as it
+  was and needs none of this. It adds 20 MB to the heap's baseline on every device. Checked on the engine in Pyodide
+  (`web/test/engine.test.ts`: globals filled with 1000-character strings under a 400 MB cap, then more passes on the full
+  heap): the data and macros stay, and the page's calls after a failed run answer. Only the ballast is freed, never the user's
+  data or macros.
 - **What a cap buys.** The heap is 3.5 to 6 times the data (80 MB column: the heap went 196 to 516 MB in `generate double x1 = 1` on
   10 million rows; 320 MB of data took 1.1 GB in all), because `generate` and `replace` copy a column, and wasm memory never
   shrinks. So 900 MB holds about 150 to 250 MB of data, not 900. Fewer copies in `generate` is the lever, and is not done.

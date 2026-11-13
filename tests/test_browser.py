@@ -196,7 +196,7 @@ def test_the_web_highlighters_command_list_matches_the_engine():
 def test_the_ballast_is_freed_after_out_of_memory_and_taken_again_by_the_next_run(tmp_path):
     """The engine's own MemoryError is r(909) (ODT-28); the web test (web/test/engine.test.ts, "a heap cap") makes a real one.
     Here the run's result says 909, which is what the ballast logic reads."""
-    _, kept, held, taken_again, internal, later = browser(
+    _, kept, held, taken_again, later = browser(
         tmp_path,
         r"""
 import dataclasses
@@ -204,30 +204,48 @@ print(json.dumps(browser._ballast is not None))           # taken at start
 real = browser._eng.run
 def nomem(*a, **k):
     return dataclasses.replace(real(*a, **k), rc=909, error="op. sys. refuses to provide memory")
-def internal(*a, **k):
-    return dataclasses.replace(real(*a, **k), rc=9999, error="internal engine error: MemoryError: x")
 browser._eng.run = nomem
 r = json.loads(browser.run('display 1'))
 print(json.dumps([r["rc"], r["error"], browser._ballast is None]))   # freed, and the result still came back
 browser._eng.run = real
 r = json.loads(browser.run('display 2'))
 print(json.dumps([r["rc"], browser._ballast is not None]))          # the next run takes it again
-browser._eng.run = internal
-browser.run('display 3')
-print(json.dumps(browser._ballast is None))                         # a MemoryError outside a command too
-browser._eng.run = real
-print(json.dumps(json.loads(browser.run('display 4'))["rc"]))
+print(json.dumps(json.loads(browser.run('display 3'))["rc"]))
 """,
     )
     assert kept is True  # taken at start
     assert held == [909, "op. sys. refuses to provide memory", True]
     assert taken_again == [0, True]
-    assert internal is True
     assert later == 0
 
 
+def test_a_memory_error_outside_a_command_frees_the_ballast_and_is_r909(tmp_path):
+    """The heap fills in the interpreter's own work (a loop between its commands), not in a command: the engine frees the
+    ballast (browser.start hooks it) before it writes the error, and answers r(909), not rc 9999 or an escape."""
+    _, r, kept, later = browser(
+        tmp_path,
+        r"""
+browser.run('clear\nset obs 7\ngen x = _n')
+def full(*a, **k):
+    assert browser._ballast is not None   # still held when the MemoryError is raised
+    raise MemoryError
+real = browser._eng.session.run
+browser._eng.session.run = full
+r = json.loads(browser.run('display 1'))
+print(json.dumps([r["rc"], r["error"], r["log"], r["nobs"], r["nvars"], browser._ballast is None]))
+browser._eng.session.run = real
+print(json.dumps(json.loads(browser.run('summarize x'))["nobs"]))
+r = json.loads(browser.run('display 2'))
+print(json.dumps([r["rc"], browser._ballast is not None]))
+""",
+    )
+    assert r == [909, "op. sys. refuses to provide memory", "op. sys. refuses to provide memory\nr(909);\n", 7, 1, True]
+    assert kept == 7  # the data is as it was
+    assert later == [0, True]  # the next run is fine and takes the ballast again
+
+
 def test_a_memory_error_that_escapes_the_engine_frees_the_ballast_and_is_r909(tmp_path):
-    """The heap filled while the engine reported an error: the MemoryError reaches run(), which frees the ballast first."""
+    """The heap filled again while the engine reported it: the MemoryError reaches run(), which frees the ballast first."""
     _, r, freed, kept, later = browser(
         tmp_path,
         r"""

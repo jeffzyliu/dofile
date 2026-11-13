@@ -6,6 +6,7 @@ changes the process working directory, so run one Engine per process (see worker
 
 from __future__ import annotations
 
+import errno
 import math
 import os
 import re
@@ -26,6 +27,10 @@ RC_INTERNAL = 9999  # a Python exception escaped the interpreter (an engine bug,
 RC_FILE = 603  # Stata: file could not be opened
 RC_BREAK = 1  # Stata: --Break-- (the user pressed Break); the session keeps its data
 BREAK = "--Break--"
+RC_NOMEM = (
+    909  # Stata: op. sys. refuses to provide memory (a MemoryError in a command is this too: OpenDTA patch ODT-28)
+)
+NOMEM = "op. sys. refuses to provide memory"
 
 
 # a tempfile's path (OpenDTA names them <tmp>/opendta-<pid>/S__000001.dta)
@@ -335,6 +340,12 @@ def _png(g, theme: str | None = None) -> bytes | None:
     return buf.getvalue()
 
 
+def _out_of_memory(e: Exception) -> bool:
+    """A MemoryError, or the OSError that WebAssembly's file system raises when the heap is full (ENOMEM: Python looking
+    up a module file)."""
+    return isinstance(e, MemoryError) or (isinstance(e, OSError) and e.errno == errno.ENOMEM)
+
+
 class Engine:
     def __init__(
         self,
@@ -353,6 +364,9 @@ class Engine:
         self._tee = _Tee(self._capture)
         self._temp_names: set[str] = set()  # tempvar, tempname and tempfile names made by the code's top level
         self.tempfile_hint = tempfile_hint
+        self.on_memory_error = (
+            None  # called first when a MemoryError escapes a call: the web demo frees its reserve here
+        )
         self.session = Session()
         self.session.run("quietly set superscript off")  # Stata's 1.000e+10, not OpenDTA's 1.00×10¹⁰ (loses a digit)
         if not hints:
@@ -479,9 +493,17 @@ class Engine:
                 self._tee(f"{error}\nr({rc});\n", "error")
                 self._recover(rc)
             except Exception as e:  # noqa: BLE001 - any engine bug becomes an error result, not a crash
-                rc = RC_INTERNAL
-                error = f"internal engine error: {type(e).__name__}: {e}"
-                self._tee(f"{error}\n{traceback.format_exc(limit=-3)}r({rc});\n", "error")
+                if _out_of_memory(
+                    e
+                ):  # outside a command (a loop's own work; a command's is r(909) already): Stata's 909
+                    if self.on_memory_error is not None:
+                        self.on_memory_error()  # before anything below allocates: the heap is full
+                    rc, error = RC_NOMEM, NOMEM
+                    self._tee(f"{error}\nr({rc});\n", "error")
+                else:
+                    rc = RC_INTERNAL
+                    error = f"internal engine error: {type(e).__name__}: {e}"
+                    self._tee(f"{error}\n{traceback.format_exc(limit=-3)}r({rc});\n", "error")
                 self._recover(rc)
             held = set(self.session.macros._frames[0].values())  # temporary names a top-level local still holds
             self._temp_names = {n for n in self._temp_names if n in held} | {

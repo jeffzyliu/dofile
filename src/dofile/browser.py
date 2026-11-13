@@ -15,7 +15,7 @@ import signal
 import time
 
 from . import linalgshim, pathshim, sandbox
-from .engine import LOG_KEEP, Engine, Result, about, clear_break, matrix_sizes, request_break
+from .engine import LOG_KEEP, NOMEM, RC_NOMEM, Engine, Result, about, clear_break, matrix_sizes, request_break
 
 DENIED = ("shell", "webuse")  # no programs and no network in a browser; file commands only touch the page's own files
 # The note under the error about a tempfile an earlier run deleted. A draft: step 4d's word list replaces it (OQ-10).
@@ -25,8 +25,6 @@ TEMPFILE_HINT = "a tempfile lasts one run: save it under a name to use it in a l
 # handling and the next call's compile need a little room, and without it every later call fails ("lost sys.stderr"), so
 # the session cannot recover. A run that ends in "out of memory" frees this, and the next run takes it again if it can.
 BALLAST = 20_000_000
-NOMEM = "op. sys. refuses to provide memory"
-RC_NOMEM = 909  # a MemoryError in a command is this (OpenDTA patch ODT-28)
 
 _eng: Engine | None = None
 _busy = False
@@ -42,9 +40,9 @@ def _hold_ballast() -> None:
             pass
 
 
-def _ran_out_of_memory(rc: int, error: str | None) -> bool:
-    # rc 909 is a command's MemoryError; an escape from outside a command is rc 9999 "internal engine error: MemoryError..."
-    return rc == RC_NOMEM or (error or "").startswith("internal engine error: MemoryError")
+def _free_ballast() -> None:
+    global _ballast
+    _ballast = None
 
 
 def _on_interrupt(signum, frame) -> None:
@@ -61,6 +59,7 @@ def start(root: str = "/work") -> str:
     # for MCP): far more than a person reads, small enough for the page to hold and show. A runaway loop prints about
     # 5 MB/s, so it reaches the cap within a second instead of filling the worker's memory.
     _eng = Engine(root, log_keep=LOG_KEEP, tempfile_hint=TEMPFILE_HINT)
+    _eng.on_memory_error = _free_ballast  # the engine frees it before it writes the error: the heap is full
     pathshim.install(root, lambda m: _eng.session.output.write(m + "\n", "text"))
     signal.signal(signal.SIGINT, _on_interrupt)
     _hold_ballast()
@@ -80,7 +79,7 @@ def run(
     undefined, or anything not callable, means none). The chunks are only a preview: they stop at the log cap with no
     marker, and notes may be added after the run. When the result comes, the page replaces the streamed text with the
     JSON's log, never appends to it."""
-    global _busy, _ballast
+    global _busy
     clear_break()
     _hold_ballast()
     _busy = True
@@ -94,15 +93,15 @@ def run(
             on_output=on_output if callable(on_output) else None,
         )
     except MemoryError:
-        # The heap filled while the engine was reporting an error (a command's own MemoryError is r(909) already and does
-        # not get here): free the ballast first, so that there is room to say so, as the engine would have.
-        _ballast = None
+        # The heap filled again while the engine was reporting its own MemoryError (it frees the ballast before it
+        # does, and a command's own is r(909) already): free it, if that did not happen, and answer as the engine would.
+        _free_ballast()
         d = _eng.session.data
         r = Result(f"{NOMEM}\nr({RC_NOMEM});\n", RC_NOMEM, NOMEM, _eng.results(), nobs=d.nobs, nvars=len(d.names))
     finally:
         _busy = False
-    if _ran_out_of_memory(r.rc, r.error):
-        _ballast = None  # room for the result below, and for the calls the page makes next (memory, describe, browse)
+    if r.rc == RC_NOMEM:
+        _free_ballast()  # room for the result below, and for the calls the page makes next (memory, describe, browse)
     t1 = time.perf_counter()
     encoded = [base64.b64encode(p).decode() for p in r.images]
     return json.dumps(

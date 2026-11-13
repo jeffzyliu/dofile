@@ -614,6 +614,32 @@ def test_odt28_out_of_memory_is_rc_909_and_capture_catches_it(eng, monkeypatch):
     assert r.rc == 0 and r.log.strip().splitlines()[-1] == "rc 909", r.log
 
 
+def test_a_memory_error_outside_a_command_is_rc_909_after_on_memory_error(eng, monkeypatch):
+    """A MemoryError in the interpreter's own work (a loop between commands) is not a command's r(909) (ODT-28) and was
+    rc 9999 with a traceback; so was the OSError ENOMEM that WebAssembly's file system raises on a full heap. Both are
+    r(909), the data stays, and `on_memory_error` is called before anything is written."""
+    import errno
+
+    eng.run("clear\nset obs 3\ngen x = _n")
+    calls = []
+    eng.on_memory_error = lambda: calls.append(eng._capture.text)
+    real = eng.session.run
+    for exc in (MemoryError(), OSError(errno.ENOMEM, "Out of memory")):
+
+        def full(*args, exc=exc, **kwargs):
+            raise exc
+
+        monkeypatch.setattr(eng.session, "run", full)
+        r = eng.run("display 1")
+        monkeypatch.setattr(eng.session, "run", real)
+        assert (r.rc, r.error, r.nobs) == (909, "op. sys. refuses to provide memory", 3), (r.rc, r.error)
+        assert r.log == "op. sys. refuses to provide memory\nr(909);\n"
+        assert eng.run("display 2").rc == 0
+    assert calls == ["", ""]  # once per error, before it was written
+    monkeypatch.setattr(eng.session, "run", lambda *a, **k: (_ for _ in ()).throw(OSError(errno.ENOENT, "gone")))
+    assert eng.run("display 3").rc == 9999  # another OSError is still an engine error
+
+
 def test_odt22_matrix_pseudofunction(eng):
     """ODT-22: matrix(name) is the matrix name in an expression."""
     eng.run("matrix xx = (1, 2 \\ 3, 4)")
