@@ -1,7 +1,7 @@
 // The time the status bar, the phone's strip and the Break pill count with: `now` (Date.now(), the clock of the engine
 // states' t0) ticks every 100 ms while a timer shows (a run, a Break, a start), and stands still otherwise. It reads the
-// engine's state and decides none: the timers only show the states' own times. Every elapsed time on the page (pill,
-// status bar, banners) reads it, so they agree (docs/design/SPEC.md, S 9).
+// engine's state and decides none: the timers only show the states' own times. The pill, the status bar and the banners
+// read it, so they agree (docs/design/SPEC.md, S 9); the download dialog keeps its own clock.
 import { effect, signal } from "@preact/signals-core";
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
 import { engine } from "../state.ts";
@@ -13,8 +13,8 @@ const TICKING = new Set<EngineState["s"]>(["running", "breaking", "waiting", "st
 let timer: ReturnType<typeof setInterval> | undefined;
 effect(() => {
   const on = TICKING.has(engine.value.s);
+  if (on) now.value = Date.now(); // each new state starts from the true time, not up to one tick late
   if (on && timer === undefined) {
-    now.value = Date.now();
     timer = setInterval(() => {
       now.value = Date.now();
     }, 100);
