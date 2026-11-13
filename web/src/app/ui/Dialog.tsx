@@ -5,8 +5,8 @@
 //  - Esc cancels: it calls `onCancel`. Without `onCancel` the dialog is blocking: Esc does nothing (the download prompt
 //    and "dofile is open in another tab").
 //  - When it closes (the component unmounts), focus returns to what had it when the dialog opened; if that has left the
-//    page, to the editor or More actions (states/focus.ts focusStable). Both after the timers its answer set, and only
-//    for a focus left on nothing, so a focus an answer places itself (the close-tab dialog's) moves once. The same when
+//    page, to the editor or More actions (states/focus.ts focusStable). Both after the render that closes it (a microtask),
+//    and only for a focus left on nothing, so a focus an answer places itself (the close-tab dialog's) moves once. The same when
 //    the opener cannot take the focus (the answer disabled it: the Log head's "Clear…" after Clear log). A dialog that
 //    opens while the one before it is handing the focus back (the next clash, other-tab over a dialog) takes that one's
 //    opener as its own; <body> is never an opener (a dialog opened with the focus on nothing gives it to focusStable).
@@ -40,7 +40,7 @@ const heldEnter = (e: KeyboardEvent) => {
   if (isHeldEnter(e)) e.preventDefault();
 };
 
-// the opener of a dialog that has closed and not yet given the focus back (its timer below), for a dialog opened
+// the opener of a dialog that has closed and not yet given the focus back (its microtask below), for a dialog opened
 // meanwhile
 let leaving: HTMLElement | null = null;
 
