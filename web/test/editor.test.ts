@@ -36,7 +36,7 @@ import { classify, hintParts, plainLog, runError } from "../src/app/log/classify
 import { matches } from "../src/app/log/find.ts";
 import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
 import type { LastRun, RunHead } from "../src/app/types.ts";
-import { isHeldEnter } from "../src/app/ui/keys.ts";
+import { ignoreHeldEnter, isHeldEnter } from "../src/app/ui/keys.ts";
 
 // a log as the engine writes it (the engine's own text: hints on, as browser.py runs it)
 const LOG = `. clear
@@ -942,6 +942,17 @@ test("a dialog's held-Enter rule (ui/keys.ts isHeldEnter): only a repeat of Ente
   assert.equal(isHeldEnter({ key: "Enter", repeat: false }), false, "the first press answers the dialog");
   for (const key of [" ", "Tab", "Escape", "a", "NumpadEnter"])
     assert.equal(isHeldEnter({ key, repeat: true }), false, key);
+});
+
+test("the Run buttons' held-Enter rule (ui/keys.ts ignoreHeldEnter): a repeat of Enter is cancelled, so the click that goes with it does not happen; the first press and the other keys are not", () => {
+  const press = (key: string, repeat: boolean) => {
+    let cancelled = false;
+    ignoreHeldEnter({ key, repeat, preventDefault: () => (cancelled = true) });
+    return cancelled;
+  };
+  assert.equal(press("Enter", true), true, "a held Enter");
+  assert.equal(press("Enter", false), false, "the first press clicks the button");
+  for (const key of [" ", "Tab", "Escape", "a"]) assert.equal(press(key, true), false, `a held ${key}`);
 });
 
 test("a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or the key does what Start engine does (the download prompt, the take-over dialog)", () => {

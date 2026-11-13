@@ -19,6 +19,7 @@ import * as eng from "../engine.ts";
 import { startEngine, startOffer } from "../start.ts";
 import { activeTab, engine, isolated, phoneTab, showToast, tabs } from "../state.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
+import { ignoreHeldEnter } from "../ui/keys.ts";
 import { since } from "./clock.ts";
 import { editorCommands, selection } from "./commands.ts";
 import { PILL_WIDEST, pillTime, refusedRunWords } from "./words.ts";
@@ -103,6 +104,7 @@ export function RunControls() {
         aria-label={NAME[run.label]}
         aria-disabled={run.busy || run.disabled || undefined}
         aria-keyshortcuts={(usable && !sel) || (run.start && !run.disabled) ? modShortcut("Enter") : undefined}
+        onKeyDown={ignoreHeldEnter}
         onClick={() => pressRun(run, () => editorCommands.runFile())}
       >
         <Labels
@@ -216,6 +218,7 @@ export function PhoneRun() {
         class={`btn stop${brk.live ? " live" : ""} pill run-ctl`}
         disabled={brk.disabled}
         aria-label={NAME[brk.label] ?? brk.label}
+        onKeyDown={ignoreHeldEnter} // the Run button's node: a held Enter that ran the file must not press Break
         onClick={() => {
           if (Date.now() - st.t0 < 600) return;
           pressBreak();
@@ -233,6 +236,7 @@ export function PhoneRun() {
       class={`btn primary run-ctl${run.disabled ? " off" : ""}`}
       aria-label={name}
       aria-disabled={run.disabled || undefined}
+      onKeyDown={ignoreHeldEnter}
       onClick={() => pressRun(run, () => (sel ? editorCommands.runSelection() : editorCommands.runFile()))}
     >
       <Labels at={range ? all.length - 2 : RUN.indexOf(run.label)} labels={all} />

@@ -328,6 +328,11 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 "Off" in this table is never the `disabled` attribute. The toolbar's Run and the command line's button are
 `aria-disabled` with `.off`; the command line's field is `aria-disabled` and read-only. All stay focusable.
 
+A button that keeps the focus through "Start engine", "Starting…" and "Run" (the toolbar's Run, the phone's Run and Break
+pill, the command line's three buttons: one element each) ignores a held Enter's repeats (`ui/keys.ts`
+`ignoreHeldEnter`), so a key held down on "Start engine" presses it once: it starts nothing twice, toasts once, and
+runs nothing when the engine is ready.
+
 - **Why not `disabled`: the focus.** These states change under the visitor's hands: a start fails while a command is
   being typed, and a press of "Start engine" after a failed start turns that very button into "Starting…" (the
   toolbar) or into the off "Run command" (the command line, the same element). A `disabled` element that has the focus
@@ -375,7 +380,7 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile()`, then the banner is dismissed | enabled in `ready` with a text tab active |
 | The command line | `runCommand(text)` | in `ready` it runs. With an engine that is not ready, or one on its way, the field is on and the command is refused with a toast (the button is off). Off with no engine |
-| A hint's `help x` link (`log/LogView.tsx`) | `runCommand(text)` | with an engine, or one on its way: the machine accepts or refuses. Off with no engine (`aria-disabled`, a toast) |
+| A hint's `help x` link (`log/LogView.tsx`) | `runCommand(text)` | in `ready` the machine accepts it. While a run is on or a start is on its way, the machine refuses it and a toast says why (`editor/words.ts` `refusedRunWords`, the command line's words). Off with no engine (`aria-disabled`, a toast) |
 | Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`; off with no engine (`aria-disabled`, a toast); `disabled` in the other states |
 
 The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` on `engine`, `followErrors` on
