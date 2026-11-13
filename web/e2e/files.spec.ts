@@ -285,6 +285,38 @@ test("a renamed row drawn after the visitor clicked into the editor leaves the f
   await expect(editor).toContainText("z");
 });
 
+test("a renamed row drawn after the visitor clicked another row leaves the focus on that row", async ({ page }) => {
+  test.skip(
+    isPhone(page),
+    "a phone shows the tree and the editor in separate views: a click on a row opens it and leaves",
+  );
+  await setUp(page, { "a.do": "1\n", "c.do": "3\n" });
+  // the store's lists wait for the test, so the renamed row is drawn only when the test says
+  await page.evaluate(() => {
+    const s = (window as any).__dofile.store;
+    const real = s.list;
+    let answer!: () => void;
+    const gate = new Promise<void>((ok) => (answer = ok));
+    (window as any).__answer = () => {
+      s.list = real;
+      answer();
+    };
+    s.list = (...a: unknown[]) => gate.then(() => real.apply(s, a));
+  });
+  await row(page, /^a\.do/).focus();
+  await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "New name for a.do" })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("b.do");
+  await page.keyboard.press("Enter");
+  await row(page, /^c\.do/).click();
+  await expect(row(page, /^c\.do/)).toBeFocused();
+  await page.evaluate(() => (window as any).__answer());
+  await expect(row(page, /^b\.do/)).toBeVisible();
+  await page.waitForTimeout(300); // a late focus of the renamed row would have come by now
+  await expect(row(page, /^c\.do/)).toBeFocused();
+});
+
 test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the default; a folder's menu; Delete all files asks with the count", async ({
   page,
   isMobile,

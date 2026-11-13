@@ -381,7 +381,7 @@ function renamed(from: string, to: string) {
     if ((b.b === "run-changed" || b.b === "save-failed") && b.path === from) {
       dismiss(b);
       addBanner({ ...b, path: to });
-    }
+    } else if (b.b === "reset" && b.run?.path === from) addBanner({ ...b, run: { ...b.run, path: to } }); // replaces the banner
   if (scrolled.has(from)) scrolled.set(to, scrolled.get(from)!);
   scrolled.delete(from);
   if (shown.value === from && view) {

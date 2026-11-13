@@ -181,9 +181,10 @@ export class FileStore {
 
   // A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then `sync`
   // tells the worker, which takes the store's version of what the journal names and empties it.
-  // Changes apply in the order they are called: `tx` is called before any await here, and IndexedDB runs readwrite
-  // transactions over the same stores in the order they were made (a write called before a rename is moved by it; the
-  // page's Save relies on that: app/files/actions.ts fileTurn).
+  // Changes apply in the order they are called: `tx` makes its transaction right after the shared `opened` promise, so
+  // calls made in order make their transactions in order, and IndexedDB runs readwrite transactions over the same
+  // stores in the order they were made (a write called before a rename is moved by it; the page's Save relies on that:
+  // app/files/actions.ts fileTurn).
   async change<T>(row: PendingRow, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
     if (this.blocked) throw new Error("dofile is open in another tab");
     const sync = this.sync;
