@@ -331,7 +331,8 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 A button that keeps the focus through "Start engine", "Starting…" and "Run" (the toolbar's Run, the phone's Run and Break
 pill, the command line's three buttons: one element each) ignores a held Enter's repeats (`ui/keys.ts`
 `ignoreHeldEnter`), so a key held down on "Start engine" presses it once: it starts nothing twice, toasts once, and
-runs nothing when the engine is ready.
+runs nothing when the engine is ready. A hint's `help x` link has the same rule: held during a run or a start it toasts
+once, and held in `ready` it runs `help x` once.
 
 - **Why not `disabled`: the focus.** These states change under the visitor's hands: a start fails while a command is
   being typed, and a press of "Start engine" after a failed start turns that very button into "Starting…" (the

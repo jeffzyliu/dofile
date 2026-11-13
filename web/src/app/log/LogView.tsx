@@ -31,6 +31,7 @@ import { engine, graphFull, graphIndex, graphs, isPhone, log, outputTab, showToa
 import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { Icon, isMac } from "../ui/Icon";
+import { ignoreHeldEnter } from "../ui/keys.ts";
 import { commandEnd, echoed, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
 import { classify, hintParts, type LogLine, runError } from "./classify.ts";
 import { findAt, findOpen, findText, matches } from "./find.ts";
@@ -126,7 +127,8 @@ const Jump = ({ line, path }: { line: number; path?: string }) => (
 
 /** A hint's `help x` link: it runs the command. With no engine (start.ts) it is off, aria-disabled and `.off`, still
  *  focusable, and a press only says why in a toast ("Start the engine to see help regress"). While a run or a start is
- *  on, the machine refuses the command, and the toast says why (refusedRunWords), as the command line's does. */
+ *  on, the machine refuses the command, and the toast says why (refusedRunWords), as the command line's does. A held
+ *  Enter's repeats are ignored (ui/keys.ts), so the toast shows once and `help x` is not run again when the engine is free. */
 function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
   const offer = startOffer(engine.value),
     off = offer !== null;
@@ -135,6 +137,7 @@ function HelpLink({ command, children }: { command: string; children: ComponentC
       type="button"
       class={`help-link${off ? " off" : ""}`}
       aria-disabled={off ? "true" : undefined}
+      onKeyDown={ignoreHeldEnter}
       onClick={() => {
         if (offer !== null) showToast(startFirst(offer, `see ${command}`), "error");
         else if (runCommand(command).how === "refused") {
