@@ -314,6 +314,7 @@ Reviewed after the merge: see Post-merge review.
    **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
 7. A run that writes something that is not text (binary, not UTF-8) over an open text tab keeps the tab's text, edits or
    not, marks it unsaved and shows the `run-changed` banner in other words, with no "Reload from the run".
+   **Iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
 8. On a phone the Results view's "↵ Copy" hint is hidden, the word Copy with it (a tap copies, and the toast says so).
    **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
 9. A file with both kinds of line break is saved with the more common one (`\n` on a tie); a file whose breaks are lone
@@ -343,6 +344,7 @@ Reviewed after the merge: see Post-merge review.
 7. A file a run deleted keeps its tab: it leaves the file list, the tab keeps its unsaved dot as it was, and Save writes
    the file again.
    **Decided (2026-11-13, #40): kept, as other editors do.** A "(deleted)" mark on such a tab is in `docs/icebox.md`.
+   **Also iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
 8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog. (Done: with a dialog open it only keeps the browser's
    Save page away and saves nothing; `editor/Editor.tsx` `onKey`, one e2e case in `editor.spec.ts`.)
 9. The editor has no find of its own (no Ctrl/Cmd+F binding); Find searches the log only.
@@ -359,10 +361,13 @@ Reviewed after the merge: see Post-merge review.
     open items (`web-engine-data-flow.md`, Part 3).
 14. A clash over an open file with unsaved edits is asked again after "Do the same" with Replace (not after Esc, nor after
     "Do the same" with Keep mine).
+    **Iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
 15. A drag that began in the page (a graph image, which Chromium and WebKit list as carrying a file) is not taken as an
     upload: a guard kept on partial evidence.
+    **Iceboxed (2026-11-13)** with the drag-and-drop audit (`docs/icebox.md`, "Command line, log and files").
 16. While a dialog is open, or another tab has the files, a drag of files over the page gives the Files pane no outline
     and the drop uploads nothing, with nothing that says why.
+    **Iceboxed (2026-11-13)** with the drag-and-drop audit (`docs/icebox.md`, "Command line, log and files").
 17. The forced-colors rules of 4a, 4b and 4c (and the shell's fold button) are in `@media (forced-colors: active)` blocks
     inside each part's block of `app.css`, not in the block at the end of `ui.css` that SPEC section 1 names.
 18. "Restore the sample" is not in the Files head menu until step 5's sample exists (OQ-13 puts it above "Delete all
@@ -441,7 +446,8 @@ Reviewed after the merge: see Post-merge review.
    holds the sample. A Save that begins while the restore's write is in progress ends after the `reload`: the store then holds
    the Save's text while the tab shows the sample with no unsaved dot (the Save sets the saved text to its own, and the dot
    only follows edits). A window of milliseconds; `reload` does not touch `saving`.
-   **Moved to `docs/icebox.md` (2026-11-13, #40), with uploads, which also write outside `fileTurn`.**
+   **Moved to `docs/icebox.md` (2026-11-13, #40), with uploads, which also write outside `fileTurn`; now part of the redesign of
+   file synchronization there (2026-11-13).**
 
 ## Post-merge review (after steps 4 and 5 merge)
 

@@ -99,11 +99,21 @@ estimated splits) are the study's, not checked again here.
   this single line one reliable with sensible defaults." 2026-11-13.
 - **Two commands on one line in `#delimit ;` mode (step 4's C 11).** Both are echoed as the whole line twice, and the second
   echo can be matched to a later identical line, which puts a graph's link in the wrong place. Left as rare. 2026-11-13.
-- **"Restore the sample" and uploads write outside the file-change turn (step 5's C 6).** A Save in progress of the same
-  file, with the restore, or with an upload that replaces an open file (`files/actions.ts` `fileTurn` covers rename and
-  delete only): the store's writes run in the order they began, so a Save that begins during the write ends after the
-  `reload`, and the store holds the Save's text while the tab shows the sample or the upload with no unsaved dot. A window
-  of milliseconds, read from the code and not tested. To be looked at in the step 6 audit. 2026-11-13.
+- **Rethink how files are kept in step between the store, the open tabs and runs: one redesign from ground rules, not
+  one-off fixes.** The maintainer: "move all of the file save decisions to the icebox as one issue to rethink the file save
+  synchronization flow. it should not happen as a bunch of one-off fixes but it should be redesigned according to some
+  ground rules. but we do not have time for that now." The cases to cover (plan, steps 4 and 5):
+  - step 4's B 7: a run that writes binary (not UTF-8) over an open text tab keeps the tab's text, marks it unsaved and
+    shows the `run-changed` banner in other words, with no "Reload from the run";
+  - step 4's C 7: a file a run deleted keeps its tab, and Save writes it again (kept, as other editors do; see the
+    "(deleted)" mark below);
+  - step 4's C 14: a clash over an open file with unsaved edits is asked again after "Do the same" with Replace;
+  - step 5's C 6 and the uploads: "Restore the sample" and an upload that replaces an open file write outside the
+    file-change turn (`files/actions.ts` `fileTurn` covers rename and delete only), so a Save that begins during the
+    write ends after the `reload`: the store holds the Save's text while the tab shows the sample or the upload with no
+    unsaved dot (a window of milliseconds, read from the code, not tested);
+  - once Restore is an upload (step 5's B 4): a sample file missing from the store but open in a clean tab keeps its old
+    text after Restore (the old Restore reloaded it). 2026-11-13.
 - **A "(deleted)" mark on a tab whose file a run deleted.** The tab stays, as in other editors, and Save writes the file again
   (step 4's C 7, kept); a mark would tell the visitor the file is gone. 2026-11-13.
 - **A close button (×) on each row of the phone's file dropdown.** The desktop tab has one; on the phone the dropdown has
@@ -111,6 +121,13 @@ estimated splits) are the study's, not checked again here.
 - **Find and replace in the editor** (step 4's C 9; the editor has no find of its own, and Find searches the log only). The
   maintainer's fix, to build later: "add find and replace window to editor pane, add ctrl/cmd f listeners to both editor and log
   panes, and allow the user to do normal browser find when focused elsewhere". 2026-11-13.
+
+- **Audit drag-and-drop.** The maintainer: "make another icebox entry for auditing drag-and-drop, with these two behaviors
+  written down to revisit":
+  - step 4's C 15: a drag that began in the page (a graph image, which Chromium and WebKit list as carrying a file) is
+    not taken as an upload, a guard kept on partial evidence;
+  - step 4's C 16: while a dialog is open, or another tab has the files, a drag of files over the page gives the Files
+    pane no outline and the drop uploads nothing, with nothing that says why. 2026-11-13.
 
 ## Engine memory (added 2026-11-13)
 
