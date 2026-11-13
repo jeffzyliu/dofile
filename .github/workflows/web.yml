@@ -84,10 +84,22 @@ jobs:
       - run: npm run lint:strict   # biome ci --error-on-warnings
 
   e2e:
-    name: browsers (Playwright)
+    name: browsers (Playwright, ${{ matrix.project }})
     needs: changes
     if: github.event_name != 'push' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    # One job per Playwright project, each on its own runner with Playwright's default workers (2 on this runner): the four
+    # run side by side, and no runner carries more load than the single job did (more workers on one runner would: the
+    # WebKit projects are sensitive to it). The iphone project is WebKit with a phone profile. A failed project does not
+    # stop the others. `web ok` needs every one of them: it reads this job's joined result.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { project: chromium, browser: chromium }
+          - { project: firefox, browser: firefox }
+          - { project: webkit, browser: webkit }
+          - { project: iphone, browser: webkit }
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
@@ -97,17 +109,17 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
       # builds the snapshot (the page's default start; needs the network once: micropip fetches openpyxl from PyPI) and the page,
-      # then Chromium, Firefox, WebKit and an iPhone profile against `vite preview`. Quality 5: a build in seconds instead of
+      # then this job's project against `vite preview`. Quality 5: a build in seconds instead of
       # minutes, about 25% bigger; the tests don't depend on the size. One test starts the page with ?snapshot=0 (the normal boot).
-      - run: npm run e2e
+      - run: npm run e2e -- --project=${{ matrix.project }}
         env:
           SNAPSHOT_QUALITY: "5"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: playwright-results
+          name: playwright-results-${{ matrix.project }}
           path: web/test-results
 
   snapshot:
