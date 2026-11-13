@@ -76,11 +76,10 @@ export function Dialog({
       if (d.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
       if (d.open) d.close();
       leaving = opener;
-      // after the timers already set, and only for a focus left on nothing: a dialog or banner that replaced this one
-      // keeps the focus it took (states/focus.ts), and an answer that places the focus itself once the page has drawn
-      // (the close-tab dialog's focusAfterClose) moves it once, straight to its place. Then the opener, or when it has
-      // left the page (a banner's button, a tab the dialog closed), the editor or More actions, not <body>.
-      setTimeout(() => {
+      // after the renders this close is part of (a microtask: states/focus.ts useFocusOnLeave), and only for a focus left
+      // on nothing: a dialog, banner or answer that placed the focus from its render keeps it, so it moves once. Then the
+      // opener, or when it has left the page, the editor or More actions, not <body>. docs/web-page-flows.md, section 1
+      queueMicrotask(() => {
         if (leaving === opener) leaving = null;
         if (document.activeElement && document.activeElement !== document.body) return;
         if (opener?.isConnected) opener.focus();
