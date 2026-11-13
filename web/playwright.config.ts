@@ -18,7 +18,12 @@ export default defineConfig({
   projects: [
     { name: "chromium", use: devices["Desktop Chrome"] },
     { name: "firefox", use: devices["Desktop Firefox"] },
-    { name: "webkit", use: devices["Desktop Safari"] },
-    { name: "iphone", use: devices["iPhone 15"] }, // emulation: viewport and touch, not a real phone keyboard
+    // navigationTimeout on the two WebKit projects: on Linux, WebKit now and then cancels a fresh page's first navigation
+    // to a page served with Cross-Origin-Opener-Policy (WebKit bug 325840, Playwright issue 42957), and page.goto then
+    // waited out the whole test timeout. A navigation that works takes about a second; this bounds reload, goBack and
+    // waitForURL too, not the engine-ready waits. The test still fails: the cap only makes a hang cost a minute, not ten.
+    { name: "webkit", use: { ...devices["Desktop Safari"], navigationTimeout: 60_000 } },
+    // emulation: viewport and touch, not a real phone keyboard
+    { name: "iphone", use: { ...devices["iPhone 15"], navigationTimeout: 60_000 } },
   ],
 });
