@@ -18,7 +18,7 @@ import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { saveAs } from "../files.ts";
-import { activeTab, banners, dialog, dismiss, files, phoneTab, say, showToast, tabs } from "../state.ts";
+import { activeTab, addBanner, banners, dialog, dismiss, files, phoneTab, say, showToast, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import type { Dialog } from "../types.ts";
 import { decodeText, openFile } from "./open.ts";
@@ -88,6 +88,10 @@ export function renameEntry(from: string, to: string): Promise<void> {
 async function renameNow(from: string, to: string) {
   if (from === to) return;
   await store.rename(from, to);
+  // the reset banner's cut file follows too, open in a tab or not (one banner: addBanner replaces it)
+  for (const b of banners.value)
+    if (b.b === "reset" && b.run?.path !== undefined && within(b.run.path, from))
+      addBanner({ ...b, run: { ...b.run, path: movedPath(b.run.path, from, to) } });
   const moved = tabs.value.filter((t) => within(t.path, from)).map((t) => t.path);
   if (!moved.length) return;
   tabs.value = tabs.value.map((t) => ({ ...t, path: movedPath(t.path, from, to) }));
