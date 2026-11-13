@@ -295,21 +295,25 @@ Reviewed after the merge: see Post-merge review.
    with a renamed tab; the extra `closedMarks` map is gone.
 2. On a phone, a tap on the Break pill also shows the Log view, where Break's countdown and its outcome are
    (`editor/RunControls.tsx`).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
 3. Pasted lines stop at the first line that is refused, that was queued and then dropped, that ends with any rc but 0
    (Break's rc 1 too), or whose run is cut because another tab took the engine; and before a line that opens a block
    (`{` at its end, a lone `program define` or `mata`), opens a `/*` comment it does not close, or holds `///` (not sent).
    A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.) (2026-11-12, with the queued run's removal: no line is queued or dropped any more, so that stop is gone; with no engine a paste is an ordinary paste into the disabled field, and no line runs.)
    **Resolved (2026-11-13, #40): "fine for now"** (the maintainer). A multi-line command line is in `docs/icebox.md`.
 4. Load on a phone's .dta tab shows only its toast ("Loaded wages.dta"); the Log view does not open.
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
 5. Reset asks whenever a run is in progress. Otherwise it resets at once while the engine is ready with no data in
    memory and no e() or r() scalar, macro or matrix; after a run it first describes the memory again, and asks when
    that fails (`states/words.ts` `resetDecision`).
    **Resolved (2026-11-13, #40), settled with C 1:** Reset asks unless the engine is `ready` and nothing has run on it since it started; it no longer describes the memory again (`states/words.ts` `resetAsks`).
 6. With a .dta tab active, a focus hand-off (a banner with the focus that goes; a dialog whose opener has left the page)
    goes to that tab in "Open files", else to its Load button (`editor/Editor.tsx` `focus`).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
 7. A run that writes something that is not text (binary, not UTF-8) over an open text tab keeps the tab's text, edits or
    not, marks it unsaved and shows the `run-changed` banner in other words, with no "Reload from the run".
 8. On a phone the Results view's "↵ Copy" hint is hidden, the word Copy with it (a tap copies, and the toast says so).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
 9. A file with both kinds of line break is saved with the more common one (`\n` on a tie); a file whose breaks are lone
    `\r` is saved with `\n` (`editor/ranover.ts` `lineBreakOf`).
    **Resolved (2026-11-13, #40): confirmed as it is** (it matches VS Code: the file's most common line break).
@@ -340,6 +344,7 @@ Reviewed after the merge: see Post-merge review.
 8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog. (Done: with a dialog open it only keeps the browser's
    Save page away and saves nothing; `editor/Editor.tsx` `onKey`, one e2e case in `editor.spec.ts`.)
 9. The editor has no find of its own (no Ctrl/Cmd+F binding); Find searches the log only.
+   **Iceboxed (2026-11-13)** with a fix to build later (`docs/icebox.md`, "Command line, log and files").
 10. On a phone the toast sits above the command line and the tab bar on every view, so on the views with no command line
     (Files, Editor, Data, Results) it is a command line's height higher than it needs to be. (UI fix round, 2026-11-12:
     fixed; on a phone the toast is lower on the views with no command line.)
@@ -388,20 +393,27 @@ Reviewed after the merge: see Post-merge review.
 1. The commands page is `/commands/` (`dist/commands/index.html`), not `/commands.html`: a folder's index is served at
    the same address with no redirect by the dev server, `vite preview` and Cloudflare's `auto-trailing-slash`, and
    `/commands.html` redirects to it.
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
 2. The first visit's sample brings no storage banner (S 19) for its own writes (of the sample's three paths); a change of
    the visitor's made while it is written, and the first one afterwards (a Save, an upload, a run that writes a file), do
    (`app/files.ts`, from the store's change row).
 3. The first-visit sample is off under `?test` unless the URL also has `?sample`, so the e2e tests start from an empty
    store.
+   **Resolved (2026-11-13): kept as it is** (the maintainer: "change it if it helps, not important at all. current situation
+   probably fine"; no change helps).
 4. "Restore the sample" (the Files head menu): files that are only missing are written with no question and the toast
    "Sample restored"; when all three are there unchanged, the toast "The sample is already here"; when one differs from the
    sample or is open with unsaved edits, the dialog `restore-sample` names those files first, and Replace writes the missing,
    differing and unsaved ones, reloads their open tabs with the sample's text and opens `analysis.do`. Other files are never
    touched.
+   **To change (2026-11-13), not built.** The maintainer: "my idea is to reuse the workflow and code for uploads to resolve
+   conflicts. in essence, restoring the sample should act as an upload of the sample + switching tab to analysis.do if it
+   exists." Not built: it waits for the focus work, which changes `files/dialogs.tsx`.
 5. "Browsers that work" says only what the tests and the docs support: the automatic tests run the page in Chromium,
    Firefox and WebKit, no browser was also tried by hand on a computer, one iPhone 13 was tried by hand, other iPhones and
    iPads and Android were not tried; Break needs cross-origin isolation, and the files stay in the browser's storage. (2026-11-12: the maintainer replaced the section's text: computers tested automatically in Chromium, Firefox and WebKit; an iPhone 13 checked by hand in Safari, older iPhones and iPads with less memory may not start; Android not tested; the files stored in this browser only; on some networks Break resets the engine. It no longer says an iPhone-sized WebKit window is run or that Break needs isolation.)
 6. `/landing.html` is a 404, not a redirect: it was never deployed (step 5 is the first to build it).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "yes, 404 is correct").
 
 **C. Open questions**
 Reviewed after the merge: see Post-merge review.
