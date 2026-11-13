@@ -137,6 +137,13 @@ test("a hint line's bold words, and its help command as a link", () => {
     { t: "text", text: " " },
     { t: "help", text: "help summarize" },
   ]);
+  // the engine's topics are one word (an underscore is part of it: help graph_bar), so `help \w+` is the link
+  assert.deepEqual(hintParts("    Learn more: help graph_bar"), [
+    { t: "text", text: "    " },
+    { t: "bold", text: "Learn more:" },
+    { t: "text", text: " " },
+    { t: "help", text: "help graph_bar" },
+  ]);
   assert.deepEqual(hintParts("    How to fix: write it"), [
     { t: "text", text: "    " },
     { t: "bold", text: "How to fix:" },
