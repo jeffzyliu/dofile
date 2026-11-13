@@ -34,7 +34,7 @@ import type {
 import { initial, RC_RESET, transition } from "../engine/machine.ts";
 import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
 import { BREAK_GRACE_MS } from "../engine/types.ts";
-import { editorCommands } from "./editor/commands.ts";
+import { editorAsked, editorCommands } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
 import { engineWriter } from "./state.ts";
@@ -381,8 +381,8 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "close-dialog":
         if (S.dialog.value?.d !== effect.dialog) return;
         S.dialog.value = null;
-        // once the dialog is gone: the page is inert while it is open
-        if (effect.focusEditor) setTimeout(() => editorCommands.focus(), 0);
+        // the Editor takes it from the render that removed the dialog (the page is inert while it is open)
+        if (effect.focusEditor) editorAsked.value = {};
         return;
       case "add-reset-banner":
         return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind, run: effect.run });

@@ -38,7 +38,7 @@ import { Compartment, EditorState, type Extension, Prec } from "@codemirror/stat
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { fileTurn } from "../files/actions.ts";
 import { openFile } from "../files/open.ts";
 import { baseName } from "../files/tree.ts";
@@ -70,7 +70,7 @@ import {
   setRunLines,
   wholeLines,
 } from "./cm.ts";
-import { codeOf, editorCommands, selection } from "./commands.ts";
+import { codeOf, editorAsked, editorCommands, selection } from "./commands.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
 import { isRunKey, isSaveKey } from "./keys.ts";
 import { editorText, type FileForm, fileText, followRun, formOf, PLAIN, savedForm } from "./ranover.ts";
@@ -412,13 +412,18 @@ function closed(path: string) {
 async function goToLine(line: number, path: string | undefined = activeTab.value ?? undefined) {
   if (!path) return;
   await openFile(path); // opens it, or only makes it the active tab (and the Editor view on a phone)
-  setTimeout(() => {
-    if (!view || shown.value !== path) return;
-    const n = Math.min(Math.max(1, line), view.state.doc.lines);
-    const at = view.state.doc.line(n).from;
-    view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }) });
-    view.focus();
-  });
+  editorAsked.value = { path, line }; // taken once the page has drawn it (Editor)
+}
+
+/** Take a request in `editorAsked`, from the Editor's render: Go to line in the file shown, or the editor's focus. */
+function takeAsk(ask: { path?: string; line?: number }) {
+  editorAsked.value = null;
+  if (ask.line === undefined) return focus();
+  if (!view || shown.value !== ask.path) return;
+  const n = Math.min(Math.max(1, ask.line), view.state.doc.lines);
+  const at = view.state.doc.line(n).from;
+  view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }) });
+  view.focus();
 }
 
 /** Put the focus in the editor, at once, without changing the active tab or the phone's view:
@@ -519,6 +524,10 @@ export function Editor() {
   const host = useRef<HTMLDivElement>(null);
   const emptyRef = useRef<HTMLDivElement>(null);
   useEffect(() => mount(host.current!, emptyRef.current!), []);
+  const ask = editorAsked.value;
+  useLayoutEffect(() => {
+    if (ask) takeAsk(ask);
+  }, [ask]);
   const none = shown.value === null;
   return (
     <div class="editor-host">

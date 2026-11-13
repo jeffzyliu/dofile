@@ -26,6 +26,11 @@ export const codeOf = new WeakMap<RunHead, string>();
  *  enabled only with one; the phone's Run says "Run 6–7". Owner: the editor. */
 export const selection = signal<[number, number] | null>(null);
 
+/** A request for the editor's focus, which the Editor takes from its own render (docs/web-page-flows.md, section 1):
+ *  `{}` for editorCommands.focus() once the page has drawn (the engine's dialog gone), `{ path, line }` for Go to line
+ *  (the phone's Editor view shown). It ends there, taken or not. */
+export const editorAsked = signal<{ path?: string; line?: number } | null>(null);
+
 export const editorCommands = {
   /** Run: the whole text of `path` (default: the active tab), saved or not, with no locals (fresh_locals). */
   runFile(_path?: string) {},
@@ -36,8 +41,8 @@ export const editorCommands = {
   save(_path?: string): Promise<boolean> {
     return Promise.resolve(false);
   },
-  /** Put the focus in the editor, at once (after the engine's dialog closes by itself; states/focus.ts focusStable, for a
-   *  banner or a dialog's opener that left; files/EditorTabs.tsx focusAfterClose). "Go to line" focuses CodeMirror itself. */
+  /** Put the focus in the editor, at once (states/focus.ts focusStable, for a banner or a dialog's opener that left;
+   *  files/EditorTabs.tsx focusAfterClose; the engine's dialog through `editorAsked`). "Go to line" focuses CodeMirror itself. */
   focus() {
     ((globalThis.document?.querySelector("[data-editor]") ?? null) as HTMLElement | null)?.focus();
   },
