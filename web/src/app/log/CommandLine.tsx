@@ -44,6 +44,7 @@ import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
 import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
 import { Icon } from "../ui/Icon";
+import { ignoreHeldEnter } from "../ui/keys.ts";
 import { MenuButton, type MenuItem } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
 import { openFind } from "./LogView";
@@ -186,6 +187,7 @@ export function CommandLine() {
           type="button"
           class={`btn start${phone ? " primary" : ""}${offer === "off" ? " off" : ""}`}
           aria-disabled={offer === "off" ? "true" : undefined}
+          onKeyDown={ignoreHeldEnter}
           onClick={() => {
             if (startEngine() === "off") showToast(startHint("off"), "error");
           }}
@@ -203,6 +205,7 @@ export function CommandLine() {
           aria-disabled={busy || !field.value.trim() ? "true" : undefined}
           onPointerDown={keepFocus}
           onMouseDown={keepFocus}
+          onKeyDown={ignoreHeldEnter}
           onClick={() => {
             if (busy) sayRefused();
             else if (field.value.trim()) submit();
@@ -216,6 +219,7 @@ export function CommandLine() {
           type="button"
           class={`btn${busy ? " off" : ""}`}
           aria-disabled={busy ? "true" : undefined}
+          onKeyDown={ignoreHeldEnter}
           onClick={() => {
             if (busy) sayRefused();
             else submit();

@@ -2,8 +2,10 @@
 // (docs/web-page-flows.md, section 2, has the table; docs/design/SPEC.md, sections 3.4, 3.5 and 5). This module is the
 // one statement of which engine states are "no engine" and of what a press of "Start engine" does in each. The toolbar's
 // Run, the command line's button and Ctrl/Cmd+Enter in the editor all call startEngine(); the command line's field,
-// Run selection, Load, Import and the log's `help x` links are off while startOffer() is not null. A control that is off
-// stays focusable (aria-disabled, never `disabled`), so the focus does not fall to the page when a state turns it off.
+// Run selection, Load, Import and the log's `help x` links are off while startOffer() is not null. With no engine the Run
+// buttons, the command line, Load, Import and the help links are aria-disabled (never `disabled`) and stay focusable, so the
+// focus does not fall to the page when a state turns them off; Run selection is the exception, `disabled` (with Load and
+// Import too, in the states that have an engine that is not `ready`).
 // Plain TypeScript, no DOM: tested in Node (test/app.test.ts).
 import * as engine from "./engine.ts";
 import * as S from "./state.ts";

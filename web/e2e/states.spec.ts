@@ -6,7 +6,7 @@
 // for Reset: its dialog (asked only with data in memory), Cancel, Reset, the reset banner. Where the focus goes when a
 // banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the stand-in and
 // for 4b's CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type Hook = {
@@ -568,4 +568,101 @@ test("Reset asks only with data in memory (described again after a run); Cancel 
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.path)).toBe("again.do");
   expect(await page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
   await expect(page.getByRole("log", { name: "Log" })).toContainText("42");
+});
+
+test("a hint's help link pressed while a run is on or a start is on its way says why in a toast, and runs nothing", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.__dofile.state.runWriter.log.value = [
+      { t: "head" },
+      {
+        t: "text",
+        run: 1,
+        text: '. summarize sex\nsex not found\n  → "sex" is not a variable.\n    Learn more: help summarize\nr(111);\n',
+        end: { kind: "command", fresh_locals: false, rc: 111, line: null, seconds: 0.1 },
+      },
+    ];
+  });
+  if (phone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
+  const help = page.getByRole("log", { name: "Log" }).getByRole("button", { name: "help summarize" });
+  const toast = page.locator(".toast");
+  const cases: [string, object, string][] = [
+    [
+      "running",
+      { s: "running", run: { kind: "file", path: "a.do", fresh_locals: true }, t0: Date.now() },
+      "Run is not available until the current run ends",
+    ],
+    [
+      "downloading",
+      { s: "downloading", received: 1e6, total: 48e6, t0: Date.now() },
+      "The engine is starting. Try again when it is ready.",
+    ],
+  ];
+  for (const [name, st, words] of cases) {
+    await show(page, st);
+    await page.evaluate(() => {
+      window.__dofile.state.toast.value = null;
+    });
+    // a live link, not an off one: it is pressed as a visitor does
+    await expect(help, name).not.toHaveAttribute("aria-disabled", "true");
+    await help.click();
+    await expect(toast, name).toHaveText(words);
+  }
+  expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
+});
+
+test("a held Enter on a Run button presses it once: the repeats of the key click nothing (the toolbar's Run, the phone's Run, the command line's Start engine and Run command)", async ({
+  page,
+}) => {
+  const clear = () =>
+    page.evaluate(() => {
+      window.__dofile.state.toast.value = null;
+    });
+  const toastNow = () => page.evaluate(() => window.__dofile.state.toast.value);
+  /** Enter held on the button: the first keydown clicks it, the repeats (Playwright sends a second `down` of a held key
+   *  as a repeat) must not. */
+  const held = async (button: Locator, words: string, name: string) => {
+    await clear();
+    await button.focus();
+    await page.keyboard.down("Enter");
+    await expect.poll(toastNow, name).toBe(words);
+    await clear();
+    await page.keyboard.down("Enter");
+    await page.keyboard.down("Enter");
+    await page.keyboard.up("Enter");
+    expect(await toastNow(), `${name}: a repeat clicked the button`).toBeNull();
+  };
+  const views = page.getByRole("tablist", { name: "Views" });
+  // a file is open (the toolbar's Run is there then)
+  await page.evaluate(() => window.__dofile.store.write("held.do", new TextEncoder().encode("display 1\n")));
+  if (phone(page)) await views.getByRole("tab", { name: "Files" }).click();
+  await page
+    .getByRole("tree", { name: "Files" })
+    .getByRole("treeitem", { name: /^held\.do/ })
+    .click();
+  await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: held.do");
+  // a start is on its way: the toolbar's Run (the phone's too) is off, "Starting…", and a press says why
+  await show(page, { s: "downloading", received: 1e6, total: 48e6, t0: Date.now() });
+  if (phone(page)) await views.getByRole("tab", { name: "Editor" }).click();
+  await held(
+    page.locator(".toolbar .btn.primary.run-ctl"),
+    "The engine is starting. Try again when it is ready.",
+    "the toolbar's Run",
+  );
+  // no engine from here (a failed start twice): the command line's Start engine is off, and a press says why
+  await show(page, { s: "failed-twice", reason: "memory", detail: "cause", message: "words" });
+  if (phone(page)) await views.getByRole("tab", { name: "Log" }).click();
+  await held(
+    page.locator(".cmdline").getByRole("button", { name: "Start engine" }),
+    "The engine isn't running",
+    "the command line's Start engine",
+  );
+  // a run is on: the command line's Run command is off, and a press says why
+  await show(page, { s: "running", run: { kind: "file", path: "a.do", fresh_locals: true }, t0: Date.now() });
+  await held(
+    page.locator(".cmdline").getByRole("button", { name: "Run command" }),
+    "Run is not available until the current run ends",
+    "the command line's Run command",
+  );
 });

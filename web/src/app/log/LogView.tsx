@@ -21,7 +21,7 @@
 import { type ComponentChildren, Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { codeOf, editorCommands } from "../editor/commands.ts";
-import { jumpLine, runheadWords } from "../editor/words.ts";
+import { jumpLine, refusedRunWords, runheadWords } from "../editor/words.ts";
 import { ABOUT } from "../env";
 import { graphOpenName } from "../output/format.ts";
 import { cardTheme } from "../output/GraphTab";
@@ -125,7 +125,8 @@ const Jump = ({ line, path }: { line: number; path?: string }) => (
 );
 
 /** A hint's `help x` link: it runs the command. With no engine (start.ts) it is off, aria-disabled and `.off`, still
- *  focusable, and a press only says why in a toast ("Start the engine to see help regress"). */
+ *  focusable, and a press only says why in a toast ("Start the engine to see help regress"). While a run or a start is
+ *  on, the machine refuses the command, and the toast says why (refusedRunWords), as the command line's does. */
 function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
   const offer = startOffer(engine.value),
     off = offer !== null;
@@ -136,7 +137,10 @@ function HelpLink({ command, children }: { command: string; children: ComponentC
       aria-disabled={off ? "true" : undefined}
       onClick={() => {
         if (offer !== null) showToast(startFirst(offer, `see ${command}`), "error");
-        else runCommand(command);
+        else if (runCommand(command).how === "refused") {
+          const words = refusedRunWords(engine.value.s);
+          if (words) showToast(words, "error");
+        }
       }}
     >
       {children}

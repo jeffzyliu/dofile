@@ -1641,7 +1641,9 @@ test("with no engine nothing offers to run: Run is Start engine and Ctrl/Cmd+Ent
   // with a selection: Run selection stays off (the phone's one button stays "Start engine", not "Run 1–2")
   if (isPhone(page)) await view(page, "Editor");
   await content.click();
-  await page.keyboard.press("ControlOrMeta+A");
+  // CodeMirror takes the iPhone profile for a Mac (select-all is Cmd+A; Ctrl+A is "line start"), while ControlOrMeta is
+  // the runner's OS's key, Control on Linux: so the phone profile presses Meta
+  await page.keyboard.press(test.info().project.name === "iphone" ? "Meta+A" : "ControlOrMeta+A");
   await expect.poll(() => page.evaluate(() => window.__dofile.selection.value)).not.toBeNull();
   if (!isPhone(page)) await expect(bar.getByRole("button", { name: "Run selection" })).toBeDisabled();
   await expect(start).toBeEnabled();

@@ -494,3 +494,9 @@ test("the CSS that keys on the engine's state names matches both other-tab state
   const keyed = [...css.matchAll(/\[data-engine([^\]]*)\]/g)].map((m) => m[1]);
   assert.deepEqual(keyed, ['^="other-tab"'], "one rule, by prefix: other-tab-idle and other-tab-taking");
 });
+
+test("every button that Start engine turns into Run keeps ignoring a held Enter: ignoreHeldEnter is the onKeyDown of the toolbar's Run, the phone's Run and Break pill, and the command line's three buttons", () => {
+  const wired = (path: string) => count(source(path, true), /onKeyDown=\{ignoreHeldEnter\}/g);
+  assert.equal(wired("src/app/editor/RunControls.tsx"), 3, "the toolbar's Run, the phone's Break pill and Run");
+  assert.equal(wired("src/app/log/CommandLine.tsx"), 3, "Start engine, the phone's send, Run command");
+});
