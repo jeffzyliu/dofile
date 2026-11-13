@@ -827,8 +827,6 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
   await expect(opener).toBeFocused();
 });
 
-// "Clear log…" asks first (SPEC 3.5, 3.10; log/ClearLogDialog.tsx): the head's "Clear…" button, and on a phone the strip's
-// "Log ⋯" menu item.
 test("the Output tabs by keyboard: each key moves the focus to the tab it selects; with Find open, the Log tab drawn again leaves the focus on the tab, not in Find's field", async ({
   page,
 }) => {
@@ -861,6 +859,8 @@ test("the Output tabs by keyboard: each key moves the focus to the tab it select
   await expect(field).not.toBeFocused();
 });
 
+// "Clear log…" asks first (SPEC 3.5, 3.10; log/ClearLogDialog.tsx): the head's "Clear…" button, and on a phone the strip's
+// "Log ⋯" menu item.
 test("Clear log asks first: Cancel and Esc keep the log and the graphs, Clear log removes them and the head stays", async ({
   page,
 }) => {
