@@ -23,7 +23,7 @@ The rest:
 - **The tree's rows say no position.** Its flat rows (`TreeRow`) have `aria-level` but no `aria-setsize` or
   `aria-posinset`, and the tree has no typeahead (a letter moves nowhere). 2026-11-11.
 - **Delete in the tree.** After a delete the focus goes to the open file's row, else the first row (`files/dialogs.tsx`
-  `refocus`, the tree's `tabbable`), not the deleted row's neighbour; a row has no Delete key (only its menu). 2026-11-11.
+  `focusTree` once the list is read again, the tree's `tabbable`), not the deleted row's neighbour; a row has no Delete key (only its menu). 2026-11-11.
 - **Rename in the tree.** The rename field sits inside the `treeitem` (`RenameField`); leaving it with a name that cannot be
   used cancels the rename and says nothing (its `onBlur`). Enter with such a name says why. 2026-11-11.
 - **Tree states.** Folders never have `aria-selected`, and an empty folder has `aria-expanded` (`TreeRow`). 2026-11-11.
