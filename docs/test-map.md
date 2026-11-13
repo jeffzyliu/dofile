@@ -127,13 +127,13 @@ several files make their tests in a loop, so a file has more tests than `test(` 
 
 ### End-to-end (Playwright, `web/e2e/`, 124 tests in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 496 cases, of which 462 run and 34 are skipped (the 4
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile: 496 cases, of which 460 run and 36 are skipped (the 4
 `poc.spec.ts` tests in every profile, marked fixme until step 6; the two iPhone-only checks in the three desktop
 profiles; the folder upload outside Chromium, where Playwright cannot give a folder to an input; the folded file list's
 rename on the iPhone, which has no folded list; the .dta tab's focus on the iPhone, where the command is typed on the Log
 view and nothing of the editor shows; the banner's hand-off to a .dta tab on the iPhone, where the banner is on the Log
 view; the phone ⋯'s Save in the three desktop profiles; the phone command line's Run button in the three desktop
-profiles).
+profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its package load stalls now and then on Linux).
 
 - `shell.spec.ts` (13): desktop and phone layout, the first visit (Not now; Run is "Start engine", which brings the prompt back; a run through the hook does nothing and opens no prompt), toolbar stability (at 1440, 1024, 900, 800, 700 and 390 px: the same boxes in all sixteen engine states, the toolbar never wider than its row, with Run's label "Start engine" with no engine, "Run" with one, "Starting…" and "Not started"), panes never remounted, banners, toast position;
   no text that names a key in sight on a phone (any text node with ⌘, Ctrl, Esc, F1 to F12, ↵ or ↩ whose box is in
