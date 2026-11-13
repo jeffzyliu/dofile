@@ -249,6 +249,42 @@ test("rename in place: F2; a name in use keeps the field open with the reason; E
   expect(await textOf(page, "main.do")).toBe("1\n");
 });
 
+test("a renamed row drawn after the visitor clicked into the editor leaves the focus in the editor", async ({
+  page,
+}) => {
+  test.skip(isPhone(page), "a phone shows the tree and the editor in separate views: a hidden row takes no focus");
+  await setUp(page, { "a.do": "1\n" });
+  await row(page, /^a\.do/).click();
+  // the store's lists wait for the test, so the renamed row is drawn only when the test says
+  await page.evaluate(() => {
+    const s = (window as any).__dofile.store;
+    const real = s.list;
+    let answer!: () => void;
+    const gate = new Promise<void>((ok) => (answer = ok));
+    (window as any).__answer = () => {
+      s.list = real;
+      answer();
+    };
+    s.list = (...a: unknown[]) => gate.then(() => real.apply(s, a));
+  });
+  await row(page, /^a\.do/).focus();
+  await page.keyboard.press("F2");
+  await expect(page.getByRole("textbox", { name: "New name for a.do" })).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("b.do");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
+  const editor = page.locator(".cm-content");
+  await editor.click();
+  await expect(editor).toBeFocused();
+  await page.evaluate(() => (window as any).__answer());
+  await expect(row(page, /^b\.do/)).toBeVisible();
+  await page.waitForTimeout(300); // a late focus of the row would have come by now
+  await expect(editor).toBeFocused();
+  await page.keyboard.type("z");
+  await expect(editor).toContainText("z");
+});
+
 test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the default; a folder's menu; Delete all files asks with the count", async ({
   page,
   isMobile,
