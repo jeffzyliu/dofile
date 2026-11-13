@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, keepFiles, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, keepFiles, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 const data = new URL("../../tests/conformance/data/", import.meta.url);
 const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
@@ -165,6 +165,7 @@ test("the default start: from the memory snapshot, runs native code and a graph,
   try {
     await keepFiles(context); // the fixture covers only the test's own context
     const page = await context.newPage();
+    retryFirstGoto(page);
     const notes: string[] = [];
     page.on("console", (m) => {
       if (m.text().includes("[dofile] snapshot start")) notes.push(m.text());

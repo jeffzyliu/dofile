@@ -96,7 +96,7 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
 - **The e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not from `@playwright/test`. Its fixture makes
   `storage.persisted()` and `persist()` answer true in every page of the test's context, so the storage banner (S 19) does
   not show in every run; `test.use({ persisted: false })` (in a file or a `describe`) gives the browser's own answers, and
-  `keepFiles(context)` covers a context the test makes itself (`launchPersistentContext`).
+  `keepFiles(context)` covers a context the test makes itself (`launchPersistentContext`). The `page` fixture also retries a `goto` once when it times out on a fresh page still at `about:blank` (WebKit on Linux CI cancels a first navigation now and then); a page the test opens itself gets `retryFirstGoto(page)`.
 - **Dev servers listen on all interfaces**, so LAN devices (a phone) can connect, for now. All dev HTTP servers (`dev`,
   `preview`, `cf:dev`) keep `--host` / `--ip 0.0.0.0` in their scripts; give any new dev server the same.
 - **The snapshot is the page's default start and there is no fallback.** `?snapshot=0` is the normal boot, a diagnostic mode for
