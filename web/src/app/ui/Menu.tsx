@@ -5,8 +5,11 @@
 //    `danger`, with "…" in its label when it asks first.
 //  - The trigger has aria-haspopup="menu" and aria-expanded.
 // Two ways to open one:
-// A `{ scroll: [...] }` entry holds items in a scrolling box (`.menu-scroll`, max 60% of the window's height): the phone's
-// open files. The arrow keys and Home/End still walk every item, as they look for them in the whole menu.
+// A `{ scroll: [...] }` entry holds items in a scrolling box (`.menu-scroll`, at most 60% of the window's height and always room left for the items around it): the phone's
+// open files. The arrow keys and Home/End still walk every item, the scrolled ones too.
+// The menu owns which item is the active one (`nav`, an index among the items that are not disabled, in the order they are
+// drawn, scroll groups included): the arrow keys and Home/End change it, and the active item takes the focus from its own
+// render (MenuEntry), once the menu is shown and in its place. The focus on an item (a click, a tap) makes it the active one.
 //   <MenuButton label="More actions" class="btn quiet icon" items={[...]}><Icon name="more" /></MenuButton>
 //   openMenu({ label: "Actions for clean.do", items, anchor: rowElement })            // Shift+F10, the menu key
 //   openMenu({ label: "Actions for clean.do", items, at: { x, y }, restore: rowEl })  // a right click
@@ -17,7 +20,7 @@
 
 import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 
 export type MenuItem =
   | "rule"
@@ -35,6 +38,7 @@ export type MenuItem =
       current?: boolean; // the open file in a list of files: the menu scrolls it into view when it opens
     };
 type Items = MenuItem[] | (() => MenuItem[]);
+type Leaf = Exclude<MenuItem, "rule" | { scroll: MenuItem[] }>;
 
 /** An item's hint; one that names a key (`hintIsKey`: "F2") has the class key-hint, which a phone hides from sight as it
  *  hides the key chips (app.css); it stays in the item's accessible name. */
@@ -123,6 +127,8 @@ const hasPopover = typeof HTMLElement !== "undefined" && "showPopover" in HTMLEl
 export function MenuHost() {
   const m = openMenuState.value;
   const ref = useRef<HTMLDivElement>(null);
+  const [placed, setPlaced] = useState<Open | null>(null); // the menu that is shown and in its place: its items may take the focus
+  const [nav, setNav] = useState<{ of: Open; at: number } | null>(null); // the active item of a menu; none yet: its `focus`
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -138,9 +144,7 @@ export function MenuHost() {
     if (x + w > innerWidth - pad) x = Math.max(pad, (r ? r.right : x) - w);
     if (y + h > innerHeight - pad) y = Math.max(pad, (r ? r.top - 4 : y) - h);
     Object.assign(el.style, { left: `${x}px`, top: `${y}px` });
-    const items = [...el.querySelectorAll<HTMLElement>("[role^=menuitem]:not([aria-disabled=true])")];
-    (m.focus === "last" ? items.at(-1) : items[0])?.focus();
-    el.querySelector("[aria-current]")?.scrollIntoView({ block: "nearest" }); // a scroll group opens on its current item
+    setPlaced(m); // the active item takes the focus (and a current one is scrolled into view) when it is drawn again
 
     const outside = (e: PointerEvent) => {
       if (!el.contains(e.target as Node) && !m.anchor?.contains(e.target as Node)) closeMenu(false);
@@ -158,25 +162,33 @@ export function MenuHost() {
   }, [m]);
 
   if (!m) return null;
+  const items = typeof m.items === "function" ? m.items() : m.items;
+  const order = new Map<Leaf, number>(); // the items the arrow keys stop at, in the order they are drawn
+  const number = (list: MenuItem[]) => {
+    for (const item of list)
+      if (typeof item === "object" && "scroll" in item) number(item.scroll);
+      else if (item !== "rule" && !item.disabled) order.set(item, order.size);
+  };
+  number(items);
+  const last = order.size - 1;
+  const at = Math.min(nav?.of === m ? nav.at : m.focus === "last" ? last : 0, last);
   const onKeyDown = (e: KeyboardEvent) => {
-    const items = [...ref.current!.querySelectorAll<HTMLElement>("[role^=menuitem]:not([aria-disabled=true])")];
-    const i = items.indexOf(document.activeElement as HTMLElement);
     const go = (n: number) => {
       e.preventDefault();
-      items[(n + items.length) % items.length]?.focus();
+      if (order.size) setNav({ of: m, at: (n + order.size) % order.size });
     };
     const plain = !(e.altKey || e.ctrlKey || e.metaKey); // Alt+Left is the browser's Back; Esc and Tab are as they were
-    if (plain && e.key === "ArrowDown") go(i + 1);
-    else if (plain && e.key === "ArrowUp") go(i - 1);
+    if (plain && e.key === "ArrowDown") go(at + 1);
+    else if (plain && e.key === "ArrowUp") go(at - 1);
     else if (plain && e.key === "Home") go(0);
-    else if (plain && e.key === "End") go(items.length - 1);
+    else if (plain && e.key === "End") go(last);
     else if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
       closeMenu();
     } else if (e.key === "Tab") closeMenu(); // focus back on the trigger first, then the browser's Tab moves on from it
   };
-  const pick = (item: Exclude<MenuItem, "rule" | { scroll: MenuItem[] }>, el: HTMLElement) => {
+  const pick = (item: Leaf, el: HTMLElement) => {
     if (item.disabled) return;
     if (item.keepOpen) {
       el.focus(); // a tap does not focus a button in Safari: keep the focus on the item, as Enter does
@@ -186,7 +198,6 @@ export function MenuHost() {
     closeMenu();
     item.onSelect?.();
   };
-  const items = typeof m.items === "function" ? m.items() : m.items;
   const renderItem = (item: MenuItem, i: number): ComponentChildren =>
     typeof item === "object" && "scroll" in item ? (
       <div key={i} class="menu-scroll">
@@ -194,37 +205,18 @@ export function MenuHost() {
       </div>
     ) : item === "rule" ? (
       <hr key={i} />
-    ) : item.href ? (
-      <a
-        key={i}
-        role="menuitem"
-        tabIndex={-1}
-        href={item.href}
-        target="_blank"
-        rel="noopener"
-        class={item.danger ? "danger" : undefined}
-        onClick={() => closeMenu(false)}
-      >
-        {item.label}
-        {item.hint && <Hint item={item} />}
-      </a>
     ) : (
-      <button
+      <MenuEntry
         key={i}
-        type="button"
-        {...(item.checked === undefined
-          ? { role: "menuitem" }
-          : { role: "menuitemcheckbox", "aria-checked": item.checked })}
-        tabIndex={-1}
-        class={item.danger ? "danger" : undefined}
-        aria-disabled={item.disabled || undefined}
-        aria-current={item.current || undefined}
-        onClick={(e) => pick(item, e.currentTarget)}
-      >
-        {item.label}
-        {item.hint && <Hint item={item} />}
-        {item.checked !== undefined && <span class="switch" aria-hidden="true" />}
-      </button>
+        item={item}
+        active={order.get(item) === at}
+        placed={placed === m}
+        onFocus={() => {
+          const n = order.get(item);
+          if (n !== undefined && n !== at) setNav({ of: m, at: n });
+        }}
+        onPick={pick}
+      />
     );
   return (
     <div
@@ -237,5 +229,66 @@ export function MenuHost() {
     >
       {items.map(renderItem)}
     </div>
+  );
+}
+
+/** One item. The active one takes the focus when the menu is in place (and each time it becomes the active one); the
+ *  current one (`current`) is scrolled into view then, in the scroll box that holds it. */
+function MenuEntry({
+  item,
+  active,
+  placed,
+  onFocus,
+  onPick,
+}: {
+  item: Leaf;
+  active: boolean;
+  placed: boolean;
+  onFocus: () => void;
+  onPick: (item: Leaf, el: HTMLElement) => void;
+}) {
+  const el = useRef<HTMLElement | null>(null);
+  const grab = (node: HTMLElement | null) => {
+    el.current = node;
+  };
+  useLayoutEffect(() => {
+    if (placed && item.current) el.current?.scrollIntoView({ block: "nearest" });
+  }, [placed]);
+  useLayoutEffect(() => {
+    if (placed && active) el.current?.focus();
+  }, [placed, active]);
+  return item.href ? (
+    <a
+      ref={grab}
+      role="menuitem"
+      tabIndex={-1}
+      href={item.href}
+      target="_blank"
+      rel="noopener"
+      class={item.danger ? "danger" : undefined}
+      onFocus={onFocus}
+      onClick={() => closeMenu(false)}
+    >
+      {item.label}
+      {item.hint && <Hint item={item} />}
+    </a>
+  ) : (
+    <button
+      ref={grab}
+      type="button"
+      {...(item.checked === undefined
+        ? { role: "menuitem" }
+        : { role: "menuitemcheckbox", "aria-checked": item.checked })}
+      tabIndex={-1}
+      class={item.danger ? "danger" : undefined}
+      aria-disabled={item.disabled || undefined}
+      aria-current={item.current || undefined}
+      onFocus={onFocus}
+      onClick={(e) => onPick(item, e.currentTarget)}
+    >
+      {item.label}
+      {item.hint && <Hint item={item} />}
+      {item.checked !== undefined && <span class="switch" aria-hidden="true" />}
+    </button>
   );
 }
