@@ -23,6 +23,7 @@
     "fonts": "node ../docs/design/fonts.mjs",
     "pretest": "npm run wheel",
     "test": "node --test \"test/*.test.ts\"",
+    "test-counts": "node scripts/test-counts.ts",
     "e2e": "npm run snapshot && npm run build && playwright test",
     "cf:dev": "npm run snapshot && npm run build && wrangler dev --ip 0.0.0.0",
     "deploy": "npm run lint:strict && npm run snapshot && npm run build && wrangler deploy"

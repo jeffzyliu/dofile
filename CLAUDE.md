@@ -101,10 +101,11 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   edit. `tests/test_stata_compat.py` (marked `slow`) runs each case with `tests_opendta/tools/compare.py`'s
   functions, one test per case in its own folder; the slowest cases are ordered so xdist starts them on separate workers.
 - **`docs/test-map.md` is the map of the whole suite** (Python, conformance, vendored, web unit and e2e, by function,
-  with counts, gaps and how to broaden the conformance corpus). **Keep it in sync**: when you add, remove, rename or
+  with gaps and how to broaden the conformance corpus). **Keep it in sync**: when you add, remove, rename or
   re-scope a test file or a group of tests, or change the conformance corpus, its probes or its known gaps, update the
-  matching section and counts in the same change. A re-vendor that changes the `tests_opendta/` file list needs the
-  same update.
+  matching section in the same change. A re-vendor that changes the `tests_opendta/` file list needs the same update.
+  The map holds no counts (they made every branch that adds a test conflict): `cd web && npm run test-counts` prints
+  the web unit and e2e counts, and `docs/test-map.md` names the Python command.
 
 ## Rules
 
