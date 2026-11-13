@@ -198,7 +198,7 @@ memory". The run ends with an ordinary error, the data stays, and the next comma
   r(909) at 360 MB of data, and an occasional crash after other runs in the same tab (memory outside the engine's heap, or a
   leak: not looked into); cap 750 and 800: r(909) at 520 MB; cap 830: the tab crashed at 560 MB; cap 900: crashed near 560 MB.
   So the phone default is 750 MB (`PHONE_CAP_MB`), below the 800 to 830 MB where the tab dies. Other phones not measured.
-- **Later (approved 2026-11-13, not built): `set max_memory`** lowers the cap for the session (`set max_memory 500m`), never above
+- **Iceboxed (2026-11-13; `docs/icebox.md`, "Engine memory"): `set max_memory`** lowers the cap for the session (`set max_memory 500m`), never above
   the device's default, since raising it is how a visitor would crash the tab. The patch reads the cap at each grow, so it can
   probably change while the engine runs (not checked). Also later: why the cap-600 tab crashed after other runs (a leak, or memory
   outside the engine's heap).

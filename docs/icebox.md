@@ -105,6 +105,9 @@ estimated splits) are the study's, not checked again here.
   (step 4's C 7, kept); a mark would tell the visitor the file is gone. 2026-11-13.
 - **A close button (×) on each row of the phone's file dropdown.** The desktop tab has one; on the phone the dropdown has
   "Close <file>" for the open file only. A control inside a menu item needs focus logic the menu does not have. 2026-11-13.
+- **Find and replace in the editor** (step 4's C 9; the editor has no find of its own, and Find searches the log only). The
+  maintainer's fix, to build later: "add find and replace window to editor pane, add ctrl/cmd f listeners to both editor and log
+  panes, and allow the user to do normal browser find when focused elsewhere". 2026-11-13.
 
 ## Engine memory (added 2026-11-13)
 
@@ -113,3 +116,8 @@ estimated splits) are the study's, not checked again here.
   WebAssembly memory only when the worker ends. Open: how long to wait; what is kept (the files are in storage; the data,
   macros and results are lost, as after a restart); and how the page says so (a banner, the status bar, what the Run
   button then offers). 2026-11-13.
+- **`set max_memory`** (approved 2026-11-13, then iceboxed the same day by the maintainer: "icebox the set max_memory task").
+  It would lower the engine's heap cap for the session (`set max_memory 500m`), never above the device's default, since raising
+  it is how a visitor would crash the tab. The engine has no `max_memory` setting today, so it needs a hook in `browser.py` (or a
+  patch) and the cap the worker sets; the loader reads the cap at each grow, so it can probably change while the engine runs
+  (not checked). `docs/browser-engine.md`, "The memory cap". 2026-11-13.
