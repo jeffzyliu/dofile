@@ -1,69 +1,90 @@
 name: deploy
 
-# Builds the web demo (wheel, memory snapshot, pages) and deploys two Cloudflare Workers as static assets: the editor
-# (web/dist/app, app.dofile.dev: wrangler.app.jsonc) and the landing and commands pages (web/dist/site, dofile.dev: wrangler.jsonc).
-# Needs the repo secrets CLOUDFLARE_API_TOKEN (template "Edit Cloudflare Workers") and CLOUDFLARE_ACCOUNT_ID.
-# Pull requests are tested by web.yml; this runs only after a merge to main, or by hand.
+# Everything that runs on a push to main: the three test workflows (ci.yml, web.yml, lint.yml, called here, so each runs
+# once per commit and on this commit), then, only if all three passed, the deploy of the web demo to two Cloudflare Workers
+# as static assets: the editor (web/dist/app, app.dofile.dev: wrangler.app.jsonc) and the landing and commands pages
+# (web/dist/site, dofile.dev: wrangler.jsonc). The build is .github/actions/build-web (shared with preview.yml).
+# Needs the repo secrets CLOUDFLARE_API_TOKEN (template "Edit Cloudflare Workers", with the dofile.dev zone in its zone
+# resources) and CLOUDFLARE_ACCOUNT_ID. Pull requests are tested by the same three workflows, which they start themselves.
+#
+# Order of deploys: only the tip of main is deployed. Each commit's tests run side by side with no shared group (a merge
+# never waits behind another merge's tests, and none is cancelled), so two quick merges can finish their tests in either
+# order. Two checks keep an older commit from landing after a newer one:
+# - `latest`, after the tests and outside the deploy group: a commit that is no longer the tip of main stops here (green,
+#   with a notice), so it never enters the group, where as the newest pending job it would cancel a newer commit's pending
+#   deploy (a group holds one running and one pending job; a new pending job cancels the pending one).
+# - the same check again as the deploy job's first step, inside the group (`deploy-production`, never cancelled in
+#   progress, so the editor and the site are never left half deployed): it runs after any deploy ahead of it has finished.
+# If the newer commit then fails its tests, production stays on the last commit deployed until a later commit passes.
+# A deploy that failed on its own (a network error, say) is retried with "Re-run failed jobs": the tests are not run
+# again, and the tip check still applies.
+#
+# By hand (workflow_dispatch): the same as a push, tests included, so nothing reaches production untested; started on
+# another branch it runs the tests and deploys nothing.
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: deploy
-  cancel-in-progress: false   # let a running deploy finish; the next one queues
-
-defaults:
-  run:
-    working-directory: web
-
-env:
-  UV_PYTHON: "3.14"
+permissions:
+  contents: read   # the most any called workflow gets
 
 jobs:
-  deploy:
+  # Their check names here are "ci / ci ok" and so on; on a pull request they are "ci ok", "web ok", "lint ok".
+  ci:
+    uses: ./.github/workflows/ci.yml
+  web:
+    uses: ./.github/workflows/web.yml
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  latest:
+    name: still the tip of main
+    needs: [ci, web, lint]   # runs only if all three succeeded
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      tip: ${{ steps.tip.outputs.tip }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm run wheel
-
-      # The snapshot depends on the wheel (engine source, dependencies), the pyodide version (package-lock) and the
-      # scripts that build it. The key hashes those inputs, so it is rebuilt only when one changes.
-      - id: cache
-        uses: actions/cache@v6
-        with:
-          path: web/public/snapshot
-          key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.mjs', 'web/scripts/install-engine.ts', 'web/scripts/build-id.ts', 'web/wheels/*.whl', 'web/src/engine/snapshot.ts') }}
-
-      # Safety net: a restored snapshot must be of the wheels and the Pyodide version just built, else rebuild it. The same
-      # check as the build's (scripts/build-id.ts, staleness), which would fail the build on a stale snapshot.
-      - id: fresh
-        if: steps.cache.outputs.cache-hit == 'true'
+      - id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if node scripts/build-id.ts; then echo "ok=true" >> "$GITHUB_OUTPUT"; fi
-      - if: steps.fresh.outputs.ok != 'true'
-        run: npm run snapshot   # needs the network once: micropip fetches openpyxl from PyPI
+          main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$main" = "$GITHUB_SHA" ]; then
+            echo "tip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main is at $main now, not $GITHUB_SHA: that commit's own run deploys it"
+            echo "tip=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - run: npm run build   # the editor into dist/app/ (with public/: wheels, runtime, snapshot, _headers), then the static pages into dist/site/; the two addresses they link each other by are scripts/urls.ts's (DOFILE_SITE_URL, DOFILE_EDITOR_URL)
-      # Cloudflare Workers static assets refuse a file over 25 MiB. The brotli-11 snapshot is built only in this workflow
-      # (CI builds it at quality 5), so this is the one place the real file sizes show up: fail here, before wrangler does.
-      - name: Check asset sizes
+  deploy:
+    needs: latest
+    if: needs.latest.outputs.tip == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false   # let a running deploy finish; the next one waits
+    steps:
+      - id: tip
+        name: Still the tip of main
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          find dist/app dist/site -type f -size +26214400c | while read -r f; do
-            echo "::error::$f is $(wc -c < "$f") bytes; Cloudflare Workers static assets refuse files over 25 MiB (26214400 bytes)"
-          done
-          find dist/app dist/site -type f -size +24117248c ! -size +26214400c | while read -r f; do
-            echo "::warning::$f is $(wc -c < "$f") bytes, over 23 MiB (24117248 bytes); the limit is 25 MiB"
-          done
-          if [ -n "$(find dist/app dist/site -type f -size +26214400c)" ]; then exit 1; fi
+          main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$main" = "$GITHUB_SHA" ]; then
+            echo "tip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main is at $main now, not $GITHUB_SHA: that commit's own run deploys it"
+          fi
+      - if: steps.tip.outputs.tip == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - if: steps.tip.outputs.tip == 'true'
+        uses: ./.github/actions/build-web   # no inputs: the production addresses of web/scripts/urls.ts
       - name: Deploy the editor (dofile-app)
+        if: steps.tip.outputs.tip == 'true'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -71,6 +92,7 @@ jobs:
           workingDirectory: web
           command: deploy --config wrangler.app.jsonc
       - name: Deploy the landing and commands pages (dofile)
+        if: steps.tip.outputs.tip == 'true'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
