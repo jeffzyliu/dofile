@@ -303,9 +303,10 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       throw fail(String(e?.message ?? e), "failed", { reason: "unknown" });
     }
     // An entry of this Cache that the list does not name is never read again: the same build's files kept at another
-    // address (the editor moved from / to /app/ with the snapshot unchanged, so the Cache's name stayed). Drop it, or it
-    // keeps tens of MB until the next snapshot. The list's own files stay, so a download that resumes keeps what it has;
-    // and not while a worker is live, which may be reading this Cache (the machine downloads only before a worker exists).
+    // address on this origin (the editor moved to another path with the snapshot unchanged, so the Cache's name
+    // stayed). Drop it, or it keeps tens of MB until the next snapshot. The list's own files stay, so a download that
+    // resumes keeps what it has; and not while a worker is live, which may be reading this Cache (the machine downloads
+    // only before a worker exists).
     if (!this.#live) await dropUnlisted(cache, list);
     const total = list.compressed,
       got = new Map<StartFile, number>();
