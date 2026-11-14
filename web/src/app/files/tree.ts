@@ -101,6 +101,22 @@ export function nameProblem(name: string, dir: string, taken: Iterable<string>, 
   return null;
 }
 
+/** What is wrong with a new file's or folder's `name` in folder `dir`: as nameProblem, but the name may be a path
+ *  ("sub/x.do"; the store makes the folders). Each part is checked as a name; only the last must be free, and a part
+ *  before it must not be a file. `files`: the store's list. */
+export function newPathProblem(name: string, dir: string, files: readonly FileInfo[]): string | null {
+  const parts = name.split("/");
+  let at = dir;
+  for (const [i, part] of parts.entries()) {
+    const last = i === parts.length - 1;
+    const problem = nameProblem(part, at, last ? files.map((f) => f.path) : []);
+    if (problem) return problem;
+    at = joinPath(at, part);
+    if (!last && files.some((f) => f.path === at && !f.dir)) return `${part} is a file, not a folder.`;
+  }
+  return null;
+}
+
 /** The label of each open file's tab: its name, and where two open files share a name, the folder too ("wages.dta ·
  *  data"; "wages.dta" alone for one at the top). */
 export function tabLabels(paths: string[]): string[] {

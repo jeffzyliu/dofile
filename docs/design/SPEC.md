@@ -96,7 +96,15 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   tab has the files, uploads nothing. A name with a control character (a line break) is refused, as the store refuses a
   file, and counted in the toast.
 - **Row menu** (`S 13`): "Open", "Rename" (hint F2; edits the name in place), "Download", rule, "Delete…" (asks, 3.10). From
-  the row's ⋯ (on the hovered, focused or open row; always on touch), right click, Shift+F10 or the menu key.
+  the row's ⋯ (on the hovered, focused or open row; always on touch), right click, Shift+F10 or the menu key. A folder's
+  menu has "New file here" and "New folder" first, then a rule, "Rename", "Download (.zip)", a rule and "Delete…": each
+  unfolds the folder and draws a draft row (OQ-21) inside it at its depth, and the name is made under the folder. The
+  phone opens the menu by the row's ⋯ only: there is no long-press (the maintainer, 2026-11-13).
+- **"+"** (the Files head's, and on a phone the button before "Files ⋯" in the strip, accessible name "New file"): a new
+  file as "New .do file" makes it, in the folder of the row last focused: the row itself if it is a folder (unfolded), the
+  folder of a file row, else the top. In a new file's or folder's name field only (not a rename) the name may be a path,
+  "sub/x.do": each part is checked as a name, a part before the last may not be a file, and the store makes the missing
+  folders; a folder the path goes through that is folded is unfolded.
 - **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload a folder", "Download all (.zip)",
   "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`, OQ-13; built in step 5) sits above "Delete all files…", after a rule.
 - **States:** drawn: open, unsaved dot, hover, folder open and closed, size, new badge (`E`), row menu (`S 13`). In the flows'
@@ -1020,7 +1028,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `App.tsx` puts those items in a "Files ⋯" button in the phone strip while the Files view is shown, as it does the Log head's in "Log ⋯" (decided 2026-11-11 for the top bar's ⋯; changed by the maintainer on 2026-11-12). A drop of files anywhere on the page uploads them (3.1); the Files pane is outlined meanwhile (OQ-16), except while a
     dialog is open or another tab has the files, when the drop uploads nothing and there is no outline (C 16 of the
     plan's list).
-    When the folded list is opened (700 to 1199 px) the focus goes to the tree's row in the tab order. "Restore the sample" (OQ-13) is in the head menu since step 5, above "Delete all files…". A new folder works as a new file does (OQ-21), with `folder` (`folder-2`, ...) and no tab opened. The
+    When the folded list is opened (700 to 1199 px) the focus goes to the tree's row in the tab order. "Restore the sample" (OQ-13) is in the head menu since step 5, above "Delete all files…". A new folder works as a new file does (OQ-21), with `folder` (`folder-2`, ...) and no tab opened. A folder's menu opens a draft inside the folder ("New file here", "New folder"), and so does the Files head's "+" (3.1). The
     phone's `FileSwitcher` is one button as wide as the title in every state ("Editor" with no open file, so the top
     bar's boxes never move); its menu lists the open files, then "Close <name>" (the phone has no ×) and "Show all
     files" (the Files view). Words the spec does not

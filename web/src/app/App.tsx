@@ -104,7 +104,7 @@ import { StatusBar } from "./editor/StatusBar";
 import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
-import { FilesBody, FilesHead, fileMenuItems, focusTree } from "./files/FilesPane";
+import { FilesBody, FilesHead, fileMenuItems, focusTree, NewFileButton } from "./files/FilesPane";
 import { downloadAll } from "./files.ts";
 import { CommandLine, LogActions, logMenuItems, PhoneStrip } from "./log/CommandLine";
 import { LogView } from "./log/LogView";
@@ -420,10 +420,13 @@ export function App() {
       {phone && (
         <PhoneStrip>
           {phoneTab.value === "files" && (
-            <MenuButton label="File actions" class="head-link strip-actions" items={fileMenuItems}>
-              <span class="strip-word">Files</span>
-              <Icon name="more" />
-            </MenuButton>
+            <>
+              <NewFileButton class="head-link icon strip-actions strip-new" />
+              <MenuButton label="File actions" class="head-link strip-actions" items={fileMenuItems}>
+                <span class="strip-word">Files</span>
+                <Icon name="more" />
+              </MenuButton>
+            </>
           )}
           {phoneTab.value === "log" && (
             <MenuButton label="Log actions" class="head-link strip-actions" items={logMenuItems}>

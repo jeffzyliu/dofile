@@ -1100,6 +1100,14 @@ input.filter::placeholder {
   margin-left: auto;
   gap: var(--s1);
 }
+/* the Files view's "+" sits before "Files ⋯": the pair is pushed right by the first */
+.phone-strip .strip-actions + .strip-actions {
+  margin-left: 0;
+}
+.phone-strip .strip-actions.strip-new {
+  width: 44px;
+  justify-content: center;
+}
 @container (max-width: 340px) {
   .phone-strip .strip-word {
     display: none;

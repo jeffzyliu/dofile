@@ -11,12 +11,13 @@
 //    Up/Down, Home/End move; Right unfolds or goes in, Left folds or goes up; Enter (or Space, or a click) opens a file
 //    through open.ts openFile or folds a folder; F2 renames in place; Shift+F10, the menu key, a right click or the
 //    row's ⋯ (aria-hidden: a control inside a treeitem would be nested) open the row menu: Open, Rename (F2), Download,
-//    Delete… for a file; Rename, Download (.zip), Delete… for a folder (OQ-21).
+//    Delete… for a file; New file here, New folder, Rename, Download (.zip), Delete… for a folder (OQ-21). There is no
+//    long-press: a phone opens it by the ⋯. The head's "+" (NewFileButton) is "New .do file" in the folder of the row last focused.
 //  - Inline rename (DS-7): the name becomes a field; Enter renames, Esc cancels (preventDefault, so App.tsx's Esc that
 //    folds the list at 700 to 1199 px leaves it), leaving the field renames when the name can be used. A name in use
 //    ("clean.do already exists here.") or one that cannot be used keeps the field open, marked aria-invalid, with the
 //    reason under it. "New .do file" and "New folder" draw the name field at once, filled in `untitled.do` (`folder`; the first
-//    free name), with nothing written (a draft: `renaming.draft`; OQ-21). Esc writes nothing; Enter, or leaving the field,
+//    free name), with nothing written (a draft: `renaming.draft`; OQ-21). A draft's name may be a path ("sub/x.do"). Esc writes nothing; Enter, or leaving the field,
 //    writes it under the typed name, or under the free default when the name is empty or unchanged (a name that cannot be
 //    used keeps the field open on Enter, and makes the default on leaving), reads the list again and, after Enter only, opens a new file.
 //  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the page (SPEC 3.1; the
@@ -54,6 +55,7 @@ import {
   joinPath,
   NAME_NOT_ALLOWED,
   nameProblem,
+  newPathProblem,
   parentOf,
   type Row,
   treeRows,
@@ -116,26 +118,44 @@ function toggle(path: string, open?: boolean) {
   folded.value = next;
 }
 
+/** Unfold `dir` and every folder above it, so a row inside it is drawn. */
+function unfold(dir: string) {
+  const next = new Set(folded.value);
+  for (let p = dir; p; p = parentOf(p)) next.delete(p);
+  folded.value = next;
+}
+
 function startRename(path: string, draft?: Renaming["draft"]) {
   renaming.value = { id: ++fields, path, problem: null, draft };
   rovingPath.value = path;
   focusWanted.value = null; // the field takes the focus: a waiting request ends
 }
 
-/** "New .do file" and "New folder": the name field is drawn at once, with nothing written (docs/web-page-flows.md,
- *  section 1, rule 8: on iOS the focus that raises the keyboard has to be made in the tap). endRename writes it. */
-function startDraft(kind: keyof typeof NEW_NAMES) {
+/** "New .do file" and "New folder", and the "+": the name field is drawn at once, in the folder `dir` (unfolded, so the
+ *  row is drawn inside it), with nothing written (docs/web-page-flows.md, section 1, rule 8: on iOS the focus that raises
+ *  the keyboard has to be made in the tap). endRename writes it. */
+function startDraft(kind: keyof typeof NEW_NAMES, dir = "") {
   const what = kind === "file" ? "file" : "folder";
   if (store.blocked)
     return fail(`New ${what}`, `Couldn't create the ${what}`)(new Error("the files are another tab's"));
+  unfold(dir);
   startRename(
     freeName(
-      "",
+      dir,
       NEW_NAMES[kind],
       files.value.map((f) => f.path),
     ),
     kind,
   );
+}
+
+/** The folder the "+" makes a file in (docs/web-page-flows.md, section 1): the row last focused if it is a folder, the
+ *  folder of the file row last focused, else the top. */
+function newFileDir(): string {
+  const p = rovingPath.value;
+  if (p === null) return "";
+  if (files.value.some((f) => f.path.startsWith(`${p}/`) || (f.path === p && f.dir))) return p;
+  return files.value.some((f) => f.path === p) ? parentOf(p) : "";
 }
 
 let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
@@ -195,14 +215,7 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   }
   const dir = parentOf(r.path);
   const asked = name.trim() === "" || name === baseName(r.path) ? undefined : name;
-  let problem =
-    asked === undefined
-      ? null
-      : nameProblem(
-          asked,
-          dir,
-          files.value.map((f) => f.path),
-        );
+  let problem = asked === undefined ? null : newPathProblem(asked, dir, files.value); // a draft's name may be a path: "sub/x.do" makes sub
   if (problem && !leaving) return keepOpen(r, problem);
   ending = true;
   let to: string;
@@ -227,6 +240,7 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
     ending = false;
   }
   if (problem) say(`${problem} Made ${baseName(to)} instead.`);
+  else if (asked?.includes("/")) unfold(parentOf(to)); // a folder the name went through may be folded
   if (kind === "file" && !leaving) openFile(to); // leaving: the visitor's tap decides what is open and where the focus is
   if (renaming.value?.id !== r.id) return; // another field was started meanwhile
   renaming.value = null;
@@ -274,7 +288,7 @@ export const fileMenuItems = (): MenuItem[] => [
 export function FilesHead() {
   const button = useRef<HTMLButtonElement>(null);
   const w = focusWanted.value;
-  // with no rows a request for the row in the tab order comes here, the pane's first control
+  // with no rows a request for the row in the tab order comes here, File actions
   useFocusRequest(
     w?.path === null && !files.value.length,
     button,
@@ -284,9 +298,21 @@ export function FilesHead() {
     w?.anywhere ? fromAnywhere : fromNothing,
   );
   return (
-    <MenuButton ref={button} label="File actions" class="head-link icon" items={fileMenuItems}>
-      <Icon name="more" />
-    </MenuButton>
+    <>
+      <NewFileButton class="head-link icon" />
+      <MenuButton ref={button} label="File actions" class="head-link icon" items={fileMenuItems}>
+        <Icon name="more" />
+      </MenuButton>
+    </>
+  );
+}
+
+/** The "+": a new file in the folder of the row last focused (newFileDir). Drawn in the Files head, and in the phone's strip. */
+export function NewFileButton({ class: cls }: { class: string }) {
+  return (
+    <button type="button" class={cls} aria-label="New file" onClick={() => startDraft("file", newFileDir())}>
+      <Icon name="plus" />
+    </button>
   );
 }
 
@@ -300,7 +326,16 @@ function rowItems(row: Row): MenuItem[] {
       downloadEntry(row.path);
     },
   });
-  if (row.dir) return [rename, download("Download (.zip)"), "rule", remove];
+  if (row.dir)
+    return [
+      { label: "New file here", onSelect: () => startDraft("file", row.path) },
+      { label: "New folder", onSelect: () => startDraft("folder", row.path) },
+      "rule",
+      rename,
+      download("Download (.zip)"),
+      "rule",
+      remove,
+    ];
   return [
     {
       label: "Open",
