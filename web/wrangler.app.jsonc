@@ -9,6 +9,8 @@
   "routes": [{ "pattern": "app.dofile.dev", "custom_domain": true }],
   // also the workers.dev address, which preview deployments use (a Worker with routes would not have it unless it is set)
   "workers_dev": true,
+  // the pull request previews (preview.yml) are version URLs on workers.dev; set here, not left to the account default
+  "preview_urls": true,
   "assets": {
     "directory": "./dist/app",
     // the same as the site's Worker (wrangler.jsonc): a x.html is served at /x, a folder's index.html at the folder

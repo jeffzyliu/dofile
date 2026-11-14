@@ -94,8 +94,8 @@ not have. The exact error is not verified, so plan on a failure, not a skip.
 
 **Step 2. Open the pull request** from `deploy/dofile-dev` (`git push -u origin deploy/dofile-dev`, then `gh pr create`).
 CI runs as usual. The pull request also runs `preview.yml` for the first time:
-- **The first upload of the editor's Worker may fail.** `dofile-app` does not exist yet, and whether
-  `wrangler versions upload` can create a Worker that has never been deployed is not verified.
+- **The editor's preview fails.** `dofile-app` does not exist yet, and wrangler refuses `versions upload` for a Worker
+  that was never deployed (the reviewer read this in wrangler's source; not seen on Cloudflare).
 - **That failure does not block the merge,** because the preview is not a required check. Run the preview again after
   step 3.
 - **The site's preview should work.** `dofile` already exists.

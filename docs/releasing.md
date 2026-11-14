@@ -36,12 +36,12 @@ the last release until the next bump, so tagging an unbumped `main` fails at upl
    otherwise raise the patch. Until the first real release use a pre-release (`0.1.0.dev1`, `0.1.0a1`, `0.1.0rc1`);
    PEP 440 orders `.devN` < `aN` < `bN` < `rcN` < the final `0.1.0`, so go in that order and never backwards (a lower
    number than one already on PyPI uploads fine but pip prefers the higher one).
-3. Merge the pull request (merge commit, squash or rebase: all work) and let `ci` go green, then tag the release commit
+3. Merge the pull request (merge commit, squash or rebase: all work) and let the `deploy` run on `main` go green (on `main`, ci runs inside it), then tag the release commit
    as it is on `main` (next section).
 
 ## Releasing with CI (`.github/workflows/release.yml`)
 A push of a tag `vX.Y.Z` (PEP 440: `v0.1.0a1`, `v0.1.0.dev1`, `v0.1.0`) builds, tests and publishes that commit.
-1. On `main`: bump the version (previous section), merge it, and let `ci` go green.
+1. On `main`: bump the version (previous section), merge it, and let the `deploy` run on `main` go green (on `main`, ci runs inside it).
 2. Tag the release commit on `main` from git (see "Tagging" below): the tag is the version with a `v`.
 3. The `build` job refuses a tag that is not on `main` or does not match `pyproject.toml`, runs `poe test`, builds, runs
    `twine check`, installs the wheel alone in a clean environment and runs `dofile run` and `dofile-mcp --help`. The
