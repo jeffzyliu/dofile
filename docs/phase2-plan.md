@@ -26,7 +26,8 @@ landing and commands pages, `app.dofile.dev` for the editor), pull request previ
 `docs/deploying.md` are built and reviewed on the **local, unpushed branch `deploy/dofile-dev`** (7592b53). It is not merged
 and not deployed. No pull request is open; that branch is the next merge.
 
-**Next, in this order:** merge `deploy/dofile-dev` (open question 7: the first deploy's checks before or after it); the audit; the verification and phone pass; the PyPI release; the launch.
+**Next, in this order:** the audit (`deploy/dofile-dev` merges before the launch; open question 7 places it against the
+first deploy's checks); the verification and phone pass; the PyPI release; the launch.
 The later UI work waits until after the audit.
 
 **Waiting on the maintainer:** the push and pull request of `deploy/dofile-dev`; the iPhone sitting (the phone command line,
