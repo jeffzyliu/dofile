@@ -1480,8 +1480,9 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   `/start-files.json` with 200, `/index.html` with a redirect, `/commands/`, `/commands`, `/nope.html` and `/_headers` with 404,
   and the two isolation headers on every answer, the 404s too; in Chromium the editor at `:8788/?test` was cross-origin isolated,
   started from the snapshot and reached `ready`, its wordmark led to `:8787/` and the landing page's "Open the editor" back to
-  `:8788/`. The two processes need separate state folders (`--persist-to`): without it the second one died on a locked SQLite
-  file.
+  `:8788/`. The editor's process has its own state folder (`--persist-to`, in `cf:dev`): in the one run made without it, started
+  together with the site's, the second process died ("Address already in use", then a locked SQLite file); the flag was not
+  tried alone against that.
 - **To look at on the first real deploy** (the edge itself is not checked: its compression and caching, the custom domains,
   `deploy.yml`'s upload):
   1. `https://dofile.dev/`, `/commands/` and `https://app.dofile.dev/`: in the editor's console `crossOriginIsolated` is true,
