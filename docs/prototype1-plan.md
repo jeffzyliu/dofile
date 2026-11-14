@@ -70,7 +70,7 @@ Nothing else open is critical as of 2026-11-13. Unsure about the critical ones: 
   navigation is merged (`web/e2e/fixtures.ts`).
 - How the editor page's focus, runs, open files and log links work: [web-page-flows.md](web-page-flows.md). How the engine
   code works, and what is still open in it: [web-engine-data-flow.md](web-engine-data-flow.md) (Part 3). Step 3.5:
-  [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md).
+  [prototype1-step3.5-plan.md](archive/prototype1-step3.5-plan.md).
 
 ## Steps
 
@@ -83,7 +83,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 1 | Engine API with tests (`engine.py`, `browser.py`): a whole-file run with no locals, the dark plot style, locals and globals, the first rows for Browse, memory use, the log streamed during a run (`on_output`; check first that it works in Pyodide), the error line, the command per graph, describing a .dta without loading it, the page's tempfile wording. Spec section 6. No MCP schema change: `mcp_server.py` does not send the new fields | general-purpose, worktree | Opus, medium | parallel with 2 | done |
 | 2 | The file store with its `pending` journal, the self-hosted runtime, a build-written list of the start files with their sizes, download with byte counts and abort (resumed per file), Break as wait / reset now, the zip made in the page, the tab lock, `storage.persist()`, relaying the streamed log and the new ops; Node tests (spec section 7) | general-purpose, worktree | Fable, high | parallel with 1 | done |
 | 3 | App shell: Preact, the tokens and `ui.css` in the page, layouts (desktop B, phone tabs), the theme toggle, the state store, and the shared primitives that 4a needs (dialog, menu, toast, the live region) | general-purpose, alone | Opus, high | after 1 and 2 | done |
-| 3.5 | The engine code made clear and auditable: TypeScript everywhere, one explicit state machine, one build identity (no offline start), the journal as the only channel. Plan: `prototype1-step3.5-plan.md` | general-purpose, one step at a time | Opus, high | after 3, before the merge | done |
+| 3.5 | The engine code made clear and auditable: TypeScript everywhere, one explicit state machine, one build identity (no offline start), the journal as the only channel. Plan: `archive/prototype1-step3.5-plan.md` | general-purpose, one step at a time | Opus, high | after 3, before the merge | done |
 | 4a | File tree, editor tabs, upload and name clash, row menus | general-purpose, worktree | Opus, medium | after 3, with 4c | done (merged with `prototype1-step4`, pull request #17) |
 | 4b | Editor, Run, Break, log, run-head, status bar | general-purpose, worktree | Opus, medium | after 4a and 4c, with 4d | done (merged with `prototype1-step4`, pull request #17) |
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | done (merged with `prototype1-step4`, pull request #17) |

@@ -381,7 +381,7 @@ in `docs/icebox.md`, or in the step 6 and step 7 lists.
   passed), `npm run check`, `npm test` (98 tests), `npm run e2e` (56 passed).
 - **Step 3.5 is done: the engine code made clear and auditable** (TypeScript everywhere, one state machine, one build
   identity, the journal as the only channel; steps A to E; merged by pull request #13).
-  Its plan and status: [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md). How the engine code works as built, and what
+  Its plan and status: [prototype1-step3.5-plan.md](archive/prototype1-step3.5-plan.md). How the engine code works as built, and what
   is still open: [web-engine-data-flow.md](web-engine-data-flow.md).
 - **How the editor page's focus, runs, open files and log links work, as built on `prototype1-step4`:** [web-page-flows.md](web-page-flows.md).
 - **Formatting and linting were added on the branch after step 3.5 and before the merge:** Biome for `web/`, ruff for dofile's own

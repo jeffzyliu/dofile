@@ -1,6 +1,6 @@
 // The transport: the page's side of the engine worker (worker.ts), and the build's files before a worker exists. It
 // decides nothing. The state machine (machine.ts) says when a worker starts and ends; the controller (src/app/engine.ts)
-// performs that here. Its interface is three parts (docs/prototype1-step3.5-c-design.md, item 7):
+// performs that here. Its interface is three parts (docs/archive/prototype1-step3.5-c-design.md, item 7):
 //   Reader     query(op, args): the read ops (types.ts, ReadOps). Safe at any time, from anywhere.
 //   Lifecycle  start(n, build, reply), end(n, ending), run(n, args, onLog), interrupt(n): what changes the engine. Only the
 //              effect performer holds this.

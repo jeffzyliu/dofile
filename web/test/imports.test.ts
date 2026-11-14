@@ -1,5 +1,5 @@
 // The contracts that no type can hold, checked on the source text and the import graph of web/src (and, where said, the
-// whole of web/). docs/prototype1-step3.5-c-design.md: items 5.1 (tickets and replies), 6 (the contracts), 7.2 (the
+// whole of web/). docs/archive/prototype1-step3.5-c-design.md: items 5.1 (tickets and replies), 6 (the contracts), 7.2 (the
 // worker is posted to in one place) and 7.4 (single instances). The text is read with comments removed, and where a rule
 // counts a word in code, with the strings' contents removed too. A definition is not a call.
 

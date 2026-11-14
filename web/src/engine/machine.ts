@@ -1,8 +1,8 @@
 // The engine's state machine: every state of the engine in the page, every event that can happen to it, and what each
 // event does in each state. One pure function, transition(machine, event), gives the machine after the event and the
 // effects the caller must then perform. The design, with the tables this file holds cell for cell:
-// docs/prototype1-step3.5-c-design.md (items 1 to 5; less the run it held for an engine that was not there, removed on
-// 2026-11-12: with no engine a run is not valid, and `ask`, the page's "Start engine", opens the prompt); the diagrams: docs/prototype1-step3.5-c-diagrams.md.
+// docs/archive/prototype1-step3.5-c-design.md (items 1 to 5; less the run it held for an engine that was not there, removed on
+// 2026-11-12: with no engine a run is not valid, and `ask`, the page's "Start engine", opens the prompt); the diagrams: docs/archive/prototype1-step3.5-c-diagrams.md.
 //
 // How to read it: State (sixteen members, one per row of the table), Event (twenty-four), Effect; then the shorthands
 // (DOWNLOAD, ASK, STOP, OWN, BREAK, END, FAIL, TWICE, RESET, LOST), then TABLE, one row per state with a cell for each

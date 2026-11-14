@@ -411,7 +411,7 @@ is the only place that decides; the engine controller (`web/src/app/engine.ts`) 
 returns. This matrix is generated from that function by `web/test/machine.test.ts`, and the same test reads it back from
 this file and fails, naming the cell, when a cell differs. To regenerate it after a change to the machine:
 `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` (from `web/`), and paste the five tables below. What each cell
-does besides changing the state (the effects, in order, and the crash count) is in `docs/prototype1-step3.5-c-design.md`,
+does besides changing the state (the effects, in order, and the crash count) is in `docs/archive/prototype1-step3.5-c-design.md`,
 item 4.2, and is tested there cell for cell.
 
 Rows are states, columns are events. A cell is one of:
