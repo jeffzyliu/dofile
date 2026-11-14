@@ -109,6 +109,22 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.match(T.nameProblem("a/b.do", "", taken) ?? "", /can't contain/);
   assert.match(T.nameProblem("..", "", taken) ?? "", /isn't allowed/);
   assert.match(T.nameProblem(".dofile", "", taken) ?? "", /dofile's own/);
+  const listed = [
+    { path: "clean.do", dir: false, size: 1, mtime: 0 },
+    { path: "data", dir: true, size: 0, mtime: 0 },
+    { path: "data/wages.dta", dir: false, size: 1, mtime: 0 },
+  ];
+  assert.equal(T.newPathProblem("x.do", "", listed), null);
+  assert.equal(T.newPathProblem("data/x.do", "", listed), null, "a folder that exists is not 'taken'");
+  assert.equal(T.newPathProblem("new/a/x.do", "", listed), null);
+  assert.equal(T.newPathProblem("x.do", "data", listed), null);
+  assert.equal(T.newPathProblem("data/wages.dta", "", listed), "wages.dta already exists here.");
+  assert.equal(T.newPathProblem("clean.do/x.do", "", listed), "clean.do is a file, not a folder.");
+  assert.equal(T.newPathProblem("a//x.do", "", listed), "Enter a name.");
+  assert.equal(T.newPathProblem("x/", "", listed), "Enter a name.");
+  assert.match(T.newPathProblem("a/../x.do", "", listed) ?? "", /isn't allowed/);
+  assert.match(T.newPathProblem(".dofile/x.do", "", listed) ?? "", /dofile's own/);
+  assert.match(T.newPathProblem("a\\b.do", "", listed) ?? "", /can't contain/);
   assert.deepEqual(T.tabLabels(["a.do", "data/wages.dta", "old/wages.dta", "wages.dta"]), [
     "a.do",
     "wages.dta · data",

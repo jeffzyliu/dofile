@@ -7,6 +7,7 @@ export type IconName =
   | "down"
   | "right"
   | "more"
+  | "plus"
   | "theme"
   | "graph"
   | "file"
