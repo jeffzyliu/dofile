@@ -71,7 +71,7 @@ estimated splits) are the study's, not checked again here.
   later, so previews may need no Terraform at all; the report should say. Nothing is written yet.
 - **A watchdog for the engine start.** Nothing times out the `starting-worker` state: `machine.ts` has only the Break grace
   timer, and `client.ts` `start()` waits on `mount`, `boot` and `startup` with no limit. A worker that stalls (the
-  `?snapshot=0` stall in `docs/prototype1-plan.md`) leaves a visitor on "Getting the engine ready" for good. Open question:
+  `?snapshot=0` stall in `docs/phase2-history.md`, "Prototype 1: the record from 'Where things stand'") leaves a visitor on "Getting the engine ready" for good. Open question:
   can the snapshot start, the page's default, stall the same way? The stall was seen only with `?snapshot=0`, and the code
   has no automatic fallback from the snapshot to the normal boot (by grep, not a full read). The words a failed start shows
   are the maintainer's. 2026-11-12.
