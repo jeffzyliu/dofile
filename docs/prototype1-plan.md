@@ -71,7 +71,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     that joined everything) and #29 (an earlier version of this section) are not for merging.
 - **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
   decisions: 1 to 5 are accepted (all built in #23 to #25; decision 5, the trackpad back-swipe, is to be checked once by
-  hand), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer (the experiment ran with zoom off; turning it back on needs another iPhone check, `docs/icebox.md`, "Phone"), and 7 to 16 have no answer yet. **17 to 22 were
+  hand: step 7, decided 2026-11-13), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer (the experiment ran with zoom off; turning it back on needs another iPhone check, `docs/icebox.md`, "Phone"), and 7 to 16 have no answer yet. **17 to 22 were
   answered on 2026-11-13:** 17 (the order of the later UI work, "queued run first") dropped, since the queued run is gone;
   18 (run only `.do` and `.ado` files), 20 (`cls`), 21 (move, rename, drag) and 22 (step 6's width: its plan plus three cheap
   audit checks) accepted; 19 (syntax checking) changed by the maintainer: a syntax error refuses the run, an unknown command
@@ -193,7 +193,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 - **To try on a real iPhone** (none of this can be tested here; the e2e iPhone profile is an emulation with no real
   keyboard, toolbars or touch scrolling): the page does not scroll or bounce; with the keyboard open the command line sits
   right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard
-  while it is open. An Android phone (Chrome, Firefox) should behave the same now.
+  while it is open. An Android phone (Chrome, Firefox) should behave the same now. **Decided 2026-11-13: this list, and Android, are in step 7's real-phone pass** ("Known work inside the steps", "Step 7").
 - **Open from step 3.5** (listed in `web-engine-data-flow.md`, Part 3): a Break pressed between sending a run and the worker
   starting it is lost and ends as a 9998 reset; when another page upgrades the database, the new worker mounts with a store
   error and an empty `/work`; if only the worker fails to open the store, an upload shows in the file list but `use` on it gives
@@ -583,9 +583,9 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | to review (built on `prototype1-step4`, pull request #17) |
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (built on `prototype1-step4`, pull request #17; the draft words in SPEC section 8, "Step 4d: draft words"; the review decisions and open questions in "Step 4: decisions and open questions" above) |
 | 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4; reviewed once, its findings fixed; the landing page moved to `/` and the editor to `/app/`; open for the maintainer: the words listed in SPEC section 8 "As built in step 5", the first deploy's checks in SPEC 8 "URLs") |
-| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review". Width decided 2026-11-13 (decision 22, accepted): the work above plus three cheap audit checks: unused code (knip), the licences of the web dependencies, and stale docs. Security headers and the `?test` gate wait until later. The audit's list also has (2026-11-13): step 3.5's lost Break, upgraded database and worker-only store failure ("Open from step 3.5"), the code splitting of the main chunk (step 4 C 20), the off controls' contrast (#26), and a held Enter on a banner button that gives the focus to the editor (to verify) |
+| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review". Width decided 2026-11-13 (decision 22, accepted): the work above plus three cheap audit checks: unused code (knip), the licences of the web dependencies, and stale docs. Security headers and the `?test` gate wait until later. The audit's list also has (2026-11-13): step 3.5's lost Break, upgraded database and worker-only store failure ("Open from step 3.5"), the code splitting of the main chunk (step 4 C 20), the off controls' contrast (#26), and a held Enter on a banner button that gives the focus to the editor (to verify). Also from the review's sections 6 and 7 (2026-11-13, the maintainer: "all recs"): what the tests do not cover (the views are tried only by e2e; `check-pytest` and `check-numeric` run by hand); #37's unchecked items (Cmd+Enter in a `<select>`, the 1 px ring's contrast, the status bar's fit at 1200 px); and the UI round's nice-to-haves 6 (IME `isComposing`), 8 (ring contrast) and 9 (the `.log` focus ring's radius and its off-screen bottom edge); the #26 and #30 review nice-to-haves (their reports were deleted) were dropped, since the audit reads that code |
 | 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | done before the merge for steps 4 and 5 (fresh-context reviews of each part, the join and the move); a `/code-review` of the merged whole open if wanted |
-| 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started |
+| 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started; its list is under "Known work inside the steps" below ("Step 7", with the 2026-11-13 additions) |
 
 ## After step 6: later UI work (the maintainer's ideas, 2026-11-12; not started)
 
@@ -669,6 +669,13 @@ is set when this work is scheduled (decision 17, "queued run first", was dropped
   `axe`, `tabwalk` and `contrast` check the mockups today, not the real page.
 - **Step 7:** the 48 MB figure, Break on a long model fit in a browser, `pyreadstat` on a real iPhone, a phone over HTTPS
   with the cache working, "no request leaves the page except for static assets", and that the host compresses the `.wasm`.
+  **Added 2026-11-13** (sections 5 and 6 of the post-merge review; the maintainer: "all recs"), the real-phone pass:
+  - A real iPhone session: the phone command line, and the wake lock locked for 30 s.
+  - The "To try on a real iPhone" list (step 3, above), step 4's C 13, and the same on an Android phone (Chrome, Firefox).
+  - Review decision 5: the trackpad back-swipe over the editor and the log, checked once by hand.
+  - Memory: the cap was measured on an iPhone 13 only (`docs/browser-engine.md`, "The memory cap"), so try other phones;
+    `merge`, `reshape`, `sort` and graphs near the cap; and a full heap in a browser.
+  - Decision 6 (zoom on the editor page) is not part of this: it stays in `docs/icebox.md`, "Phone".
 
 ## Known work found in steps 1 and 2 and the step 1 review
 
