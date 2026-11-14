@@ -34,7 +34,7 @@ The rest:
   (`files/EditorTabs.tsx`) have no `aria-controls`, and the editor is not a `tabpanel`. 2026-11-11.
 - **The full-size graph view** (`output/FullSize.tsx`) is a hand-made `role="dialog" aria-modal` with its own focus trap;
   the rest of the page is not inert under it (a native `<dialog>` would make it so). 2026-11-11.
-- **The toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size** (plan, step 4 C 22): its compact
+- **The toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size** (`docs/phase2-history.md`, step 4 C 22): its compact
   form starts below 56em, so a larger default font leaves a band where neither form fits. Rare, and nothing is lost (the
   toolbar scrolls); a fix needs a third toolbar form. The maintainer: "all recommendations". 2026-11-13.
 
@@ -101,7 +101,7 @@ estimated splits) are the study's, not checked again here.
 ## Command line, log and files (decided in the post-merge review, 2026-11-13)
 
 - **A multi-line command line.** Shift+Enter would start a new line, so a block or a `///` command could be typed or pasted
-  and run as one; today such a paste stops with a toast that points to the editor (plan, step 4 A 5 and B 3). The
+  and run as one; today such a paste stops with a toast that points to the editor (`docs/phase2-history.md`, step 4 A 5 and B 3). The
   maintainer: "making it expand for multiline inputs should be considered, but not at this time. priority is just making
   this single line one reliable with sensible defaults." 2026-11-13.
 - **Two commands on one line in `#delimit ;` mode (step 4's C 11).** Both are echoed as the whole line twice, and the second
@@ -145,7 +145,7 @@ estimated splits) are the study's, not checked again here.
   see the page's changes during a run (the worker is busy in one synchronous call), so a `save` into a folder the page
   renamed or removed meanwhile succeeds, where desktop Stata would give r(603); today the file is not kept and
   `RunResult.skipped` lists it, and the log says so. The idea: pass the changes through a `SharedArrayBuffer`, checked before
-  each command, as Break is. Plan: "Known work found in steps 1 and 2". Moved here by the document pass, 2026-11-13.
+  each command, as Break is. Record: `docs/phase2-history.md`, "Known work found in steps 1 and 2". Moved here by the document pass, 2026-11-13.
 
 ## Engine memory (added 2026-11-13)
 
@@ -155,7 +155,7 @@ estimated splits) are the study's, not checked again here.
   macros and results are lost, as after a restart); and how the page says so (a banner, the status bar, what the Run
   button then offers). 2026-11-13.
 - **A run whose first command is `clear all` restarts the engine first** (from "Later UI work" item 9 of
-  `docs/prototype1-plan.md`, moved here 2026-11-13; nothing in that work is built before step 6). The restart frees the
+  `docs/prototype1-plan.md`, now in `docs/phase2-history.md`; moved here 2026-11-13; nothing in that work is built before step 6). The restart frees the
   engine's WebAssembly memory, which never shrinks otherwise (the status bar's "Engine memory" only grows until a restart).
   First step: measure how long a restart from the cached snapshot takes; build it only if that is under about 2 s.
   `clear all` anywhere else in a run clears as today. 2026-11-13.

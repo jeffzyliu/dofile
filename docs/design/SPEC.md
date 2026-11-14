@@ -48,7 +48,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
   ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
-  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, plan, "Step 4: decisions and open questions", B 8); the nested-do note (`S 15`) names
+  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/prototype1-plan.md`, "Where things stand"); the nested-do note (`S 15`) names
   the file dropdown's Save instead of the key (on a phone). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
@@ -241,7 +241,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Empty** (`S 16`): "No graphs yet" / "Graphs drawn by a run appear here, for example `scatter wage educ`. A .png from the
   file list opens here too."
 - **Calls:** `RunResult.images` (base64 PNG, the last 5 a run drew at most; `new_graphs` counts all). Every run sends
-  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors, and a graph is drawn in the run's theme whatever colors its command names (decided 2026-11-11: `docs/prototype1-plan.md`, 4c). The card of a run's graph follows the run's theme; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
+  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors, and a graph is drawn in the run's theme whatever colors its command names (decided 2026-11-11: `docs/phase2-history.md`, "Known work found in steps 1 and 2", 4c). The card of a run's graph follows the run's theme; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
 
 ### 3.8 Data tab and Browse (P1, step 4c)
 - **Tab** (`P/Data`): facts ("500 obs", "3 vars", "from data/wages.dta", "6 KB in memory"); the field "Filter variables"; a
@@ -854,7 +854,7 @@ engine, did not start, failed twice, running, stopping, waiting and "Break reset
 they are not in `banners`.
 
 Step 4's decisions, the review decisions waiting for the maintainer's confirmation and the open questions are listed
-once, in `docs/prototype1-plan.md`, "Step 4: decisions and open questions" (step 5's in "Step 5: decisions and open
+once, in `docs/phase2-history.md`, "Step 4: decisions and open questions" (step 5's in "Step 5: decisions and open
 questions"); this section points there. They do not block the merge: they are reviewed after it (the plan's "Post-merge
 review"), with the words. The words for the visitor, decided by the maintainer on 2026-11-13, are below, per part: "Words the spec does not give" in 4a and 4b, "Step 4c: decided words", "Step 4d:
 decided words", "Start engine: decided words".
@@ -1101,7 +1101,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     engine's state (`editor/words.ts` `refusedRunWords`, decided by the maintainer, plan's list A; nothing where the
     press runs, `ready`, or does what "Start engine" does: `none`, `asking`, `declined`, `other-tab-idle`, and a `failed` start that can be tried again); with a dialog open it saves nothing (the browser's Save page is still kept away; C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast), and a Save pressed while a rename or a delete is being written waits for it, then writes under the new name or, for a deleted file, nothing; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
-    place to change it; the joining agent's, for the maintainer to approve: plan, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
+    place to change it; the joining agent's, for the maintainer to approve: `docs/phase2-history.md`, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
     of that same file starts, when the engine is reset or restarted (the effect `engine-gone` sets `lastRun` to null, which
     clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line), and when the marked line is
@@ -1262,7 +1262,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     focus on it come once Break has been pending 1 s, `STOPPING_AFTER_S`, so a Break that lands at once moves no focus; the 5 s is the constant `GRACE_S`, as in the running banner's own text, and the time Break was pressed is `resetAt` minus it: `breakPending` in `editor/clock.ts`; at 0 s, until the reset lands, the bold part
     reads "The engine is being reset now:" instead of "In 0 s"), waiting (takes
     the focus), the reset banner ("Run the file again" is drawn only after a Break or a crash that cut a file run, runs that file, is on while the engine is `ready` and the file is open as a text tab, and dismisses the banner: C 3 of the plan's list, fixed 2026-11-13). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "next error",
-    the memory banner (not in prototype 1: no limit is measured, OQ-8; its unused view was removed in the post-merge review, C 12 of the plan's list). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
+    the memory banner (not in prototype 1: no limit is measured, OQ-8; its unused view was removed in the post-merge review, C 12 of the list in `docs/phase2-history.md`, "Step 4: decisions and open questions"). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
     **Step 4d: decided words**, decided by the maintainer on 2026-11-13 (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
     Reset banner by kind: user "You reset the engine." / break "The engine was reset: the code did not stop at Break."
     (the reason, a cause in parentheses cut off) or, with no cross-origin isolation, "Break reset the engine." "This page
@@ -1371,7 +1371,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     take-over dialog) or, after a failed start that can be tried again, `start`. No state keeps a run or a mark that a
     run was wanted (`asking` has no fields, the prompt one title), so when the engine is ready nothing runs by itself.
     (Until 2026-11-12 the machine held the run and sent it when the engine had started, and dropped it when the start
-    did not happen; the maintainer removed that, and then the prompt that a run opened: plan, Post-merge review.)
+    did not happen; the maintainer removed that, and then the prompt that a run opened: `docs/phase2-history.md`, "Post-merge review".)
   - **The tab lock.** Losing it ends the worker, blocks the store, shows the take-over dialog, tells run.ts the engine is gone
     (it clears what the engine left) and cuts a run in progress with rc 9998, kind `stopped`. A lock answer that arrives after
     the lock was lost, or after a take-over was cancelled, is stale and dropped; there is no counter for it.
@@ -1436,8 +1436,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 
 ### As built in step 5 (landing, commands, sample; branch `prototype1-step5`)
 
-The maintainer's list for step 5 (decided, waiting for confirmation, open) is the plan's "Step 5: decisions and open
-questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below, under "To look at on the first real deploy".
+The maintainer's list for step 5 (decided, waiting for confirmation, open) is "Step 5: decisions and open
+questions" (`docs/phase2-history.md`); the first real deploy's checks are below, under "To look at on the first real deploy".
 
 - **URLs** (decided by the maintainer in the review of step 5): the landing page is the site's root, `/`; the commands page is
   `/commands/`; the editor is a single-page app under `/app/` (`/app/?test` and the other flags as before). Every address,

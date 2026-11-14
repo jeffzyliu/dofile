@@ -296,7 +296,7 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   (run 43381169730, `types, unit tests, build`, on #27 `ad1d85e`, a commit that changed only an e2e test and docs). The
   other engine tests in the job loaded their packages. Passed on the next run. 2026-11-13.
 - `editor.spec.ts` "a rename while Save writes" was reported to fail about 1 run in 16 in Firefox (suspected cause and the
-  test changes: `docs/prototype1-plan.md`, post-merge review). Not seen since: no failure of it in the 133 CI runs up to
+  test changes: `docs/phase2-history.md`, "Post-merge review"). Not seen since: no failure of it in the 133 CI runs up to
   2026-11-13, 24 Firefox runs each before and after the `focusRow` rewrite passed, and 16 of 16 passed on `main` (00821e2)
   locally. Kept here until about ten more runs have passed.
 

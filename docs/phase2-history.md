@@ -485,3 +485,443 @@ in `docs/icebox.md`, or in the step 6 and step 7 lists.
   layout, and "Not affiliated with StataCorp" in the status bar from 1200 px; also Ctrl/Cmd+S and Ctrl/Cmd+Enter take
   Ctrl or Cmd on every platform, and `.gitattributes` marks lockfiles, wheels, the vendored engine and the startup-times
   files as generated. The checks at the tip are in the first bullet.
+
+## Prototype 1: the decided lists of the plan, to 2026-11-14
+
+Moved out of [prototype1-plan.md](prototype1-plan.md) on 2026-11-14 (the second document pass); the text below is unchanged,
+except that a section's heading is one level lower. Its "above", "below" and "this file" mean that file as it stood then:
+"Open, critical", "Steps", "After step 6: later UI work", "Known work inside the steps" (its Step 6 and Step 7 lists, and
+the one Step 6 note taken from "Known work found in steps 1 and 2") and "Step 5: the clean-room record" are still sections
+of it. Item IDs in the plan and in other documents, such as "step 4 B 3" or "step 5 C 1", name items of the two lists
+below. Every open item these sections held lives now in one place: "Open, critical", step 6's or step 7's list, "After
+step 6: later UI work", `docs/icebox.md` or `docs/test-map.md` ("Known flaky tests"), as each item says. The 2026-11-14
+record is not a separate section: pull requests #52, #54 and #55 are in the plan's "Where things stand (2026-11-14)",
+and step 4 B 8 is closed there.
+
+### Step 4: decisions and open questions
+
+The maintainer's list for step 4 (pull request #17), in one place: each item is stated here, as the code behaves, and
+SPEC section 8 points here. The words drafted for the visitor are not repeated here: they are SPEC section 8's lists
+("Words the spec does not give" for 4a and 4b, "Step 4c: draft words", "Step 4d: draft words").
+
+**A. Decided by the maintainer** (2026-11-11)
+1. Text pasted into the command line with line breaks runs each line in turn, the next once the one before has ended.
+   Trailing line breaks are stripped first, so one copied line with its break is an ordinary paste (`log/paste.ts`).
+2. A run that rewrites an open file: a tab with no unsaved edits shows the run's version; a tab with unsaved edits keeps
+   them, stays unsaved and gets the banner `run-changed` ("Reload from the run", "Dismiss"), the fallback in place of a
+   question dialog (SPEC section 8, "As built in step 4b").
+3. `.md` and `.json` are highlighted with CodeMirror's packages (`@codemirror/lang-markdown`'s `markdownLanguage` alone,
+   `@codemirror/lang-json`).
+4. What becomes of a queued command is decided by the state machine: a step that lets go of the queued run without
+   sending it ends with the effect `drop-run`, which settles the command's `done` with null (`engine/machine.ts`).
+   **Superseded by #26 (2026-11-12, checked against `web/src/app/start.ts` and `docs/web-page-flows.md`, section 2, on
+   2026-11-13):** the held run is gone, see Post-merge review: there is no queued command and no `drop-run`. With no
+   engine the command line is disabled and the page offers "Start engine"; a command opens no prompt.
+5. The engine's hint for an unclosed block still names OpenDTA's Command window and Shift+Enter: left as is (ODT-33). A
+   multi-line command line (Shift+Enter starts a new line, so a block or a `///` command can be typed or pasted and run
+   as one) is future work; today such a paste stops with a toast that points to the editor.
+6. Save keeps a file's line break, `\r\n` or `\n`, noted when the file is read (`editor/ranover.ts` `formOf`). A new or
+   empty file is written with `\n` on every OS.
+7. Save keeps a UTF-8 byte order mark, except in a `.do` or `.ado` file (case ignored), which is written without it: the
+   engine reads a BOM as part of the first command (ODT-34; `editor/ranover.ts` `dropsBom`).
+8. Keyboard shortcuts work at every width. The phone layout shows no key chip and no key hint (SPEC section 1, Glyphs).
+9. The status bar says "Not affiliated with StataCorp" on the desktop from 1200 px (SPEC 3.6).
+10. The log's head keeps "Stata 14 syntax" ("dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax"): a descriptive use of
+    the name.
+11. From the joining of 4a and 4c: on a phone the Files pane's head is hidden and the file actions are in the top bar's ⋯
+    on the Files view (UI fix round, 2026-11-12: by the maintainer's decision they are now in the phone strip's "Files ⋯" button, and the Log view's actions in "Log ⋯"); the unfolded file list (700 to 1199 px) gives the focus to the tree's row; a drop of files
+    anywhere on the page uploads them; a toast confirms, or reports an error that needs no action, and anything the
+    visitor must act on or choose between is a banner or a dialog (SPEC 3.10); a graph is drawn in the run's theme
+    whatever colors its command names, so a dark plot with a user-named color is accepted as it is (Step 4c, below).
+12. (2026-11-11) A Ctrl/Cmd+Enter in the editor that the engine does not take (a run on, the engine starting, no engine
+    that can run in this tab), where the Run buttons are disabled, says why in a short toast by the engine's state
+    (`editor/words.ts` `refusedRunWords`; the words are drafts in SPEC section 8); nothing where it runs or opens the
+    prompt. A held Ctrl/Cmd+Enter runs once. **Since #26:** with no engine (`none`, `asking`, `declined`, `other-tab-idle`, a
+    `failed` start that can be tried again) Ctrl/Cmd+Enter does what "Start engine" does and shows no toast
+    (`refusedRunWords` gives null there); the toast stays for a run on, a start on its way, and a start that cannot be tried
+    again (`app/start.ts`, `editor/words.ts`).
+
+**B. Made during review, waiting for the maintainer's confirmation**
+Reviewed after the merge: see Post-merge review.
+1. The error mark belongs to the file's last run: set when a run of that file (whole or a selection) ends with an error
+   on a line (not Break's rc 1); cleared by a new run of that file, a reset or a restart of the engine, or deleting the
+   marked line; a command from the command line and a run of another file leave it; a file closed with its mark and no
+   unsaved edits has it again when it is opened with the same text (`editor/errormark.ts`).
+   **Resolved (2026-11-13, #40): confirmed, and changed.** The maintainer: "this should be cleared in those situations, it is
+   ephemeral." The mark lives in the tab's editor state: it goes when the tab closes (a file opened again has none) and stays
+   with a renamed tab; the extra `closedMarks` map is gone.
+2. On a phone, a tap on the Break pill also shows the Log view, where Break's countdown and its outcome are
+   (`editor/RunControls.tsx`).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
+3. Pasted lines stop at the first line that is refused, that was queued and then dropped, that ends with any rc but 0
+   (Break's rc 1 too), or whose run is cut because another tab took the engine; and before a line that opens a block
+   (`{` at its end, a lone `program define` or `mata`), opens a `/*` comment it does not close, or holds `///` (not sent).
+   A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.) **Superseded by #26 (2026-11-12):** no line is queued or dropped any more, so the "queued and then dropped" stop is gone; with no engine a paste is an ordinary paste into the disabled field, and no line runs; with an engine that is not `ready` a paste is refused whole, the field untouched (`docs/web-page-flows.md`, section 2).
+   **Resolved (2026-11-13, #40): "fine for now"** (the maintainer). A multi-line command line is in `docs/icebox.md`.
+4. Load on a phone's .dta tab shows only its toast ("Loaded wages.dta"); the Log view does not open.
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
+5. Reset asks whenever a run is in progress. Otherwise it resets at once while the engine is ready with no data in
+   memory and no e() or r() scalar, macro or matrix; after a run it first describes the memory again, and asks when
+   that fails (`states/words.ts` `resetDecision`).
+   **Resolved (2026-11-13, #40), settled with C 1:** Reset asks unless the engine is `ready` and nothing has run on it since it started; it no longer describes the memory again (`states/words.ts` `resetAsks`).
+6. With a .dta tab active, a focus hand-off (a banner with the focus that goes; a dialog whose opener has left the page)
+   goes to that tab in "Open files", else to its Load button (`editor/Editor.tsx` `focus`).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
+7. A run that writes something that is not text (binary, not UTF-8) over an open text tab keeps the tab's text, edits or
+   not, marks it unsaved and shows the `run-changed` banner in other words, with no "Reload from the run".
+   **Iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
+8. On a phone the Results view's "↵ Copy" hint is hidden, the word Copy with it (a tap copies, and the toast says so).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
+   **Decided (2026-11-14, #54):** no copy hint on a phone (the maintainer: "Confirm: no hint"); the whole row copies on a click
+   or tap, and the toast names what was copied.
+9. A file with both kinds of line break is saved with the more common one (`\n` on a tie); a file whose breaks are lone
+   `\r` is saved with `\n` (`editor/ranover.ts` `lineBreakOf`).
+   **Resolved (2026-11-13, #40): confirmed as it is** (it matches VS Code: the file's most common line break).
+
+**C. Open questions**
+Reviewed after the merge: see Post-merge review.
+1. Reset does not ask when only globals, Stata scalars or graphs are held: only data and e() or r() results count (S 14
+   read literally), though the dialog says Reset clears macros and graphs.
+   **Fixed (2026-11-13, #40), with B 5:** Reset asks whenever anything has run on the engine since it started.
+2. The running banner shows on every run, though S 11's caption says "with the first run".
+   **Placed (2026-11-13, review decision 9):** "After step 6: later UI work", item 6 (hold back quick operations); see also
+   "Found in the UI fix round", under Post-merge review.
+3. "Run the file again" (the reset banner) runs the active text tab, not the file whose run the reset cut, and it is
+   offered after a Reset the visitor asked for too.
+   **Fixed (2026-11-13, #40):** the button runs the file whose run the reset cut, and is drawn only after a Break or a crash
+   that cut a file run (not after a Reset the visitor asked for); it is enabled while the engine is ready and that file is
+   open as a text tab.
+4. The Break grace of 5 s is written twice: the machine's `graceMs` and 4d's `GRACE_S` (`states/words.ts`), which the
+   banners' words count from. (Done: `BREAK_GRACE_MS` in `engine/types.ts` is the one place; `app/engine.ts` defaults `graceMs`
+   to it and `GRACE_S` is derived from it; the machine still takes the grace through `env`.)
+5. A failed start is announced twice to a screen reader: the live region's "The engine didn't start" and the failed
+   banner, which has `role="alert"`.
+   **Fixed (2026-11-13, #40):** the failed banners are not `role="alert"`; the live region says it once.
+6. "Browsers that work" (`landing.html#browsers`) and the other-tab dialog's "Close editor" (`landing.html`) are dead
+   links until step 5 builds the landing page; check them then, and that the e2e tab-lock test's request still matches
+   the page's path. (Step 5: they go to `/#browsers` and `/`, checked by `e2e/landing.spec.ts` and the tab-lock test.)
+7. A file a run deleted keeps its tab: it leaves the file list, the tab keeps its unsaved dot as it was, and Save writes
+   the file again.
+   **Decided (2026-11-13, #40): kept, as other editors do.** A "(deleted)" mark on such a tab is in `docs/icebox.md`.
+   **Also iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
+8. Ctrl/Cmd+S with a dialog open saves the active tab behind the dialog. (Done: with a dialog open it only keeps the browser's
+   Save page away and saves nothing; `editor/Editor.tsx` `onKey`, one e2e case in `editor.spec.ts`.)
+9. The editor has no find of its own (no Ctrl/Cmd+F binding); Find searches the log only.
+   **Iceboxed (2026-11-13)** with a fix to build later (`docs/icebox.md`, "Command line, log and files").
+10. On a phone the toast sits above the command line and the tab bar on every view, so on the views with no command line
+    (Files, Editor, Data, Results) it is a command line's height higher than it needs to be. (UI fix round, 2026-11-12:
+    fixed; on a phone the toast is lower on the views with no command line.)
+11. In `#delimit ;` mode two commands on one line are echoed as the whole line twice, and the second echo can be matched
+    to a later identical line, which puts a graph's link in the wrong place.
+    **Moved to `docs/icebox.md` (2026-11-13, #40).**
+12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.) The code is removed: `MemoryBanner`, its registry entry, `{ b: "memory" }`, `memoryHead` and their tests; the `memory` signal stays.)
+13. On a real iPhone: that the on-screen keyboard opens again when a dialog gives the focus back to the command line (the
+    focus now comes back in a timer); the iPhone checks of step 3 ("To try on a real iPhone", in the history record); and step 3.5's
+    open items (`web-engine-data-flow.md`, Part 3).
+    **Placed (2026-11-13):** step 7's real-phone pass ("Known work inside the steps", "Step 7"); step 3.5's open items are in
+    step 6's audit list. The "To try on a real iPhone" list is in `phase2-history.md`, "Prototype 1: the record from 'Where
+    things stand'", and step 7's list refers to it.
+14. A clash over an open file with unsaved edits is asked again after "Do the same" with Replace (not after Esc, nor after
+    "Do the same" with Keep mine).
+    **Iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
+15. A drag that began in the page (a graph image, which Chromium and WebKit list as carrying a file) is not taken as an
+    upload: a guard kept on partial evidence.
+    **Iceboxed (2026-11-13)** with the drag-and-drop audit (`docs/icebox.md`, "Command line, log and files").
+16. While a dialog is open, or another tab has the files, a drag of files over the page gives the Files pane no outline
+    and the drop uploads nothing, with nothing that says why.
+    **Iceboxed (2026-11-13)** with the drag-and-drop audit (`docs/icebox.md`, "Command line, log and files").
+17. The forced-colors rules of 4a, 4b and 4c (and the shell's fold button) are in `@media (forced-colors: active)` blocks
+    inside each part's block of `app.css`, not in the block at the end of `ui.css` that SPEC section 1 names.
+    **Resolved (2026-11-13, #47):** SPEC section 1 now describes the rules where they are; no CSS change.
+18. "Restore the sample" is not in the Files head menu until step 5's sample exists (OQ-13 puts it above "Delete all
+    files…"). (Step 5: it is there, above "Delete all files…".)
+19. A graph that keeps its own scheme (`scheme(s1mono)`) in the dark theme is a light image on a dark card. (2026-11-12: the card's image has a thin border from the tokens in the dark theme, so it looks intended; `app.css`.)
+20. The build's main JavaScript chunk is over Vite's 500 kB warning (about 525 kB raw, 173 kB gzip).
+    **Moved to step 6 (2026-11-13, the maintainer: "all recommendations"):** now 562 kB raw, 191 kB gzip; code splitting is
+    part of step 6's audit.
+21. A two-word `help` topic in a hint's link is unverified.
+    **Closed (2026-11-13, #47):** every engine hint's help topic is one word.
+22. From step 3: at 700 to about 855 px with a 20 px default font size the toolbar scrolls sideways instead of fitting
+    (its compact form starts below 56em).
+    **Iceboxed (2026-11-13, the maintainer: "all recommendations")** (`docs/icebox.md`, "Accessibility"): rare, nothing is
+    lost, and a fix needs a third toolbar form.
+
+### Step 5: decisions and open questions
+
+The list for step 5 (pull request #18), in the same form: each item as the code behaves. What was built, the addresses and
+the words drafted for the visitor are in SPEC section 8, "As built in step 5".
+
+**A. Decided by the maintainer** (2026-11-11)
+1. The landing page is the site's root, `/`; the commands page is `/commands/`; the editor is a single-page app under
+   `/app/` (`/app/?test` and the other flags as before).
+2. The editor's location is one setting, `web/scripts/urls.ts` (`EDITOR_BASE`, with `EDITOR_URL` and `SITE_URL` for links
+   across origins), so that it can move to its own subdomain later. Another path on the same origin is a change of that
+   setting alone; the subdomain is two builds into two folders plus the hand edits SPEC section 8, "URLs", lists.
+3. The landing and commands pages load none of the editor's code: static HTML with their own two small scripts and
+   stylesheet (`src/site/`, which imports only `src/site/` and the stylesheets; nothing of the editor's imports it), complete
+   with scripts off.
+4. `sysuse` is left as the engine has it: it loads OpenDTA's three synthetic datasets (`cohort`, `diet`, `growth`), and
+   the names of Stata's example datasets give rc 601 with a note (the clean-room record, below).
+
+**B. Made during the step, waiting for the maintainer's confirmation**
+Reviewed after the merge: see Post-merge review.
+1. The commands page is `/commands/` (`dist/commands/index.html`), not `/commands.html`: a folder's index is served at
+   the same address with no redirect by the dev server, `vite preview` and Cloudflare's `auto-trailing-slash`, and
+   `/commands.html` redirects to it.
+   **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
+2. The first visit's sample brings no storage banner (S 19) for its own writes (of the sample's three paths); a change of
+   the visitor's made while it is written, and the first one afterwards (a Save, an upload, a run that writes a file), do
+   (`app/files.ts`, from the store's change row).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "b2 is okay, do not bring the banner on the initial sample write").
+3. The first-visit sample is off under `?test` unless the URL also has `?sample`, so the e2e tests start from an empty
+   store.
+   **Resolved (2026-11-13): kept as it is** (the maintainer: "change it if it helps, not important at all. current situation
+   probably fine"; no change helps).
+4. "Restore the sample" (the Files head menu): files that are only missing are written with no question and the toast
+   "Sample restored"; when all three are there unchanged, the toast "The sample is already here"; when one differs from the
+   sample or is open with unsaved edits, the dialog `restore-sample` names those files first, and Replace writes the missing,
+   differing and unsaved ones, reloads their open tabs with the sample's text and opens `analysis.do`. Other files are never
+   touched.
+   **Done (2026-11-13, #46): "Restore the sample" is an upload of the sample** (identical files are not asked; the clash
+   dialog and toast take the sample's words; `analysis.do` opens after; the `restore-sample` dialog is gone). The text above
+   is the behavior before #46; the request, as written:
+   the maintainer: "my idea is to reuse the workflow and code for uploads to resolve
+   conflicts. in essence, restoring the sample should act as an upload of the sample + switching tab to analysis.do if it
+   exists." Not built: it waits for the focus work, which changes `files/dialogs.tsx`.
+5. "Browsers that work" says only what the tests and the docs support: the automatic tests run the page in Chromium,
+   Firefox and WebKit, no browser was also tried by hand on a computer, one iPhone 13 was tried by hand, other iPhones and
+   iPads and Android were not tried; Break needs cross-origin isolation, and the files stay in the browser's storage. (2026-11-12: the maintainer replaced the section's text: computers tested automatically in Chromium, Firefox and WebKit; an iPhone 13 checked by hand in Safari, older iPhones and iPads with less memory may not start; Android not tested; the files stored in this browser only; on some networks Break resets the engine. It no longer says an iPhone-sized WebKit window is run or that Break needs isolation.)
+   **Done (2026-11-13).**
+6. `/landing.html` is a 404, not a redirect: it was never deployed (step 5 is the first to build it).
+   **Resolved (2026-11-13): confirmed** (the maintainer: "yes, 404 is correct").
+
+**C. Open questions**
+Reviewed after the merge: see Post-merge review.
+1. The first real deploy: the list in SPEC section 8, "To look at on the first real deploy" (the edge's redirects, 404s and
+   headers on 304s; a tab of the old build left open across the deploy shows a failed download, not "updated").
+2. OpenDTA's `growth` dataset (`sysuse growth`) resembles Stata's `childweight` in theme only (children measured at several
+   ages with a `girl` indicator; other variables, another measure, other values); its generator was read, not run.
+   **Resolved (2026-11-13): kept** (the maintainer: "keep growth"). Re-run of the generator matches the vendored data; the
+   resemblance is in theme only (a report of 2026-11-13, from public descriptions; Stata's file was not opened).
+3. The engine's own text was not audited again for step 5: its error messages and hints, and OpenDTA's help pages (`help`),
+   are covered by the vendor's clean-room policy only; the clean-room check covered the site's pages, the sample and the
+   editor's words.
+   **Iceboxed (2026-11-13)** (`docs/icebox.md`, "Engine text"): the maintainer: "no engine patches that are non critical for
+   correctness until phase 2(web editor) is done, icebox".
+4. `shell.spec.ts`'s `?snapshot=0` test (the normal boot from the CDN) has failed now and then in Firefox, not in the other
+   profiles; not investigated.
+   **Decided, kept (2026-11-13):** the cause stays unknown in the test map (the maintainer: "all recs").
+5. The design checks (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs, not the built pages;
+   on the real landing and commands pages only axe runs (`e2e/landing.spec.ts`, both themes).
+   **Held by step 6 (2026-11-13):** its row runs these checks on the real pages.
+6. "Restore the sample" against a Save in progress of the same file (step 4's `saving` set in `editor/Editor.tsx`), read
+   from the code, not tested: the store's writes run in the order they began. A Save that began first (Ctrl/Cmd+S behind
+   the open dialog, then Replace: that first step can no longer happen, since C 8 makes Ctrl/Cmd+S do nothing with a dialog open) ends first, and the restore's `reload` then shows the sample: the tab is clean and the store
+   holds the sample. A Save that begins while the restore's write is in progress ends after the `reload`: the store then holds
+   the Save's text while the tab shows the sample with no unsaved dot (the Save sets the saved text to its own, and the dot
+   only follows edits). A window of milliseconds; `reload` does not touch `saving`.
+   **Moved to `docs/icebox.md` (2026-11-13, #40), with uploads, which also write outside `fileTurn`; now part of the redesign of
+   file synchronization there (2026-11-13).**
+
+### Post-merge review (after steps 4 and 5 merge)
+
+By the maintainer's decision (2026-11-11), lists B (waiting for confirmation) and C (open questions) of "Step 4: decisions
+and open questions" and "Step 5: decisions and open questions", and the draft words in SPEC section 8, do not block the
+merge of steps 4 and 5. They are reviewed after it:
+
+- [x] Confirm or change each B item. Done 2026-11-13: every B item of steps 4 and 5 is resolved above.
+- [x] Decide each C item: fix it, move it to `docs/icebox.md`, or drop it. Done 2026-11-13: each C item is marked above (fixed, iceboxed, placed in step 6, step 7 or "After step 6", or kept).
+- [x] Approve or reword the draft words (SPEC section 8). (2026-11-12: the maintainer went through all five lists; the entries decided are marked in SPEC section 8; the rest stay drafts.) Done 2026-11-13: all decided; the last was the failed-twice banner's sentence, #53.
+- [x] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan. Done 2026-11-13 (branch `decisions-1113`): "Open, critical", above.
+- [x] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand". Done 2026-11-13: the record is in `phase2-history.md`.
+- [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy. Placed in step 6 (2026-11-13); listed in "Open, critical".
+- [x] Remove the queued run (asked for by the maintainer, 2026-11-12). Done on the branch `claude/remove-queued-run`, merged as #26 on 2026-11-12: no
+      state holds a run, `started` always leads to `ready`, `drop-run`, run.ts's `pending` and `dropped` are gone, and with no
+      engine nothing offers to run: Run is "Start engine" (the prompt, a new try, or the take-over dialog), the command
+      line is disabled, and Load, Import and the help links are off (`docs/web-page-flows.md`, section 2). What follows
+      is the request as written on 2026-11-12, before it was done ("today" is the code before this change): Today a Run or a command with no engine (`none`,
+      `declined`) is accepted, opens the download prompt and is held until the engine starts; the machine drops it
+      (`drop-run`) when the visitor says "Not now", the start fails or another tab takes the engine. The simpler model: with
+      no engine, Run only opens the prompt and runs nothing, and the visitor presses Run again when the engine is ready. That
+      removes the held run from the machine's table (`web/src/engine/machine.ts`), the `drop-run` effect, `pending` and
+      `dropped` in `run.ts`, and the special cases in `log/CommandLine.tsx` and `log/pasterun.ts`
+      (`docs/web-page-flows.md`, section 2).
+
+The maintainer's review decisions 7 to 16 are done (2026-11-13): 7 (the B items of steps 4 and 5): S4 B 7 iceboxed, S5 B 4
+done by #46, the rest confirmed; 8, 10, 11 and 15 by #40; 16 by #40 and #45; 12 iceboxed (the editor's own find); 9 placed
+in "After step 6: later UI work", 6; 13 and 14 (the other C items of steps 4 and 5), each row done, iceboxed or placed: S4 C 2
+in "After step 6", 6, C 13 in step 7, C 20 in step 6, C 22 in `docs/icebox.md`, S5 C 1 in step 6's first deploy, S5 C 4 in
+`docs/test-map.md`, S5 C 5 in step 6. Decisions 1 to 5 and 17 to 22 are in the text above; 6 (zoom) stays with the
+maintainer. #53 (the failed-twice banner's last sentence) is merged.
+
+Found in the UI fix round (2026-11-12):
+- The "Running…" banner appears and goes for every short run and every pasted line (seen as a flash). The log no longer
+  loses its place through it. Open; placed 2026-11-13 in "After step 6: later UI work", item 6 (review decision 9).
+- The phone keyboard's jump: settled by three rounds of measurements on an iPhone (iOS 27.0.1;
+  `docs/phone-keyboard-experiment.md`). The command line takes a tap's focus itself with `preventScroll` (no pan at
+  all); elsewhere Safari's pan is scrolled straight back (one frame, about 3 px seen) and the editor's caret is scrolled
+  above the keyboard through CodeMirror. `?kblog` stays, an on-screen list of the viewport's events.
+- `overscroll-behavior-x: none` on the editor and the log also stops a trackpad back-swipe that starts over them.
+
+- (Open; tracked in `docs/test-map.md`, "Known flaky tests", where its sightings are kept.) `e2e/editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main`.
+  Changed (test code only): its `rename` helper now waits for the renamed row to have the focus before it returns, and the
+  F2 steps in `editor.spec.ts` wait for the rename field to have the focus before Ctrl+A. The suspected cause (the tree's
+  `focusRow` retrying every 50 ms and taking the focus from the editor, so the typed character is lost) is a suspicion
+  until Firefox runs confirm it. (2026-11-13: 24 Firefox runs each before and after the `focusRow` rewrite passed; the flake
+  did not reproduce, so the suspicion is neither confirmed nor ruled out.) `shell.spec.ts`'s `?snapshot=0` test (a failure now and then in Firefox, cause unknown)
+  now waits until the state is not a starting state, asserts `ready` with the state's `reason` and `detail`, and prints
+  the page's console in the failure; no retries.
+
+### Later UI work
+
+Moved (2026-11-13) to "After step 6: later UI work", after "Steps". Its item 9 moved to `docs/icebox.md`, "Engine memory".
+
+How this relates to steps 6, 6r and 7. **Step 6** (e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages) is
+partly done inside steps 3 to 5: the e2e suite has 105 tests in four browser profiles (420 cases, 389 run, 31 skipped:
+`docs/test-map.md`), and `e2e/landing.spec.ts` runs axe on the built landing and commands pages. Left for it: the design-check
+scripts (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs and do not yet run on the built
+pages; the four tests in `e2e/poc.spec.ts` are still fixme; and the accessibility items in `docs/icebox.md` belong with that
+work. **Step 6r** (a review of each merge by a fresh context) has in effect been done before the merge for steps 4 and 5:
+fresh-context reviewers went over each part, the join and the move, and their findings were fixed or listed in B and C. The
+`/code-review` of the merged whole is dropped (2026-11-13, the maintainer: "all recs"): the step 6 full-code audit is that review. **Step 7** (the Phase 2 verification list, the
+real-phone pass, the Safari storage re-check) takes the real-phone items of the C lists (step 4's C 13).
+
+### Decisions (2026-11-10)
+
+The reasons are in `phase2-plan.md` (decisions 1, 3 and 7); the detail a builder needs is in `docs/design/SPEC.md`.
+
+1. **File store:** dofile's own store in IndexedDB, one record per file, shared by the page and the worker. `/work` in the
+   worker becomes a plain in-memory folder; Emscripten's IDBFS is dropped. The page works on the store directly. The
+   worker copies the store into `/work` at engine start and writes back only what each run changed. A save made during a
+   run wins over that run's write of the same file: a `pending` journal in the store holds page changes the worker has not
+   applied yet, and the worker leaves those paths out of the run's difference. A Web Lock lets one tab own the engine; a
+   second tab is blocked entirely and writes nothing. Files in the old IDBFS store are not imported, and that database is
+   left in the visitor's browser, unused.
+2. **Framework:** Preact with signals, on the project's own `ui.css`. No component library.
+3. **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the
+   `pyodide` npm package into `public/pyodide/` at build time and served from the page's own origin. `?snapshot=0` keeps
+   the CDN and is a diagnostic mode.
+4. **Download size:** about 48 MB for the snapshot start, added up from file sizes, not measured in a browser. The pages
+   take the number from the build. Step 2 measures it.
+5. **Deploy size check:** in `deploy.yml`, after the build: fail over 25 MiB per file, warn over 23 MiB. The snapshot files
+   are not split.
+6. **Styles:** `web/src/styles/tokens.css` and `web/src/styles/ui.css` are the one source for the page and the design pages.
+7. **Scope of prototype 1:** desktop and phone layouts with the core flows. Deferred to prototype 2: the Help tab; the
+   highlighters for .py, .R, .tex, .sql and .yaml; the unknown-command underline and per-file list; the selection-run
+   warning about an unset local; unpacking a .zip on upload.
+8. **The spec's open questions** (SPEC.md section 10): its recommendations are accepted, except: the log streams during a run
+   (OQ-1); Load's question about changed data and drafts kept across a reload are P2 (OQ-6, OQ-17); the step 4d agent
+   drafts the missing words and the maintainer approves them (OQ-10, OQ-16, OQ-18).
+9. **Tabled:** the Safari 7-day storage note (re-verify after the prototype, step 7); keyboard shortcuts beyond the design's.
+10. **Cleanup:** `web/spike/` and `eval/` are deleted (in git history at `10e0f1c`).
+11. **`?snapshot=0` is not named by the page** (step 3, second review). It still works as the normal boot, a diagnostic mode
+    for developers documented in `web/CLAUDE.md` and `docs/pyodide-snapshot.md`, but no message the page shows names it. A
+    stale snapshot is reason "updated": the page says the site has a newer version and must be reloaded. An automatic
+    fallback to the normal boot when the snapshot fails is a possible later step, not built.
+12. **Words decided for step 4a** (step 3, second review): the close-tab dialog ("Save changes to clean.do?": Save, Don't
+    save, Cancel) and the Delete-all dialog ("Delete all 12 files?"), in SPEC 3.10. A failed "Download all" gives no toast
+    (it offers "Try again", and what the visitor can act on is a banner; a toast confirms, or reports an error that needs
+    no action, SPEC 3.10 as reworded 2026-11-11): it shows the banner `download-failed` with "Try again" (built in step 3; 4d may restyle or
+    reword it, OQ-16). A command that does not run stays in the
+    command line and is not added to the history (SPEC 3.5, 8).
+
+### Known work inside the steps (found in the review of 2026-11-10): the Step 2 and Step 3 notes
+
+- **Step 2 (done; kept as the record, 2026-11-13):** risk: the patched loader is loaded with `import()`, and it is not checked that `loadPyodide` can be given the
+  runtime's bytes instead of fetching them itself; if it cannot, a counted download cannot hand those files to the start.
+  `client.js` `breakRun` ties the interrupt to the 5 s kill timer; "Don't reset: wait for it" and "Reset now"
+  need them apart. Today the snapshot start downloads everything before any file call answers, so the file panel waits
+  for the engine; the file store removes that. The page does not call `navigator.storage.persist()` yet.
+- **Step 3 (done in steps 3 to 5; kept as the record):** `worker.js`, `client.js` and `snapshot.js` are plain JavaScript and `main.ts` casts their results; add a
+  shared types file from the spec's declarations, without converting them (the Node tests run them directly).
+
+### Known work found in steps 1 and 2 and the step 1 review
+
+Decided in the step 2 review:
+- A run's new file inside a folder the page renamed or removed during the run is not saved; `RunResult.skipped` lists it, and
+  the log says so (step 4b). A file the page itself changed during the run is not listed: the page's version wins by design.
+  The engine cannot see page changes during a run (the worker is busy in one synchronous call), so such a `save` succeeds
+  where desktop Stata would give r(603). **P2 idea:** pass folder changes and deletes to the engine mid-run through a
+  `SharedArrayBuffer`, checked before each command, as Break is. (Not critical; moved to `docs/icebox.md`, "Command line,
+  log and files", 2026-11-13.)
+- With no Web Locks (plain HTTP on a LAN, the dev server only), every tab owns the engine. Accepted and documented.
+- `engineBytes` is written into the page at build time, so the prompt has the size before any download, offline too.
+- The real page keeps a test hook, on only behind a flag, so step 2's tab-lock and download e2e tests keep running through
+  steps 3 to 5. Step 2 lists what the hook must expose.
+
+- **Step 3:**
+  - Rebuild the snapshot after merging step 1 (`npm run snapshot`). Run `npm test`: the three tests in `files.test.ts` (then `files.test.mjs`) that need
+    step 1 turn on by themselves.
+  - `engineBytes` is not a build constant: step 2's build writes `start-files.json` (each start file, its size on disk and its
+    compressed size). The page reads `compressed` from it.
+  - The engine controller builds the states of section 5 from `onStatus`, `onRestart(reason, started)`, `resetAt`, a
+    `download()` rejection (`AbortError` means declined) and `start()` rejecting with "failed twice". Whether to ask
+    at load comes from the Cache (`client.cached()`), not a flag (round 6).
+  - Wire `main.ts` in this order: `tabLock`, then `keepFiles()`, then `store.*` (set `store.blocked` when the lock is lost),
+    then `client.download()` and `client.start()`. Leave out the proof-of-concept page's `?start=manual`, `window.__dofile`
+    and its `confirm()` take-over (or keep them for tests only).
+  - Show the streamed log with `run(code, {onLog})`, and at the end replace it with `RunResult.log`, never append: the stream
+    can stop short of the log with no marker (log cap, and the sandbox notes added after the run).
+  - Add `graph_lines: []` to the client's rc 9998 result (`graph_lines` was added after step 2 was built).
+  - Docs left stale by step 2: `web/CLAUDE.md` and `docs/pyodide-snapshot.md` (the loader from a `blob:` URL, the runtime
+    from the page's origin, the cache-first fetch during the start).
+  - Not fixed in step 3: the toolbar at 700 to about 855 px with a 20 px default font size ("Step 4: decisions and open
+    questions", C 22).
+- **Step 4a:** on a phone the Files view showed the pane head "FILES" right under the top bar's "Files" title. Decided
+  and done (2026-11-11): the head is hidden on a phone and the file actions are in the top bar's ⋯ on the Files view
+  (`App.tsx` `phoneMoreItems`, `app.css`). Also decided: a drop of files anywhere on the page uploads them.
+- **Step 4b** (done; merged by #17 and its fix rounds): a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
+  and give it no error mark. Put each "graph n" link after the echo on line `graph_lines[i]`, not by matching the text.
+  From the second review of step 3: the toast's offset on a phone (`app.css` puts it above the command line and the tab
+  bar, and with the keyboard open above the command line at the visible area's foot; set both against 4b's real command
+  line, which shows on the Log view only, and the strip; `e2e/shell.spec.ts` checks the place). The command line clears
+  its field only when `runCommand(text).accepted` (SPEC 8). All four done: the "stopped before line N" note with no
+  error mark; the links placed by `log/align.ts` from `graph_lines` (the echoes walked beside the code sent; the text
+  only keeps the two walks in step); the toast placed against the command line's fixed phone height (`--cmdline-h`,
+  app.css 4b block); the field cleared only when accepted. The old `.cmdline .placeholder` rules in app.css's shell part
+  were removed when 4b and 4d were joined; the e2e checks of 4b are `e2e/editor.spec.ts`.
+- **Step 4b review (2026-11-11), fixed in 4b's files:** Find counted only the run-heads' and notes' matches (now every
+  match, in the log's order), was unseen when unsplit on another Output tab, and left the focus on the page after the
+  phone's ⋯; the error mark went back to the run's line number after a tab switch; the echo walk lost step after a `do`
+  in a block or a mata block, and missed `capture noisily do`; a phone's inline graph was always on the light card; no
+  focus ring in forced colors; `editorCommands.focus()` with a .dta tab active focused nothing; a log file's head words
+  were muted anywhere in a run's output; a command's Break note named "line 1"; a pasted block's line was sent (now the
+  lines stop before it, with a toast), and a Run or Enter could slip in between two pasted lines; Save was on for a .dta
+  tab. Decided at the review (from step 4d's), for the maintainer to confirm (list B): on a phone the Break pill also shows the Log view. **Left for the joining
+  agent or the maintainer:** a queued command's end is told from state names in `log/CommandLine.tsx` (`DROPPED`): run.ts's
+  `runCommand().done` should resolve for a queued run (run.ts or the machine); a run that rewrites an open file leaves
+  the editor's text stale, and a later Save overwrites the run's file (the maintainer's question; files.ts `afterRun`);
+  whether a command-line command should clear the file's error mark (it does); whether a paste of one line and a line
+  break should run at once (it does); the dead `.cmdline .placeholder` rules and the phone toast's offset on views
+  without the command line; a two-word `help` topic in a hint's link (unverified); `@lezer/highlight` to declare in
+  `package.json`; `.md` and `.json` open plain, against SPEC 3.11; `files.spec.ts` no longer tests "Save fails, the
+  tab stays" in the close-tab dialog (4a); the phone ⋯'s Save (App.tsx) is not off on a .dta tab. **Done when 4b and 4d
+  were joined:** the queued command's end (run.ts `done` settles; the machine's `drop-run`); a run that rewrites an open
+  file (a clean tab reloads; an edited one stays unsaved with the banner `run-changed`; a file the run deleted keeps its
+  tab, still open); the error mark (the file's last run's: a command leaves it, `editor/errormark.ts`; for the maintainer
+  to confirm, list B); one line pasted
+  with its line break is an ordinary paste (a paste of several lines runs them in turn, as before); the dead rules;
+  `@lezer/highlight`; `.md` and `.json` highlighted; the close-tab test's failed Save; the phone ⋯'s Save. **Still
+  open, and the future work** (a multi-line command line, ODT-33): "Step 4: decisions and open questions", A 5 and C.
+- **Step 4d:** a failed "Download all" shows the banner `download-failed` above the editor ("Your files couldn't be
+  downloaded. This browser wouldn't open the storage where dofile keeps them, so the .zip couldn't be made. Try again;
+  if it fails again, reload the page." / "Try again", "Dismiss"; reworded by 4d, a draft in SPEC section 8), built in
+  step 3 in `states/banners.tsx`; `files.ts` (then `files.js`) adds it (one at a time) and removes it when a later
+  download works.
+  It sits above the editor on desktop; on a phone every view draws it (`banners.tsx`, `phone: "every"`), so it is seen
+  whichever view "Download all" was started from.
+- **Step 5 (done; merged by #18 and its fix rounds):** the other-tab dialog's "Close editor" and the banner's "Browsers that work" go to
+  the landing page, `/` and `/#browsers` (`/landing.html` until the editor moved to `/app/`); the e2e tab-lock test (`step2.spec.ts`) checks the request and
+  that the landing page's section answers; `e2e/landing.spec.ts` checks both links ("Step 4: decisions and open questions", C 6).
+- **Step 4c:**
+  - Dark plots: colors the user names (`mcolor(black)`, `lcolor(navy)`) nearly vanish on the dark card. Decided
+    (2026-11-11): accepted as it is; a graph is drawn in the run's theme whatever colors its command names. A rule that
+    drew such a graph light was built and removed the same day: it needed changes to engine code shared with the CLI and
+    the MCP server (a wrapper around the interpreter's per-command step, a new result field) for a small gain, and the
+    visitor can switch the theme. A page-only version (the page asks for light graphs for a run whose text names a
+    color) is possible later if asked for. Known gap: a kept scheme in the dark theme ("Step 4: decisions and open
+    questions", C 19).
+  - Three graphs from one loop share one label and alt text (`graph_commands` is the unexpanded command). Done in 4c: the
+    alt text adds the graph number when another kept graph has the same command (SPEC section 8, "As built (step 4c)").
+  - `browse` returns string cells whole (a strL can be thousands of characters with newlines). Done in 4c: a cell over 60
+    characters, or with a line break, is cut to one line in the grid and shows whole when pressed.
