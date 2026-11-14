@@ -43,7 +43,7 @@ Nothing else open is critical as of 2026-11-13. Unsure about the critical ones: 
   merged on 2026-11-14, below). The record of all of it, with the checks at the old tips and the past reviews:
   [phase2-history.md](phase2-history.md), "Prototype 1: the record from 'Where things stand', to 2026-11-13". Each merge
   deploys the page.
-- **Merged on 2026-11-14:** #52 "Files in folders" (`files-in-folders`; main 2b2f461 and the four commits before it): a
+- **Merged on 2026-11-14:** #52 "Files in folders" (`files-in-folders`; 11 commits on main, 98b6563 to 2b2f461): a
   folder's menu gets "New file here" and "New folder", a "+" in the Files head and the phone strip makes a file in the folder
   of the row last focused, a new file's or folder's name may be a path (`sub/x.do`; missing folders are made), and Esc in a
   draft gives the focus back to its row; a double-click on a folder leaves it current. The maintainer's decisions for it:
@@ -54,8 +54,7 @@ Nothing else open is critical as of 2026-11-13. Unsure about the critical ones: 
   the folds stay as they were; no copy hint on a phone ("Confirm: no hint"), which decides and closes step 4 B 8. A matrix
   row's click copies only (toast "Copied e(b)"); View and Hide stay and do not copy. #55 (main cbb35f3): an e2e check that
   the Results act cell keeps 8 px spare around its content.
-- **Open now:** this branch, `decisions-1113`: the document pass (this file, `docs/icebox.md`, the history). No other pull
-  request is open on the plan's work.
+- **Open now:** no pull request is open on the plan's work.
 - **Decided:** review decisions 1 to 5 and 7 to 22 (7 to 16 by #40, #45 and #46 or iceboxed; 17 to 22 in the history's "Post-merge
   review" and "After step 6: later UI work"), and the draft words of SPEC section 8. Decision 6 (zoom on the editor page)
   is left to the maintainer: it needs another iPhone sitting (`docs/icebox.md`, "Phone").
@@ -66,7 +65,7 @@ Nothing else open is critical as of 2026-11-13. Unsure about the critical ones: 
   ("Steps", and "Known work inside the steps"); (2) step 7: the verification list and the real-phone pass; (3) "After step
   6: later UI work". Nothing in that section is built before step 6.
 - **Known flaky tests**, with their sightings: `docs/test-map.md`, "Known flaky tests". The causes found for WebKit's
-  first-navigation hang and the `?snapshot=0` stall are in the history record above; the one-retry of a stalled first
+  first-navigation hang and the `?snapshot=0` stall are in the history record ([phase2-history.md](phase2-history.md)); the one-retry of a stalled first
   navigation is merged (`web/e2e/fixtures.ts`).
 - How the editor page's focus, runs, open files and log links work: [web-page-flows.md](web-page-flows.md). How the engine
   code works, and what is still open in it: [web-engine-data-flow.md](web-engine-data-flow.md) (Part 3). Step 3.5:
