@@ -28,17 +28,29 @@ Each item is listed once; the ones below are kept where the maintainer placed th
 
 Nothing else open is critical as of 2026-11-13. Unsure about the critical ones: the maintainer decides.
 
-## Where things stand (2026-11-13)
+## Where things stand (2026-11-14)
 
 - **Merged:** steps 0 to 5 (step 4 and step 5 by pull requests #17 and #18, with the formatting and linting work in #13),
-  the fix rounds after them and the pull requests merged up to #53 (among them #26 "remove the queued run: Start engine",
+  the fix rounds after them and the pull requests merged up to #55 (among them #26 "remove the queued run: Start engine",
   #27 and #48 the phone keyboard, #40 the post-merge fixes, #43 Break on one clock, #45 focus hooks, #46 "Restore the sample" as
-  an upload, #50 the draft row for New, and #53 the failed-twice banner's last sentence, "Your files are safe: you can
-  still edit and download them."). The record of all of it, with the checks at the old tips and the past reviews:
+  an upload, #50 the draft row for New, #53 the failed-twice banner's last sentence, "Your files are safe: you can
+  still edit and download them.", #52 "Files in folders", #54 the Results tab's copy and #55 its e2e check; the last three
+  merged on 2026-11-14, below). The record of all of it, with the checks at the old tips and the past reviews:
   [phase2-history.md](phase2-history.md), "Prototype 1: the record from 'Where things stand', to 2026-11-13". Each merge
   deploys the page.
-- **Open now:** pull request #52 "Files in folders" (`files-in-folders`), draft, not merged; its SPEC and page-flows edits
-  are on that branch. This branch, `decisions-1113`: the document pass (this file, `docs/icebox.md`, the history).
+- **Merged on 2026-11-14:** #52 "Files in folders" (`files-in-folders`; main 2b2f461 and the four commits before it): a
+  folder's menu gets "New file here" and "New folder", a "+" in the Files head and the phone strip makes a file in the folder
+  of the row last focused, a new file's or folder's name may be a path (`sub/x.do`; missing folders are made), and Esc in a
+  draft gives the focus back to its row; a double-click on a folder leaves it current. The maintainer's decisions for it:
+  the "+" target is row-based, no long-press (the ⋯ only, on a phone), folder drafts accept paths. Not tried on a real
+  iPhone (the keyboard coming up on the "+", the strip at 320 px; step 7's pass). #54 the Results tab's copy (main fcaa3d3,
+  a8bb7d2), decided by the maintainer: the whole row copies; every value is a Tab stop; "✓ Copied" shows in the row for 2 s
+  and a toast names it ("Copied e(r2)"); the engine's unchanged preset globals are hidden; the hover and focus tint are CSS;
+  the folds stay as they were; no copy hint on a phone ("Confirm: no hint"), which decides and closes step 4 B 8. A matrix
+  row's click copies only (toast "Copied e(b)"); View and Hide stay and do not copy. #55 (main cbb35f3): an e2e check that
+  the Results act cell keeps 8 px spare around its content.
+- **Open now:** this branch, `decisions-1113`: the document pass (this file, `docs/icebox.md`, the history). No other pull
+  request is open on the plan's work.
 - **Decided:** review decisions 1 to 5 and 7 to 22 (7 to 16 by #40, #45 and #46 or iceboxed; 17 to 22 in "Post-merge
   review" and "After step 6: later UI work"), and the draft words of SPEC section 8. Decision 6 (zoom on the editor page)
   is left to the maintainer: it needs another iPhone sitting (`docs/icebox.md`, "Phone").
@@ -129,6 +141,8 @@ Reviewed after the merge: see Post-merge review.
    **Iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
 8. On a phone the Results view's "↵ Copy" hint is hidden, the word Copy with it (a tap copies, and the toast says so).
    **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
+   **Decided (2026-11-14, #54):** no copy hint on a phone (the maintainer: "Confirm: no hint"); the whole row copies on a click
+   or tap, and the toast names what was copied.
 9. A file with both kinds of line break is saved with the more common one (`\n` on a tie); a file whose breaks are lone
    `\r` is saved with `\n` (`editor/ranover.ts` `lineBreakOf`).
    **Resolved (2026-11-13, #40): confirmed as it is** (it matches VS Code: the file's most common line break).
@@ -526,7 +540,7 @@ Decided in the step 2 review:
 - **Step 4a:** on a phone the Files view showed the pane head "FILES" right under the top bar's "Files" title. Decided
   and done (2026-11-11): the head is hidden on a phone and the file actions are in the top bar's ⋯ on the Files view
   (`App.tsx` `phoneMoreItems`, `app.css`). Also decided: a drop of files anywhere on the page uploads them.
-- **Step 4b** (built, to review): a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
+- **Step 4b** (done; merged by #17 and its fix rounds): a run stopped by Break (rc 1) has `error_line` on the command that did not start: say "stopped before line N"
   and give it no error mark. Put each "graph n" link after the echo on line `graph_lines[i]`, not by matching the text.
   From the second review of step 3: the toast's offset on a phone (`app.css` puts it above the command line and the tab
   bar, and with the keyboard open above the command line at the visible area's foot; set both against 4b's real command
@@ -566,7 +580,7 @@ Decided in the step 2 review:
   download works.
   It sits above the editor on desktop; on a phone every view draws it (`banners.tsx`, `phone: "every"`), so it is seen
   whichever view "Download all" was started from.
-- **Step 5 (done, to review):** the other-tab dialog's "Close editor" and the banner's "Browsers that work" go to
+- **Step 5 (done; merged by #18 and its fix rounds):** the other-tab dialog's "Close editor" and the banner's "Browsers that work" go to
   the landing page, `/` and `/#browsers` (`/landing.html` until the editor moved to `/app/`); the e2e tab-lock test (`step2.spec.ts`) checks the request and
   that the landing page's section answers; `e2e/landing.spec.ts` checks both links ("Step 4: decisions and open questions", C 6).
 - **Step 4c:**
