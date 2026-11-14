@@ -54,7 +54,7 @@ jobs:
           if [ "$EVENT" = pull_request ]; then
             all=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
             files=$(printf '%s\n' "$all" | grep -vE '\.md$' || true)   # a markdown file never counts
-            hit=$(printf '%s\n' "$files" | grep -E '^(web|src)/|^(pyproject\.toml|uv\.lock|\.github/workflows/web\.yml)$' || true)   # files outside the pattern are not covered by these tests
+            hit=$(printf '%s\n' "$files" | grep -E '^(web|src)/|^\.github/actions/|^(pyproject\.toml|uv\.lock|\.github/workflows/web\.yml)$' || true)   # files outside the pattern are not covered by these tests
             [ -n "$hit" ] || code=false
             [ -n "$(printf '%s\n' "$files" | grep -E "$ENGINE" || true)" ] || engine=false
           fi

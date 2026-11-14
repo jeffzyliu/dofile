@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Connect, defineConfig, type Plugin, type UserConfig } from "vite";
 import checker from "vite-plugin-checker";
@@ -193,9 +193,11 @@ const siteFiles: Plugin = {
   apply: "build",
   configResolved(config) {
     siteOut = outDirOf(config);
-    if (siteOut === editorSource)
+    // the site's build empties its folder, so a folder that holds the editor's (dist/ around dist/app/) would delete it too
+    const fromSite = relative(siteOut, editorSource);
+    if (siteOut === editorSource || (fromSite && !fromSite.startsWith("..") && !isAbsolute(fromSite)))
       throw new Error(
-        `site: ${siteOut} is the editor's folder (EDITOR_BASE ${EDITOR_BASE}); its index.html is the editor's page. Build the ` +
+        `site: ${siteOut} is or holds the editor's folder ${editorSource} (EDITOR_BASE ${EDITOR_BASE}); its index.html is the editor's page. Build the ` +
           "landing and commands pages into another folder (`vite build --mode site --outDir <folder>`), as their own site",
       );
   },

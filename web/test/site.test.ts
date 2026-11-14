@@ -214,6 +214,9 @@ test("the URLs the build is given must end with a slash: a link is joined to the
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr, /DOFILE_SITE_URL must end with "\/"/);
   assert.match(load({ DOFILE_EDITOR_URL: "https://x.workers.dev" }).stderr, /DOFILE_EDITOR_URL must end with "\/"/);
+  // without a scheme the link would be relative, and the build would take both for one origin
+  assert.match(load({ DOFILE_EDITOR_URL: "x.workers.dev/" }).stderr, /DOFILE_EDITOR_URL must be a whole http\(s\) URL/);
+  assert.match(load({ DOFILE_SITE_URL: "/" }).stderr, /DOFILE_SITE_URL must be a whole http\(s\) URL/);
   assert.equal(
     load({ DOFILE_SITE_URL: "https://x.workers.dev/", DOFILE_EDITOR_URL: "https://y.workers.dev/" }).status,
     0,
