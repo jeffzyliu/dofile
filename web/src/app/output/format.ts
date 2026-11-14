@@ -132,7 +132,7 @@ export interface ResultRow {
 export interface ResultGroup {
   id: string; // e.scalars, r.macros, m.locals ...
   title: string; // Scalars, Macros, Matrices, Locals, Globals
-  note: string; // after the title: the count, or "6, all set by the system"
+  note: string; // after the title: the count
   open: boolean; // its state until the visitor folds or unfolds it
   rows: ResultRow[];
 }
@@ -146,8 +146,8 @@ export interface ResultSection {
 /** The Results tab's sections from `results` and `macros`, empty groups left out, and no section at all when nothing is
  *  there (the empty state). Only the e() scalars start open (and the r() scalars when e() has none, so `summarize` alone
  *  shows its numbers); Locals start open, Globals folded. A matrix row's value is its size; its name is `e(b)`.
- *  OQ-7: no Functions group, and the r() section is just "r()". Globals the engine itself sets count as the system's,
- *  but a section of nothing else is no result: the empty state shows. */
+ *  OQ-7: no Functions group, and the r() section is just "r()". Globals the engine presets that still hold their preset
+ *  value (`system_globals`: S_ADO, F1 ...) are left out; one the user set or changed shows. */
 export function sections(results: Results | null, macros: Macros | null): ResultSection[] {
   const out: ResultSection[] = [];
   const eScalars = results ? Object.keys(results.e.scalars).length : 0;
@@ -179,10 +179,11 @@ export function sections(results: Results | null, macros: Macros | null): Result
   }
   if (macros) {
     const locals = Object.entries(macros.locals);
-    const globals = Object.entries(macros.globals).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     const system = new Set(macros.system_globals);
-    const own = globals.filter(([n]) => !system.has(n)).length;
-    if (out.length || locals.length || own) {
+    const globals = Object.entries(macros.globals)
+      .filter(([n]) => !system.has(n))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    if (out.length || locals.length || globals.length) {
       const groups: ResultGroup[] = [];
       if (locals.length)
         groups.push({
@@ -192,18 +193,19 @@ export function sections(results: Results | null, macros: Macros | null): Result
           open: true,
           rows: locals.map(([n, v]) => ({ key: `local ${n}`, name: `\`${n}'`, value: v })),
         });
-      if (globals.length) {
-        const sys = globals.length - own;
+      if (globals.length)
         groups.push({
           id: "m.globals",
           title: "Globals",
-          note: sys === 0 ? `${globals.length}` : `${globals.length}, ${own === 0 ? "all" : sys} set by the system`,
+          note: String(globals.length),
           open: false,
           rows: globals.map(([n, v]) => ({ key: `global ${n}`, name: `$${n}`, value: v })),
         });
-      }
       if (groups.length) out.push({ id: "m", title: "Locals and globals", changed: false, groups });
     }
   }
   return out;
 }
+
+/** The toast after a row is copied names the row as it shows it: "Copied e(r2)", "Copied $mygl". */
+export const copiedNote = (row: ResultRow) => `Copied ${row.name}`;

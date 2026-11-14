@@ -278,10 +278,9 @@ body {
 
 /* no key chips or key hints on a phone (the shortcuts still work with a keyboard): a chip (ui/Icon.tsx Key) is
    aria-hidden, its control's aria-keyshortcuts says the key; a menu's key hint (ui/Menu.tsx key-hint: "Rename F2") is
-   only hidden from sight, so the item's name keeps it; the Results row's "↵ Copy" goes (a tap copies, and the toast
-   says "Copied"). The desktop's sizes do not change: the phone shows neither the toolbar nor its chips. */
-.app[data-layout="phone"] .key,
-.app[data-layout="phone"] .rs .act .hint {
+   only hidden from sight, so the item's name keeps it; the Results row draws no "↵ Copy" (ResultsTab.tsx: a tap copies,
+   and the row says "✓ Copied"). The desktop's sizes do not change: the phone shows neither the toolbar nor its chips. */
+.app[data-layout="phone"] .key {
   display: none;
 }
 .app[data-layout="phone"] .menu .key-hint {
@@ -566,7 +565,12 @@ input.filter::placeholder {
   .grid td.picked {
     border-bottom: 1px solid Highlight;
   }
-  .rs .focusrow td:first-child {
+  .rs :is(.row:has(.val:focus-visible), .focusrow) td:first-child {
+    border-left: var(--bar) solid Highlight;
+  }
+}
+@media (forced-colors: active) and (hover: hover) {
+  .rs .row:hover td:first-child {
     border-left: var(--bar) solid Highlight;
   }
 }

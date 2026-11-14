@@ -7,6 +7,7 @@ import { test } from "node:test";
 import {
   bytes,
   CELL_MAX,
+  copiedNote,
   count,
   cutCell,
   full,
@@ -198,10 +199,11 @@ test("with no e() scalars, the r() scalars start open, so summarize alone shows 
   assert.deepEqual([out[0].title, out[0].changed, out[0].groups[0].open], ["r()", true, true]);
 });
 
-test("locals and globals: names as written in the code, globals sorted, the count says how many the system set", () => {
+test("locals and globals: names as written in the code, globals sorted, the engine's unchanged presets left out", () => {
+  // F1 still holds its preset (in system_globals); S_ADO is a preset the user changed, so the engine does not list it
   const out = sections(
     results(),
-    macros({ controls: "age educ", v: "educ" }, { zeta: "1", S_OS: "Unix", alpha: "2" }, ["S_OS"]),
+    macros({ controls: "age educ", v: "educ" }, { zeta: "1", F1: "help advice;", S_ADO: "mine", alpha: "2" }, ["F1"]),
   );
   assert.equal(out.length, 1);
   assert.equal(out[0].title, "Locals and globals");
@@ -211,11 +213,24 @@ test("locals and globals: names as written in the code, globals sorted, the coun
     locals.rows.map((r) => r.name),
     ["`controls'", "`v'"],
   );
-  assert.deepEqual([globals.title, globals.note, globals.open], ["Globals", "3, 1 set by the system", false]);
+  assert.deepEqual([globals.title, globals.note, globals.open], ["Globals", "3", false]);
   assert.deepEqual(
     globals.rows.map((r) => r.name),
-    ["$S_OS", "$alpha", "$zeta"],
+    ["$S_ADO", "$alpha", "$zeta"],
   );
-  const next = sections(results({ scalars: { N: 1 } }), macros({}, { S_ADO: "a" }, ["S_ADO"]));
-  assert.equal(next[1].groups[0].note, "1, all set by the system", "with an e() result the system globals show");
+  const next = sections(results({ scalars: { N: 1 } }), macros({ v: "1" }, { S_ADO: "a" }, ["S_ADO"]));
+  assert.deepEqual(
+    next[1].groups.map((g) => g.title),
+    ["Locals"],
+    "only unchanged presets: no Globals group, also with an e() result",
+  );
+});
+
+test("the toast after a copy names the row as it shows it", () => {
+  const [e, m] = sections(
+    results({ scalars: { r2: 0.409 }, matrices: { b: "1x3" } }),
+    macros({ controls: "age" }, { mygl: "5" }),
+  );
+  const names = [...e.groups, ...m.groups].flatMap((g) => g.rows.map(copiedNote));
+  assert.deepEqual(names, ["Copied e(r2)", "Copied e(b)", "Copied `controls'", "Copied $mygl"]);
 });
