@@ -3,6 +3,7 @@
 // numbers are the build's, and the clean-room greps (docs/phase2-history.md, "Step 5: the clean-room record").
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,17 @@ import {
   OWN_PREFIXES,
   sitePageFor,
 } from "../scripts/site-pages.ts";
-import { EDITOR_BASE, EDITOR_URL, SITE_URL } from "../scripts/urls.ts";
+import {
+  EDITOR_BASE,
+  EDITOR_OUT,
+  EDITOR_URL,
+  LOCAL_EDITOR_URL,
+  LOCAL_SITE_URL,
+  PRODUCTION_EDITOR_URL,
+  PRODUCTION_SITE_URL,
+  SITE_OUT,
+  SITE_URL,
+} from "../scripts/urls.ts";
 import { countText, filterNames } from "../src/site/filter.ts";
 import data from "../src/stata/commands.json" with { type: "json" };
 
@@ -117,12 +128,21 @@ test("where each page is served, and the headers file: isolation on the editor's
 });
 
 test("the editor's location is one setting: scripts/urls.ts, read by the config, the e2e config and the scripts", () => {
-  // the defaults follow the setting: a path with a slash at each end, the links the same origin's unless the environment
-  // gives whole URLs (so moving the editor to another path is a change of EDITOR_BASE alone)
+  // the editor is at the root of its own origin; the two addresses the pages link each other by are whole URLs ending in a slash
+  // (links are joined to them), the production ones unless the environment says otherwise
   assert.match(EDITOR_BASE, /^\/(.*\/)?$/);
-  assert.match(web("scripts/urls.ts"), /export const EDITOR_BASE = process\.env\.DOFILE_EDITOR_BASE \?\? "\/[^"]*\/";/);
-  assert.equal(EDITOR_URL, process.env.DOFILE_EDITOR_URL ?? EDITOR_BASE);
-  assert.equal(SITE_URL, process.env.DOFILE_SITE_URL ?? "/");
+  assert.match(
+    web("scripts/urls.ts"),
+    /export const EDITOR_BASE = process\.env\.DOFILE_EDITOR_BASE \?\? "\/(?:[^"]*\/)?";/,
+  );
+  assert.equal(PRODUCTION_SITE_URL, "https://dofile.dev/");
+  assert.equal(PRODUCTION_EDITOR_URL, "https://app.dofile.dev/");
+  const local = process.env.DOFILE_URLS === "local";
+  assert.equal(EDITOR_URL, process.env.DOFILE_EDITOR_URL ?? (local ? LOCAL_EDITOR_URL : PRODUCTION_EDITOR_URL));
+  assert.equal(SITE_URL, process.env.DOFILE_SITE_URL ?? (local ? LOCAL_SITE_URL : PRODUCTION_SITE_URL));
+  for (const url of [LOCAL_SITE_URL, LOCAL_EDITOR_URL, SITE_URL, EDITOR_URL])
+    assert.match(url, /^https?:\/\/.*\/$/, url);
+  assert.notEqual(LOCAL_SITE_URL, LOCAL_EDITOR_URL, "two origins: the servers need two ports");
   for (const f of [
     "vite.config.ts",
     "playwright.config.ts",
@@ -134,8 +154,8 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
   // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=` (an
   // HTML attribute), followed by anything but a letter or digit ("/app/", "/app?test", "/app.html", "/app#x"). Comments may
   // name it. Read: the sources (CSS and JSON too), the scripts, the e2e tests, the configs, the pages and the workflows.
-  // A path made by joining strings ("/" + "app") is not caught: never write one.
-  if (EDITOR_BASE === "/") return; // the editor at the root of its own origin: nothing to spell
+  // A path made by joining strings ("/" + "app") is not caught: never write one. With the editor at the root of its own origin
+  // there is no path to spell, so the check runs on "/app/", where the editor was before it had an origin of its own.
   const walk = (dir: string): string[] =>
     readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)), { withFileTypes: true }).flatMap((e) =>
       e.isDirectory()
@@ -146,27 +166,76 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     );
   const files = [
     ...["src", "scripts", "e2e", "../.github/workflows"].flatMap(walk).filter((f) => f !== "scripts/urls.ts"),
-    ...["vite.config.ts", "playwright.config.ts", "index.html", "landing.html", "commands.html", "wrangler.jsonc"],
-    ...["package.json", "biome.json", "tsconfig.json"],
+    ...["vite.config.ts", "playwright.config.ts", "index.html", "landing.html", "commands.html"],
+    ...["wrangler.jsonc", "wrangler.app.jsonc", "package.json", "biome.json", "tsconfig.json"],
   ];
   assert.ok(files.length > 50, "the walk found the sources");
   assert.ok(
     files.some((f) => f.endsWith(".css")) && files.some((f) => f.endsWith(".yml")),
     "CSS and workflows are read",
   );
-  const spelled = new RegExp(`["'\`(=]${esc(EDITOR_BASE.slice(0, -1))}(?![\\w-])`);
+  const path = EDITOR_BASE === "/" ? "/app" : EDITOR_BASE.slice(0, -1);
+  const spelled = new RegExp(`["'\`(=]${esc(path)}(?![\\w-])`);
   for (const probe of ['"/app/"', "'/app?test'", "`/app.html`", "url(/app/x.woff2)", "href=/app#x", '"/app"'])
-    assert.match(probe.replace("/app", EDITOR_BASE.slice(0, -1)), spelled, probe);
-  assert.doesNotMatch(`"${EDITOR_BASE.slice(0, -1)}s/"`, spelled, "another name that starts the same");
+    assert.match(probe.replace("/app", path), spelled, probe);
+  assert.doesNotMatch(`"${path}s/"`, spelled, "another name that starts the same");
   for (const f of files) assert.doesNotMatch(web(f), spelled, f);
-  // and no e2e test opens the editor's flags at the site's root ("/?test" is the landing page): the editor's addresses are
-  // relative to Playwright's baseURL, which ends in the base
-  for (const f of files.filter((f) => f.startsWith("e2e/")))
-    assert.doesNotMatch(
-      web(f),
-      /["'`]\/\?(test|sample|snapshot|brotli)\b/,
-      `${f}: an editor address at the site's root`,
-    );
+  // Nor the origins: the production addresses are scripts/urls.ts's, and a link to another origin is made from SITE_URL and
+  // EDITOR_URL (the Wrangler configs spell the two domains without a scheme, and a test below compares them)
+  const origin = /["'`]https?:\/\/(?:app\.)?dofile\.dev/;
+  for (const probe of ['"https://dofile.dev/"', "`https://app.dofile.dev`", "'http://dofile.dev'"])
+    assert.match(probe, origin, probe);
+  for (const f of files) assert.doesNotMatch(web(f), origin, `${f}: an address of the site's origins`);
+  // and no e2e test opens the editor's flags at the site's root when the editor is under a path ("/?test" is the landing page
+  // there): the editor's addresses are relative to Playwright's baseURL
+  if (EDITOR_BASE !== "/")
+    for (const f of files.filter((f) => f.startsWith("e2e/")))
+      assert.doesNotMatch(
+        web(f),
+        /["'`]\/\?(test|sample|snapshot|brotli)\b/,
+        `${f}: an editor address at the site's root`,
+      );
+});
+
+test("the URLs the build is given must end with a slash: a link is joined to them", () => {
+  const load = (env: Record<string, string>) => {
+    const inherited: Record<string, string | undefined> = { ...process.env, ...env };
+    for (const k of ["DOFILE_SITE_URL", "DOFILE_EDITOR_URL"]) if (!(k in env)) delete inherited[k];
+    return spawnSync(process.execPath, ["--input-type=module", "-e", 'import "./scripts/urls.ts"'], {
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+      env: inherited,
+      encoding: "utf8",
+    });
+  };
+  const bad = load({ DOFILE_SITE_URL: "https://x.workers.dev" });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /DOFILE_SITE_URL must end with "\/"/);
+  assert.match(load({ DOFILE_EDITOR_URL: "https://x.workers.dev" }).stderr, /DOFILE_EDITOR_URL must end with "\/"/);
+  assert.equal(
+    load({ DOFILE_SITE_URL: "https://x.workers.dev/", DOFILE_EDITOR_URL: "https://y.workers.dev/" }).status,
+    0,
+  );
+});
+
+test("the two Wrangler configs agree with scripts/urls.ts: the folder each Worker serves, its domain, and each other's settings", () => {
+  const config = (f: string) => JSON.parse(web(f).replace(/^\s*\/\/.*$/gm, ""));
+  const site = config("wrangler.jsonc"),
+    app = config("wrangler.app.jsonc");
+  assert.equal(site.name, "dofile");
+  assert.equal(app.name, "dofile-app");
+  assert.equal(site.assets.directory, `./${SITE_OUT}`);
+  assert.equal(app.assets.directory, `./${EDITOR_OUT}`);
+  // a custom domain is a host name: the production URL's
+  assert.deepEqual(site.routes, [{ pattern: new URL(PRODUCTION_SITE_URL).hostname, custom_domain: true }]);
+  assert.deepEqual(app.routes, [{ pattern: new URL(PRODUCTION_EDITOR_URL).hostname, custom_domain: true }]);
+  // previews are workers.dev addresses; a Worker with routes would not have one unless it says so
+  assert.equal(site.workers_dev, true);
+  assert.equal(app.workers_dev, true);
+  assert.equal(site.compatibility_date, app.compatibility_date);
+  assert.equal(site.assets.html_handling, "auto-trailing-slash");
+  assert.equal(app.assets.html_handling, site.assets.html_handling);
+  assert.equal(site.assets.not_found_handling, "none");
+  assert.equal(app.assets.not_found_handling, "none");
 });
 
 test("the filter keeps the names that contain what was typed, ignoring case and outer spaces", () => {
