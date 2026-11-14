@@ -23,6 +23,13 @@ export const within = (path: string, top: string) => path === top || path.starts
 /** `path` after `from` was renamed to `to` (a path not under `from` stays). */
 export const movedPath = (path: string, from: string, to: string) =>
   within(path, from) ? to + path.slice(from.length) : path;
+/** `dir` if the list has it as a folder, else the nearest folder above it that it has, else "" (the top): what a folder
+ *  that has gone counts as. A folder with no record of its own counts when a path lies under it (as treeRows). */
+export function folderOrAbove(dir: string, files: readonly FileInfo[]): string {
+  const isFolder = (d: string) => files.some((f) => f.path.startsWith(`${d}/`) || (f.path === d && f.dir));
+  for (let d = dir; d; d = parentOf(d)) if (isFolder(d)) return d;
+  return "";
+}
 /** The lowercased extension with its dot (".do"), or "". */
 export const extOf = (path: string) => {
   const name = baseName(path),
