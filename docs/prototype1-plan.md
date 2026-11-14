@@ -39,7 +39,8 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     contrast goes to step 6's audit; the paste, the held Enter and the retry are kept as built; the declined banner's "Start
     engine" is decided with the Start engine words (SPEC section 8). **Held Enter:** the guard was checked with a synthesized repeated keydown in Chromium,
     Firefox and WebKit, and (2026-11-13) by the maintainer on real keyboards: "good on all browsers". **Not verified:** a held Enter on a banner button that hands the focus to the editor
-    ("Try again", "Run the file again"), where the repeats may type newlines into CodeMirror (older than this change); nothing
+    ("Try again", "Run the file again"), where the repeats may type newlines into CodeMirror (older than this change; to verify in step 6's audit, decided
+    2026-11-13); nothing
     merged today was tried on a real phone. Stale after #26 and not yet edited: SPEC's toast "… not run: line 1 didn't run",
     and this plan's lines on the held run (step 4's list B item 3 and decision 4).
   - **Causes found for two CI failures (investigations, 2026-11-12; neither reproduced).**
@@ -107,8 +108,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     "Write only, don't open"; Esc discards; checked on the maintainer's iPhone). Gaps of #48 and #50: `docs/icebox.md`,
     "Phone" and "Command line, log and files".
   - Waiting on the maintainer: decisions 7 to 16 (17 to 22 are decided, 2026-11-13, above); the iPhone sitting (the phone command line, the wake
-    lock with the phone locked 30 s; the keyboard experiment is done, #27); the deployed site's address for the first-deploy checks; the
-    draft words of SPEC section 8; how they saw Home open `analysis.do` (see "After step 6: later UI work", 8).
+    lock with the phone locked 30 s; the keyboard experiment is done, #27); the deployed site's address for the first-deploy checks; how they saw Home open `analysis.do` (see "After step 6: later UI work", 8).
   - Known flaky tests, with their sightings: `docs/test-map.md`, "Known flaky tests".
 
 - **UI fix round (2026-11-12), on `ui-lightning`:** the maintainer's UI bugs after the merge of steps 4 and 5. Editor: the
@@ -198,7 +198,10 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
   starting it is lost and ends as a 9998 reset; when another page upgrades the database, the new worker mounts with a store
   error and an empty `/work`; if only the worker fails to open the store, an upload shows in the file list but `use` on it gives
   rc 601 with no banner; a closed database keeps today's restart (the maintainer's ruling, 2026-11-11). (The failed states'
-  banners, also listed there, are built by step 4d.)
+  banners, also listed there, are built by step 4d.) **Decided (2026-11-13, the maintainer: "go with recommendations"):**
+  the lost Break, the upgraded database and the worker-only store failure go to step 6's audit list; the closed database's
+  restart is done (the 2026-11-11 ruling). No timeout on the start stays iceboxed (`docs/icebox.md`, "A watchdog for the
+  engine start").
 - **4b and 4d are joined on `prototype1-step4`** (2026-11-11): 4d's four commits, then 4b's four, then the joining
   changes (the "Step 4 join" commits): `@lezer/highlight` declared, with CodeMirror's Markdown and JSON languages; the dead
   `.cmdline .placeholder` rules gone; the close-tab test's failed Save again; a dialog whose opener has left the page
@@ -580,7 +583,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | to review (built on `prototype1-step4`, pull request #17) |
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (built on `prototype1-step4`, pull request #17; the draft words in SPEC section 8, "Step 4d: draft words"; the review decisions and open questions in "Step 4: decisions and open questions" above) |
 | 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4; reviewed once, its findings fixed; the landing page moved to `/` and the editor to `/app/`; open for the maintainer: the words listed in SPEC section 8 "As built in step 5", the first deploy's checks in SPEC 8 "URLs") |
-| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review". Width decided 2026-11-13 (decision 22, accepted): the work above plus three cheap audit checks: unused code (knip), the licences of the web dependencies, and stale docs. Security headers and the `?test` gate wait until later |
+| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review". Width decided 2026-11-13 (decision 22, accepted): the work above plus three cheap audit checks: unused code (knip), the licences of the web dependencies, and stale docs. Security headers and the `?test` gate wait until later. The audit's list also has (2026-11-13): step 3.5's lost Break, upgraded database and worker-only store failure ("Open from step 3.5"), the code splitting of the main chunk (step 4 C 20), the off controls' contrast (#26), and a held Enter on a banner button that gives the focus to the editor (to verify) |
 | 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | done before the merge for steps 4 and 5 (fresh-context reviews of each part, the join and the move); a `/code-review` of the merged whole open if wanted |
 | 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started |
 
