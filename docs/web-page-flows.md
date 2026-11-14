@@ -1,7 +1,7 @@
 # Flows of the editor page
 
 **This describes the code as built on branch `prototype1-step4` (pull request #17, 2026-11-11), with what step 5
-(`prototype1-step5`, pull request #18) adds to these flows: the editor is served under `/app/`, and the sample's first-visit
+(`prototype1-step5`, pull request #18) adds to these flows: the editor was served under `/app/` (since the split it is at the root of its own origin, `app.dofile.dev`: SPEC section 8, "URLs"), and the sample's first-visit
 seed and "Restore the sample" (`sample.ts`) are events of section 3 (the restore asks through the clash dialog of section 1).** It
 is a sibling of [web-engine-data-flow.md](web-engine-data-flow.md), which covers the engine under the page. This
 document covers four parts of the editor page that no single file shows: where the focus goes, a run as the views see

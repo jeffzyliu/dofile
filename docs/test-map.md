@@ -154,10 +154,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
 - `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
-    headers file.
+    headers file (isolation on the editor's path only).
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
     `language.ts`.
-  - The editor's location is one setting (`scripts/urls.ts`); the filter; the theme button equals the editor's.
+  - The editor's location is one setting (`scripts/urls.ts`: the production and local addresses, each ending in a slash);
+    no other file spells the editor's old path (`/app/`) or the site's origins; the two Wrangler configs against
+    `urls.ts`.
+  - The filter; the theme button equals the editor's.
   - The clean-room greps: trademark line kept, no "CDN", no Stata example dataset, manual, `.sthlp`, `.ado` or
     stata.com.
 - `sample.test.ts`: the sample project's page logic (`src/app/sample.ts`) on the real store module.
@@ -231,19 +234,21 @@ Specs:
   - S 15's note under a nested `do` of a file with unsaved edits in a loop: one, though the loop runs the file twice.
   - The log follows its end through wide lines and pastes, and keeps its place once scrolled up. The Break test's loop
     is `while 1`.
-- `landing.spec.ts` (step 5): the landing page at `/` and the editor at `/app/`.
+- `landing.spec.ts` (step 5): the landing page at the site's origin and the editor at its own (the e2e setup serves
+  `dist/site` and `dist/app` on two localhost ports; every crossing is asserted by the whole address).
   - Content with no placeholder left; Open the editor and back; Close editor and Browsers that work (`/#browsers`).
-  - The download size in the text equals the build's (`/app/start-files.json`), rounded as the prompt does.
-  - The theme button (shared with the editor); Copy buttons; axe in both themes; forced colors.
-  - The site's addresses: redirects keep the query, a 404 for missing pages and `/_headers`, isolation headers on
-    `/app/` only.
-  - The pages request only their own `/assets/`; with scripts off both are complete.
+  - The download size in the text equals the build's (the editor's `start-files.json`), rounded as the prompt does.
+  - The theme button (the editor's choice, kept per origin); Copy buttons; axe in both themes; forced colors.
+  - The site's addresses and the editor's, each on its own origin: redirects keep the query, a 404 for missing pages and
+    `/_headers`, isolation headers on the editor's origin only.
+  - The pages request only their own `/assets/`, all from the site's origin and nothing from the editor's; with scripts
+    off both are complete.
 - `commands.spec.ts` (step 5): every name of `commands.json` once and in order, the shortest form in bold, the prefixes,
   `shell` and `webuse` marked off; the filter and its count; no help-page link or manual wording.
 - `sample.spec.ts` (step 5): the sample project.
   - A first visit lists the sample and opens `analysis.do`; a later visit writes nothing; never over a visitor's files.
   - Restore the sample as an upload: toast, "already here", the clash dialog (Keep mine, Replace with the sample).
-  - The sample runs in the real engine at `/app/` to a table and a graph.
+  - The sample runs in the real engine at the editor's base to a table and a graph.
   - Where the browser keeps no storage, the sample's write brings no banner and the visitor's own change does.
 - `step2.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
   URL flag.
