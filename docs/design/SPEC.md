@@ -1526,7 +1526,8 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
      `html_handling` and `not_found_handling: "none"`, `routes` a custom domain `app.dofile.dev`, `workers_dev` on) and the
      site's (`wrangler.jsonc`, Worker `dofile`: `./dist/site`, custom domain `dofile.dev`, `workers_dev` on); `package.json`'s
      `build` (both builds), `build:local`, `preview`, `e2e`, `cf:dev` and `deploy` (two deploys: the editor, then the site) and
-     `deploy.yml` (two deploy steps, the size check over both folders). A bare `wrangler deploy` deploys the site only.
+     `deploy.yml` (two deploy steps; the size check over both folders, now in `.github/actions/build-web`, the build it shares
+     with `preview.yml`). A bare `wrangler deploy` deploys the site only.
   4. The e2e setup serves the two folders on two ports (`vite preview --mode site` and `vite preview`; Playwright's `baseURL` is
      the editor's origin, and the specs spell the site's: `LOCAL_SITE_URL`); the tests that cross between the pages compare whole
      addresses, since `/` is a path of both origins. The theme test records that the choice is per origin.
