@@ -153,7 +153,8 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     assert.match(web(f), /from "\.{1,2}\/(scripts\/)?urls\.ts"/, f);
   // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=` (an
   // HTML attribute), followed by anything but a letter or digit ("/app/", "/app?test", "/app.html", "/app#x"). Comments may
-  // name it. Read: the sources (CSS and JSON too), the scripts, the e2e tests, the configs, the pages and the workflows.
+  // name it. Read: the sources (CSS and JSON too), the scripts, the e2e tests, the configs, the pages, the workflows and
+  // the local actions (.github/actions/, where deploy.yml and preview.yml build).
   // A path made by joining strings ("/" + "app") is not caught: never write one. With the editor at the root of its own origin
   // there is no path to spell, so the check runs on "/app/", where the editor was before it had an origin of its own.
   const walk = (dir: string): string[] =>
@@ -165,7 +166,9 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
           : [],
     );
   const files = [
-    ...["src", "scripts", "e2e", "../.github/workflows"].flatMap(walk).filter((f) => f !== "scripts/urls.ts"),
+    ...["src", "scripts", "e2e", "../.github/workflows", "../.github/actions"]
+      .flatMap(walk)
+      .filter((f) => f !== "scripts/urls.ts"),
     ...["vite.config.ts", "playwright.config.ts", "index.html", "landing.html", "commands.html"],
     ...["wrangler.jsonc", "wrangler.app.jsonc", "package.json", "biome.json", "tsconfig.json"],
   ];

@@ -1,0 +1,91 @@
+name: Build the web demo for Cloudflare
+description: >-
+  Builds what the two Cloudflare Workers serve: the dofile wheel, the memory snapshot at brotli quality 11 (cached on a
+  hash of its inputs), the editor into web/dist/app and the landing and commands pages into web/dist/site, then fails if
+  a file is too big for Workers static assets. Used by deploy.yml (production) and preview.yml (pull request previews), so
+  the two cannot drift apart. Needs the repository checked out first. Runs no wrangler and reads no secret.
+inputs:
+  site-url:
+    description: >-
+      The landing page's address the editor links to (DOFILE_SITE_URL, a whole URL ending in "/"). Empty: the production
+      address of web/scripts/urls.ts.
+    required: false
+    default: ""
+  editor-url:
+    description: >-
+      The editor's address the pages link to (DOFILE_EDITOR_URL, a whole URL ending in "/"). Empty: the production address
+      of web/scripts/urls.ts.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v10.3.3
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 26
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+    - shell: bash
+      working-directory: web
+      run: npm ci
+    - shell: bash
+      working-directory: web
+      env:
+        UV_PYTHON: "3.14"   # Pyodide 314's Python; `npm run wheel` builds the dofile wheel with uv
+      run: npm run wheel
+
+    # The snapshot depends on the wheel (engine source, dependencies), the pyodide version (package-lock) and the scripts
+    # that build it, not on the two addresses. The key hashes those inputs, so it is rebuilt only when one changes. A
+    # pull request's run can restore main's cache but saves its own only for that pull request (GitHub scopes caches by
+    # branch), so a preview never feeds a production deploy.
+    - id: cache
+      uses: actions/cache@v6
+      with:
+        path: web/public/snapshot
+        key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.mjs', 'web/scripts/install-engine.ts', 'web/scripts/build-id.ts', 'web/wheels/*.whl', 'web/src/engine/snapshot.ts') }}
+
+    # Safety net: a restored snapshot must be of the wheels and the Pyodide version just built, else rebuild it. The same
+    # check as the build's (scripts/build-id.ts, staleness), which would fail the build on a stale snapshot.
+    - id: fresh
+      if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      working-directory: web
+      run: |
+        if node scripts/build-id.ts; then echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+    - if: steps.fresh.outputs.ok != 'true'
+      shell: bash
+      working-directory: web
+      env:
+        UV_PYTHON: "3.14"
+      run: npm run snapshot   # quality 11, the shipped one; needs the network once: micropip fetches openpyxl from PyPI
+
+    # The editor into dist/app/ (with public/: wheels, runtime, snapshot, _headers), then the static pages into dist/site/.
+    # The addresses they link each other by are read at build time (scripts/urls.ts). An empty input leaves its variable
+    # unset rather than empty: urls.ts takes an empty value as given, and it does not end in "/".
+    - name: Build
+      shell: bash
+      working-directory: web
+      env:
+        UV_PYTHON: "3.14"
+        SITE_URL: ${{ inputs.site-url }}
+        EDITOR_URL: ${{ inputs.editor-url }}
+      run: |
+        if [ -n "$SITE_URL" ]; then export DOFILE_SITE_URL="$SITE_URL"; fi
+        if [ -n "$EDITOR_URL" ]; then export DOFILE_EDITOR_URL="$EDITOR_URL"; fi
+        npm run build
+
+    # Cloudflare Workers static assets refuse a file over 25 MiB. The brotli-11 snapshot is built only here (web.yml builds
+    # it at quality 5), so this is the one place the real file sizes show up: fail here, before wrangler does.
+    - name: Check asset sizes
+      shell: bash
+      working-directory: web
+      run: |
+        find dist/app dist/site -type f -size +26214400c | while read -r f; do
+          echo "::error::$f is $(wc -c < "$f") bytes; Cloudflare Workers static assets refuse files over 25 MiB (26214400 bytes)"
+        done
+        find dist/app dist/site -type f -size +24117248c ! -size +26214400c | while read -r f; do
+          echo "::warning::$f is $(wc -c < "$f") bytes, over 23 MiB (24117248 bytes); the limit is 25 MiB"
+        done
+        if [ -n "$(find dist/app dist/site -type f -size +26214400c)" ]; then exit 1; fi
