@@ -148,6 +148,11 @@ estimated splits) are the study's, not checked again here.
   WebAssembly memory only when the worker ends. Open: how long to wait; what is kept (the files are in storage; the data,
   macros and results are lost, as after a restart); and how the page says so (a banner, the status bar, what the Run
   button then offers). 2026-11-13.
+- **A run whose first command is `clear all` restarts the engine first** (from "Later UI work" item 9 of
+  `docs/prototype1-plan.md`, moved here 2026-11-13; nothing in that work is built before step 6). The restart frees the
+  engine's WebAssembly memory, which never shrinks otherwise (the status bar's "Engine memory" only grows until a restart).
+  First step: measure how long a restart from the cached snapshot takes; build it only if that is under about 2 s.
+  `clear all` anywhere else in a run clears as today. 2026-11-13.
 - **`set max_memory`** (approved 2026-11-13, then iceboxed the same day by the maintainer: "icebox the set max_memory task").
   It would lower the engine's heap cap for the session (`set max_memory 500m`), never above the device's default, since raising
   it is how a visitor would crash the tab. The engine has no `max_memory` setting today, so it needs a hook in `browser.py` (or a
