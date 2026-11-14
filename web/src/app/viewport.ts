@@ -10,6 +10,7 @@
 // keyboard counts as open while a text field has the focus and the page is more than KEYBOARD px shorter than the
 // tallest it has been at this width (a new width, a rotation, starts again). The same attributes are set.
 // With the keyboard closed, nothing is set and .app simply fills the window (position: fixed; inset: 0).
+// A page that is still scrolled as the keyboard closes is scrolled back then too: .app is fixed to the layout viewport, which a pan shortens.
 // Zoomed in (a pinch), the visual viewport is small because of the zoom, not a keyboard: nothing is set then either.
 //
 // Safari also pans the page up to show the focused field, before the page hears of it (iPhone measurements:
@@ -164,6 +165,9 @@ export function watchViewport({
       root.style.removeProperty("--vv-height");
       delete root.dataset.keyboard;
       guard(false);
+      // a scroll that came after the last update (reveal's scrollIntoView on a field that then lost the focus, a quick
+      // tap away) would keep the page panned, so .app, fixed to the layout viewport, stays short (docs/phone-keyboard-experiment.md)
+      if (panned()) scrollTop();
     }
   };
   // resize: the keyboard opens or closes; scroll: the browser pans the visible area (to the focused field); focus: a

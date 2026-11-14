@@ -2100,6 +2100,10 @@ function keyboardPage({
       Object.assign(vv, { height, offsetTop, scale });
       vv.dispatchEvent(new Event("resize"));
     },
+    /** the page scrolls with no event the watcher hears (a field's scrollIntoView as the keyboard goes) */
+    scrollPage() {
+      scrolled = true;
+    },
     pan(offsetTop: number, scrollY = false) {
       vv.offsetTop = offsetTop;
       scrolled = scrollY;
@@ -2158,6 +2162,20 @@ test("the phone keyboard: Safari's pan is scrolled back while the keyboard is op
   p.seen.phone = false;
   p.move(508, 120);
   assert.equal(p.seen.unpans, 3, "off the phone");
+  p.stop();
+});
+
+test("the phone keyboard: a scroll of the page that no update has seen is scrolled back when the keyboard closes, so .app is not left short", () => {
+  const p = keyboardPage();
+  p.move(508);
+  p.tick(); // the first update's own reveal
+  assert.equal(p.seen.unpans, 0);
+  p.scrollPage(); // a quick tap away: the field's scrollIntoView moved the page after the last update
+  p.move(844); // the keyboard closes
+  assert.equal(p.open(), false);
+  assert.equal(p.seen.unpans, 1, "scrolled back at the close");
+  p.move(844);
+  assert.equal(p.seen.unpans, 1, "a page that is not panned is left alone");
   p.stop();
 });
 
