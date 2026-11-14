@@ -7,261 +7,53 @@ Status column and the "Where things stand" section at the end of every session.
 To pick up after a break: read this file, then `docs/design/SPEC.md` (the build spec), then run `git status` and
 `git log --oneline -5`.
 
-## Where things stand (2026-11-12)
+## Open, critical
 
-- **Fix round 2 (2026-11-12): pull requests merged one by one, each on the maintainer's word, rebased in turn.** Merged
-  and deployed (each merge deploys): #22 (step 4's C 4, C 8 and C 12, every key with Alt, Ctrl or Cmd left to the browser in the
-  file tree, dead toast CSS, three flaky e2e tests), #23 ("Clear log" asks first; decision 1), #24 (the phone command line:
-  autocorrect off as an attribute, typed curly quotes straightened, a Run button; decisions 3 and 4), #25 (the screen stays
-  awake while the engine works; decision 2). None of the four has been tried on a real phone.
-  - **Merged later the same day:** #31 (a 60 s navigation timeout on the `webkit` and `iphone` projects, so a hung first
-    navigation fails in 60 s, not 10 minutes), #30 (landing page fixes: the logo, the theme switch's word kept on a phone with
-    an icon each, Copy buttons that turn to "Copied", the two panels scroll sideways), #32 (the browsers job is one job per
-    Playwright project, a matrix of four, each on its own runner, with a 30-minute limit; it went green only on a re-run), #20
-    (`cloudflare/wrangler-action` 3 to 4), #33 (every job also runs on a push to main, one run per commit, so a merge's tree is
-    tested), #21 (`actions/cache` 5 to 6; the maintainer merged it by hand, because the `gh` token has no `workflow` scope and
-    GitHub refused the merge), #26 (remove the queued run, below) and #34 (the `?snapshot=0` normal-boot test is skipped in
-    the two WebKit projects).
-  - **#26 "Remove the queued run" and "Start engine" is merged.** The maintainer approved the design ("i approve your
-    recommendations for 26"): with no engine nothing on the page offers to run. The toolbar's Run and the command line's
-    buttons read "Start engine"; Ctrl/Cmd+Enter does the same; the command line is off with the hint "Start the engine to run
-    code" and keeps its text; Run selection, Load, Import and the log's `help` links are off and say why in a toast. Widths,
-    in the maintainer's words: "navbar button should be wide enough, but let the mobile command line button expand. we want
-    it to be as small as it can in every situation". The state table is in `docs/web-page-flows.md` section 2 and
-    `web/src/app/start.ts`. Fresh-context reviews: the second commit's four findings were fixed; the fix commit
-    (`ae8af24`) was reviewed and accepted with no must-fix, and its one should-fix (the hint's `help x` link had no
-    held-Enter guard, so every repeat raised the refused-run toast and the next one ran `help x` when the engine was free)
-    was fixed in the last commit before the merge, which no second agent reviewed. Kept for the maintainer: the off controls
-    (Load, Import, help links at 0.45 opacity) measure 2.2 to 3.8 to 1, under 4.5 (WCAG exempts disabled controls); a
-    multi-line paste while an engine exists and is not ready is refused whole with the field untouched; a held Enter is
-    ignored in every dialog; the declined banner's button reads "Start engine"; a retry from a failed start downloads with no
-    prompt, as "Try again" does. **Decided (2026-11-13, the maintainer: "all recommendations"):** the off controls'
-    contrast goes to step 6's audit; the paste, the held Enter and the retry are kept as built; the declined banner's "Start
-    engine" is decided with the Start engine words (SPEC section 8). **Held Enter:** the guard was checked with a synthesized repeated keydown in Chromium,
-    Firefox and WebKit, and (2026-11-13) by the maintainer on real keyboards: "good on all browsers". **Not verified:** a held Enter on a banner button that hands the focus to the editor
-    ("Try again", "Run the file again"), where the repeats may type newlines into CodeMirror (older than this change; to verify in step 6's audit, decided
-    2026-11-13); nothing
-    merged today was tried on a real phone. Stale after #26 and not yet edited: SPEC's toast "… not run: line 1 didn't run",
-    and this plan's lines on the held run (step 4's list B item 3 and decision 4).
-  - **Causes found for two CI failures (investigations, 2026-11-12; neither reproduced).**
-    - *WebKit's first-navigation hang.* A fresh page's first `page.goto` to `/app/` stays on `about:blank` and waits until the
-      test times out. The trace holds the document request with no response, the screenshot is blank, and the other worker
-      keeps passing tests against the same server. Likely cause (medium-high confidence): WebKit bug 325840, a race in which a
-      late `DidStartProvisionalLoadForFrame` from the old web process cancels the new process's navigation when a
-      `Cross-Origin-Opener-Policy: same-origin` document forces a process swap. dofile serves that header on `/app/`
-      (`web/vite.config.ts`), for SharedArrayBuffer and Break. Upstream: Playwright issue #42957, closed as an upstream bug;
-      the WebKit fix (WebKit/WebKit#75569) was open, not merged, on 2026-11-10; no Playwright release has it (ours is 1.65.0).
-      Rate: about 1 navigation in 3,000, about 7% of full runs, from run counts and not measured. Ruled out: the preview
-      server, a service worker, a crash, a dofile change. Not reproduced on macOS in 2,000 navigations, which neither
-      confirms nor rules out the cause. #31 caps the cost at 60 s; the test still fails.
-      **A one-retry of a stalled first navigation (a `goto` that timed out while the page is on `about:blank` is called once
-      more, in `web/e2e/fixtures.ts`; test code only) is being built in its own pull request, not merged.** Unproven until a
-      CI log shows a retried navigation followed by a pass.
-    - *`?snapshot=0` stall.* The worker is stuck, not slow: in both failures the normal boot stopped inside Pyodide's
-      `loadPackage` ("Loading packages", step 4 of 5) after every download had finished, and stayed 312 s with the page alive;
-      passing runs take 17 to 34 s. Every request got a 200. Likely mechanism (moderate confidence): one package's
-      asynchronous `WebAssembly.instantiate` in the Worker never settles, which blocks the loader's one lock (about 136
-      instantiations per boot); WebKit bug 208368 records a flaky case like it on Linux. Rate about 4% of WebKit runs of the
-      test (2 in about 49), none in Chromium or Firefox. #34 skips the test in WebKit. A product gap stays: nothing times out
-      the `starting-worker` state (`docs/icebox.md`).
-  - **#27 is merged** (`claude/phone-keyboard-experiment`, rebased on `main`). Three rounds on an iPhone (iOS 27.0.1;
-    `docs/phone-keyboard-experiment.md`) settled the keyboard: the phone's command line takes a tap's focus itself with
-    `preventScroll`, Safari's pan is scrolled straight back with `.app` kept at the top, and the editor's caret is scrolled
-    above the keyboard through CodeMirror. The `?kb=` and `?slide` flags are gone; `?kblog` stays. The closed #28 (a draft
-    that joined everything) and #29 (an earlier version of this section) are not for merging.
-- **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
-  decisions: 1 to 5 are accepted (all built in #23 to #25; decision 5, the trackpad back-swipe, is to be checked once by
-  hand: step 7, decided 2026-11-13), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer (the experiment ran with zoom off; turning it back on needs another iPhone check, `docs/icebox.md`, "Phone"), and 7 to 16 have no answer yet. **17 to 22 were
-  answered on 2026-11-13:** 17 (the order of the later UI work, "queued run first") dropped, since the queued run is gone;
-  18 (run only `.do` and `.ado` files), 20 (`cls`), 21 (move, rename, drag) and 22 (step 6's width: its plan plus three cheap
-  audit checks) accepted; 19 (syntax checking) changed by the maintainer: a syntax error refuses the run, an unknown command
-  only warns. The specs of 18 to 21 are in "After step 6: later UI work", and nothing in it is built before step 6. Nothing
-  else they would release is started: the document pass.
-  - Found by reading the code, **fixed in #40 (2026-11-13)**: a Save pressed right after a rename's Enter, before the
-    rename's write ends, left the old text under the new name and the new text under the old name, with the tab shown as
-    saved (`files/actions.ts` `renameEntry`, `editor/Editor.tsx` `save`); a Save after a delete, the same race, brought the
-    deleted file back. A Save now waits for the change the tabs follow (`files/actions.ts` `fileTurn`) and writes under
-    the new name, or nothing for a deleted file. The file tree's focus retry after a rename (`files/FilesPane.tsx`
-    `focusRow`, a 50 ms poll) could take the focus from a visitor who clicked into the editor within a second; the row
-    now takes the focus from its own render (`focusWanted`), only while the focus is on the page or in the tree, and the
-    row-focus logic is the hook `useRovingFocus`.
-  - **Post-merge fixes, #40 (`postmerge-fixes`, 2026-11-13):** the two bugs above; step 4's B 1, B 5 and C 1, C 3, C 5
-    (marked in the lists below); step 4's C 7 and C 11 and step 5's C 6 decided (kept, or moved to `docs/icebox.md`);
-    and three phone UI changes: the strip under the top bar has one height on every view, with a 44 px tap target for its
-    ⋯; Save moved from the phone's ⋯ menu into the file dropdown, which has Save above a scrolling list of the open files
-    and Close and Show all files below it (the list is capped so all of it fits a landscape phone, and the open file is
-    scrolled into view when the menu opens); and the menu (`ui/Menu.tsx`) owns its active item (a position among all its
-    items), which an item takes the focus from its own render, with no `querySelectorAll`. Not tried on a real phone.
-    No fresh-context review of the second fix round: the orchestrator checked it.
-  - Reported by the maintainer (2026-11-12), not investigated: dofile seems to crash Firefox on the desktop, perhaps
-    through its memory use. The `?snapshot=0` e2e test's failures in Firefox may share the cause (the investigation above saw
-    its failures in WebKit only). To look at: the report in `about:crashes` (an out-of-memory crash is marked), and whether
-    the tab or the whole browser goes.
-    **Iceboxed (2026-11-13)** (`docs/icebox.md`, "Engine memory"): not reproduced locally; the maintainer: "icebox the firefox
-    crash, i'll revisit it if it happens again".
-  - **Merged 2026-11-13:** #43 (Break: the pill, status bar and banners on one clock; "Stopping…" from the press until
-    the engine confirms); #45 (focus: one hooks file, each focus request taken by the render that draws its target);
-    #48 (phone: a touchmove guard stops iOS panning the page while the keyboard is open; checked on the maintainer's iPhone,
-    including a selection handle within one line and the caret magnifier); #50 (New .do file and New folder draw
-    their name field in the tap, so the iPhone keyboard comes up: Enter writes, opens and focuses the row; leaving the
-    field writes only and opens nothing, the focus and the phone's view staying where the visitor tapped, the maintainer's
-    "Write only, don't open"; Esc discards; checked on the maintainer's iPhone). Gaps of #48 and #50: `docs/icebox.md`,
-    "Phone" and "Command line, log and files".
-  - Waiting on the maintainer: decisions 7 to 16 (17 to 22 are decided, 2026-11-13, above); the iPhone sitting (the phone command line, the wake
-    lock with the phone locked 30 s; the keyboard experiment is done, #27); how they saw Home open `analysis.do` (see "After step 6: later UI work", 8).
-  - Known flaky tests, with their sightings: `docs/test-map.md`, "Known flaky tests".
+Open items that are a data-loss or wrong-result bug, a security or clean-room issue, or that block step 6, a release or a
+deploy. Everything open that is not critical is in `docs/icebox.md` or in the list of the step or section that owns it.
+Each item is listed once; the ones below are kept where the maintainer placed them, and this list points to them.
 
-- **UI fix round (2026-11-12), on `ui-lightning`:** the maintainer's UI bugs after the merge of steps 4 and 5. Editor: the
-  focus ring over the gutters, a fainter lines-to-run mark with an accent bar, no sideways overscroll, tab labels that keep
-  their bold width, a tooltip with the full path on file rows. A "Wrap lines" preference (both ⋯ menus; the editor and the
-  log). Menus: "Clear log" left the desktop ⋯, "Commands" and "About dofile" open in a new tab, and on a phone the file
-  and log actions are the strip's "Files ⋯" and "Log ⋯". Log pane: a "Clear" button in its head, a "Log actions" ⋯ when the
-  head is narrow, Split with an icon, "Clear log" keeps the head, the log follows its end unless the visitor scrolls up.
-  Toasts: an error kind, a time by length, wrapping. The static pages: a sticky top bar, "Home", the GitHub link, shorter
-  sample comments. It does not finish the post-merge review below; the checks are recorded by its pull request.
-- **After steps 4 and 5 merge:** the open items are reviewed then, not before: "Post-merge review", below.
-- **Step 4 (4a, 4b, 4c, 4d and the joining changes) was built on `prototype1-step4`, in pull request #17; merged
-  (with step 5, pull request #18).** Checked at its tip `486f6bf`, CI green: Biome, `tsc` and ruff clean; `npm test` (295 pass); the e2e suite
-  (273 passed, 31 skipped); `uv run poe test` (1346 passed, 13 skipped, 3 xfailed); nothing under `src/dofile/` or `tests/`
-  differs from `main`. Before the merge the maintainer goes through "Step 4: decisions and open questions" (below) and
-  the draft words in `docs/design/SPEC.md` section 8. Step 5 is on its own branch, `prototype1-step5`, in draft pull
-  request #18 over step 4. The step 4 bullets below are the record of that work.
-- **Step 5 is built on `prototype1-step5`, a branch stacked on `prototype1-step4`** (its own pull request, after step 4's;
-  rebased onto `prototype1-step4` at 486f6bf, with the step 4 e2e cases moved to the editor's address `/app/`, and again at
-  d94bb5e, step 4's docs):
-  the landing page (`web/landing.html`), the commands page (`web/commands.html`), the sample project (`web/sample/`, loaded on a
-  first visit, "Restore the sample" in the file menu), and the clean-room check of all text (the record at the end of this
-  file). What was built, the URLs, the words the sources do not give and the decisions left open are in SPEC section 8, "As
-  built in step 5". The maintainer's list (what was decided, what waits for confirmation, what is open) is "Step 5: decisions and open
-  questions", below; the first real deploy's checks are in SPEC 8, "URLs".
+- **The first real deploy's checks** block the first deploy: SPEC section 8, "To look at on the first real deploy" (the
+  edge's redirects, 404s and headers on 304s; a tab of the old build left open across the deploy shows a failed download,
+  not "updated"). Placed in step 6 (step 5 C 1; "Known work inside the steps", "Step 6 (deployment)"): the domain is bought
+  when the audit begins, and the one-origin site is checked before the two origins are split.
+- **The two origins are split before the site is announced** (`dofile.dev` and `app.dofile.dev`): the visitors' files live
+  per origin, so a later split loses them ("Known work inside the steps", "Step 6 (deployment)").
+- **Step 3.5's three engine gaps**, in step 6's audit list: a Break pressed between sending a run and the worker starting it
+  is lost and ends as a 9998 reset (the data in memory goes); when another page upgrades the database, the new worker mounts
+  with a store error and an empty `/work`; if only the worker fails to open the store, an upload shows in the file list but
+  `use` on it gives rc 601 with no banner (`web-engine-data-flow.md`, Part 3).
+- **Step 6's audit** as a whole (the full-web-code audit, its three cheap checks, the design checks on the real pages):
+  the step 6 row of "Steps" and "Known work inside the steps".
 
-- **Steps 3 and 3.5 are merged into `main`**, with the formatting and linting work, by pull request #13 (the merge commit
-  `aff60a5`, 2026-11-11). `main` is pushed and protected (root `CLAUDE.md`, Rules): every change is a pull request, and a
-  merge deploys the page. Checked before the merge, locally and in CI (Ubuntu and macOS, Python 3.12
-  to 3.14): the lint gates; `npm test` (212 pass); e2e (74 passed, 22 skipped); `uv run poe ci` (1443 passed, 13 skipped, 3
-  xfailed); the design checks. The branch `prototype1-step3` and its worktree are no longer needed. The bullets below
-  about steps 3 and 3.5 are the record of that work as it stood on the branch.
-- **Step 4 is built on one branch, `prototype1-step4`, with one pull request at the end** (a merge to `main` deploys the
-  page, so the parts are not merged one by one). **4a and 4c are built and joined on it** (4c, then 4a rebased on it),
-  with these decisions of 2026-11-11: on a phone the Files head is hidden and the file actions are in the top bar's ⋯;
-  the unfolded file list gives the focus to the tree's row; a drop of files anywhere on the page uploads them; a graph
-  is drawn in the run's theme whatever colors its command names (a rule that drew such a graph light was built and
-  removed the same day: the 4c note below); a toast may also report an error that needs no action (SPEC 3.10). Two
-  reviews' findings are fixed (one upload at a time, a clash never over another dialog and an unsaved file's clash not
-  asked after Esc, paths in commands through `web/src/stata/quote.ts`, the focus after a tab closes, a .dta renamed to
-  .png closes its tab, a drag that began in the page is no upload). Checked on the branch:
-  `uv run poe lint`, `npm run check`, `npm run lint:strict`; `uv run poe test` (1346 passed, 13 skipped, 3 xfailed);
-  `npm test` (252 pass, none skipped); the e2e suite (138 passed, 26 skipped). 4b and 4d are now joined
-  too (the bullet "4b and 4d are joined" below). The draft words of 4a and 4c wait for the maintainer's approval (SPEC
-  section 8, "As built in step 4a" and "Step 4c: draft words").
-- **Steps 0, 1 and 2 are merged into `main`**. Checked on `main` after step 2 merged: `uv run poe test` (1346
-  passed), `npm run check`, `npm test` (98 tests), `npm run e2e` (56 passed).
-- **Step 3.5 is done: the engine code made clear and auditable** (TypeScript everywhere, one state machine, one build
-  identity, the journal as the only channel; steps A to E; merged by pull request #13).
-  Its plan and status: [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md). How the engine code works as built, and what
-  is still open: [web-engine-data-flow.md](web-engine-data-flow.md).
-- **How the editor page's focus, runs, open files and log links work, as built on `prototype1-step4`:** [web-page-flows.md](web-page-flows.md).
-- **Formatting and linting were added on the branch after step 3.5 and before the merge:** Biome for `web/`, ruff for dofile's own
-  Python, width 120. Two commits are layout only (`.git-blame-ignore-revs` lists them); the lint fixes change no behavior; the gates
-  are `npm run check` (Biome, then `tsc`), `npm run lint:strict`, `uv run poe lint` and a CI job for each. Decisions, rules turned
-  off and commands: [formatting-proposal.md](formatting-proposal.md). Checked on the final state (2026-11-11): `npm run lint:strict`,
-  `npm run check`, `uv run poe lint`; `npm test` (212 tests, all pass, none skipped); `SNAPSHOT_QUALITY=5 npm run e2e` (74
-  passed, 22 skipped, as before); `uv run poe ci` (1443 passed, 13 skipped, 3 xfailed). The design checks (`npm run axe`,
-  `contrast`, `tabwalk`, `fonts`) pass too: 0 violations in 36 runs, 0 contrast failures, 0 hidden focus stops, 0 font problems.
-- **Step 3 (the app shell) is built, reviewed twice, edited from the maintainer's notes, and merged by pull request #13.**
-  It was built on the branch `prototype1-step3` (made from `main` at `c014141`). What the step 4
-  agents write against: `docs/design/SPEC.md` section 8 ("As built in step 3") and the header of `web/src/app/App.tsx`.
-- Checked on the branch after step 3.5 E: `npm run check`; `npm test` (212 tests, all pass, none skipped); step E changes no page code, so the e2e and design checks were not rerun for it, and the counts below are the last recorded: `SNAPSHOT_QUALITY=5 npm run e2e`
-  (74 passed, 22 skipped: the 16 fixme cases of `e2e/poc.spec.ts`, and the two iPhone-only checks, the page scroll and the toast's place, in the three desktop profiles); `npm run axe`, `contrast`, `tabwalk`, `fonts`. Nothing under the root `src/` or `tests/` changed, so
-  `uv run poe test` was not run again.
-- The last edits: the other-tab dialog has "Close editor" (focused; it goes to the landing page, a dead link until step 5)
-  and "Use dofile in this tab"; `App.tsx` holds the whole layout again, each phone piece next to its desktop one
-  (`Phone.tsx` and `Toolbar.tsx` are gone); the viewport meta no longer sets `interactive-widget`, so Android keeps its
-  default (only the visual viewport shrinks for the keyboard, as on iOS) and `app/viewport.ts` (then `.js`) serves both, with a
-  fallback for a browser that shrinks the layout viewport; the phone toast goes above the keyboard; a failed "Download
-  all" shows the banner `download-failed` with "Try again"; a failed start's `message` is plain words for the visitor
-  and its `detail` the developer's cause. Then (round 5): that banner shows on every phone view; the phone's Files view
-  is no longer blank (`data-files` folded it away); shorter state labels on Run and Break ("Starting…", "Stopped",
-  "Break (reset)"; the phone's "Run 6–7"), so the buttons are narrower; one height for the toolbar's buttons and one for a pane
-  head's controls; the phone ⋯'s "Theme: ◐ System" cycles the theme and keeps the menu open. Round 6: the
-  `dofile.downloaded` flag is gone; at load the page asks unless `client.cached()` finds this build's start files all in
-  the Cache, and a `failed-twice` (not memory or no-wasm) deletes them (`client.forgetDownload()`).
-- **Next, in this order:**
-  1. The maintainer's pass on pull request #17 (step 4): "Step 4: decisions and open questions" below, and the draft
-     words in SPEC section 8; then its merge.
-  2. Step 5 (pull request #18, over step 4), then step 6 for each merged part (its full-code audit replaces 6r).
-- **To try on a real iPhone** (none of this can be tested here; the e2e iPhone profile is an emulation with no real
-  keyboard, toolbars or touch scrolling): the page does not scroll or bounce; with the keyboard open the command line sits
-  right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard
-  while it is open. An Android phone (Chrome, Firefox) should behave the same now. **Decided 2026-11-13: this list, and Android, are in step 7's real-phone pass** ("Known work inside the steps", "Step 7").
-- **Open from step 3.5** (listed in `web-engine-data-flow.md`, Part 3): a Break pressed between sending a run and the worker
-  starting it is lost and ends as a 9998 reset; when another page upgrades the database, the new worker mounts with a store
-  error and an empty `/work`; if only the worker fails to open the store, an upload shows in the file list but `use` on it gives
-  rc 601 with no banner; a closed database keeps today's restart (the maintainer's ruling, 2026-11-11). (The failed states'
-  banners, also listed there, are built by step 4d.) **Decided (2026-11-13, the maintainer: "go with recommendations"):**
-  the lost Break, the upgraded database and the worker-only store failure go to step 6's audit list; the closed database's
-  restart is done (the 2026-11-11 ruling). No timeout on the start stays iceboxed (`docs/icebox.md`, "A watchdog for the
-  engine start").
-- **4b and 4d are joined on `prototype1-step4`** (2026-11-11): 4d's four commits, then 4b's four, then the joining
-  changes (the "Step 4 join" commits): `@lezer/highlight` declared, with CodeMirror's Markdown and JSON languages; the dead
-  `.cmdline .placeholder` rules gone; the close-tab test's failed Save again; a dialog whose opener has left the page
-  gives the focus to the editor or More actions; the phone ⋯'s Save off on a .dta tab; OQ-10's notes shown in the log
-  where the engine's own words do not already say them (the tempfile note dropped); "Run the file again" tested with the
-  real editor; one focus move with a .dta tab active (the tab wins). Then, on the maintainer's decisions: a run that
-  rewrites an open file reloads a clean tab and keeps an edited one unsaved with the banner `run-changed`; a paste of one
-  line with its line break is an ordinary paste; a queued run's `done` settles (the machine's effect `drop-run`), so the
-  command line reads no state names. Made at the join, for the maintainer to confirm (list B below): the error mark
-  belongs to the file's last run (`editor/errormark.ts`). Decisions
-  and words: SPEC section 8, "As built in step 4b" and "As built (4d, to review)". Checked on the branch: `npm run check`, `npm run lint:strict`,
-  `uv run poe lint`; `npm test` (282 pass, none skipped); `uv run poe test` (1346 passed, 13 skipped, 3 xfailed); the
-  e2e suite (241 passed, 31 skipped); nothing under `src/dofile/` or `tests/` differs from `main`. The design checks
-  (`axe`, `tabwalk`, `contrast`, `fonts`) were not run: they check the mockups in `docs/design/`, which did not change.
-- **A second review of 4b's fixes, fixed on the joined branch** (2026-11-11): the echo walk (`log/align.ts`) no longer
-  puts a graph's link at another line's echo after a `do` run from a loop or a program, or from a do-file that runs one
-  (where it cannot know, the link goes to the run's end); `n` is `noisily`; a `quietly { }` or `capture { }` body and a
-  `/* */` comment's inside are never taken as echoes; a local's braces open no block; the walk is linear (a log of 16,000
-  lines with 10,000 unannounced nested echoes: about 400 ms before, 5 ms after) and the log keeps its answer per run.
-  Pasted lines also stop before a `/*` comment that goes on, a lone `program define` and a lone `mata`. The notes at a
-  run's end wrap in the Log pane, so "Go to line" stays in view. A file closed with its error mark and no unsaved edits
-  has it again when opened with the same text. Known, left: `#delimit ;` with two commands on one line (list C below).
-- **A review of the join's commits, fixed** (2026-11-11): pasted lines stop when another tab takes the engine during a
-  line ("… not run: another tab took over the engine during line 1"), and no leftover line is sent to the engine this
-  tab gets back; a run's promise settles even when the after-run work fails; a run that rewrites an open file goes
-  through the editor's `ranOver`: the same text changes nothing, a clean tab is changed in one transaction (caret,
-  selection and undo kept), and a version that is not text keeps the tab's text, unsaved, with the `run-changed` banner
-  in other words and no reload (chosen over closing a clean tab: one path, and no edits are lost); the `run-changed` and
-  `save-failed` banners go with a closed tab and follow a rename, `reload` does nothing for a file no longer open, and
-  `run-changed` shows on every phone view; OQ-10's note comes from the error the run ended with; a dialog gives the focus
-  back once, after its answer places it (the opener lets go of it before `showModal()`, so the browser gives nothing
-  back on `close()`). A file the run deleted keeps its tab (not handled): it leaves the file list, the tab keeps its dot
-  as it was, and Save writes it again. Checked on the branch after both: `npm run check`, `npm run lint:strict`, `uv run
-  poe lint`; `npm test` (292 pass, none skipped); the e2e suite (249 passed, 31 skipped); `uv run poe test` not run
-  (nothing under `src/dofile/` or `tests/` changed).
-- **A second review of the join, fixed** (2026-11-11): a dialog that follows another before that one has given the
-  focus back (the next clash after "Keep mine", other-tab over a dialog) gives it back to the first one's opener, not
-  to `<body>`, and `<body>` is never an opener; a clean tab of a file with `\r\n` breaks follows a run as any other (the
-  texts are compared with breaks as `\n`, `editor/ranover.ts`; Save keeps the file's own line break, the maintainer's
-  decision, list A below: `\r\n` or `\n`, noted when the file is read, the more common one in a mixed file, `\n` for a
-  new or empty file); a run that writes
-  the editor's own text over a version that was not text takes the `run-changed` banner away; the close-tab dialog
-  stays open while its Save writes, so the focus moves once.
-- **A review of Save's form, its keys and the phone's key hints, fixed** (2026-11-11): Save keeps a file's UTF-8 byte
-  order mark too (noted with its line break, `editor/ranover.ts` `formOf`; the editor never holds it); Ctrl/Cmd+S takes
-  S on any keyboard layout (`editor/keys.ts`: on a Cyrillic layout CodeMirror's binding had caught it, the window
-  listener alone did not, and the browser's Save page opened) and saves once while held; a menu item says its hint is a
-  key (`hintIsKey`) instead of a text pattern; the nested-do note on a phone says "Save it (⋯ › Save)"; the Break test's
-  loop has no end, since a fixed one ran out before Break once. The engine reads a do-file's BOM as part of its first
-  command (ODT-34: a nested `do` of such a file stops with r(198); `import delimited` skips it), so on the maintainer's
-  decision Save drops the BOM of a `.do` or `.ado` file and keeps it for any other (`editor/ranover.ts` `dropsBom`, by
-  the name it is saved under). Ctrl/Cmd+S with a dialog open, and the iPhone check of the focus that a dialog gives
-  back in a timer: list C below. The four new or extended e2e
-  tests failed on the code before these fixes (16 of 16 cases). Checked on the branch: `npm run check`, `npm run
-  lint:strict`, `uv run poe lint`; `npm test` (293 pass, none skipped); the e2e suite (257 passed, 31 skipped); `uv run
-  poe test` not run (nothing under `src/dofile/` or `tests/` changed).
-- **Then** (2026-11-11): on the maintainer's decisions (list A below), no key chip or key hint in sight on the phone
-  layout, and "Not affiliated with StataCorp" in the status bar from 1200 px; also Ctrl/Cmd+S and Ctrl/Cmd+Enter take
-  Ctrl or Cmd on every platform, and `.gitattributes` marks lockfiles, wheels, the vendored engine and the startup-times
-  files as generated. The checks at the tip are in the first bullet.
+Nothing else open is critical as of 2026-11-13. Unsure about the critical ones: the maintainer decides.
+
+## Where things stand (2026-11-13)
+
+- **Merged:** steps 0 to 5 (step 4 and step 5 by pull requests #17 and #18, with the formatting and linting work in #13),
+  the fix rounds after them and the pull requests merged up to #53 (among them #26 "remove the queued run: Start engine",
+  #27 and #48 the phone keyboard, #40 the post-merge fixes, #43 Break on one clock, #45 focus hooks, #46 "Restore the sample" as
+  an upload, #50 the draft row for New, and #53 the failed-twice banner's last sentence, "Your files are safe: you can
+  still edit and download them."). The record of all of it, with the checks at the old tips and the past reviews:
+  [phase2-history.md](phase2-history.md), "Prototype 1: the record from 'Where things stand', to 2026-11-13". Each merge
+  deploys the page.
+- **Open now:** pull request #52 "Files in folders" (`files-in-folders`), draft, not merged; its SPEC and page-flows edits
+  are on that branch. This branch, `decisions-1113`: the document pass (this file, `docs/icebox.md`, the history).
+- **Decided:** review decisions 1 to 5 and 7 to 22 (7 to 16 by #40, #45 and #46 or iceboxed; 17 to 22 in "Post-merge
+  review" and "After step 6: later UI work"), and the draft words of SPEC section 8. Decision 6 (zoom on the editor page)
+  is left to the maintainer: it needs another iPhone sitting (`docs/icebox.md`, "Phone").
+- **Waiting on the maintainer:** the iPhone sitting (the phone command line, the wake lock with the phone locked 30 s;
+  step 7's real-phone pass), and how they saw Home open `analysis.do` ("After step 6: later UI work", 8). None of #22 to #25
+  and #40 has been tried on a real phone; #48 and #50 were.
+- **Next, in this order:** (1) step 6: the full-web-code audit, the design checks on the real pages, the first deploy
+  ("Steps", and "Known work inside the steps"); (2) step 7: the verification list and the real-phone pass; (3) "After step
+  6: later UI work". Nothing in that section is built before step 6.
+- **Known flaky tests**, with their sightings: `docs/test-map.md`, "Known flaky tests". The causes found for WebKit's
+  first-navigation hang and the `?snapshot=0` stall are in the history record above; the one-retry of a stalled first
+  navigation is merged (`web/e2e/fixtures.ts`).
+- How the editor page's focus, runs, open files and log links work: [web-page-flows.md](web-page-flows.md). How the engine
+  code works, and what is still open in it: [web-engine-data-flow.md](web-engine-data-flow.md) (Part 3). Step 3.5:
+  [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md).
 
 ## Step 4: decisions and open questions
 
