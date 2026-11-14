@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # "/" covers .github/workflows/; the local composite actions (.github/actions/build-web) pin actions of their own
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: weekly
