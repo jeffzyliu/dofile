@@ -7,7 +7,7 @@ tables and race scenarios, is [prototype1-step3.5-c-design.md](archive/prototype
 parts are written against is `docs/design/SPEC.md`, sections 5 to 8.
 
 After step 3.5 the code was reformatted (Biome for `web/`, ruff for the Python) and its lint findings fixed, with no change
-in behavior: [formatting-proposal.md](formatting-proposal.md). Every name in this document was checked against the code
+in behavior: [formatting-proposal.md](archive/formatting-proposal.md). Every name in this document was checked against the code
 after that (2026-11-11); none changed. The document names functions and files, not line numbers, so it does not depend
 on the layout.
 

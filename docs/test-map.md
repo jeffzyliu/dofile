@@ -238,7 +238,7 @@ profiles; the `?snapshot=0` normal boot in the two WebKit profiles, where its pa
 - It runs where the other suites do not: through dofile's `Engine` with the sandbox on, and in Pyodide, where
   `check-snapshot` compares the browser's output with CPython's.
 - A strict xfail turns a fixed upstream gap into a failing test, so the xfail gets removed.
-- The probes found a real bug (`xtlogit, re` crashed; see `docs/engine-evaluation.md`).
+- The probes found a real bug (`xtlogit, re` crashed; see `docs/archive/engine-evaluation.md`).
 - It is cheap: a few dozen cases.
 
 **Limits**
@@ -305,4 +305,4 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
 See `CLAUDE.md` (Commands) for the full list. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
 `uv run poe slow` (Stata 14 logs), `uv run poe opendta` (vendored suite), `cd web && npm test` and `npm run check` (Biome,
 then `tsc`), `npm run e2e` (Playwright). The format and lint gates are `uv run poe lint` and
-`cd web && npm run lint:strict`; `docs/formatting-proposal.md` has the rest.
+`cd web && npm run lint:strict`; `docs/archive/formatting-proposal.md` has the rest.

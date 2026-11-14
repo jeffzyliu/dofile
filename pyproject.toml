@@ -72,7 +72,7 @@ addopts = [
   "--deselect=tests_opendta/tests/test_i18n.py::test_graph_editor_edits",
 ]
 
-# Formatter and linter for dofile's own Python (docs/formatting-proposal.md). The vendored engine and OpenDTA's tests are
+# Formatter and linter for dofile's own Python (docs/archive/formatting-proposal.md). The vendored engine and OpenDTA's tests are
 # never formatted: the vendor script's patches apply to upstream's exact text. The lint rules are ruff's defaults.
 [tool.ruff]
 line-length = 120

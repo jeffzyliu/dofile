@@ -722,7 +722,7 @@ not closed), says in English and Portuguese: "add the closing }. In the Command 
   stopped with a toast that says to run it from the editor). "add the closing }." is still true everywhere.
 - Not a Stata behavior question: the words are OpenDTA's own.
 - Left as is on the maintainer's word (2026-11-11): no patch. To fix upstream, or together with a multi-line command line
-  in the web demo (`docs/prototype1-plan.md`, future work), when the sentence would be true there.
+  in the web demo (`docs/phase2-plan.md`, "Later UI work"), when the sentence would be true there.
 
 ### ODT-34: a do-file that starts with a UTF-8 BOM fails on its first line
 `commands/program.py` `_run_file` reads the do-file with `path.read_text(encoding="utf-8")` (latin-1 when that fails),

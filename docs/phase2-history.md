@@ -185,7 +185,7 @@ dropped (git and the pull requests hold them).
   both; the phone toast goes above the keyboard; a failed start has plain `message` and a developer's `detail`; whether to ask
   at load comes from the Cache (`client.cached()`), and a `failed-twice` (not memory or no-wasm) deletes the start files.
 - **Step 3.5 and the formatting work** (Biome for `web/`, ruff for dofile's Python, width 120;
-  [formatting-proposal.md](formatting-proposal.md)) were merged with step 3 by #13 (`aff60a5`, 2026-11-11). The design checks
+  [formatting-proposal.md](archive/formatting-proposal.md)) were merged with step 3 by #13 (`aff60a5`, 2026-11-11). The design checks
   passed then (0 violations in 36 axe runs, 0 contrast failures, 0 hidden focus stops, 0 font problems).
 - **Open from step 3.5** (`web-engine-data-flow.md`, Part 3): the lost Break, the upgraded database and the worker-only store
   failure went to the audit (2026-11-13, "go with recommendations"); a closed database keeps today's restart (the maintainer,

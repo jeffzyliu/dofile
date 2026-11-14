@@ -38,7 +38,7 @@ pipe it through `tail` or `head`: they print nothing until the command ends, so 
 empty one. pytest prints dots as tests finish and a summary line at the end; wait for the completion notice, then
 read the last lines of the log. A single test or file is quick enough to run in the foreground.
 
-Format and lint (decisions and reasons: `docs/formatting-proposal.md`): ruff 0.17.4 for dofile's own Python (`[tool.ruff]`
+Format and lint (decisions and reasons: `docs/archive/formatting-proposal.md`): ruff 0.17.4 for dofile's own Python (`[tool.ruff]`
 in `pyproject.toml`: width 120, ruff's default rules), Biome for `web/` (`web/CLAUDE.md`). Both are pinned exactly and
 checked in CI (`ci ok`, `web ok`), where a warning fails as an error does. Run `uv run poe format` at the end of a task
 or before a commit, not after every edit (a reformat between a read and an edit makes the edit's text stop matching).
@@ -122,13 +122,12 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   job is a matrix of four Playwright projects (chromium, firefox, webkit, iphone), each on its own runner with a 30-minute
   limit. Every job also runs on a push to main, one run per commit, so a merge's tree is tested. `deploy.yml` does not wait for
   those runs.
-- Where to look (`docs/`): `phase1-plan.md` (done), `phase2-plan.md` (web demo; `phase2-history.md`, `browser-engine.md` and
-  `lazy-matplotlib.md` hold its history and gaps), `phase3-plan.md` (hosted multi-user MCP server). Web demo prototype 1: read
-  `prototype1-plan.md` first (status and next steps); `web-engine-data-flow.md` explains the web engine's data flow and
-  `web-page-flows.md` the editor page's focus, runs, open files and log links. `opendta-issues.md`: known OpenDTA problems to
+- Where to look (`docs/`): `phase2-plan.md` (web demo; read it first: status and next steps; `phase2-history.md`, `browser-engine.md` and
+  `lazy-matplotlib.md` hold its history and gaps), `phase3-plan.md` (hosted multi-user MCP server).
+  `web-engine-data-flow.md` explains the web engine's data flow and `web-page-flows.md` the editor page's focus, runs, open files and log links. `opendta-issues.md`: known OpenDTA problems to
   verify against Stata. `agent-ergonomics.md`: dofile's own agent-ergonomics problems. `releasing.md`: releasing to PyPI.
-  `icebox.md`: things knowingly left for later (nothing in it blocks a merge). `formatting-proposal.md`: Biome and ruff.
-  `archive/`: records of finished work (the step 3.5 plan and design), not kept current.
+  `icebox.md`: things knowingly left for later (nothing in it blocks a merge).
+  `archive/`: records of finished work (Phase 0/1, the Biome and ruff decision, step 3.5), not kept current.
 - Web demo design (moodboard, flows, wireframes, mockups): `docs/design/`. `docs/design/SPEC.md` is the build spec for the web
   demo's pages; `docs/design/README.md` holds the brief, the rules and every round of feedback (the plan keeps only a summary of
   the decisions). Renders are not committed; each folder's README has the command.

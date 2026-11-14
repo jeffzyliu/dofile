@@ -126,4 +126,4 @@ output fidelity expectations; StatsPAI could add a .do interpreter itself.
 - https://aeadataeditor.github.io/projects/project4
 
 ## Refocus (2026-11-03)
-Engine + MCP first; web IDE reduced to a thin Pyodide demo. See docs/engine-evaluation.md "Decision".
+Engine + MCP first; web IDE reduced to a thin Pyodide demo. See docs/archive/engine-evaluation.md "Decision".

@@ -1,6 +1,6 @@
 // The landing and commands pages' plain logic (scripts/site-pages.ts, src/site/filter.ts) and what their source says:
 // the commands list is made from src/stata/commands.json and nothing else, the placeholders are all known, the
-// numbers are the build's, and the clean-room greps (docs/prototype1-plan.md, "Clean-room check of the site's text").
+// numbers are the build's, and the clean-room greps (docs/phase2-history.md, "Step 5: the clean-room record").
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -200,7 +200,7 @@ test("the theme button of the landing and commands pages has the editor's words,
     assert.ok(web(f).includes(`localStorage.getItem("${site.KEY}")`), f);
 });
 
-// ---- clean room (LICENSE-POLICY.md): what the checks can see; the record is in docs/prototype1-plan.md ----
+// ---- clean room (LICENSE-POLICY.md): what the checks can see; the record is in docs/phase2-history.md ----
 
 test("clean room: the pages say Stata only as the policy allows, name no real dataset, and keep the trademark line", () => {
   for (const f of ["landing.html", "commands.html"]) {

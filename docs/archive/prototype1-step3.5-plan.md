@@ -2,7 +2,7 @@
 
 The task proposal the maintainer approved on 2026-11-10, after reading the engine's data flow
 ([web-engine-data-flow.md](../web-engine-data-flow.md)). It sits between step 3 (the app shell) and step 4 of
-[prototype1-plan.md](../prototype1-plan.md). Update the status table here at the end of every session.
+[phase2-plan.md](../phase2-plan.md). Update the status table here at the end of every session.
 
 Steps A to E are done and were merged into `main` with step 3 by pull request #13 (`aff60a5`, 2026-11-11); this file is now
 a record. To pick up the code: read this file, then `web/CLAUDE.md`,
@@ -209,7 +209,7 @@ path.
 - SPEC sections 5 (states), 6 (protocol and types), 7 (the store) and 8 (as built) say what the code does.
 - `web/CLAUDE.md`: TypeScript everywhere, the machine's file, the one journal path, no `manifest.json` fetch.
 - `docs/web-engine-data-flow.md` is revised to the code as built, and its Part 3 keeps only what is still open.
-- `docs/prototype1-plan.md`: step 3.5 `done`; next is the maintainer's approval and the merge, then step 4.
+- `docs/phase2-plan.md`: step 3.5 `done`; next is the maintainer's approval and the merge, then step 4.
 
 ## Carried over, not part of this step
 
@@ -218,4 +218,4 @@ path.
 - At load, while `cached()` is pending, the state is `none`; a Run pressed then opens the "to run code" prompt, which
   the plain prompt then replaces. Step C's machine should make this a state of its own (checking) or queue the run.
 - `afterRun` lists the store after the tab lost the lock. Step C.
-- Real-phone checks, the phone's "FILES" pane head (step 4a) and the toolbar at a 20 px font: in `prototype1-plan.md`.
+- Real-phone checks, the phone's "FILES" pane head (step 4a) and the toolbar at a 20 px font: in `phase2-plan.md`.

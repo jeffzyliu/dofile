@@ -8,7 +8,7 @@ into its `/work` folder when it starts and writes back what each run changed.
 
 This is Phase 2 of the project; the plan, decisions and measurements are in [`../docs/phase2-plan.md`](../docs/phase2-plan.md).
 The page is Preact with signals on the project's own CSS (`src/app/`); prototype 1 is being built to
-[`../docs/design/SPEC.md`](../docs/design/SPEC.md) (status: [`../docs/prototype1-plan.md`](../docs/prototype1-plan.md)).
+[`../docs/design/SPEC.md`](../docs/design/SPEC.md) (status: [`../docs/phase2-plan.md`](../docs/phase2-plan.md)).
 
 ## Setup
 

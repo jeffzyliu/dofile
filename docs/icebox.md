@@ -4,7 +4,7 @@ Things knowingly left for later, by area. Each item says what it is, where it sh
 
 Rules:
 - An item enters when the maintainer puts it here.
-- It leaves when it is fixed, dropped, or promoted to a plan (`docs/prototype1-plan.md` or a later one).
+- It leaves when it is fixed, dropped, or promoted to a plan (`docs/phase2-plan.md` or a later one).
 - Nothing here blocks a merge.
 
 Paths are relative to `web/src/app/`.
@@ -155,7 +155,7 @@ estimated splits) are the study's, not checked again here.
   macros and results are lost, as after a restart); and how the page says so (a banner, the status bar, what the Run
   button then offers). 2026-11-13.
 - **A run whose first command is `clear all` restarts the engine first** (from "Later UI work" item 9 of
-  `docs/prototype1-plan.md`, now in `docs/phase2-history.md`; moved here 2026-11-13; nothing in that work is built before step 6). The restart frees the
+  `docs/phase2-plan.md`, "Later UI work"; moved here 2026-11-13; nothing in that work is built before step 6). The restart frees the
   engine's WebAssembly memory, which never shrinks otherwise (the status bar's "Engine memory" only grows until a restart).
   First step: measure how long a restart from the cached snapshot takes; build it only if that is under about 2 s.
   `clear all` anywhere else in a run clears as today. 2026-11-13.

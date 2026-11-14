@@ -1,4 +1,4 @@
-"""dofile's own conformance corpus (from docs/engine-evaluation.md), run through Engine.
+"""dofile's own conformance corpus (from docs/archive/engine-evaluation.md), run through Engine.
 
 Each corpus .do prints `CHECK name=value`; values must match ref.json (independent statsmodels /
 linearmodels results) to 1e-6 relative. Known OpenDTA gaps are strict xfails, so a fix shows up; their IDs
