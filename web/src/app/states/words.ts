@@ -100,7 +100,7 @@ export function failedActions(reason: FailReason): FailedAction[] {
 /** The second line of S 7 (failed twice), with the reason when it is memory. */
 export const twiceWords = (reason: FailReason): { head: string; rest: string } => ({
   head: `The engine stopped after failing twice${reason === "memory" ? " (out of memory)" : ""}.`,
-  rest: "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe.",
+  rest: "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe: you can still edit and download them.",
 });
 
 // ---- OQ-10: the two notes in the page's own words (DRAFT; log/LogView.tsx shows them: see SPEC 8, "Step 4d") ----

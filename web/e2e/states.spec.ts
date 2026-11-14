@@ -268,6 +268,7 @@ test("a failed start: the words and the first action follow the reason", async (
   const twice = page.locator(".banner").filter({ hasText: "The engine stopped after failing twice" });
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(twice).toContainText("(out of memory)");
+  await expect(twice).toContainText("Your files are safe: you can still edit and download them."); // as the failed banner says
   await expect(twice.getByRole("button", { name: "Reload the page" })).toBeVisible();
   await expect(twice.getByRole("button", { name: "Download all (.zip)" })).toBeVisible();
 });
