@@ -1,9 +1,8 @@
 name: Build the web demo for Cloudflare
 description: >-
-  Builds what the two Cloudflare Workers serve: the dofile wheel, the memory snapshot at brotli quality 11 (cached on a
-  hash of its inputs), the editor into web/dist/app and the landing and commands pages into web/dist/site, then fails if
-  a file is too big for Workers static assets. Used by deploy.yml (production) and preview.yml (pull request previews), so
-  the two cannot drift apart. Needs the repository checked out first. Runs no wrangler and reads no secret.
+  What the two Workers serve, for deploy.yml and preview.yml (so the two cannot drift apart): the dofile wheel, the memory
+  snapshot at brotli quality 11, the editor into web/dist/app and the landing and commands pages into web/dist/site, then
+  the size check. Needs the repository checked out first. Runs no wrangler and reads no secret.
 inputs:   # the addresses the two builds link each other by (web/scripts/urls.ts): `urls`, or both of the other two
   urls:
     description: DOFILE_URLS, "production" (the addresses of web/scripts/urls.ts).
@@ -26,61 +25,29 @@ runs:
         cache-dependency-path: web/package-lock.json
     - shell: bash
       working-directory: web
-      run: npm ci
-    - shell: bash
-      working-directory: web
-      env:
-        UV_PYTHON: "3.14"   # Pyodide 314's Python; `npm run wheel` builds the dofile wheel with uv
-      run: npm run wheel
+      run: npm ci && npm run wheel   # uv builds the wheel with the repository's .python-version (3.14, Pyodide 314's)
 
-    # The snapshot depends on the wheel (engine source, dependencies), the pyodide version (package-lock) and the scripts
-    # that build it, not on the two addresses. The key hashes those inputs, so it is rebuilt only when one changes. A
-    # pull request's run can restore main's cache but saves its own only for that pull request (GitHub scopes caches by
-    # branch), so a preview never feeds a production deploy.
+    # The snapshot's inputs, hashed: the wheel (engine source, dependencies), the Pyodide version (package-lock) and the
+    # scripts that build it, not the two addresses. A pull request's run can restore main's cache but saves its own only for
+    # that pull request (GitHub scopes caches by branch), so a preview never feeds a production deploy.
     - id: cache
       uses: actions/cache@v6
       with:
         path: web/public/snapshot
         key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.mjs', 'web/scripts/install-engine.ts', 'web/scripts/build-id.ts', 'web/wheels/*.whl', 'web/src/engine/snapshot.ts') }}
-
-    # Safety net: a restored snapshot must be of the wheels and the Pyodide version just built, else rebuild it. The same
-    # check as the build's (scripts/build-id.ts, staleness), which would fail the build on a stale snapshot.
-    - id: fresh
-      if: steps.cache.outputs.cache-hit == 'true'
-      shell: bash
-      working-directory: web
-      run: |
-        if node scripts/build-id.ts; then echo "ok=true" >> "$GITHUB_OUTPUT"; fi
-    - if: steps.fresh.outputs.ok != 'true'
-      shell: bash
+    # A restored snapshot is used only if it is of the wheels and the Pyodide version just built (the build's own staleness
+    # check, scripts/build-id.ts); else it is built again, at quality 11, the shipped one (micropip fetches openpyxl from PyPI).
+    - shell: bash
       working-directory: web
       env:
-        UV_PYTHON: "3.14"
-      run: npm run snapshot   # quality 11, the shipped one; needs the network once: micropip fetches openpyxl from PyPI
+        HIT: ${{ steps.cache.outputs.cache-hit }}
+      run: if [ "$HIT" = true ] && node scripts/build-id.ts; then echo "the cached snapshot is current"; else npm run snapshot; fi
 
-    # The editor into dist/app/ (with public/: wheels, runtime, snapshot, _headers), then the static pages into dist/site/.
-    # The addresses they link each other by are read at build time (scripts/urls.ts, where an empty value is unset); the
-    # build fails unless the caller gave `urls` or both URLs.
-    - name: Build
-      shell: bash
+    # Both builds; they fail unless the caller gave `urls` or both URLs (an empty one is unset).
+    - shell: bash
       working-directory: web
       env:
-        UV_PYTHON: "3.14"
         DOFILE_URLS: ${{ inputs.urls }}
         DOFILE_SITE_URL: ${{ inputs.site-url }}
         DOFILE_EDITOR_URL: ${{ inputs.editor-url }}
-      run: npm run build
-
-    # Cloudflare Workers static assets refuse a file over 25 MiB. The brotli-11 snapshot is built only here (web.yml builds
-    # it at quality 5), so this is the one place the real file sizes show up: fail here, before wrangler does.
-    - name: Check asset sizes
-      shell: bash
-      working-directory: web
-      run: |
-        find dist/app dist/site -type f -size +26214400c | while read -r f; do
-          echo "::error::$f is $(wc -c < "$f") bytes; Cloudflare Workers static assets refuse files over 25 MiB (26214400 bytes)"
-        done
-        find dist/app dist/site -type f -size +24117248c ! -size +26214400c | while read -r f; do
-          echo "::warning::$f is $(wc -c < "$f") bytes, over 23 MiB (24117248 bytes); the limit is 25 MiB"
-        done
-        if [ -n "$(find dist/app dist/site -type f -size +26214400c)" ]; then exit 1; fi
+      run: npm run build && node scripts/check-sizes.ts   # Workers static assets refuse a file over 25 MiB

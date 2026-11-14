@@ -119,21 +119,23 @@ from the jsDelivr CDN, at the same version as the `pyodide` npm package.
 
 Two Workers, each a static-assets-only Worker with `html_handling: "auto-trailing-slash"` (`/commands` goes to `/commands/`) and `not_found_handling: "none"` (a missing page is a 404), a custom domain and the `workers.dev` address (previews use it):
 `wrangler.jsonc` is the site's (Worker `dofile`, `dist/site/`, `dofile.dev`) and `wrangler.app.jsonc` the editor's (Worker `dofile-app`, `dist/app/`, `app.dofile.dev`; its `_headers` isolates every path). A bare `wrangler deploy` deploys the site only: use `--config wrangler.app.jsonc` for the editor.
-`npx wrangler login` once, then `npm run cf:dev` (local, workerd: the site on port 8787 and the editor on 8788, built with links to those; `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` override them, for a phone on the LAN) or `npm run deploy` (which runs `lint:strict` first, then deploys the editor and the site). Both build the snapshot first (the page
+`npx wrangler login` once, then `npm run cf:dev` (local, workerd: the site on port 8787 and the editor on 8788, built with links to those; `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` override them, for a phone on the LAN) or `npm run deploy` (which runs `lint:strict` first, builds with `DOFILE_URLS=production`, runs the size check, then deploys the editor and the site). Both build the snapshot first (the page
 starts from it by default, and `public/snapshot/` is gitignored, so a page built without one would not start). Each asset must
 be under 25 MiB; the two snapshot files are about 20 MB, so they fit with little room to spare. A snapshot built with
 `SNAPSHOT_QUALITY=5` (as the e2e tests and CI build it) does not: its heap is about 26.5 MB, and `wrangler dev` refuses it
-("Asset too large"); `npm run cf:dev` builds the default quality 11 (about 3 min), which it serves (checked in step 5). The deploy and preview builds (`.github/actions/build-web`) fail the job when any file in `dist/app/` or `dist/site/` is over 25 MiB and warn over 23 MiB, because the brotli-11 snapshot is built only there.
+("Asset too large"); `npm run cf:dev` builds the default quality 11 (about 3 min), which it serves (checked in step 5). The size check (`scripts/check-sizes.ts`, run by the deploy and preview builds, `.github/actions/build-web`, and by `npm run deploy`) fails when any file in `dist/app/` or `dist/site/` is over 25 MiB and warns over 23 MiB, because the brotli-11 snapshot is built only there.
 
 `.github/workflows/deploy.yml` runs on every push to `main` (and by hand): it calls `ci.yml`, `web.yml` and `lint.yml` on that
 commit and deploys both Workers only if all three passed and the commit is still the tip of `main`. The build (shared with
 previews: `.github/actions/build-web`) makes the snapshot too, cached on a hash of its inputs. It needs the repo secrets
-`CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`.
+`CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`. After the deploy,
+`scripts/smoke.ts` checks that both domains answer 200, that the landing page links to the editor and that the editor is
+cross-origin isolated (`node scripts/smoke.ts [<site URL> <editor URL>]`; no URLs: production).
 
 `.github/workflows/preview.yml` builds both parts for a pull request from a branch of this repo (not a fork) with the links
 pointing at `https://pr-<N>-dofile-app.<subdomain>.workers.dev/` (editor) and `https://pr-<N>-dofile.<subdomain>.workers.dev/`
-(pages), uploads them with `wrangler versions upload --preview-alias pr-<N>` (production does not change) and keeps one
-comment on the pull request with the two addresses. `<subdomain>` is the repo variable `CLOUDFLARE_WORKERS_SUBDOMAIN`.
+(pages), uploads them with `wrangler versions upload --preview-alias pr-<N>` (production does not change), runs the same
+smoke check on the two preview addresses and keeps one comment on the pull request with the two addresses. `<subdomain>` is the repo variable `CLOUDFLARE_WORKERS_SUBDOMAIN`.
 
 ## CI
 

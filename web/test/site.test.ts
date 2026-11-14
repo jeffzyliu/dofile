@@ -4,9 +4,12 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { bigFiles, LIMIT, NEAR } from "../scripts/check-sizes.ts";
 import {
   type CommandData,
   canonicalURL,
@@ -19,6 +22,7 @@ import {
   OWN_PREFIXES,
   sitePageFor,
 } from "../scripts/site-pages.ts";
+import { problems } from "../scripts/smoke.ts";
 import {
   DEV_EDITOR_PORT,
   DEV_SITE_PORT,
@@ -307,6 +311,56 @@ test("the two Wrangler configs agree with scripts/urls.ts: the folder each Worke
   assert.equal(app.assets.html_handling, site.assets.html_handling);
   assert.equal(site.assets.not_found_handling, "none");
   assert.equal(app.assets.not_found_handling, "none");
+});
+
+test("the size check before a deploy: an error over 25 MiB, a warning within 2 MiB of it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dofile-sizes-"));
+  try {
+    mkdirSync(join(dir, "snapshot"));
+    const sized = (name: string, bytes: number) => {
+      writeFileSync(join(dir, name), "");
+      truncateSync(join(dir, name), bytes); // sparse: no real 25 MB written
+    };
+    sized("small.js", 1000);
+    sized("snapshot/near.br", NEAR + 1);
+    sized("snapshot/limit.br", LIMIT);
+    sized("snapshot/over.br", LIMIT + 1);
+    const found = Object.fromEntries(bigFiles([dir]).map((f) => [relative(dir, f.file), f.over]));
+    assert.deepEqual(found, { "snapshot/near.br": false, "snapshot/limit.br": false, "snapshot/over.br": true });
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test("the smoke check after a deploy: both pages 200, the landing page links to the editor, the editor is isolated", async () => {
+  const [site, editor] = ["https://pr-1-dofile.x.workers.dev/", "https://pr-1-dofile-app.x.workers.dev/"];
+  const isolated = { "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp" };
+  const fake =
+    (pages: Record<string, Response | Error>): typeof fetch =>
+    async (url) => {
+      const page = pages[String(url)];
+      if (page instanceof Error) throw page;
+      return page ?? new Response("", { status: 404 });
+    };
+  const good = () => ({
+    [site]: new Response(`<a class="btn primary try" href="${editor}">Open the editor</a>`),
+    [editor]: new Response("<div id=root>", { headers: isolated }),
+  });
+  assert.deepEqual(await problems(site, editor, fake(good())), []);
+  const cases: [Record<string, Response | Error>, RegExp][] = [
+    [{ ...good(), [site]: new Response("", { status: 302 }) }, /pr-1-dofile\.x\.workers\.dev\/ answered 302/],
+    [{ ...good(), [site]: new Response('<a href="https://elsewhere.example/">') }, /does not link to/],
+    [{ ...good(), [editor]: new Response("") }, /Cross-Origin-Opener-Policy is missing/],
+    [
+      {
+        ...good(),
+        [editor]: new Response("", { headers: { ...isolated, "Cross-Origin-Embedder-Policy": "credentialless" } }),
+      },
+      /Cross-Origin-Embedder-Policy is credentialless, not require-corp/,
+    ],
+    [{ ...good(), [editor]: new Error("getaddrinfo ENOTFOUND") }, /ENOTFOUND/],
+  ];
+  for (const [pages, wrong] of cases) assert.match((await problems(site, editor, fake(pages))).join("\n"), wrong);
 });
 
 test("the filter keeps the names that contain what was typed, ignoring case and outer spaces", () => {

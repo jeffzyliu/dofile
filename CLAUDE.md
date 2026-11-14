@@ -125,8 +125,10 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   the tip of main (checked before and inside the deploy's concurrency group, so an older commit never lands after a newer one).
   In a called workflow `github.workflow` is the caller's name, so each of the three spells its own concurrency prefix.
   `preview.yml` uploads a preview of both Workers for each pull request from a branch of this repo (not forks), with the two
-  addresses in one comment; it does not wait for the tests. Deploy and preview build through one composite action,
-  `.github/actions/build-web`.
+  addresses in one comment, after a smoke check of both (`web/scripts/smoke.ts`); it does not wait for the tests. Deploy and
+  preview build through one composite action, `.github/actions/build-web`, and run the project's own wrangler
+  (`npx --no-install`); both tip checks are one script, `.github/scripts/is-main-tip.sh`, and the reasoning is in
+  `docs/deploying.md`, "How the workflows work".
 - Where to look (`docs/`): `phase2-plan.md` (web demo; read it first: status and next steps; `phase2-history.md`, `browser-engine.md` and
   `lazy-matplotlib.md` hold its history and gaps), `phase3-plan.md` (hosted multi-user MCP server).
   `web-engine-data-flow.md` explains the web engine's data flow and `web-page-flows.md` the editor page's focus, runs, open files and log links. `opendta-issues.md`: known OpenDTA problems to

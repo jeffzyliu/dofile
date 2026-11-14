@@ -1,24 +1,13 @@
 name: preview
 
-# A preview of the web demo for each pull request from a branch of this repo: builds both parts (.github/actions/build-web,
-# as deploy.yml does) with the links between them pointing at the preview addresses, uploads a version of each Worker under
-# the alias pr-<N> with `wrangler versions upload` (a version is not deployed: production does not change), and keeps one
-# comment on the pull request with the two addresses, updated on each push:
+# A preview of the web demo for each pull request from a branch of this repo: both builds, linked to each other's preview
+# address, uploaded as a version of each Worker under the alias pr-<N> (not deployed: production does not change), checked,
+# and one comment on the pull request with the two addresses, updated on each push:
 #   https://pr-<N>-dofile-app.<subdomain>.workers.dev/   the editor (wrangler.app.jsonc)
 #   https://pr-<N>-dofile.<subdomain>.workers.dev/       the landing and commands pages (wrangler.jsonc)
-# <subdomain> is the account's workers.dev subdomain, the repository variable CLOUDFLARE_WORKERS_SUBDOMAIN. The build needs
-# both addresses before it starts (they are baked in), so they are worked out here, not read from wrangler's output; a
-# step afterwards warns if wrangler printed other ones.
-#
-# Not for forks: their pull requests get no secrets, and pull_request_target would run their code with them. Not for
-# Dependabot, whose runs get no Actions secrets either. Not a required check, and it does not wait for the tests (web.yml
-# tests the same commit): a preview is for looking. A new push cancels the pull request's preview in progress.
-# Cloudflare keeps the 1,000 newest aliases per Worker; nothing deletes a preview when its pull request closes.
-#
-# To check on the first real preview (the docs do not say, so unverified): that Version URLs work for these assets-only
-# Workers, that the editor's _headers (COOP/COEP) apply on its preview address (the editor needs crossOriginIsolated), that
-# `versions upload` leaves the custom domains and the deployed version alone. wrangler refuses `versions upload` for a Worker
-# that was never deployed (its source), so the editor's previews fail until the first production deploy of dofile-app.
+# <subdomain> is the repository variable CLOUDFLARE_WORKERS_SUBDOMAIN. Not for forks or Dependabot (no secrets; never
+# pull_request_target), not a required check, does not wait for the tests. Setup, limits and what is unverified:
+# docs/deploying.md, sections 4 and "How the workflows work".
 on:
   pull_request:
     paths:   # what the two builds are made from; a pull request that changes none of it keeps its last preview
@@ -46,8 +35,7 @@ jobs:
       site: ${{ steps.urls.outputs.site }}
       editor: ${{ steps.urls.outputs.editor }}
     steps:
-      # The Worker names are wrangler.jsonc's (dofile) and wrangler.app.jsonc's (dofile-app). An alias, a dash and the
-      # Worker's name make one DNS label: at most 63 characters, and the alias starts with a letter.
+      # Worked out before the build, which bakes them in. The Worker names are the two Wrangler configs'.
       - id: urls
         name: The preview addresses
         env:
@@ -58,18 +46,10 @@ jobs:
             echo "::error::Set the repository variable CLOUDFLARE_WORKERS_SUBDOMAIN to the account's workers.dev subdomain (the <subdomain> in <worker>.<subdomain>.workers.dev), got '$SUBDOMAIN'"
             exit 1
           fi
-          alias="pr-$N"
-          for worker in dofile dofile-app; do
-            label="$alias-$worker"
-            if [ "${#label}" -gt 63 ]; then
-              echo "::error::$label is ${#label} characters; a preview alias and Worker name may have 63 together"
-              exit 1
-            fi
-          done
           {
-            echo "alias=$alias"
-            echo "site=https://$alias-dofile.$SUBDOMAIN.workers.dev/"
-            echo "editor=https://$alias-dofile-app.$SUBDOMAIN.workers.dev/"
+            echo "alias=pr-$N"
+            echo "site=https://pr-$N-dofile.$SUBDOMAIN.workers.dev/"
+            echo "editor=https://pr-$N-dofile-app.$SUBDOMAIN.workers.dev/"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
@@ -78,41 +58,24 @@ jobs:
         with:
           site-url: ${{ steps.urls.outputs.site }}
           editor-url: ${{ steps.urls.outputs.editor }}
-      # The secrets go to these two steps only, not to the job's environment that npm ci and the build see.
-      - id: editor
-        name: Upload a version of the editor (dofile-app), not deployed
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: web
-          command: versions upload --config wrangler.app.jsonc --preview-alias ${{ steps.urls.outputs.alias }}
-      - id: site
-        name: Upload a version of the landing and commands pages (dofile), not deployed
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: web
-          command: versions upload --preview-alias ${{ steps.urls.outputs.alias }}
-      # A warning, not a failure: wrangler's wording is not a documented interface. A wrong subdomain variable shows here.
-      - name: Wrangler printed the addresses the build links to
+      # The project's own wrangler (package-lock). The secrets are in this step's environment only, not the build's.
+      - name: Upload a version of each Worker, not deployed
+        working-directory: web
         env:
-          EDITOR: ${{ steps.urls.outputs.editor }}
-          SITE: ${{ steps.urls.outputs.site }}
-          EDITOR_OUTPUT: ${{ steps.editor.outputs.command-output }}
-          SITE_OUTPUT: ${{ steps.site.outputs.command-output }}
+          ALIAS: ${{ steps.urls.outputs.alias }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          check() {
-            host=${1#https://}
-            host=${host%/}
-            if ! printf '%s' "$2" | grep -qF "$host"; then
-              echo "::warning::wrangler's output does not name $host; the build links to it. What wrangler printed:"
-              printf '%s\n' "$2"
-            fi
-          }
-          check "$EDITOR" "$EDITOR_OUTPUT"
-          check "$SITE" "$SITE_OUTPUT"
+          npx --no-install wrangler versions upload --config wrangler.app.jsonc --preview-alias "$ALIAS"
+          npx --no-install wrangler versions upload --preview-alias "$ALIAS"
+      # Both addresses answer 200, the landing page links to this preview's editor, and the editor is cross-origin isolated
+      # (a wrong subdomain variable fails here too).
+      - name: The previews answer as they should
+        working-directory: web
+        env:
+          SITE: ${{ steps.urls.outputs.site }}
+          EDITOR: ${{ steps.urls.outputs.editor }}
+        run: node scripts/smoke.ts "$SITE" "$EDITOR"
 
   # A job of its own, so the token that may write to the pull request never shares a runner with the pull request's code.
   comment:
