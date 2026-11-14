@@ -1657,6 +1657,11 @@ dialog.dialog.sheet {
     outline: 1px solid Highlight;
     outline-offset: -1px;
   }
+  /* its focus ring stays 2 px, as on any row */
+  .files li.current:focus-visible {
+    outline-width: 2px;
+    outline-offset: -2px;
+  }
   .files li.open,
   .code .ln.run,
   .t tr.picked td:first-child {

@@ -991,6 +991,11 @@ test("the current folder in forced colors: a Highlight outline and no fill (Chro
   expect(picked.outlineStyle).toBe("solid");
   expect(picked.outlineWidth).toBe("1px");
   expect(picked.bg).toBe((await style(row(page, /^a\.do/))).bg);
+  // with the keyboard focus on it, the ring is the 2 px of any row, not the current folder's 1 px
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowUp");
+  await expect(row(page, /^data\//)).toBeFocused();
+  expect((await style(row(page, /^data\//))).outlineWidth).toBe("2px");
 });
 
 // The row last focused may be a draft's path (the draft is not in the list), or a row that has gone: it counts as its folder.
