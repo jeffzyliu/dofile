@@ -49,6 +49,7 @@ async function showTab(page: Page, tab: "graph" | "data" | "results") {
   else await page.getByRole("tab", { name: tab[0].toUpperCase() + tab.slice(1), exact: true }).click();
 }
 const copied = (page: Page) => page.evaluate(() => window.__copied);
+const toastText = (page: Page) => page.evaluate(() => document.querySelector(".toast")?.textContent ?? null);
 const logLength = (page: Page) => page.evaluate(() => window.__dofile.state.log.value.length);
 async function ready(page: Page) {
   await expect
@@ -367,6 +368,23 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     await expect(rowOf(/^e\(rank\):/).locator(".hint")).toBeVisible();
     expect(await fits(/^e\(rank\):/), "↵ Copy is not cut").toBe(true);
     await page.mouse.move(1, 1);
+    // a drag over a name selects it and copies nothing (no toast, no "✓ Copied")
+    const box = (await rowOf(/^e\(rank\):/)
+      .locator("td")
+      .first()
+      .boundingBox())!;
+    const toastBefore = await toastText(page);
+    const before = (await copied(page)).length;
+    await page.mouse.move(box.x + 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    expect(await page.evaluate(() => getSelection()?.toString() ?? "")).toContain("e(rank)");
+    expect((await copied(page)).length, "a drag-select copies nothing").toBe(before);
+    expect(await toastText(page)).toBe(toastBefore);
+    await expect(page.locator(".rs .copied")).toHaveCount(0);
+    await page.evaluate(() => getSelection()?.removeAllRanges());
+    await page.mouse.move(1, 1);
   }
   // every value is a Tab stop: Tab from a later group's head reaches its first value, which is tinted with all digits
   const tab = browserName === "webkit" ? "Alt+Tab" : "Tab"; // Safari's Tab skips buttons unless Option is held
@@ -389,7 +407,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   const nextValue = (await next.getAttribute("aria-label"))!.split(": ")[1];
   await page.keyboard.press("ControlOrMeta+c");
   expect((await copied(page)).at(-1)).toBe(nextValue);
-  // without the clipboard API (plain http, as on a LAN), the old way copies; a click leaves no focus ring
+  // without the clipboard API (plain http, as on a LAN), the old way copies; a click leaves no focus ring, a key the focus
   await page.evaluate(() => {
     window.__clip = navigator.clipboard;
     Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
@@ -397,9 +415,31 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await page.mouse.move(1, 1);
   await r2.click();
   await page.mouse.move(1, 1);
-  await expect(page.locator(".toast")).toBeVisible();
+  await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
   expect(await page.evaluate(() => document.querySelector(".rs :focus-visible")?.outerHTML ?? null)).toBeNull();
   expect(await tint(/^e\(r2\):/)).toBe(plain);
+  await page.getByRole("button", { name: /^Locals/ }).focus();
+  await page.keyboard.press(tab);
+  await expect(firstLocal).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
+  await expect(firstLocal).toBeFocused();
+  // a double-click on a name copies once (its first click) and leaves the word selected: the old way's select() is over
+  if (!phone(page)) {
+    const word = await r2Name.evaluate((td) => {
+      const range = document.createRange(); // on the name's text: past it, a double-click selects nothing in some browsers
+      range.selectNodeContents(td);
+      const [t, c] = [range.getBoundingClientRect(), td.getBoundingClientRect()];
+      return { x: t.left - c.left + t.width / 2, y: t.top - c.top + t.height / 2 };
+    });
+    await r2Name.dblclick({ position: word });
+    const picked = await r2Name.evaluate((td) => {
+      const s = getSelection();
+      return s && !s.isCollapsed && td.contains(s.anchorNode) ? s.toString() : "";
+    });
+    expect(picked, "the double-clicked word stays selected").not.toBe("");
+    await page.evaluate(() => getSelection()?.removeAllRanges());
+  }
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true }),
   );
