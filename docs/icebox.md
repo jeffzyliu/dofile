@@ -34,6 +34,9 @@ The rest:
   (`files/EditorTabs.tsx`) have no `aria-controls`, and the editor is not a `tabpanel`. 2026-11-11.
 - **The full-size graph view** (`output/FullSize.tsx`) is a hand-made `role="dialog" aria-modal` with its own focus trap;
   the rest of the page is not inert under it (a native `<dialog>` would make it so). 2026-11-11.
+- **The toolbar scrolls sideways at 700 to about 855 px with a 20 px default font size** (plan, step 4 C 22): its compact
+  form starts below 56em, so a larger default font leaves a band where neither form fits. Rare, and nothing is lost (the
+  toolbar scrolls); a fix needs a third toolbar form. The maintainer: "all recommendations". 2026-11-13.
 
 ## Code to join (no dependency)
 
