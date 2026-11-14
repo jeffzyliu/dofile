@@ -222,6 +222,7 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   const asked = name.trim() === "" || name === baseName(r.path) ? undefined : name;
   let problem = asked === undefined ? null : newPathProblem(asked, dir, files.value); // a draft's name may be a path: "sub/x.do" makes sub
   if (problem && !leaving) return keepOpen(r, problem);
+  if (leaving && rovingPath.value === r.path) rovingPath.value = r.from; // the draft's path is not a row
   ending = true;
   let to: string;
   try {

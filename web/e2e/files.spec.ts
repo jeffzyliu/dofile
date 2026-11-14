@@ -836,9 +836,18 @@ test('the "+" twice from a folder\'s file row: both drafts are in the folder (th
   const field = page.locator("input.rename-field");
   await expect(field).toBeFocused();
   expect(await levelOf(field)).toBe("2");
-  await plus(page).click(); // the mousedown leaves the first field: it is written
+  // the store's write waits for the test, so the first draft is still not in the list at the second click, on every profile
+  await page.evaluate(() => {
+    const w = window as any;
+    const s = w.__dofile.store;
+    const write = s.write.bind(s);
+    const held = new Promise<void>((ok) => (w.__release = ok));
+    s.write = (...a: unknown[]) => held.then(() => write(...a));
+  });
+  await plus(page).click(); // the mousedown leaves the first field: it is written (when released)
   await expect(field).toBeFocused();
   expect(await levelOf(field)).toBe("2");
+  await page.evaluate(() => (window as any).__release());
   await expect.poll(() => storePaths(page)).toContain("data/untitled.do"); // Enter while the first is written does nothing
   await page.keyboard.press("Enter");
   await expect.poll(() => storePaths(page).then((p) => p.filter((f) => f.includes("untitled")))).toHaveLength(2);
@@ -849,16 +858,24 @@ test('the "+" after a typed name was written by leaving the field: the next draf
   page,
 }) => {
   await setUp(page, tree3);
+  await row(page, /^a\.do/).click(); // the open file
+  await showFiles(page);
   await row(page, /^c\.do/).focus();
   await plus(page).click();
   await page.keyboard.type("x");
   await nameField(page, "untitled.do").blur(); // on a phone: a tap on the Log tab
   await expect.poll(() => storePaths(page)).toContain("data/x.do");
+  await expect(page.locator("input.rename-field")).toBeHidden(); // the draft is gone: one row matches x.do
   await expect(row(page, /^x\.do/)).toBeVisible();
+  await showFiles(page);
   await plus(page).click();
   const field = nameField(page, "untitled.do");
   await expect(field).toBeFocused();
   expect(await levelOf(field)).toBe("2");
+  await page.keyboard.press("Escape"); // the focus is back on c.do (not the open file's row), and the next "+" is in the folder
+  await expect(row(page, /^c\.do/)).toBeFocused();
+  await plus(page).click();
+  expect(await levelOf(nameField(page, "untitled.do"))).toBe("2");
 });
 
 // Esc in a draft started from a folder gives the focus back to the row the visitor came from (the open file's row is only
