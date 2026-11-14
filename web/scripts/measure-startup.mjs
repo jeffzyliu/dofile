@@ -1,6 +1,6 @@
 // Time until the web demo's engine is ready, normal boot vs memory snapshot, by network speed, for a first visit (new browser
 // context: cold caches) and a return visit (a reload in the same context: warm). Chromium, the built editor (web/dist/app: run
-// `npm run build` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes docs/img/startup-times.json,
+// `npm run build:local` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes docs/img/startup-times.json,
 // which docs/img/make-startup-times.mjs draws.
 //
 //   node scripts/measure-startup.mjs [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
@@ -37,7 +37,7 @@ const nets = arg("--nets", "unthrottled,100,30")
   .split(",")
   .map((k) => ({ key: k, ...NETS[k] }));
 if (!existsSync(join(dist, EDITOR_BASE, "index.html")))
-  throw new Error(`no web/${EDITOR_OUT}: run \`npm run build\` (after \`npm run snapshot\`)`);
+  throw new Error(`no web/${EDITOR_OUT}: run \`npm run build:local\` (after \`npm run snapshot\`)`);
 
 // ---- the host ----------------------------------------------------------------------------------------------------------
 const TYPES = {

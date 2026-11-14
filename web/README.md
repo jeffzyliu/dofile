@@ -141,7 +141,7 @@ smoke check on the two preview addresses and keeps one comment on the pull reque
 
 `.github/workflows/web.yml` runs four jobs on every pull request and on every push to `main` (started by `deploy.yml` there, one run per commit, so a merge's tree is tested; a pull request that changes nothing under `web/` or the Python build inputs skips the test jobs), and it can be started by hand. `deploy.yml` deploys only after it, `ci.yml` and `lint.yml` passed:
 
-- **types, unit tests, build:** `npm run check`, a check that `commands.json` is up to date, `npm test`, `npm run build`.
+- **types, unit tests, build:** `npm run check`, a check that `commands.json` is up to date, `npm test`, `DOFILE_URLS=production npm run build`.
 - **format and lint (Biome):** `npm run lint:strict`: the format, the import order and the lint rules; a warning fails.
 - **browsers:** `npm run e2e` on Ubuntu, a matrix of four jobs, one Playwright project each (Chromium, Firefox, WebKit,
   iPhone profile), each on its own runner with a 30-minute limit; Playwright's results are kept as an artifact on failure.
