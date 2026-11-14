@@ -14,7 +14,7 @@ npm test                  # the engine in Pyodide under Node, the file store, th
 npm run dev               # two dev servers, on the LAN too: the editor on 5173, the landing and commands pages on 5174; each links to the other at the page's own host name
 npm run e2e               # builds the snapshot and the two builds (`build:local`), then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min; E2E_PORT=4181 serves the pages on 4181 and the editor on 4182 instead of 4173 and 4174, for a second worktree)
 npm run build             # the wheel, the editor into dist/app/, the pages into dist/site/; refuses to start unless told the URLs they link each other by: DOFILE_URLS=production, DOFILE_URLS=local (`npm run build:local`), or both DOFILE_SITE_URL and DOFILE_EDITOR_URL
-npm run preview           # the two builds on two ports, 4173 (pages) and 4174 (editor), as the two Workers serve them
+npm run preview           # the two builds on two ports, 4173 (pages) and 4174 (editor) or E2E_PORT and the next, as the two Workers serve them (dev and preview: scripts/together.ts stops both when one stops)
 npm run snapshot          # the Pyodide memory snapshot the page starts from; `npm run dev` needs it once, and again after a change to the engine
 npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide (~4 min; --normal: no snapshot; --cases a,b)
 npm run check-numeric     # e()/r() of all 98 Stata 14 programs at full precision (~4 min; the diff: header of scripts/compare_numeric.py)

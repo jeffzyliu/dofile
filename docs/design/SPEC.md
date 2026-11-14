@@ -1509,7 +1509,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   `EDITOR_URL` is what the static pages link to; `SITE_URL` is the landing page, from the editor. A build has no default for
   them and refuses to start without one of: `DOFILE_URLS=production` (`https://dofile.dev/` and `https://app.dofile.dev/`:
   what `deploy.yml` and `npm run deploy` build); `DOFILE_URLS=local` (`http://localhost:4173/` the site and
-  `http://localhost:4174/` the editor, the next two ports from `E2E_PORT` when set: what `npm run build:local` and `npm run e2e`
+  `http://localhost:4174/` the editor, `E2E_PORT` (the pages) and `E2E_PORT`+1 (the editor) when set: what `npm run build:local` and `npm run e2e`
   build, and what `npm run preview` serves); or both `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` (a pull request preview, set to
   its two `workers.dev` addresses; `npm run cf:dev`). Both URLs must end in `/` (the file throws otherwise: the editor joins
   `commands/` and `#browsers` to the landing page's). The dev servers need none (`DEV_EDITOR_PORT`, `DEV_SITE_PORT`). `vite.config.ts`, `playwright.config.ts`,

@@ -29,7 +29,10 @@ permissions:
 jobs:
   upload:
     name: build and upload
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    # not a fork's, and not a Dependabot pull request, also when a maintainer pushes to it ("Update branch")
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     outputs:
       site: ${{ steps.urls.outputs.site }}
