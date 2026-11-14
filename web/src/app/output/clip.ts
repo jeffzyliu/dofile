@@ -24,7 +24,10 @@ function fallbackCopy(text: string): boolean {
   field.setAttribute("aria-hidden", "true");
   field.style.position = "fixed";
   field.style.opacity = "0";
-  const keep = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  // the focus comes back only to keyboard focus: after a click, focus() would bring it back as keyboard focus, ring and
+  // all (the browser's :focus-visible heuristic), so a click's focus is left off
+  const active = document.activeElement;
+  const keep = active instanceof HTMLElement && active.matches(":focus-visible") ? active : null;
   document.body.append(field);
   field.select();
   let ok = false;

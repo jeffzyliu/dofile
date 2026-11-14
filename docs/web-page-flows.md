@@ -109,6 +109,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | layout effect of the bar's render (`useFocusRequest`); once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
+| `output/clip.ts` `fallbackCopy` | a copy without the clipboard API (plain HTTP): Results, Copy on a .dta tab or a file's bar | synchronous: the hidden field takes the focus to copy, then gives it back only to an element that had keyboard focus (`:focus-visible`) | that element; after a click the focus stays off (the page body), so no ring shows. The Results tab moves no other focus: every value is a Tab stop, no arrow keys (SPEC 3.9) |
 
 A mouse click on a tab's × that closes a clean tab calls no `focusAfterClose` (`EditorTabs` passes `keyboard: false`).
 

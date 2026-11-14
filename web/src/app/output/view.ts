@@ -16,10 +16,8 @@ export const loadingRows = signal(false);
 
 /** The Results tab's groups the visitor folded or unfolded, by group id; a group not here has its own default. */
 export const folds = signal<Readonly<Record<string, boolean>>>({});
-/** The value button with the focus, by row key: the one in the tab order. */
-export const focusVal = signal<string | null>(null);
-/** The value button the pointer is on or that has the focus: it shows every digit. */
-export const hotVal = signal<string | null>(null);
+/** The row just copied, by row key: its action cell says "✓ Copied" for a while (ResultsTab.tsx, COPIED_MS). */
+export const copiedRow = signal<string | null>(null);
 
 /** A matrix opened in place. It belongs to the `results` it was read for: after another run it is no longer shown (its
  *  values could be another model's), and View reads it again. */

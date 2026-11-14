@@ -48,7 +48,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
   ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
-  name keeps it; a Results row's "↵ Copy" goes (a tap copies, and the toast says so; for the maintainer to confirm: plan, "Step 4: decisions and open questions", B 8); the nested-do note (`S 15`) names
+  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, plan, "Step 4: decisions and open questions", B 8); the nested-do note (`S 15`) names
   the file dropdown's Save instead of the key (on a phone). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
@@ -239,16 +239,23 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 ### 3.9 Results tab and matrix view (P1, step 4c)
 - **Tab** (`P/Results, top`, `P/Results, scrolled`): one table, three fixed columns (name, value, action). Sections "e() ·
   regress" (`e(cmd)`), "r() · summarize", "Locals and globals" hold groups that fold, with counts: Scalars, Macros, Matrices,
-  Functions; Locals, Globals ("6, all set by the system"). e() scalars start open. "changed by the last run" shows when
-  `e_changed` or `r_changed` is true. Functions and the r() name: OQ-7.
-- **Values:** 8 significant digits; all digits when focused or hovered and when copied. Enter or Ctrl/Cmd+C on a focused value
-  copies it ("↵ Copy" hint; toast "Copied").
+  Functions; Locals, Globals. Globals leaves out the engine's presets that still hold their preset value (`system_globals`:
+  `S_ADO`, `F1` ...); a global the user set, or a preset the user changed, shows, and with none left there is no Globals
+  group. e() scalars start open. "changed by the last run" shows when `e_changed` or `r_changed` is true. Functions and the
+  r() name: OQ-7.
+- **Values:** 8 significant digits; all digits on a hovered row (under `hover: hover`) or a value with keyboard focus, which
+  also tint the row and show "↵ Copy" (CSS only), and always in the copy and the value's accessible name. A click or tap
+  anywhere on a row (name or value), or Enter or Ctrl/Cmd+C on a focused value, copies it: the toast names it ("Copied
+  e(r2)") and the row's action cell says "✓ Copied" for 2 s, the landing page's Copy words. The action column fits "↵ Copy"
+  and "✓ Copied" whole. A copy by click leaves no focus ring, also without the clipboard API (plain HTTP).
 - **Matrices:** the row shows the size ("1 x 3", from the engine's "1x3") and "View", which opens the matrix in place as a
-  grid: no command, nothing in the log or the history. "Hide" folds it. Copying a matrix copies tab-separated text.
+  grid: no command, nothing in the log or the history. "Hide" folds it; View and Hide do not copy. Copying a matrix (a click
+  on its row) copies tab-separated text; the toast says "Copied e(b)" and View or Hide stays in the action cell.
 - **Empty** (`S 18`): "No results yet" / "e() and r() appear after an estimation or a command such as `summarize`, with the
   locals and globals your runs set."
-- **Keyboard and ARIA:** values are buttons, one in the tab order, arrows move; group heads are buttons with `aria-expanded`.
-  **Calls:** `RunResult.results`; `macros` after each run; `matrix {name}` on View.
+- **Keyboard and ARIA:** values are buttons, each a Tab stop (Tab walks group heads and values in order; no arrow keys);
+  group heads are buttons with `aria-expanded`. **Calls:** `RunResult.results`; `macros` after each run; `matrix {name}` on
+  View.
 
 ### 3.10 Dialogs, banners, toast, menus (P1, step 4d unless noted)
 A dialog is a `<dialog>` centered over the scrim, a bottom sheet on a phone. Focus starts on the safe choice, Esc cancels,

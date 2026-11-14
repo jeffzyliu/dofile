@@ -20,6 +20,7 @@ declare global {
   interface Window {
     __dofile: Hook;
     __copied: string[];
+    __clip: Clipboard; // the recorder, kept while a test takes the clipboard API away
   }
 }
 
@@ -154,7 +155,7 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
   await expect(page.locator(".toast")).toHaveText("Copied");
 });
 
-test("the Graph, Data and Results tabs and a .dta tab, after a run through the hook", async ({ page }) => {
+test("the Graph, Data and Results tabs and a .dta tab, after a run through the hook", async ({ page, browserName }) => {
   await page.goto("?test");
   await startEngine(page);
   await ready(page);
@@ -309,33 +310,99 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await expect(page.getByRole("button", { name: /^Scalars/ }).first()).toHaveAttribute("aria-expanded", "true"); // e(): open
   await expect(page.getByRole("button", { name: /^Matrices/ }).first()).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("button", { name: /^Locals/ })).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByRole("button", { name: /^Globals/ })).toContainText("set by the system");
   await expect(page.locator(".rs .row", { hasText: "`controls'" })).toContainText("age educ");
-  // a value: 8 digits, every digit when focused, copied whole
+  // Globals: the user's own; the engine's presets still at their value (F1 "help advice;" ...) are left out
+  const globalsHead = page.getByRole("button", { name: /^Globals/ });
+  await expect(globalsHead.locator(".count")).toHaveText("1");
+  await globalsHead.click();
+  await expect(page.locator(".rs .row", { hasText: "$mygl" })).toContainText("5");
+  await expect(page.locator(".rs .row", { hasText: "$F1" })).toHaveCount(0);
+  await globalsHead.click();
+  // a value: 8 digits, every digit copied; the toast names the row
+  const rowOf = (name: string) => page.locator(".rs .row").filter({ has: page.getByRole("button", { name }) });
+  const tint = (name: string) =>
+    rowOf(name)
+      .locator("td")
+      .first()
+      .evaluate((td) => getComputedStyle(td).backgroundColor);
+  const fits = (name: string) =>
+    rowOf(name)
+      .locator("td.act")
+      .evaluate((td) => td.scrollWidth <= td.clientWidth);
+  const plain = await tint(/^e\(rank\):/); // a row the pointer has not been on
   const n = page.getByRole("button", { name: "e(N): 160" });
   await n.click();
   expect((await copied(page)).at(-1)).toBe("160");
-  await expect(page.locator(".toast")).toHaveText("Copied");
-  const r2 = page.locator(".rs button.val[aria-label^='e(r2):']");
-  const short = (await r2.textContent())!;
+  await expect(page.locator(".toast")).toHaveText("Copied e(N)");
+  const r2 = page.getByRole("button", { name: /^e\(r2\):/ });
+  const whole = (await r2.getAttribute("aria-label"))!.replace("e(r2): ", "");
+  const short = (await r2.locator(".short").textContent())!; // the digits in sight; .full has all
   expect(short.length).toBeLessThanOrEqual(10);
-  await r2.focus();
-  // the focused row's "↵ Copy": in sight on the desktop; a phone hides it (a tap copies, and the toast says so)
-  const copyHint = page.locator(".rs .focusrow .hint");
-  await expect(copyHint).toHaveText("↵ Copy");
-  if (phone(page)) await expect(copyHint).toBeHidden();
-  else await expect(copyHint).toBeVisible();
-  const whole = (await r2.textContent())!;
   expect(whole.length).toBeGreaterThan(short.length);
-  await page.keyboard.press("Enter");
+  // after a click and the pointer gone: no tint, and the short digits are back
+  await r2.click();
   expect((await copied(page)).at(-1)).toBe(whole);
-  await n.focus();
+  await page.mouse.move(1, 1);
+  await expect(r2).toHaveText(short, { useInnerText: true });
+  expect(await tint(/^e\(r2\):/)).toBe(plain);
+  // a click (a tap on the phone) on the name copies too; the row says "✓ Copied", whole, for about 2 s
+  const r2Name = rowOf(/^e\(r2\):/)
+    .locator("td")
+    .first();
+  const copies = (await copied(page)).length;
+  if (phone(page)) await r2Name.tap();
+  else await r2Name.click();
+  await expect.poll(async () => (await copied(page)).length).toBe(copies + 1);
+  expect((await copied(page)).at(-1)).toBe(whole);
+  await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
+  const done = rowOf(/^e\(r2\):/).locator(".act .copied");
+  await expect(done).toBeVisible();
+  await expect(done).toHaveText("Copied");
+  expect(await fits(/^e\(r2\):/), "✓ Copied is not cut").toBe(true);
+  await expect(done).toHaveCount(0, { timeout: 4000 });
+  // "↵ Copy" on a hovered row, whole, on the desktop; a phone has none (a tap copies, and the row says so)
+  if (phone(page)) await expect(page.locator(".rs .hint")).toHaveCount(0);
+  else {
+    await rowOf(/^e\(rank\):/).hover();
+    await expect(rowOf(/^e\(rank\):/).locator(".hint")).toBeVisible();
+    expect(await fits(/^e\(rank\):/), "↵ Copy is not cut").toBe(true);
+    await page.mouse.move(1, 1);
+  }
+  // every value is a Tab stop: Tab from a later group's head reaches its first value, which is tinted with all digits
+  const tab = browserName === "webkit" ? "Alt+Tab" : "Tab"; // Safari's Tab skips buttons unless Option is held
+  await page.getByRole("button", { name: /^Locals/ }).focus();
+  await page.keyboard.press(tab);
+  const firstLocal = page
+    .locator(".rs tr.grp")
+    .filter({ hasText: /^Locals/ })
+    .locator("xpath=following-sibling::tr[1]")
+    .locator("button.val");
+  await expect(firstLocal).toBeFocused();
+  const [local, value] = (await firstLocal.getAttribute("aria-label"))!.split(": ");
+  expect(await tint(`${local}: ${value}`)).not.toBe(plain);
+  await page.keyboard.press("Enter");
+  expect((await copied(page)).at(-1)).toBe(value);
+  await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
+  await page.keyboard.press(tab); // the next value
+  const next = page.locator(".rs .row button.val:focus");
+  await expect(next).toHaveCount(1);
+  const nextValue = (await next.getAttribute("aria-label"))!.split(": ")[1];
   await page.keyboard.press("ControlOrMeta+c");
-  expect((await copied(page)).at(-1)).toBe("160");
-  // one value in the tab order; arrows move
-  await expect(page.locator(".rs button.val[tabindex='0']")).toHaveCount(1);
-  await page.keyboard.press("ArrowDown");
-  expect(await page.evaluate(() => document.activeElement?.getAttribute("data-key"))).not.toBe("e(N)");
+  expect((await copied(page)).at(-1)).toBe(nextValue);
+  // without the clipboard API (plain http, as on a LAN), the old way copies; a click leaves no focus ring
+  await page.evaluate(() => {
+    window.__clip = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  });
+  await page.mouse.move(1, 1);
+  await r2.click();
+  await page.mouse.move(1, 1);
+  await expect(page.locator(".toast")).toBeVisible();
+  expect(await page.evaluate(() => document.querySelector(".rs :focus-visible")?.outerHTML ?? null)).toBeNull();
+  expect(await tint(/^e\(r2\):/)).toBe(plain);
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true }),
+  );
   // a matrix: View opens it in place, Hide folds it, the size copies it as tab-separated text
   const log = await logLength(page);
   await page
@@ -344,12 +411,18 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     .click();
   await expect(page.locator(".rs .mat")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "e(b): 1 x 3" })).toBeVisible();
+  const beforeView = (await copied(page)).length;
   await page.getByRole("button", { name: "View e(b)" }).click();
   const grid = page.locator(".rs .mat table.grid");
   await expect(grid.locator("th")).toHaveText(["Row", "age", "educ", "_cons"]);
   await expect(grid.locator("tbody tr")).toHaveCount(1);
   expect(await logLength(page)).toBe(log);
   await page.getByRole("button", { name: "e(b): 1 x 3" }).click();
+  await expect
+    .poll(async () => (await copied(page)).length, "View copies nothing; the size copies once")
+    .toBe(beforeView + 1);
+  await expect(page.locator(".toast")).toHaveText("Copied e(b)");
+  await expect(page.locator(".rs .copied")).toHaveCount(0); // a matrix row keeps View and Hide: the toast says it
   expect((await copied(page)).at(-1)).toMatch(/^\tage\teduc\t_cons\n\S+\t[-.\d]+\t[-.\d]+\t[-.\d]+$/);
   await page.getByRole("button", { name: "Hide e(b)" }).click();
   await expect(page.locator(".rs .mat")).toHaveCount(0);
