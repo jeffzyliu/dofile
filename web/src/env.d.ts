@@ -2,6 +2,7 @@ declare const __WHEEL__: string; // the dofile wheel's file name, served next to
 declare const __EXTRA_WHEELS__: string[]; // file names of web/wheels/*.whl (pyreadstat), served next to the page
 declare const __BUILD_ID__: string; // the build id (scripts/build-id.ts); start-files.json must carry the same (client.ts, checkBuild)
 declare const __PYODIDE__: string; // Pyodide's indexURL (CDN)
-declare const __SITE_URL__: string; // the landing page, from the editor (scripts/urls.ts SITE_URL): "/" or a whole URL
+declare const __SITE_URL__: string | null; // the landing page, from the editor (scripts/urls.ts SITE_URL): a whole URL; null in dev
+declare const __DEV_SITE_PORT__: number; // the pages' dev server's port (scripts/urls.ts DEV_SITE_PORT): app/env.ts LANDING_URL in dev
 // what the build says of the engine (scripts/build-id.ts, about()): the package's version, the engine's commit, the Stata version
 declare const __ABOUT__: { dofile: string; engine_commit: string | null; stata_version: number };

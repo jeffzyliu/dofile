@@ -82,7 +82,9 @@ jobs:
         with:
           persist-credentials: false
       - if: steps.tip.outputs.tip == 'true'
-        uses: ./.github/actions/build-web   # no inputs: the production addresses of web/scripts/urls.ts
+        uses: ./.github/actions/build-web
+        with:
+          urls: production   # the production addresses of web/scripts/urls.ts
       - name: Deploy the editor (dofile-app)
         if: steps.tip.outputs.tip == 'true'
         uses: cloudflare/wrangler-action@v4

@@ -79,7 +79,9 @@ jobs:
       - run: npm run commands   # regenerate the highlighter's command list from the engine's registry ...
       - run: git diff --exit-code -- src/stata/commands.json   # ... it must match what is committed
       - run: npm test   # builds the wheel, then node --test: the worker and client in Node, the shim, inflate/unpack
-      - run: npm run build   # vite build
+      - run: npm run build   # vite build, both modes, as production builds them (canonical links, no noindex)
+        env:
+          DOFILE_URLS: production
 
   # Biome (web/biome.json): the format, the import order and the lint rules. Warnings fail here too; locally
   # (`npm run check`, the dev server, a build) only errors do. Also on a push to main. The fix: `npm run format`.

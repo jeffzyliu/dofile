@@ -24,10 +24,11 @@ export const brotli = q.get("brotli") ?? undefined;
  *  cap on a real phone. main.tsx logs it and gives it to the transport. */
 export const memcap = chooseCap(factsOf(navigator), q.get("memcap"));
 
-/** The landing page (web/landing.html, step 5), the site's root: the wordmark, "About dofile" and the other-tab dialog's
- *  "Close editor" go there. The build sets it (scripts/urls.ts SITE_URL: "/" while the editor is under /app/ on the same
- *  origin, a whole URL once the editor has its own). The editor's own files are under import.meta.env.BASE_URL. */
-export const LANDING_URL = __SITE_URL__;
+/** The landing page (web/landing.html, step 5), the root of the site's own origin: the wordmark, "About dofile" and the
+ *  other-tab dialog's "Close editor" go there. A whole URL ending in "/": the build's (scripts/urls.ts SITE_URL); in dev
+ *  (`npm run dev`) the pages' dev server, at this page's own host name on its port (scripts/urls.ts DEV_SITE_PORT), so a
+ *  phone on the LAN reaches it too. The editor's own files are under import.meta.env.BASE_URL. */
+export const LANDING_URL = __SITE_URL__ ?? `${location.protocol}//${location.hostname}:${__DEV_SITE_PORT__}/`;
 
 /** The commands page ("Commands" in the ⋯ menus): the site's /commands/, from the landing page's address (which ends in /). */
 export const COMMANDS_URL = `${LANDING_URL}commands/`;

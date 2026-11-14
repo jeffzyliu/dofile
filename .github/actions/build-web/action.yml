@@ -4,18 +4,15 @@ description: >-
   hash of its inputs), the editor into web/dist/app and the landing and commands pages into web/dist/site, then fails if
   a file is too big for Workers static assets. Used by deploy.yml (production) and preview.yml (pull request previews), so
   the two cannot drift apart. Needs the repository checked out first. Runs no wrangler and reads no secret.
-inputs:
+inputs:   # the addresses the two builds link each other by (web/scripts/urls.ts): `urls`, or both of the other two
+  urls:
+    description: DOFILE_URLS, "production" (the addresses of web/scripts/urls.ts).
+    default: ""
   site-url:
-    description: >-
-      The landing page's address the editor links to (DOFILE_SITE_URL, a whole URL ending in "/"). Empty: the production
-      address of web/scripts/urls.ts.
-    required: false
+    description: DOFILE_SITE_URL, the landing page's address the editor links to (a whole URL ending in "/").
     default: ""
   editor-url:
-    description: >-
-      The editor's address the pages link to (DOFILE_EDITOR_URL, a whole URL ending in "/"). Empty: the production address
-      of web/scripts/urls.ts.
-    required: false
+    description: DOFILE_EDITOR_URL, the editor's address the pages link to (a whole URL ending in "/").
     default: ""
 
 runs:
@@ -62,19 +59,17 @@ runs:
       run: npm run snapshot   # quality 11, the shipped one; needs the network once: micropip fetches openpyxl from PyPI
 
     # The editor into dist/app/ (with public/: wheels, runtime, snapshot, _headers), then the static pages into dist/site/.
-    # The addresses they link each other by are read at build time (scripts/urls.ts). An empty input leaves its variable
-    # unset rather than empty: urls.ts takes an empty value as given, and it does not end in "/".
+    # The addresses they link each other by are read at build time (scripts/urls.ts, where an empty value is unset); the
+    # build fails unless the caller gave `urls` or both URLs.
     - name: Build
       shell: bash
       working-directory: web
       env:
         UV_PYTHON: "3.14"
-        SITE_URL: ${{ inputs.site-url }}
-        EDITOR_URL: ${{ inputs.editor-url }}
-      run: |
-        if [ -n "$SITE_URL" ]; then export DOFILE_SITE_URL="$SITE_URL"; fi
-        if [ -n "$EDITOR_URL" ]; then export DOFILE_EDITOR_URL="$EDITOR_URL"; fi
-        npm run build
+        DOFILE_URLS: ${{ inputs.urls }}
+        DOFILE_SITE_URL: ${{ inputs.site-url }}
+        DOFILE_EDITOR_URL: ${{ inputs.editor-url }}
+      run: npm run build
 
     # Cloudflare Workers static assets refuse a file over 25 MiB. The brotli-11 snapshot is built only here (web.yml builds
     # it at quality 5), so this is the one place the real file sizes show up: fail here, before wrangler does.
