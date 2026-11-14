@@ -11,7 +11,7 @@ export async function problems(site: string, editor: string, get: typeof fetch =
   // a redirect is not followed: a login page or another site in its place must not count as the page
   const load = async (url: string) => {
     try {
-      const res = await get(url, { redirect: "manual" });
+      const res = await get(url, { redirect: "manual", signal: AbortSignal.timeout(15_000) }); // a server that never answers must not hold the deploy group
       if (res.status === 200) return res;
       out.push(`${url} answered ${res.status}`);
     } catch (e) {

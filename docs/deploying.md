@@ -192,7 +192,9 @@ on `main` (a new commit, which deploys itself), or from your own computer `npx w
 (with `--config wrangler.app.jsonc` for the editor; not tried here).
 
 **Secrets.** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are in the environment of the step that runs wrangler only:
-`npm ci`, the snapshot and the builds never see them. Wrangler is the project's own (`npx --no-install wrangler`, the version
+`npm ci`, the snapshot and the builds never see them in their environment. In preview.yml those run the pull request's own
+code earlier in the same job, and anything it leaves behind (a process, a changed `node_modules/.bin/wrangler`) runs with the
+token: that is why previews are for branches of this repository only. Wrangler is the project's own (`npx --no-install wrangler`, the version
 in `web/package-lock.json`), never a fresh download. Checkouts keep no credentials (`persist-credentials: false`).
 
 **Why preview.yml has two jobs.** `upload` runs the pull request's code (its `npm ci`, its build scripts) with the

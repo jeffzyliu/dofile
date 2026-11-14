@@ -180,9 +180,9 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
   request,
 }) => {
   const res = await request.get("start-files.json");
-  expect(res.ok(), "no build: run npm run snapshot, then npm run build").toBe(true);
+  expect(res.ok(), "no build: run npm run snapshot, then npm run build:local").toBe(true);
   const list = await res.json();
-  expect(list.built, "no snapshot: run npm run snapshot, then npm run build").toBeTruthy();
+  expect(list.built, "no snapshot: run npm run snapshot, then npm run build:local").toBeTruthy();
   // the build's list is the one statement of the build: a list of another build id is a site updated since the page loaded
   await page.route("**/start-files.json", (route) => route.fulfill({ json: { ...list, buildId: "0".repeat(64) } }));
   await page.goto("?test");
