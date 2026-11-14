@@ -1221,6 +1221,62 @@ test("a file that isn't UTF-8 opens no tab: the Files pane's banner offers Downl
   await expect(banner).toBeHidden();
 });
 
+// A picker's synthetic click on the hidden input must not reach the empty-space handler (it would make the top current)
+test('Upload and Upload a folder, cancelled: the current folder stays, and the "+" still names it', async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  await row(page, /^data\//).click();
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  const upload = page.locator(".dropzone").getByRole("button", { name: "Upload" });
+  if (await upload.isVisible()) {
+    const chooser = page.waitForEvent("filechooser");
+    await upload.click();
+    await chooser; // the picker opened; nothing is chosen
+    await expect(plus(page)).toHaveAccessibleName("New file in data/");
+    await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
+  }
+  const chooser = page.waitForEvent("filechooser");
+  await (await fileActions(page)).getByRole("menuitem", { name: "Upload a folder" }).click();
+  await chooser;
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
+});
+
+test("the head menu's New .do file and New folder, and the dropzone's New .do file, make the entry in the current folder", async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  const data = row(page, /^data\//);
+  const ask = async (item: string) => {
+    await data.click();
+    await expect(data).toHaveAttribute("aria-current", "true");
+    await (await fileActions(page)).getByRole("menuitem", { name: item }).click();
+  };
+  await ask("New .do file");
+  const file = nameField(page, "untitled.do");
+  await expect(file).toBeFocused();
+  expect(await levelOf(file)).toBe("2");
+  await page.keyboard.press("Escape");
+  await expect(file).toHaveCount(0);
+  await showFiles(page);
+  await ask("New folder");
+  const folder = nameField(page, "folder");
+  await expect(folder).toBeFocused();
+  expect(await levelOf(folder)).toBe("2");
+  await page.keyboard.press("Escape");
+  await expect(folder).toHaveCount(0);
+  await showFiles(page);
+  const link = page.locator(".dropzone").getByRole("button", { name: "New .do file" });
+  if (await link.isVisible()) {
+    await data.click();
+    await link.click();
+    const field = nameField(page, "untitled.do");
+    await expect(field).toBeFocused();
+    expect(await levelOf(field)).toBe("2");
+  }
+});
+
 test("Upload a folder keeps its folders (Chromium: Playwright gives a folder to a webkitdirectory input there only)", async ({
   page,
   browserName,

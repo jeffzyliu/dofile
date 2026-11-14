@@ -214,7 +214,7 @@ async function endRename(name: string | null, leaving = false) {
 
 /** The end of a draft's field. Esc writes nothing. Enter writes the typed name, or the free default (`untitled.do`,
  *  `folder`) when it is empty or unchanged; a name in use keeps the field open. Leaving the field always writes: a name
- *  that cannot be used makes the free default, and the live region says so, but nothing opens and the focus stays where
+ *  that cannot be used makes the free default, and a toast says so, but nothing opens and the focus stays where
  *  the visitor tapped (docs/web-page-flows.md, rule 8). Then the list is read again, so the row replaces the draft, and
  *  after Enter a file opens and its row takes the focus. */
 async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
@@ -673,12 +673,12 @@ export function FilesBody() {
     if (list.length) send(fromFileList(list));
   };
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: a tap on the empty space makes the top the current folder; the keyboard has no such stop (Left on a top-level folder does it)
+    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: a tap on the empty space (not the pickers' hidden inputs, whose synthetic click bubbles here) makes the top the current folder; the keyboard has no such stop (Left on a top-level folder does it)
     <div
       class="files-body"
       ref={ref}
       onClick={(e) => {
-        if (!(e.target as HTMLElement).closest('[role="treeitem"], button')) currentDir.value = "";
+        if (!(e.target as HTMLElement).closest('[role="treeitem"], button, input')) currentDir.value = "";
       }}
     >
       {rows.length > 0 && (

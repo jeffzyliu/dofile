@@ -302,7 +302,7 @@ sequenceDiagram
 - `web/e2e/files.spec.ts`:
   - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save"
   - "the row menu (Shift+F10, right click, the ⋯): Delete asks, …" (the focus after Delete, on the tree's row)
-  - "a folder's menu: New file here and New folder unfold …", 'the "+": the folder row last focused, …', 'the "+" and a
+  - "a folder's menu: New file here and New folder unfold …", 'the "+": the current folder (a tap on a folder's name, or on a file in it), else the top; …', 'the "+" and a
     name with "/": …' and 'a draft's name is checked part by part …; a rename still refuses "/"' (a draft in a folder), 'the "+" twice from a folder's file row …', 'the "+" after a typed name was written by leaving the field …' (a draft's path counts as its folder) and "a draft's Esc, from a folder's menu or the "+": the focus goes back to the row it came from …"
   - "New .do file and New folder: the name field has the focus within the tap's microtasks, from the link and from the
     menu" (rule 8), and the tests after it: Esc (the focus back on the tree's row), Enter, leaving the field (writes only;
