@@ -108,7 +108,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     "Write only, don't open"; Esc discards; checked on the maintainer's iPhone). Gaps of #48 and #50: `docs/icebox.md`,
     "Phone" and "Command line, log and files".
   - Waiting on the maintainer: decisions 7 to 16 (17 to 22 are decided, 2026-11-13, above); the iPhone sitting (the phone command line, the wake
-    lock with the phone locked 30 s; the keyboard experiment is done, #27); the deployed site's address for the first-deploy checks; how they saw Home open `analysis.do` (see "After step 6: later UI work", 8).
+    lock with the phone locked 30 s; the keyboard experiment is done, #27); how they saw Home open `analysis.do` (see "After step 6: later UI work", 8).
   - Known flaky tests, with their sightings: `docs/test-map.md`, "Known flaky tests".
 
 - **UI fix round (2026-11-12), on `ui-lightning`:** the maintainer's UI bugs after the merge of steps 4 and 5. Editor: the
@@ -189,7 +189,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 - **Next, in this order:**
   1. The maintainer's pass on pull request #17 (step 4): "Step 4: decisions and open questions" below, and the draft
      words in SPEC section 8; then its merge.
-  2. Step 5 (pull request #18, over step 4), then step 6 for each merged part and the review in 6r.
+  2. Step 5 (pull request #18, over step 4), then step 6 for each merged part and the audit in step 6.
 - **To try on a real iPhone** (none of this can be tested here; the e2e iPhone profile is an emulation with no real
   keyboard, toolbars or touch scrolling): the page does not scroll or bounce; with the keyboard open the command line sits
   right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard
@@ -442,6 +442,7 @@ Reviewed after the merge: see Post-merge review.
 5. "Browsers that work" says only what the tests and the docs support: the automatic tests run the page in Chromium,
    Firefox and WebKit, no browser was also tried by hand on a computer, one iPhone 13 was tried by hand, other iPhones and
    iPads and Android were not tried; Break needs cross-origin isolation, and the files stay in the browser's storage. (2026-11-12: the maintainer replaced the section's text: computers tested automatically in Chromium, Firefox and WebKit; an iPhone 13 checked by hand in Safari, older iPhones and iPads with less memory may not start; Android not tested; the files stored in this browser only; on some networks Break resets the engine. It no longer says an iPhone-sized WebKit window is run or that Break needs isolation.)
+   **Done (2026-11-13).**
 6. `/landing.html` is a 404, not a redirect: it was never deployed (step 5 is the first to build it).
    **Resolved (2026-11-13): confirmed** (the maintainer: "yes, 404 is correct").
 
@@ -460,6 +461,7 @@ Reviewed after the merge: see Post-merge review.
    correctness until phase 2(web editor) is done, icebox".
 4. `shell.spec.ts`'s `?snapshot=0` test (the normal boot from the CDN) has failed now and then in Firefox, not in the other
    profiles; not investigated.
+   **Decided, kept (2026-11-13):** the cause stays unknown in the test map (the maintainer: "all recs").
 5. The design checks (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs, not the built pages;
    on the real landing and commands pages only axe runs (`e2e/landing.spec.ts`, both themes).
    **Held by step 6 (2026-11-13):** its row runs these checks on the real pages.
@@ -524,8 +526,8 @@ partly done inside steps 3 to 5: the e2e suite has 105 tests in four browser pro
 scripts (`npm run axe`, `tabwalk`, `contrast`, `fonts`) read the mockups from `file:` URLs and do not yet run on the built
 pages; the four tests in `e2e/poc.spec.ts` are still fixme; and the accessibility items in `docs/icebox.md` belong with that
 work. **Step 6r** (a review of each merge by a fresh context) has in effect been done before the merge for steps 4 and 5:
-fresh-context reviewers went over each part, the join and the move, and their findings were fixed or listed in B and C. A
-`/code-review` of the merged whole is still open if the maintainer wants it. **Step 7** (the Phase 2 verification list, the
+fresh-context reviewers went over each part, the join and the move, and their findings were fixed or listed in B and C. The
+`/code-review` of the merged whole is dropped (2026-11-13, the maintainer: "all recs"): the step 6 full-code audit is that review. **Step 7** (the Phase 2 verification list, the
 real-phone pass, the Safari storage re-check) takes the real-phone items of the C lists (step 4's C 13).
 
 ## Decisions (2026-11-10)
@@ -585,7 +587,7 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (built on `prototype1-step4`, pull request #17; the draft words in SPEC section 8, "Step 4d: draft words"; the review decisions and open questions in "Step 4: decisions and open questions" above) |
 | 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4; reviewed once, its findings fixed; the landing page moved to `/` and the editor to `/app/`; open for the maintainer: the words listed in SPEC section 8 "As built in step 5", the first deploy's checks in SPEC 8 "URLs") |
 | 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages (step 5 C 5: today they read the mockups); the accessibility items of `docs/icebox.md`, "Accessibility" | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review". Width decided 2026-11-13 (decision 22, accepted): the work above plus three cheap audit checks: unused code (knip), the licences of the web dependencies, and stale docs. Security headers and the `?test` gate wait until later. The audit's list also has (2026-11-13): step 3.5's lost Break, upgraded database and worker-only store failure ("Open from step 3.5"), the code splitting of the main chunk (step 4 C 20), the off controls' contrast (#26), and a held Enter on a banner button that gives the focus to the editor (to verify). Also from the review's sections 6 and 7 (2026-11-13, the maintainer: "all recs"): what the tests do not cover (the views are tried only by e2e; `check-pytest` and `check-numeric` run by hand); #37's unchecked items (Cmd+Enter in a `<select>`, the 1 px ring's contrast, the status bar's fit at 1200 px); and the UI round's nice-to-haves 6 (IME `isComposing`), 8 (ring contrast) and 9 (the `.log` focus ring's radius and its off-screen bottom edge); the #26 and #30 review nice-to-haves (their reports were deleted) were dropped, since the audit reads that code |
-| 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | done before the merge for steps 4 and 5 (fresh-context reviews of each part, the join and the move); a `/code-review` of the merged whole open if wanted |
+| 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | done before the merge for steps 4 and 5 (fresh-context reviews of each part, the join and the move); dropped for the merged whole (2026-11-13): the step 6 full-code audit is that review |
 | 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started; its list is under "Known work inside the steps" below ("Step 7", with the 2026-11-13 additions) |
 
 ## After step 6: later UI work (the maintainer's ideas, 2026-11-12; not started)
@@ -629,7 +631,7 @@ is set when this work is scheduled (decision 17, "queued run first", was dropped
 - Steps 1 and 2 touch different files (`src/dofile/` and `tests/` against `web/src/engine/` and `web/test/`). The worker
   ops that call step 1's new Python functions are joined after both merge, at the start of step 3.
 - Step 3 fixes the state model that the step 4 agents write against. Do not start step 4 before step 3 is merged.
-- After each merge: step 6 for that part, then the review in 6r, then update the Status column here.
+- After each merge: step 6 for that part, then update the Status column here.
 
 ## Known work inside the steps (found in the review of 2026-11-10)
 
@@ -659,7 +661,7 @@ is set when this work is scheduled (decision 17, "queued run first", was dropped
     maintainer asked for the hooks to live in one focus-hooks file.
 - **Step 6 (deployment, decided 2026-11-13): the site at `dofile.dev`, the editor at `app.dofile.dev`.** The maintainer asked
   for this layout ("dofile.dev and app.dofile.dev later"). Order: buy the domain and run the first-deploy checks (SPEC
-  section 8, "To look at on the first real deploy") on the one-origin site, then split the two origins **before the site is
+  section 8, "To look at on the first real deploy"; they run in step 6, with the domain bought when the audit begins, 2026-11-13) on the one-origin site, then split the two origins **before the site is
   announced**. The browser keeps the visitors' files, the downloaded engine, the tab lock, the sample's mark and the theme per
   origin, so a split after visitors have used `dofile.dev/app/` would leave their files behind (they would download a zip and
   upload it again) and download the engine again; before anyone uses it, nothing is lost. The steps (two builds into two
