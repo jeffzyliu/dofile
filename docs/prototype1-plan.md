@@ -93,6 +93,14 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     the tab or the whole browser goes.
     **Iceboxed (2026-11-13)** (`docs/icebox.md`, "Engine memory"): not reproduced locally; the maintainer: "icebox the firefox
     crash, i'll revisit it if it happens again".
+  - **Merged 2026-11-13:** #43 (Break: the pill, status bar and banners on one clock; "Stopping…" from the press until
+    the engine confirms); #45 (focus: one hooks file, each focus request taken by the render that draws its target);
+    #48 (phone: a touchmove guard stops iOS panning the page while the keyboard is open; checked on the maintainer's iPhone,
+    including a selection handle within one line and the caret magnifier); #50 (New .do file and New folder draw
+    their name field in the tap, so the iPhone keyboard comes up: Enter writes, opens and focuses the row; leaving the
+    field writes only and opens nothing, the focus and the phone's view staying where the visitor tapped, the maintainer's
+    "Write only, don't open"; Esc discards; checked on the maintainer's iPhone). Gaps of #48 and #50: `docs/icebox.md`,
+    "Phone" and "Command line, log and files".
   - Waiting on the maintainer: decisions 7 to 22; the iPhone sitting (the phone command line, the wake
     lock with the phone locked 30 s; the keyboard experiment is done, #27); the deployed site's address for the first-deploy checks; the
     draft words of SPEC section 8; how they saw Home open `analysis.do` (see "Later UI work", 8).
