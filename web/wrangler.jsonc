@@ -9,6 +9,8 @@
   "routes": [{ "pattern": "dofile.dev", "custom_domain": true }],
   // also the workers.dev address, which preview deployments use (a Worker with routes would not have it unless it is set)
   "workers_dev": true,
+  // the pull request previews (preview.yml) are version URLs on workers.dev; set here, not left to the account default
+  "preview_urls": true,
   "assets": {
     "directory": "./dist/site",
     // Cloudflare's default, written out: /commands goes to /commands/ (its index.html), and a file x.html is served at /x (so

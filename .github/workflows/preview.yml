@@ -17,7 +17,8 @@ name: preview
 #
 # To check on the first real preview (the docs do not say, so unverified): that Version URLs work for these assets-only
 # Workers, that the editor's _headers (COOP/COEP) apply on its preview address (the editor needs crossOriginIsolated), that
-# `versions upload` leaves the custom domains and the deployed version alone, and whether it needs the Worker deployed once.
+# `versions upload` leaves the custom domains and the deployed version alone. wrangler refuses `versions upload` for a Worker
+# that was never deployed (its source), so the editor's previews fail until the first production deploy of dofile-app.
 on:
   pull_request:
     paths:   # what the two builds are made from; a pull request that changes none of it keeps its last preview
