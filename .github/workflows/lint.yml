@@ -5,7 +5,7 @@ name: lint
 # treat lint.yml and release.yml as non-code).
 #
 # Same pattern as ci.yml: the workflow starts for every pull request, `changes` looks at the files, and the lint job is
-# skipped unless a workflow or a local action (.github/actions/) changed, so the check `lint ok` always reports and can be
+# skipped unless a workflow, a local action (.github/actions/) or a workflow script (.github/scripts/) changed, so the check `lint ok` always reports and can be
 # required in branch protection. (A workflow-level `paths` filter would start nothing, and a required check that never
 # reports blocks the merge forever.) A push to main (or a manual run) always lints, as ci.yml and web.yml run in full on
 # main: on main this runs through deploy.yml (workflow_call), which deploys only if this, ci.yml and web.yml all passed.
@@ -27,7 +27,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      workflows: ${{ steps.diff.outputs.workflows }}   # "false" only for a pull request that changes no file in .github/workflows/ or .github/actions/ (actionlint checks a workflow's use of a local action against its action.yml)
+      workflows: ${{ steps.diff.outputs.workflows }}   # "false" only for a pull request that changes no file in .github/workflows/, .github/actions/ or .github/scripts/ (actionlint checks a workflow's use of a local action against its action.yml)
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,7 +40,7 @@ jobs:
           workflows=true
           if [ "$EVENT" = pull_request ]; then
             files=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
-            wf=$(printf '%s\n' "$files" | grep -E '^\.github/(workflows|actions)/' || true)
+            wf=$(printf '%s\n' "$files" | grep -E '^\.github/(workflows|actions|scripts)/' || true)
             [ -n "$wf" ] || workflows=false
           fi
           echo "workflows=$workflows" >> "$GITHUB_OUTPUT"
@@ -54,6 +54,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3
       # pinned, so a new rule cannot fail an unrelated pull request; bump it on purpose
       - run: uvx --from actionlint-py==1.7.12.25 actionlint
+      - run: shellcheck .github/scripts/*.sh   # the scripts the workflows call (actionlint checks only the inline ones)
 
   # The check to require in branch protection: it fails if any job failed or was cancelled; skipped jobs are fine.
   ok:
