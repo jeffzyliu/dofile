@@ -158,6 +158,12 @@ estimated splits) are the study's, not checked again here.
   it is how a visitor would crash the tab. The engine has no `max_memory` setting today, so it needs a hook in `browser.py` (or a
   patch) and the cap the worker sets; the loader reads the cap at each grow, so it can probably change while the engine runs
   (not checked). `docs/browser-engine.md`, "The memory cap". 2026-11-13.
+- **Fewer copies in `generate`** (2026-11-13, from the post-merge review's section 6; the maintainer: "all recs"). The heap is
+  3.5 to 6 times the data because `generate` and `replace` copy a column and wasm memory never shrinks, so a cap holds much
+  less data than its size; fewer copies is the lever, and is not done (`docs/browser-engine.md`, "What a cap buys").
+- **Memory cap: no fallback for `importCapped`, and the capped normal boot is tested only in Chromium e2e** (the memory cap's
+  review, nice-to-have 3; iceboxed 2026-11-13). If the blob import fails there is no fallback, and no other browser's e2e
+  runs the capped normal boot.
 - **Desktop Firefox crash** (reported by the maintainer 2026-11-12; iceboxed 2026-11-13, to revisit if it happens again).
   Not reproduced (2026-11-13, Playwright's Firefox 159, headless, a 24 GB Mac): four fills of the uncapped 4 GB heap each
   ended in a clean r(909) with the data kept; 40 runs with resets, and 3 to 6 million rows through regress, graphs, sort and
