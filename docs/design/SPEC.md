@@ -92,7 +92,8 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   files or folders" in P1; the mockup's "or a .zip" is P2, OQ-19; links "Upload" and "New .do file") and "Download all (.zip)".
 - **Folders and the current folder:** a folder row has two targets. The caret (left) folds or unfolds the folder and selects
   nothing; a tap on the rest of the row, or Enter or Space, makes it the current folder and unfolds it (never folds); a second tap on the name of the
-  current folder makes the top current (no fold; Enter and Space on it stay select and unfold). The
+  current folder makes the top current (no fold; Enter and Space on it stay select and unfold; a double-click's second click
+  is not a second tap). The
   current folder is shown with its name in the accent colour and a 1 px accent outline, no fill, so the open file's filled row
   and the folder never both look selected (`aria-current`; in forced colors a Highlight outline). A tap on a file opens it and makes its folder current; a tap on the empty space under the rows makes the
   top current (the way back on a phone, where the Files head is hidden). Folding the current folder, or a folder above it, makes

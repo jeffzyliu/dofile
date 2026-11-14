@@ -888,6 +888,16 @@ test("a tap on the name of the current folder makes the top current and does not
   await expect(plus(page)).toHaveAccessibleName("New file in data/");
 });
 
+// A double-click on a folder (the desktop habit for "open it") leaves it current: its second click is not a second tap.
+test("a double-click on a folder makes it current and unfolds it", async ({ page }) => {
+  await setUp(page, tree3);
+  const data = row(page, /^data\//);
+  await data.dblclick();
+  await expect(data).toHaveAttribute("aria-current", "true");
+  await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+});
+
 // "Outline, no fill" (the maintainer): the current folder has a thin outline and no tint, so only the open file's row has the fill.
 test("the current folder is outlined with no fill; only the open file's row is filled", async ({ page }) => {
   await setUp(page, tree3);

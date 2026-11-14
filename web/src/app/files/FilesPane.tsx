@@ -527,9 +527,10 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
       onClick={(e) => {
         if (r || (e.target as HTMLElement).closest(".rename-field")) return;
         rove(row.path);
-        if (row.dir && currentDir.value === row.path)
-          currentDir.value = ""; // a second tap on the current folder: the top
-        else activate();
+        // a second tap on the current folder: the top; not the second click of a double-click, which means "open it"
+        if (row.dir && currentDir.value === row.path) {
+          if (e.detail < 2) currentDir.value = "";
+        } else activate();
       }}
       onContextMenu={(e) => {
         if (r) return;
