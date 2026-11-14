@@ -11,8 +11,10 @@ Run from `web/` (`npm install` once). The wheel is rebuilt by the scripts that n
 
 ```bash
 npm test                  # the engine in Pyodide under Node, the file store, the client, the page's controllers (~70 s)
-npm run dev               # the site on the LAN too: the landing page at /, the editor at /app/
-npm run e2e               # builds the snapshot and the page, then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min; E2E_PORT=4181 serves the build on another port than 4173, for a second worktree)
+npm run dev               # the editor on the LAN too, at / (the landing and commands pages are another origin and not served in dev: `npm run build:local && npm run preview` serves both builds)
+npm run e2e               # builds the snapshot and the two builds (`build:local`), then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min; E2E_PORT=4181 serves the pages on 4181 and the editor on 4182 instead of 4173 and 4174, for a second worktree)
+npm run build             # the wheel, the editor into dist/app/, the pages into dist/site/; the URLs they link each other by: DOFILE_SITE_URL, DOFILE_EDITOR_URL (production by default, DOFILE_URLS=local: localhost; `npm run build:local`)
+npm run preview           # the two builds on two ports, 4173 (pages) and 4174 (editor), as the two Workers serve them
 npm run snapshot          # the Pyodide memory snapshot the page starts from; `npm run dev` needs it once, and again after a change to the engine
 npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide (~4 min; --normal: no snapshot; --cases a,b)
 npm run check-numeric     # e()/r() of all 98 Stata 14 programs at full precision (~4 min; the diff: header of scripts/compare_numeric.py)
@@ -152,22 +154,26 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   `sh web/wheels/pyreadstat/build.sh`, see its README). `scripts/install-engine.ts` installs them in Node as `worker.ts` does
   in the page.
 
-- **The site's addresses: the landing page is `/`, the commands page `/commands/`, the editor a single-page app under
-  `/app/`.** The editor's location is ONE setting, `scripts/urls.ts` (`EDITOR_BASE`, and `EDITOR_URL`/`SITE_URL` for links
-  across origins); everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL`
-  (`app/env.ts`), and `test/site.test.ts` fails if another source (CSS and JSON too), script, e2e test, config, page or
-  workflow spells the editor's path after a quote, a backquote, `(` or `=`. Never write a root-absolute path to an editor file,
-  nor one joined from pieces. Another path on the same origin is a change of `EDITOR_BASE` alone (the tests compare with the
-  setting). Its own subdomain later is two builds into two folders (the editor with `DOFILE_EDITOR_BASE=/` and `--outDir`, the
-  pages with `DOFILE_EDITOR_URL`, `DOFILE_EDITOR_DIR` and `--outDir`; both builds follow `--outDir`, and the pages' build
-  refuses the editor's folder) plus hand edits to the Wrangler configs, `package.json`, `deploy.yml` and the e2e setup: the
-  exact list, and what does not follow the editor to a new origin (the stored files, the downloaded engine, the sample's mark,
-  the theme), is in `docs/design/SPEC.md`, section 8, "URLs". `npm run build` is two builds:
-  `vite build` (the editor into `dist/app/`, emptying `dist/` first) and `vite build --mode site` (the landing and commands
-  pages into `dist/index.html` and `dist/commands/index.html`, their own assets in `dist/assets/`, and `dist/_headers`, which
-  isolates `/app/*` only; `public/` has no `_headers`). `vite preview` serves all of `dist/` as the host does; the dev server
-  is the editor's with the two pages added at `/` and `/commands/`. The e2e `baseURL` ends in `/app/`: `goto("?test")` is the
-  editor, `goto("/")` the landing page. A missing page is a 404 everywhere (`appType: "mpa"`; `not_found_handling: "none"`).
+- **The site is two origins, built into two folders and deployed as two Workers: the landing and commands pages at
+  `https://dofile.dev/` (`dist/site/`, `wrangler.jsonc`, Worker `dofile`), the editor at the root of
+  `https://app.dofile.dev/` (`dist/app/`, `wrangler.app.jsonc`, Worker `dofile-app`).** The editor's location is ONE setting,
+  `scripts/urls.ts`: `EDITOR_BASE` (`/`), the two folders (`EDITOR_OUT`, `SITE_OUT`) and the two addresses the builds link each
+  other by, `SITE_URL` (the editor's wordmark, "About dofile", "Close editor", "Browsers that work") and `EDITOR_URL` (the
+  pages' "Open the editor"): the production addresses unless `DOFILE_SITE_URL` / `DOFILE_EDITOR_URL` (whole URLs ending in `/`;
+  a preview deployment sets both to its workers.dev addresses) or `DOFILE_URLS=local` (localhost, ports from `E2E_PORT`) say
+  otherwise. Everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL` (`app/env.ts`),
+  and `test/site.test.ts` fails if another source, script, e2e test, config, page or workflow spells the editor's old path
+  (`/app/`) or an address of the site's origins after a quote, a backquote, `(` or `=` (the Wrangler configs spell the two domains
+  without a scheme, and a test compares them with `urls.ts`). `npm run build` is two builds: `vite build` (the editor into
+  `dist/app/`, with its own `_headers`: every path isolated) and `vite build --mode site` (the pages into `dist/site/index.html`
+  and `dist/site/commands/index.html`, their own `dist/site/assets/`, no `_headers`); `build:local` is the same with
+  `DOFILE_URLS=local`. `vite preview` serves one folder as its Worker does (`npm run preview`: both, on two ports, and the e2e
+  config does the same). `npm run dev` is the editor's dev server at `/`; the pages are another origin, so it does not serve them
+  (its links to the landing page go to `SITE_URL`: production unless `DOFILE_SITE_URL` points at a preview of `dist/site`). The
+  e2e `baseURL` is the editor's origin: `goto("?test")` is the editor, and the pages are `LOCAL_SITE_URL` and
+  `${LOCAL_SITE_URL}commands/` (compare whole addresses, origin included: `/` is a path of both). What does not follow the editor
+  to a new origin (the stored files, the downloaded engine, the sample's mark, the theme) and the steps, are in
+  `docs/design/SPEC.md`, section 8, "URLs". A missing page is a 404 everywhere (`appType: "mpa"`; `not_found_handling: "none"`).
 - **The landing and commands pages (step 5) are static HTML** (`landing.html`, `commands.html`; the editor is `index.html`).
   Their code is `src/site/` and imports only `src/site/` and the stylesheets, CSS `@import`s included, and the editor's
   `index.html` loads none of it (`test/imports.test.ts`): no signals, no store, no
