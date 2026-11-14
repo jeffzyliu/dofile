@@ -38,9 +38,13 @@ export const EDITOR_URL = process.env.DOFILE_EDITOR_URL ?? (local ? LOCAL_EDITOR
 export const SITE_URL = process.env.DOFILE_SITE_URL ?? (local ? LOCAL_SITE_URL : PRODUCTION_SITE_URL);
 
 if (!/^\/(.*\/)?$/.test(EDITOR_BASE)) throw new Error(`EDITOR_BASE must start and end with "/": ${EDITOR_BASE}`);
-// the links are joined to these ("commands/", "#browsers"): a URL without its slash would give "https://x.workers.devcommands/"
+// the links are joined to these ("commands/", "#browsers"): a URL without its slash would give "https://x.workers.devcommands/".
+// Both must be whole http(s) URLs: "x.workers.dev/" would make a relative link, and the build would take the site and the
+// editor for one origin (the editor's isolation headers on the landing page).
 for (const [name, url] of [
   ["DOFILE_EDITOR_URL", EDITOR_URL],
   ["DOFILE_SITE_URL", SITE_URL],
-] as const)
+] as const) {
+  if (!/^https?:\/\/[^/]+/.test(url)) throw new Error(`${name} must be a whole http(s) URL: ${url}`);
   if (!url.endsWith("/")) throw new Error(`${name} must end with "/": ${url}`);
+}

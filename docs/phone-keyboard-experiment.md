@@ -43,7 +43,7 @@ the pan back; whether `pre` stops it; whether `focus({preventScroll: true})` sto
 
 ## The flags
 
-Add them to the editor's address from `npm run dev` on the LAN, e.g. `http://<computer>:5173/app/?kb=pre&kblog`.
+Add them to the editor's address from `npm run dev` on the LAN, e.g. `http://<computer>:5173/?kb=pre&kblog`.
 
 | Flag | What the page does while the keyboard is open |
 |---|---|
