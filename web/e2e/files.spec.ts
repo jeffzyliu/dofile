@@ -826,6 +826,65 @@ test('the "+": the folder row last focused, else the folder of the file row last
   await expect.poll(() => storePaths(page)).toContain("data/deep/untitled.do");
 });
 
+// The row last focused may be a draft's path (the draft is not in the list), or a row that has gone: it counts as its folder.
+test('the "+" twice from a folder\'s file row: both drafts are in the folder (the first is a row that is not written yet)', async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  await row(page, /^c\.do/).focus();
+  await plus(page).click();
+  const field = page.locator("input.rename-field");
+  await expect(field).toBeFocused();
+  expect(await levelOf(field)).toBe("2");
+  await plus(page).click(); // the mousedown leaves the first field: it is written
+  await expect(field).toBeFocused();
+  expect(await levelOf(field)).toBe("2");
+  await expect.poll(() => storePaths(page)).toContain("data/untitled.do"); // Enter while the first is written does nothing
+  await page.keyboard.press("Enter");
+  await expect.poll(() => storePaths(page).then((p) => p.filter((f) => f.includes("untitled")))).toHaveLength(2);
+  expect((await storePaths(page)).filter((f) => f.includes("untitled")).every((f) => f.startsWith("data/"))).toBe(true);
+});
+
+test('the "+" after a typed name was written by leaving the field: the next draft is in the same folder', async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  await row(page, /^c\.do/).focus();
+  await plus(page).click();
+  await page.keyboard.type("x");
+  await nameField(page, "untitled.do").blur(); // on a phone: a tap on the Log tab
+  await expect.poll(() => storePaths(page)).toContain("data/x.do");
+  await expect(row(page, /^x\.do/)).toBeVisible();
+  await plus(page).click();
+  const field = nameField(page, "untitled.do");
+  await expect(field).toBeFocused();
+  expect(await levelOf(field)).toBe("2");
+});
+
+// Esc in a draft started from a folder gives the focus back to the row the visitor came from (the open file's row is only
+// the row in the tab order when no row was focused).
+test("a draft's Esc, from a folder's menu or the \"+\": the focus goes back to the row it came from, not the open file's", async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  await row(page, /^a\.do/).click(); // the open file
+  await showFiles(page);
+  const data = row(page, /^data\//);
+  await data.click({ button: "right" });
+  await page.getByRole("menu", { name: "Actions for data/" }).getByRole("menuitem", { name: "New file here" }).click();
+  await expect(nameField(page, "untitled.do")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(nameField(page, "untitled.do")).toBeHidden();
+  await expect(data).toBeFocused();
+  await row(page, /^c\.do/).focus();
+  await plus(page).click();
+  await expect(nameField(page, "untitled.do")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(row(page, /^c\.do/)).toBeFocused();
+  await plus(page).click(); // the next "+" is in the folder again
+  expect(await levelOf(nameField(page, "untitled.do"))).toBe("2");
+});
+
 test('the "+" and a name with "/": the missing folders are made, and a folder the name goes through is unfolded', async ({
   page,
 }) => {

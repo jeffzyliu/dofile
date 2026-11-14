@@ -73,6 +73,7 @@ interface Renaming {
   path: string; // a draft: the name it was offered, picked in the tap
   problem: string | null;
   draft?: keyof typeof NEW_NAMES; // a new file or folder: nothing is written until the field is left
+  from: string | null; // the row in the tab order before the field: a draft's Esc gives the focus back to it
 }
 const renaming = signal<Renaming | null>(null);
 let fields = 0;
@@ -126,7 +127,7 @@ function unfold(dir: string) {
 }
 
 function startRename(path: string, draft?: Renaming["draft"]) {
-  renaming.value = { id: ++fields, path, problem: null, draft };
+  renaming.value = { id: ++fields, path, problem: null, draft, from: rovingPath.value };
   rovingPath.value = path;
   focusWanted.value = null; // the field takes the focus: a waiting request ends
 }
@@ -150,12 +151,15 @@ function startDraft(kind: keyof typeof NEW_NAMES, dir = "") {
 }
 
 /** The folder the "+" makes a file in (docs/web-page-flows.md, section 1): the row last focused if it is a folder, the
- *  folder of the file row last focused, else the top. */
+ *  folder of the file row last focused, else the top. A row that has gone (a draft's path, a deleted file) counts as its
+ *  folder: the nearest one that exists. */
 function newFileDir(): string {
+  const isFolder = (d: string) => files.value.some((f) => f.path.startsWith(`${d}/`) || (f.path === d && f.dir));
   const p = rovingPath.value;
   if (p === null) return "";
-  if (files.value.some((f) => f.path.startsWith(`${p}/`) || (f.path === p && f.dir))) return p;
-  return files.value.some((f) => f.path === p) ? parentOf(p) : "";
+  if (isFolder(p)) return p;
+  for (let d = parentOf(p); d; d = parentOf(d)) if (isFolder(d)) return d;
+  return "";
 }
 
 let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
@@ -210,6 +214,7 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   const what = kind === "file" ? "file" : "folder";
   if (name === null) {
     renaming.value = null;
+    rovingPath.value = r.from; // the row the visitor came from, not the draft's path or the open file's row
     focusTree();
     return;
   }

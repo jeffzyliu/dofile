@@ -77,7 +77,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    That is why "New .do file" and "New folder" (also a folder row's "New file here" and "New folder", and the Files head's
    "+") show their name field at once (a draft row, in the folder `startDraft(kind, dir)` unfolds) and write the file or folder
    when the field is left (Enter or blur; Esc writes nothing), and why `startRename` and `startDraft` are synchronous.
-   The "+" takes its folder from the row last focused (`newFileDir`: a folder row itself, a file row's folder, else the top).
+   The "+" takes its folder from the row last focused (`newFileDir`: a folder row itself, a file row's folder, else the top; a row that has gone, such as a draft's path, counts as the nearest folder that exists). Esc in a draft gives the focus back to the row that was in the tab order before it (`Renaming.from`), not the open file's row.
    The commit (`endDraft`) then awaits the store and reads the list again (`files.ts` `refresh`). The store's change
    already refreshes the list, so for a render the tree may hold both the field and the new row; then the draft goes.
    What happens next depends on how the field ended. After Enter the file opens and its row takes the focus
@@ -303,7 +303,7 @@ sequenceDiagram
   - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save"
   - "the row menu (Shift+F10, right click, the ⋯): Delete asks, …" (the focus after Delete, on the tree's row)
   - "a folder's menu: New file here and New folder unfold …", 'the "+": the folder row last focused, …', 'the "+" and a
-    name with "/": …' and 'a draft's name is checked part by part …; a rename still refuses "/"' (a draft in a folder)
+    name with "/": …' and 'a draft's name is checked part by part …; a rename still refuses "/"' (a draft in a folder), 'the "+" twice from a folder's file row …', 'the "+" after a typed name was written by leaving the field …' (a draft's path counts as its folder) and "a draft's Esc, from a folder's menu or the "+": the focus goes back to the row it came from …"
   - "New .do file and New folder: the name field has the focus within the tap's microtasks, from the link and from the
     menu" (rule 8), and the tests after it: Esc (the focus back on the tree's row), Enter, leaving the field (writes only;
     a tap on a row, on the phone's Log view or on "Files ⋯" keeps what it chose), a name in use, a second New while the
