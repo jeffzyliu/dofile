@@ -290,7 +290,10 @@ real deploy's checks (the plan).
 Found in the UI fix round (2026-11-12): the "Running…" banner flashes for every short run and pasted line (later UI work, 6);
 the phone keyboard's jump (settled by #27); `overscroll-behavior-x: none` on the editor and the log also stops a trackpad
 back-swipe that starts over them (review decision 5). The Firefox flake of `editor.spec.ts` "a rename while Save writes" and
-the `?snapshot=0` test's Firefox failures are tracked in `docs/test-map.md`, "Known flaky tests".
+the `?snapshot=0` test's Firefox failures are tracked in `docs/test-map.md`, "Known flaky tests". For the rename flake, the
+`rename` helper now waits for the renamed row's focus and the F2 steps for the rename field's focus before Ctrl+A; the
+suspected cause, the tree's `focusRow` retrying every 50 ms and taking the editor's focus, was neither confirmed nor ruled
+out by 24 Firefox runs each before and after the `focusRow` rewrite.
 
 ## Step 4: decisions and open questions
 
@@ -329,7 +332,7 @@ The list for step 4 (#17), as the code behaves. The words drafted for the visito
 4. Load on a phone's .dta tab shows only its toast. Confirmed.
 5. Reset asks unless the engine is `ready` and nothing has run on it since it started (#40, with C 1; `resetAsks`).
 6. With a .dta tab active, a focus hand-off goes to that tab, else to its Load button. Confirmed.
-7. A run that writes something not text over an open text tab keeps the tab's text, unsaved, with the `run-changed` banner.
+7. A run that writes something not text over an open text tab keeps the tab's text, unsaved, with the `run-changed` banner (no "Reload from the run").
    Iceboxed with the redesign of file synchronization.
 8. No copy hint on a phone; a tap copies and the toast names it. Decided 2026-11-14 (#54, "Confirm: no hint").
 9. A file with mixed line breaks is saved with the more common one (`\n` on a tie; lone `\r` becomes `\n`). Confirmed (#40),

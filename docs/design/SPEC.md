@@ -48,7 +48,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
   ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
-  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/phase2-plan.md`, "Where things stand"); the nested-do note (`S 15`) names
+  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/phase2-history.md`, the prototype 1 record, #54); the nested-do note (`S 15`) names
   the file dropdown's Save instead of the key (on a phone). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.

@@ -26,6 +26,9 @@ landing and commands pages, `app.dofile.dev` for the editor), pull request previ
 `docs/deploying.md` are built and reviewed on the **local, unpushed branch `deploy/dofile-dev`** (7592b53). It is not merged
 and not deployed. No pull request is open; that branch is the next merge.
 
+**Next, in this order:** merge `deploy/dofile-dev` (open question 7: the first deploy's checks before or after it); the audit; the verification and phone pass; the PyPI release; the launch.
+The later UI work waits until after the audit.
+
 **Waiting on the maintainer:** the push and pull request of `deploy/dofile-dev`; the iPhone sitting (the phone command line,
 the wake lock with the phone locked 30 s, review decision 6's zoom); how they saw Home open `analysis.do` (later UI work, 8).
 
@@ -110,7 +113,8 @@ The maintainer's step. It runs the verification list below, and:
 - A real iPhone session: the phone command line; the wake lock with the phone locked for 30 s; the page does not scroll or
   bounce; with the keyboard open the command line sits right above it and the tab bar is hidden; a toast sits above the command
   line and the tab bar, and above the keyboard while it is open; the keyboard opens again when a dialog gives the focus back to
-  the command line (step 4 C 13); the phone's Break ignoring taps in its first 600 ms; #52's "+" bringing the keyboard up and the strip at 320 px. None of #22 to #25 and #40 has
+  the command line (step 4 C 13); the phone's Break ignoring taps in its first 600 ms; #52's "+" bringing the keyboard up and the strip at 320 px; whether a real keyboard's select-all leaves the last line behind,
+  as WebKit's did in the e2e (the reason for the `window.__editor` hook). None of #22 to #25 and #40 has
   been tried on a real phone; #48 and #50 were.
 - The same on an Android phone (Chrome, Firefox).
 - Review decision 5: the trackpad back-swipe over the editor and the log, checked once by hand.
@@ -232,7 +236,7 @@ Other rules a builder needs:
 
 1. Does Phase 2 close with the PyPI release (a non-pre-release) and the Launch (domain, browsers, README link), or do those
    move to a later phase? Options: both in Phase 2; the release in Phase 2 and the launch later; both later. Today the
-   deployed landing page (workers.dev) shows `pip install dofile`, which fails until a non-pre-release exists.
+   deployed landing page labels `pip install dofile` "with the first release" until a non-pre-release exists.
 2. Once Phase 2 closes, where do the prototype 2 items and the later UI work live: a prototype 2 plan, a Phase 2.5 plan,
    `phase3-plan.md`, or `docs/icebox.md`?
 3. When is the Safari 7-day storage re-check due ("after prototype 1")? In the verification pass, or before the launch?

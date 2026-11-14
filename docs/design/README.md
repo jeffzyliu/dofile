@@ -1,6 +1,6 @@
 # dofile web demo: design
 
-The UI/UX design step of Phase 2 (`../phase2-plan.md`, "UI/UX design"): it comes after the proof of concept and before
+The UI/UX design step of Phase 2 (`../phase2-history.md`, "Design decisions built"): it comes after the proof of concept and before
 the full editor, and produces the design that steps 6 and 8 build. The PoC page is deliberately unstyled. This file holds
 the design brief, the deliverables, the rules, and the history of each round of feedback. It was moved here out of the
 plan on 2026-11-09 (iteration 2); the plan keeps a short summary of the decisions.
