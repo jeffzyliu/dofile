@@ -228,7 +228,7 @@ button {
   .tab:hover {
     color: var(--ink);
   }
-  .files li:not(.open):hover {
+  .files li:not(.open, .current):hover {
     background: var(--surface-2);
   }
 }
@@ -510,7 +510,33 @@ button {
 .files .folder .ico {
   color: var(--muted);
   font-size: 12px;
-  margin-left: -2px;
+}
+/* the current folder (docs/web-page-flows.md, section 1): a soft fill, the name in the accent and a 1 px inset outline,
+   so it differs from the open file's bar; the keyboard focus ring (2 px) stays over the outline */
+.files li.current {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.files li.current:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.files li.current .name {
+  color: var(--accent);
+}
+/* a folder's caret (12 px icon in a 24 px square): the click target that folds or unfolds, not a tab stop; it takes no
+   room beyond the icon (the negative margins) */
+.files .caret {
+  margin: -3px -6px -3px -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  cursor: pointer;
+}
+.files .caret:hover {
+  background: var(--border);
 }
 .files .file-ico {
   color: var(--muted);
@@ -547,7 +573,7 @@ button {
 .files li.open .row-more {
   opacity: 1;
 }
-.files li:not(.open).hover {
+.files li:not(.open, .current).hover {
   background: var(--surface-2);
 }
 .files .row-more:hover {
@@ -570,6 +596,13 @@ button {
     height: 44px;
     margin-top: -10px;
     margin-bottom: -10px;
+  }
+  .files .caret {
+    width: 44px;
+    height: 44px;
+    margin: -10px -22px -10px -12px;
+    justify-items: start;
+    padding-left: 10px;
   }
   .tab .x {
     width: 32px;
@@ -1592,6 +1625,17 @@ dialog.dialog.sheet {
   .progress > i {
     forced-color-adjust: none;
     background: Highlight;
+  }
+  .files li.current {
+    forced-color-adjust: none;
+    background: SelectedItem;
+    color: SelectedItemText;
+  }
+  .files li.current :is(.name, .ico) {
+    color: SelectedItemText;
+  }
+  .files li.current .ico {
+    background: SelectedItemText;
   }
   .files li.open,
   .code .ln.run,

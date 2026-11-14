@@ -9,10 +9,13 @@
 //    folders fold (aria-expanded); sizes; the open file's mark (aria-selected); the unsaved dot; the "new" badge from
 //    `fresh`. Roving focus: one row in the tab order (the one last focused, else the open file, else the first);
 //    Up/Down, Home/End move; Right unfolds or goes in, Left folds or goes up; Enter (or Space, or a click) opens a file
-//    through open.ts openFile or folds a folder; F2 renames in place; Shift+F10, the menu key, a right click or the
+//    through open.ts openFile, or on a folder makes it the current folder and unfolds it (never folds: the caret, a span
+//    like the ⋯, and Left fold, and select nothing; a folded current folder or one above it hands "current" to the folded folder's
+//    parent); the current folder (aria-current, the highlight; a file's tap makes its folder current, a tap on the empty space the
+//    top) is where the "+", New .do file and New folder make their file; F2 renames in place; Shift+F10, the menu key, a right click or the
 //    row's ⋯ (aria-hidden: a control inside a treeitem would be nested) open the row menu: Open, Rename (F2), Download,
 //    Delete… for a file; New file here, New folder, Rename, Download (.zip), Delete… for a folder (OQ-21). There is no
-//    long-press: a phone opens it by the ⋯. The head's "+" (NewFileButton) is "New .do file" in the folder of the row last focused.
+//    long-press: a phone opens it by the ⋯. The head's "+" (NewFileButton) is "New .do file" in the current folder, which its label names.
 //  - Inline rename (DS-7): the name becomes a field; Enter renames, Esc cancels (preventDefault, so App.tsx's Esc that
 //    folds the list at 700 to 1199 px leaves it), leaving the field renames when the name can be used. A name in use
 //    ("clean.do already exists here.") or one that cannot be used keeps the field open, marked aria-invalid, with the
@@ -50,21 +53,27 @@ import {
 import { openFile } from "./open.ts";
 import {
   baseName,
+  folderOrAbove,
   formatSize,
   freeName,
   joinPath,
+  movedPath,
   NAME_NOT_ALLOWED,
   nameProblem,
   newPathProblem,
   parentOf,
   type Row,
   treeRows,
+  within,
 } from "./tree.ts";
 
 // ---- the panel's own state (not shared: state.ts holds what other parts read) ----
 
 const folded = signal<ReadonlySet<string>>(new Set()); // the folded folders
 const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
+// the current folder ("" is the top): where the "+", New .do file and New folder make their file; set by a tap on a folder's
+// name or on a file (its folder), cleared by a tap on the empty space; apart from the focus (docs/web-page-flows.md, section 1)
+const currentDir = signal("");
 // the focus request (docs/web-page-flows.md, section 1): the row of `path` takes it when it is drawn (TreeRow), or with
 // no path the row in the tab order (with no rows, the head's File actions); `anywhere`: also from outside the tree
 export const focusWanted = signal<{ path: string | null; anywhere?: boolean } | null>(null); // the test hook reads it
@@ -112,10 +121,15 @@ const fail = (what: string, said: string) => (e: unknown) => {
   say(said);
 };
 
+/** Fold or unfold a folder (`open`: unfold, else swap). Folding the current folder, or one above it, makes the folded
+ *  folder's parent current. */
 function toggle(path: string, open?: boolean) {
   const next = new Set(folded.value);
   if (open ?? next.has(path)) next.delete(path);
-  else next.add(path);
+  else {
+    next.add(path);
+    if (within(currentDir.value, path)) currentDir.value = parentOf(path);
+  }
   folded.value = next;
 }
 
@@ -133,13 +147,14 @@ function startRename(path: string, draft?: Renaming["draft"]) {
 }
 
 /** "New .do file" and "New folder", and the "+": the name field is drawn at once, in the folder `dir` (unfolded, so the
- *  row is drawn inside it), with nothing written (docs/web-page-flows.md, section 1, rule 8: on iOS the focus that raises
+ *  row is drawn inside it, and made the current folder), with nothing written (docs/web-page-flows.md, section 1, rule 8: on iOS the focus that raises
  *  the keyboard has to be made in the tap). endRename writes it. */
-function startDraft(kind: keyof typeof NEW_NAMES, dir = "") {
+function startDraft(kind: keyof typeof NEW_NAMES, dir: string) {
   const what = kind === "file" ? "file" : "folder";
   if (store.blocked)
     return fail(`New ${what}`, `Couldn't create the ${what}`)(new Error("the files are another tab's"));
   unfold(dir);
+  currentDir.value = dir;
   startRename(
     freeName(
       dir,
@@ -150,17 +165,9 @@ function startDraft(kind: keyof typeof NEW_NAMES, dir = "") {
   );
 }
 
-/** The folder the "+" makes a file in (docs/web-page-flows.md, section 1): the row last focused if it is a folder, the
- *  folder of the file row last focused, else the top. A row that has gone (a draft's path, a deleted file) counts as its
- *  folder: the nearest one that exists. */
-function newFileDir(): string {
-  const isFolder = (d: string) => files.value.some((f) => f.path.startsWith(`${d}/`) || (f.path === d && f.dir));
-  const p = rovingPath.value;
-  if (p === null) return "";
-  if (isFolder(p)) return p;
-  for (let d = parentOf(p); d; d = parentOf(d)) if (isFolder(d)) return d;
-  return "";
-}
+/** The folder the "+" makes a file in (docs/web-page-flows.md, section 1): the current folder, or the nearest one above
+ *  it that exists (the current folder may have been deleted); else the top. */
+const newFileDir = () => folderOrAbove(currentDir.value, files.value);
 
 let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
 
@@ -198,6 +205,7 @@ async function endRename(name: string | null, leaving = false) {
     } finally {
       ending = false;
     }
+    currentDir.value = movedPath(currentDir.value, r.path, to); // the current folder, or one above it, was renamed
   }
   if (renaming.value?.id !== r.id) return; // another field was started meanwhile
   renaming.value = null;
@@ -264,8 +272,8 @@ const askDelete = (path: string) => {
 /** The head menu "File actions" (S 13's caption). On a phone the Files head is hidden and App.tsx gives these to the "Files ⋯"
  *  button at the right of the phone strip while the Files view is shown. */
 export const fileMenuItems = (): MenuItem[] => [
-  { label: "New .do file", onSelect: () => startDraft("file") },
-  { label: "New folder", onSelect: () => startDraft("folder") },
+  { label: "New .do file", onSelect: () => startDraft("file", newFileDir()) },
+  { label: "New folder", onSelect: () => startDraft("folder", newFileDir()) },
   { label: "Upload a folder", onSelect: () => pickFolder?.click() },
   {
     label: "Download all (.zip)",
@@ -313,10 +321,12 @@ export function FilesHead() {
   );
 }
 
-/** The "+": a new file in the folder of the row last focused (newFileDir). Drawn in the Files head, and in the phone's strip. */
+/** The "+": a new file in the current folder (newFileDir), which its label names. Drawn in the Files head, and in the phone's strip. */
 export function NewFileButton({ class: cls }: { class: string }) {
+  const dir = newFileDir();
+  const label = dir ? `New file in ${dir}/` : "New file";
   return (
-    <button type="button" class={cls} aria-label="New file" onClick={() => startDraft("file", newFileDir())}>
+    <button type="button" class={cls} aria-label={label} onClick={() => startDraft("file", dir)}>
       <Icon name="plus" />
     </button>
   );
@@ -430,7 +440,7 @@ function useRovingFocus(path: string, li: { current: HTMLElement | null }, renam
   );
 }
 
-function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: Row[] }) {
+function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean; current: boolean; rows: Row[] }) {
   const tab = tabs.value.find((t) => t.path === row.path);
   const open = !row.dir && activeTab.value === row.path;
   const r = renaming.value?.path === row.path ? renaming.value : null;
@@ -438,9 +448,15 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
   useRovingFocus(row.path, li, r !== null, tabbable);
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor: at ? null : el, at, restore: el });
+  // a folder is made current and unfolded, never folded (its caret and Left fold it); a file opens, and its folder is current
   const activate = () => {
-    if (row.dir) toggle(row.path);
-    else openFile(row.path);
+    if (row.dir) {
+      currentDir.value = row.path;
+      toggle(row.path, true);
+    } else {
+      openFile(row.path);
+      currentDir.value = parentOf(row.path);
+    }
   };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.target !== e.currentTarget) return; // keys typed in the rename field
@@ -490,7 +506,7 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
         return;
     }
   };
-  const cls = [row.dir && "folder", open && "open", r && "renaming"].filter(Boolean).join(" ");
+  const cls = [row.dir && "folder", open && "open", current && "current", r && "renaming"].filter(Boolean).join(" ");
   return (
     <li
       ref={li}
@@ -501,6 +517,7 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
       aria-level={row.depth + 1}
       aria-expanded={row.dir ? row.expanded : undefined}
       aria-selected={row.dir ? undefined : open}
+      aria-current={current ? "true" : undefined}
       aria-haspopup="menu"
       tabIndex={tabbable ? 0 : -1}
       onFocus={(e) => {
@@ -520,7 +537,19 @@ function TreeRow({ row, tabbable, rows }: { row: Row; tabbable: boolean; rows: R
       }}
       onKeyDown={onKeyDown}
     >
-      {row.dir && <Icon name={row.expanded ? "down" : "right"} />}
+      {row.dir && (
+        // the caret folds or unfolds, and selects nothing (a click on the name does, and never folds); aria-hidden as the ⋯: the keys do it
+        <span
+          class="caret"
+          aria-hidden="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle(row.path);
+          }}
+        >
+          <Icon name={row.expanded ? "down" : "right"} />
+        </span>
+      )}
       {r ? (
         <RenameField key={r.id} r={r} row={row} /> // a field started over this one is a new field: it takes the focus
       ) : (
@@ -631,6 +660,7 @@ export function FilesBody() {
     folded.value,
   );
   const paths = rows.map((r) => r.path);
+  const here = newFileDir(); // the current folder, as the "+" takes it: one that has gone is its nearest folder above
   const tabbable =
     [rovingPath.value, activeTab.value].find((p) => p !== null && paths.includes(p)) ?? rows[0]?.path ?? null;
   const picked = (e: Event) => {
@@ -640,12 +670,25 @@ export function FilesBody() {
     if (list.length) send(fromFileList(list));
   };
   return (
-    <div class="files-body" ref={ref}>
+    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: a tap on the empty space makes the top the current folder; the keyboard has no such stop (Left on a top-level folder does it)
+    <div
+      class="files-body"
+      ref={ref}
+      onClick={(e) => {
+        if (!(e.target as HTMLElement).closest('[role="treeitem"], button')) currentDir.value = "";
+      }}
+    >
       {rows.length > 0 && (
         // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the tree's rows are a list's items, as ui.css draws them (.files li)
         <ul class="files" role="tree" aria-label="Files" ref={setTree}>
           {rows.map((row) => (
-            <TreeRow key={row.path} row={row} rows={rows} tabbable={row.path === tabbable} />
+            <TreeRow
+              key={row.path}
+              row={row}
+              rows={rows}
+              tabbable={row.path === tabbable}
+              current={row.dir && row.path === here}
+            />
           ))}
         </ul>
       )}
@@ -656,7 +699,7 @@ export function FilesBody() {
           Upload
         </button>
         {" · "}
-        <button type="button" class="files-link" onClick={() => startDraft("file")}>
+        <button type="button" class="files-link" onClick={() => startDraft("file", newFileDir())}>
           New .do file
         </button>
       </div>

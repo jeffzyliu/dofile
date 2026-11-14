@@ -138,6 +138,13 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.match(T.nameProblem("a\tb.do", "", taken) ?? "", /line break/);
   assert.equal(T.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
   assert.equal(T.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
+  const info = (path: string, dir = false) => ({ path, dir, size: 0, mtime: 0 });
+  const kept = [info("a.do"), info("data", true), info("data/c.do"), info("pkg/m.do")];
+  assert.equal(T.folderOrAbove("data", kept), "data");
+  assert.equal(T.folderOrAbove("data/deep/x", kept), "data", "a folder that has gone is the nearest one above it");
+  assert.equal(T.folderOrAbove("pkg", kept), "pkg", "a folder with no record of its own, with a path under it");
+  assert.equal(T.folderOrAbove("a.do", kept), "", "a file is no folder");
+  assert.equal(T.folderOrAbove("", kept), "");
   assert.equal(T.extOf("data/Wages.DTA"), ".dta");
   assert.equal(T.extOf(".hidden"), "");
 });

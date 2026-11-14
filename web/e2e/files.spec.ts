@@ -92,6 +92,7 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect(items.nth(0)).toHaveAttribute("aria-expanded", "false");
   await page.keyboard.press("ArrowRight"); // unfold
   await expect(items).toHaveCount(5);
+  await expect(tree(page).locator("[aria-current]")).toHaveCount(0); // the keys fold and unfold, and select nothing
   await page.keyboard.press("ArrowRight"); // into it: raw/
   await expect(row(page, /^raw\//)).toBeFocused();
   await page.keyboard.press("End");
@@ -755,7 +756,7 @@ test("New folder: a draft too; Enter writes the typed name and opens no tab; Esc
 
 // A draft in a folder (docs/web-page-flows.md, section 1, rule 8): the folder's menu and the "+" unfold it and draw the
 // field inside, at its depth; the name is joined to the folder.
-const plus = (page: Page) => page.getByRole("button", { name: "New file", exact: true });
+const plus = (page: Page) => page.getByRole("button", { name: /^New file( in .+)?$/ });
 const levelOf = (field: ReturnType<Page["locator"]>) =>
   field.evaluate((el) => el.closest("li")?.getAttribute("aria-level"));
 const tree3 = { "a.do": "1\n", "data/c.do": "3\n", "data/deep/d.do": "4\n" };
@@ -766,11 +767,12 @@ test("a folder's menu: New file here and New folder unfold a folded folder, draw
   await setUp(page, tree3);
   const data = row(page, /^data\//);
   const ask = async (item: string) => {
-    await data.click(); // folds it
+    await data.locator(".caret").click(); // folds it
     await expect(data).toHaveAttribute("aria-expanded", "false");
     await data.click({ button: "right" });
     await page.getByRole("menu", { name: "Actions for data/" }).getByRole("menuitem", { name: item }).click();
     await expect(data).toHaveAttribute("aria-expanded", "true");
+    await expect(data).toHaveAttribute("aria-current", "true"); // the folder it was made in is the current one
   };
   await ask("New file here");
   const field = nameField(page, "untitled.do");
@@ -793,32 +795,38 @@ test("a folder's menu: New file here and New folder unfold a folded folder, draw
   expect(await openTabs(page)).toEqual(["data/x.do"]); // a folder opens nothing
 });
 
-test('the "+": the folder row last focused, else the folder of the file row last focused, else the top', async ({
+test('the "+": the current folder (a tap on a folder\'s name, or on a file in it), else the top; its label names the folder', async ({
   page,
 }) => {
   await setUp(page, tree3);
   const field = nameField(page, "untitled.do");
-  // nothing focused yet: the top
+  // nothing tapped yet: the top
+  await expect(plus(page)).toHaveAccessibleName("New file");
   await plus(page).click();
   await expect(field).toBeFocused();
   expect(await levelOf(field)).toBe("1");
   await page.keyboard.press("Enter");
   await expect.poll(() => storePaths(page)).toContain("untitled.do");
   await showFiles(page);
-  // a folder row: its own folder, unfolded
+  // a tap on a folder's name: that folder, unfolded
   const data = row(page, /^data\//);
-  await data.click();
+  await data.locator(".caret").click(); // folds it; selects nothing
   await expect(data).toHaveAttribute("aria-expanded", "false");
-  await plus(page).click();
+  await expect(plus(page)).toHaveAccessibleName("New file");
+  await data.click();
   await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  await plus(page).click();
   await expect(field).toBeFocused();
   expect(await levelOf(field)).toBe("2");
   await page.keyboard.type("x");
   await page.keyboard.press("Enter");
   await expect.poll(() => storePaths(page)).toContain("data/x.do");
   await showFiles(page);
-  // a file row inside a folder: that folder; a deeper one: that one
-  await row(page, /^d\.do/).focus();
+  // a tap on a file in a deeper folder: that folder
+  await row(page, /^d\.do/).click();
+  await showFiles(page);
+  await expect(plus(page)).toHaveAccessibleName("New file in data/deep/");
   await plus(page).click();
   await expect(field).toBeFocused();
   expect(await levelOf(field)).toBe("3");
@@ -826,12 +834,144 @@ test('the "+": the folder row last focused, else the folder of the file row last
   await expect.poll(() => storePaths(page)).toContain("data/deep/untitled.do");
 });
 
+// docs/web-page-flows.md, section 1: the folder row's caret folds and unfolds and selects nothing; a tap on the rest of the
+// row selects and unfolds, never folds; folding the current folder, or one above it, makes the folded folder's parent current.
+test("a folder's caret folds without selecting, a tap on its name selects and never folds; folding the current folder or one above it", async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  const data = row(page, /^data\//);
+  const deep = row(page, /^deep\//);
+  const current = tree(page).locator('[aria-current="true"]');
+  await data.locator(".caret").click();
+  await expect(data).toHaveAttribute("aria-expanded", "false");
+  await expect(current).toHaveCount(0);
+  await data.locator(".caret").click();
+  await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(current).toHaveCount(0);
+  await data.click();
+  await data.click(); // a second tap on the name: still open
+  await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(current).toHaveText(/^data\//);
+  // the current folder is data/deep/; folding data/ (above it) makes the top current
+  await deep.click();
+  await expect(current).toHaveText(/^deep\//);
+  await data.locator(".caret").click();
+  await expect(current).toHaveCount(0);
+  await expect(plus(page)).toHaveAccessibleName("New file");
+  // folding the current folder itself: its parent
+  await data.locator(".caret").click();
+  await deep.click();
+  await expect(plus(page)).toHaveAccessibleName("New file in data/deep/");
+  await deep.locator(".caret").click();
+  await expect(deep).toHaveAttribute("aria-expanded", "false");
+  await expect(data).toHaveAttribute("aria-current", "true");
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  // Left on the current top-level folder folds it, and the top is current
+  await data.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(data).toHaveAttribute("aria-expanded", "false");
+  await expect(current).toHaveCount(0);
+  await expect(plus(page)).toHaveAccessibleName("New file");
+});
+
+test("Enter and Space on a folder select and unfold it, and never fold it; a tap on the empty space makes the top current", async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  const data = row(page, /^data\//);
+  await data.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(data).toHaveAttribute("aria-expanded", "false");
+  await page.keyboard.press("Enter");
+  await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(data).toHaveAttribute("aria-current", "true");
+  await page.keyboard.press(" ");
+  await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  // the arrow keys move the focus only
+  await page.keyboard.press("End");
+  await expect(data).toHaveAttribute("aria-current", "true");
+  // the empty space under the rows (the Files head is hidden on a phone, so this is its way back to the top)
+  const body = page.locator(".files-body");
+  const box = (await body.boundingBox())!;
+  await body.click({ position: { x: 3, y: box.height - 3 } });
+  await expect(tree(page).locator("[aria-current]")).toHaveCount(0);
+  await expect(plus(page)).toHaveAccessibleName("New file");
+});
+
+test("a tap on a file makes its folder current; renaming the current folder keeps it current, deleting it makes the top", async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  const data = row(page, /^data\//);
+  await row(page, /^c\.do/).click();
+  await showFiles(page);
+  await expect(data).toHaveAttribute("aria-current", "true");
+  await expect(row(page, /^c\.do/)).not.toHaveAttribute("aria-current", "true"); // a file's mark is aria-selected (the open one)
+  await row(page, /^a\.do/).click();
+  await showFiles(page);
+  await expect(tree(page).locator("[aria-current]")).toHaveCount(0);
+  // rename: the current folder follows its new name
+  await data.click();
+  await data.focus();
+  await page.keyboard.press("F2");
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("info");
+  await page.keyboard.press("Enter");
+  await expect(row(page, /^info\//)).toHaveAttribute("aria-current", "true");
+  await expect(plus(page)).toHaveAccessibleName("New file in info/");
+  // delete: the nearest folder that exists, here the top
+  await row(page, /^info\//).click({ button: "right" });
+  await page.getByRole("menu", { name: "Actions for info/" }).getByRole("menuitem", { name: "Delete…" }).click();
+  await page.getByRole("alertdialog", { name: "Delete info/?" }).getByRole("button", { name: "Delete" }).click();
+  await expect(row(page, /^info\//)).toHaveCount(0);
+  await expect(plus(page)).toHaveAccessibleName("New file");
+});
+
+// the "+" label and the highlight agree: a deleted nested current folder is its nearest folder above it
+test("deleting a nested current folder makes the folder above it current, in the highlight and in the label", async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  await row(page, /^deep\//).click();
+  await expect(plus(page)).toHaveAccessibleName("New file in data/deep/");
+  await row(page, /^deep\//).click({ button: "right" });
+  await page.getByRole("menu", { name: "Actions for data/deep/" }).getByRole("menuitem", { name: "Delete…" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(row(page, /^deep\//)).toHaveCount(0);
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
+});
+
+test("the current folder in forced colors: the system's selected colors (Chromium's emulation)", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Playwright's forced-colors emulation is Chromium's");
+  await setUp(page, tree3);
+  await page.emulateMedia({ forcedColors: "active" });
+  await row(page, /^data\//).click();
+  // Chromium's emulated palette has SelectedItemText and CanvasText both black, so the fill (SelectedItem, a light color, not
+  // the page's Canvas) is what shows the pair is applied; the name takes the row's text color
+  const style = (loc: ReturnType<typeof row>) =>
+    loc.evaluate((el) => ({
+      bg: getComputedStyle(el).backgroundColor,
+      fg: getComputedStyle(el).color,
+      name: getComputedStyle(el.querySelector(".name")!).color,
+    }));
+  const picked = await style(row(page, /^data\//));
+  expect(picked.bg).not.toBe((await style(row(page, /^a\.do/))).bg);
+  expect(picked.name).toBe(picked.fg);
+});
+
 // The row last focused may be a draft's path (the draft is not in the list), or a row that has gone: it counts as its folder.
 test('the "+" twice from a folder\'s file row: both drafts are in the folder (the first is a row that is not written yet)', async ({
   page,
 }) => {
   await setUp(page, tree3);
-  await row(page, /^c\.do/).focus();
+  await row(page, /^c\.do/).click();
+  await showFiles(page);
   await plus(page).click();
   const field = page.locator("input.rename-field");
   await expect(field).toBeFocused();
@@ -860,7 +1000,8 @@ test('the "+" after a typed name was written by leaving the field: the next draf
   await setUp(page, tree3);
   await row(page, /^a\.do/).click(); // the open file
   await showFiles(page);
-  await row(page, /^c\.do/).focus();
+  await row(page, /^c\.do/).click();
+  await showFiles(page);
   await plus(page).click();
   await page.keyboard.type("x");
   await nameField(page, "untitled.do").blur(); // on a phone: a tap on the Log tab
@@ -893,7 +1034,8 @@ test("a draft's Esc, from a folder's menu or the \"+\": the focus goes back to t
   await page.keyboard.press("Escape");
   await expect(nameField(page, "untitled.do")).toBeHidden();
   await expect(data).toBeFocused();
-  await row(page, /^c\.do/).focus();
+  await row(page, /^c\.do/).click();
+  await showFiles(page);
   await plus(page).click();
   await expect(nameField(page, "untitled.do")).toBeFocused();
   await page.keyboard.press("Escape");
@@ -914,7 +1056,9 @@ test('the "+" and a name with "/": the missing folders are made, and a folder th
   await showFiles(page);
   await expect(row(page, /^sub\//)).toHaveAttribute("aria-expanded", "true");
   await expect(row(page, /^x\.do/)).toBeVisible();
-  // from the file's row: under its folder, nested folders at once
+  // a tap on the file: under its folder, nested folders at once
+  await row(page, /^x\.do/).click();
+  await showFiles(page);
   await plus(page).click();
   await page.keyboard.type("a/b/y");
   await page.keyboard.press("Enter");
@@ -927,7 +1071,8 @@ test('the "+" and a name with "/": the missing folders are made, and a folder th
   await data.focus();
   await page.keyboard.press("ArrowLeft");
   await expect(data).toHaveAttribute("aria-expanded", "false");
-  await row(page, /^a\.do/).focus();
+  await row(page, /^a\.do/).click(); // the top is current again
+  await showFiles(page);
   await plus(page).click();
   await page.keyboard.type("data/z");
   await page.keyboard.press("Enter");
