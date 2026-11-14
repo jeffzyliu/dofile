@@ -326,10 +326,19 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
       .locator("td")
       .first()
       .evaluate((td) => getComputedStyle(td).backgroundColor);
-  const fits = (name: string) =>
-    rowOf(name)
+  // The act cell holds its content with room to spare, not just without overflow: another font must not cut it
+  const SLACK = 8;
+  const room = async (name: RegExp) => {
+    const m = await rowOf(name)
       .locator("td.act")
-      .evaluate((td) => td.scrollWidth <= td.clientWidth);
+      .evaluate((td) => {
+        const css = getComputedStyle(td);
+        const inner = td.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
+        const used = [...td.children].reduce((sum, c) => sum + c.getBoundingClientRect().width, 0);
+        return { spare: inner - used, cut: td.scrollWidth > td.clientWidth };
+      });
+    return m.cut ? -1 : m.spare;
+  };
   const plain = await tint(/^e\(rank\):/); // a row the pointer has not been on
   const n = page.getByRole("button", { name: "e(N): 160" });
   await n.click();
@@ -359,14 +368,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   const done = rowOf(/^e\(r2\):/).locator(".act .copied");
   await expect(done).toBeVisible();
   await expect(done).toHaveText("Copied");
-  expect(await fits(/^e\(r2\):/), "✓ Copied is not cut").toBe(true);
+  expect(await room(/^e\(r2\):/), "✓ Copied is not cut").toBeGreaterThanOrEqual(SLACK);
   await expect(done).toHaveCount(0, { timeout: 4000 });
   // "↵ Copy" on a hovered row, whole, on the desktop; a phone has none (a tap copies, and the row says so)
   if (phone(page)) await expect(page.locator(".rs .hint")).toHaveCount(0);
   else {
     await rowOf(/^e\(rank\):/).hover();
     await expect(rowOf(/^e\(rank\):/).locator(".hint")).toBeVisible();
-    expect(await fits(/^e\(rank\):/), "↵ Copy is not cut").toBe(true);
+    expect(await room(/^e\(rank\):/), "↵ Copy is not cut").toBeGreaterThanOrEqual(SLACK);
     await page.mouse.move(1, 1);
     // a drag over a name selects it and copies nothing (no toast, no "✓ Copied")
     const box = (await rowOf(/^e\(rank\):/)
