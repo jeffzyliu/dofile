@@ -1187,8 +1187,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     another kept graph shares) and "Graph 3" (a graph with no command); a thumbnail's name "Show graph 2: scatter wage
     educ", the thumbnails' list "Graphs"; the full-size view's name "Full-size graph" and, on a phone, "Previous" and
     "Next"; the toasts "Couldn't read the matrix", "Couldn't copy: the browser refused" and "Couldn't copy the image: the browser refused"; a matrix opened in place: "Reading e(b)…", "Couldn't read e(b): <reason>" ("the engine isn't running" with no engine), the buttons' names "View e(b)" and "Hide e(b)"; Browse with every row shown "500
-    rows · read only"; the live region's "More rows shown" (Show 50 more) and, for Copy image in the full-size
-    view, the visible face "Copied" (`.vsaid`, `aria-hidden`) with "Copied to the clipboard" in the page's live region, as on the landing page.
+    rows · read only"; the live region's "More rows shown" (Show 50 more) and "Copied" (Copy image in the full-size
+    view).
   - **4d** `states/DownloadDialog.tsx` (the prompt and "dofile is open in another tab", built as far as the start and the
     tab lock need: 4d adds S 2's stage times and S 3; "Close editor" goes to `LANDING_URL`, the landing page since step 5),
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
