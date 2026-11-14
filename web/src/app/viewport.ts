@@ -191,10 +191,12 @@ export function watchViewport({
  *  page's layout is final there (the pan scrolled back), and it knows where the caret is on any line, where a DOM range
  *  has no box on an empty line. Nothing when the focus is not in an editor. */
 function revealCaret() {
-  const editor = globalThis.document?.activeElement?.closest<HTMLElement>(".cm-editor");
+  const active = globalThis.document?.activeElement;
+  const editor = active?.closest<HTMLElement>(".cm-editor");
   const view = editor ? EditorView.findFromDOM(editor) : null;
   if (view)
     view.dispatch({
       effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "nearest", yMargin: CARET_MARGIN }),
     });
+  else if (active?.matches?.("input, textarea") && isTextField(active)) active.scrollIntoView({ block: "nearest" }); // a plain field (the Files pane's draft) in a scroller; scroll-margin on the field keeps its reason line in view
 }

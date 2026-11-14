@@ -116,7 +116,12 @@ export function newPathProblem(name: string, dir: string, files: readonly FileIn
   let at = dir;
   for (const [i, part] of parts.entries()) {
     const last = i === parts.length - 1;
-    const problem = nameProblem(part, at, last ? files.map((f) => f.path) : []);
+    const problem =
+      part === ".."
+        ? "A name can't go up a folder (..)."
+        : part === "."
+          ? "A name can't be a dot (.)."
+          : nameProblem(part, at, last ? files.map((f) => f.path) : []);
     if (problem) return problem;
     at = joinPath(at, part);
     if (!last && files.some((f) => f.path === at && !f.dir)) return `${part} is a file, not a folder.`;

@@ -122,7 +122,9 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.equal(T.newPathProblem("clean.do/x.do", "", listed), "clean.do is a file, not a folder.");
   assert.equal(T.newPathProblem("a//x.do", "", listed), "Enter a name.");
   assert.equal(T.newPathProblem("x/", "", listed), "Enter a name.");
-  assert.match(T.newPathProblem("a/../x.do", "", listed) ?? "", /isn't allowed/);
+  assert.equal(T.newPathProblem("../x.do", "data", listed), "A name can't go up a folder (..).");
+  assert.equal(T.newPathProblem("a/../x.do", "", listed), "A name can't go up a folder (..).");
+  assert.equal(T.newPathProblem("./x.do", "", listed), "A name can't be a dot (.).");
   assert.match(T.newPathProblem(".dofile/x.do", "", listed) ?? "", /dofile's own/);
   assert.match(T.newPathProblem("a\\b.do", "", listed) ?? "", /can't contain/);
   assert.deepEqual(T.tabLabels(["a.do", "data/wages.dta", "old/wages.dta", "wages.dta"]), [
