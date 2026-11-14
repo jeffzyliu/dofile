@@ -158,7 +158,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
     `language.ts`.
   - The editor's location is one setting (`scripts/urls.ts`: the production and local addresses, each ending in a slash);
-    no other file spells the editor's old path (`/app/`) or the site's origins; the two Wrangler configs against
+    no other file, workflow or local action (`.github/actions/`) spells the editor's old path (`/app/`) or the site's
+    origins; the two Wrangler configs against
     `urls.ts`.
   - The filter; the theme button equals the editor's.
   - The clean-room greps: trademark line kept, no "CDN", no Stata example dataset, manual, `.sthlp`, `.ado` or
@@ -309,7 +310,7 @@ Specs:
   controllers,
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`,
-  the snapshot job);
+  the snapshot job; on `main` `deploy.yml` calls `web.yml` and deploys only if it, `ci.yml` and `lint.yml` passed);
   `check-pytest` and `check-numeric` are run by hand.
 - Probes check rc 0 only, not output.
 

@@ -117,11 +117,16 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   `web ok` and `lint ok` must pass. Any merge method works (the maintainer usually rebases), with one exception: a pull request
   that holds a reformat commit named in `.git-blame-ignore-revs` is merged with a merge commit, since a rebase or squash gives the
   commit a new hash and the file would name one that is not on `main`. A merge to `main` deploys the web page to Cloudflare
-  (`deploy.yml`).
+  (`deploy.yml`) once its tests pass.
 - CI (`.github/workflows/`): `ci.yml` (the Python matrix), `web.yml` (the web demo) and `lint.yml`. In `web.yml` the browsers
   job is a matrix of four Playwright projects (chromium, firefox, webkit, iphone), each on its own runner with a 30-minute
-  limit. Every job also runs on a push to main, one run per commit, so a merge's tree is tested. `deploy.yml` does not wait for
-  those runs.
+  limit. A pull request starts the three itself. A push to main starts only `deploy.yml`, which calls the three
+  (`workflow_call`; one run per commit, so a merge's tree is tested) and deploys only if all three passed and the commit is still
+  the tip of main (checked before and inside the deploy's concurrency group, so an older commit never lands after a newer one).
+  In a called workflow `github.workflow` is the caller's name, so each of the three spells its own concurrency prefix.
+  `preview.yml` uploads a preview of both Workers for each pull request from a branch of this repo (not forks), with the two
+  addresses in one comment; it does not wait for the tests. Deploy and preview build through one composite action,
+  `.github/actions/build-web`.
 - Where to look (`docs/`): `phase2-plan.md` (web demo; read it first: status and next steps; `phase2-history.md`, `browser-engine.md` and
   `lazy-matplotlib.md` hold its history and gaps), `phase3-plan.md` (hosted multi-user MCP server).
   `web-engine-data-flow.md` explains the web engine's data flow and `web-page-flows.md` the editor page's focus, runs, open files and log links. `opendta-issues.md`: known OpenDTA problems to

@@ -162,7 +162,7 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   pages' "Open the editor"): the production addresses unless `DOFILE_SITE_URL` / `DOFILE_EDITOR_URL` (whole URLs ending in `/`;
   a preview deployment sets both to its workers.dev addresses) or `DOFILE_URLS=local` (localhost, ports from `E2E_PORT`) say
   otherwise. Everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL` (`app/env.ts`),
-  and `test/site.test.ts` fails if another source, script, e2e test, config, page or workflow spells the editor's old path
+  and `test/site.test.ts` fails if another source, script, e2e test, config, page, workflow or local action (`.github/actions/`) spells the editor's old path
   (`/app/`) or an address of the site's origins after a quote, a backquote, `(` or `=` (the Wrangler configs spell the two domains
   without a scheme, and a test compares them with `urls.ts`). `npm run build` is two builds: `vite build` (the editor into
   `dist/app/`, with its own `_headers`: every path isolated) and `vite build --mode site` (the pages into `dist/site/index.html`

@@ -64,11 +64,11 @@ estimated splits) are the study's, not checked again here.
 
 - **Infrastructure as code, and branch previews.** One entry, three parts, put here by the maintainer. (a) A research report
   on infrastructure as code (Terraform and the others) for a reader who knows nothing about Terraform; it should compare the
-  options with what the site does today (`deploy.yml` runs wrangler against Cloudflare, `web/wrangler.jsonc`). (b) A
-  requirement for it: branch previews, a preview deployment for each branch or pull request. (c) Block the deploy until main's
-  CI has passed: today `deploy.yml` deploys on the push to main without waiting for the `ci` and `web` runs. Not checked:
-  the release notes of `cloudflare/wrangler-action` (seen in #20) mention "Workers Previews", which needs Wrangler 4.136.3 or
-  later, so previews may need no Terraform at all; the report should say. Nothing is written yet.
+  options with what the site does today (`deploy.yml` runs wrangler against Cloudflare, `web/wrangler.jsonc` and
+  `web/wrangler.app.jsonc`). (b) Branch previews: built without Terraform, `preview.yml` uploads a preview of both Workers
+  for each pull request from a branch of this repo (`wrangler versions upload --preview-alias pr-<N>`). (c) Block the deploy
+  until main's CI has passed: done, `deploy.yml` calls `ci.yml`, `web.yml` and `lint.yml` and deploys only after all three
+  pass. Open: (a), the report.
 - **A watchdog for the engine start.** Nothing times out the `starting-worker` state: `machine.ts` has only the Break grace
   timer, and `client.ts` `start()` waits on `mount`, `boot` and `startup` with no limit. A worker that stalls (the
   `?snapshot=0` stall in `docs/phase2-history.md`, "Prototype 1: the record from 'Where things stand'") leaves a visitor on "Getting the engine ready" for good. Open question:

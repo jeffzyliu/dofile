@@ -123,14 +123,21 @@ Two Workers, each a static-assets-only Worker with `html_handling: "auto-trailin
 starts from it by default, and `public/snapshot/` is gitignored, so a page built without one would not start). Each asset must
 be under 25 MiB; the two snapshot files are about 20 MB, so they fit with little room to spare. A snapshot built with
 `SNAPSHOT_QUALITY=5` (as the e2e tests and CI build it) does not: its heap is about 26.5 MB, and `wrangler dev` refuses it
-("Asset too large"); `npm run cf:dev` builds the default quality 11 (about 3 min), which it serves (checked in step 5). `deploy.yml` fails the job when any file in `dist/app/` or `dist/site/` is over 25 MiB and warns over 23 MiB, because the brotli-11 snapshot is built only there.
+("Asset too large"); `npm run cf:dev` builds the default quality 11 (about 3 min), which it serves (checked in step 5). The deploy and preview builds (`.github/actions/build-web`) fail the job when any file in `dist/app/` or `dist/site/` is over 25 MiB and warn over 23 MiB, because the brotli-11 snapshot is built only there.
 
-`.github/workflows/deploy.yml` deploys on every push to `main` (and by hand). It builds the snapshot too, cached on a hash of its
-inputs, and needs the repo secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`.
+`.github/workflows/deploy.yml` runs on every push to `main` (and by hand): it calls `ci.yml`, `web.yml` and `lint.yml` on that
+commit and deploys both Workers only if all three passed and the commit is still the tip of `main`. The build (shared with
+previews: `.github/actions/build-web`) makes the snapshot too, cached on a hash of its inputs. It needs the repo secrets
+`CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`.
+
+`.github/workflows/preview.yml` builds both parts for a pull request from a branch of this repo (not a fork) with the links
+pointing at `https://pr-<N>-dofile-app.<subdomain>.workers.dev/` (editor) and `https://pr-<N>-dofile.<subdomain>.workers.dev/`
+(pages), uploads them with `wrangler versions upload --preview-alias pr-<N>` (production does not change) and keeps one
+comment on the pull request with the two addresses. `<subdomain>` is the repo variable `CLOUDFLARE_WORKERS_SUBDOMAIN`.
 
 ## CI
 
-`.github/workflows/web.yml` runs four jobs on every pull request and on every push to `main` (one run per commit, so a merge's tree is tested; a pull request that changes nothing under `web/` or the Python build inputs skips the test jobs), and it can be started by hand. `deploy.yml` does not wait for it:
+`.github/workflows/web.yml` runs four jobs on every pull request and on every push to `main` (started by `deploy.yml` there, one run per commit, so a merge's tree is tested; a pull request that changes nothing under `web/` or the Python build inputs skips the test jobs), and it can be started by hand. `deploy.yml` deploys only after it, `ci.yml` and `lint.yml` passed:
 
 - **types, unit tests, build:** `npm run check`, a check that `commands.json` is up to date, `npm test`, `npm run build`.
 - **format and lint (Biome):** `npm run lint:strict`: the format, the import order and the lint rules; a warning fails.
