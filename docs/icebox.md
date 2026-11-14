@@ -90,6 +90,10 @@ estimated splits) are the study's, not checked again here.
   scale other than 1 it counts no keyboard: no area above it, no scroll-back of Safari's pan, no caret reveal), so a tap
   low in the editor while zoomed in may jump as before. If zoom comes back: one more sitting on an iPhone with `?kblog`,
   including taps while zoomed in. Nothing to do while zoom stays off. 2026-11-12.
+- **The pan guard's known gaps (#48, `viewport.ts`).** After a pinch the guard may judge a move from a stale finger
+  position (fixing it needs a `touchend` listener, more raw DOM handling than was approved); a horizontal drag on the
+  command line's text when it overflows is cancelled; a long-press drag of the caret where no scroller can follow is
+  cancelled by design. Revisit if the iPhone shows a problem. 2026-11-13.
 
 ## Command line, log and files (decided in the post-merge review, 2026-11-13)
 
@@ -118,6 +122,11 @@ estimated splits) are the study's, not checked again here.
   (step 4's C 7, kept); a mark would tell the visitor the file is gone. 2026-11-13.
 - **A close button (×) on each row of the phone's file dropdown.** The desktop tab has one; on the phone the dropdown has
   "Close <file>" for the open file only. A control inside a menu item needs focus logic the menu does not have. 2026-11-13.
+- **The New draft row's small gaps (#50).** A draft committed by leaving the field shows only its new row (on a phone the
+  tree may be hidden by the view tapped): a toast ("untitled.do made") could say so. The field's label stays "New name for
+  untitled.do", naming a file that does not exist yet (the maintainer chose to keep it). If a run writes the offered name
+  while the field is open, the field sits on that file's row until the commit (cosmetic). Enter in a second field while
+  the first commit is still being written is ignored, a window of a few milliseconds. 2026-11-13.
 - **Find and replace in the editor** (step 4's C 9; the editor has no find of its own, and Find searches the log only). The
   maintainer's fix, to build later: "add find and replace window to editor pane, add ctrl/cmd f listeners to both editor and log
   panes, and allow the user to do normal browser find when focused elsewhere". 2026-11-13.
