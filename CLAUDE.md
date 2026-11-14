@@ -131,6 +131,7 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   `lazy-matplotlib.md` hold its history and gaps), `phase3-plan.md` (hosted multi-user MCP server).
   `web-engine-data-flow.md` explains the web engine's data flow and `web-page-flows.md` the editor page's focus, runs, open files and log links. `opendta-issues.md`: known OpenDTA problems to
   verify against Stata. `agent-ergonomics.md`: dofile's own agent-ergonomics problems. `releasing.md`: releasing to PyPI.
+  `deploying.md`: deploying the web demo (the domain, the token, previews, the first deploy).
   `icebox.md`: things knowingly left for later (nothing in it blocks a merge).
   `archive/`: records of finished work (Phase 0/1, the Biome and ruff decision, step 3.5), not kept current.
 - Web demo design (moodboard, flows, wireframes, mockups): `docs/design/`. `docs/design/SPEC.md` is the build spec for the web

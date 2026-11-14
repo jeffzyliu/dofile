@@ -1499,8 +1499,9 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   6. The links across the origins: the landing page's "Open the editor" goes to `https://app.dofile.dev/`; the editor's wordmark
      and "About dofile" to `https://dofile.dev/`, "Commands" to `https://dofile.dev/commands/`, "Browsers that work" to
      `https://dofile.dev/#browsers`.
-  7. Nothing was deployed before the split (the domain is new), so no tab of an older build is left and no visitor has files at
-     another address.
+  7. The domain is new, so no tab of an older build is open on it. The one-origin build was deployed before, at the `dofile`
+     Worker's workers.dev address (the editor under `/app/`): that address now serves the landing page, and files kept there
+     stay with that origin (`docs/deploying.md`, section 6).
 - **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base`; the folders
   are `EDITOR_OUT` (`dist/app/`) and `SITE_OUT` (`dist/site/`), which the Wrangler configs spell (a test compares them);
   `EDITOR_URL` (`https://app.dofile.dev/`; or `DOFILE_EDITOR_URL`) is what the static pages link to; `SITE_URL`
