@@ -121,7 +121,8 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - env:
+      - shell: bash   # pipefail: a failed lookup must stop the step, not post a second comment
+        env:
           GH_TOKEN: ${{ github.token }}
           N: ${{ github.event.pull_request.number }}
           HEAD: ${{ github.event.pull_request.head.sha }}
