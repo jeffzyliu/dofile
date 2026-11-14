@@ -35,7 +35,9 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     (Load, Import, help links at 0.45 opacity) measure 2.2 to 3.8 to 1, under 4.5 (WCAG exempts disabled controls); a
     multi-line paste while an engine exists and is not ready is refused whole with the field untouched; a held Enter is
     ignored in every dialog; the declined banner's button reads "Start engine"; a retry from a failed start downloads with no
-    prompt, as "Try again" does. **Held Enter:** the guard was checked with a synthesized repeated keydown in Chromium,
+    prompt, as "Try again" does. **Decided (2026-11-13, the maintainer: "all recommendations"):** the off controls'
+    contrast goes to step 6's audit; the paste, the held Enter and the retry are kept as built; the declined banner's "Start
+    engine" is decided with the Start engine words (SPEC section 8). **Held Enter:** the guard was checked with a synthesized repeated keydown in Chromium,
     Firefox and WebKit, and (2026-11-13) by the maintainer on real keyboards: "good on all browsers". **Not verified:** a held Enter on a banner button that hands the focus to the editor
     ("Try again", "Run the file again"), where the repeats may type newlines into CodeMirror (older than this change); nothing
     merged today was tried on a real phone. Stale after #26 and not yet edited: SPEC's toast "… not run: line 1 didn't run",
@@ -383,10 +385,14 @@ Reviewed after the merge: see Post-merge review.
     files…"). (Step 5: it is there, above "Delete all files…".)
 19. A graph that keeps its own scheme (`scheme(s1mono)`) in the dark theme is a light image on a dark card. (2026-11-12: the card's image has a thin border from the tokens in the dark theme, so it looks intended; `app.css`.)
 20. The build's main JavaScript chunk is over Vite's 500 kB warning (about 525 kB raw, 173 kB gzip).
+    **Moved to step 6 (2026-11-13, the maintainer: "all recommendations"):** now 562 kB raw, 191 kB gzip; code splitting is
+    part of step 6's audit.
 21. A two-word `help` topic in a hint's link is unverified.
     **Closed (2026-11-13, #47):** every engine hint's help topic is one word.
 22. From step 3: at 700 to about 855 px with a 20 px default font size the toolbar scrolls sideways instead of fitting
     (its compact form starts below 56em).
+    **Iceboxed (2026-11-13, the maintainer: "all recommendations")** (`docs/icebox.md`, "Accessibility"): rare, nothing is
+    lost, and a fix needs a third toolbar form.
 
 ## Step 5: decisions and open questions
 
