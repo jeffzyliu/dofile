@@ -1,17 +1,21 @@
 {
-  // Static-assets-only Worker: Cloudflare serves dist/ (npm run build): the landing page at /, the commands page at
-  // /commands/, the editor under /app/ (scripts/urls.ts), with the headers from dist/_headers (the isolation headers on
-  // /app/* only; the site's build writes the file).
+  // The site's Worker: static assets only. Cloudflare serves dist/site (npm run build; the second Worker, wrangler.app.jsonc,
+  // serves the editor): the landing page at /, the commands page at /commands/. No headers file: the pages need no isolation.
+  // `wrangler deploy` with no --config deploys this one. The folder and the domain are scripts/urls.ts's (a test compares).
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dofile",
   "compatibility_date": "2026-11-01",
+  // the site's own domain (Cloudflare makes the DNS record and the certificate, and the domain's zone must be on the account)
+  "routes": [{ "pattern": "dofile.dev", "custom_domain": true }],
+  // also the workers.dev address, which preview deployments use (a Worker with routes would not have it unless it is set)
+  "workers_dev": true,
   "assets": {
-    "directory": "./dist",
-    // Cloudflare's default, written out: /commands and /app go to /commands/ and /app/ (their index.html), and a file
-    // x.html is served at /x (so /x.html redirects there). The site's own links use the folder forms.
+    "directory": "./dist/site",
+    // Cloudflare's default, written out: /commands goes to /commands/ (its index.html), and a file x.html is served at /x (so
+    // /x.html redirects there). The site's own links use the folder forms.
     "html_handling": "auto-trailing-slash",
-    // A path that is no file is a 404, never a page in its place (not "single-page-application": it applies to the whole
-    // site and would answer every missing page with the editor or the landing page).
+    // A path that is no file is a 404, never a page in its place (not "single-page-application": it would answer every
+    // missing page with the landing page).
     "not_found_handling": "none"
   }
 }

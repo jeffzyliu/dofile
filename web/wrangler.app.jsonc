@@ -1,0 +1,19 @@
+{
+  // The editor's Worker: static assets only. Cloudflare serves dist/app (npm run build) at the root of its own origin, with
+  // the isolation headers from dist/app/_headers on every path (the editor's build writes the file). The site's Worker is
+  // wrangler.jsonc. Deploy with `wrangler deploy --config wrangler.app.jsonc`. The folder and the domain are scripts/urls.ts's
+  // (a test compares).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dofile-app",
+  "compatibility_date": "2026-11-01",
+  "routes": [{ "pattern": "app.dofile.dev", "custom_domain": true }],
+  // also the workers.dev address, which preview deployments use (a Worker with routes would not have it unless it is set)
+  "workers_dev": true,
+  "assets": {
+    "directory": "./dist/app",
+    // the same as the site's Worker (wrangler.jsonc): a x.html is served at /x, a folder's index.html at the folder
+    "html_handling": "auto-trailing-slash",
+    // A path that is no file is a 404: the editor is one page and has no routes of its own
+    "not_found_handling": "none"
+  }
+}

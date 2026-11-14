@@ -19,12 +19,12 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
 import { chromium } from "@playwright/test";
-import { EDITOR_BASE } from "./urls.ts";
+import { EDITOR_BASE, EDITOR_OUT } from "./urls.ts";
 
 const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const here = fileURLToPath(new URL(".", import.meta.url));
-const dist = join(here, "../dist");
+const dist = join(here, "..", EDITOR_OUT); // the editor's folder, served at the root of its own origin (EDITOR_BASE)
 const out = arg("--out", join(here, "../../docs/img/startup-times.json"));
 const reps = Number(arg("--reps", 3));
 const modes = arg("--modes", "normal,snapshot").split(",");
@@ -37,7 +37,7 @@ const nets = arg("--nets", "unthrottled,100,30")
   .split(",")
   .map((k) => ({ key: k, ...NETS[k] }));
 if (!existsSync(join(dist, EDITOR_BASE, "index.html")))
-  throw new Error("no web/dist: run `npm run build` (after `npm run snapshot`)");
+  throw new Error(`no web/${EDITOR_OUT}: run \`npm run build\` (after \`npm run snapshot\`)`);
 
 // ---- the host ----------------------------------------------------------------------------------------------------------
 const TYPES = {
