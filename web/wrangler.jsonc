@@ -1,6 +1,7 @@
 {
   // The site's Worker: static assets only. Cloudflare serves dist/site (npm run build; the second Worker, wrangler.app.jsonc,
-  // serves the editor): the landing page at /, the commands page at /commands/. No headers file: the pages need no isolation.
+  // serves the editor): the landing page at /, the commands page at /commands/. The pages need no isolation: dist/site/_headers exists only in a build that is not
+  // production's, with X-Robots-Tag: noindex (a preview).
   // `wrangler deploy` with no --config deploys this one. The folder and the domain are scripts/urls.ts's (a test compares).
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dofile",

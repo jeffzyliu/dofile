@@ -1462,7 +1462,9 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   table (`slash` in `vite.config.ts`), and `/commands/index.html` is redirected there to match what auto-trailing-slash is
   documented to do, not seen on workerd. `/landing.html` was never deployed, so it is a 404, not redirected. Headers: the
   cross-origin isolation the editor's Break needs (`COOP: same-origin`, `COEP: require-corp`) on every path of the editor's
-  origin (`dist/app/_headers`, `/*`, written by the editor's build); the site's origin gets none (it has no `_headers`). The
+  origin (`dist/app/_headers`, `/*`, written by the editor's build); the site's origin gets none (its `_headers`, written only by a build that is not production's, holds just `X-Robots-Tag:
+  noindex`, which the editor's also gets then; a production build instead gives each page a `<link rel="canonical">` to its
+  production address, so the copies at the Workers' workers.dev addresses defer to `dofile.dev`). The
   dev server sends them on every response (Biome's checker panel is a frame and needs them). Links across the origins: the pages
   name the editor by `{{editor-url}}`, which the build fills (`EDITOR_URL`), and each other by absolute path (`/`, `/commands/`);
   the editor names the landing page by `LANDING_URL` (`app/env.ts`, from the build's `__SITE_URL__`, `SITE_URL`, a whole URL ending
@@ -1504,12 +1506,13 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
      stay with that origin (`docs/deploying.md`, section 6).
 - **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base`; the folders
   are `EDITOR_OUT` (`dist/app/`) and `SITE_OUT` (`dist/site/`), which the Wrangler configs spell (a test compares them);
-  `EDITOR_URL` (`https://app.dofile.dev/`; or `DOFILE_EDITOR_URL`) is what the static pages link to; `SITE_URL`
-  (`https://dofile.dev/`; or `DOFILE_SITE_URL`) is the landing page, from the editor. Both URLs must end in `/` (the file
-  throws otherwise: the editor joins `commands/` and `#browsers` to the landing page's). `DOFILE_URLS=local` makes them
-  `http://localhost:4173/` (the site) and `http://localhost:4174/` (the editor), the next two ports from `E2E_PORT` when set:
-  what `npm run build:local` and `npm run e2e` build, and what `npm run preview` serves. A preview deployment (later) builds
-  with the two environment variables set to its two `workers.dev` addresses. `vite.config.ts`, `playwright.config.ts`,
+  `EDITOR_URL` is what the static pages link to; `SITE_URL` is the landing page, from the editor. A build has no default for
+  them and refuses to start without one of: `DOFILE_URLS=production` (`https://dofile.dev/` and `https://app.dofile.dev/`:
+  what `deploy.yml` and `npm run deploy` build); `DOFILE_URLS=local` (`http://localhost:4173/` the site and
+  `http://localhost:4174/` the editor, the next two ports from `E2E_PORT` when set: what `npm run build:local` and `npm run e2e`
+  build, and what `npm run preview` serves); or both `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` (a pull request preview, set to
+  its two `workers.dev` addresses; `npm run cf:dev`). Both URLs must end in `/` (the file throws otherwise: the editor joins
+  `commands/` and `#browsers` to the landing page's). The dev servers need none (`DEV_EDITOR_PORT`, `DEV_SITE_PORT`). `vite.config.ts`, `playwright.config.ts`,
   `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.mjs` read it; the tests compare with the setting.
   `e2e/global-setup.ts` fails with a message when the servers serve another build, or one made for other addresses (the page's
   link to the editor, and the editor's script, are checked for the local origins). `test/site.test.ts` fails if another
@@ -1534,6 +1537,8 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
      addresses, since `/` is a path of both origins. The theme test records that the choice is per origin.
   5. The dev server is the editor's at `/`; the static pages are another site's and are not served in dev (their middleware stays
      for an `EDITOR_BASE` other than `/`, a one-origin layout the scripts and the e2e tests no longer build: see "Builds").
+     Since then `npm run dev` starts the pages' own dev server too (`vite --mode site`, port 5174, the same middleware at `/`),
+     and each server links to the other at the page's own host name on the other's port.
   What does not follow the editor to a new origin, because the browser keeps it per origin: the visitors' files (IndexedDB
   `dofile`; they must "Download all (.zip)" on the old address and upload them on the new), the downloaded engine (the Cache
   `dofile-snapshot-<built>`: a first visit's download again), the tab lock (`dofile-engine`, per origin), the sample's mark
@@ -1548,8 +1553,9 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   `dist/app/start-files.json`, which must exist; the pages moved to `index.html` and `commands/index.html` in `dist/site/`).
   Both builds take their folder from Vite's resolved `build.outDir`, so `--outDir` moves the whole output, `start-files.json`
   included. `vite preview` serves the editor's folder (every path isolated, as its `_headers` says; `/index.html` redirected) and,
-  with `--mode site`, the pages' (the folder redirects, no isolation), each as its Worker does. The dev server is the editor's
-  (base `/`); with `EDITOR_BASE` another path it also serves the pages at `/` and `/commands/` (a middleware; their scripts are
+  with `--mode site`, the pages' (the folder redirects, no isolation), each as its Worker does. The editor's dev server
+  (base `/`, port 5173) is one of the two `npm run dev` starts; the pages' (`vite --mode site`, port 5174) is the other. With
+  `EDITOR_BASE` another path the editor's also serves the pages at `/` and `/commands/` (a middleware; their scripts are
   then served from under the base, a dev-only detail), which is the layout of step 5 (the editor under `/app/` on the site's
   origin) and is not exercised since the split.
 - **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which

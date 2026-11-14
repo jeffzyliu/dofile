@@ -11,9 +11,9 @@ Run from `web/` (`npm install` once). The wheel is rebuilt by the scripts that n
 
 ```bash
 npm test                  # the engine in Pyodide under Node, the file store, the client, the page's controllers (~70 s)
-npm run dev               # the editor on the LAN too, at / (the landing and commands pages are another origin and not served in dev: `npm run build:local && npm run preview` serves both builds)
+npm run dev               # two dev servers, on the LAN too: the editor on 5173, the landing and commands pages on 5174; each links to the other at the page's own host name
 npm run e2e               # builds the snapshot and the two builds (`build:local`), then Chromium, Firefox, WebKit, iPhone profile (`npx playwright install` once; SNAPSHOT_QUALITY=5 builds the snapshot in seconds instead of ~3 min; E2E_PORT=4181 serves the pages on 4181 and the editor on 4182 instead of 4173 and 4174, for a second worktree)
-npm run build             # the wheel, the editor into dist/app/, the pages into dist/site/; the URLs they link each other by: DOFILE_SITE_URL, DOFILE_EDITOR_URL (production by default, DOFILE_URLS=local: localhost; `npm run build:local`)
+npm run build             # the wheel, the editor into dist/app/, the pages into dist/site/; refuses to start unless told the URLs they link each other by: DOFILE_URLS=production, DOFILE_URLS=local (`npm run build:local`), or both DOFILE_SITE_URL and DOFILE_EDITOR_URL
 npm run preview           # the two builds on two ports, 4173 (pages) and 4174 (editor), as the two Workers serve them
 npm run snapshot          # the Pyodide memory snapshot the page starts from; `npm run dev` needs it once, and again after a change to the engine
 npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the 97 Stata 14 cases inside Pyodide (~4 min; --normal: no snapshot; --cases a,b)
@@ -159,17 +159,20 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
   `https://app.dofile.dev/` (`dist/app/`, `wrangler.app.jsonc`, Worker `dofile-app`).** The editor's location is ONE setting,
   `scripts/urls.ts`: `EDITOR_BASE` (`/`), the two folders (`EDITOR_OUT`, `SITE_OUT`) and the two addresses the builds link each
   other by, `SITE_URL` (the editor's wordmark, "About dofile", "Close editor", "Browsers that work") and `EDITOR_URL` (the
-  pages' "Open the editor"): the production addresses unless `DOFILE_SITE_URL` / `DOFILE_EDITOR_URL` (whole URLs ending in `/`;
-  a preview deployment sets both to its workers.dev addresses) or `DOFILE_URLS=local` (localhost, ports from `E2E_PORT`) say
-  otherwise. Everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL` (`app/env.ts`),
+  pages' "Open the editor"). There is no default: a build fails unless `DOFILE_URLS=production`, `DOFILE_URLS=local`
+  (localhost, ports from `E2E_PORT`) or both `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` (whole URLs ending in `/`; a preview
+  deployment sets them to its workers.dev addresses) say which (an empty value is unset). A production build gives each page a
+  `<link rel="canonical">` to its production address; any other build writes `X-Robots-Tag: noindex` into both folders'
+  `_headers` (the pages' folder has one only then). Everything of the editor's goes through `import.meta.env.BASE_URL` (`main.tsx`) or `LANDING_URL` (`app/env.ts`),
   and `test/site.test.ts` fails if another source, script, e2e test, config, page, workflow or local action (`.github/actions/`) spells the editor's old path
   (`/app/`) or an address of the site's origins after a quote, a backquote, `(` or `=` (the Wrangler configs spell the two domains
   without a scheme, and a test compares them with `urls.ts`). `npm run build` is two builds: `vite build` (the editor into
   `dist/app/`, with its own `_headers`: every path isolated) and `vite build --mode site` (the pages into `dist/site/index.html`
-  and `dist/site/commands/index.html`, their own `dist/site/assets/`, no `_headers`); `build:local` is the same with
+  and `dist/site/commands/index.html`, their own `dist/site/assets/`, no `_headers` in production); `build:local` is the same with
   `DOFILE_URLS=local`. `vite preview` serves one folder as its Worker does (`npm run preview`: both, on two ports, and the e2e
-  config does the same). `npm run dev` is the editor's dev server at `/`; the pages are another origin, so it does not serve them
-  (its links to the landing page go to `SITE_URL`: production unless `DOFILE_SITE_URL` points at a preview of `dist/site`). The
+  config does the same). `npm run dev` is two dev servers (`DEV_EDITOR_PORT` 5173: the editor at `/`; `DEV_SITE_PORT` 5174, `vite --mode site`:
+  the pages at `/` and `/commands/`). In dev only, each finds the other at the page's own host name on the other's port (the
+  editor from `location`, the pages from the request's Host header), so a phone on the LAN follows the links too. The
   e2e `baseURL` is the editor's origin: `goto("?test")` is the editor, and the pages are `LOCAL_SITE_URL` and
   `${LOCAL_SITE_URL}commands/` (compare whole addresses, origin included: `/` is a path of both). What does not follow the editor
   to a new origin (the stored files, the downloaded engine, the sample's mark, the theme) and the steps, are in

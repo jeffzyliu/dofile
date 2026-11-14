@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   type CommandData,
+  canonicalURL,
   commandsHtml,
   deniedInBrowser,
   engineMB,
@@ -19,15 +20,16 @@ import {
   sitePageFor,
 } from "../scripts/site-pages.ts";
 import {
+  DEV_EDITOR_PORT,
+  DEV_SITE_PORT,
+  devURL,
   EDITOR_BASE,
   EDITOR_OUT,
-  EDITOR_URL,
   LOCAL_EDITOR_URL,
   LOCAL_SITE_URL,
   PRODUCTION_EDITOR_URL,
   PRODUCTION_SITE_URL,
   SITE_OUT,
-  SITE_URL,
 } from "../scripts/urls.ts";
 import { countText, filterNames } from "../src/site/filter.ts";
 import data from "../src/stata/commands.json" with { type: "json" };
@@ -73,7 +75,7 @@ test("the six prefixes the interpreter handles itself are the highlighter's (lan
 });
 
 test("commands.html and landing.html: no placeholder is left once filled, and every placeholder is one the build knows", () => {
-  const tokens = { version: "9.9.9", engineMB: "50", editorURL: EDITOR_URL };
+  const tokens = { version: "9.9.9", engineMB: "50", editorURL: LOCAL_EDITOR_URL };
   const commands = fillCommands(fillTokens(web("commands.html"), tokens), data as CommandData, ["shell", "webuse"]);
   assert.doesNotMatch(commands, /\{\{|<!--COMMANDS-->|<!--PREFIXES-->/);
   const landing = fillTokens(web("landing.html"), tokens);
@@ -125,6 +127,24 @@ test("where each page is served, and the headers file: isolation on the editor's
   assert.doesNotMatch(headersFile("/editor/"), /^\/\*$/m, "no rule for the whole site");
   assert.match(headersFile(EDITOR_BASE), rule(EDITOR_BASE));
   assert.match(headersFile("/"), rule("/"), "an editor at the root of its own origin: every path");
+  // a build that is not production's: noindex on every path, in the editor's one block when it is at the root
+  assert.doesNotMatch(headersFile("/"), /X-Robots-Tag/, "a production build is indexed");
+  assert.match(
+    headersFile("/", true),
+    /^\/\*\n {2}Cross-Origin-Opener-Policy: same-origin\n {2}Cross-Origin-Embedder-Policy: require-corp\n {2}X-Robots-Tag: noindex$/m,
+  );
+  assert.equal(headersFile("/", true).match(/^\/\*$/gm)?.length, 1, "one block for every path");
+  assert.match(headersFile("/editor/", true), /^\/\*\n {2}X-Robots-Tag: noindex$/m);
+  assert.match(headersFile(null, true), /^\/\*\n {2}X-Robots-Tag: noindex\n$/m, "the pages' folder: noindex only");
+  assert.doesNotMatch(headersFile(null, true), /Cross-Origin/);
+  assert.equal(headersFile(null), "", "the pages' folder of a production build has no headers file");
+});
+
+test("a production build's canonical links: each page's production address", () => {
+  const [site, editor] = [PRODUCTION_SITE_URL, PRODUCTION_EDITOR_URL];
+  assert.equal(canonicalURL("landing.html", site, editor), site);
+  assert.equal(canonicalURL("commands.html", site, editor), `${site}commands/`);
+  assert.equal(canonicalURL("index.html", site, editor), editor);
 });
 
 test("the editor's location is one setting: scripts/urls.ts, read by the config, the e2e config and the scripts", () => {
@@ -137,12 +157,9 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
   );
   assert.equal(PRODUCTION_SITE_URL, "https://dofile.dev/");
   assert.equal(PRODUCTION_EDITOR_URL, "https://app.dofile.dev/");
-  const local = process.env.DOFILE_URLS === "local";
-  assert.equal(EDITOR_URL, process.env.DOFILE_EDITOR_URL ?? (local ? LOCAL_EDITOR_URL : PRODUCTION_EDITOR_URL));
-  assert.equal(SITE_URL, process.env.DOFILE_SITE_URL ?? (local ? LOCAL_SITE_URL : PRODUCTION_SITE_URL));
-  for (const url of [LOCAL_SITE_URL, LOCAL_EDITOR_URL, SITE_URL, EDITOR_URL])
-    assert.match(url, /^https?:\/\/.*\/$/, url);
+  for (const url of [LOCAL_SITE_URL, LOCAL_EDITOR_URL]) assert.match(url, /^https?:\/\/.*\/$/, url);
   assert.notEqual(LOCAL_SITE_URL, LOCAL_EDITOR_URL, "two origins: the servers need two ports");
+  assert.notEqual(DEV_SITE_PORT, DEV_EDITOR_PORT, "two dev servers: two ports");
   for (const f of [
     "vite.config.ts",
     "playwright.config.ts",
@@ -200,16 +217,20 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
       );
 });
 
+/** Runs `args` in web/ with the environment's DOFILE_URLS, DOFILE_SITE_URL and DOFILE_EDITOR_URL replaced by `env`'s. */
+const withURLs = (env: Record<string, string>, args: string[]) => {
+  const inherited: Record<string, string | undefined> = { ...process.env, ...env };
+  for (const k of ["DOFILE_URLS", "DOFILE_SITE_URL", "DOFILE_EDITOR_URL"]) if (!(k in env)) delete inherited[k];
+  return spawnSync(args[0], args.slice(1), {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    env: inherited,
+    encoding: "utf8",
+  });
+};
+
 test("the URLs the build is given must end with a slash: a link is joined to them", () => {
-  const load = (env: Record<string, string>) => {
-    const inherited: Record<string, string | undefined> = { ...process.env, ...env };
-    for (const k of ["DOFILE_SITE_URL", "DOFILE_EDITOR_URL"]) if (!(k in env)) delete inherited[k];
-    return spawnSync(process.execPath, ["--input-type=module", "-e", 'import "./scripts/urls.ts"'], {
-      cwd: fileURLToPath(new URL("..", import.meta.url)),
-      env: inherited,
-      encoding: "utf8",
-    });
-  };
+  const load = (env: Record<string, string>) =>
+    withURLs(env, [process.execPath, "--input-type=module", "-e", 'import "./scripts/urls.ts"']);
   const bad = load({ DOFILE_SITE_URL: "https://x.workers.dev" });
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr, /DOFILE_SITE_URL must end with "\/"/);
@@ -221,6 +242,50 @@ test("the URLs the build is given must end with a slash: a link is joined to the
     load({ DOFILE_SITE_URL: "https://x.workers.dev/", DOFILE_EDITOR_URL: "https://y.workers.dev/" }).status,
     0,
   );
+});
+
+test("no default addresses: production, local or both URLs, said outright; a build refuses to start without them", () => {
+  const urls = (env: Record<string, string>) => {
+    const r = withURLs(env, [
+      process.execPath,
+      "--input-type=module",
+      "-e",
+      // the module's path as an argument: a test reads `import(` in this file's text as an import of its own
+      "const u = await import(process.argv[1]); console.log(JSON.stringify([u.SITE_URL ?? null, u.EDITOR_URL ?? null, u.PRODUCTION]))",
+      "./scripts/urls.ts",
+    ]);
+    return r.status === 0 ? JSON.parse(r.stdout) : r.stderr;
+  };
+  // nothing (or only empty values: a workflow's input that was not given) is no addresses, and no production build
+  assert.deepEqual(urls({}), [null, null, false]);
+  assert.deepEqual(urls({ DOFILE_URLS: "", DOFILE_SITE_URL: "", DOFILE_EDITOR_URL: "" }), [null, null, false]);
+  assert.deepEqual(urls({ DOFILE_URLS: "production" }), [PRODUCTION_SITE_URL, PRODUCTION_EDITOR_URL, true]);
+  assert.deepEqual(urls({ DOFILE_URLS: "local" }), [LOCAL_SITE_URL, LOCAL_EDITOR_URL, false]);
+  const pair = {
+    DOFILE_SITE_URL: "https://pr-1-dofile.x.workers.dev/",
+    DOFILE_EDITOR_URL: "https://pr-1-dofile-app.x.workers.dev/",
+  };
+  assert.deepEqual(urls(pair), [pair.DOFILE_SITE_URL, pair.DOFILE_EDITOR_URL, false]);
+  // the production addresses given one by one are a production build too
+  assert.deepEqual(urls({ DOFILE_SITE_URL: PRODUCTION_SITE_URL, DOFILE_EDITOR_URL: PRODUCTION_EDITOR_URL })[2], true);
+  assert.match(urls({ DOFILE_URLS: "prod" }), /DOFILE_URLS must be "production" or "local": prod/);
+  assert.match(urls({ DOFILE_SITE_URL: pair.DOFILE_SITE_URL }), /go together: give both/);
+  assert.match(urls({ DOFILE_EDITOR_URL: pair.DOFILE_EDITOR_URL }), /go together: give both/);
+  assert.match(urls({ DOFILE_URLS: "production", ...pair }), /give one or the other/);
+  // both builds (the editor's, the pages') stop before they start, with the choices in the message
+  const vite = fileURLToPath(new URL("../node_modules/vite/bin/vite.js", import.meta.url));
+  for (const mode of [[], ["--mode", "site"]]) {
+    const r = withURLs({}, [process.execPath, vite, "build", ...mode, "--outDir", "dist/never-written"]);
+    assert.notEqual(r.status, 0, `vite build ${mode.join(" ")}`);
+    assert.match(r.stderr + r.stdout, /Say which addresses the two builds link each other by: DOFILE_URLS=production/);
+  }
+});
+
+test("a dev server finds the other at the host name the browser used, on the other's port", () => {
+  assert.equal(devURL("localhost:5174", 5173), "http://localhost:5173/");
+  assert.equal(devURL("192.168.1.5:5173", 5174), "http://192.168.1.5:5174/");
+  assert.equal(devURL("[::1]:5174", 5173), "http://[::1]:5173/");
+  assert.equal(devURL("mac.local", 5174), "http://mac.local:5174/", "a Host header without a port");
 });
 
 test("the two Wrangler configs agree with scripts/urls.ts: the folder each Worker serves, its domain, and each other's settings", () => {

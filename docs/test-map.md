@@ -154,10 +154,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
 - `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
-    headers file (isolation on the editor's path only).
+    headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
+    page's canonical address in a production build.
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
     `language.ts`.
-  - The editor's location is one setting (`scripts/urls.ts`: the production and local addresses, each ending in a slash);
+  - The editor's location is one setting (`scripts/urls.ts`: the production and local addresses, each ending in a slash;
+    no default: production, local or both said outright, anything else refused, and `vite build` refuses without them;
+    the dev servers' addresses from the request's host);
     no other file, workflow or local action (`.github/actions/`) spells the editor's old path (`/app/`) or the site's
     origins; the two Wrangler configs against
     `urls.ts`.
