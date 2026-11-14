@@ -189,7 +189,7 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
 - **Next, in this order:**
   1. The maintainer's pass on pull request #17 (step 4): "Step 4: decisions and open questions" below, and the draft
      words in SPEC section 8; then its merge.
-  2. Step 5 (pull request #18, over step 4), then step 6 for each merged part and the audit in step 6.
+  2. Step 5 (pull request #18, over step 4), then step 6 for each merged part (its full-code audit replaces 6r).
 - **To try on a real iPhone** (none of this can be tested here; the e2e iPhone profile is an emulation with no real
   keyboard, toolbars or touch scrolling): the page does not scroll or bounce; with the keyboard open the command line sits
   right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard
