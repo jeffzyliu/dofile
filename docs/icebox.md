@@ -141,6 +141,12 @@ estimated splits) are the study's, not checked again here.
   - step 4's C 16: while a dialog is open, or another tab has the files, a drag of files over the page gives the Files
     pane no outline and the drop uploads nothing, with nothing that says why. 2026-11-13.
 
+- **Pass the page's folder changes and deletes to the engine mid-run (a P2 idea from the step 2 review).** The engine cannot
+  see the page's changes during a run (the worker is busy in one synchronous call), so a `save` into a folder the page
+  renamed or removed meanwhile succeeds, where desktop Stata would give r(603); today the file is not kept and
+  `RunResult.skipped` lists it, and the log says so. The idea: pass the changes through a `SharedArrayBuffer`, checked before
+  each command, as Break is. Plan: "Known work found in steps 1 and 2". Moved here by the document pass, 2026-11-13.
+
 ## Engine memory (added 2026-11-13)
 
 - **The engine unloads itself after a long idle time or while the visitor is away.** After a long period of inactivity, or

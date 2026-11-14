@@ -71,8 +71,9 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
    `@codemirror/lang-json`).
 4. What becomes of a queued command is decided by the state machine: a step that lets go of the queued run without
    sending it ends with the effect `drop-run`, which settles the command's `done` with null (`engine/machine.ts`).
-   (2026-11-12: the held run is gone, see Post-merge review: there is no queued command and no `drop-run`. With no
-   engine the command line is disabled and the page offers "Start engine"; a command opens no prompt.)
+   **Superseded by #26 (2026-11-12, checked against `web/src/app/start.ts` and `docs/web-page-flows.md`, section 2, on
+   2026-11-13):** the held run is gone, see Post-merge review: there is no queued command and no `drop-run`. With no
+   engine the command line is disabled and the page offers "Start engine"; a command opens no prompt.
 5. The engine's hint for an unclosed block still names OpenDTA's Command window and Shift+Enter: left as is (ODT-33). A
    multi-line command line (Shift+Enter starts a new line, so a block or a `///` command can be typed or pasted and run
    as one) is future work; today such a paste stops with a toast that points to the editor.
@@ -92,7 +93,10 @@ SPEC section 8 points here. The words drafted for the visitor are not repeated h
 12. (2026-11-11) A Ctrl/Cmd+Enter in the editor that the engine does not take (a run on, the engine starting, no engine
     that can run in this tab), where the Run buttons are disabled, says why in a short toast by the engine's state
     (`editor/words.ts` `refusedRunWords`; the words are drafts in SPEC section 8); nothing where it runs or opens the
-    prompt. A held Ctrl/Cmd+Enter runs once.
+    prompt. A held Ctrl/Cmd+Enter runs once. **Since #26:** with no engine (`none`, `asking`, `declined`, `other-tab-idle`, a
+    `failed` start that can be tried again) Ctrl/Cmd+Enter does what "Start engine" does and shows no toast
+    (`refusedRunWords` gives null there); the toast stays for a run on, a start on its way, and a start that cannot be tried
+    again (`app/start.ts`, `editor/words.ts`).
 
 **B. Made during review, waiting for the maintainer's confirmation**
 Reviewed after the merge: see Post-merge review.
@@ -109,7 +113,7 @@ Reviewed after the merge: see Post-merge review.
 3. Pasted lines stop at the first line that is refused, that was queued and then dropped, that ends with any rc but 0
    (Break's rc 1 too), or whose run is cut because another tab took the engine; and before a line that opens a block
    (`{` at its end, a lone `program define` or `mata`), opens a `/*` comment it does not close, or holds `///` (not sent).
-   A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.) (2026-11-12, with the queued run's removal: no line is queued or dropped any more, so that stop is gone; with no engine a paste is an ordinary paste into the disabled field, and no line runs.)
+   A toast says how many lines were not run, and a refused line goes back into the field (`log/paste.ts`). (UI fix round, 2026-11-12: that toast is now an error toast, with the warning icon.) **Superseded by #26 (2026-11-12):** no line is queued or dropped any more, so the "queued and then dropped" stop is gone; with no engine a paste is an ordinary paste into the disabled field, and no line runs; with an engine that is not `ready` a paste is refused whole, the field untouched (`docs/web-page-flows.md`, section 2).
    **Resolved (2026-11-13, #40): "fine for now"** (the maintainer). A multi-line command line is in `docs/icebox.md`.
 4. Load on a phone's .dta tab shows only its toast ("Loaded wages.dta"); the Log view does not open.
    **Resolved (2026-11-13): confirmed** (the maintainer: "ok").
@@ -135,6 +139,8 @@ Reviewed after the merge: see Post-merge review.
    read literally), though the dialog says Reset clears macros and graphs.
    **Fixed (2026-11-13, #40), with B 5:** Reset asks whenever anything has run on the engine since it started.
 2. The running banner shows on every run, though S 11's caption says "with the first run".
+   **Placed (2026-11-13, review decision 9):** "After step 6: later UI work", item 6 (hold back quick operations); see also
+   "Found in the UI fix round", under Post-merge review.
 3. "Run the file again" (the reset banner) runs the active text tab, not the file whose run the reset cut, and it is
    offered after a Reset the visitor asked for too.
    **Fixed (2026-11-13, #40):** the button runs the file whose run the reset cut, and is drawn only after a Break or a crash
@@ -165,8 +171,11 @@ Reviewed after the merge: see Post-merge review.
     **Moved to `docs/icebox.md` (2026-11-13, #40).**
 12. The memory banner is built (`states/banners.tsx` `MemoryBanner`), but nothing adds it (OQ-8: no limit is measured). (2026-11-12: dropped from SPEC's words; the unused `MemoryBanner` code is to be removed in the post-merge review.) The code is removed: `MemoryBanner`, its registry entry, `{ b: "memory" }`, `memoryHead` and their tests; the `memory` signal stays.)
 13. On a real iPhone: that the on-screen keyboard opens again when a dialog gives the focus back to the command line (the
-    focus now comes back in a timer); the iPhone checks of step 3 ("To try on a real iPhone", above); and step 3.5's
+    focus now comes back in a timer); the iPhone checks of step 3 ("To try on a real iPhone", in the history record); and step 3.5's
     open items (`web-engine-data-flow.md`, Part 3).
+    **Placed (2026-11-13):** step 7's real-phone pass ("Known work inside the steps", "Step 7"); step 3.5's open items are in
+    step 6's audit list. The "To try on a real iPhone" list is in `phase2-history.md`, "Prototype 1: the record from 'Where
+    things stand'", and step 7's list refers to it.
 14. A clash over an open file with unsaved edits is asked again after "Do the same" with Replace (not after Esc, nor after
     "Do the same" with Keep mine).
     **Iceboxed (2026-11-13)** with the redesign of file synchronization (`docs/icebox.md`, "Command line, log and files").
@@ -228,7 +237,10 @@ Reviewed after the merge: see Post-merge review.
    sample or is open with unsaved edits, the dialog `restore-sample` names those files first, and Replace writes the missing,
    differing and unsaved ones, reloads their open tabs with the sample's text and opens `analysis.do`. Other files are never
    touched.
-   **To change (2026-11-13), not built.** The maintainer: "my idea is to reuse the workflow and code for uploads to resolve
+   **Done (2026-11-13, #46): "Restore the sample" is an upload of the sample** (identical files are not asked; the clash
+   dialog and toast take the sample's words; `analysis.do` opens after; the `restore-sample` dialog is gone). The text above
+   is the behavior before #46; the request, as written:
+   the maintainer: "my idea is to reuse the workflow and code for uploads to resolve
    conflicts. in essence, restoring the sample should act as an upload of the sample + switching tab to analysis.do if it
    exists." Not built: it waits for the focus work, which changes `files/dialogs.tsx`.
 5. "Browsers that work" says only what the tests and the docs support: the automatic tests run the page in Chromium,
@@ -272,12 +284,12 @@ By the maintainer's decision (2026-11-11), lists B (waiting for confirmation) an
 and open questions" and "Step 5: decisions and open questions", and the draft words in SPEC section 8, do not block the
 merge of steps 4 and 5. They are reviewed after it:
 
-- [ ] Confirm or change each B item.
-- [ ] Decide each C item: fix it, move it to `docs/icebox.md`, or drop it.
-- [ ] Approve or reword the draft words (SPEC section 8). (2026-11-12: the maintainer went through all five lists; the entries decided are marked in SPEC section 8; the rest stay drafts.)
-- [ ] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan.
-- [ ] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand".
-- [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy.
+- [x] Confirm or change each B item. Done 2026-11-13: every B item of steps 4 and 5 is resolved above.
+- [x] Decide each C item: fix it, move it to `docs/icebox.md`, or drop it. Done 2026-11-13: each C item is marked above (fixed, iceboxed, placed in step 6, step 7 or "After step 6", or kept).
+- [x] Approve or reword the draft words (SPEC section 8). (2026-11-12: the maintainer went through all five lists; the entries decided are marked in SPEC section 8; the rest stay drafts.) Done 2026-11-13: all decided; the last was the failed-twice banner's sentence, #53.
+- [x] A document pass: non-critical items go to `docs/icebox.md`; the critical ones are surfaced at the top of this plan. Done 2026-11-13 (branch `decisions-1113`): "Open, critical", above.
+- [x] Documentation shuffling: one place for open items, and the stale history trimmed from "Where things stand". Done 2026-11-13: the record is in `phase2-history.md`.
+- [ ] The first-deploy checklist (SPEC section 8, "To look at on the first real deploy") run against the real deploy. Placed in step 6 (2026-11-13); listed in "Open, critical".
 - [x] Remove the queued run (asked for by the maintainer, 2026-11-12). Done on the branch `claude/remove-queued-run`, merged as #26 on 2026-11-12: no
       state holds a run, `started` always leads to `ready`, `drop-run`, run.ts's `pending` and `dropped` are gone, and with no
       engine nothing offers to run: Run is "Start engine" (the prompt, a new try, or the take-over dialog), the command
@@ -290,16 +302,23 @@ merge of steps 4 and 5. They are reviewed after it:
       `dropped` in `run.ts`, and the special cases in `log/CommandLine.tsx` and `log/pasterun.ts`
       (`docs/web-page-flows.md`, section 2).
 
-Found in the UI fix round (2026-11-12), still open:
+The maintainer's review decisions 7 to 16 are done (2026-11-13): 7 (the B items of steps 4 and 5): S4 B 7 iceboxed, S5 B 4
+done by #46, the rest confirmed; 8, 10, 11 and 15 by #40; 16 by #40 and #45; 12 iceboxed (the editor's own find); 9 placed
+in "After step 6: later UI work", 6; 13 and 14 (the other C items of steps 4 and 5), each row done, iceboxed or placed: S4 C 2
+in "After step 6", 6, C 13 in step 7, C 20 in step 6, C 22 in `docs/icebox.md`, S5 C 1 in step 6's first deploy, S5 C 4 in
+`docs/test-map.md`, S5 C 5 in step 6. Decisions 1 to 5 and 17 to 22 are in the text above; 6 (zoom) stays with the
+maintainer. #53 (the failed-twice banner's last sentence) is merged.
+
+Found in the UI fix round (2026-11-12):
 - The "Running…" banner appears and goes for every short run and every pasted line (seen as a flash). The log no longer
-  loses its place through it.
+  loses its place through it. Open; placed 2026-11-13 in "After step 6: later UI work", item 6 (review decision 9).
 - The phone keyboard's jump: settled by three rounds of measurements on an iPhone (iOS 27.0.1;
   `docs/phone-keyboard-experiment.md`). The command line takes a tap's focus itself with `preventScroll` (no pan at
   all); elsewhere Safari's pan is scrolled straight back (one frame, about 3 px seen) and the editor's caret is scrolled
   above the keyboard through CodeMirror. `?kblog` stays, an on-screen list of the viewport's events.
 - `overscroll-behavior-x: none` on the editor and the log also stops a trackpad back-swipe that starts over them.
 
-- `e2e/editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main`.
+- (Open; tracked in `docs/test-map.md`, "Known flaky tests", where its sightings are kept.) `e2e/editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main`.
   Changed (test code only): its `rename` helper now waits for the renamed row to have the focus before it returns, and the
   F2 steps in `editor.spec.ts` wait for the rename field to have the focus before Ctrl+A. The suspected cause (the tree's
   `focusRow` retrying every 50 ms and taking the focus from the editor, so the typed character is lost) is a suspicion
@@ -427,12 +446,12 @@ is set when this work is scheduled (decision 17, "queued run first", was dropped
 
 ## Known work inside the steps (found in the review of 2026-11-10)
 
-- **Step 2:** risk: the patched loader is loaded with `import()`, and it is not checked that `loadPyodide` can be given the
+- **Step 2 (done; kept as the record, 2026-11-13):** risk: the patched loader is loaded with `import()`, and it is not checked that `loadPyodide` can be given the
   runtime's bytes instead of fetching them itself; if it cannot, a counted download cannot hand those files to the start.
   `client.js` `breakRun` ties the interrupt to the 5 s kill timer; "Don't reset: wait for it" and "Reset now"
   need them apart. Today the snapshot start downloads everything before any file call answers, so the file panel waits
   for the engine; the file store removes that. The page does not call `navigator.storage.persist()` yet.
-- **Step 3:** `worker.js`, `client.js` and `snapshot.js` are plain JavaScript and `main.ts` casts their results; add a
+- **Step 3 (done in steps 3 to 5; kept as the record):** `worker.js`, `client.js` and `snapshot.js` are plain JavaScript and `main.ts` casts their results; add a
   shared types file from the spec's declarations, without converting them (the Node tests run them directly).
 - **Step 6 (the "full-web-code audit", the maintainer's name for it, 2026-11-13):** look out for these, in the maintainer's
   words.
@@ -466,7 +485,7 @@ is set when this work is scheduled (decision 17, "queued run first", was dropped
   with the cache working, "no request leaves the page except for static assets", and that the host compresses the `.wasm`.
   **Added 2026-11-13** (sections 5 and 6 of the post-merge review; the maintainer: "all recs"), the real-phone pass:
   - A real iPhone session: the phone command line, and the wake lock locked for 30 s.
-  - The "To try on a real iPhone" list (step 3, above), step 4's C 13, and the same on an Android phone (Chrome, Firefox).
+  - The "To try on a real iPhone" list (step 3; `phase2-history.md`, "Prototype 1: the record from 'Where things stand'": the page does not scroll or bounce; with the keyboard open the command line sits right above it and the tab bar is hidden; a toast sits above the command line and the tab bar, and above the keyboard while it is open), step 4's C 13, and the same on an Android phone (Chrome, Firefox).
   - Review decision 5: the trackpad back-swipe over the editor and the log, checked once by hand.
   - Memory: the cap was measured on an iPhone 13 only (`docs/browser-engine.md`, "The memory cap"), so try other phones;
     `merge`, `reshape`, `sort` and graphs near the cap; and a full heap in a browser.
@@ -479,7 +498,8 @@ Decided in the step 2 review:
   the log says so (step 4b). A file the page itself changed during the run is not listed: the page's version wins by design.
   The engine cannot see page changes during a run (the worker is busy in one synchronous call), so such a `save` succeeds
   where desktop Stata would give r(603). **P2 idea:** pass folder changes and deletes to the engine mid-run through a
-  `SharedArrayBuffer`, checked before each command, as Break is.
+  `SharedArrayBuffer`, checked before each command, as Break is. (Not critical; moved to `docs/icebox.md`, "Command line,
+  log and files", 2026-11-13.)
 - With no Web Locks (plain HTTP on a LAN, the dev server only), every tab owns the engine. Accepted and documented.
 - `engineBytes` is written into the page at build time, so the prompt has the size before any download, offline too.
 - The real page keeps a test hook, on only behind a flag, so step 2's tab-lock and download e2e tests keep running through
