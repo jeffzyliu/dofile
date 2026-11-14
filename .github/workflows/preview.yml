@@ -1,0 +1,143 @@
+name: preview
+
+# A preview of the web demo for each pull request from a branch of this repo: builds both parts (.github/actions/build-web,
+# as deploy.yml does) with the links between them pointing at the preview addresses, uploads a version of each Worker under
+# the alias pr-<N> with `wrangler versions upload` (a version is not deployed: production does not change), and keeps one
+# comment on the pull request with the two addresses, updated on each push:
+#   https://pr-<N>-dofile-app.<subdomain>.workers.dev/   the editor (wrangler.app.jsonc)
+#   https://pr-<N>-dofile.<subdomain>.workers.dev/       the landing and commands pages (wrangler.jsonc)
+# <subdomain> is the account's workers.dev subdomain, the repository variable CLOUDFLARE_WORKERS_SUBDOMAIN. The build needs
+# both addresses before it starts (they are baked in), so they are worked out here, not read from wrangler's output; a
+# step afterwards warns if wrangler printed other ones.
+#
+# Not for forks: their pull requests get no secrets, and pull_request_target would run their code with them. Not for
+# Dependabot, whose runs get no Actions secrets either. Not a required check, and it does not wait for the tests (web.yml
+# tests the same commit): a preview is for looking. A new push cancels the pull request's preview in progress.
+# Cloudflare keeps the 1,000 newest aliases per Worker; nothing deletes a preview when its pull request closes.
+#
+# To check on the first real preview (the docs do not say, so unverified): that Version URLs work for these assets-only
+# Workers, that the editor's _headers (COOP/COEP) apply on its preview address (the editor needs crossOriginIsolated), that
+# `versions upload` leaves the custom domains and the deployed version alone, and whether it needs the Worker deployed once.
+on:
+  pull_request:
+    paths:   # what the two builds are made from; a pull request that changes none of it keeps its last preview
+      - "web/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/actions/build-web/**"
+      - ".github/workflows/preview.yml"
+      - "!**/*.md"
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: build and upload
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.urls.outputs.site }}
+      editor: ${{ steps.urls.outputs.editor }}
+    steps:
+      # The Worker names are wrangler.jsonc's (dofile) and wrangler.app.jsonc's (dofile-app). An alias, a dash and the
+      # Worker's name make one DNS label: at most 63 characters, and the alias starts with a letter.
+      - id: urls
+        name: The preview addresses
+        env:
+          N: ${{ github.event.pull_request.number }}
+          SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+        run: |
+          if ! printf '%s' "$SUBDOMAIN" | grep -qE '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'; then
+            echo "::error::Set the repository variable CLOUDFLARE_WORKERS_SUBDOMAIN to the account's workers.dev subdomain (the <subdomain> in <worker>.<subdomain>.workers.dev), got '$SUBDOMAIN'"
+            exit 1
+          fi
+          alias="pr-$N"
+          for worker in dofile dofile-app; do
+            label="$alias-$worker"
+            if [ "${#label}" -gt 63 ]; then
+              echo "::error::$label is ${#label} characters; a preview alias and Worker name may have 63 together"
+              exit 1
+            fi
+          done
+          {
+            echo "alias=$alias"
+            echo "site=https://$alias-dofile.$SUBDOMAIN.workers.dev/"
+            echo "editor=https://$alias-dofile-app.$SUBDOMAIN.workers.dev/"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-web
+        with:
+          site-url: ${{ steps.urls.outputs.site }}
+          editor-url: ${{ steps.urls.outputs.editor }}
+      # The secrets go to these two steps only, not to the job's environment that npm ci and the build see.
+      - id: editor
+        name: Upload a version of the editor (dofile-app), not deployed
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: versions upload --config wrangler.app.jsonc --preview-alias ${{ steps.urls.outputs.alias }}
+      - id: site
+        name: Upload a version of the landing and commands pages (dofile), not deployed
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: versions upload --preview-alias ${{ steps.urls.outputs.alias }}
+      # A warning, not a failure: wrangler's wording is not a documented interface. A wrong subdomain variable shows here.
+      - name: Wrangler printed the addresses the build links to
+        env:
+          EDITOR: ${{ steps.urls.outputs.editor }}
+          SITE: ${{ steps.urls.outputs.site }}
+          EDITOR_OUTPUT: ${{ steps.editor.outputs.command-output }}
+          SITE_OUTPUT: ${{ steps.site.outputs.command-output }}
+        run: |
+          check() {
+            host=${1#https://}
+            host=${host%/}
+            if ! printf '%s' "$2" | grep -qF "$host"; then
+              echo "::warning::wrangler's output does not name $host; the build links to it. What wrangler printed:"
+              printf '%s\n' "$2"
+            fi
+          }
+          check "$EDITOR" "$EDITOR_OUTPUT"
+          check "$SITE" "$SITE_OUTPUT"
+
+  # A job of its own, so the token that may write to the pull request never shares a runner with the pull request's code.
+  comment:
+    name: comment the addresses
+    needs: upload
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          EDITOR: ${{ needs.upload.outputs.editor }}
+          SITE: ${{ needs.upload.outputs.site }}
+        run: |
+          marker='<!-- dofile-preview -->'
+          body=$(printf '%s\n' "$marker" \
+            "Preview of $HEAD merged with the base branch (not production; this comment is updated on each push):" \
+            "" \
+            "- Editor: $EDITOR" \
+            "- Landing and commands pages: $SITE")
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$N/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | sed -n 1p)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" > /dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$N/comments" -f body="$body" > /dev/null
+          fi
