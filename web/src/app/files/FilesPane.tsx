@@ -9,7 +9,7 @@
 //    folders fold (aria-expanded); sizes; the open file's mark (aria-selected); the unsaved dot; the "new" badge from
 //    `fresh`. Roving focus: one row in the tab order (the one last focused, else the open file, else the first);
 //    Up/Down, Home/End move; Right unfolds or goes in, Left folds or goes up; Enter (or Space, or a click) opens a file
-//    through open.ts openFile, or on a folder makes it the current folder and unfolds it (never folds: the caret, a span
+//    through open.ts openFile, or on a folder makes it the current folder and unfolds it (a second tap on the current one makes the top current; never folds: the caret, a span
 //    like the ⋯, and Left fold, and select nothing; a folded current folder or one above it hands "current" to the folded folder's
 //    parent); the current folder (aria-current, the highlight; a file's tap makes its folder current, a tap on the empty space the
 //    top) is where the "+", New .do file and New folder make their file; F2 renames in place; Shift+F10, the menu key, a right click or the
@@ -527,7 +527,9 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
       onClick={(e) => {
         if (r || (e.target as HTMLElement).closest(".rename-field")) return;
         rove(row.path);
-        activate();
+        if (row.dir && currentDir.value === row.path)
+          currentDir.value = ""; // a second tap on the current folder: the top
+        else activate();
       }}
       onContextMenu={(e) => {
         if (r) return;

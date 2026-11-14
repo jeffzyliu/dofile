@@ -500,3 +500,33 @@ test("every button that Start engine turns into Run keeps ignoring a held Enter:
   assert.equal(wired("src/app/log/CommandLine.tsx"), 3, "Start engine, the phone's send, Run command");
   assert.equal(wired("src/app/log/LogView.tsx"), 1, "a hint's help link");
 });
+
+// A tap on iOS leaves :hover on until the next tap elsewhere (the Files pane's caret and ⋯ and the heads' "+" stayed gray): the
+// hover rules of these controls are only inside `@media (hover: hover)`.
+test("the hover rules of the Files pane's caret and ⋯ and the head links are inside (hover: hover)", () => {
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles/ui.css"), "utf8").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
+  const stack: string[] = [];
+  const outside: string[] = [];
+  let buf = "";
+  for (const ch of css) {
+    if (ch === "{") {
+      const sel = buf.trim();
+      stack.push(sel);
+      if (
+        /:hover/.test(sel) &&
+        /\.(caret|row-more|head-link)\b/.test(sel) &&
+        !stack.some((s) => /hover:\s*hover/.test(s))
+      )
+        outside.push(sel);
+      buf = "";
+    } else if (ch === "}") {
+      stack.pop();
+      buf = "";
+    } else if (ch === ";") buf = "";
+    else buf += ch;
+  }
+  assert.deepEqual(outside, []);
+});

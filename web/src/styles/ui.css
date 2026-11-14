@@ -452,8 +452,10 @@ button {
   white-space: nowrap;
   border-radius: var(--radius);
 }
-.head-link:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .head-link:hover {
+    text-decoration: underline;
+  }
 }
 .head-link[disabled] {
   opacity: var(--disabled-opacity);
@@ -467,10 +469,12 @@ button {
   color: var(--muted);
   padding: 0 5px;
 }
-.head-link.icon:hover {
-  color: var(--ink);
-  background: var(--border);
-  text-decoration: none;
+@media (hover: hover) {
+  .head-link.icon:hover {
+    color: var(--ink);
+    background: var(--border);
+    text-decoration: none;
+  }
 }
 
 /* files: one row per file or folder; --d is the depth. Each level indents 16 px and draws a faint guide line. */
@@ -511,10 +515,9 @@ button {
   color: var(--muted);
   font-size: 12px;
 }
-/* the current folder (docs/web-page-flows.md, section 1): a soft fill, the name in the accent and a 1 px inset outline,
-   so it differs from the open file's bar; the keyboard focus ring (2 px) stays over the outline */
+/* the current folder (docs/web-page-flows.md, section 1): the name in the accent and a 1 px inset outline, no fill (the
+   fill is the open file's, and both show at once); the keyboard focus ring (2 px) stays over the outline */
 .files li.current {
-  background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 .files li.current:focus-visible {
@@ -535,8 +538,10 @@ button {
   flex: none;
   cursor: pointer;
 }
-.files .caret:hover {
-  background: var(--border);
+@media (hover: hover) {
+  .files .caret:hover {
+    background: var(--border);
+  }
 }
 .files .file-ico {
   color: var(--muted);
@@ -568,7 +573,6 @@ button {
 .files .badge + .row-more {
   margin-left: 4px;
 }
-.files li:hover .row-more,
 .files li:focus-visible .row-more,
 .files li.open .row-more {
   opacity: 1;
@@ -576,9 +580,15 @@ button {
 .files li:not(.open, .current).hover {
   background: var(--surface-2);
 }
-.files .row-more:hover {
-  background: var(--border);
-  color: var(--ink);
+/* :hover only with a real pointer (a tap on iOS leaves :hover on until the next tap elsewhere) */
+@media (hover: hover) {
+  .files li:hover .row-more {
+    opacity: 1;
+  }
+  .files .row-more:hover {
+    background: var(--border);
+    color: var(--ink);
+  }
 }
 @media (hover: none) {
   .files .row-more {
@@ -1626,16 +1636,10 @@ dialog.dialog.sheet {
     forced-color-adjust: none;
     background: Highlight;
   }
+  /* the current folder: a real outline (the inset box-shadow is dropped here), no fill, as outside forced colors */
   .files li.current {
-    forced-color-adjust: none;
-    background: SelectedItem;
-    color: SelectedItemText;
-  }
-  .files li.current :is(.name, .ico) {
-    color: SelectedItemText;
-  }
-  .files li.current .ico {
-    background: SelectedItemText;
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
   }
   .files li.open,
   .code .ln.run,
