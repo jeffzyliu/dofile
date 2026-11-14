@@ -140,5 +140,8 @@ inputs, and needs the repo secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare 
 - **browsers:** `npm run e2e` on Ubuntu, a matrix of four jobs, one Playwright project each (Chromium, Firefox, WebKit,
   iPhone profile), each on its own runner with a 30-minute limit; Playwright's results are kept as an artifact on failure.
 - **memory snapshot:** `npm run snapshot`, then `npm test` (so the native-library test runs) and `npm run check-snapshot`.
+  On a pull request it runs only when the pull request changes one of its inputs (the `ENGINE` list in `web.yml`: the
+  Python engine and its build files, the extra wheels, the Pyodide version, `web/src/engine/`, the snapshot scripts and
+  tests, the conformance corpus and `tests_opendta/`); on a push to `main` it always runs.
 
 `check-pytest` and `check-numeric` are run by hand. The Python suite is `.github/workflows/ci.yml`.

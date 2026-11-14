@@ -27,11 +27,13 @@ env:
 # pyproject.toml, uv.lock, this workflow) skips the test
 # jobs but still starts the workflow, so the required check `web ok` reports. (A workflow-level `paths` filter starts
 # nothing, and a required check that never reports blocks the merge forever.)
+# The memory snapshot job has its own, narrower list (`engine`): what the snapshot is built from and what its checks read.
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.diff.outputs.code }}   # "false" only for a pull request that changes none of: web/, src/ (the engine the wheel is built from), pyproject.toml, uv.lock, this workflow
+      engine: ${{ steps.diff.outputs.engine }}   # "false" only for a pull request that changes none of the snapshot job's inputs (ENGINE below)
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,14 +42,22 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.base_ref }}
+          # the snapshot job's inputs: the dofile wheel (src/, pyproject.toml, uv.lock), the extra wheels, the Pyodide version
+          # (package.json, package-lock.json), the scripts that build, boot and check it, the engine code its tests start
+          # (web/src/engine/), the tests that need it, and the corpus and Stata cases check-snapshot runs
+          ENGINE: '^(src|tests/conformance|tests_opendta|web/wheels|web/src/engine)/|^web/scripts/(make-snapshot\.mjs|check-snapshot\.mjs|snapshot-node\.ts|install-engine\.ts|build-id\.ts)$|^web/test/((engine|snapshot-native)\.test|harness)\.ts$|^(pyproject\.toml|uv\.lock|web/package\.json|web/package-lock\.json|\.github/workflows/web\.yml)$'
         run: |
           code=true
+          engine=true
           if [ "$EVENT" = pull_request ]; then
-            files=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
-            hit=$(printf '%s\n' "$files" | grep -vE '\.md$' | grep -E '^(web|src)/|^(pyproject\.toml|uv\.lock|\.github/workflows/web\.yml)$' || true)   # a markdown file never counts; files outside the pattern are not covered by these tests
+            all=$(git diff --name-only "origin/$BASE...HEAD")   # the whole PR, not the last commit; a failure stops the job (red)
+            files=$(printf '%s\n' "$all" | grep -vE '\.md$' || true)   # a markdown file never counts
+            hit=$(printf '%s\n' "$files" | grep -E '^(web|src)/|^(pyproject\.toml|uv\.lock|\.github/workflows/web\.yml)$' || true)   # files outside the pattern are not covered by these tests
             [ -n "$hit" ] || code=false
+            [ -n "$(printf '%s\n' "$files" | grep -E "$ENGINE" || true)" ] || engine=false
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "engine=$engine" >> "$GITHUB_OUTPUT"
 
   unit:
     name: types, unit tests, build
@@ -129,7 +139,7 @@ jobs:
   snapshot:
     name: memory snapshot
     needs: changes
-    if: needs.changes.outputs.code == 'true'   # always 'true' on a push to main
+    if: needs.changes.outputs.engine == 'true'   # always 'true' on a push to main
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
