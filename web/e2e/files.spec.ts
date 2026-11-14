@@ -850,8 +850,6 @@ test("a folder's caret folds without selecting, a tap on its name selects and ne
   await expect(data).toHaveAttribute("aria-expanded", "true");
   await expect(current).toHaveCount(0);
   await data.click();
-  await data.click(); // a second tap on the name: still open
-  await expect(data).toHaveAttribute("aria-expanded", "true");
   await expect(current).toHaveText(/^data\//);
   // the current folder is data/deep/; folding data/ (above it) makes the top current
   await deep.click();
@@ -873,6 +871,36 @@ test("a folder's caret folds without selecting, a tap on its name selects and ne
   await expect(data).toHaveAttribute("aria-expanded", "false");
   await expect(current).toHaveCount(0);
   await expect(plus(page)).toHaveAccessibleName("New file");
+});
+
+// A second tap on the current folder's name makes the top current (the way back that VoiceOver's activation has); it never folds.
+test("a tap on the name of the current folder makes the top current and does not fold it", async ({ page }) => {
+  await setUp(page, tree3);
+  const data = row(page, /^data\//);
+  await data.click();
+  await expect(data).toHaveAttribute("aria-current", "true");
+  await data.click();
+  await expect(tree(page).locator("[aria-current]")).toHaveCount(0);
+  await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(plus(page)).toHaveAccessibleName("New file");
+  await data.click(); // and a third selects it again
+  await expect(data).toHaveAttribute("aria-current", "true");
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+});
+
+// "Outline, no fill" (the maintainer): the current folder has a thin outline and no tint, so only the open file's row has the fill.
+test("the current folder is outlined with no fill; only the open file's row is filled", async ({ page }) => {
+  await setUp(page, tree3);
+  await row(page, /^c\.do/).click(); // opens data/c.do: its folder is current too
+  await showFiles(page);
+  const style = (loc: ReturnType<typeof row>) =>
+    loc.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, shadow: getComputedStyle(el).boxShadow }));
+  const folder = await style(row(page, /^data\//));
+  const file = await style(row(page, /^c\.do/));
+  const plain = await style(row(page, /^a\.do/));
+  expect(folder.bg).toBe(plain.bg);
+  expect(folder.shadow).not.toBe("none"); // the outline
+  expect(file.bg).not.toBe(plain.bg);
 });
 
 test("Enter and Space on a folder select and unfold it, and never fold it; a tap on the empty space makes the top current", async ({
@@ -944,7 +972,7 @@ test("deleting a nested current folder makes the folder above it current, in the
   await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
 });
 
-test("the current folder in forced colors: the system's selected colors (Chromium's emulation)", async ({
+test("the current folder in forced colors: a Highlight outline and no fill (Chromium's emulation)", async ({
   page,
   browserName,
 }) => {
@@ -952,17 +980,17 @@ test("the current folder in forced colors: the system's selected colors (Chromiu
   await setUp(page, tree3);
   await page.emulateMedia({ forcedColors: "active" });
   await row(page, /^data\//).click();
-  // Chromium's emulated palette has SelectedItemText and CanvasText both black, so the fill (SelectedItem, a light color, not
-  // the page's Canvas) is what shows the pair is applied; the name takes the row's text color
+  // the inset box-shadow is dropped in forced colors, so the outline is a real one; the fill stays the row's own
   const style = (loc: ReturnType<typeof row>) =>
     loc.evaluate((el) => ({
       bg: getComputedStyle(el).backgroundColor,
-      fg: getComputedStyle(el).color,
-      name: getComputedStyle(el.querySelector(".name")!).color,
+      outlineStyle: getComputedStyle(el).outlineStyle,
+      outlineWidth: getComputedStyle(el).outlineWidth,
     }));
   const picked = await style(row(page, /^data\//));
-  expect(picked.bg).not.toBe((await style(row(page, /^a\.do/))).bg);
-  expect(picked.name).toBe(picked.fg);
+  expect(picked.outlineStyle).toBe("solid");
+  expect(picked.outlineWidth).toBe("1px");
+  expect(picked.bg).toBe((await style(row(page, /^a\.do/))).bg);
 });
 
 // The row last focused may be a draft's path (the draft is not in the list), or a row that has gone: it counts as its folder.
@@ -1248,9 +1276,12 @@ test("the head menu's New .do file and New folder, and the dropzone's New .do fi
 }) => {
   await setUp(page, tree3);
   const data = row(page, /^data\//);
-  const ask = async (item: string) => {
-    await data.click();
+  const select = async () => {
+    if ((await data.getAttribute("aria-current")) !== "true") await data.click(); // a second tap would make the top current
     await expect(data).toHaveAttribute("aria-current", "true");
+  };
+  const ask = async (item: string) => {
+    await select();
     await (await fileActions(page)).getByRole("menuitem", { name: item }).click();
   };
   await ask("New .do file");
@@ -1269,7 +1300,7 @@ test("the head menu's New .do file and New folder, and the dropzone's New .do fi
   await showFiles(page);
   const link = page.locator(".dropzone").getByRole("button", { name: "New .do file" });
   if (await link.isVisible()) {
-    await data.click();
+    await select();
     await link.click();
     const field = nameField(page, "untitled.do");
     await expect(field).toBeFocused();
