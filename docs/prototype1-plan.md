@@ -70,9 +70,12 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     that joined everything) and #29 (an earlier version of this section) are not for merging.
 - **The post-merge review is prepared; most of it is not decided.** The maintainer's review document holds 22
   decisions: 1 to 5 are accepted (all built in #23 to #25; decision 5, the trackpad back-swipe, is to be checked once by
-  hand), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer (the experiment ran with zoom off; turning it back on needs another iPhone check, `docs/icebox.md`, "Phone"), and 7 to 22 have no answer yet. Nothing they
-  would release is started: `cls`, the later UI work, the
-  document pass and step 6's scope.
+  hand), 6 (zoom on the editor page) waited on the keyboard experiment, which is now done (#27) and leaves it to the maintainer (the experiment ran with zoom off; turning it back on needs another iPhone check, `docs/icebox.md`, "Phone"), and 7 to 16 have no answer yet. **17 to 22 were
+  answered on 2026-11-13:** 17 (the order of the later UI work, "queued run first") dropped, since the queued run is gone;
+  18 (run only `.do` and `.ado` files), 20 (`cls`), 21 (move, rename, drag) and 22 (step 6's width: its plan plus three cheap
+  audit checks) accepted; 19 (syntax checking) changed by the maintainer: a syntax error refuses the run, an unknown command
+  only warns. The specs of 18 to 21 are in "After step 6: later UI work", and nothing in it is built before step 6. Nothing
+  else they would release is started: the document pass.
   - Found by reading the code, **fixed in #40 (2026-11-13)**: a Save pressed right after a rename's Enter, before the
     rename's write ends, left the old text under the new name and the new text under the old name, with the tab shown as
     saved (`files/actions.ts` `renameEntry`, `editor/Editor.tsx` `save`); a Save after a delete, the same race, brought the
@@ -103,9 +106,9 @@ To pick up after a break: read this file, then `docs/design/SPEC.md` (the build 
     field writes only and opens nothing, the focus and the phone's view staying where the visitor tapped, the maintainer's
     "Write only, don't open"; Esc discards; checked on the maintainer's iPhone). Gaps of #48 and #50: `docs/icebox.md`,
     "Phone" and "Command line, log and files".
-  - Waiting on the maintainer: decisions 7 to 22; the iPhone sitting (the phone command line, the wake
+  - Waiting on the maintainer: decisions 7 to 16 (17 to 22 are decided, 2026-11-13, above); the iPhone sitting (the phone command line, the wake
     lock with the phone locked 30 s; the keyboard experiment is done, #27); the deployed site's address for the first-deploy checks; the
-    draft words of SPEC section 8; how they saw Home open `analysis.do` (see "Later UI work", 8).
+    draft words of SPEC section 8; how they saw Home open `analysis.do` (see "After step 6: later UI work", 8).
   - Known flaky tests, with their sightings: `docs/test-map.md`, "Known flaky tests".
 
 - **UI fix round (2026-11-12), on `ui-lightning`:** the maintainer's UI bugs after the merge of steps 4 and 5. Editor: the
@@ -507,30 +510,9 @@ Found in the UI fix round (2026-11-12), still open:
   now waits until the state is not a starting state, asserts `ready` with the state's `reason` and `detail`, and prints
   the page's console in the failure; no retries.
 
-## Later UI work (the maintainer's ideas, 2026-11-12; not started)
+## Later UI work
 
-"Remove the queued run" (Post-merge review) came before 1 and 6, since they change the same Run controls; it is merged (#26).
-
-1. Run only from a `.do` or `.ado` file (today any text file runs). Overlaps the refused-run toast (step 4 A 12) and C 3.
-2. Live syntax checking of the active editor buffer, with underlines, and a run refused on a syntax error; the same for the
-   command line. It would replace the paste heuristics `opensComment` and `opensBlock` (step 4 B 3, C 11) and bears on A 5's
-   multi-line command line. A misspelled command name can come from `src/stata/commands.json`; argument checks need the
-   engine's parser.
-3. Reorder the editor's tabs by dragging.
-4. Move files: a "Move…" with a typed path first, drag in the file tree later.
-5. Rename from a right click on an editor tab.
-6. Hold back the presentation of very quick operations (about 100 ms), so buttons, the status bar and the running banner do
-   not flash; the internal state is unchanged. Subtle transitions later. Overlaps step 4 C 2 and the flash noted above.
-7. `cls` typed at the command line clears the log (Stata's command for it; the engine has none). `clear` keeps its meaning
-   of dropping the data.
-8. Remember the open tabs across reloads. Today a tab without the engine's lock neither reads nor writes to storage (the
-   Web Lock lets one tab own the engine; a second tab is blocked entirely and writes nothing), so the open tabs would have
-   to be kept by the tab that holds the lock. Open question for the maintainer: how they saw Home open `analysis.do`; the
-   code opens it on a first visit only (the sample's load), so the source of that sighting is unknown.
-9. A run whose first command is `clear all` restarts the engine first, which frees its WebAssembly memory (it never shrinks
-   otherwise; the status bar's "Engine memory" only grows until a restart). First step: measure how long a restart from the
-   cached snapshot takes; build it only if that is under about 2 s. `clear all` anywhere else in a run clears as today.
-   (2026-11-13.)
+Moved (2026-11-13) to "After step 6: later UI work", after "Steps". Its item 9 moved to `docs/icebox.md`, "Engine memory".
 
 How this relates to steps 6, 6r and 7. **Step 6** (e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages) is
 partly done inside steps 3 to 5: the e2e suite has 105 tests in four browser profiles (420 cases, 389 run, 31 skipped:
@@ -598,9 +580,41 @@ Status values: `not started`, `running`, `to review`, `done`.
 | 4c | Graph, Data and Browse, Results and the matrix view | general-purpose, worktree | Sonnet, medium | with 4a | to review (built on `prototype1-step4`, pull request #17) |
 | 4d | Dialogs and states: download prompt, failures, reset, toast; drafts the missing words (OQ-10, OQ-16, OQ-18) for the maintainer to approve before merge | general-purpose, worktree | Sonnet, medium | with 4b | to review (built on `prototype1-step4`, pull request #17; the draft words in SPEC section 8, "Step 4d: draft words"; the review decisions and open questions in "Step 4: decisions and open questions" above) |
 | 5 | Landing page, commands page, the sample project on synthetic data, clean-room check of all text | general-purpose, worktree | Sonnet, medium | parallel with 4 | to review (branch `prototype1-step5`, draft pull request #18 over step 4; reviewed once, its findings fixed; the landing page moved to `/` and the editor to `/app/`; open for the maintainer: the words listed in SPEC section 8 "As built in step 5", the first deploy's checks in SPEC 8 "URLs") |
-| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review" |
+| 6 | e2e per user flow; `axe`, `tabwalk`, `contrast` on the real pages | general-purpose | Sonnet, medium | after each of 3 to 5 | partly done in steps 3 to 5 (105 e2e tests, axe on the built landing and commands pages); the rest after the merge: "Post-merge review". Width decided 2026-11-13 (decision 22, accepted): the work above plus three cheap audit checks: unused code (knip), the licences of the web dependencies, and stale docs. Security headers and the `?test` gate wait until later |
 | 6r | Review of each merge (`/code-review`) | fresh context | Opus, high (Fable for step 2) | per merge | done before the merge for steps 4 and 5 (fresh-context reviews of each part, the join and the move); a `/code-review` of the merged whole open if wanted |
 | 7 | The Phase 2 verification list; a real-phone pass; the Safari storage re-check | maintainer | | last | not started |
+
+## After step 6: later UI work (the maintainer's ideas, 2026-11-12; not started)
+
+Decided 2026-11-13: these items come after step 6, as their own section. **Nothing in this section is built before step 6.**
+The queued run's removal came before them, since it changed the same Run controls; it is merged (#26). The order among them
+is set when this work is scheduled (decision 17, "queued run first", was dropped: the queued run is gone).
+
+1. **Run only from a `.do` or `.ado` file** (today any text file runs). Decision 18, accepted as the review recommends: Run
+   is disabled, with a reason; Ctrl/Cmd+Enter shows a toast; Run selection follows the same rule; a file with no extension
+   does not run. Overlaps the refused-run toast (step 4 A 12) and C 3.
+2. **Syntax checking of the active editor buffer**, with underlines. Decision 19, changed by the maintainer ("i do want to
+   reject syntax errors"): stage 1 only, the page's own lexer. A syntax error (an unclosed quote, brace or comment) refuses
+   the run. An unknown command is a warning only and the run goes on (the maintainer: "No, warn only"). The same for the
+   command line. It would replace the paste heuristics `opensComment` and `opensBlock` (step 4 B 3, C 11) and bears on A 5's
+   multi-line command line. A misspelled command name can come from `src/stata/commands.json`; argument checks need the
+   engine's parser (not part of stage 1).
+3. **Reorder the editor's tabs by dragging.** Decision 21, accepted: no drag by touch.
+4. **Move files:** a "Move…" with a typed path first, drag in the file tree later (decision 21: no drag by touch). Move
+   refuses a name that exists (no replace).
+5. **Rename from a right click on an editor tab.** Decision 21, accepted: a tab's Rename uses the Move dialog.
+6. **Hold back the presentation of very quick operations** (about 100 ms), so buttons, the status bar and the running banner
+   do not flash; the internal state is unchanged. Subtle transitions later. Overlaps step 4 C 2 and the "Running…" flash
+   noted under "Post-merge review". No decision in the review's 17 to 22 touches it.
+7. **`cls`** typed at the command line clears the log (Stata's command for it; the engine has none). `clear` keeps its
+   meaning of dropping the data. Decision 20, accepted: no confirmation; it clears the graphs too, like Clear log; it works
+   during a run; command line only (in a do-file it stays an error, with a hint).
+8. **Remember the open tabs across reloads.** Today a tab without the engine's lock neither reads nor writes to storage (the
+   Web Lock lets one tab own the engine; a second tab is blocked entirely and writes nothing), so the open tabs would have
+   to be kept by the tab that holds the lock. Open question for the maintainer: how they saw Home open `analysis.do`; the
+   code opens it on a first visit only (the sample's load), so the source of that sighting is unknown.
+
+(The old item 9, a run starting with `clear all`, moved to the engine-memory follow-ups in `docs/icebox.md`, "Engine memory".)
 
 ## How to run a step
 
