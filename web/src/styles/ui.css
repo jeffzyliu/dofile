@@ -241,10 +241,15 @@ button {
   font-weight: 400;
   color: var(--muted);
 }
-.btn.quiet:hover,
 .btn.quiet.hover {
   border-color: var(--border-strong);
   color: var(--ink);
+}
+@media (hover: hover) {
+  .btn.quiet:hover {
+    border-color: var(--border-strong);
+    color: var(--ink);
+  }
 }
 .btn.icon {
   padding: 6px;
@@ -325,8 +330,10 @@ button {
   border: 1px solid var(--border-strong);
   background: var(--surface);
 }
-.theme:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .theme:hover {
+    background: var(--surface-2);
+  }
 }
 .theme .ico {
   font-size: 15px;
@@ -436,10 +443,15 @@ button {
   display: inline-grid;
   place-items: center;
 }
-.tab .x:hover,
 .tab .x.hover {
   background: var(--border);
   color: var(--ink);
+}
+@media (hover: hover) {
+  .tab .x:hover {
+    background: var(--border);
+    color: var(--ink);
+  }
 }
 /* links in a pane head: the accent color, so they don't read as captions */
 .head-link {
@@ -1351,9 +1363,13 @@ dialog.dialog.sheet {
   padding: 6px 10px;
   border-radius: var(--radius);
 }
-.menu [role^="menuitem"]:hover,
 .menu [role^="menuitem"].hover {
   background: var(--accent-soft);
+}
+@media (hover: hover) {
+  .menu [role^="menuitem"]:hover {
+    background: var(--accent-soft);
+  }
 }
 .menu [role^="menuitem"] .aside {
   margin-left: auto;
@@ -1670,8 +1686,14 @@ dialog.dialog.sheet {
   dialog.dialog {
     border: 1px solid CanvasText;
   }
-  .menu [role^="menuitem"]:is(:hover, .hover) {
+  .menu [role^="menuitem"].hover {
     outline: 2px solid Highlight;
     outline-offset: -2px;
+  }
+  @media (hover: hover) {
+    .menu [role^="menuitem"]:hover {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
   }
 }

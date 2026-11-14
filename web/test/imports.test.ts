@@ -501,32 +501,29 @@ test("every button that Start engine turns into Run keeps ignoring a held Enter:
   assert.equal(wired("src/app/log/LogView.tsx"), 1, "a hint's help link");
 });
 
-// A tap on iOS leaves :hover on until the next tap elsewhere (the Files pane's caret and ⋯ and the heads' "+" stayed gray): the
-// hover rules of these controls are only inside `@media (hover: hover)`.
-test("the hover rules of the Files pane's caret and ⋯ and the head links are inside (hover: hover)", () => {
-  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles/ui.css"), "utf8").replace(
-    /\/\*[\s\S]*?\*\//g,
-    "",
-  );
-  const stack: string[] = [];
+// A tap on iOS leaves :hover on until the next tap elsewhere (the Files pane's caret and ⋯ and the heads' "+" stayed gray): every
+// :hover rule of the stylesheets is inside `@media (hover: hover)`.
+test("every :hover rule is inside (hover: hover)", () => {
   const outside: string[] = [];
-  let buf = "";
-  for (const ch of css) {
-    if (ch === "{") {
-      const sel = buf.trim();
-      stack.push(sel);
-      if (
-        /:hover/.test(sel) &&
-        /\.(caret|row-more|head-link)\b/.test(sel) &&
-        !stack.some((s) => /hover:\s*hover/.test(s))
-      )
-        outside.push(sel);
-      buf = "";
-    } else if (ch === "}") {
-      stack.pop();
-      buf = "";
-    } else if (ch === ";") buf = "";
-    else buf += ch;
+  for (const file of ["../src/styles/ui.css", "../src/styles/app.css", "../src/site/site.css"]) {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), file), "utf8").replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    );
+    const stack: string[] = [];
+    let buf = "";
+    for (const ch of css) {
+      if (ch === "{") {
+        const sel = buf.trim();
+        stack.push(sel);
+        if (/:hover/.test(sel) && !stack.some((s) => /hover:\s*hover/.test(s))) outside.push(`${file}: ${sel}`);
+        buf = "";
+      } else if (ch === "}") {
+        stack.pop();
+        buf = "";
+      } else if (ch === ";") buf = "";
+      else buf += ch;
+    }
   }
   assert.deepEqual(outside, []);
 });
