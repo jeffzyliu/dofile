@@ -1451,3 +1451,44 @@ test("desktop is unchanged: the open files are tabs, the ⋯ menu has no Save an
   await expect(menu.getByRole("menuitemcheckbox")).toHaveText("Wrap lines");
   await expect(menu.locator(".menu-scroll")).toHaveCount(0);
 });
+
+// The row's ⋯ (a span in the row): the menu hangs from it, so on a phone it is at the right edge; a second tap closes it
+// and the focus goes back to the row, as a MenuButton does.
+test("the row's ⋯: the menu hangs from it (at the row's right edge on a phone), and a second tap closes it and focuses the row", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "1\n", "b.do": "2\n" });
+  const a = row(page, /^a\.do/);
+  const menu = page.getByRole("menu", { name: "Actions for a.do" });
+  await a.locator(".row-more").click();
+  await expect(menu).toBeVisible();
+  if (isPhone(page)) {
+    const edges = await page.evaluate(() => ({
+      menu: document.querySelector("[role=menu]")!.getBoundingClientRect().right,
+      row: document.querySelector("[role=treeitem]")!.getBoundingClientRect().right,
+    }));
+    expect(Math.abs(edges.menu - edges.row)).toBeLessThan(24);
+  }
+  await a.locator(".row-more").click();
+  await expect(menu).toHaveCount(0);
+  await expect(a).toBeFocused();
+});
+
+// '..' in a new name (the maintainer: "new file within a folder, then entering ../foo.do fails silently")
+test("a new file named ../foo.do: Enter keeps the field open and says why; leaving makes untitled.do and a toast says why", async ({
+  page,
+}) => {
+  await setUp(page, { "data/c.do": "3\n" });
+  await row(page, /^data\//).click();
+  await plus(page).click();
+  const field = nameField(page, "untitled.do");
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("../foo.do");
+  await page.keyboard.press("Enter");
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator(".rename-problem")).toHaveText("A name can't go up a folder (..).");
+  expect(await storePaths(page)).toEqual(["data", "data/c.do"]);
+  await row(page, /^c\.do/).click(); // leaving the field
+  await expect.poll(() => storePaths(page)).toEqual(["data", "data/c.do", "data/untitled.do"]);
+  await expect(page.locator(".toast")).toHaveText("A name can't go up a folder (..). Made untitled.do instead.");
+});

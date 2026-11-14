@@ -176,6 +176,48 @@ for (const tap of ["a low line", "an empty line", "the last line"] as const)
     expect((await caret()).bottom).toBeGreaterThan(300); // just above the keyboard, not further
   });
 
+// A draft's name field (the Files pane, a plain input in .files-body, a scroller) is scrolled into view when the keyboard
+// opens, with its reason line under it: the stand-in visualViewport as above, a long tree so the draft is at the foot.
+test("a new file's name field and its reason line are inside the list's visible part when the keyboard opens", async ({
+  page,
+}) => {
+  await page.addInitScript((height) => {
+    const vv = Object.assign(new EventTarget(), { height, width: 390, offsetTop: 0, offsetLeft: 0, scale: 1 });
+    Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
+    (window as any).__vv = vv;
+  }, PHONE.height);
+  await open(page);
+  await page.waitForFunction(() => (window as any).__dofile.store.blocked === false);
+  await page.evaluate(async () => {
+    const { store } = (window as any).__dofile;
+    for (let i = 0; i < 40; i++)
+      await store.write(`a${String(i).padStart(2, "0")}.do`, new TextEncoder().encode("1\n"));
+  });
+  await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  await page.getByRole("button", { name: /^New file/ }).click();
+  const field = page.getByRole("textbox", { name: /^New name for/ });
+  await expect(field).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("a00.do");
+  await page.keyboard.press("Enter"); // a name in use: the reason line shows under the field
+  await expect(page.locator(".rename-problem")).toBeVisible();
+  await page.evaluate(() => {
+    const vv = (window as any).__vv;
+    vv.height = 400;
+    vv.dispatchEvent(new Event("resize"));
+  });
+  expect(await page.evaluate(() => "keyboard" in document.documentElement.dataset)).toBe(true);
+  await settled(page);
+  const inside = (sel: string) =>
+    page.evaluate((s) => {
+      const b = document.querySelector(s)!.getBoundingClientRect();
+      const body = document.querySelector(".files-body")!.getBoundingClientRect();
+      return b.top >= body.top - 1 && b.bottom <= Math.min(body.bottom, 400) + 1;
+    }, sel);
+  expect(await inside(".rename-field")).toBe(true);
+  expect(await inside(".rename-problem")).toBe(true);
+});
+
 // While the keyboard is open a drag that no scroller under the finger can follow is cancelled (the drag guard,
 // app/viewport.ts), so iOS does not pan the page by the keyboard's height. Synthetic events: that Safari then does not
 // pan is for the real iPhone. The stand-in visualViewport plays the keyboard, as above; the guard is on only after

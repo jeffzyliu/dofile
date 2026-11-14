@@ -34,11 +34,11 @@ import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { downloadAll, refresh } from "../files.ts";
 import { restoreSample } from "../sample.ts";
-import { activeTab, dialog, files, fresh, hasFiles, say, tabs } from "../state.ts";
+import { activeTab, dialog, files, fresh, hasFiles, say, showToast, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import { fromAnywhere, fromNothing, useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
-import { MenuButton, type MenuItem, openMenu } from "../ui/Menu";
+import { closeMenu, MenuButton, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import {
   createEntry,
   downloadEntry,
@@ -253,7 +253,8 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   } finally {
     ending = false;
   }
-  if (problem) say(`${problem} Made ${baseName(to)} instead.`);
+  if (problem)
+    showToast(`${problem} Made ${baseName(to)} instead.`); // the reason line is gone with the field
   else if (asked?.includes("/")) unfold(parentOf(to)); // a folder the name went through may be folded
   if (kind === "file" && !leaving) openFile(to); // leaving: the visitor's tap decides what is open and where the focus is
   if (renaming.value?.id !== r.id) return; // another field was started meanwhile
@@ -446,8 +447,8 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
   const r = renaming.value?.path === row.path ? renaming.value : null;
   const li = useRef<HTMLLIElement>(null);
   useRovingFocus(row.path, li, r !== null, tabbable);
-  const showMenu = (el: HTMLElement, at?: { x: number; y: number }) =>
-    openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor: at ? null : el, at, restore: el });
+  const showMenu = (el: HTMLElement, at?: { x: number; y: number }, anchor: HTMLElement | null = at ? null : el) =>
+    openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor, at, restore: el });
   // a folder is made current and unfolded, never folded (its caret and Left fold it); a file opens, and its folder is current
   const activate = () => {
     if (row.dir) {
@@ -566,7 +567,9 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
             aria-hidden="true"
             onClick={(e) => {
               e.stopPropagation();
-              showMenu(e.currentTarget.closest("li") as HTMLElement);
+              const more = e.currentTarget; // the menu hangs from the ⋯ and a second tap on it closes it, as a MenuButton
+              if (openMenuState.value?.anchor === more) closeMenu();
+              else showMenu(more.closest("li") as HTMLElement, undefined, more);
             }}
           >
             <Icon name="more" />
