@@ -43,8 +43,8 @@ the maintainer's post-merge review (a table in the history).
 | **Audit**: the full-web-code audit, the design checks on the real pages, the first real deploy's checks | phase 2 step 6 (its last part); prototype 1 step 6, with 6r folded in | not started |
 | **Two origins**: `dofile.dev` and `app.dofile.dev` | prototype 1 step 6 (deployment) | built on `deploy/dofile-dev`, not merged |
 | **Verification and phone pass**: the verification list below, a real-phone pass, the Safari storage re-check | prototype 1 step 7 | not started |
-| **PyPI release**: a non-pre-release, so `pip install dofile` works | phase 2 step 7 | pre-release only |
-| **Launch**: domain, Chrome, Firefox and Safari on desktop and phone, a link from the README | phase 2 step 10 | open |
+| **PyPI release**: a non-pre-release, so `pip install dofile` works; it comes before the launch, since the landing page tells people to run `pip install dofile`. Trusted Publishing, no stored token ([releasing.md](releasing.md)) | phase 2 step 7 | pre-release only |
+| **Launch**: the domain (`dofile.dev`, bought; the split is on `deploy/dofile-dev`), Chrome, Firefox and Safari on desktop and phone, a link from the README | phase 2 step 10 | open |
 | **Lazy matplotlib** (experiment, [lazy-matplotlib.md](lazy-matplotlib.md)) | phase 2 step 4a | not started, no code |
 | **Later UI work** (8 items, below) | "After step 6: later UI work" | not started; nothing is built before the audit |
 
@@ -93,7 +93,8 @@ wait until later. The maintainer's name for it is "the full-web-code audit"; it 
   a held Enter on a banner button that hands the focus to the editor ("Try again", "Run the file again"), whose repeats may type
   newlines into CodeMirror; #37's unchecked items (Cmd+Enter in a `<select>`, the 1 px ring's contrast, the status bar's fit at
   1200 px); the UI round's nice-to-haves 6 (IME `isComposing`), 8 (ring contrast) and 9 (the `.log` focus ring's radius and its
-  off-screen bottom edge).
+  off-screen bottom edge). The #26 and #30 review nice-to-haves were dropped (their reports were deleted): the audit reads that
+  code.
 - **Tests:** what the tests do not cover (the views are tried only by e2e; `check-pytest` and `check-numeric` run by hand);
   `web/e2e/poc.spec.ts` is bound to the proof-of-concept page's ids and is rewritten with the page (its four tests are fixme);
   one Playwright test of a streamed run in a real browser (step 1 checked streaming in Node only); Tab out of the open ⋯ menu
@@ -109,7 +110,7 @@ The maintainer's step. It runs the verification list below, and:
 - A real iPhone session: the phone command line; the wake lock with the phone locked for 30 s; the page does not scroll or
   bounce; with the keyboard open the command line sits right above it and the tab bar is hidden; a toast sits above the command
   line and the tab bar, and above the keyboard while it is open; the keyboard opens again when a dialog gives the focus back to
-  the command line (step 4 C 13); #52's "+" bringing the keyboard up and the strip at 320 px. None of #22 to #25 and #40 has
+  the command line (step 4 C 13); the phone's Break ignoring taps in its first 600 ms; #52's "+" bringing the keyboard up and the strip at 320 px. None of #22 to #25 and #40 has
   been tried on a real phone; #48 and #50 were.
 - The same on an Android phone (Chrome, Firefox).
 - Review decision 5: the trackpad back-swipe over the editor and the log, checked once by hand.
@@ -198,7 +199,7 @@ build spec; `README.md` holds every round of feedback).
 5. **Repository layout:** `web/` (Vite, TypeScript) beside the Python package at the root; the Python the page needs stays in
    `src/dofile/`. [Alternatives](phase2-history.md#repository-layout-alternatives).
 6. **Hosting:** Cloudflare Workers static assets (`web/wrangler.jsonc`, the isolation headers in `web/public/_headers`,
-   `deploy.yml`). Each asset must be under 25 MiB (the two snapshot files are about 20 MB each; `deploy.yml` fails over 25 MiB
+   `deploy.yml`). Each asset must be under 25 MiB, and there is no fallback start (the two snapshot files are about 20 MB each; `deploy.yml` fails over 25 MiB
    and warns over 23 MiB). The headers must be on every response, 304s included (WebKit refuses a worker whose cached 304 has
    no COEP). Domain: `dofile.dev`, bought 2026-11-14; the split is on `deploy/dofile-dev` (Status).
 7. **Pyodide self-hosted for the snapshot start** (2026-11-10, built): the build copies `pyodide.asm.wasm`, `python_stdlib.zip`
@@ -225,12 +226,13 @@ Other rules a builder needs:
   `navigator.storage.persist()` was granted (the page asks), Safari's 7 days. The page says files stay only in this browser
   and offers "Download all (.zip)".
 - **Path mapping can pick the wrong file** when two files share a name; the log note shows it.
-- **Safari:** one real iPhone tried, no Mac Safari.
+- **Safari:** storage and SharedArrayBuffer differences; one real iPhone tried, no Mac Safari.
 
 ## Open questions for the maintainer (closing Phase 2)
 
 1. Does Phase 2 close with the PyPI release (a non-pre-release) and the Launch (domain, browsers, README link), or do those
-   move to a later phase? Options: both in Phase 2; the release in Phase 2 and the launch later; both later.
+   move to a later phase? Options: both in Phase 2; the release in Phase 2 and the launch later; both later. Today the
+   deployed landing page (workers.dev) shows `pip install dofile`, which fails until a non-pre-release exists.
 2. Once Phase 2 closes, where do the prototype 2 items and the later UI work live: a prototype 2 plan, a Phase 2.5 plan,
    `phase3-plan.md`, or `docs/icebox.md`?
 3. When is the Safari 7-day storage re-check due ("after prototype 1")? In the verification pass, or before the launch?
