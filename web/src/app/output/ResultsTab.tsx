@@ -2,14 +2,15 @@
 // action). Sections "e() · regress", "r()" and "Locals and globals" hold groups that fold (Scalars, Macros, Matrices,
 // Locals, Globals), each with its count. Values show 8 significant digits, and every digit on a hovered row or a value
 // with keyboard focus (CSS only: ui.css, "results"). A click or tap anywhere on a row, or Enter or Ctrl/Cmd+C on its value,
-// copies every digit: the toast names the row ("Copied e(r2)") and the row's action cell says "✓ Copied" for COPIED_MS.
+// copies every digit: the toast names the row ("Copied e(r2)") and the row's action cell says "✓ Copied" for COPIED_MS. A
+// click that ends a text selection in the row (a drag, a double-click) selects, and does not copy.
 // A matrix row shows its size ("1 x 3") and View, which opens the matrix in place as a grid (engine.ts call("matrix"): no
 // command, nothing in the log or the history); Hide folds it; copying a matrix copies tab-separated text (the toast
 // only: View and Hide stay in its cell).
 //
 // Values are buttons, each a Tab stop; group heads are buttons with aria-expanded. The folds, the row just copied and the
-// open matrices are signals of view.ts. An open matrix belongs to the `results` it was read for: after another run it is
-// closed, since its values could be another model's.
+// open matrices are signals of view.ts. An open matrix and "✓ Copied" belong to the `results` they were read for: after
+// another run they are gone, since the values could be another model's.
 
 import { call } from "../engine.ts";
 import { isPhone, macros, results, showToast } from "../state.ts";
@@ -90,8 +91,9 @@ async function copyMatrix(name: string, done: string) {
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 /** Copy a scalar or macro row's every digit; once copied, its action cell says "✓ Copied" for COPIED_MS. */
 async function copyValue(row: ResultRow) {
+  const copied = { key: row.key, for: results.value, macros: macros.value }; // the run's, before a newer run can land
   if (!(await copyText(full(row.value), copiedNote(row)))) return;
-  copiedRow.value = row.key;
+  copiedRow.value = copied;
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => {
     copiedRow.value = null;
@@ -156,7 +158,14 @@ function Row({ row }: { row: ResultRow }) {
   return (
     <>
       {/* the row copies on a click anywhere; the value button is the keyboard's target, its Enter and Space click here */}
-      <tr class="row" onClick={copy}>
+      <tr
+        class="row"
+        onClick={(e) => {
+          const s = getSelection(); // a click that ends a selection in the row selects; Enter and Space have detail 0
+          if (e.detail > 0 && s && !s.isCollapsed && e.currentTarget.contains(s.anchorNode)) return;
+          copy();
+        }}
+      >
         <td>{row.name}</td>
         <td>
           <button
@@ -195,7 +204,9 @@ function Row({ row }: { row: ResultRow }) {
             >
               {open ? "Hide" : "View"}
             </button>
-          ) : copiedRow.value === row.key ? (
+          ) : copiedRow.value?.key === row.key &&
+            copiedRow.value.for === rs &&
+            copiedRow.value.macros === macros.value ? (
             <span class="copied">
               <Icon name="check" />
               Copied

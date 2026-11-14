@@ -3,7 +3,7 @@
 // pickedVar ...) are in state.ts; these are only the 4c views'. No other part reads or writes them.
 
 import { signal } from "@preact/signals-core";
-import type { Matrix, Results } from "../../engine/types.ts";
+import type { Macros, Matrix, Results } from "../../engine/types.ts";
 
 /** The Data tab's "Filter variables" text. */
 export const filterText = signal("");
@@ -16,8 +16,9 @@ export const loadingRows = signal(false);
 
 /** The Results tab's groups the visitor folded or unfolded, by group id; a group not here has its own default. */
 export const folds = signal<Readonly<Record<string, boolean>>>({});
-/** The row just copied, by row key: its action cell says "✓ Copied" for a while (ResultsTab.tsx, COPIED_MS). */
-export const copiedRow = signal<string | null>(null);
+/** The row just copied, by row key, and the results and macros it was copied from: its action cell says "✓ Copied" for a
+ *  while (ResultsTab.tsx, COPIED_MS), and not on a newer run's row of the same name. */
+export const copiedRow = signal<{ key: string; for: Results | null; macros: Macros | null } | null>(null);
 
 /** A matrix opened in place. It belongs to the `results` it was read for: after another run it is no longer shown (its
  *  values could be another model's), and View reads it again. */

@@ -265,7 +265,10 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   also tint the row and show "↵ Copy" (CSS only), and always in the copy and the value's accessible name. A click or tap
   anywhere on a row (name or value), or Enter or Ctrl/Cmd+C on a focused value, copies it: the toast names it ("Copied
   e(r2)") and the row's action cell says "✓ Copied" for 2 s, the landing page's Copy words. The action column fits "↵ Copy"
-  and "✓ Copied" whole. A copy by click leaves no focus ring, also without the clipboard API (plain HTTP).
+  and "✓ Copied" whole, and "✓ Copied" only on the run's row it was copied from (a newer run's row of the same name has
+  none). A copy by click leaves no focus ring, also without the clipboard API (plain HTTP). A click that ends a text
+  selection in the row (a drag over a name, a double-click) only selects: a drag copies nothing, and a double-click copies
+  once (its first click) and keeps the word selected.
 - **Matrices:** the row shows the size ("1 x 3", from the engine's "1x3") and "View", which opens the matrix in place as a
   grid: no command, nothing in the log or the history. "Hide" folds it; View and Hide do not copy. Copying a matrix (a click
   on its row) copies tab-separated text; the toast says "Copied e(b)" and View or Hide stays in the action cell.
