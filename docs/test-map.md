@@ -160,10 +160,10 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     `language.ts`.
   - The editor's location is one setting (`scripts/urls.ts`: the production and local addresses, each ending in a slash;
     no default: production, local or both said outright, anything else refused, and `vite build` refuses without them;
-    the dev servers' addresses from the request's host);
-    no other file, workflow or local action (`.github/actions/`) spells the editor's old path (`/app/`) or the site's
-    origins; the two Wrangler configs against
-    `urls.ts`.
+    the dev servers' addresses from the request's host); no other file, workflow or local action (`.github/actions/`)
+    spells the editor's old path (`/app/`) or the site's origins; the two Wrangler configs against `urls.ts`.
+  - The size check before a deploy (`scripts/check-sizes.ts`: over 25 MiB an error, within 2 MiB a warning); the smoke
+    check after a deploy or a preview upload (`scripts/smoke.ts`, with a stand-in fetch).
   - The filter; the theme button equals the editor's.
   - The clean-room greps: trademark line kept, no "CDN", no Stata example dataset, manual, `.sthlp`, `.ado` or
     stata.com.

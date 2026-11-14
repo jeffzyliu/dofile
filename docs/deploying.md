@@ -104,11 +104,14 @@ CI runs as usual. The pull request also runs `preview.yml` for the first time:
 order:
 1. The three test suites.
 2. A check that the commit is still the tip of `main`.
-3. The two builds.
+3. The two builds (`DOFILE_URLS=production`).
 4. A size check over both folders.
-5. `wrangler deploy` of the editor's Worker, then the site's.
+5. The tip check again, then `wrangler deploy` of the editor's Worker, then the site's.
+6. A smoke check of both domains (`web/scripts/smoke.ts`, retrying for up to 10 minutes).
 
-On the first deploy, Cloudflare creates the DNS records and certificates for both domains itself.
+On the first deploy, Cloudflare creates the DNS records and certificates for both domains itself. If the certificates take
+longer than the smoke check waits, the run goes red although the deploy went through: check the two addresses by hand
+(`cd web && node scripts/smoke.ts`).
 
 **Step 4. Check the deploy**, as in section 5.
 
@@ -116,10 +119,10 @@ On the first deploy, Cloudflare creates the DNS records and certificates for bot
 
 **A manual deploy** (Actions > deploy > Run workflow) runs the tests too, so no route puts an untested commit into
 production. If only the deploy job failed, for example on a Cloudflare hiccup, "Re-run failed jobs" retries the deploy
-alone, and the tip-of-main check runs again first.
+alone, and the tip-of-main check runs again first (see "How the workflows work" for when not to).
 
 **Deploying from your own computer** (`cd web && npm run deploy`) still works: it runs a strict lint, builds both folders
-and deploys both Workers. It runs no tests. It needs `wrangler login`, or `CLOUDFLARE_API_TOKEN` and
+for production (`DOFILE_URLS=production`), runs the size check and deploys both Workers. It runs no tests. It needs `wrangler login`, or `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` in the environment. Use it only when the workflow cannot run.
 
 ## 4. Pull request previews
@@ -146,8 +149,63 @@ The two link to each other, not to production: the build bakes both preview addr
   addresses.
 - Production is unchanged: `wrangler versions upload` does not deploy, and the custom domains still serve the old
   version.
-- The workflow's log shows no warning that wrangler printed addresses other than the ones the workflow worked out. Such a
-  warning means `CLOUDFLARE_WORKERS_SUBDOMAIN` is wrong.
+- The workflow's smoke check passed: both preview addresses answer 200, the landing page links to the preview editor, and
+  the editor has COOP and COEP (so `_headers` applies on preview addresses). A wrong `CLOUDFLARE_WORKERS_SUBDOMAIN` fails
+  this step.
+- The previews' responses carry `X-Robots-Tag: noindex` (from `_headers`; the smoke check does not look at it).
+
+## How the workflows work
+
+The two workflow files keep only what a maintainer needs on the page; the reasons are here.
+
+**Only the tip of `main` is deployed, and never out of order.** Each commit on `main` gets its own `deploy` run, and its
+tests run with no shared group: a merge never waits behind another merge's tests, and none is cancelled. So two quick
+merges A then B can finish their tests in either order. One script, `.github/scripts/is-main-tip.sh`, asks GitHub whether
+the run's commit is still the tip of `main` (exit 0: yes; 1: no, with a notice; 2: it could not tell, which fails the job).
+It is asked twice:
+- **`latest`, after the tests and outside the deploy group.** A commit that is no longer the tip stops here, green. It
+  never enters `deploy-production`. This matters because a concurrency group holds one running and one pending job, and a
+  new pending job cancels the pending one: an older commit entering the group late would cancel a newer commit's pending
+  deploy.
+- **In the deploy job, inside the group, in the same step as `wrangler deploy`.** The group runs one deploy at a time and
+  never cancels one in progress (`cancel-in-progress: false`), so the editor and the site are never left half deployed.
+  By the time this check runs, any deploy ahead of it has finished. It sits after the build, right before wrangler: a
+  commit superseded during the build still stops there. The cost: a superseded commit holds the group through one build
+  before it stops (time, not safety).
+
+If the newer commit then fails its tests, production stays on the last commit deployed until a later commit passes.
+
+**Re-runs and manual runs.**
+- A deploy that failed on its own (a network error, say) is retried with "Re-run failed jobs": the tests are not run again,
+  and the in-group tip check still applies. Re-run failed jobs only while that commit is still the tip: the re-run skips
+  `latest`, so an old deploy job would enter the group and could cancel a newer pending one (it would then stop at its own
+  tip check, and production would wait for the next merge or a re-run of the tip's run).
+- A manual run (Actions > deploy > Run workflow) runs the tests too, so nothing reaches production untested. Started on
+  another branch it runs the tests and deploys nothing.
+- A `[skip ci]` commit on `main` starts no run. If it lands while an earlier commit's run is testing, that run's tip check
+  stops it, so neither deploys until the next commit.
+
+**The smoke check cannot roll back.** After the deploy, `web/scripts/smoke.ts` checks both domains (200, the landing
+page's link to the editor, the editor's COOP and COEP), retrying for up to 10 minutes. A failure turns the run red; the
+deploy has happened. To go back: re-running an earlier commit's run deploys nothing (its tip check stops it), so revert
+on `main` (a new commit, which deploys itself), or from your own computer `npx wrangler rollback` for each Worker
+(with `--config wrangler.app.jsonc` for the editor; not tried here).
+
+**Secrets.** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are in the environment of the step that runs wrangler only:
+`npm ci`, the snapshot and the builds never see them. Wrangler is the project's own (`npx --no-install wrangler`, the version
+in `web/package-lock.json`), never a fresh download. Checkouts keep no credentials (`persist-credentials: false`).
+
+**Why preview.yml has two jobs.** `upload` runs the pull request's code (its `npm ci`, its build scripts) with the
+Cloudflare token, which is why it runs only for branches of this repository: never `pull_request_target`, never forks, never
+Dependabot. The token that can write to the pull request (`pull-requests: write`) is in `comment` only, a job that runs no
+code from the pull request and gets the two addresses as `upload`'s outputs.
+
+**What the build shares.** `.github/actions/build-web` is the one build for production and previews: the wheel, the
+snapshot (cached on a hash of its inputs, and used only if `node scripts/build-id.ts` says it is of the wheels just built;
+GitHub scopes a pull request's cache to it, so a preview never feeds production), both builds and the 25 MiB size check
+(`web/scripts/check-sizes.ts`, which `npm run deploy` runs too). The caller names the addresses: `urls: production`, or the
+two preview URLs; with neither the build fails (`web/scripts/urls.ts`). A production build carries canonical links; a
+preview's `_headers` say `X-Robots-Tag: noindex`.
 
 ## 5. Checklist for the first production deploy
 
@@ -171,6 +229,8 @@ deploy, with the editor at `/app/`. After this change:
 - `/app/` there is a 404.
 - `https://dofile-app.<subdomain>.workers.dev/` serves the new editor. Both configs keep `workers_dev` on, because
   previews need it.
+- Search engines are pointed at the production addresses: every page of a production build has a `<link rel="canonical">`
+  to its `dofile.dev` or `app.dofile.dev` address, so the same files at the two workers.dev addresses defer to them.
 
 **Files stored under the old address stay with it.** Files a visitor kept in the old editor live in that origin's
 browser storage (IndexedDB), and the new editor is on another origin. To keep them:

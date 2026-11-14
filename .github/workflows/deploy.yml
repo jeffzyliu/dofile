@@ -1,30 +1,13 @@
 name: deploy
 
-# Everything that runs on a push to main: the three test workflows (ci.yml, web.yml, lint.yml, called here, so each runs
-# once per commit and on this commit), then, only if all three passed, the deploy of the web demo to two Cloudflare Workers
-# as static assets: the editor (web/dist/app, app.dofile.dev: wrangler.app.jsonc) and the landing and commands pages
-# (web/dist/site, dofile.dev: wrangler.jsonc). The build is .github/actions/build-web (shared with preview.yml).
-# Needs the repo secrets CLOUDFLARE_API_TOKEN (template "Edit Cloudflare Workers", with the dofile.dev zone in its zone
-# resources) and CLOUDFLARE_ACCOUNT_ID. Pull requests are tested by the same three workflows, which they start themselves.
-#
-# Order of deploys: only the tip of main is deployed. Each commit's tests run side by side with no shared group (a merge
-# never waits behind another merge's tests, and none is cancelled), so two quick merges can finish their tests in either
-# order. Two checks keep an older commit from landing after a newer one:
-# - `latest`, after the tests and outside the deploy group: a commit that is no longer the tip of main stops here (green,
-#   with a notice), so it never enters the group, where as the newest pending job it would cancel a newer commit's pending
-#   deploy (a group holds one running and one pending job; a new pending job cancels the pending one).
-# - the same check again as the deploy job's first step, inside the group (`deploy-production`, never cancelled in
-#   progress, so the editor and the site are never left half deployed): it runs after any deploy ahead of it has finished.
-# If the newer commit then fails its tests, production stays on the last commit deployed until a later commit passes.
-# A deploy that failed on its own (a network error, say) is retried with "Re-run failed jobs": the tests are not run
-# again, and the tip check still applies.
-#
-# By hand (workflow_dispatch): the same as a push, tests included, so nothing reaches production untested; started on
-# another branch it runs the tests and deploys nothing.
+# A push to main: the three test workflows on this commit, then, only if all three passed and the commit is still the tip
+# of main, the web demo's two Cloudflare Workers: the editor (web/wrangler.app.jsonc, app.dofile.dev) and the landing and
+# commands pages (web/wrangler.jsonc, dofile.dev). Secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID. Why the tip is
+# checked twice, re-runs and manual runs: docs/deploying.md, "How the workflows work".
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:   # the same as a push, tests included; on another branch it deploys nothing
 
 permissions:
   contents: read   # the most any called workflow gets
@@ -38,6 +21,8 @@ jobs:
   lint:
     uses: ./.github/workflows/lint.yml
 
+  # Outside the deploy group: a commit that is no longer the tip stops here (green, with a notice), so it never becomes the
+  # group's pending job, which would cancel a newer commit's pending deploy.
   latest:
     name: still the tip of main
     needs: [ci, web, lint]   # runs only if all three succeeded
@@ -46,17 +31,14 @@ jobs:
     outputs:
       tip: ${{ steps.tip.outputs.tip }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
       - id: tip
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
-          if [ "$main" = "$GITHUB_SHA" ]; then
-            echo "tip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::main is at $main now, not $GITHUB_SHA: that commit's own run deploys it"
-            echo "tip=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: if .github/scripts/is-main-tip.sh; then echo "tip=true" >> "$GITHUB_OUTPUT"; elif [ $? -ne 1 ]; then exit 1; fi
 
   deploy:
     needs: latest
@@ -64,40 +46,29 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-production
-      cancel-in-progress: false   # let a running deploy finish; the next one waits
+      cancel-in-progress: false   # a deploy in progress always finishes: the two Workers are never left half deployed
     steps:
-      - id: tip
-        name: Still the tip of main
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
-          if [ "$main" = "$GITHUB_SHA" ]; then
-            echo "tip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::main is at $main now, not $GITHUB_SHA: that commit's own run deploys it"
-          fi
-      - if: steps.tip.outputs.tip == 'true'
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - if: steps.tip.outputs.tip == 'true'
-        uses: ./.github/actions/build-web
+      - uses: ./.github/actions/build-web
         with:
-          urls: production   # the production addresses of web/scripts/urls.ts
-      - name: Deploy the editor (dofile-app)
-        if: steps.tip.outputs.tip == 'true'
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: web
-          command: deploy --config wrangler.app.jsonc
-      - name: Deploy the landing and commands pages (dofile)
-        if: steps.tip.outputs.tip == 'true'
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: web
-          command: deploy
+          urls: production   # the addresses of web/scripts/urls.ts
+      # The tip check again, inside the group (any deploy ahead of this one has finished), right before the deploy; then
+      # the project's own wrangler (package-lock). The secrets are in this step's environment only, not the build's.
+      - id: deploy
+        working-directory: web
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          ../.github/scripts/is-main-tip.sh || { [ $? -eq 1 ] && exit 0; exit 1; }
+          npx --no-install wrangler deploy --config wrangler.app.jsonc
+          npx --no-install wrangler deploy
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+      # Fails the run if production does not answer as it should. It cannot roll back: that is a deploy of an earlier
+      # commit (docs/deploying.md). The first deploy's certificates can take minutes, hence the long wait.
+      - if: steps.deploy.outputs.deployed == 'true'
+        working-directory: web
+        run: node scripts/smoke.ts --wait 600
