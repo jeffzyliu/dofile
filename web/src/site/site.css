@@ -46,9 +46,13 @@ html {
   color: var(--ink);
   text-decoration: none;
 }
-.top nav a:hover,
 .top nav a[aria-current="page"] {
   text-decoration: underline;
+}
+@media (hover: hover) {
+  .top nav a:hover {
+    text-decoration: underline;
+  }
 }
 body.landing main {
   flex: 1;
