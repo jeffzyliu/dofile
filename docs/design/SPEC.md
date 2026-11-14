@@ -1473,7 +1473,15 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   answers as the table says: the pages' addresses, their redirects and 404s and no isolation on the site's origin; the editor's
   addresses, isolation on every one and the pages' paths a 404 on the editor's origin; "Open the editor" to the editor's origin
   and the wordmark, "About dofile", "Close editor" and "Browsers that work" to the site's. `wrangler deploy --dry-run` reads both
-  configs and both folders. WRANGLER_DEV_PLACEHOLDER
+  configs and both folders. `npm run cf:dev` (two `wrangler dev` processes, the site on 8787 and the editor on 8788, built with links to each
+  other, the editor on the quality-11 snapshot: the quality-5 one has a file over 25 MiB, which wrangler dev refuses): the site
+  answered `/` and `/commands/` with 200, `/commands`, `/commands.html` and `/index.html` with a redirect (307, `Location` a whole
+  URL), `/nope.html`, `/_headers` and `/start-files.json` with 404, and no isolation headers; the editor answered `/` and
+  `/start-files.json` with 200, `/index.html` with a redirect, `/commands/`, `/commands`, `/nope.html` and `/_headers` with 404,
+  and the two isolation headers on every answer, the 404s too; in Chromium the editor at `:8788/?test` was cross-origin isolated,
+  started from the snapshot and reached `ready`, its wordmark led to `:8787/` and the landing page's "Open the editor" back to
+  `:8788/`. The two processes need separate state folders (`--persist-to`): without it the second one died on a locked SQLite
+  file.
 - **To look at on the first real deploy** (the edge itself is not checked: its compression and caching, the custom domains,
   `deploy.yml`'s upload):
   1. `https://dofile.dev/`, `/commands/` and `https://app.dofile.dev/`: in the editor's console `crossOriginIsolated` is true,
