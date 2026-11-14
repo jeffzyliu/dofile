@@ -1,16 +1,23 @@
 // Prototype 1, step 5: the landing page and its links (docs/design/SPEC.md, sections 3.12 and 8) in real browsers. The
-// landing page is static HTML at the site's root, /, the commands page at /commands/, and the editor a single-page app at
-// EDITOR_BASE, /app/ today (Playwright's baseURL, so a relative URL is the editor's and an absolute one the site's). The tests
-// assert the landing page's own content after each link, not only the URL: a host that answers a missing page with the
-// editor would pass a URL check with no landing page.
+// landing page is static HTML at the root of the site's origin (SITE: scripts/urls.ts's LOCAL_SITE_URL), the commands page at
+// SITE/commands/, and the editor a single-page app at the root of its own origin (EDITOR, with its base: LOCAL_EDITOR_URL,
+// Playwright's baseURL, so a relative URL is the editor's). The tests assert the landing page's own content after each link,
+// not only the URL: a host that answers a missing page with the editor would pass a URL check with no landing page. And they
+// compare the whole address, origin included: "/" is a path of both origins.
 // Also: the build's numbers in the text, the theme button (one choice for the whole site), the Copy buttons, and axe on the
 // real page in both themes (the design checks `npm run axe` etc. read the mockups from file: URLs; the built pages need a
 // server, so the same rules run here).
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
-import { EDITOR_BASE } from "../scripts/urls.ts";
+import { EDITOR_BASE, LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
 import { expect, test } from "./fixtures";
 
+/** The editor's address, and the page's address without its query and hash: origin and path. */
+const EDITOR = new URL(EDITOR_BASE, LOCAL_EDITOR_URL).href;
+const where = (url: string) => {
+  const u = new URL(url);
+  return u.origin + u.pathname;
+};
 const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 const landingHeading = (page: Page) =>
   page.getByRole("heading", { level: 1, name: "dofile: run Stata-syntax do-files in your browser" });
@@ -21,7 +28,7 @@ test("the landing page shows its content, and the pages that do not exist are 40
   page,
   request,
 }) => {
-  await page.goto("/");
+  await page.goto(SITE);
   await expect(landingHeading(page)).toHaveCount(1);
   await expect(page).toHaveTitle(/dofile: run Stata-syntax code in your browser/);
   await expect(page.locator("#browsers")).toContainText("Browsers that work");
@@ -30,7 +37,7 @@ test("the landing page shows its content, and the pages that do not exist are 40
   ).toBeVisible();
   // the version is the package's, not a literal
   await expect(page.locator("body")).toContainText(/\b0\.1\.0\S*/);
-  const landing = await request.get("/");
+  const landing = await request.get(SITE);
   expect(landing.status()).toBe(200);
   expect(await landing.text()).not.toContain("{{"); // every placeholder is filled by the build
 });
@@ -38,9 +45,9 @@ test("the landing page shows its content, and the pages that do not exist are 40
 test("Open the editor leads to the editor; its wordmark (or, on a phone, About dofile) leads back to the landing page", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto(SITE);
   await openEditor(page).click();
-  await expect.poll(() => new URL(page.url()).pathname).toBe(EDITOR_BASE);
+  await expect.poll(() => where(page.url())).toBe(EDITOR);
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBeTruthy(); // the editor
   await expect(landingHeading(page)).toHaveCount(0);
   // a first visit: the download prompt is over the page until it is answered, and the sample's analysis.do is open
@@ -54,7 +61,7 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
       page.getByRole("menuitem", { name: "Commands" }).click(),
     ]);
     await commands.waitForLoadState();
-    expect(new URL(commands.url()).pathname).toBe("/commands/");
+    expect(where(commands.url())).toBe(`${SITE}commands/`);
     await commands.close();
     await page.getByRole("button", { name: "More actions" }).click();
     // About dofile opens in a new tab (leaving the editor would end the engine): that tab is the landing page
@@ -68,7 +75,7 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
   } else {
     await page.getByRole("link", { name: "dofile", exact: true }).click();
   }
-  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await expect.poll(() => where(page.url())).toBe(SITE);
   await expect(landingHeading(page)).toHaveCount(1);
 });
 
@@ -84,7 +91,7 @@ test("the other-tab dialog's Close editor leaves for the landing page", async ({
     .getByRole("alertdialog", { name: "dofile is open in another tab" })
     .getByRole("button", { name: "Close editor" })
     .click();
-  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await expect.poll(() => where(page.url())).toBe(SITE);
   await expect(landingHeading(page)).toHaveCount(1);
 });
 
@@ -106,16 +113,16 @@ test("the failed-start banner's Browsers that work opens the landing page's sect
   await page.getByRole("link", { name: "Browsers that work" }).click();
   const tab = await popup;
   await tab.waitForLoadState();
-  expect(new URL(tab.url()).pathname).toBe("/");
+  expect(where(tab.url())).toBe(SITE);
   expect(new URL(tab.url()).hash).toBe("#browsers");
   await expect(tab.getByRole("heading", { level: 2, name: "Browsers that work" })).toBeVisible();
   await expect(tab.locator("#browsers")).toBeInViewport();
 });
 
 test("the commands page is one link away, and back", async ({ page }) => {
-  await page.goto("/");
+  await page.goto(SITE);
   await page.getByRole("navigation", { name: "Site" }).getByRole("link", { name: "Commands" }).click();
-  await expect.poll(() => new URL(page.url()).pathname).toBe("/commands/");
+  await expect.poll(() => where(page.url())).toBe(`${SITE}commands/`);
   await expect(page.getByRole("heading", { level: 1, name: "Commands" })).toBeVisible();
   await page.getByRole("link", { name: "dofile", exact: true }).click();
   await expect(landingHeading(page)).toHaveCount(1);
@@ -127,7 +134,7 @@ test("the download size in the text is the build's: the editor prompt's number, 
 }) => {
   const list = await (await request.get("start-files.json")).json();
   const mb = String(Math.round(list.compressed / 1e6));
-  await page.goto("/");
+  await page.goto(SITE);
   const text = (await page.locator("main").textContent()) ?? "";
   const found = [...text.matchAll(/about (\d+) MB/g)].map((m) => m[1]);
   expect(found.length).toBeGreaterThanOrEqual(2);
@@ -136,7 +143,7 @@ test("the download size in the text is the build's: the editor prompt's number, 
 });
 
 test("the theme button fits the bar at 320 px (icon only, named); the word shows from 360 px", async ({ page }) => {
-  await page.goto("/");
+  await page.goto(SITE);
   const button = page.getByRole("button", { name: /^Theme:/ });
   const word = button.locator(".label-text");
   const right = async () => (await button.boundingBox())!.x + (await button.boundingBox())!.width;
@@ -150,8 +157,10 @@ test("the theme button fits the bar at 320 px (icon only, named); the word shows
   expect(await right()).toBeLessThanOrEqual(360);
 });
 
-test("the theme button cycles System, Light, Dark; the choice is the editor's too", async ({ page }) => {
-  await page.goto("/");
+test("the theme button cycles System, Light, Dark; the choice is kept under the editor's key, for this origin", async ({
+  page,
+}) => {
+  await page.goto(SITE);
   const button = page.getByRole("button", { name: /^Theme:/ });
   const theme = () => page.evaluate(() => document.documentElement.dataset.theme ?? null);
   expect(await theme()).toBeNull();
@@ -167,15 +176,20 @@ test("the theme button cycles System, Light, Dark; the choice is the editor's to
   expect(await theme()).toBe("dark");
   await expect(button).toBeHidden(); // with no script, no theme button
   await page.unroute("**/*.js");
+  // the key is the editor's button's (test/site.test.ts compares them), but the editor is another origin, and the browser keeps
+  // the choice per origin: the editor starts from the system's (SPEC section 8, "URLs": what does not follow the editor)
+  expect(await page.evaluate(() => localStorage.getItem("dofile.theme"))).toBe("dark");
   await page.goto("?test=manual");
-  expect(await theme()).toBe("dark"); // the same key as the editor's button
-  await page.goto("/");
+  expect(await theme()).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("dofile.theme"))).toBeNull();
+  await page.goto(SITE);
+  expect(await theme()).toBe("dark"); // the landing page's own choice stays
   await page.getByRole("button", { name: /^Theme:/ }).click(); // dark -> system
   expect(await theme()).toBeNull();
 });
 
 test("the theme button shows its word and a different icon for each choice, at this width too", async ({ page }) => {
-  await page.goto("/");
+  await page.goto(SITE);
   const button = page.getByRole("button", { name: /^Theme:/ });
   const word = button.locator(".label-text");
   const icon = () =>
@@ -209,7 +223,7 @@ test("Copy: the text is copied, the button says Copied without changing size, an
       configurable: true,
     });
   });
-  await page.goto("/");
+  await page.goto(SITE);
   const pip = page.getByRole("button", { name: "Copy pip install dofile" });
   const before = (await pip.boundingBox())!;
   await expect(pip.locator(".copy-idle")).toBeVisible();
@@ -244,7 +258,7 @@ test("Copy: the text is copied, the button says Copied without changing size, an
 });
 
 test("each Copy button fits inside its code box, and the one-line box is as high as its line", async ({ page }) => {
-  await page.goto("/");
+  await page.goto(SITE);
   for (const name of ["Copy pip install dofile", "Copy the MCP command"]) {
     const button = page.getByRole("button", { name });
     const b = (await button.boundingBox())!;
@@ -262,7 +276,7 @@ test("each Copy button fits inside its code box, and the one-line box is as high
 
 test("the banner's rows are one line apart, so its slanted strokes join", async ({ page }) => {
   // on a phone the hero's banner (each row a block in a <pre>); wider, welcome.do's first five numbered lines
-  await page.goto("/");
+  await page.goto(SITE);
   const rows = await page.evaluate((phoneLayout) => {
     const lines = phoneLayout
       ? [...document.querySelectorAll(".hero .art .art-skew")]
@@ -280,7 +294,7 @@ test("welcome.do and the run's log scroll sideways where they are too wide, by k
 }) => {
   // the two-column layout at a width where both are cut (as an iPhone shows the page in its desktop mode, about 980 px)
   await page.setViewportSize({ width: 980, height: 900 });
-  await page.goto("/");
+  await page.goto(SITE);
   await page.evaluate(() => document.fonts.ready);
   for (const [name, region] of [
     ["welcome.do", page.getByRole("region", { name: "welcome.do" })],
@@ -311,8 +325,8 @@ for (const scheme of ["light", "dark"] as const) {
   test(`axe finds nothing on the landing and commands pages, ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     // the project's own width, then 980 px, where welcome.do and the run's log scroll sideways (their regions checked too)
-    for (const url of ["/", "/commands/", "/#980"]) {
-      if (url === "/#980") await page.setViewportSize({ width: 980, height: 900 });
+    for (const url of [SITE, `${SITE}commands/`, `${SITE}#980`]) {
+      if (url === `${SITE}#980`) await page.setViewportSize({ width: 980, height: 900 });
       await page.goto(url);
       await page.evaluate(() => document.fonts.ready);
       const { violations } = await new AxeBuilder({ page })
@@ -327,13 +341,13 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 test("the pages do not scroll sideways at this width, light or in forced colors", async ({ page, browserName }) => {
-  for (const url of ["/", "/commands/"]) {
+  for (const url of [SITE, `${SITE}commands/`]) {
     await page.goto(url);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), url).toBe(true);
   }
   if (browserName === "webkit") return; // Playwright's forced-colors emulation is not in WebKit
   await page.emulateMedia({ forcedColors: "active" });
-  await page.goto("/");
+  await page.goto(SITE);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // the banner takes the system's text color, not the accent (site.css, forced-colors block)
   const same = await page.evaluate(() => {
@@ -343,29 +357,20 @@ test("the pages do not scroll sideways at this width, light or in forced colors"
   expect(same).toBe(true);
 });
 
-test("the site's addresses: the pages at / and /commands/, the editor at its base, a folder without its slash redirected, a missing or old page a 404, the isolation headers on the editor only", async ({
+test("the pages' addresses, on the site's origin: / and /commands/, a folder without its slash redirected, a missing or old page a 404, no isolation, none of the editor's files", async ({
   request,
 }) => {
-  const get = (url: string) => request.get(url, { maxRedirects: 0 });
+  const get = (url: string) => request.get(new URL(url, SITE).href, { maxRedirects: 0 });
   for (const url of ["/", "/commands/"]) {
     const r = await get(url);
     expect(r.status(), url).toBe(200);
     expect(await r.text(), url).not.toContain("{{");
     expect(r.headers()["content-type"], url).toContain("text/html");
     expect(r.headers()["cross-origin-opener-policy"], `${url}: a static page needs no isolation`).toBeUndefined();
+    expect(r.headers()["cross-origin-embedder-policy"], url).toBeUndefined();
   }
-  for (const url of [EDITOR_BASE, `${EDITOR_BASE}?test`, `${EDITOR_BASE}start-files.json`]) {
-    const r = await get(url);
-    expect(r.status(), url).toBe(200);
-    expect(r.headers()["cross-origin-opener-policy"], url).toBe("same-origin");
-    expect(r.headers()["cross-origin-embedder-policy"], url).toBe("require-corp");
-  }
-  expect(await (await get(EDITOR_BASE)).text()).toContain('name="dofile-engine-bytes"'); // the editor's page
   // a folder's other addresses go to the folder, the query kept, as the host does (Cloudflare's auto-trailing-slash)
   for (const [from, to] of [
-    [EDITOR_BASE.slice(0, -1), EDITOR_BASE],
-    [`${EDITOR_BASE.slice(0, -1)}?test`, `${EDITOR_BASE}?test`],
-    [`${EDITOR_BASE}index.html?test`, `${EDITOR_BASE}?test`],
     ["/commands", "/commands/"],
     ["/commands.html", "/commands/"],
     ["/index.html", "/"],
@@ -374,19 +379,49 @@ test("the site's addresses: the pages at / and /commands/, the editor at its bas
     expect([301, 302, 307, 308], from).toContain(r.status());
     expect(r.headers().location, from).toBe(to);
   }
-  // nothing that is not a page of the site is answered with one: 404, never the editor
-  for (const url of ["/nope.html", "/nope/", `${EDITOR_BASE}nope.html`, "/landing.html", "/_headers"])
+  // nothing that is not a page of the site is answered with one: 404, never the editor (which is not on this origin)
+  for (const url of [
+    "/nope.html",
+    "/nope/",
+    "/landing.html",
+    "/_headers",
+    "/start-files.json",
+    "/pyodide/pyodide-lock.json",
+  ])
     expect((await get(url)).status(), url).toBe(404);
 });
 
-test("the landing and commands pages load none of the editor's files: only their own script, stylesheet and fonts", async ({
+test("the editor's addresses, on its own origin: the editor at its base, every path isolated, the pages' paths a 404 and never the landing page", async ({
+  request,
+}) => {
+  const get = (url: string) => request.get(url, { maxRedirects: 0 });
+  for (const url of [EDITOR_BASE, `${EDITOR_BASE}?test`, `${EDITOR_BASE}start-files.json`]) {
+    const r = await get(url);
+    expect(r.status(), url).toBe(200);
+    expect(r.headers()["cross-origin-opener-policy"], url).toBe("same-origin");
+    expect(r.headers()["cross-origin-embedder-policy"], url).toBe("require-corp");
+  }
+  expect(await (await get(EDITOR_BASE)).text()).toContain('name="dofile-engine-bytes"'); // the editor's page
+  for (const [from, to] of [
+    [`${EDITOR_BASE}index.html?test`, `${EDITOR_BASE}?test`],
+    [`${EDITOR_BASE}index.html`, EDITOR_BASE],
+  ]) {
+    const r = await get(from);
+    expect([301, 302, 307, 308], from).toContain(r.status());
+    expect(r.headers().location, from).toBe(to);
+  }
+  for (const url of ["/nope.html", "/nope/", "/commands/", "/commands", "/landing.html", "/_headers"])
+    expect((await get(url)).status(), url).toBe(404);
+});
+
+test("the landing and commands pages load none of the editor's files: only their own script, stylesheet and fonts, all from their own origin", async ({
   page,
 }) => {
-  for (const url of ["/", "/commands/"]) {
+  for (const url of [SITE, `${SITE}commands/`]) {
     const requested: string[] = [];
     page.on("request", (r) => {
-      const path = new URL(r.url()).pathname;
-      if (path !== "/favicon.ico") requested.push(path); // a browser's own guess, not something the page asks for
+      const u = new URL(r.url());
+      if (u.pathname !== "/favicon.ico") requested.push(u.origin + u.pathname); // a browser's own guess, not something the page asks for
     });
     await page.goto(url);
     await page.evaluate(() => document.fonts.ready);
@@ -394,13 +429,16 @@ test("the landing and commands pages load none of the editor's files: only their
     expect(requested[0], url).toBe(url);
     const rest = requested.slice(1);
     expect(rest.length, url).toBeGreaterThan(0);
-    for (const path of rest) {
-      expect(path.startsWith(EDITOR_BASE), `${url} asked for the editor's ${path}`).toBe(false);
-      expect(path, url).toMatch(/^\/assets\/[\w.-]+\.(js|css|woff2)$/);
+    for (const full of rest) {
+      expect(full.startsWith(new URL(SITE).origin), `${url} asked for ${full}, not of the site's origin`).toBe(true);
+      expect(full.startsWith(new URL(LOCAL_EDITOR_URL).origin), `${url} asked the editor's origin for ${full}`).toBe(
+        false,
+      );
+      expect(new URL(full).pathname, url).toMatch(/^\/assets\/[\w.-]+\.(js|css|woff2)$/);
     }
     // the scripts are the pages' own (site.ts with the theme and Copy buttons, and the commands page's filter)
     for (const js of rest.filter((p) => p.endsWith(".js")))
-      expect(js, url).toMatch(/^\/assets\/(site|landing|commands)-/);
+      expect(new URL(js).pathname, url).toMatch(/^\/assets\/(site|landing|commands)-/);
   }
 });
 
@@ -409,17 +447,17 @@ test.describe("with scripts off", () => {
   test("both pages are complete: every word and link, the whole commands list; no button that needs a script", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto(SITE);
     await expect(landingHeading(page)).toHaveCount(1);
     await expect(page.locator("#browsers")).toContainText("Browsers that work");
-    await expect(openEditor(page)).toHaveAttribute("href", EDITOR_BASE);
+    await expect(openEditor(page)).toHaveAttribute("href", LOCAL_EDITOR_URL);
     await expect(page.locator("main")).toContainText("pip install dofile");
     await expect(page.getByRole("button")).toHaveCount(0); // Copy and the theme button work only with the script
-    await page.goto("/commands/");
+    await page.goto(`${SITE}commands/`);
     await expect(page.getByRole("heading", { level: 1, name: "Commands" })).toBeVisible();
     await expect(page.locator("#names li")).not.toHaveCount(0);
     await expect(page.locator("#names li:visible")).toHaveCount(await page.locator("#names li").count());
     await expect(page.getByRole("searchbox")).toHaveCount(0); // the filter needs the script
-    await expect(page.getByRole("link", { name: "Open the editor" })).toHaveAttribute("href", EDITOR_BASE);
+    await expect(page.getByRole("link", { name: "Open the editor" })).toHaveAttribute("href", LOCAL_EDITOR_URL);
   });
 });

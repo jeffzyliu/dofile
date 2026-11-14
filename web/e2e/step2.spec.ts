@@ -9,6 +9,7 @@
 // and reset (the engine controller's), drops (the events that changed nothing) }; with ?test=manual the page starts no
 // engine until start() is called. The store is blocked until the tab lock answers.
 import type { BrowserContext, Page } from "@playwright/test";
+import { LOCAL_SITE_URL } from "../scripts/urls.ts";
 import { expect, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type StartFiles = {
@@ -437,7 +438,7 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
   ]);
 
   // "Close editor" leaves for the landing page, and the landing page is what answers (e2e/landing.spec.ts too)
-  const leaving = page.waitForRequest((r) => r.isNavigationRequest() && new URL(r.url()).pathname === "/");
+  const leaving = page.waitForRequest((r) => r.isNavigationRequest() && r.url() === LOCAL_SITE_URL); // the site's origin: "/" is a path of the editor's too
   await otherTab(page).getByRole("button", { name: "Close editor" }).click();
   await leaving;
   await expect(page.getByRole("heading", { level: 2, name: "Browsers that work" })).toBeVisible();
