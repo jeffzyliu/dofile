@@ -355,7 +355,7 @@ No Node test covers the focus. The rules hold only in a browser.
     the engine becomes ready (`started` always leads to `ready`). With no engine the page offers one action, "Start
     engine" (next section). (Until 2026-11-12 the machine held the run in `none` and `declined`, sent it on `started`
     and dropped it with an effect when the start did not happen; the maintainer removed that, and then the prompt a
-    run opened: `docs/prototype1-plan.md`, Post-merge review.)
+    run opened: `docs/phase2-history.md`, "Post-merge review".)
   - Every exit from `running`, `breaking` or `waiting` has one `end-run`, as its last effect: `END` (`run-ended`,
     `run-failed`), `RESET` (`reset`, `crashed`, `break-timeout`, or Break with no `SharedArrayBuffer`) and `LOST`.
 - `engine.ts` `run(code, head)` dispatches the event and answers whether the run started (true) or was refused, from
@@ -975,7 +975,7 @@ again at a dot echo with no nested end before the next `do`, or when a line outs
 ### The known limit
 
 In `#delimit ;` mode, two commands on one line are echoed as the whole line twice. The second echo can be matched to a
-later identical line, and a graph's link then goes in the wrong place (`docs/prototype1-plan.md`, list C, item 11).
+later identical line, and a graph's link then goes in the wrong place (`docs/phase2-history.md`, "Step 4: decisions and open questions", list C, item 11).
 
 ### Tests that hold this
 

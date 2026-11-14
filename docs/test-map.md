@@ -284,7 +284,7 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   `sample.spec.ts:73`, on main `e8f16d2`, 60 s). Cause (likely, not reproduced): WebKit bug 325840. The 60 s timeout
   (#31) caps the cost. The `page` fixture's one retry (`web/e2e/fixtures.ts`, merged) fired twice in the 42 WebKit and
   iPhone jobs since it landed (runs 43497316688 `[webkit]` and 43503620201 `[iphone]`, 2026-11-13), and the test passed both
-  times. See `docs/prototype1-plan.md`, "Where things stand".
+  times. Causes: `docs/phase2-history.md`, "Prototype 1: the record from 'Where things stand'".
 - **`?snapshot=0` normal boot stalls at "Loading packages" in WebKit on Linux.** 2 sightings: runs 43295867614 (`[iphone]`)
   and 43350296329 attempt 1 (`[webkit]`). Now skipped in the two WebKit projects (#34).
 - **`shell.spec.ts` "the toolbar does not move"** failed about 3 runs in 8 on the phone profile (locally 5 in 8, 2026-11-13; no
@@ -295,8 +295,10 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   Pyodide's CDN did not answer: loading `micropip` gave `fetch failed`, and the start failed with `ModuleNotFoundError`
   (run 43381169730, `types, unit tests, build`, on #27 `ad1d85e`, a commit that changed only an e2e test and docs). The
   other engine tests in the job loaded their packages. Passed on the next run. 2026-11-13.
-- `editor.spec.ts` "a rename while Save writes" fails about 1 run in 16 in Firefox on `main` (suspected cause and the test
-  changes: `docs/prototype1-plan.md`, post-merge review; 24 Firefox runs each before and after the `focusRow` rewrite passed, so it did not reproduce).
+- `editor.spec.ts` "a rename while Save writes" was reported to fail about 1 run in 16 in Firefox (suspected cause and the
+  test changes: `docs/phase2-history.md`, "Post-merge review"). Not seen since: no failure of it in the 133 CI runs up to
+  2026-11-13, 24 Firefox runs each before and after the `focusRow` rewrite passed, and 16 of 16 passed on `main` (00821e2)
+  locally. Kept here until about ten more runs have passed.
 
 ## Running them
 

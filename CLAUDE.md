@@ -122,12 +122,13 @@ the one place a version bump does not reach by itself, and `tests/test_version.p
   job is a matrix of four Playwright projects (chromium, firefox, webkit, iphone), each on its own runner with a 30-minute
   limit. Every job also runs on a push to main, one run per commit, so a merge's tree is tested. `deploy.yml` does not wait for
   those runs.
-- Status and next steps: `docs/phase1-plan.md` (done), `docs/phase2-plan.md` (web demo; the history and gaps are in
-  `docs/phase2-history.md`, `docs/browser-engine.md` and `docs/lazy-matplotlib.md`), `docs/phase3-plan.md` (hosted multi-user MCP
-  server). `docs/prototype1-plan.md` (the build plan and status for prototype 1 of the web demo: read it first when picking that
-  work up; steps 0 to 3.5 are merged, and so are steps 4 and 5 (pull requests #17 and #18) and the fix rounds after them, while the post-merge review is mostly open; `docs/prototype1-step3.5-plan.md` is the record of step 3.5, and `docs/web-engine-data-flow.md` explains the web engine's data flow, `docs/web-page-flows.md` the editor page's focus, runs, open files and log links). Known OpenDTA problems to verify against Stata: `docs/opendta-issues.md`. dofile's own agent-ergonomics problems:
-  `docs/agent-ergonomics.md`. Releasing to PyPI: `docs/releasing.md`. Things knowingly left for later: `docs/icebox.md` (nothing in it blocks a merge). Formatting and linting (Biome, ruff; merged with
-  step 3.5 by pull request #13): `docs/formatting-proposal.md`.
+- Where to look (`docs/`): `phase1-plan.md` (done), `phase2-plan.md` (web demo; `phase2-history.md`, `browser-engine.md` and
+  `lazy-matplotlib.md` hold its history and gaps), `phase3-plan.md` (hosted multi-user MCP server). Web demo prototype 1: read
+  `prototype1-plan.md` first (status and next steps); `web-engine-data-flow.md` explains the web engine's data flow and
+  `web-page-flows.md` the editor page's focus, runs, open files and log links. `opendta-issues.md`: known OpenDTA problems to
+  verify against Stata. `agent-ergonomics.md`: dofile's own agent-ergonomics problems. `releasing.md`: releasing to PyPI.
+  `icebox.md`: things knowingly left for later (nothing in it blocks a merge). `formatting-proposal.md`: Biome and ruff.
+  `archive/`: records of finished work (the step 3.5 plan and design), not kept current.
 - Web demo design (moodboard, flows, wireframes, mockups): `docs/design/`. `docs/design/SPEC.md` is the build spec for the web
   demo's pages; `docs/design/README.md` holds the brief, the rules and every round of feedback (the plan keeps only a summary of
   the decisions). Renders are not committed; each folder's README has the command.

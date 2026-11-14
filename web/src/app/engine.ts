@@ -1,7 +1,7 @@
 // The engine controller: the one caller of the state machine (src/engine/machine.ts). It holds the machine, feeds it
 // events, performs the effects each step gives, and writes the `engine` signal from the machine's state. It decides
 // nothing itself: which state follows which event, and what must be done then, is the machine's table. The design:
-// docs/prototype1-step3.5-c-design.md (items 5 and 7); the data-flow map: docs/prototype1-step3.5-c-diagrams.md, 1.
+// docs/archive/prototype1-step3.5-c-design.md (items 5 and 7); the data-flow map: docs/archive/prototype1-step3.5-c-diagrams.md, 1.
 //
 //   an action (start, decline, run, ...) or lost()      dispatch(event)          events WITHOUT a ticket only
 //   an answer to an effect (the lock, the download,     reply(effect)(answer)    THE ONE PLACE a ticket is put on an event

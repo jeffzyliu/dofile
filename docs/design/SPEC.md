@@ -48,7 +48,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
   ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
-  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, plan, "Step 4: decisions and open questions", B 8); the nested-do note (`S 15`) names
+  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/prototype1-plan.md`, "Where things stand"); the nested-do note (`S 15`) names
   the file dropdown's Save instead of the key (on a phone). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
@@ -241,7 +241,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Empty** (`S 16`): "No graphs yet" / "Graphs drawn by a run appear here, for example `scatter wage educ`. A .png from the
   file list opens here too."
 - **Calls:** `RunResult.images` (base64 PNG, the last 5 a run drew at most; `new_graphs` counts all). Every run sends
-  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors, and a graph is drawn in the run's theme whatever colors its command names (decided 2026-11-11: `docs/prototype1-plan.md`, 4c). The card of a run's graph follows the run's theme; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
+  `plot_theme`: the page's resolved light or dark. Graphs already drawn keep their colors, and a graph is drawn in the run's theme whatever colors its command names (decided 2026-11-11: `docs/phase2-history.md`, "Known work found in steps 1 and 2", 4c). The card of a run's graph follows the run's theme; a .png from the files is always on the light card (its colors are its own). Alt text: the graph's command from `graph_commands`, for example "Graph: scatter wage educ" (OQ-3).
 
 ### 3.8 Data tab and Browse (P1, step 4c)
 - **Tab** (`P/Data`): facts ("500 obs", "3 vars", "from data/wages.dta", "6 KB in memory"); the field "Filter variables"; a
@@ -292,7 +292,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Another tab | `WS 6` (wireframe) | Sections 5 and 7. |
 | Close a tab with unsaved edits (4a) | not drawn; words decided 2026-11-10 | "Save changes to clean.do?" (the file's name) / **Save** (focused), **Don't save**, **Cancel**. Esc is Cancel. Save saves, then closes the tab; Don't save closes it and drops the edits. |
 | Delete all files (4a) | not drawn; words decided 2026-11-10 | "Delete all 12 files?" (the count of files, not folders) / "This removes every file dofile keeps in this browser. This can't be undone." / **Cancel** (focused), **Delete all** (`.btn.stop.live`). |
-| Clear the log (step 4d fix round) | not drawn; words are drafts (section 8, "Clear log dialog: draft words") | `role="alertdialog"`. "Clear the log?" / "This removes the log and the graphs. Your data and your files stay." / **Cancel** (focused), **Clear log** (`.btn.stop.live`). Opened by the Log head's "Clear…" and the menus' "Clear log…"; those are disabled when the log holds only its head (or only the running run's text) and there are no graphs. Esc is Cancel. A run in progress keeps its text item. |
+| Clear the log (step 4d fix round) | not drawn; words are decided (section 8, "Clear log dialog: decided words") | `role="alertdialog"`. "Clear the log?" / "This removes the log and the graphs. Your data and your files stay." / **Cancel** (focused), **Clear log** (`.btn.stop.live`). Opened by the Log head's "Clear…" and the menus' "Clear log…"; those are disabled when the log holds only its head (or only the running run's text) and there are no graphs. Esc is Cancel. A run in progress keeps its text item. |
 | Load over changed data | not drawn | P2 (OQ-6). |
 
 - **Banners** sit in a pane above its content until their cause goes or they are dismissed; warning and error banners carry
@@ -390,7 +390,7 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 | `breaking` | "**Stopping** · resets in 4 s", the run's time | `S 9` from the press until the engine confirms (OQ-21): "**Stopping…** This command can't stop until it ends. **In 4 s the engine is reset:** the data in memory is lost; your files are kept." / "Don't reset: wait for it" (focused), after 1 s | disabled | "Stopping…", disabled |
 | `waiting` | "**Waiting** · Break after this command", the run's time | `S 9b`, a banner with `tabindex="-1"` that takes the focus: "**Waiting for this command to end.** The Break is still pending: the run stops after this command, with the data kept. If it never ends, **Reset now** resets the engine: the data in memory is lost; your files are kept." | disabled | "Reset now", live; asks nothing |
 | `failed` | "**Not started** · the engine didn't start" | `S 6` (not `role="alert"`: the live region says "The engine didn't start" once): "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Try again", after a message that says "Close other tabs, then try again" (`FAILED` in `engine.ts`). | "Start engine" where the banner has "Try again" (download, memory, unknown): the same new try. Else (no-wasm, updated) "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
-| `failed-twice` | "**Stopped** · failed twice" | `S 7` (not `role="alert"`; the live region says it once): "**The engine stopped after failing twice (out of memory).** It won't restart by itself, since each attempt can use a lot of memory. Your files are safe." / "Reload the page", "Download all (.zip)" | "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
+| `failed-twice` | "**Stopped** · failed twice" | `S 7` (not `role="alert"`; the live region says it once): "**The engine stopped after failing twice (out of memory).** It won't restart by itself, since each attempt can use a lot of memory. Your files are safe: you can still edit and download them." / "Reload the page", "Download all (.zip)" | "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
 | `other-tab-idle`, `other-tab-taking` | "**Paused** · another tab has the engine" | `WS 6`, blocking: "dofile is open in another tab" / "Only one tab can use your files at a time, so they are not overwritten. The other tab keeps its data until you take over here." / "Close editor" (focused, so a stray Enter does not take over), "Use dofile in this tab". WS 6 draws "Close this tab", but a page may close only a tab a script opened: "Close editor" goes to the landing page (`landing.html`, built in step 5) | none shown (hidden, under the blocking dialog). "Start engine" in `other-tab-idle` (Ctrl/Cmd+Enter, the command line's button, should the dialog not be up) opens this dialog again and takes no lock; off in `other-tab-taking` | none |
 
 **With no engine nothing offers to run** (decided 2026-11-12). "No engine" is `none`, `asking`, `declined`, `failed`,
@@ -411,7 +411,7 @@ is the only place that decides; the engine controller (`web/src/app/engine.ts`) 
 returns. This matrix is generated from that function by `web/test/machine.test.ts`, and the same test reads it back from
 this file and fails, naming the cell, when a cell differs. To regenerate it after a change to the machine:
 `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` (from `web/`), and paste the five tables below. What each cell
-does besides changing the state (the effects, in order, and the crash count) is in `docs/prototype1-step3.5-c-design.md`,
+does besides changing the state (the effects, in order, and the crash count) is in `docs/archive/prototype1-step3.5-c-design.md`,
 item 4.2, and is tested there cell for cell.
 
 Rows are states, columns are events. A cell is one of:
@@ -854,11 +854,10 @@ engine, did not start, failed twice, running, stopping, waiting and "Break reset
 they are not in `banners`.
 
 Step 4's decisions, the review decisions waiting for the maintainer's confirmation and the open questions are listed
-once, in `docs/prototype1-plan.md`, "Step 4: decisions and open questions" (step 5's in "Step 5: decisions and open
+once, in `docs/phase2-history.md`, "Step 4: decisions and open questions" (step 5's in "Step 5: decisions and open
 questions"); this section points there. They do not block the merge: they are reviewed after it (the plan's "Post-merge
-review"), with the draft words. The words drafted
-for the visitor are below, per part: "Words the spec does not give" in 4a and 4b, "Step 4c: draft words", "Step 4d:
-draft words", "Start engine: draft words".
+review"), with the words. The words for the visitor, decided by the maintainer on 2026-11-13, are below, per part: "Words the spec does not give" in 4a and 4b, "Step 4c: decided words", "Step 4d:
+decided words", "Start engine: decided words".
 
 ```ts
 type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";   // snapshot start: no "packages";
@@ -1052,7 +1051,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     phone's `FileSwitcher` is one button as wide as the title in every state ("Editor" with no open file, so the top
     bar's boxes never move); its menu lists the open files, then "Close <name>" (the phone has no ×) and "Show all
     files" (the Files view). Words the spec does not
-    give, drafts for the maintainer: the inline rename's reasons ("clean.do already exists here.", "Enter a name.", "A
+    give, decided by the maintainer on 2026-11-13: the inline rename's reasons ("clean.do already exists here.", "Enter a name.", "A
     name can't contain / or \.", "A name can't contain a line break.", "That name isn't
     allowed.", "That name is dofile's own."); the bar of a file whose name a command can't hold ("Its name has a character a command can't use: rename the file.", also the .dta tab's); a folder's delete ("Delete
     data/?" / "The folder and its files exist only in this browser. This can't be undone."); an upload with files
@@ -1102,7 +1101,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     engine's state (`editor/words.ts` `refusedRunWords`, decided by the maintainer, plan's list A; nothing where the
     press runs, `ready`, or does what "Start engine" does: `none`, `asking`, `declined`, `other-tab-idle`, and a `failed` start that can be tried again); with a dialog open it saves nothing (the browser's Save page is still kept away; C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast), and a Save pressed while a rename or a delete is being written waits for it, then writes under the new name or, for a deleted file, nothing; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
-    place to change it; the joining agent's, for the maintainer to approve: plan, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
+    place to change it; the joining agent's, for the maintainer to approve: `docs/phase2-history.md`, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
     of that same file starts, when the engine is reset or restarted (the effect `engine-gone` sets `lastRun` to null, which
     clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line), and when the marked line is
@@ -1172,8 +1171,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (these stops are for the maintainer to confirm, B 3 of the plan's list). The next line starts in a microtask
     after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
-    nothing either (for the maintainer to confirm, B 4 of the plan's list). Words the spec does not give, drafts for the
-    maintainer: "No file is open: open one from the file
+    nothing either (for the maintainer to confirm, B 4 of the plan's list). Words the spec does not give, decided by the
+    maintainer on 2026-11-13: "No file is open: open one from the file
     list." (the empty editor); "No file is open to run" (toast); a refused Ctrl/Cmd+Enter's toast: "Run is not available until the current run ends" (`running`,
     `breaking`, `waiting`), "The engine is starting. Try again when it is ready." (the page load, `downloading`, `starting-*`; the Run button's own name is "Starting… Run is not available until the engine is ready"), "Run is not available: the engine isn't running in this tab" (a `failed` start that cannot be tried again,
     `failed-twice`, `other-tab-taking`); "Loading" (status bar, the page load); the save-failed
@@ -1182,7 +1181,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the engine can't take a command now", "… not run: another tab took over the engine
     during line 1", "… not run: line 2 can't be run from the command line; run it from the editor"); "Stopped by Break before line N. …", and for a command "Stopped by Break. The
     data is as the last complete command left it."; "Not
-    kept: a.dta, b.dta. Its folder was renamed or deleted during the run" ("Their folder …" when several files are named);; "The files this run wrote couldn't be kept in
+    kept: a.dta, b.dta. Its folder was renamed or deleted during the run." ("Their folder …" when several files are named); "The files this run wrote couldn't be kept in
     this browser: <reason>"; the last-run words above; the strip's "Last run: 0.38 s" and "before line 17 · 18.4 s";
     "Find in the log", "no match", "Close"; the editor's name "Editor: analysis.do"; the inline graph's name "Open graph full size: scatter y x"; the live region's "analysis.do couldn't be saved" (a failed save); the run-changed banner
     ("**The run changed t.csv.** Your unsaved edits are still in the editor; saving them overwrites the file the run wrote." /
@@ -1211,7 +1210,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     and shows whole when pressed; the r() scalars start open when e() has no scalars; an open matrix closes when another
     run replaces the results; Load says "Loaded wages.dta" (or "Couldn't load wages.dta: r(601)") in a toast when it
     ends; a matrix grid shows 100 rows and 30 columns at most (Copy has all).
-    **Step 4c: draft words**, for the maintainer to approve (the words the spec draws are not listed): Load's toasts
+    **Step 4c: decided words**, decided by the maintainer on 2026-11-13 (the words the spec draws are not listed): Load's toasts
     "Loaded wages.dta" and "Couldn't load wages.dta: r(601)"; the alt text "Graph 2: scatter wage educ" (a command that
     another kept graph shares) and "Graph 3" (a graph with no command); a thumbnail's name "Show graph 2: scatter wage
     educ", the thumbnails' list "Graphs"; the full-size view's name "Full-size graph" and, on a phone, "Previous" and
@@ -1223,7 +1222,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
     banners above the editor and the log, and the reset and storage banners (the unused memory banner view was removed in the post-merge review); `DownloadFailedBanner` was built in
     step 3, "Try again" (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d
-    reworded it: "Step 4d: draft words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
+    reworded it: "Step 4d: decided words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
     `ask()` (the declined banner's "Start engine" leads back to `asking`, section 5), `decline`,
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
@@ -1263,14 +1262,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     focus on it come once Break has been pending 1 s, `STOPPING_AFTER_S`, so a Break that lands at once moves no focus; the 5 s is the constant `GRACE_S`, as in the running banner's own text, and the time Break was pressed is `resetAt` minus it: `breakPending` in `editor/clock.ts`; at 0 s, until the reset lands, the bold part
     reads "The engine is being reset now:" instead of "In 0 s"), waiting (takes
     the focus), the reset banner ("Run the file again" is drawn only after a Break or a crash that cut a file run, runs that file, is on while the engine is `ready` and the file is open as a text tab, and dismisses the banner: C 3 of the plan's list, fixed 2026-11-13). The toast was not changed. Not built (no signal or owner exists): a "too big" state, "next error",
-    the memory banner (not in prototype 1: no limit is measured, OQ-8; its unused view was removed in the post-merge review, C 12 of the plan's list). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
-    **Step 4d: draft words**, for the maintainer to approve (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
+    the memory banner (not in prototype 1: no limit is measured, OQ-8; its unused view was removed in the post-merge review, C 12 of the list in `docs/phase2-history.md`, "Step 4: decisions and open questions"). ("Find" and the failed save's banner `save-failed` are 4b's, built.)
+    **Step 4d: decided words**, decided by the maintainer on 2026-11-13 (OQ-10, OQ-16, OQ-18; the words the spec draws are not listed).
     Reset banner by kind: user "You reset the engine." / break "The engine was reset: the code did not stop at Break."
     (the reason, a cause in parentheses cut off) or, with no cross-origin isolation, "Break reset the engine." "This page
     can't ask a run to stop, so Break resets it." / crash "The engine crashed and was reset." (a storage failure: "The browser closed the file storage, and the engine was reset."); each then "The data in memory is lost; your files are kept." Running banner: "Running lines 14–15 · 3.4 s" also "Running line 9",
     "Running analysis.do", "Running a command". The failed banner: "The engine didn't start." then the engine's
     `message` for the reason (`FAILED` in `engine.ts`), then "Your files are safe: you can still edit and download them."
-    The declined banner's "(about 48 MB)" is the build's size. Failed twice: "The engine stopped after failing twice (out of memory)." (the parenthesis only for reason memory) "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe." `DownloadFailedBanner` (OQ-16, storage unavailable): "Your files couldn't be downloaded. This browser wouldn't open the storage where dofile keeps your files. Try again, or reload the page." / Try again, Dismiss. Stopping banner at 0 s: "**The engine is being
+    The declined banner's "(about 48 MB)" is the build's size. Failed twice: "The engine stopped after failing twice (out of memory)." (the head) then "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe: you can still edit and download them." (the parenthesis only for reason memory) `DownloadFailedBanner` (OQ-16, storage unavailable): "Your files couldn't be downloaded. This browser wouldn't open the storage where dofile keeps your files. Try again, or reload the page." / Try again, Dismiss. Stopping banner at 0 s: "**The engine is being
     reset now:** the data in memory is lost; your files are kept."  The memory banner is not in prototype 1: no limit is measured (OQ-8); its code is removed. Progress rows: "Downloading the engine",
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
     of M". OQ-18: "Browsers that work" goes to `/#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
@@ -1283,7 +1282,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     temporary name from an earlier run (r(601) naming the engine's temporary file): the engine's own line after `r(601);`
     says it (`browser.py` TEMPFILE_HINT, "(a tempfile lasts one run: save it under a name to use it in a later run)"), so
     the draft "A tempfile, tempvar or tempname lasts one run. …" was dropped when 4b and 4d were joined.
-  - **Start engine: draft words**, for the maintainer to approve (2026-11-12, with the queued run's removal; the words
+  - **Start engine: decided words**, decided by the maintainer on 2026-11-13 (written 2026-11-12, with the queued run's removal; the words
     are in `app/start.ts`, `editor/RunControls.tsx`, `editor/StatusBar.tsx`, `log/CommandLine.tsx` and
     `states/banners.tsx`): the button "Start engine" (the toolbar's Run, the command line's button on a desktop and a
     phone, and the declined banner's button, which was "Download the engine"); the command line's hint "Start the
@@ -1298,7 +1297,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     engine is starting. Try again when it is ready.", "Run is not available until the current run ends"); the status bar's "**No engine** · Start
     engine downloads it" (`declined`; was "Run downloads it first"). The download prompt has one title again, "Download
     the engine?": "Download the engine to run code" is gone with the run behind it.
-  - **Clear log dialog: draft words**, for the maintainer to approve (UI fix round): the title "Clear the log?", the body
+  - **Clear log dialog: decided words**, decided by the maintainer on 2026-11-13 (UI fix round): the title "Clear the log?", the body
     "This removes the log and the graphs. Your data and your files stay.", the buttons "Clear log" (danger) and "Cancel"
     (focused, as Delete all's); the Log head's button "Clear…" (accessible name "Clear log…") and the menus' item "Clear
     log…" (the "…" says it asks first). They are disabled when `canClearLog()` (`run.ts`) is false: no log item but the
@@ -1372,7 +1371,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     take-over dialog) or, after a failed start that can be tried again, `start`. No state keeps a run or a mark that a
     run was wanted (`asking` has no fields, the prompt one title), so when the engine is ready nothing runs by itself.
     (Until 2026-11-12 the machine held the run and sent it when the engine had started, and dropped it when the start
-    did not happen; the maintainer removed that, and then the prompt that a run opened: plan, Post-merge review.)
+    did not happen; the maintainer removed that, and then the prompt that a run opened: `docs/phase2-history.md`, "Post-merge review".)
   - **The tab lock.** Losing it ends the worker, blocks the store, shows the take-over dialog, tells run.ts the engine is gone
     (it clears what the engine left) and cuts a run in progress with rc 9998, kind `stopped`. A lock answer that arrives after
     the lock was lost, or after a take-over was cancelled, is stale and dropped; there is no counter for it.
@@ -1437,8 +1436,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 
 ### As built in step 5 (landing, commands, sample; branch `prototype1-step5`)
 
-The maintainer's list for step 5 (decided, waiting for confirmation, open) is the plan's "Step 5: decisions and open
-questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below, under "To look at on the first real deploy".
+The maintainer's list for step 5 (decided, waiting for confirmation, open) is "Step 5: decisions and open
+questions" (`docs/phase2-history.md`); the first real deploy's checks are below, under "To look at on the first real deploy".
 
 - **URLs** (decided by the maintainer in the review of step 5): the landing page is the site's root, `/`; the commands page is
   `/commands/`; the editor is a single-page app under `/app/` (`/app/?test` and the other flags as before). Every address,
@@ -1578,12 +1577,11 @@ questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below
   does (`reopen`: the text decoded as the editor reads a file, `decodeText(bytes, true)`), so the tab takes the sample's form, `\n`
   and no BOM: a tab whose file had `\r\n` or a BOM saves the sample's form from then on, as the store holds it. A missing file that is open in a tab is written with no reload: its tab keeps its text (an open question, kept with
   the file-save rethink in `docs/icebox.md`).
-- **Words decided by the maintainer on 2026-11-12** (the UI fix round; the rest of the draft words stay drafts): "Home" (the
-  commands page's link to the landing page, was "Back to the start"), "Clear" (accessible name "Clear log"), "Wrap lines",
+- **Words decided by the maintainer on 2026-11-12** (the UI fix round; on 2026-11-13 the maintainer decided the rest of the draft words as written): "Home" (the
+  commands page's link to the landing page, was "Back to the start"), "Clear…" (accessible name "Clear log…"), "Wrap lines",
   "Commands", "Files" / "File actions", "Log" / "Log actions", and the footers' "open source" link to the GitHub repository.
     Step 5 also has a sticky top bar on both static pages (`--bar-h`; the commands filter sticks under it).
-- **Words decided by the maintainer on 2026-11-12, in the review of all five draft lists** (the entries not named here stay
-  drafts; "was" gives the old words, which the code no longer has). 4a: "Enter a name." (was "Type a name."); "A name can't
+- **Words decided by the maintainer on 2026-11-12, in the review of all five draft lists** (the entries not named here were decided as written on 2026-11-13; "was" gives the old words, which the code no longer has). 4a: "Enter a name." (was "Type a name."); "A name can't
   contain a line break."; "Its name has a character a command can't use: rename the file."; the delete bodies "The folder
   and its files exist only in this browser. This can't be undone." / "It exists only in this browser. This can't be undone."
   and Delete all's "This can't be undone."; "2 files uploaded · 1 failed"; the live region's "Couldn't create the file",
@@ -1608,20 +1606,20 @@ questions" (`docs/prototype1-plan.md`); the first real deploy's checks are below
   draft words: it is not in prototype 1. The failed banner's "Browsers that work" link opens in a new tab (it did already).
   Step 5: "Your other files are untouched."; the section "Browsers that work" of `landing.html` (new text: computers, iPhone
   13 checked by hand, Android not tested, the files stored in this browser only, Break resetting the engine on some networks);
-  the commands page's first list is "Command names" and its last link "Open the editor →"; "Home" stays. The Log head's "Clear"
-  and the menus' "Clear log" take the danger color (`.danger`).
+  the commands page's first list is "Command names" and its last link "Open the editor →"; "Home" stays. The Log head's "Clear…"
+  and the menus' "Clear log…" take the danger color (`.danger`).
 
-- **Words of the landing page's fix round** (2026-11-12, drafts for the maintainer): the Copy button's face "Copied" (was
+- **Words of the landing page's fix round** (2026-11-12; decided by the maintainer on 2026-11-13): the Copy button's face "Copied" (was
   beside the button; same word); the scrolling regions' names "welcome.do" and "What a run looks like" (its heading). The
-  theme icons (a screen for System, a sun for Light, a moon for Dark) are drafts too.
-- **Words not in the sources** (drafts for the maintainer): "Restore the sample"'s clash dialog (3.10's, with these words): the
+  theme icons (a screen for System, a sun for Light, a moon for Dark) are decided too.
+- **Words not in the sources** (decided by the maintainer on 2026-11-13): "Restore the sample"'s clash dialog (3.10's, with these words): the
   title "helpers.do differs from the sample" / "Keep yours, or replace it with the sample's? Your other files are untouched." /
   the meta line "Yours: 1 KB, 9 Nov · sample: 2 KB · clash 1 of 2 · the other file is in place." / **Replace with the sample**,
   **Keep mine** (focused); the toasts
   "Sample restored", "The sample is already here", "Couldn't restore the sample"; the Copy failure line in the live region
-  "Couldn't copy: select the text and copy it by hand"; the section "Browsers that work"; the commands page's text (below the
+  "Couldn't copy: select the text and copy it by hand"; the commands page's text (below the
   title, the Filter label and its placeholder "for example: reg", the count "N of M commands, 1 prefix", "No command starts with
-  or contains that.", "off in the browser", "Prefixes", "Home" (decided 2026-11-12), "Open the editor →"). The Copy buttons and the theme
+  or contains that.", "off in the browser", "Prefixes", "Home" (decided 2026-11-12)). The Copy buttons and the theme
   button are hidden until the script that makes them work runs. Their exact text is in the two HTML files and in
   `docs/prototype1-plan.md`, "Step 5: the clean-room record".
 - **Tests.** Node: `web/test/site.test.ts` (placeholders, the commands list against `commands.json`, `DENIED`, the six prefixes,

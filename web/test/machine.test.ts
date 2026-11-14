@@ -1,6 +1,6 @@
 // The engine's state machine (src/engine/machine.ts), alone: no controller, no transport, no clock.
 //  - the table: every row (state) by every event, 16 by 24, with the variants of the cells that depend on a payload or on
-//    the machine. GRID is the five tables of docs/prototype1-step3.5-c-design.md, item 4.2, cell for cell; CELLS says what
+//    the machine. GRID is the five tables of docs/archive/prototype1-step3.5-c-design.md, item 4.2, cell for cell; CELLS says what
 //    each named cell does. A new state or event fails `npm run check` until its cells are written.
 //  - the properties of item 6, over every cell and every step of every scenario.
 //  - the race scenarios of item 8, each a short list of events with the state and every effect after each.

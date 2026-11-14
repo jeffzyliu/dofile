@@ -1,8 +1,8 @@
 # Prototype 1, step 3.5: the engine code, made clear and auditable
 
 The task proposal the maintainer approved on 2026-11-10, after reading the engine's data flow
-([web-engine-data-flow.md](web-engine-data-flow.md)). It sits between step 3 (the app shell) and step 4 of
-[prototype1-plan.md](prototype1-plan.md). Update the status table here at the end of every session.
+([web-engine-data-flow.md](../web-engine-data-flow.md)). It sits between step 3 (the app shell) and step 4 of
+[prototype1-plan.md](../prototype1-plan.md). Update the status table here at the end of every session.
 
 Steps A to E are done and were merged into `main` with step 3 by pull request #13 (`aff60a5`, 2026-11-11); this file is now
 a record. To pick up the code: read this file, then `web/CLAUDE.md`,

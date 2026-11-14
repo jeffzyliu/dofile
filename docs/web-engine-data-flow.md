@@ -1,9 +1,9 @@
 # Data flow through the dofile web engine
 
 **This describes the code as built by step 3.5 (branch `prototype1-step3`, commit `7d26ed6` and the step E documents,
-2026-11-11).** [prototype1-step3.5-plan.md](prototype1-step3.5-plan.md) is the plan that produced it: TypeScript
+2026-11-11).** [prototype1-step3.5-plan.md](archive/prototype1-step3.5-plan.md) is the plan that produced it: TypeScript
 everywhere, one state machine, one build identity, the journal as the only channel. The state machine's design, with its
-tables and race scenarios, is [prototype1-step3.5-c-design.md](prototype1-step3.5-c-design.md); the contract the page's
+tables and race scenarios, is [prototype1-step3.5-c-design.md](archive/prototype1-step3.5-c-design.md); the contract the page's
 parts are written against is `docs/design/SPEC.md`, sections 5 to 8.
 
 After step 3.5 the code was reformatted (Biome for `web/`, ruff for the Python) and its lint findings fixed, with no change
