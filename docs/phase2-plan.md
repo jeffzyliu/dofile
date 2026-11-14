@@ -31,13 +31,12 @@ the wake lock with the phone locked 30 s, review decision 6's zoom); how they sa
 
 ## Step numbers
 
-The remaining work has names, not numbers, because two old numberings collide. The phase 2 plan had steps 1 to 10 (with 4a to
-4e); prototype 1 was the build plan for its steps 6 and 8, with its own steps 0 to 7 (and 3.5, 4a to 4d, 6r). So phase 2's
-step 4 (the proof-of-concept page), 5 (the design) and 7 (PyPI) are not prototype 1's steps 4, 5 and 7. In code comments, the
-history and other docs, "step 3.5", "step 4a" to "4d", "step 6" (the audit) and "step 7" (the verification and phone pass)
-mean prototype 1's steps; "step 4 A/B/C n" and "step 5 A/B/C n" are the decision lists of prototype 1's steps 4 and 5, now in
-the history; "decision N" with N up to 7 is this plan's, and "review decision N" (1 to 22) is the maintainer's post-merge
-review (table in the history).
+The remaining work has names, because two old numberings collide: the phase 2 plan's steps 1 to 10 (with 4a to 4e), and
+prototype 1's steps 0 to 7 (with 3.5, 4a to 4d, 6r), the build plan for phase 2's steps 6 and 8. Phase 2's steps 4 (the
+proof of concept), 5 (the design) and 7 (PyPI) are not prototype 1's. In code comments and other docs, "step 3.5", "step 4a"
+to "4d", "step 6" (the audit) and "step 7" (the verification pass) are prototype 1's; "step 4 A/B/C n" and "step 5 A/B/C n"
+are prototype 1's decision lists, now in the history; "decision N" (1 to 7) is this plan's; "review decision N" (1 to 22) is
+the maintainer's post-merge review (a table in the history).
 
 | Remaining work | Old numbers | Status |
 |---|---|---|
@@ -76,16 +75,14 @@ Width decided 2026-11-13 (review decision 22): the work below plus three cheap c
 wait until later. The maintainer's name for it is "the full-web-code audit"; it replaces a `/code-review` of the merged whole.
 
 - **Code**, in the maintainer's words:
-  - Preact lifecycle and raw DOM: "rely on render cycle as much as possible", "avoid raw dom operations wherever possible".
-    Look for `querySelector` or `getElementById` reaching into rendered components, timers or polling that wait for a render,
-    and focus or scroll moved from outside the component that owns the element.
-  - Code comments' scope: top-of-file comments "keep getting changed due to unrelated file changes"; "leave heavy multi-module
-    documentation in text files" and link to it. A comment says what its code does and why.
-  - Spaghetti patterns: "small changes in app statefulness and order of asynchronous concurrent operations". Look for booleans
-    that patch an ordering, timers standing in for an event, state duplicated across modules. Known case: uploads and "Restore
-    the sample" write outside `fileTurn` (`docs/icebox.md`).
-  - Focus consolidation: #45 made one focus-hooks file, with each focus request taken by the render that draws its target;
-    check what is left of the scattered `.focus()` calls (about 38 in 18 files before #45).
+  - Preact lifecycle and raw DOM: "rely on render cycle as much as possible", "avoid raw dom operations wherever possible"
+    (`querySelector` into rendered components, timers waiting for a render, focus or scroll moved from outside the owner).
+  - Comments: top-of-file comments "keep getting changed due to unrelated file changes"; "leave heavy multi-module
+    documentation in text files" and link to it.
+  - Spaghetti patterns: "small changes in app statefulness and order of asynchronous concurrent operations" (booleans that
+    patch an ordering, timers standing in for an event, duplicated state). Known case: uploads and "Restore the sample" write
+    outside `fileTurn` (`docs/icebox.md`).
+  - Focus consolidation: #45 made one focus-hooks file; check what is left of the `.focus()` calls (about 38 in 18 files before).
 - **Three cheap checks:** unused code (knip), the licences of the web dependencies, stale docs.
 - **Design checks on the real pages:** `npm run axe`, `tabwalk`, `contrast` and `fonts` read the mockups from `file:` URLs;
   only axe runs on the built landing and commands pages (`e2e/landing.spec.ts`; step 5 C 5). Also e2e per user flow, and the
@@ -221,14 +218,14 @@ Other rules a builder needs:
 
 ## Risks still open
 
-- **Load size and time.** The snapshot start is 41.6 MB; matplotlib is in the heap. Lazy matplotlib is the open experiment.
-- **Memory.** WebAssembly has at most 4 GB, less on phones; a large .dta can fail where the CLI works. The page must report an
-  out-of-memory error clearly and not freeze (no limit is measured, OQ-8).
-- **Browser storage can be cleared:** the visitor clears site data or uses a private window; the browser evicts when the disk is
-  nearly full unless `navigator.storage.persist()` was granted (the page asks); Safari deletes it after 7 days without a visit.
-  The page says files are kept only in this browser and offers "Download all (.zip)". Quotas are not the limit; memory is.
-- **Path mapping can pick the wrong file** when two files share a name in different folders. The log note shows it.
-- **Safari** storage and SharedArrayBuffer differences: only one real iPhone tried, no Mac Safari.
+- **Load size and time:** 41.6 MB with matplotlib in the heap; lazy matplotlib is the open experiment.
+- **Memory:** WebAssembly has at most 4 GB, less on phones; a large .dta can fail where the CLI works. An out-of-memory error
+  must be reported clearly, without a freeze (no limit is measured, OQ-8).
+- **Browser storage can be cleared:** site data cleared, a private window, eviction on a full disk unless
+  `navigator.storage.persist()` was granted (the page asks), Safari's 7 days. The page says files stay only in this browser
+  and offers "Download all (.zip)".
+- **Path mapping can pick the wrong file** when two files share a name; the log note shows it.
+- **Safari:** one real iPhone tried, no Mac Safari.
 
 ## Open questions for the maintainer (closing Phase 2)
 
@@ -253,8 +250,6 @@ Other rules a builder needs:
 
 ## Pointers
 
-[phase2-history.md](phase2-history.md) (what is done and decided, with every item ID); `docs/design/SPEC.md` (the build spec);
-[icebox.md](icebox.md); [test-map.md](test-map.md); [browser-engine.md](browser-engine.md) (the engine in Pyodide, its gaps);
-[pyodide-snapshot.md](pyodide-snapshot.md) (the snapshot, start times, the real iPhone); [lazy-matplotlib.md](lazy-matplotlib.md);
-[releasing.md](releasing.md); [opendta-issues.md](opendta-issues.md) (ODT-n, PATCH-n); step 3.5's plan:
+[phase2-history.md](phase2-history.md); [icebox.md](icebox.md); [test-map.md](test-map.md);
+[browser-engine.md](browser-engine.md) (the engine in Pyodide); [opendta-issues.md](opendta-issues.md) (ODT-n, PATCH-n);
 [archive/prototype1-step3.5-plan.md](archive/prototype1-step3.5-plan.md).
