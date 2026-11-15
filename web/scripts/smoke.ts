@@ -19,8 +19,14 @@ export async function problems(site: string, editor: string, get: typeof fetch =
     }
   };
   const landing = await load(site);
-  if (landing && !(await landing.text()).includes(`href="${editor}"`))
-    out.push(`${site}: "Open the editor" does not link to ${editor}`);
+  if (landing)
+    try {
+      // the body can stall too: the same timeout ends it, and the run tries again
+      if (!(await landing.text()).includes(`href="${editor}"`))
+        out.push(`${site}: "Open the editor" does not link to ${editor}`);
+    } catch (e) {
+      out.push(`${site}: ${e}`);
+    }
   const app = await load(editor);
   for (const [name, value] of [
     ["Cross-Origin-Opener-Policy", "same-origin"],

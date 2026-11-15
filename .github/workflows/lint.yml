@@ -1,7 +1,7 @@
 name: lint
 
-# Lints the workflows with actionlint (shellcheck included), so a mistake in release.yml is found in the pull request and
-# not when a tag is pushed. A separate file, so that changing it never reruns the test workflows (ci.yml and web.yml
+# Lints the workflows with actionlint (shellcheck included), so a mistake in release.yml is found in the pull request
+# and not when a tag is pushed. A separate file, so that changing it never reruns the test workflows (ci.yml and web.yml
 # treat lint.yml and release.yml as non-code).
 #
 # Same pattern as ci.yml: the workflow starts for every pull request, `changes` looks at the files, and the lint job is
