@@ -82,7 +82,9 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
      are synchronous.
    - **The current folder** (what it does: SPEC 3.1, "Folders and the current folder", and OQ-21): `currentDir` in
      `FilesPane.tsx`, kept apart from the roving focus (`rovingPath`); arrow keys select nothing; the caret is a span,
-     `aria-hidden`, not a tab stop. The "+" (and the head
+     `aria-hidden`, not a tab stop, and it folds and unfolds and selects nothing; a tap on the rest of the row selects and
+     unfolds, never folds; folding it or a folder above it makes the parent current; it is drawn as an accent outline, no
+     fill. The "+" (and the head
      menu's New .do file and New folder, and the dropzone's New .do file) make theirs in `newFileDir`: the current
      folder, or the nearest folder above it that exists when it has gone; the "+" label names it.
    - **A draft left with a name that cannot be used** makes the free default, and a toast says why (the field's reason

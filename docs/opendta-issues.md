@@ -322,11 +322,10 @@ areg y x [aweight=w], absorb(id)  // 0.47292
 - Cause: `estimation/panel.py` declares the weights for `cmd_xtreg` and `cmd_areg` and parses them into `smp.w`, but
   `_xtreg_fe` and `cmd_areg` never read it: they demean with `_demean(y, ids, inv, counts)` and solve unweighted.
 - Expected in Stata: [R] areg treats `absorb(var)` "as if it were specified by dummy variables" and takes a-, f- and
-  pweights, so it should equal `regress y x i.id [aw=w]` (shown only unweighted; the weighted case is inferred). Stata 14
-  [XT] xtreg (syntax notes, PDF p. 4; current manual p. 7): "aweights, fweights, and pweights are allowed for the
+  pweights, so it should equal `regress y x i.id [aw=w]` (shown only unweighted; the weighted case is inferred). Stata
+  14 [XT] xtreg (syntax notes, PDF p. 4; current manual p. 7): "aweights, fweights, and pweights are allowed for the
   fixed-effects model. ... See [U] 11.1.6 weight. Weights must be constant within panel." Statalist, 2008, Austin
-  Nichols: "-xtreg- will not
-  allow weights that vary over time within panel, but -areg- will"
+  Nichols: "-xtreg- will not allow weights that vary over time within panel, but -areg- will"
   (https://www.stata.com/statalist/archive/2008-06/msg01015.html). The error's rc is not in the manual.
 - Found with Cheng and Hoekstra (2013), `xtreg l_homicide ... post [aweight=popwt], fe` (`popwt` constant within state):
   `post` 0.0694 (se 0.0559) with `xtreg, fe` and `areg`, 0.0755 (se 0.0348) with `regress ... i.sid`.
@@ -387,12 +386,11 @@ traceback, and `capture` (which catches only `StataError`, `lang/interpreter.py`
 
 **A missing folder or a directory in place of a file:** `log using hi/hi, replace` with no folder `hi/` gave
 `FileNotFoundError: [Errno 2] No such file or directory: 'hi/hi.smcl'`, rc 9999, also under `capture`.
-- Cause: `log`, `cmdlog`, `outfile`, `file open`, `copy` (destination) and `bcal create` had no `except OSError` around
-  their `open()`; `use`, `append`, `type`, `infile`, `file open ... read`, `copy` (source) check `path.exists()` and then
-  fail in `open()` on a directory (`IsADirectoryError`). The commands that were right carry their own `except OSError`
-  (`save`,
-  `export delimited`/`excel`, `outsheet`, `postfile`, `putexcel`, `graph save`/`export`, `erase` 693,
-  `mkdir`/`rmdir` 693, `cd` 170).
+- Cause: `log`, `cmdlog`, `outfile`, `file open`, `copy` (destination) and `bcal create` had no `except OSError`
+  around their `open()`; `use`, `append`, `type`, `infile`, `file open ... read`, `copy` (source) check
+  `path.exists()` and then fail in `open()` on a directory (`IsADirectoryError`). The commands that were right carry
+  their own `except OSError` (`save`, `export delimited`/`excel`, `outsheet`, `postfile`, `putexcel`, `graph
+  save`/`export`, `erase` 693, `mkdir`/`rmdir` 693, `cd` 170).
 - Probed: 48 file commands with a missing folder and with a directory. Not covered: commands outside those 48,
   permission errors that are not the sandbox's, and the rc of `merge`/`cross` with a directory (459 and 110).
 - Expected in Stata: **assumed, not checked.** r(603), `file hi/hi.smcl could not be opened`, as `save` already gives
@@ -460,9 +458,9 @@ firststage is unrecognized". It's the standard weak-instrument check, so it's wo
 ### ODT-31: overflow warnings in delta-method intervals (left as is)
 The details of ODT-29 (one issue, two IDs). `poe slow` prints three `RuntimeWarning: overflow encountered in exp`:
 `estimation/mleq.py:157` in `1907_models` and `1918_models3`, `estimation/models2.py:739` in `1918_models3`.
-- Both lines compute `exp(b - c * se)` and `exp(b + c * se)` (`mleq.py`'s `transformed_row`; `models2.py`'s interval of
-  `nbreg`/`gnbreg`'s alpha); a large `se` overflows the upper end to `inf`. Neither is
-  wrapped in `np.errstate`, unlike `core/ordination.py`, `core/survival.py`, `core/rng.py`.
+- Both lines compute `exp(b - c * se)` and `exp(b + c * se)` (`mleq.py`'s `transformed_row`; `models2.py`'s interval
+  of `nbreg`/`gnbreg`'s alpha); a large `se` overflows the upper end to `inf`. Neither is wrapped in `np.errstate`,
+  unlike `core/ordination.py`, `core/survival.py`, `core/rng.py`.
 - Upstream code, unmodified (`opendta-odt12-nbreg-boundary.patch` edits the branch above `models2.py:739`, not the
   `exp` line). OpenDTA's own suite prints the `mleq.py:157` warning too, in `test_nb1_nbreg_and_tnbreg`; `models2.py:739`
   was not checked upstream (1918_models3 runs only through `compare.py`). `slogdet` and `normalden` overflow warnings in
@@ -474,11 +472,11 @@ The details of ODT-29 (one issue, two IDs). `poe slow` prints three `RuntimeWarn
 
 ### ODT-32: a missing optional package is rc 610 "file not Stata format", with `pip install` advice
 `io/statpkg.py` and `io/dta.py` raised `StataError(610, ...)` when `pyreadstat` or `pandas` could not be imported
-(`export sasxport requires the pandas package (pip install pandas)`). 610 is Stata's code for a file not in its format,
-and OpenDTA uses it for that too (`file not SAS XPORT format`, `file not Stata format`), so one number meant both "the
-file is bad" and "this build lacks a package". The web
-demo ships `pyreadstat` without pandas (`docs/pyodide-snapshot.md`, "Packages added"). A script that tests `_rc == 610`
-for a bad file misread it, and the advice is useless in the browser.
+(`export sasxport requires the pandas package (pip install pandas)`). 610 is Stata's code for a file not in its
+format, and OpenDTA uses it for that too (`file not SAS XPORT format`, `file not Stata format`), so one number meant
+both "the file is bad" and "this build lacks a package". The web demo ships `pyreadstat` without pandas
+(`docs/pyodide-snapshot.md`, "Packages added"). A script that tests `_rc == 610` for a bad file misread it, and the
+advice is useless in the browser.
 - Expected in Stata: **no equivalent; a design choice.** Stata always has all its commands. The nearest dofile code is
   the sandbox's refusal, rc 199 `command ... is disabled in the dofile sandbox` (`sandbox.py`).
 - Patched (`scripts/patches/opendta-odt32-missing-package-errors.patch`): three sites become
@@ -639,20 +637,18 @@ is dofile's own, not for upstream.
   64-bit `intp` is `int64`, so nothing changes there. Counts above 2^31 cannot exist in a 4 GiB address space.
 - Found running the 98 Stata 14 comparison cases inside Pyodide with `compare.py` and the known-difference rules
   (`web/scripts/check-snapshot.mjs`; normal boot and snapshot start gave the same results). Eleven failed at their
-  first `expand` or `stsplit`: `expand` in 0304_collapse,
-  1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology, 1801_programming, 1902_multilevel, 1908_models2,
-  1909_other_suites and 1916_multilevel; `stsplit` in 1901_survival.
+  first `expand` or `stsplit`: `expand` in 0304_collapse, 1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology,
+  1801_programming, 1902_multilevel, 1908_models2, 1909_other_suites and 1916_multilevel; `stsplit` in 1901_survival.
 - **Other int64 sites: none else is affected.** In Pyodide's numpy 2.4.6 only five calls refuse an int64 array:
   `np.repeat` with an array of counts, `np.put`, `np.searchsorted(sorter=...)`, `np.choose` and `ufunc.reduceat`
   (indices). These accept it: fancy indexing and assignment, `np.take`, `np.bincount`, `np.add.at`, `np.delete`,
-  `np.insert`, `np.split`, `np.unique(return_inverse=True)`, `np.lexsort`, `np.tile`, `reshape`, `np.arange`, `np.full`,
-  `np.unravel_index`, `np.ravel_multi_index`, `np.take_along_axis` and `np.roll`. Of the engine's 96 `int64` uses, the
-  other `np.repeat` calls with counts (`lang/vexpr.py:68-69`, `commands/egen.py:59`, `commands/{roc,summarize,kappa}.py`)
-  get `intp` counts (`flatnonzero`, `bincount`, `np.diff`, `astype(int)`), and the `reduceat` calls
-  (`core/panelquad.py:48`, `estimation/mlcmd.py:872`) take `intp` indices (`cumsum` of a `bincount`). The engine never
-  calls `np.put`, `np.choose`
-  or `sorter=`. Not covered: calls inside scipy and statsmodels-style code given an engine int64 array, and numpy
-  functions not probed.
+  `np.insert`, `np.split`, `np.unique(return_inverse=True)`, `np.lexsort`, `np.tile`, `reshape`, `np.arange`,
+  `np.full`, `np.unravel_index`, `np.ravel_multi_index`, `np.take_along_axis` and `np.roll`. Of the engine's 96
+  `int64` uses, the other `np.repeat` calls with counts (`lang/vexpr.py:68-69`, `commands/egen.py:59`,
+  `commands/{roc,summarize,kappa}.py`) get `intp` counts (`flatnonzero`, `bincount`, `np.diff`, `astype(int)`), and
+  the `reduceat` calls (`core/panelquad.py:48`, `estimation/mlcmd.py:872`) take `intp` indices (`cumsum` of a
+  `bincount`). The engine never calls `np.put`, `np.choose` or `sorter=`. Not covered: calls inside scipy and
+  statsmodels-style code given an engine int64 array, and numpy functions not probed.
 - **Run in Pyodide, one process per case:** all 11 pass. Five (0304, 1002, 1402, 1801, 1909) with PATCH-4 alone; the
   other six (1001, 1601, 1901, 1902, 1908, 1916) then hit the 600 s limit on a second problem, `numpy.linalg` returning
   NaN instead of raising `LinAlgError` in Pyodide, and pass with `src/dofile/linalgshim.py` (`browser-engine.md`, "Open

@@ -24,10 +24,11 @@ Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compa
 - **Not covered by any check:** Break on a long model fit in the browser; `1920_models4` (no Stata log); the dofile tests that
   need subprocesses or the `mcp` package, which do not apply in a page.
 
-**The Stata 14 cases.** `check-snapshot --normal` (one process per case, four at a time), after PATCH-4, the `numpy.linalg`
-shim and the packages (2026-11-09): **95 of 97 cases pass in 157 s**, none times out or crashes, and the corpus (63 checks),
-the 12 probes and the 13 native-library calls are clean. The other two (1701, 1911) differ only from `export sasxport` on.
-The count is 97, not 98, because `1920_models4` has no Stata reference log. The snapshot start gives the same result (95 of 97 in about 150 s;
+**The Stata 14 cases.** `check-snapshot --normal` (one process per case, four at a time), after PATCH-4, the
+`numpy.linalg` shim and the packages (2026-11-09): **95 of 97 cases pass in 157 s**, none times out or crashes, and
+the corpus (63 checks), the 12 probes and the 13 native-library calls are clean. The other two (1701, 1911) differ
+only from `export sasxport` on. The count is 97, not 98, because `1920_models4` has no Stata reference log. The
+snapshot start gives the same result (95 of 97 in about 150 s;
 [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)).
 
 **The unit tests in Pyodide** (`npm run check-pytest`; one process per file, 72 files, 128 s; compared with CPython test by
@@ -91,11 +92,12 @@ not load pandas, so `export sasxport` stops with rc 199 (ODT-32) and what follow
 exact check. The rest of what they cover, `.xls` and the ReadStat reads, is checked by the unit tests and the e2e test. What was done:
 1. **`xlwt` and `xlrd`:** pure Python wheels on PyPI; they install in Pyodide through micropip in about 0.1 s. They became core
    dependencies of dofile (`pyproject.toml`), so the CLI and the MCP server get `.xls` too, and the page needs no code for them.
-2. **`pyreadstat`:** no Pyodide build exists, so `web/wheels/pyreadstat/build.sh` (the recipe, `web/wheels/pyreadstat/`) compiles one with `pyodide-build` (a 614 KB wheel; Cython plus
-   ReadStat C, zlib from Emscripten's port, a two-line `setup.py` patch for the link flags), committed as
-   `web/wheels/pyreadstat-*.whl`. The page, `make-snapshot.mjs` and the Node checks install it after the dofile wheel through
-   `web/scripts/install-engine.ts`. The version is 1.3.6, the cap in the dev group: 1.3.7 gives empty values for long strings
-   (strL) in `read_dta`, on CPython as well (`test_readstat_reads_ours[119]`).
+2. **`pyreadstat`:** no Pyodide build exists, so `web/wheels/pyreadstat/build.sh` (the recipe,
+   `web/wheels/pyreadstat/`) compiles one with `pyodide-build` (a 614 KB wheel; Cython plus ReadStat C, zlib from
+   Emscripten's port, a two-line `setup.py` patch for the link flags), committed as `web/wheels/pyreadstat-*.whl`. The
+   page, `make-snapshot.mjs` and the Node checks install it after the dofile wheel through
+   `web/scripts/install-engine.ts`. The version is 1.3.6, the cap in the dev group: 1.3.7 gives empty values for long
+   strings (strL) in `read_dta`, on CPython as well (`test_readstat_reads_ours[119]`).
 3. **No pandas, on purpose.** `pyreadstat` reads SAS transport and SPSS without it; only `export sasxport` needs
    it. Pandas is 6.9 MB of the 48.6 MB snapshot and 1.9 s of a cold 30 Mbps snapshot start
    ([pyodide-snapshot.md](pyodide-snapshot.md#packages-added-xlwt-xlrd-and-pyreadstat-not-pandas-2026-11-09)). The snapshot is 41.6 MB.
