@@ -58,7 +58,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | GAP-6 | `help` has no page for the language topics `if`, `in`, `foreach`, `forvalues`, `while`, `weights`, `varlist` (rc 111 `help for foreach not found`); every command has one | found 2026-11-08 (web demo design: the Help panel), no test | known |
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table, with e(b)'s columns; new estimates drop a stale one | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 | PATCH-2 | dofile patch: Break is taken only at safe points, so an interrupt can't leave the data half changed | `tests/test_break.py` | patched |
-| PATCH-3 | dofile patch: every user file name goes through one hook (`core/userpath.user_path`), for the web demo's path shim | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
+| PATCH-3 | dofile patch: every user file name goes through one hook (`core/userpath.user_path`), for the web demo's path shim (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
 | PATCH-4 | dofile patch: `expand` and `stsplit` build `np.repeat` counts as `np.intp`, which wasm32 numpy needs | `expand` and `stsplit` cases of `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.mjs`); a CPython test cannot show it | patched (dofile-only, wasm32); the 11 cases pass in Pyodide |
 
 ## Details
@@ -87,12 +87,13 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 - Workaround (before the patch): `matrix b = e(b)`, `display b[1, colnumb(b, "c.yrsed#2.sex")]`, or `get_matrix("e(b)")`.
 - Patched (`opendta-odt3-coef-interaction-names.patch`): the tokenizer accepts `#` and `.` inside `_b[...]`, `_se[...]`
   and `_coef[...]`, and `_coef_index` tries an interaction's terms in any order (VERIFY Stata's order). Both orders now
-  give `.00783558`. A `#` outside the brackets is still a syntax error.
+  give `.00783558` (`_b[c.yrsed#2.sex]` and `_b[2.sex#c.yrsed]`). A `#` outside the brackets is still a syntax error.
 
 ### ODT-4: `confirm variable` return code
 `clear`, `set obs 1`, `capture confirm variable nosuch`, `display _rc`.
 - dofile: `198`. Expected in Stata: `111` ("variable nosuch not found"); [P] confirm's capture example shows `_rc` 111
   (https://www.stata.com/manuals14/pconfirm.pdf).
+- Workaround (before the patch): test `_rc != 0` instead of `_rc == 111`.
 - Patched (`opendta-odt4-confirm-variable.patch`): `confirm [new|numeric|string|str#|<type>] variable varlist [, exact]`
   with the manual's codes: 111 `variable not found` and `no variables defined`, 110 `already defined` for `new`, 198
   `invalid name`, 7 for a type mismatch. VERIFY: the type-mismatch message text; `exact` turns off abbreviations.
@@ -117,7 +118,8 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 - dofile: `a\X b` (the backslash stays and `$v1` is expanded).
 - Expected in Stata: `a$v1 b`. Stata's FAQ shows `display "\$myfile"` printing `$myfile`, and the Programming manual
   prints `$22.15` with `display "\$22.15"` (https://www.stata.com/support/faqs/programming/backslashes-and-macros/).
-  So `\$` is documented. A backslash before a backquote is not: the FAQ only covers a path such as ``c:\data\\`myfile'``.
+  So `\$` is documented ([U] 18.3, macros). A backslash before a backquote is not: the FAQ only covers a path such as
+  ``c:\data\\`myfile'``.
 - Workaround: put such text in a macro and reference it, since a macro's contents aren't expanded again. This
   is how `dofile run` passes the do-file path.
 - Patched (`opendta-odt8-macro-backslash-dollar.patch`): in `lang/macros.py:expand`, `\$` leaves a literal `$` (the
@@ -151,7 +153,8 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 
 ### ODT-12: `nbreg` warning
 `nbreg pos educ` on the Card data (`pos = round(exp(lwage-5))`) printed `RuntimeWarning: invalid value encountered
-in sqrt` from `estimation/models2.py` (alpha's standard error); the estimates still came back.
+in sqrt` from `estimation/models2.py` (alpha's standard error); the estimates still came back. Open: whether Stata
+reports a standard error for `lnalpha` where dofile now shows missing.
 - Patched (`opendta-odt12-nbreg-boundary.patch`): `lnalpha` (-18.6, just above the -20 boundary test) had a
   negative variance; the square root is skipped and the row shows missing, as at the boundary. Still to verify:
   the LR test printed `chibar2(01) = 2.5e-03`; Stata 14 shows `%7.2f` and `0.0e+00` for an exact zero, so small
@@ -161,7 +164,8 @@ in sqrt` from `estimation/models2.py` (alpha's standard error); the estimates st
 `clear`, `set obs 50`, `gen x = rnormal()`, `mean x`, then `mean` and `mean, level(90)`.
 - dofile: the last two give rc 100 `varlist required`. `estimates replay` redisplays the results (the workaround).
 - Expected in Stata 14: [U] 20.3 says an estimation command typed without arguments redisplays its prior results,
-  with options allowed on replay (https://www.stata.com/manuals14/u20.pdf). `mean` stores `e(b)` and `e(V)`, and
+  with options allowed on replay (its example: `regress`, then `regress, coeflegend`)
+  (https://www.stata.com/manuals14/u20.pdf). `mean` stores `e(b)` and `e(V)`, and
   `level()`, `noheader`, `nolegend` and `coeflegend` are its replay options (https://www.stata.com/manuals14/rmean.pdf).
   [R] mean's syntax box shows no replay line, but neither does `regress`'s. Documented by the general rule, not shown.
 - Patched (`opendta-odt13-mean-replay.patch`): `mean`, `proportion`, `ratio` and `total` with no varlist redisplay the last
@@ -186,7 +190,8 @@ in sqrt` from `estimation/models2.py` (alpha's standard error); the estimates st
 - dofile: rc 9999 `AttributeError: 'Estimates' object has no attribute 'terms'` (`estimation/postest.py`, `xb_all`);
   `bootstrap _b[x], reps(5): regress y x` then `predict` does the same. The session keeps its data, but rc 9999 skips
   `capture` and ends the call. A crash is a bug whatever Stata does.
-- Expected in Stata 14: rc 321. The `mean` postestimation page lists no `predict`
+- Expected in Stata 14: rc 321. The `mean` postestimation page lists `estat vce`, `estimates`, `hausman`, `lincom`,
+  `nlcom`, `test` and `testnl`, and no `predict`
   (https://www.stata.com/manuals14/rmeanpostestimation.pdf); [P] error gives 321 "requested action not valid after most
   recent estimation command" for this case (https://www.stata.com/manuals14/perror.pdf). Only `mean` was checked, not
   `bootstrap`.
@@ -223,7 +228,8 @@ in sqrt` from `estimation/models2.py` (alpha's standard error); the estimates st
 - Patched (`opendta-odt17-legend-position.patch`): `position()` is read as the clock position, outside the plot
   region (12 top, 3 right, 6 bottom, 9 left; 1-2 and 10-11 top right and top left, 4-5 and 7-8 bottom right and bottom
   left); a legend at a side defaults to one column. Not done: `ring()` (parsed, ignored), `ring(0)` inside the plot
-  region, `bplacement()`, `position(0)`. Re-rendered 2026-11-05: `legend(ring(0) pos(11))` still draws outside (top left).
+  region, `bplacement()`, `position(0)`. Re-rendered 2026-11-05: `pos(3)` right, `pos(12)` top, `pos(1)` top right
+  outside the plot; `legend(ring(0) pos(11))` still draws outside (top left).
 
 ### ODT-18: `ttest` with `unequal` but no `unpaired`
 `clear`, `set obs 50`, `gen x = _n`, `gen y = x + rnormal()`, `gen z = x + rnormal()`, `ttest y == z, unequal`.
@@ -239,7 +245,8 @@ in sqrt` from `estimation/models2.py` (alpha's standard error); the estimates st
 After `regress y x`: `display e(b)[1,1]`, `scalar s = e(b)[1,1]`, `display r(table)[1,1]`, `display %6.3f (r(table)[1,1])`.
 All fail (rc in the table below). `matrix T = e(b)` then `display T[1,1]`, `el(e(b),1,1)` and `_b[x]` work.
 - Stata: nothing documents `e(b)[1,1]` as an expression. [U] 14.9 and [P] matrix define give `matname[r,c]` for a matrix
-  *name*; [U] 14 allows `e(b)` "in any matrix expression", with `matrix myb = e(b)` as its example. A 2010 Statalist thread
+  *name*; [U] 14 allows `e(b)` "in any matrix expression", with `matrix myb = e(b)` as its example (its `e(b)[1,3]` is
+  only the heading `matrix list e(b)` prints). A 2010 Statalist thread
   (Stata 11) reports `local x = e(b)[1,1]` "invalid syntax" and `generate x = e(b)[1,1]` r(509), advising a copy into a
   named matrix (https://www.stata.com/statalist/archive/2010-10/msg00534.html). An earlier reading that Stata accepts
   these is not supported. dofile is more permissive than Stata for `el(e(b),1,1)`, and accepts `e(b)` in matrix
@@ -317,11 +324,13 @@ areg y x [aweight=w], absorb(id)  // 0.47292
 - Expected in Stata: [R] areg treats `absorb(var)` "as if it were specified by dummy variables" and takes a-, f- and
   pweights, so it should equal `regress y x i.id [aw=w]` (shown only unweighted; the weighted case is inferred). Stata 14
   [XT] xtreg (syntax notes, PDF p. 4; current manual p. 7): "aweights, fweights, and pweights are allowed for the
-  fixed-effects model. ... Weights must be constant within panel." Statalist, 2008, Austin Nichols: "-xtreg- will not
+  fixed-effects model. ... See [U] 11.1.6 weight. Weights must be constant within panel." Statalist, 2008, Austin
+  Nichols: "-xtreg- will not
   allow weights that vary over time within panel, but -areg- will"
   (https://www.stata.com/statalist/archive/2008-06/msg01015.html). The error's rc is not in the manual.
 - Found with Cheng and Hoekstra (2013), `xtreg l_homicide ... post [aweight=popwt], fe` (`popwt` constant within state):
   `post` 0.0694 (se 0.0559) with `xtreg, fe` and `areg`, 0.0755 (se 0.0348) with `regress ... i.sid`.
+- Workaround (before the patch): `regress y x i.id [aweight=w], vce(cluster id)`.
 - Not checked: `xtivreg`. The Stata 14 reference logs have no weighted `xtreg` or `areg`.
 - Patched (`opendta-odt24-weighted-within-estimators.patch`): `xtreg, fe` and `areg` demean with weighted group means and
   solve weighted least squares, weights scaled as `regress` does (a- and pweights to the sample size, fweights as they
@@ -342,7 +351,7 @@ areg y x [aweight=w], absorb(id)  // 0.47292
 - Cause: the file's `<sortlist>` has 186 two-byte entries, `3, 0, 0, ...` (the key is `sid`), then 127 leftover nonzero
   entries that Stata ignores, since the list ends at the first 0. `io/dta.py:314` kept every entry in range.
 - Not checked: whether `by:` or `merge` use the list (it looks cosmetic), and the .dta format specification's wording
-  ([P] File formats .dta) on the terminator.
+  ([P] File formats .dta) on the terminator. A file that dofile writes has zeros after the list and reads back fine.
 - Patched (`opendta-odt25-dta-sort-list.patch`): the reader stops at the first 0 (`_sort_keys` in `io/dta.py`, for the old
   and the 117+ formats). `castle.dta` now reports `Sorted by: sid`.
 
@@ -364,7 +373,8 @@ areg y x [aweight=w], absorb(id)  // 0.47292
 - Expected in Stata: **assumed, not checked.** `save` is documented as `save [filename] [, options]`, with no `using`
   clause, so we assume a syntax error (probably rc 198). Unknown: the code and message, and whether Stata accepts
   unquoted spaces in a `save` file name (which decides `save a b`).
-- Evidence in the repo: none. No Stata 14 log runs either form; `known_differences.txt` doesn't list it.
+- Evidence in the repo: none. No Stata 14 log runs either form (every `save` in `tests_opendta/compat/do/` is plain,
+  `save odta_u, replace`); `known_differences.txt` doesn't list it.
 - Not evidence about Stata: stats.camp (a closed-source Rust reimplementation, Stata version and testing unknown)
   accepts `save using x, replace` and writes `x.dta`, so dofile's output differs from it.
 - To verify: run both in Stata 14, then add them to `gerar_esperados.do` as a case.
@@ -379,13 +389,14 @@ traceback, and `capture` (which catches only `StataError`, `lang/interpreter.py`
 `FileNotFoundError: [Errno 2] No such file or directory: 'hi/hi.smcl'`, rc 9999, also under `capture`.
 - Cause: `log`, `cmdlog`, `outfile`, `file open`, `copy` (destination) and `bcal create` had no `except OSError` around
   their `open()`; `use`, `append`, `type`, `infile`, `file open ... read`, `copy` (source) check `path.exists()` and then
-  fail in `open()` on a directory. The commands that were right carry their own `except OSError` (`save`,
+  fail in `open()` on a directory (`IsADirectoryError`). The commands that were right carry their own `except OSError`
+  (`save`,
   `export delimited`/`excel`, `outsheet`, `postfile`, `putexcel`, `graph save`/`export`, `erase` 693,
   `mkdir`/`rmdir` 693, `cd` 170).
 - Probed: 48 file commands with a missing folder and with a directory. Not covered: commands outside those 48,
   permission errors that are not the sandbox's, and the rc of `merge`/`cross` with a directory (459 and 110).
 - Expected in Stata: **assumed, not checked.** r(603), `file hi/hi.smcl could not be opened`, as `save` already gives
-  here; 603 assumed for a directory too.
+  here (the engine's own handlers raise 603 with `(strerror)`); 603 assumed for a directory too.
 
 **Out of memory:** a numpy `MemoryError` (`Unable to allocate 763. MiB ...`) escaped the same way. In the web demo
 (WebAssembly heap stops at 4 GB), with 100 million observations `gen double x = 1` and `gen double y = x` worked (heap
@@ -448,7 +459,7 @@ firststage is unrecognized". It's the standard weak-instrument check, so it's wo
 
 ### ODT-31: overflow warnings in delta-method intervals (left as is)
 The details of ODT-29 (one issue, two IDs). `poe slow` prints three `RuntimeWarning: overflow encountered in exp`:
-`mleq.py:157` in `1907_models` and `1918_models3`, `models2.py:739` in `1918_models3`.
+`estimation/mleq.py:157` in `1907_models` and `1918_models3`, `estimation/models2.py:739` in `1918_models3`.
 - Both lines compute `exp(b - c * se)` and `exp(b + c * se)` (`mleq.py`'s `transformed_row`; `models2.py`'s interval of
   `nbreg`/`gnbreg`'s alpha); a large `se` overflows the upper end to `inf`. Neither is
   wrapped in `np.errstate`, unlike `core/ordination.py`, `core/survival.py`, `core/rng.py`.
@@ -464,7 +475,8 @@ The details of ODT-29 (one issue, two IDs). `poe slow` prints three `RuntimeWarn
 ### ODT-32: a missing optional package is rc 610 "file not Stata format", with `pip install` advice
 `io/statpkg.py` and `io/dta.py` raised `StataError(610, ...)` when `pyreadstat` or `pandas` could not be imported
 (`export sasxport requires the pandas package (pip install pandas)`). 610 is Stata's code for a file not in its format,
-and OpenDTA uses it for that too, so one number meant both "the file is bad" and "this build lacks a package". The web
+and OpenDTA uses it for that too (`file not SAS XPORT format`, `file not Stata format`), so one number meant both "the
+file is bad" and "this build lacks a package". The web
 demo ships `pyreadstat` without pandas (`docs/pyodide-snapshot.md`, "Packages added"). A script that tests `_rc == 610`
 for a bad file misread it, and the advice is useless in the browser.
 - Expected in Stata: **no equivalent; a design choice.** Stata always has all its commands. The nearest dofile code is
@@ -531,7 +543,7 @@ OpenDTA's `help` (`commands/helpcmd.py`, 173 pages in `help/`, its own words) co
 but `help foreach` stops with rc 111 `help for foreach not found`, as do `if`, `in`, `forvalues`, `while`, `weights` and
 `varlist` (`local`, `global`, `program`, `by`, `quietly`, `capture`, `missing`, `functions` have pages). Checked with
 `find_help()` on each topic.
-- Impact: these are what a new user looks up first. The web demo's Help panel shows "no help page for this yet"
+- Impact: these are what a new user looks up first. The web demo's Help panel will show "no help page for this yet"
   instead of an error; the MCP server and CLI print the rc 111 line.
 - Not a bug: the pages' examples use Stata's example-dataset variables (`regress price mpg weight`), which dofile
   does not ship, so they don't run as written.
@@ -626,7 +638,8 @@ is dofile's own, not for upstream.
   `reps = np.ones(n, dtype=np.intp)`, whose later `reps[rows] = np.bincount(...)` covers both `np.repeat` calls. On
   64-bit `intp` is `int64`, so nothing changes there. Counts above 2^31 cannot exist in a 4 GiB address space.
 - Found running the 98 Stata 14 comparison cases inside Pyodide with `compare.py` and the known-difference rules
-  (`web/scripts/check-snapshot.mjs`). Eleven failed at their first `expand` or `stsplit`: `expand` in 0304_collapse,
+  (`web/scripts/check-snapshot.mjs`; normal boot and snapshot start gave the same results). Eleven failed at their
+  first `expand` or `stsplit`: `expand` in 0304_collapse,
   1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology, 1801_programming, 1902_multilevel, 1908_models2,
   1909_other_suites and 1916_multilevel; `stsplit` in 1901_survival.
 - **Other int64 sites: none else is affected.** In Pyodide's numpy 2.4.6 only five calls refuse an int64 array:
@@ -636,7 +649,8 @@ is dofile's own, not for upstream.
   `np.unravel_index`, `np.ravel_multi_index`, `np.take_along_axis` and `np.roll`. Of the engine's 96 `int64` uses, the
   other `np.repeat` calls with counts (`lang/vexpr.py:68-69`, `commands/egen.py:59`, `commands/{roc,summarize,kappa}.py`)
   get `intp` counts (`flatnonzero`, `bincount`, `np.diff`, `astype(int)`), and the `reduceat` calls
-  (`core/panelquad.py:48`, `estimation/mlcmd.py:872`) take `intp` indices. The engine never calls `np.put`, `np.choose`
+  (`core/panelquad.py:48`, `estimation/mlcmd.py:872`) take `intp` indices (`cumsum` of a `bincount`). The engine never
+  calls `np.put`, `np.choose`
   or `sorter=`. Not covered: calls inside scipy and statsmodels-style code given an engine int64 array, and numpy
   functions not probed.
 - **Run in Pyodide, one process per case:** all 11 pass. Five (0304, 1002, 1402, 1801, 1909) with PATCH-4 alone; the
