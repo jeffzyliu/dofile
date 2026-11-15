@@ -18,13 +18,13 @@ snapshot is the default start (a return visit in 1.2 s, a first visit in 1.7 s u
 brotli 11; one real iPhone took about 3 s to unpack with the browser's own decoder, [pyodide-snapshot.md](pyodide-snapshot.md)).
 The editor page, the landing and commands pages and the sample project are built and merged (prototype 1 steps 0 to 5, pull
 requests #13, #17 and #18, then fix rounds up to #55). CI runs on every pull request and every push to `main`, and each merge
-to `main` deploys the one-origin build to Cloudflare Workers (workers.dev), until this branch's pull request merges. PyPI has only the pre-release `0.1.0.dev1`
+to `main` deploys, once the tests pass, to `dofile.dev` and `app.dofile.dev` ([deploying.md](deploying.md); the first deploy
+is still to run). PyPI has only the pre-release `0.1.0.dev1`
 ([releasing.md](releasing.md)).
 
 The maintainer bought `dofile.dev` on 2026-11-14 and set up its Cloudflare zone. The two-origin split (`dofile.dev` for the
 landing and commands pages, `app.dofile.dev` for the editor), pull request previews, a gated production deploy and
-`docs/deploying.md` are in the pull request of this branch (`deploy/dofile-dev`), built and reviewed. They are not merged and not
-deployed.
+`docs/deploying.md` are built and reviewed (branch `deploy/dofile-dev`); the first deploy is still to run.
 
 **Next, in this order:** the audit (the two-origin pull request merges before the launch; open question 7 places it
 against the first deploy's checks); the verification and phone pass; the PyPI release; the launch.
@@ -45,10 +45,10 @@ the maintainer's post-merge review (a table in the history).
 | Remaining work | Old numbers | Status |
 |---|---|---|
 | **Audit**: the full-web-code audit, the design checks on the real pages, the first real deploy's checks | phase 2 step 6 (its last part); prototype 1 step 6, with 6r folded in | not started |
-| **Two origins**: `dofile.dev` and `app.dofile.dev` | prototype 1 step 6 (deployment) | in this branch's pull request, not merged |
+| **Two origins**: `dofile.dev` and `app.dofile.dev` | prototype 1 step 6 (deployment) | built, first deploy still to run |
 | **Verification and phone pass**: the verification list below, a real-phone pass, the Safari storage re-check | prototype 1 step 7 | not started |
 | **PyPI release**: a non-pre-release, so `pip install dofile` works; it comes before the launch, since the landing page tells people to run `pip install dofile`. Trusted Publishing, no stored token ([releasing.md](releasing.md)) | phase 2 step 7 | pre-release only |
-| **Launch**: the domain (`dofile.dev`, bought; the split is in this branch's pull request), Chrome, Firefox and Safari on desktop and phone, a link from the README | phase 2 step 10 | open |
+| **Launch**: the domain (`dofile.dev`, bought; the split is built, not yet deployed), Chrome, Firefox and Safari on desktop and phone, a link from the README | phase 2 step 10 | open |
 | **Lazy matplotlib** (experiment, [lazy-matplotlib.md](lazy-matplotlib.md)) | phase 2 step 4a | not started, no code |
 | **Later UI work** (8 items, below) | "After step 6: later UI work" | not started; nothing is built before the audit |
 
@@ -66,7 +66,7 @@ maintainer decides on the ones that are unsure.
   "updated"). Step 5 C 1.
 - **The two origins are split before the site is announced.** The browser keeps the visitors' files, the downloaded engine,
   the tab lock, the sample's mark and the theme per origin, so a split after visitors used `dofile.dev/app/` would leave their
-  files behind. Built in this branch's pull request, not merged.
+  files behind. Built, not yet deployed.
 - **Step 3.5's three engine gaps** (`web-engine-data-flow.md`, Part 3): a Break pressed between sending a run and the worker
   starting it is lost and ends as a 9998 reset; when another page upgrades the database, the new worker mounts with a store
   error and an empty `/work`; if only the worker fails to open the store, an upload shows in the file list but `use` on it gives
@@ -206,7 +206,7 @@ build spec; `README.md` holds every round of feedback).
 6. **Hosting:** Cloudflare Workers static assets (`web/wrangler.jsonc` the site's and `web/wrangler.app.jsonc` the editor's, the isolation headers
    in the editor's build, `deploy.yml`). Each asset must be under 25 MiB, and there is no fallback start (the two snapshot files are about 20 MB each; `deploy.yml` fails over 25 MiB
    and warns over 23 MiB). The headers must be on every response, 304s included (WebKit refuses a worker whose cached 304 has
-   no COEP). Domain: `dofile.dev`, bought 2026-11-14; the split is in this branch's pull request (Status).
+   no COEP). Domain: `dofile.dev`, bought 2026-11-14; the split is built, not yet deployed (Status).
 7. **Pyodide self-hosted for the snapshot start** (2026-11-10, built): the build copies `pyodide.asm.wasm`, `python_stdlib.zip`
    and `pyodide-lock.json` from the `pyodide` npm package into `public/pyodide/`. `?snapshot=0`, the normal boot, keeps the CDN
    and is a diagnostic mode the page never names.
@@ -246,8 +246,8 @@ Other rules a builder needs:
 5. Lazy matplotlib (old step 4a, never started): keep it in Phase 2, icebox it, or drop it?
 6. Which verification items still `[ ]` or `[~]` must be `[x]` to close Phase 2: a real replication package, Break on a long
    model fit, Chrome and Edge as shipped, Android, Safari on a Mac, no request leaving the editor page, `pip install dofile`?
-7. The first real deploy's checks were to run on the one-origin site before the split. The split is now built, in this
-   branch's pull request. Run them on the one-origin site's workers.dev deploy before the split is merged, or on the split
+7. The first real deploy's checks were to run on the one-origin site before the split. The split is now built
+   (`deploy/dofile-dev`). Run them on the one-origin site's workers.dev deploy before the split is merged, or on the split
    site after it?
 8. The clean-room record's "Doubtful" list: 1 is half decided (the log head's "Stata 14 syntax" kept, step 4 A 10; the commands
    page's "Stata 14" was not decided on its own), 2 is iceboxed (step 5 C 3), 3 was replaced by the maintainer's text (step 5
