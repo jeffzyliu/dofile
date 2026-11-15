@@ -1,11 +1,10 @@
 # Test map
 
 What the tests are for, by function. This map describes scope, not numbers: it keeps no counts, so a branch that adds a
-test does not conflict with another. Web counts: `cd web && npm run test-counts` (per file and in total: unit tests as the
-runner counts them, e2e tests from `playwright test --list`; the script's header says how to get the e2e skips). Python
-counts: `uv run pytest --collect-only -q tests | tail -1` for dofile's own tests (the "deselected" part is the slow Stata
-comparison; `-o addopts=` counts it too, `-m slow` counts only it) and `uv run pytest --collect-only -q tests_opendta/tests | tail -1`
-for the vendored suite.
+test does not conflict with another. Web counts: `cd web && npm run test-counts` (per file and in total; the script's
+header says how to get the e2e skips). Python counts: `uv run pytest --collect-only -q tests | tail -1` for dofile's own
+tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts it too, `-m slow` only it) and
+`uv run pytest --collect-only -q tests_opendta/tests | tail -1` for the vendored suite.
 
 - [Python](#python): dofile's own tests, the conformance corpus, the vendored OpenDTA suite.
 - [Web](#web): unit and integration tests on Node's test runner (`node --test`), Playwright end-to-end tests.
@@ -25,19 +24,16 @@ for the vendored suite.
 ### dofile's own tests, by function
 
 **1. Engine adapter** (`test_engine.py`)
-- Result shape: log, rc, `results()`, `r(table)`, the e_changed and r_changed flags, JSON for missing values and matrices.
-- Error containment: a Python exception is rc 9999; a MemoryError outside a command, or a full WebAssembly heap's
-  ENOMEM, is r(909) after `on_memory_error`; a crash inside a program closes its scope; each call is a do-file scope.
-- Regression tests for OpenDTA fixes, named `test_odtN_*`: xtreg and areg weights, rc 603 and 909 for file
-  errors, legend and colour options, interaction names in `b`, `predict`, `ttest` options. These go with the patches in
-  `scripts/patches/`.
-- Safe expression evaluation: Stata expressions cannot reach Python.
+- Result shape: log, rc, `results()`, `r(table)`, the e_changed and r_changed flags, JSON for missing values and
+  matrices.
+- Error containment: a Python exception is rc 9999; a MemoryError or a full WebAssembly heap is r(909) after
+  `on_memory_error`; a crash inside a program closes its scope; each call is a do-file scope.
+- Regression tests for OpenDTA fixes (`test_odtN_*`, with the patches in `scripts/patches/`); Stata expressions cannot
+  reach Python.
 
 **2. Engine features added for the web demo** (`test_engine_web.py`)
-- Output streaming (`on_output`): batching, caps, truncation, failing receivers.
-- Error line numbers, including nested, included and earlier-run programs.
-- Which command made each graph, and the dark plot theme.
-- `describe_file`, `fresh_locals`, memory size.
+- Output streaming (`on_output`); error line numbers, including nested, included and earlier-run programs.
+- Which command made each graph, and the dark plot theme; `describe_file`, `fresh_locals`, memory size.
 
 **3. Interrupt and Break** (`test_break.py`; also the timeout and cancel tests in `test_worker.py`)
 - A Break stops between commands and keeps the data; loops stop between passes.
@@ -47,17 +43,13 @@ for the vendored suite.
 
 **5. Sandbox and security** (`test_sandbox.py`; also parts of `test_engine`, `test_worker`, `test_mcp`)
 - Denied commands return rc 199.
-- Reads and writes outside the allowed folders are blocked.
+- Reads and writes outside the allowed folders are blocked; symlinks cannot leave the workdir.
 - The audit hook blocks network access and subprocesses.
-- Symlinks cannot leave the workdir.
 - Unsafe mode over HTTP is allowed only on loopback.
-
-Each case runs in a subprocess, because audit hooks cannot be removed.
+- Each case runs in a subprocess, because audit hooks cannot be removed.
 
 **6. Workers and pool** (`test_worker.py`)
-- State persists between calls.
-- Dead or failed workers are reported, then restarted.
-- Forkserver use.
+- State persists between calls; dead or failed workers are reported, then restarted; forkserver use.
 - The pool isolates sessions, evicts only idle ones, reaps, and refuses when all are busy.
 
 **7. MCP server** (`test_mcp.py`)
@@ -69,15 +61,14 @@ Each case runs in a subprocess, because audit hooks cannot be removed.
 **8. CLI** (`test_dofile_cli.py`): exit codes, log and JSON output, nested do-files, `$` and backquotes in paths.
 
 **9. Browser and Pyodide shims** (`test_browser.py`, `test_pathshim.py`, `test_linalgshim.py`)
-- The browser entry point's JSON API, and the ballast the memory cap relies on (freed before each r(909) report of a
-  MemoryError, in or outside a command; taken again by the next run).
-- Mapping of foreign paths.
-- The `numpy.linalg` shim.
+- The browser entry point's JSON API, and the ballast the memory cap relies on.
+- Mapping of foreign paths; the `numpy.linalg` shim.
 - Guards: the web highlighter's command list matches the engine, and no new path sites appear in the engine.
 
-**10. Packaging** (`test_version.py`, `test_vendor.py`, `test_sample_data.py`): version stamps, the `MCP-SCHEMA.md`
-version line, the vendor stamp; the web demo's sample dataset (`web/sample/data/wages.dta`) is what
-`web/sample/make_sample.py` makes, byte for byte, and two builds make the same bytes (its `--check`).
+**10. Packaging** (`test_version.py`, `test_vendor.py`, `test_sample_data.py`)
+- Version stamps, the `MCP-SCHEMA.md` version line, the vendor stamp.
+- The web demo's sample dataset (`web/sample/data/wages.dta`) is what `web/sample/make_sample.py` makes, byte for
+  byte, and two builds make the same bytes (its `--check`).
 
 **11. Correctness against references** (`test_conformance.py`)
 - The `CHECK name=value` lines of the corpus files must match `data/ref.json` to 1e-6 relative. The values come from
@@ -90,16 +81,19 @@ version line, the vendor stamp; the web demo's sample dataset (`web/sample/data/
 
 These test the Stata-language engine itself. Grouping is by file name.
 
-- **Statistics and estimation** (the largest group): basestats, estimation, stats, vce, anova_estat, nptests, survival(2), timeseries,
+- **Statistics and estimation** (the largest group): basestats, estimation, stats, vce, anova_estat, nptests,
+  survival(2), timeseries,
   irf, multivariate(2, block), multilevel(1-3), panel_block, sem(2), gsem, irt, mi(2), svy(2), bayes, power(1-3),
   `models_block*`.
-- **Data management**: data, datamgmt, datamgmt_options, egen, combine, sample, replace_ts, datatools, codebook_bootstrap.
+- **Data management**: data, datamgmt, datamgmt_options, egen, combine, sample, replace_ts, datatools,
+  codebook_bootstrap.
 - **File I/O and formats**: dta, delimited, excel, infile, formats, storage.
 - **Language and programming**: language, lexer, expr, programming, programs, macrofuncs, matrix, mata, mata_classes,
   vector_functions, superscript.
 - **Graphics**: graphics.
 - **Epidemiology tables**: epitab.
-- **Robustness and tooling**: rng, numerics, hints, i18n, guard, logs, cli, compare_tool, updater, comandos, partial_features.
+- **Robustness and tooling**: rng, numerics, hints, i18n, guard, logs, cli, compare_tool, updater, comandos,
+  partial_features.
 - **Stata 14 reference logs** (slow): each `.do` file's output is compared with a log made by real Stata 14. The logs
   are not distributed (see `LICENSE-POLICY.md`).
 
@@ -110,161 +104,185 @@ These test the Stata-language engine itself. Grouping is by file name.
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. Several files make their tests in a
 loop, so a file has more tests than `test(` lines; `npm run test-counts` counts what the runner reports.
 
-| File | Function |
-|---|---|
-| `app.test.ts` | App controllers: start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, "Clear log" and `canClearLog`, toasts (their time, the error kind); banners; theme. The phone keyboard (`app/viewport.ts`): Safari's pan scrolled back, the editor's caret revealed when the keyboard opens, and the drag guard (which touchmoves are cancelled while the keyboard is open). With no engine a run or a command is refused, opens no prompt, runs nothing and stays out of `history`. "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, the hint's and toasts' words, and `startEngine` pressed in each state on the real controllers. Pasted lines (`log/pasterun.ts`): `pastePlan` with no engine, an engine not ready and a ready one, `putBack`, `startFirst`'s toasts, and stopping when another tab takes the engine. A run that rewrites an open file (`ranOver` for every open text tab, the run-changed banner); a run's promise settles even when the after-run work throws. |
-| `wakelock.test.ts` | The screen wake lock (`app/wakelock.ts`) with fakes: the policy for every state name; the lock taken for a run (kept through `breaking` and `waiting`) and let go at its end; asked again when a hidden page is shown; refused, late and pending requests (never two locks); no API; `stop()`. |
-| `files.test.ts` | Store and engine worker together: the journal, what a run changed, a worker that cannot open its store. |
-| `machine.test.ts` | State machine: the transition table, SPEC section 5 matching the code, invariants (stale events change nothing, one ticket issued once, one live worker, no run held: `send-run` only from a run in `ready`, and no state keeps a run's code), the race scenarios, and Start engine's event `ask` in `none`, `asking`, after a failed start and in `other-tab-idle`. |
-| `files-ui.test.ts` | The file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb: the tree's rows and the current folder (`folderOrAbove`); opening each kind of file (SPEC 3.11), closing, renaming and deleting with open tabs; a folder's .zip; upload and its name clashes (queued uploads and dialogs, "Do the same", unsaved files, the same bytes, control characters, the sample's words); `newPathProblem` (a draft's name that may be a path); paths in `use` and `import delimited` (`src/stata/quote.ts`); `fileTurn` during a rename or a delete. |
-| `client.test.ts` | Engine client and worker transport: downloading start files into the Cache (size checks, abort, build mismatch, entries the build's list does not name dropped, never while a worker is live), start and end rules, error kinds, interrupt. |
-| `store.test.ts` | IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock. |
-| `snapshot-native.test.ts` | Native library calls from an engine restored from the memory snapshot (skipped, as one test, without a current snapshot). |
-| `engine.test.ts` | The engine in Pyodide under Node: runs, results, graphs, Break, a worker that fails to load; the heap cap on a snapshot start (400 MB: a 10-million-row `generate` is r(909) and the data is kept; strings in globals until the heap is full, about 60 s, end as r(909), never rc 9999, and later runs work). |
-| `memcap.test.ts` | The memory cap's rule (`engine/memcap.ts`): iPhone, iPad and a touch Mac are capped (750 MB), a Mac without touch is not; `userAgentData.mobile` and `deviceMemory` of 4 or less; `?memcap=<MB>` wins both ways, 0 is none, a bad value is ignored and said; the console line; the loader patch for the cap applies to this Pyodide's `pyodide.asm.mjs` once and throws on other text. |
-| `editor.test.ts` | The editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/csv.ts`, `ranover.ts` and `words.ts`): the .log tokenizer; Download log's text; where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture` blocks, cases from the engine's own logs); the file a `do` names and the unsaved file it is; pasted lines (joined, in turn, stopping at a refused or failed line or before a block; the toast); Find's matches; `runError`; a .csv's columns; the run-head, last-run, time and memory words; a refused Ctrl/Cmd+Enter's toast; the held-Enter rule (`ui/keys.ts` `isHeldEnter`, `ignoreHeldEnter`); the error mark's rule (`editor/errormark.ts`); a run's version of an open file (`editor/ranover.ts`, line breaks compared as `\n`); a file's form, which Save keeps (`formOf`, `lineBreakOf`, `fileText`, `dropsBom`, `savedForm`: line breaks, a BOM, dropped for `.do` and `.ado`); Save's key (`editor/keys.ts`: Ctrl or Cmd with S on several layouts, never with Alt, AltGr or Shift). |
-| `straighten.test.ts` | Straight quotes for typed text (`src/stata/straighten.ts`): curly quotes and the em dash straightened, the en dash left; which `inputType`s count as typing; the caret and the text already there kept. |
-| `output.test.ts` | The Output tabs' logic (`app/output/format.ts`): number formats, missing values, a matrix as tab-separated text, the Results sections and groups (the engine's unchanged preset globals left out), the copy toast naming the row, a long Browse cell cut short, a graph's label and alt text, sizes. |
-| `states.test.ts` | Step 4d's plain logic (`app/states/words.ts`): Reset asked (`resetAsks`) unless the engine is `ready` and nothing has run on it since it started, `rerunPath` (the reset banner's "Run the file again": the cut run's file, only after a non-user reset that cut a file run), the stopping countdown at 0 s, the times, the reset banner's words by kind, the running banner's name of a run, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile, which the engine's own line says). |
-| `site.test.ts` | Step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`): the `{{version}}` and `{{engine-mb}}` placeholders and the rounding of the size; the commands list is every name of `commands.json` in order with the shortest form in bold; `browser.py`'s `DENIED` read from its source and marked; the six own prefixes against `language.ts`; no placeholder left once filled, and no unknown one; the pages' links (the site's pages by absolute path, the editor's address a build token, the `#browsers` section, `LANDING_URL` and `BROWSERS_URL` from the build); where each page is served (`/`, `/commands/`) and the headers file (isolation on `/app/*` only); the editor's location is one setting (`scripts/urls.ts`, read by the configs and scripts; the checks compare with the setting, not with `/app/`; no other source, CSS or JSON file, script, e2e test, config, page or workflow spells the editor's path after a quote, a backquote, `(` or `=`); the filter and its count ("N of M commands, 1 prefix"); the theme button's words, order and key equal the editor's (`src/site/theme.ts` against `src/app/theme.ts`); the clean-room greps (trademark line kept, no "CDN", no Stata example dataset, no manual, `.sthlp`, `.ado` or stata.com in the pages or the sample). |
-| `sample.test.ts` | The sample project's page logic (`src/app/sample.ts`) on the real store module: the generated `sample-files.ts` is current; a first visit writes it and opens `analysis.do`, once; never over a visitor's files, and not again after a delete-all; off under `?test` without `?sample`, and outside a page; a blocked store is not written; Restore (an upload of the sample) writes what is missing with a toast, leaves other files and opens `analysis.do`, and says "already here" when nothing was written or asked; a changed file is asked about in the clash dialog with the sample's words, Keep mine leaves it, Replace restores it and reloads its open tab; a seed whose write fails sets no mark and is tried again, and one whose opening throws resolves; Restore asks about a sample file open with unsaved edits even when its bytes are the sample's, and Replace reloads it; a tab whose file had a BOM and `\r\n` is given the sample's text; where storage is not kept, the seed's writes bring no storage banner and a Save, an upload or a run that writes a file afterwards does, and so does a change made while the seed is in progress. |
-| `sample-run.test.ts` | The sample's do-files in the page's engine (Pyodide in a worker thread): `analysis.do` and `helpers.do` end with rc 0, one graph, the loop and the program ran, and every output line of the landing page's "What a run looks like" is in that run's log. |
-| `imports.test.ts` | Architecture rules enforced by scanning source: every `:hover` rule of `ui.css`, `app.css` and `site.css` is inside `@media (hover: hover)` (SPEC; a tap on iOS leaves :hover on); import layering, single writers, single instances, one `postMessage` site; no old state flag outside the machine (except `editor/clock.ts` and `states/banners.tsx` reading `breaking`'s `resetAt`); the site pages' scripts, HTML and CSS in `src/site/` use only `src/site/` and `src/styles/`, and nothing outside `src/site/` uses them; `ignoreHeldEnter` is the `onKeyDown` of every Run button (counted in the source). |
-| `snapshot.test.ts` | Snapshot inflate and unpack. |
-| `linalgshim.test.ts` | The linalg shim in the Pyodide engine. |
-| `build-id.test.ts` | Build id and the staleness check. |
+- `app.test.ts`: the app controllers.
+  - Start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, toasts, banners,
+    theme.
+  - "Clear log" and `canClearLog`; a run that rewrites an open file (`ranOver`, the run-changed banner).
+  - The phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
+  - No engine: a run or command is refused and stays out of `history`.
+  - "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the real controllers.
+  - Pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the engine.
+- `wakelock.test.ts`: the screen wake lock (`app/wakelock.ts`) with fakes: the policy per state, taken for a run,
+  refused, late and pending requests, no API.
+- `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
+  store.
+- `machine.test.ts`: the state machine.
+  - The transition table, SPEC section 5 matching the code, the race scenarios.
+  - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
+  - Start engine's event `ask` in each state.
+- `files-ui.test.ts`: the file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb.
+  - The tree and the current folder; opening each kind of file (SPEC 3.11), closing, renaming, deleting with open tabs.
+  - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
+- `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
+  build
+  mismatch, stale entries), start and end rules, error kinds, interrupt.
+- `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock.
+- `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
+  test,
+  without a current snapshot).
+- `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break, a worker that fails to load.
+  - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
+    globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
+- `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
+  - iPhone, iPad and a touch Mac are capped (750 MB), a Mac without touch is not; `userAgentData.mobile`, `deviceMemory`
+    of 4 or less.
+  - `?memcap=<MB>` wins both ways, 0 is none, a bad value is ignored and said.
+  - The loader patch applies to `pyodide.asm.mjs` once and throws on other text.
+- `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`).
+  - The .log tokenizer, Download log's text, Find's matches, `runError`, a .csv's columns, the run-head words.
+  - Where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture`
+    blocks).
+  - Pasted lines: joined, stopping at a refused or failed line or before a block.
+  - The held-Enter rule, the error mark's rule, Save's key on several layouts.
+  - A file's form that Save keeps (`formOf`, `lineBreakOf`, `dropsBom`, `savedForm`); a run's version of an open file.
+- `straighten.test.ts`: straight quotes for typed text (`src/stata/straighten.ts`): which `inputType`s count, the caret
+  kept.
+- `output.test.ts`: the Output tabs' logic (`app/output/format.ts`): number formats, missing values, a matrix as text,
+  the
+  Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
+- `states.test.ts`: step 4d's plain logic (`app/states/words.ts`): `resetAsks`, `rerunPath`, the stopping countdown, the
+  banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
+- `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
+  - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
+    headers file.
+  - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
+    `language.ts`.
+  - The editor's location is one setting (`scripts/urls.ts`); the filter; the theme button equals the editor's.
+  - The clean-room greps: trademark line kept, no "CDN", no Stata example dataset, manual, `.sthlp`, `.ado` or
+    stata.com.
+- `sample.test.ts`: the sample project's page logic (`src/app/sample.ts`) on the real store module.
+  - The generated `sample-files.ts` is current.
+  - A first visit writes the sample and opens `analysis.do`, once; never over a visitor's files; not after a delete-all.
+  - Restore: writes what is missing, says "already here", asks in the clash dialog about a changed file.
+  - A failed seed write is tried again; where storage is not kept, the seed brings no storage banner.
+- `sample-run.test.ts`: the sample's do-files in the page's engine: rc 0, one graph, every output line of the landing
+  page's "What a run looks like" in the log.
+- `imports.test.ts`: architecture rules enforced by scanning source.
+  - Every `:hover` rule is inside `@media (hover: hover)` (SPEC).
+  - Import layering, single writers, one `postMessage` site; no old state flag outside the machine.
+  - The site pages use only `src/site/` and `src/styles/`; `ignoreHeldEnter` is the `onKeyDown` of every Run button.
+- `snapshot.test.ts`: snapshot inflate and unpack.
+- `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
+- `build-id.test.ts`: build id and the staleness check.
 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
-Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases: `poc.spec.ts` in every profile (fixme
-until step 6); the capped normal boot outside Chromium; the `?snapshot=0` normal boot in the two WebKit profiles (its
-package load stalls now and then on Linux); the folder upload outside Chromium (Playwright cannot give a folder to an
-input); a menu item's click focus in WebKit and the iPhone (Safari does not focus a clicked button); on the desktop
-profiles, the iPhone-only checks, the phone's file dropdown, the phone's strip and the phone command line's Run button; on the iPhone, the
-desktop-only tests (a tablist with no scroll group, a renamed row drawn late, the unsplit Output tabs by keyboard), the
-folded file list's rename, the .dta tab's focus and the banner's hand-off to a .dta tab.
+Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases:
+- `poc.spec.ts` in every profile (fixme until step 6).
+- The capped normal boot outside Chromium; the `?snapshot=0` normal boot in the two WebKit projects (its package load
+  stalls now and then on Linux).
+- The folder upload outside Chromium (Playwright cannot give a folder to an input).
+- A menu item's click focus in WebKit and the iPhone (Safari does not focus a clicked button).
+- On the desktop profiles: the iPhone-only checks, the phone's file dropdown, strip and command line Run button.
+- On the iPhone: the desktop-only tests (a tablist with no scroll group, a renamed row drawn late, the unsplit Output
+  tabs by keyboard), the folded file list's rename, the .dta tab's focus, the banner's hand-off to a .dta tab.
 
-- `shell.spec.ts`: desktop and phone layout (Unsplit shows the Log), the first visit (Not now; Run is "Start engine"),
-  toolbar stability (from 1440 to 390 px, the same boxes in all sixteen engine states, Run's labels), panes never
-  remounted, banners, toast position; the folded file list opened by keyboard with no files; no text naming a key in
-  sight on a phone, and on the desktop the Save chip's `aria-keyshortcuts` and "F2"; the status bar's "Not affiliated
-  with StataCorp" (shown at 1440 px, none at 1199 px, no overflow at 1200 px, none on the iPhone).
-- `keyboard.spec.ts`: the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, in every profile at
-  390 by 844 px, the keyboard played by script or a stand-in `visualViewport`: the layout while it is open and after it
-  closes, a tap on the command line (touch profiles only), a new file's name field and the editor's caret scrolled above it, and the drag
-  guard (synthetic touch events: what is cancelled while the keyboard is open, scrollers, moves under 4 px, selected
-  text). Safari not panning is for the iPhone.
-- `files.spec.ts`: the file tree by keyboard (modifier keys left to the browser); tabs opened and closed with and
-  without unsaved edits, Save and the focus after it; inline rename ("already exists", Esc at 1024 px, a row drawn
-  late); the row and head menus (arrow keys skip disabled items); delete and delete-all; upload with name clashes
-  (Enter, Esc, "Do the same", a dialog replaced, the focus after), the same bytes, a non-UTF-8 file, a folder upload
-  (Chromium), a drop anywhere on the page; New .do file and New folder (the name field focused within the tap's
-  microtasks, what Enter, Esc and leaving the field write, a name in use, a store that refuses); drafts in a folder and
-  a draft's name as a path (`sub/x.do`; `../foo.do` refused); the current folder (selecting, folding, the "+" button's
-  folder, rename and delete, forced colors in Chromium); the phone's strip, file dropdown (44 px targets, landscape)
-  and "Files ⋯"; the desktop's tablist.
-- `states.spec.ts` (step 4d): the prompt, Not now and the declined banner; the progress dialog; the take-over button
-  and a real second tab; the off command line where nothing can start the engine (`aria-disabled`, the hint, the
-  toasts, nothing dropped); a help link during a run; a held Enter on Run or Start engine clicks once
-  (`ignoreHeldEnter`); the 320 px phone layout; the failed banners; Download all; Reset during a run; where the focus
-  goes when a banner or a dialog's opener leaves; the running, stopping, waiting, storage, reset and download-failed
-  banners; the one-clock test (`page.clock`: the Break pill or status bar equal to the banner's time, "Stopping…" and
-  its countdowns); with an engine, Reset's dialog, when Reset asks, and the reset banner's "Run the file again".
-- `editor.spec.ts` (step 4b; the post-merge round added a Save during a rename's write and one during a delete's write, "the error line goes with its tab: a file closed and opened again with the same text has none" (renamed), the reset banner's cut file following a rename, open or closed): Ctrl/Cmd+Enter with the focus on a toolbar button runs the file once and does not press it; a checkbox, radio, button or contenteditable="false" area does not keep Ctrl/Cmd+Enter while a text field, textarea or editable element does, and an open menu blocks it (the probes are made in the page); with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
-  its toast (Ctrl+S and Cmd+S each pressed by name, so both save from the editor in every profile on any host; Ctrl+S
-  on a Cyrillic layout, an event made in the page with key "ы" and code KeyS, saves and prevents the browser's Save
-  page, and its repeats save nothing more), the focused editor's ring (an outline that forced colors give a system color while they drop the box-shadow; Chromium and Firefox, since WebKit forces no colors), a failed save's banner and its Download, a rename of
-  the open file that keeps its text and edits; a failed save's banner that goes when the editor takes the store's text again ("Reload from the run", "Replace with uploaded"); a Save that answers after its tab was renamed, which leaves the tab clean with the toast under the new name, and a failed one whose banner names the new name; Save keeps a file's form (a `\r\n` file edited and saved holds
-  `\r\n` throughout and is clean, an edit taken back to it clears the dot, the save-failed banner's Download has
-  `\r\n`, and so has the file renamed and saved; a `\n` file stays `\n`; a file's BOM is not in the editor, Save
-  writes a .csv's back and drops a .do's, keeping its `\r\n`; a renamed file follows its new name at the next Save: a .do
-  saved without its BOM stays without as .txt, a .csv's BOM goes when it is saved as .do); a .csv's
-  columns and a .log's lines in the editor, the Stata tokens, .md and .json tokens, a file dropped on the editor (uploaded, the text
-  unchanged), the editor's 16 px on a phone; the log's formatting as computed styles in light and dark (echo bold, output
-  400, error red and bold, hint and note muted; the phone's hint block), Go to line and the help link shown, the
-  run-head, Download log without the head, run-head or notes; Find in the log (every match counted and numbered in
-  the log's order, Enter and Shift+Enter, "none", the Log tab shown first when unsplit, Esc back to the Find button or
-  the phone strip's "Log ⋯"); the unsplit Output tabs by keyboard (each arrow, Home and End moves the focus to the tab
-  it selects, and with Find open the Log drawn again leaves the focus on its tab, not in Find's field); Clear log asks first (the head's "Clear…", or the strip's "Log ⋯" menu item on a phone: Cancel and
-  Esc keep the log and the graphs and give the focus back to the opener; "Clear log" removes them, the head stays, and the focus
-  does not fall to the page when the head's button is disabled by it) and is disabled with nothing to clear; the error line that keeps to its text across a tab switch, and its rule (a command and another file's run leave it; a
-  run of the file, a reset and the line's deletion clear it), and back when its file is closed and opened again with the same text (not with other text); the notes at a run's end wrapping in the Log pane with Go to line in view (1440, 1200, 900 and 700 px, and the phone); the OQ-10 notes under an error (the error the run ended with, not one `capture noisily` caught; and none for the tempfile,
-  whose note the engine prints); the phone ⋯'s Save off on a .dta tab; a command's Break note with no line, and a
-  phone's inline graph on its run's card; with no engine, Import and a hint's `help x` link off (`aria-disabled`, `.off`,
-  still focusable; a press only shows the toast "Start the engine to import t.csv" or "… to see help summarize": no
-  prompt, no drop, nothing in `history`), and on again with an engine. With an
-  engine: the command line with no engine first (disabled, the hint as its placeholder, whole and at the text contrast
-  in both themes; "Start engine" in words in place of "Run command", wider than the phone's 44 px icon, the field
-  taking what is left; a paste of two lines is not prevented and runs nothing, opens no prompt, shows no toast and
-  drops nothing; "Start engine" opens the prompt; ready, nothing ran; a typed draft stays through a loss of the engine,
-  readable, and Enter runs it when the engine is back); nothing offers to run with no engine (the toolbar has "Start
-  engine" and no Run; Run selection disabled with a selection; a held Ctrl/Cmd+Enter opens the prompt once and its
-  repeats do not press "Download"; the button does the same; ready, nothing ran and nothing was dropped; then
-  Ctrl/Cmd+Enter runs); a start in progress and a failed start, with the build's list held and then refused by the
-  test (a command typed during the download: Enter and the off "Run command" give the "starting" toast and the text
-  stays; a paste of lines is prevented, the field unchanged, with "3 of 3 pasted lines not run…"; the start fails with
-  the field focused: it is off, keeps its text and the focus, and Enter says the hint; the command line's "Start
-  engine" by keyboard tries again and the off "Run command" in its place keeps the focus, a second Enter there gives
-  the toast and no third request; the toolbar's "Start engine" by keyboard becomes "Starting…", `aria-disabled`, still
-  focused, and a second Enter gives the toast; Ctrl/Cmd+Enter in the editor after a failed start tries again, Ctrl/Cmd+Enter from anywhere on the page runs (not in the command line, not with a dialog open, once while held), with no
-  toast; with reason "updated" it gives the toast and no request); a .dta tab (Save off; the command line disabled; Start engine opens the prompt; the focus on its tab when the engine's
-  prompt closes by itself, and nothing ran); Run (the run-head, the
-  graph link after the echo of its line or inline on a phone, the error line marked, Go to line, the status bar or the
-  phone's strip), Run selection (Ctrl/Cmd+Enter or the phone's "Run line 7", with the locals an earlier run set); Break
-  (its note "before line N" and its Go to line, no error mark, the pill's time on a phone, and on a phone the pill
-  tapped on the Editor view shows the Log view); the command line (Enter, ↑, a paste of lines that stops at an error
-  with its toast, an ordinary paste, one line with its line break that runs nothing); the phone keyboard's flags (with no engine, the `engine` signal set to show `ready` so the field is on: the command line's autocorrect, autocapitalize, spellcheck and enterkeyhint, the phone's Run icon button or the desktop's text button, never both; typed curly quotes and an em dash straightened with the caret kept, a paste, a drop and an en dash left; in the editor, typed curly quotes straight in a .do and kept in a .md, a paste kept; with an engine, on the phone only: a tap on Run runs the text and leaves the focus in the field, an empty field runs nothing); a run that rewrites open files (a
-  clean tab shows the run's version; one with edits keeps them, unsaved, with the run-changed banner and "Reload from
-  the run", on a phone also on the Log view; the same text again changes nothing and keeps the selection; a clean tab
-  shown the run's new rows keeps its selection, and one undo takes the change back; a `.dta` saved over the open file
-  keeps its text, unsaved, with the not-text banner and no reload, and a run that then writes the editor's text makes the tab clean and takes the banner away; the banner follows a rename and goes with the tab); a clean tab of a `.csv` with `\r\n` breaks that a run rewrites shows the run's version, with no dot and no banner; a
-  file's form follows what the editor takes from the store (a run's `\r\n` version, shown or kept with edits, saved
-  with `\r\n`; "Reload from the run" of a version with a BOM and `\r\n` after a run's `\n` one, saved with both), and a do-file with a BOM fails in a nested
-  `do` with r(198) (ODT-34, in the page's engine), runs from the editor (Run sends no BOM), and once saved from the
-  editor has no BOM and runs in a nested `do`; S 15's note under a nested `do` of a file with unsaved edits in a loop: one, after the loop's echo of that line, though the loop runs the file twice; Ctrl/Cmd+Enter during a run says so in a toast and starts nothing, pressed when ready it runs with no toast, and a held key's repeats run nothing. The Break test's loop is `while 1`, so Break always lands inside it. The log follows its end through seven runs of wide lines (the running banner shrinks the pane by its height and gives it back each run), also scrolled sideways; it keeps its place after the visitor scrolls up, and follows again once scrolled back to the end (a wheel event stands in for the visitor's input). Pasted lines (12 wide `display` lines and a `foreach {` that stops the paste) leave the log at its end after each of three pastes, with the banner going and coming back for each line, and a paste leaves a log the visitor scrolled up where it was.
-- `landing.spec.ts` (step 5): the landing page at `/` (content, no placeholder left) and the editor at `/app/`; Open the editor and back (the wordmark, or the phone's About dofile), the editor showing the sample's `analysis.do`; the other-tab dialog's Close editor and the failed-start banner's Browsers that work (a new tab at `/#browsers`), each asserted by the landing page's own content, not the URL; the commands link (`/commands/`); the download size in the text equals the build's (`/app/start-files.json`) rounded as the prompt does; the theme button cycles and is the editor's choice too, and the first paint has it with every module blocked; the theme button keeps its word at the profile's width (a phone too) and shows three different icons, and at 320 px shows the icon only (named, inside the viewport) while the word shows at 360 px; Copy (stubbed clipboard, the button's clipboard icon, its face "Copied" for 2 s at the same size with its name kept, the live region, the ok color's contrast in both themes); each Copy button inside its code box (at least 24 px high) and the one-line box no higher than its line; the banner's five rows one line-height apart (the phone's hero, or welcome.do); welcome.do and the run's log at 980 px: named regions in the tab order that scroll sideways by keyboard, the page not; axe in both themes on both pages, and on the landing page at 980 px; no sideways scroll, and the banner's color in forced colors; the site's addresses (the pages at `/` and `/commands/`, the editor under `/app/`, `/app` and `/commands` redirected with the query kept, `/landing.html`, `/commands.html`, `/_headers` and missing pages a 404, the isolation headers on `/app/` only); the landing and commands pages request only their own `/assets/` script, stylesheet and fonts, nothing under `/app/`; with scripts off both pages are complete, with no button that needs a script.
-- `commands.spec.ts` (step 5): every name of `commands.json` once and in order, in columns, the shortest form in bold, the prefixes, `shell` and `webuse` marked off; the filter (contains, case and spaces ignored, the count, a prefix-only match that hides the commands' section and counts "1 prefix", the empty message with the prefixes' note hidden, the list back); no link to a help page and no manual or help-file wording.
-- `sample.spec.ts` (step 5): a first visit lists the sample and opens `analysis.do`, a later visit writes nothing (the mark; a deleted file stays deleted); never over a visitor's files, and not under `?test` alone; Restore the sample as an upload (position above Delete all files…, the toast, `analysis.do` made the active tab, "already here", the clash dialog on a changed file with the sample's words: Keep mine focused and keeps it, Replace with the sample restores it, other files untouched); the sample runs in the real engine at `/app/` to a table and a graph; where the browser keeps no storage, the sample's write brings no storage banner and the visitor's own change does.
-- `step2.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
+Specs:
+- `shell.spec.ts`: layout and toolbar.
+  - Desktop and phone layout; the first visit; the toolbar stays put from 1440 to 390 px in all sixteen engine states.
+  - Panes never remounted; banners; toast position; no key names on a phone.
+  - The status bar's "Not affiliated with StataCorp" (at 1440 px, not at 1199 px, not on the iPhone).
+- `keyboard.spec.ts`: the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, at 390 by 844 px:
+  layout while it is open and after, a tap on the command line, a new file's name field, the drag guard.
+- `files.spec.ts`: files, tabs and the file panel.
+  - The tree by keyboard; tabs with and without unsaved edits; Save; inline rename; row and head menus; delete.
+  - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page.
+  - New .do file and New folder; drafts in a folder; the current folder (selecting, folding, rename and delete).
+  - The phone's strip, file dropdown (44 px targets) and "Files ⋯"; the desktop's tablist.
+- `states.spec.ts` (step 4d): engine states and their banners.
+  - The prompt, Not now, the progress dialog, the take-over button and a real second tab.
+  - The off command line where nothing can start the engine (`aria-disabled`, the hint, toasts, nothing dropped).
+  - A held Enter on Run or Start engine clicks once; the 320 px phone layout.
+  - Each banner (running, stopping, waiting, storage, reset, failed, download-failed) and where the focus goes.
+  - Download all; Reset during a run; Reset's dialog and "Run the file again".
+  - One clock (`page.clock`): the Break pill or status bar equals the banner's time.
+- `editor.spec.ts` (step 4b): the editor, the log and the command line, in the page.
+  - Ctrl/Cmd+Enter: runs once, which focused elements keep it, an open menu blocks it, held repeats run nothing.
+  - Typing and the unsaved dot, Ctrl/Cmd+S, a failed save's banner, Save during a rename's or a delete's write.
+  - Save keeps a file's form: `\r\n`, `\n` and BOM (written back for a .csv, dropped for a .do).
+  - Tokens by file type; a file dropped on the editor is uploaded; 16 px on a phone.
+  - The log: formatting, Go to line, the run-head, Download log, Find, Clear log; the unsplit Output tabs by keyboard.
+  - The error line: kept across a tab switch, its clear rules, back when its file is closed and opened with the same
+    text.
+  - Notes at a run's end (OQ-10: not for a `capture noisily` error, none for the tempfile); a Break note with no line.
+  - No engine: Import and a hint's `help x` link off, the command line disabled, "Start engine" opens the prompt, a
+    typed
+    draft survives a loss of the engine; a start in progress and a failed start (toasts, kept text, retry, no second
+    request).
+  - A .dta tab: Save off, the command line disabled.
+  - Run, Run selection, Break (its note "before line N", no error mark), the command line (pastes that stop at an
+    error).
+  - The phone keyboard's flags and straight quotes (kept in a .md); a tap on Run keeps the focus.
+  - A run that rewrites open files: a clean tab shows the run's version, one with edits keeps them with the run-changed
+    banner and "Reload from the run"; a `.dta` saved over an open file gets the not-text banner.
+  - A do-file with a BOM fails in a nested `do` with r(198) (ODT-34, in the page's engine), runs from the editor, and
+    once saved has no BOM.
+  - S 15's note under a nested `do` of a file with unsaved edits in a loop: one, though the loop runs the file twice.
+  - The log follows its end through wide lines and pastes, and keeps its place once scrolled up. The Break test's loop
+    is `while 1`.
+- `landing.spec.ts` (step 5): the landing page at `/` and the editor at `/app/`.
+  - Content with no placeholder left; Open the editor and back; Close editor and Browsers that work (`/#browsers`).
+  - The download size in the text equals the build's (`/app/start-files.json`), rounded as the prompt does.
+  - The theme button (shared with the editor); Copy buttons; axe in both themes; forced colors.
+  - The site's addresses: redirects keep the query, a 404 for missing pages and `/_headers`, isolation headers on
+    `/app/` only.
+  - The pages request only their own `/assets/`; with scripts off both are complete.
+- `commands.spec.ts` (step 5): every name of `commands.json` once and in order, the shortest form in bold, the prefixes,
+  `shell` and `webuse` marked off; the filter and its count; no help-page link or manual wording.
+- `sample.spec.ts` (step 5): the sample project.
+  - A first visit lists the sample and opens `analysis.do`; a later visit writes nothing; never over a visitor's files.
+  - Restore the sample as an upload: toast, "already here", the clash dialog (Keep mine, Replace with the sample).
+  - The sample runs in the real engine at `/app/` to a table and a graph.
+  - Where the browser keeps no storage, the sample's write brings no banner and the visitor's own change does.
+- `step2.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
+  URL flag.
 - `fixtures.spec.ts` (no browser page): `retryFirstGoto` in `fixtures.ts`, which the `page` fixture applies to every
-  test's page (and `engine.spec.ts`, `step2.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on a
-  page still at `about:blank` is retried once and logs a "timed out on a fresh page" line (WebKit bug 325840 on Linux
-  CI); a second timeout, another error, or a page that has left `about:blank` is not retried.
-- `poc.spec.ts` (all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept page.
+  test's page (and `engine.spec.ts`, `step2.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on
+  a page still at `about:blank` is retried once and logs "timed out on a fresh page" (WebKit bug 325840); a second
+  timeout, another error, or a page that has left `about:blank` is not retried.
+- `poc.spec.ts` (all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept
+  page.
 - `engine.spec.ts`: runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start;
-  the memory cap (`?memcap=400`: a 10-million-row `generate` is r(909), the engine stays `ready` and the data is kept),
-  also on the normal boot (`?snapshot=0&memcap=400`, Chromium only).
-- `output.spec.ts` (step 4c): the three empty states and the reset wording; a .png on the light card in the dark
-  theme; .dta tabs whose name a command can't hold and with no engine (Load off, its toast); with an engine, the Graph
-  tab and the full-size view (keys, focus, Copy image, Export PNG, the phone's buttons, the live region), the Data tab
-  (filter, keys, Show 50 more, a cut cell), the Results tab (sections, Globals without the presets, copying by click,
-  tap, keyboard and without the clipboard API, its toasts and marks, a drag that copies nothing, matrices), and a .dta
-  tab (variables, `describe_file` leaves the data, Load). The clipboard is a recorder in every page.
+  the memory cap (`?memcap=400`: a 10-million-row `generate` is r(909), the engine stays `ready`, the data is kept),
+  also
+  on the normal boot (`?snapshot=0&memcap=400`, Chromium only).
+- `output.spec.ts` (step 4c): the Output tabs.
+  - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
+  - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the
+    Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).
+  - The clipboard is a recorder in every page.
 
 ## Conformance corpus: value and limits
 
 **Why it is worth keeping**
-- It is the only independent numerical oracle. The values in `ref.json` come from statsmodels and linearmodels. The
-  vendored suite compares OpenDTA with its own expectations, so it cannot catch a wrong result that OpenDTA gives
-  consistently.
+- It is the only independent numerical oracle: `ref.json` comes from statsmodels and linearmodels, while the vendored
+  suite compares OpenDTA with its own expectations and cannot catch a wrong result it gives consistently.
 - It runs where the other suites do not: through dofile's `Engine` with the sandbox on, and in Pyodide, where
   `check-snapshot` compares the browser's output with CPython's.
 - A strict xfail turns a fixed upstream gap into a failing test, so the xfail gets removed.
-- The probes found a real bug (`xtlogit, re` crashed; see `docs/archive/engine-evaluation.md`).
-- It is cheap: a few dozen cases.
+- The probes found a real bug (`xtlogit, re` crashed; see `docs/archive/engine-evaluation.md`). It is cheap: a few dozen
+  cases.
 
 **Limits**
 - Narrow numeric coverage: mostly OLS, IV, logit, probit, Poisson, fixed effects and clustered standard errors.
   Survival, multilevel, SEM, time series and nonparametric tests have no independent reference; the Stata 14 log
-  comparisons cover far more.
-- Not every check is independent. The data-management, programming and error checks (counts, `wordcount`, `err_*_rc`)
+  comparisons cover far more, as does the vendored suite for basic regression.
+- Not every check is independent: the data-management, programming and error checks (counts, `wordcount`, `err_*_rc`)
   are regression tests with expected values set by hand.
 - The probes assert rc 0 only, so a wrong output passes. Two probes are expected failures (`esttab`, `outreg2`).
 - The one xfail among the value checks (`reghdfe`, GAP-1) is a missing community command, not a bug, so it will never
   flip by an upstream fix.
-- Much of the basic regression ground is also covered by the vendored suite and the Stata logs.
-- The tolerance is 1e-6 relative for every value. Iterative estimators (nonlinear, multilevel) may need a looser,
-  per-value tolerance.
+- The tolerance is 1e-6 relative for every value; iterative estimators (nonlinear, multilevel) may need a looser one.
 
 **Recommendations to broaden it** (none done yet; roughly cheapest first)
 1. Make each probe check one key number against a reference, so a probe fails on a wrong result as well as on a crash.
@@ -281,9 +299,11 @@ folded file list's rename, the .dta tab's focus and the banner's hand-off to a .
 
 ## What is not covered
 
-- Component rendering and styling are checked only by the e2e tests (each in four profiles); the unit tests drive the controllers,
+- Component rendering and styling are checked only by the e2e tests (each in four profiles); the unit tests drive the
+  controllers,
   not the Preact views.
-- The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`, the snapshot job);
+- The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`,
+  the snapshot job);
   `check-pytest` and `check-numeric` are run by hand.
 - Probes check rc 0 only, not output.
 
@@ -296,7 +316,8 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   caps the cost. The `page` fixture's one retry (`web/e2e/fixtures.ts`) fired twice in the 42 WebKit and iPhone jobs
   since it landed (runs 43497316688 `[webkit]` and 43503620201 `[iphone]`, 2026-11-13), and the test passed both times.
   Causes: `docs/phase2-history.md`, "Prototype 1: the record from 'Where things stand'".
-- **`?snapshot=0` normal boot stalls at "Loading packages" in WebKit on Linux.** 2 sightings: runs 43295867614 (`[iphone]`)
+- **`?snapshot=0` normal boot stalls at "Loading packages" in WebKit on Linux.** 2 sightings: runs 43295867614
+  (`[iphone]`)
   and 43350296329 attempt 1 (`[webkit]`). Now skipped in the two WebKit projects (#34).
 - **`shell.spec.ts` "the toolbar does not move"** failed about 3 runs in 8 on the phone profile (locally 5 in 8; no CI
   sighting in 133 runs): its first measurement could come before the web fonts, in the fallback font. Fixed
@@ -305,14 +326,17 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
 - **`engine.test.ts` "engine worker: files, run, describe, matrix, Break, a new worker after end()"** failed once when
   Pyodide's CDN did not answer (`micropip`: `fetch failed`, then `ModuleNotFoundError`; run 43381169730, `types, unit
   tests, build`, on #27 `ad1d85e`, 2026-11-13). Passed on the next run.
-- `editor.spec.ts` "a rename while Save writes" was reported to fail about 1 run in 16 in Firefox (suspected cause and the
+- `editor.spec.ts` "a rename while Save writes" was reported to fail about 1 run in 16 in Firefox (suspected cause and
+  the
   test changes: `docs/phase2-history.md`, "Post-merge review"). Not seen since: no failure in the 133 CI runs up to
-  2026-11-13, 24 Firefox runs each before and after the `focusRow` rewrite passed, and 16 of 16 passed on `main` (00821e2)
+  2026-11-13, 24 Firefox runs each before and after the `focusRow` rewrite passed, and 16 of 16 passed on `main`
+  (00821e2)
   locally. Kept here until about ten more runs have passed.
 
 ## Running them
 
 See `CLAUDE.md` (Commands) for the full list. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
-`uv run poe slow` (Stata 14 logs), `uv run poe opendta` (vendored suite), `cd web && npm test` and `npm run check` (Biome,
+`uv run poe slow` (Stata 14 logs), `uv run poe opendta` (vendored suite), `cd web && npm test` and `npm run check`
+(Biome,
 then `tsc`), `npm run e2e` (Playwright). The format and lint gates are `uv run poe lint` and
 `cd web && npm run lint:strict`; `docs/archive/formatting-proposal.md` has the rest.
