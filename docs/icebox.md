@@ -191,6 +191,6 @@ estimated splits) are the study's, not checked again here.
 
 - **The vendored clean-room policy's Portuguese link is dead.** `scripts/vendor_opendta.py` copies upstream's
   `docs/clean-room-policy.md` as `src/dofile/_vendor/opendta/CLEAN_ROOM_POLICY.md` and not its translation, so the file's
-  `[Português](clean-room-policy.pt-BR.md)` points at nothing. Not to be fixed: the maintainer keeps the English file's
+  "Português" link to `clean-room-policy.pt-BR.md` points at nothing. Not to be fixed: the maintainer keeps the English file's
   name `CLEAN_ROOM_POLICY.md` (like `THIRD_PARTY_NOTICES.md` beside it, and as `LICENSE-POLICY.md` links to it) and does
   not need the translation. A link check over the whole tree reports this one. 2026-11-15.

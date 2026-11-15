@@ -330,8 +330,8 @@ restarts the engine). Numbers read by hand, a few runs each: an indication, not 
   Playwright's Chromium has no native brotli in `DecompressionStream`; a current Chrome or Edge was not tried.
 - **A run of the sample program** (regress and a scatter plot), desktop, first run then second, in seconds: normal boot
   0.8–1.1 then 0.04–0.06; snapshot 0.09–0.13 then 0.05–0.06 (the snapshot has matplotlib loaded). On the phone a run
-  took 2–3 s in snapshot mode until the snapshot, older than the code, was rebuilt: then 0.1–0.2 s against 0.1–1 s on the normal boot (cause not
-  established).
+  took 2–3 s in snapshot mode until the snapshot, older than the code, was rebuilt: then 0.1–0.2 s, against 0.1–1 s on
+  the normal boot (cause not established).
 - **Where the time goes** is in the client's `startup`, the worker's `[dofile] snapshot start` console line and a run's
   `timing` (until prototype 1, step 3, the page's status line). A snapshot start: `[download|read from cache X s, unpack
   X s (heap, site-packages, decoder native|wasm), restore X s, files X s, engine X s; not cached]`. A normal boot:
@@ -362,8 +362,8 @@ desktop. What was found:
   snapshot worked on the phone.
 - **`cProfile` is not a speed measurement.** Profiled, a scatter took 2.8–3 s on the phone against 0.1 s unprofiled, and
   a normal boot's first graph 64 s (39 s in `compile`: matplotlib ships without `.pyc` files). The profiler's hook costs
-  far more on the phone than in Node (0.17 s profiled, 0.04 s not). Use it for the shape of the time only. A check that the phone itself is fine:
-  `sum(range(10**7))` took 0.4 s in Pyodide's console (`pyodide.org/en/stable/console.html`).
+  far more on the phone than in Node (0.17 s profiled, 0.04 s not). Use it for the shape of the time only. A check that
+  the phone itself is fine: `sum(range(10**7))` took 0.4 s in Pyodide's console (`pyodide.org/en/stable/console.html`).
 - **The slow earlier numbers were the phone's state.** "2–3 s per graph in snapshot mode" and "normal boot too slow to
   start" were measured with the inspector on and did not come back after the fixes (the second graph 0.1 s or less).
 - **`save` of 1 s on some runs**: Safari's IndexedDB took about 1 s on some of the worker's writes of `/work` after every
