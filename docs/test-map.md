@@ -156,6 +156,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
+  - The icons: the editor, landing and commands pages link the same three (`src/icons/`), each by a relative path the
+    build hashes, and the files exist.
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
     `language.ts`.
   - The editor's location is one setting (`scripts/urls.ts`: the production and local addresses, each ending in a slash;
