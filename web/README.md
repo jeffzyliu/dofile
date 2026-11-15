@@ -162,17 +162,11 @@ over 25 MiB and warns over 23 MiB.
     On a pull request only when one of its inputs changed (the `ENGINE` list in `web.yml`: the Python engine and build
     files, the extra wheels, the Pyodide version, `web/src/engine/`, the snapshot scripts and tests, the conformance
     corpus, `tests_opendta/`); on `main` always.
-- `.github/workflows/deploy.yml`, on every push to `main` and by hand: runs `ci.yml`, `web.yml` and `lint.yml` on the
-  commit and deploys both Workers only if all three passed and the commit is still the tip of `main`. The build (shared
-  with previews: `.github/actions/build-web`) makes the snapshot too, cached on a hash of its inputs. Needs the repo
-  secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`. Afterwards `scripts/smoke.ts` checks both domains answer
-  200, the landing page links to the editor and the editor is cross-origin isolated
+- Deploys: `.github/workflows/deploy.yml` (production, after `ci.yml`, `web.yml` and `lint.yml` pass on the tip of `main`)
+  and `preview.yml` (a preview of both Workers per pull request from a branch of this repo, uploaded with
+  `wrangler versions upload --preview-alias pr-<N>`). Both build through `.github/actions/build-web`, which makes the
+  snapshot too, cached on a hash of its inputs, and `scripts/smoke.ts` checks the result
   (`node scripts/smoke.ts [<site URL> <editor URL>]`; no URLs: production).
-- `.github/workflows/preview.yml`, for a pull request from a branch of this repo (not a fork): builds both parts linking to
-  `https://pr-<N>-dofile-app.<subdomain>.workers.dev/` (editor) and `https://pr-<N>-dofile.<subdomain>.workers.dev/`
-  (pages), uploads them with `wrangler versions upload --preview-alias pr-<N>` (production does not change), runs the same
-  smoke check, and keeps one comment on the pull request with the two addresses. `<subdomain>` is the repo variable
-  `CLOUDFLARE_WORKERS_SUBDOMAIN`.
 
-One-time setup (domain, Cloudflare account, token, secrets) and the first deploy: [`../docs/deploying.md`](../docs/deploying.md).
+The workflows, secrets, one-time setup and the first deploy: [`../docs/deploying.md`](../docs/deploying.md).
 `check-pytest` and `check-numeric` are run by hand. The Python suite is `.github/workflows/ci.yml`.
