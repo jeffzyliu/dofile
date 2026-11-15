@@ -177,7 +177,7 @@ sequenceDiagram
   E->>E: lock.take()
   E->>T: lock-answered (owned)
   Note over T: not owned: other-tab-idle, store stays blocked
-  T-->>E: checking-cache; effects own-files, check-cache
+  T-->>E: checking-cache (effects own-files, check-cache)
   E->>DB: unblock, list files
   E->>C: cached()
   C->>CA: is every start file of this build here?
@@ -189,7 +189,7 @@ sequenceDiagram
   C->>CA: fetch the list, checkBuild, fetch each start file, check its size, put
   C-->>E: progress (state downloading)
   E->>T: download-done (build)
-  T-->>E: starting-worker; effect start-worker
+  T-->>E: starting-worker (effect start-worker)
   E->>C: start(n, build, reply)
   C->>W: new Worker, then mount (with the build's files)
   W->>CA: read snapshot files
@@ -250,7 +250,7 @@ sequenceDiagram
   V->>R: runCode(code, head)
   R->>E: run(code, head)
   E->>T: run event
-  T-->>E: running; effect send-run
+  T-->>E: running (effect send-run)
   E->>R: handlers.began(head, theme): run-head and an empty text item go into the log
   E->>C: run(n, args, onLog)
   C->>W: id, op run
@@ -267,7 +267,7 @@ sequenceDiagram
   W-->>C: id, result
   C-->>E: reply(run-ended, result)
   E->>T: run-ended
-  T-->>E: ready; effect end-run
+  T-->>E: ready (effect end-run)
   E->>R: handlers.ended(result)
   R->>R: replace the text with result.log, add graphs, set lastRun, results
   R->>DB: afterRun: list files
