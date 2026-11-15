@@ -17,6 +17,24 @@ This file covers the one-time setup, the order it has to happen in, and what to 
 two builds link to each other is in `docs/design/SPEC.md`, section 8, "URLs". Prices and policies were checked on
 2026-11-13. Check the price again at checkout.
 
+## Every workflow at a glance
+
+All in `.github/workflows/`. The required checks are the branch ruleset's; on `main`, called from `deploy.yml`, the same
+checks are named `ci / ci ok`, `web / web ok` and `lint / lint ok`.
+
+| Workflow | Trigger | What it runs | Required check | Secrets, variables |
+|---|---|---|---|---|
+| `ci.yml` | pull request; called by `deploy.yml`; by hand | ruff (`poe lint`); `poe ci` on Ubuntu and macOS × Python 3.12, 3.13, 3.14. A pull request that touches none of its files skips the jobs | `ci ok` | none |
+| `web.yml` | pull request; called by `deploy.yml`; by hand | `npm run check`, the `commands.json` diff, `npm test`, a production build; Biome strict; e2e, one job per Playwright project (4); the memory snapshot and `check-snapshot`. Same skipping | `web ok` | none |
+| `lint.yml` | pull request; called by `deploy.yml`; by hand | actionlint and shellcheck, when `.github/workflows/`, `actions/` or `scripts/` changed (always on `main`) | `lint ok` | none |
+| `deploy.yml` | push to `main`; by hand (deploys only on `main`) | the three above, then, if all passed and the commit is still the tip of `main`, `build-web`, `wrangler deploy` of both Workers and `scripts/smoke.ts` | none | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; `github.token` (tip check) |
+| `preview.yml` | pull request that changes `web/`, `src/`, `pyproject.toml`, `uv.lock`, `build-web` or itself; not forks or Dependabot | `build-web` with the preview addresses, `wrangler versions upload --preview-alias pr-<N>` of both Workers, `scripts/smoke.ts`, one comment with the addresses ([section 4](#4-pull-request-previews)) | none (does not wait for the tests) | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; variable `CLOUDFLARE_WORKERS_SUBDOMAIN`; `github.token` (`pull-requests: write`, comment job only) |
+| `release.yml` | push of a tag `v*` | tag on `main` and equal to `pyproject.toml`'s version, `poe test`, `uv build`, `twine check`, the wheel's smoke test, then `uv publish` ([`docs/releasing.md`](releasing.md)) | none | no secret: PyPI Trusted Publishing (OIDC), environment `pypi` |
+| Dependabot (`.github/dependabot.yml`) | weekly | update pull requests for the GitHub Actions in the workflows and in `.github/actions/*` | (its pull requests run the checks above) | none |
+
+`build-web` is the composite action `.github/actions/build-web` (the wheel, the snapshot at quality 11, both builds, the
+size check); the tip check is `.github/scripts/is-main-tip.sh`. Why: [How the workflows work](#how-the-workflows-work).
+
 ## 1. Buy the domain
 
 **Use Cloudflare Registrar.** The domain, its DNS zone and the Workers then all sit in one account.
