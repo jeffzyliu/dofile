@@ -369,7 +369,7 @@ Output:
 }
 ```
 
-See [Upload endpoint](#upload-endpoint).
+See [Upload and download endpoints](#upload-and-download-endpoints).
 
 ### `request_download` (HTTP only)
 
