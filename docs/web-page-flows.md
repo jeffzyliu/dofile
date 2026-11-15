@@ -119,7 +119,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | `useFocusRequest`; once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
-| `output/clip.ts` `fallbackCopy` | a copy without the clipboard API (plain HTTP): Results, Copy on a .dta tab or a file's bar | synchronous: the hidden field takes the focus to copy, then gives it back only to an element that had keyboard focus (`:focus-visible`) | that element; after a click the focus stays off (the page body), so no ring shows. The Results tab moves no other focus (SPEC 3.9) |
+| `output/clip.ts` `fallbackCopy` | a copy without the clipboard API (plain HTTP): Results, Copy on a .dta tab or a file's bar | synchronous: the hidden field takes the focus to copy, then gives it back only to an element that had keyboard focus (`:focus-visible`) | that element; after a click the focus stays off (the page body), so no ring shows. The Results tab moves no other focus: every value is a Tab stop, no arrow keys (SPEC 3.9) |
 
 A mouse click on a tab's × that closes a clean tab calls no `focusAfterClose` (`EditorTabs` passes `keyboard: false`).
 
@@ -382,7 +382,8 @@ becomes ready.
 - **A held Enter acts once.** A button that keeps the focus through "Start engine", "Starting…" and "Run" (the
   toolbar's Run, the phone's Run and Break pill, the command line's three buttons: one element each) ignores a held
   Enter's repeats (`ui/keys.ts` `ignoreHeldEnter`): it starts nothing twice, toasts once, and runs nothing when the
-  engine is ready. A hint's `help x` link follows the same rule. Ctrl/Cmd+Enter (one window listener in `Editor.tsx`;
+  engine is ready. A hint's `help x` link held during a run or a start toasts once, and held in `ready` runs `help x`
+  once. Ctrl/Cmd+Enter (one window listener in `Editor.tsx`;
   not with a dialog open, nor in another text field, which keeps it) ignores the key's repeats, and a dialog ignores a
   repeated Enter (`ui/Dialog.tsx`), so the repeats do not press the prompt's "Download", which has the focus.
 - **An off control that is pressed is not silent**, except Run while a run is on: Enter in the field with text, and a
@@ -515,7 +516,7 @@ sequenceDiagram
 | `stop.why` | When | Lines counted as run | Toast (`inTurnWords`) |
 |---|---|---|---|
 | `block` | the line opens a block, a `/*` comment it does not close, or holds `///` (`opensBlock`); it is not sent | those before it | "N of T pasted lines not run: line L starts a block, a comment or a /// command; run those from the editor" |
-| refused whole (`pastePlan`: `refused`) | the engine is there or on its way but not `ready` when the paste comes (the page load, a download, a start, a run) | none: no line is sent | "T of T pasted lines not run: the engine can't take a command now". The paste is prevented and the field is exactly as it was: nothing pasted, nothing cleared, the text around the cursor kept. |
+| refused whole (`pastePlan`: `refused`) | the engine is there or on its way but not `ready` when the paste comes (the page load, a download, a start, a run) | none: no line is sent | "T of T pasted lines not run: the engine can't take a command now". The paste is prevented and the field is exactly as it was: nothing pasted, nothing cleared, the text around the cursor kept (until 2026-11-12 the field was cleared and the lines after the first and the text after the cursor were lost). |
 | `refused` | `how` is `refused` for a line after the first (the engine was `ready` when the paste began, and was not when this line's turn came) | those before it | "N of T pasted lines not run: the engine can't take a command now". The line goes back into the field if the field is empty and not off (`pasterun.ts` `putBack`: with no engine by then, nothing is put into the off field). |
 | `error` | rc is not 0: an error, Break's rc 1, or rc 9998 (a reset, `run-failed`) | up to and with it | "N of T pasted lines not run: line L ended with r(rc)" |
 | `taken` | `done` gave kind `stopped` | up to and with it | "N of T pasted lines not run: another tab took over the engine during line L" |
@@ -598,9 +599,8 @@ the line.
   engine, and the next line is refused.
 - **Changing `Promise.allSettled` to `Promise.all` in `ended`** leaves `done` unsettled when an open tab's follow-up
   fails, and a paste then waits for ever (J5).
-- **Holding a run again** (sending it when the engine is ready) would need a state field, the promise that waits for
-  it and an effect for each way it is let go: what was removed on 2026-11-12. The no-held-run property in
-  `machine.test.ts` fails first.
+- **Holding a run again** ("No run is held", above) would bring back a state field, a promise and an effect per way out,
+  removed on 2026-11-12; the no-held-run property in `machine.test.ts` fails first.
 - **The order of writes in `ended`:** log and graphs, then `lastRun`, then `results`. The editor's error mark and
   `whenEnds` react to `lastRun`; moving it earlier gives them a log that is not final.
 - **The `RunHead` object is passed through unchanged**, from `runCode` through the machine to `began` and the run-head
