@@ -414,7 +414,7 @@ test("the editor's addresses, on its own origin: the editor at its base, every p
     expect((await get(url)).status(), url).toBe(404);
 });
 
-test("the landing and commands pages load none of the editor's files: only their own script, stylesheet and fonts, all from their own origin", async ({
+test("the landing and commands pages load none of the editor's files: only their own script, stylesheet, fonts and icons, all from their own origin", async ({
   page,
 }) => {
   for (const url of [SITE, `${SITE}commands/`]) {
@@ -434,7 +434,10 @@ test("the landing and commands pages load none of the editor's files: only their
       expect(full.startsWith(new URL(LOCAL_EDITOR_URL).origin), `${url} asked the editor's origin for ${full}`).toBe(
         false,
       );
-      expect(new URL(full).pathname, url).toMatch(/^\/assets\/[\w.-]+\.(js|css|woff2)$/);
+      // the icons are the pages' own copies (src/icons/; a browser may fetch one, as Firefox does the apple-touch icon)
+      expect(new URL(full).pathname, url).toMatch(
+        /^\/assets\/([\w.-]+\.(js|css|woff2)|(favicon|favicon-32|apple-touch-icon)-[\w-]+\.(svg|png))$/,
+      );
     }
     // the scripts are the pages' own (site.ts with the theme and Copy buttons, and the commands page's filter)
     for (const js of rest.filter((p) => p.endsWith(".js")))

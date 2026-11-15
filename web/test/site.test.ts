@@ -96,7 +96,11 @@ test("the pages' links: the editor's address from the build, the site's pages by
     // a preload's href is a file of the page's own (the build rewrites ./src/ to the hashed asset), not a link
     const preloads = [...html.matchAll(/<link rel="preload" href="([^"]*)"/g)].map((m) => m[1]);
     for (const h of preloads) assert.match(h, /^\.\/src\/styles\/fonts\/[\w-]+\.woff2$/, `${f}: preload ${h}`);
-    const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]).filter((h) => !preloads.includes(h));
+    // so is an icon's (the editor's are checked in the next test)
+    const icons = [...html.matchAll(/<link rel="(?:icon|apple-touch-icon)" href="([^"]*)"/g)].map((m) => m[1]);
+    const hrefs = [...html.matchAll(/href="([^"]*)"/g)]
+      .map((m) => m[1])
+      .filter((h) => !preloads.includes(h) && !icons.includes(h));
     for (const h of hrefs)
       assert.ok(
         ["/", "/commands/", "{{editor-url}}"].includes(h) || h.startsWith("https://"),
@@ -107,6 +111,25 @@ test("the pages' links: the editor's address from the build, the site's pages by
   assert.match(web("landing.html"), /<section class="browsers" id="browsers"/);
   assert.match(web("src/app/env.ts"), /LANDING_URL = __SITE_URL__/);
   assert.match(web("src/app/states/banners.tsx"), /BROWSERS_URL = `\$\{LANDING_URL\}#browsers`/);
+});
+
+test("the three pages have the same icons, each a file of the page's own (./src/icons/, hashed by the build), and they exist", () => {
+  const iconLinks = (html: string) =>
+    [...html.matchAll(/<link rel="(?:icon|apple-touch-icon)"[^>]*>/g)].map((m) => m[0]);
+  const editor = iconLinks(web("index.html"));
+  assert.deepEqual(
+    editor.map((l) => l.match(/rel="([^"]*)"/)![1]),
+    ["icon", "icon", "apple-touch-icon"],
+    "a PNG and an SVG icon, and the apple-touch icon",
+  );
+  for (const f of ["landing.html", "commands.html"])
+    assert.deepEqual(iconLinks(web(f)), editor, `${f}: the editor's icons`);
+  for (const l of editor) {
+    const href = l.match(/href="([^"]*)"/)![1];
+    // relative, never root-absolute: the editor's base is the build's (BASE_URL), and each origin serves its own copy
+    assert.match(href, /^\.\/src\/icons\/[\w-]+\.(svg|png)$/, href);
+    assert.ok(web(href.slice(2)).length > 0, `${href} exists`);
+  }
 });
 
 test("where each page is served, and the headers file: isolation on the editor's path only", () => {

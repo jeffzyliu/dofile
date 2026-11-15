@@ -1,7 +1,28 @@
-# dofile
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/jeffzyliu/dofile/main/docs/images/logo-dark.svg">
+    <img alt="dofile" src="https://raw.githubusercontent.com/jeffzyliu/dofile/main/docs/images/logo-light.svg" width="264">
+  </picture>
+</p>
 
-Run Stata-syntax `.do` files without a Stata license: in your browser, on the command line, or from an AI agent over
-MCP.
+<p align="center">
+  Run Stata-syntax <code>.do</code> files without a Stata license: in your browser, on the command line, or from an AI
+  agent over MCP. The browser editor needs no install and no account: the engine runs inside the page, on your own
+  computer.
+</p>
+
+<p align="center">
+  <b>Try it in your browser: <a href="https://app.dofile.dev/">app.dofile.dev</a></b> · About:
+  <a href="https://dofile.dev/">dofile.dev</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jeffzyliu/dofile/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/jeffzyliu/dofile/ci.yml?branch=main&label=ci"></a>
+  <a href="https://pypi.org/project/dofile/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/dofile"></a>
+  <a href="https://github.com/jeffzyliu/dofile/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/jeffzyliu/dofile"></a>
+</p>
+
+![The dofile editor on a desktop: the file panel, the sample do-file, the log with a regression table, and a scatter plot](https://raw.githubusercontent.com/jeffzyliu/dofile/main/docs/images/editor-desktop.png)
 
 - **In the browser:** open the editor at [app.dofile.dev](https://app.dofile.dev/). No account and no server: the engine
   runs inside the page, on your own computer, and the files you open stay in that browser. The first visit downloads the
@@ -11,7 +32,19 @@ MCP.
 - **For AI agents:** `dofile-mcp` is an MCP server, so an agent such as Claude Code runs do-files and reads `e()` and `r()`
   as JSON instead of guessing numbers.
 
-![The dofile editor on a desktop: the file panel, the sample do-file, the log with a regression table, and a scatter plot](https://raw.githubusercontent.com/jeffzyliu/dofile/main/docs/images/editor-desktop.png)
+**Under the hood:**
+
+- The Python engine runs in the browser on Pyodide (CPython compiled to WebAssembly), in a Web Worker. The page starts
+  from a Pyodide memory snapshot with the engine already imported, keeps the files in IndexedDB, and stops a running
+  do-file between commands (Break) through Pyodide's interrupt buffer, which needs the cross-origin-isolated page it is
+  served as.
+- An MCP server (stdio and HTTP) so an AI agent runs do-files and reads `e()` and `r()` as JSON: one worker process per
+  session, forked (on Linux and macOS) from a server that has the engine preloaded, with timeouts and cancels as
+  Stata's Break.
+- A sandbox for code it did not write: dangerous commands are disabled, and a PEP 578 audit hook blocks subprocesses
+  and the network, confines writes to the working folder and reads to the folders it is given.
+- Tested against reference results: a corpus of do-files checked against statsmodels and linearmodels to 1e-6, and the
+  engine's own cases compared with Stata 14 logs, in CI on Python and in the browser engine.
 
 | Dark theme, Data view | On a phone |
 | --- | --- |
