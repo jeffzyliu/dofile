@@ -1,6 +1,6 @@
 # dofile web demo: build spec (prototype 1)
 
-What to build, for the agents of steps 1 to 6 (`docs/prototype1-plan.md`). It replaces reading the design history; where an
+What to build, for the agents of steps 1 to 6 (`docs/phase2-plan.md`). It replaces reading the design history; where an
 older design file differs, this file holds the later decision. Text in quotes is verbatim from the mockups. *Proposed* marks
 a name this spec gives to something no source names. "OQ-n" points to section 10, where each question is decided (2026-11-10). Source tags (files in `docs/design/`):
 
@@ -48,7 +48,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
   ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
-  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/prototype1-plan.md`, "Where things stand"); the nested-do note (`S 15`) names
+  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/phase2-history.md`, the prototype 1 record, #54); the nested-do note (`S 15`) names
   the file dropdown's Save instead of the key (on a phone). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
@@ -1621,7 +1621,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   title, the Filter label and its placeholder "for example: reg", the count "N of M commands, 1 prefix", "No command starts with
   or contains that.", "off in the browser", "Prefixes", "Home" (decided 2026-11-12)). The Copy buttons and the theme
   button are hidden until the script that makes them work runs. Their exact text is in the two HTML files and in
-  `docs/prototype1-plan.md`, "Step 5: the clean-room record".
+  `docs/phase2-history.md`, "Step 5: the clean-room record (2026-11-11)".
 - **Tests.** Node: `web/test/site.test.ts` (placeholders, the commands list against `commands.json`, `DENIED`, the six prefixes,
   the filter, the clean-room greps), `web/test/sample.test.ts` (the first visit, never over a visitor's files, Restore and its
   dialog on the real store module; the generated module is current), `web/test/sample-run.test.ts` (both do-files run with

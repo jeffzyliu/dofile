@@ -2,7 +2,7 @@
 
 Loaded when work touches `web/`, the web demo: the engine in Pyodide inside a Web Worker, and a page on top of it. The root
 `CLAUDE.md` still applies. What each script and folder does, with times: `web/README.md`. The plan and decisions:
-`docs/phase2-plan.md`. The build plan and status of prototype 1: `docs/prototype1-plan.md` (read it first when picking that work up). How data flows through the engine code, as built: `docs/web-engine-data-flow.md`; the editor page's focus, runs, open files and log links: `docs/web-page-flows.md`. Biome: `docs/formatting-proposal.md`. The finished step 3.5 plan and the state machine's design are in `docs/archive/`.
+`docs/phase2-plan.md`. Its status and next steps are in the same file (read it first when picking that work up). How data flows through the engine code, as built: `docs/web-engine-data-flow.md`; the editor page's focus, runs, open files and log links: `docs/web-page-flows.md`. Biome: `docs/archive/formatting-proposal.md`. The finished step 3.5 plan and the state machine's design are in `docs/archive/`.
 The build spec for the pages: `docs/design/SPEC.md` (section 5 holds the machine's transition matrix, which a test checks).
 
 ## Commands
@@ -28,7 +28,7 @@ npm run sample            # the sample's data (uv run python sample/make_sample.
 ## Rules
 
 - **Biome formats and lints `web/`** (`biome.json`: width 120, the recommended rules less six; version pinned exactly;
-  decisions in `docs/formatting-proposal.md`). A lint **error** fails `npm run check` and a build, and in `npm run dev` opens
+  decisions in `docs/archive/formatting-proposal.md`). A lint **error** fails `npm run check` and a build, and in `npm run dev` opens
   a panel over the page (`vite-plugin-checker` in `vite.config.ts`, again on each change); a **warning** is only listed
   there, and fails CI (`web ok`) and `npm run deploy`. So fix or ignore every finding before a commit that is to be
   merged: `// biome-ignore lint/<group>/<rule>: <reason>`, always with the reason. Run `npm run format` at the end of a

@@ -48,7 +48,7 @@
 
 **Access and Entry**
 - **Q1 [Answered]:** How does the user arrive? — Landing page → "Open the editor →" (`landing.html:75,87`); the editor's
-  wordmark links back (`editor.html:23`). A first visit loads a sample project (`phase2-plan.md` "What the page does").
+  wordmark links back (`editor.html:23`). A first visit loads a sample project (`../../phase2-plan.md`, "Status").
 - **Q2 [Answered]:** Can they leave and return without losing state? — Files and the editor text persist in IndexedDB;
   data in memory does not (`phase2-plan.md` decision 1; flows "Behavior": the last log is kept across a reload, an
   unsaved draft is kept).

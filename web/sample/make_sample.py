@@ -1,4 +1,4 @@
-"""Regenerate the sample project's dataset, data/wages.dta (docs/prototype1-plan.md, step 5).
+"""Regenerate the sample project's dataset, data/wages.dta (docs/phase2-history.md, step 5).
 
 The data are synthetic: drawn here from numpy's PCG64 generator with a fixed seed. No real person's record, no dataset of
 Stata's. The engine itself writes the .dta (import delimited, label, save), so the file is in the format the page reads.

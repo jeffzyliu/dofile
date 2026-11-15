@@ -1,18 +1,18 @@
 # dofile — Phase 1 plan
 
 **Goal:** an installable, open-source Python package that runs Stata-syntax .do code with no Stata license, plus an
-MCP server (`dofile-mcp`) that lets agents use it. Engine: OpenDTA (MIT), chosen in `docs/engine-evaluation.md`.
-Background research: `docs/stata-research.md`.
+MCP server (`dofile-mcp`) that lets agents use it. Engine: OpenDTA (MIT), chosen in `docs/archive/engine-evaluation.md`.
+Background research: `docs/archive/stata-research.md`.
 
-**Not in Phase 1:** the web demo ([Phase 2](phase2-plan.md)), a hosted multi-user MCP server
-([Phase 3](phase3-plan.md)), accounts/storage, our own estimators, community commands (`reghdfe`, `esttab`,
+**Not in Phase 1:** the web demo ([Phase 2](../phase2-plan.md)), a hosted multi-user MCP server
+([Phase 3](../phase3-plan.md)), accounts/storage, our own estimators, community commands (`reghdfe`, `esttab`,
 `outreg2`), fixing OpenDTA upstream.
 
 **Status (2026-11-05):** Phase 1 is complete. All exit checks pass, including CI on Linux and macOS (see
 [Is Phase 1 finished?](#is-phase-1-finished)). Since then, agent testing (three paper replications) led to
 result-format, engine, sandbox and MCP changes, all pushed; CI is green on `b38fc96` (2026-11-06). See
 [After Phase 1](#after-phase-1-2026-11-04-and-05). Every open item in [Next steps](#next-steps) is now done, moved
-to [phase2-plan.md](phase2-plan.md) or [phase3-plan.md](phase3-plan.md), or in the backlog.
+to [phase2-plan.md](../phase2-plan.md) or [phase3-plan.md](../phase3-plan.md), or in the backlog.
 
 ## Facts this plan rests on (checked 2026-11-03, corrected 2026-11-04 and 05)
 - OpenDTA is not on PyPI, and PyPI rejects packages that depend on a git URL. Our installs could pin it by commit,
@@ -29,7 +29,7 @@ to [phase2-plan.md](phase2-plan.md) or [phase3-plan.md](phase3-plan.md), or in t
   embedded-Python routes. `arch`'s `archmexp()` and `bayesstats` expressions passed Stata text to Python's
   `eval()` with empty `__builtins__`, which attribute access escapes (ODT-14). dofile now patches both to a
   restricted evaluator.
-- Known OpenDTA problems are tracked in [opendta-issues.md](opendta-issues.md); dofile patches the ones that
+- Known OpenDTA problems are tracked in [opendta-issues.md](../opendta-issues.md); dofile patches the ones that
   crash, mislead agents or affect security (see Decision 1). `while 1 {}` never returns on its own; the worker's
   timeout interrupts it.
 - MCP SDK is `mcp` 2.3.0. `FastMCP` was renamed `MCPServer` (`from mcp.server.mcpserver import MCPServer`), with
@@ -50,7 +50,7 @@ to [phase2-plan.md](phase2-plan.md) or [phase3-plan.md](phase3-plan.md), or in t
    data licenses. `scripts/vendor_opendta.py` re-vendors a commit, then applies dofile's own patches from
    `scripts/patches/*.patch` in name order; the `VENDORED` stamp records commit and patches. This fixes both
    PyPI publishing and Qt. Each patch is one file, `opendta-<id>-<slug>.patch` (`odt<N>` for an `ODT-N` issue,
-   `patch1` for PATCH-1), and is recorded in [opendta-issues.md](opendta-issues.md) to report upstream.
+   `patch1` for PATCH-1), and is recorded in [opendta-issues.md](../opendta-issues.md) to report upstream.
 2. **The MCP server is Python, and the Node backend is retired.** This replaces the original "make the backend an
    MCP server". With a Python engine, a Node layer would only add a hop.
 3. **Layout:** the uv project lives at the top of this folder. The three 2020 repos are in `legacy/`, unchanged
@@ -139,7 +139,7 @@ new_graphs, images, files)`.
   there's no SIGINT, so an interrupt always waits 5 s and resets.
 
 **4. `mcp_server.py`.** The full reference, with inputs, outputs and return codes, is
-[MCP-SCHEMA.md](../MCP-SCHEMA.md); every tool except `get_file` advertises a typed output schema.
+[MCP-SCHEMA.md](../../MCP-SCHEMA.md); every tool except `get_file` advertises a typed output schema.
 - Tools: `start_session` (HTTP), `run_do(code, graphs, timeout)`, `get_matrix(name, rows, cols)`,
   `describe_data(vars, offset, limit)`, `get_file(name, offset, limit)` (text in pages of 50,000 characters by default),
   `upload_file(name, text, replace)`, `request_upload` and
@@ -197,7 +197,7 @@ readable. `--json` writes rc, error, the failing command, e()/r() and `versions`
   macOS, running everything (`-m ""`). First run 2026-11-05 on `978fad4`: all 6 jobs green, 1,167 passed each,
   8–13 minutes per job (serial). The workflow now runs `uv run poe ci` (poethepoet
   tasks in `pyproject.toml`, parallel with `-n auto`), with `UV_PYTHON` set per job.
-- **Replication tests** ([replication-tests.md](replication-tests.md)): three papers replicated through the MCP
+- **Replication tests** ([replication-tests.md](../replication-tests.md)): three papers replicated through the MCP
   server by an agent (Card & Krueger 1994, LaLonde / Dehejia & Wahba, Card 1995), with published versus dofile
   numbers and a checklist of what to look out for. Manual, not in CI: the data belongs to its authors.
 
@@ -251,7 +251,7 @@ Yes (2026-11-05). All exit checks are done:
 Windows stays "not supported yet".
 
 ## After Phase 1 (2026-11-04 and 05)
-Agent testing: an agent replicated three papers through the MCP server ([replication-tests.md](replication-tests.md));
+Agent testing: an agent replicated three papers through the MCP server ([replication-tests.md](../replication-tests.md));
 all published numbers were reproduced. What it led to (full suite green):
 - **Session semantics:** each `run_do` call is a do-file scope, so a failed call no longer leaves `preserve`
   active (the retry used to fail with rc 621).
@@ -263,9 +263,9 @@ all published numbers were reproduced. What it led to (full suite green):
   after `mean`/`proportion`/`total`/`ratio`, and is never stale; 5 of its 6 items are fixed, the sixth needs
   real Stata. Its four patches were merged into one.
 - **Engine bugs patched:** the ODT issues marked `patched` or `partly patched` in
-  [opendta-issues.md](opendta-issues.md), including the ODT-14 security fix. Each has a test that fails without
+  [opendta-issues.md](../opendta-issues.md), including the ODT-14 security fix. Each has a test that fails without
   its patch.
-- **Agent ergonomics:** the problems in [agent-ergonomics.md](agent-ergonomics.md), all fixed in dofile's own code:
+- **Agent ergonomics:** the problems in [agent-ergonomics.md](../agent-ergonomics.md), all fixed in dofile's own code:
   log cut, tempfile hint, `e_changed`/`r_changed`, the sandbox's reason on a 603, the reconnect note, `get_file`
   paging, the busy-session limit.
 - **Tests:** pytest-xdist; the Stata comparison split into one test per case.
@@ -279,27 +279,27 @@ all published numbers were reproduced. What it led to (full suite green):
 ## Next steps
 Status (2026-11-06): each item is done, moved to a later phase, or in the backlog (not tied to a phase).
 1. ~~Push the local commits and confirm CI is green.~~ Done: CI green on `b38fc96` (2026-11-06).
-2. **Publish to PyPI** → moved to [Phase 2](phase2-plan.md), step 7 (the landing page needs `pip install dofile`).
+2. **Publish to PyPI** → moved to [Phase 2](../phase2-plan.md), step 7 (the landing page needs `pip install dofile`).
    PyPI has no reservations: a name is claimed by uploading a release (`dofile` and `dofile-mcp` were free on
    2026-11-04). It must be a working package, since PyPI's name policy (PEP 541) lets others reclaim squatted names,
    and a version number can never be re-uploaded. Use Trusted Publishing from GitHub Actions.
-3. **OpenDTA issues** ([opendta-issues.md](opendta-issues.md)) → backlog: report upstream, ODT-14 (security)
+3. **OpenDTA issues** ([opendta-issues.md](../opendta-issues.md)) → backlog: report upstream, ODT-14 (security)
    first, then the patched bugs with their patches. Still open: ODT-11 (`by: regress`), GAP-2 and GAP-3
    (`estat firststage`, `endogenous`, `overid`), the leftovers of ODT-16/17, and PATCH-1's check against real Stata.
    Many entries need someone with Stata to confirm.
 4. **Re-vendor to upstream `main`** → backlog, when it's worth it: redo the ODT-9 patch for the moved code, check
    the `safe-expr` and `safe-break` patches and any new `eval`/`exec` on user text, rerun everything including the
    new reference cases.
-5. **Web demo** → [Phase 2](phase2-plan.md). The scope grew from "an editor plus a log, one sample dataset, no
+5. **Web demo** → [Phase 2](../phase2-plan.md). The scope grew from "an editor plus a log, one sample dataset, no
    storage": users upload their own files into a virtual working folder kept in the browser, file paths are mapped
    into it, and there is a landing page.
-6. **HTTP hardening** (auth, per-session memory and disk limits, a container) → [Phase 3](phase3-plan.md), with
+6. **HTTP hardening** (auth, per-session memory and disk limits, a container) → [Phase 3](../phase3-plan.md), with
    authorization, a reverse proxy and hosting.
 7. **Robustness:** ~~a Break in the middle of `merge`/`reshape`~~ fixed by PATCH-2 (`tests/test_break.py`).
-   Clients other than the Python SDK (MCP Inspector, Claude Desktop) → [Phase 3](phase3-plan.md), step 5.
+   Clients other than the Python SDK (MCP Inspector, Claude Desktop) → [Phase 3](../phase3-plan.md), step 5.
    Windows → backlog ("not supported yet").
-8. **Agent ergonomics:** ERG-1 to ERG-7 are done. ERG-8 and ERG-9 are open → [Phase 3](phase3-plan.md), step 8.
-   More replications per [replication-tests.md](replication-tests.md) when the engine changes.
+8. **Agent ergonomics:** ERG-1 to ERG-7 are done. ERG-8 and ERG-9 are open → [Phase 3](../phase3-plan.md), step 8.
+   More replications per [replication-tests.md](../replication-tests.md) when the engine changes.
 9. Community commands (`reghdfe`, `esttab`) → backlog, via OpenDTA upstream or a later decision.
 10. Dropped: a `parse_do` parser tool. The MIT tree-sitter-stata grammar (codedthinking) covers syntax for the web
    demo's highlighting, and `run_do` already reports real errors. If agents need a pre-flight check, the small
@@ -311,11 +311,11 @@ Status (2026-11-06): each item is done, moved to a later phase, or in the backlo
   pin), so vendoring means we choose when to take updates. Re-vendor deliberately and rerun conformance and the
   Stata comparison each time; every patch in `scripts/patches/` must still apply, and moved code means redoing a patch.
 - Agents trust `results` and `r(table)` more than a person would. A mislabeled or stale value is worse than a
-  missing one, so changes there need the checks in [replication-tests.md](replication-tests.md).
+  missing one, so changes there need the checks in [replication-tests.md](../replication-tests.md).
 - Audit hooks are a policy layer, not a security boundary, and they assume clients can't run Python; an
   engine `eval()` on user text breaks that (ODT-14). Public HTTP hosting needs a container.
 - HTTP has no auth and no per-session memory or disk limits, so it's for localhost only; anyone who can reach the
-  port can start sessions and push idle ones out of a full pool. Moved to [Phase 3](phase3-plan.md).
+  port can start sessions and push idle ones out of a full pool. Moved to [Phase 3](../phase3-plan.md).
 - ~~An interrupted command (Break) may leave half-changed data.~~ It did (an interrupted `append`); fixed by
   PATCH-2, which takes Break only at safe points (`389b38b`, `tests/test_break.py`).
 - Windows is untested, and interrupts there always reset the session.

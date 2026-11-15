@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures";
 
 // The proof-of-concept page is gone (prototype 1, step 3): these four tests need its editor and file list (#run,
 // #status, #files, window.__editor, confirm()) and are rewritten against the new page's flows in step 6
-// (docs/prototype1-plan.md). Until then they are marked fixme. The cases that need no editor moved: Break, reload and
+// (docs/phase2-plan.md). Until then they are marked fixme. The cases that need no editor moved: Break, reload and
 // reset, the package formats and the cached snapshot start to e2e/engine.spec.ts; the stale snapshot and the
 // ?snapshot=0 start to e2e/shell.spec.ts. The half of the old first test that needs the editor is the fourth test here.
 test.fixme(true, "bound to the proof-of-concept page; step 6 rewrites it against the new page");

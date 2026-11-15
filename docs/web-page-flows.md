@@ -9,15 +9,16 @@ it, an open file's state in the editor, and where the log puts graph links and n
 depends on an order of events.
 
 Written from the code. Paths are relative to `web/src/app/` unless they start with `web/` or `engine/` (that is
-`web/src/engine/`). The document names files and functions, not line numbers.
+`web/src/engine/`). The document names files and functions, not line numbers. What the page shows is in
+`docs/design/SPEC.md`; this file says how the code gets there.
 
 **Timing words used below.**
 
 - **Synchronous:** in the same call stack.
 - **Signal effect:** an `effect()` from `@preact/signals-core`. It runs synchronously when a signal it read is written.
 - **Render:** a component that reads a signal re-renders in a microtask (`@preact/signals` calls `setState`, and Preact
-  11 queues renders with `queueMicrotask`). One microtask renders every queued component. A step of the engine's
-  machine therefore reaches the views as one render, with all of its writes.
+  11 queues renders with `queueMicrotask`). One microtask renders every queued component, so a step of the engine's
+  machine reaches the views as one render, with all of its writes.
 - **Layout effect:** `useLayoutEffect`. It runs in that render, before the next microtask. Its cleanup runs while the
   component's nodes are still in the page.
 - **Timer:** `setTimeout(f)` or `setTimeout(f, 0)`. It runs after all microtasks, and after every timer set before it.
@@ -29,8 +30,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 ### The rules
 
 1. **A hand-off moves only a focus left on nothing** (`document.activeElement` is `<body>` or null). The dialog's
-   hand-back and `useFocusOnLeave` check this first. So whoever places the focus first wins, and
-   the focus moves once.
+   hand-back and `useFocusOnLeave` check this first, so whoever places the focus first wins and the focus moves once.
 2. **The fallback is `states/focus.ts` `focusStable()`:** first `editorCommands.focus()`, then, if that moved the focus
    nowhere, the first visible `button[aria-label="More actions"]`. It is never `<body>`.
 3. **`editorCommands.focus()`** (`editor/Editor.tsx` `focus`) focuses at once, without changing the active tab or the
@@ -39,15 +39,15 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    - no tab, or a text tab with no editor state yet: the empty view ("No file is open", `[data-editor]` then);
    - a `.dta` tab: its tab in "Open files" when that is visible, else the first enabled button of its view (Load), else
      nothing;
-   - the Editor pane hidden (a phone on another view): the code calls `view.focus()` (or the empty view's `focus()`) all
-     the same. The browser does not
-     focus an element under `display: none`, so the focus does not move, and `focusStable` goes on to "More actions".
+   - the Editor pane hidden (a phone on another view): it calls `view.focus()` (or the empty view's `focus()`) all the
+     same; the browser does not focus an element under `display: none`, so nothing moves and `focusStable` goes on to
+     "More actions".
 4. **A dialog gives the focus back to its opener** (what had the focus when it opened). When the opener has left the
    page, or it had none, the dialog calls `focusStable()`. `<body>` is never an opener. A dialog that opens while
    another one is still handing the focus back takes that one's opener as its own (`ui/Dialog.tsx`, the module variable
    `leaving`).
 5. **A view that takes the focus when it appears takes it in a layout effect:** a dialog (`ui/Dialog.tsx`), the
-   stopping banner's "Don't reset: wait for it", and the waiting banner itself (`states/banners.tsx`), and the inline
+   stopping banner's "Don't reset: wait for it", the waiting banner itself (`states/banners.tsx`), and the inline
    rename field (`files/FilesPane.tsx`), the last three through `ui/focus-hooks.ts` `useFocusOnMount`. So a hand-off
    that waits for a microtask finds the focus already taken.
 6. **After a tab closes** (`files/EditorTabs.tsx` `focusAfterClose` sets `closeAsked`, which `EditorTabs` takes in a
@@ -60,34 +60,44 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    `useFocusRequest`, or a plain layout effect where taking it is more than a focus: Go to line, a closed tab), and the
    request ends there, taken or not. No timer stands in for that render: Preact renders the queued components
    shallowest first, so `App` shows a pane, and the dialog host closes its dialog, before a deeper target takes its
-   request. Each says whose focus it may take (`from`): from inside its own list (or the page body, after a close) for
-   the tablists, from the page body or the tree for the tree's rows, from anywhere for the Files button's request, Find
-   and the editor. The tree's request names a row (`focusRow`) or none (`focusTree`: the row in the tab order, or with
-   no rows the head's File actions). It is set once its action has succeeded (a rename, a delete once the list has been
-   read again), and it also ends when a new one replaces it, a rename starts, or the visitor focuses or clicks another
-   row. A tablist's request is set by a key, never by a click: Safari does not focus a tapped button (`ui/Menu.tsx`
-   focuses a `keepOpen` item itself for that reason), so a request from a click on a tab would move the focus there
-   where a click alone moves none. The other requests follow an action that may be a click (the Files button, a
-   dialog's answer, "Go to line", Find), and so does a rename that a click elsewhere ends: the field's blur ends it and
-   `focusRow` asks for the renamed row, which takes the focus where that click left it on the page body (WebKit) and
-   not where the click focused something outside the tree.
+   request.
+   - **Whose focus each may take** (`from`): the tablists, from inside their own list (or the page body, after a
+     close); the tree's rows, from the page body or the tree; the Files button's request, Find and the editor, from
+     anywhere.
+   - **The tree's request** names a row (`focusRow`) or none (`focusTree`: the row in the tab order, or with no rows
+     the head's File actions). It is set once its action has succeeded (a rename, a delete once the list has been read
+     again). It also ends when a new one replaces it, a rename starts, or the visitor focuses or clicks another row.
+   - **A tablist's request is set by a key, never by a click:** Safari does not focus a tapped button (`ui/Menu.tsx`
+     focuses a `keepOpen` item itself for that reason), so a request from a click would move the focus where a click
+     alone moves none. The other requests follow an action that may be a click (the Files button, a dialog's answer,
+     "Go to line", Find), and so does a rename that a click elsewhere ends: the field's blur ends it and `focusRow` asks
+     for the renamed row, which takes the focus where the click left it on the page body (WebKit), not where the click
+     focused something outside the tree.
 8. **On an iPhone the keyboard comes up only for a focus made while the tap is handled** (the tap's own microtasks
    count: a signal set in the tap renders, and its layout effect runs, before the tap's dispatch ends; an `await` of
    IndexedDB does not). A field that is to raise the keyboard is drawn in the tap, before anything is written or awaited.
-   That is why "New .do file" and "New folder" (also a folder row's "New file here" and "New folder", and the Files head's
-   "+") show their name field at once (a draft row, in the folder `startDraft(kind, dir)` unfolds) and write the file or folder
-   when the field is left (Enter or blur; Esc writes nothing), and why `startRename` and `startDraft` are synchronous.
-   The "+" (and the head menu's New .do file and New folder, and the dropzone's New .do file) take their folder from the current folder, `currentDir` in `FilesPane.tsx`, apart from the roving focus (`rovingPath`): a tap on a folder's name or on Enter or Space selects and unfolds it, never folds (a second tap on the name of the current folder makes the top current, the way back for VoiceOver and touch; a double-click's second click is not a second tap, so a double-click leaves the folder current; Enter and Space on it stay select and unfold); the current folder is drawn as an outline and the name in the accent, no fill, in forced colors a Highlight outline; its caret (a span, aria-hidden, not a tab stop) folds and unfolds and selects nothing; a tap on a file makes its folder current; a tap on the empty space under the rows makes the top current; folding the current folder or one above it makes the folded folder's parent current; arrow keys select nothing. `newFileDir` is the current folder, or the nearest folder above it that exists when it has gone, and the "+" label names it. A draft that is left with a name that cannot be used makes the free default and a toast says why (the field's reason line is gone with it). Esc in a draft gives the focus back to the row that was in the tab order before it (`Renaming.from`), not the open file's row.
-   The commit (`endDraft`) then awaits the store and reads the list again (`files.ts` `refresh`). The store's change
-   already refreshes the list, so for a render the tree may hold both the field and the new row; then the draft goes.
-   What happens next depends on how the field ended. After Enter the file opens and its row takes the focus
-   (`focusRow`), unless another field was started meanwhile (each field has an `id`; a commit that ends after another
-   began touches neither the state nor the focus). After a blur (a tap elsewhere, the keyboard's hide key) it only
-   writes: nothing opens, and the focus and the phone's view stay where the visitor tapped (a tap on another row opens
-   that row's file, a tap on the Log view shows the log, a tap on "Files ⋯" opens its menu), because the commit ends
-   after the tap's own click and would otherwise open the new file on top of it.
-   Nobody can test the keyboard in Playwright: the e2e test makes sure the
-   field has the focus within the tap's microtasks.
+   - So "New .do file" and "New folder" (also a folder row's "New file here" and "New folder", and the Files head's
+     "+") show their name field at once: a draft row, in the folder that `startDraft(kind, dir)` unfolds. The file or
+     folder is written when the field is left (Enter or blur; Esc writes nothing), and `startRename` and `startDraft`
+     are synchronous.
+   - **The current folder** (what it does: SPEC 3.1, "Folders and the current folder", and OQ-21): `currentDir` in
+     `FilesPane.tsx`, kept apart from the roving focus (`rovingPath`); arrow keys select nothing; the caret is a span,
+     `aria-hidden`, not a tab stop, and it folds and unfolds and selects nothing; a tap on the rest of the row selects and
+     unfolds, never folds; folding it or a folder above it makes the parent current; it is drawn as an accent outline, no
+     fill. The "+" (and the head
+     menu's New .do file and New folder, and the dropzone's New .do file) make theirs in `newFileDir`: the current
+     folder, or the nearest folder above it that exists when it has gone; the "+" label names it.
+   - **A draft left with a name that cannot be used** makes the free default, and a toast says why (the field's reason
+     line is gone with it). Esc in a draft gives the focus back to the row that was in the tab order before it
+     (`Renaming.from`), not the open file's row.
+   - **The commit** (`endDraft`) awaits the store and reads the list again (`files.ts` `refresh`). The store's change
+     already refreshes the list, so for one render the tree may hold both the field and the new row; then the draft
+     goes. After Enter the file opens and its row takes the focus (`focusRow`), unless another field was started
+     meanwhile (each field has an `id`; a commit that ends after another began touches neither the state nor the
+     focus). After a blur (a tap elsewhere, the keyboard's hide key) it only writes: nothing opens, and the focus and
+     the phone's view stay where the visitor tapped (a row's file, the Log view, the "Files ⋯" menu), because the commit
+     ends after the tap's own click and would otherwise open the new file on top of it.
+   - Playwright cannot test the keyboard: the e2e test checks that the field has the focus within the tap's microtasks.
 
 ### Who moves the focus
 
@@ -99,16 +109,16 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `KeepWaitingButton` (in `StoppingBanner`), `WaitingBanner` (`states/banners.tsx`) | the button appears (1 s after the Break press), the waiting banner mounts | layout effect (`useFocusOnMount`) | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
 | `DeclinedBanner` (`states/banners.tsx`) | "Start engine" | synchronous, before `eng.ask()` | `focusStable()`, so the prompt takes the editor as its opener |
 | `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | sets `editorAsked` (`{}`) in the step; the Editor takes it in a layout effect of the render that removes the dialog | `editorCommands.focus()` |
-| `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | sets `closeAsked`; `EditorTabs` takes it in a layout effect of its next render | the selected tab (`tabAsked`), else the tree's row (`focusTree`) when the tree is shown, else `editorCommands.focus()` |
+| `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | sets `closeAsked` (rule 6) | rule 6 |
 | `files/dialogs.tsx` `DeleteDialog` | Delete's store change is done and the list read again (`files.ts` `refresh`) | `focusTree()`, taken by the tree's render; only a focus on nothing or in the tree | the tree's row in the tab order; with no rows, the head's File actions (`FilesHead`) |
-| `App.tsx` `foldFiles` | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere (the focus is on the button) | the tree's row in the tab order; with no rows, the head's File actions |
+| `App.tsx` `foldFiles` | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere | as `DeleteDialog` |
 | `ui/Menu.tsx` `closeMenu(true)` | Esc, Tab, a picked item (before its `onSelect`) | synchronous | the trigger (`restore`, else `anchor`). A click outside, a resize or the window's blur close it with no focus move. |
-| `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the menu's active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
-| `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts. A New's field is a draft (`renaming.draft`): `startDraft` sets it in the tap, with nothing written and no `await` before it (rule 8) | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
-| `files/FilesPane.tsx` `endDraft` | Esc in a draft's field | `focusTree()`, taken by the tree's render; only a focus on nothing or in the tree | the tree's row in the tab order; with no rows, the head's File actions (hidden on a phone, as after Delete) |
-| `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist (a click sets no request) | layout effect of the tab's render (`useFocusRequest`); the request ends there | the tab moved to, only while the focus is inside that tablist |
-| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and the signal `focusWanted`; `focusTree` (the Files button, Delete once the list is read again) sets a keyless request, taken by the row in the tab order, else File actions; the row's own render takes it | layout effect; the request ends when its row is drawn, taken or not, and when a new one replaces it, a rename starts, or the visitor focuses or clicks another row | the row, only while the focus is on the page body or inside the tree (the tree's `role`); on WebKit and the iPhone a click elsewhere leaves the focus on the body, so the row may take it (rule 7) |
-| `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | layout effect of the bar's render (`useFocusRequest`); once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
+| `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
+| `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts (a New's field is a draft, `renaming.draft`, rule 8) | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
+| `files/FilesPane.tsx` `endDraft` | Esc in a draft's field | `focusTree()`, as `DeleteDialog` | as `DeleteDialog` (File actions is hidden on a phone) |
+| `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist | `useFocusRequest` (rule 7) | the tab moved to, only while the focus is inside that tablist |
+| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and `focusWanted`; `focusTree` sets a keyless request | rule 7 | the row, only while the focus is on the page body or inside the tree (the tree's `role`) |
+| `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | `useFocusRequest`; once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
 | `output/clip.ts` `fallbackCopy` | a copy without the clipboard API (plain HTTP): Results, Copy on a .dta tab or a file's bar | synchronous: the hidden field takes the focus to copy, then gives it back only to an element that had keyboard focus (`:focus-visible`) | that element; after a click the focus stays off (the page body), so no ring shows. The Results tab moves no other focus: every value is a Tab stop, no arrow keys (SPEC 3.9) |
@@ -141,9 +151,9 @@ sequenceDiagram
 The opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on `close()`.
 Only T gives it back, once.
 
-"Restore the sample" (`sample.ts`) is an upload (`upload(items, "sample")`), so its questions are the clash dialog with the
-sample's words and follow the clash rules below: "Keep mine" focused, the focus back to the menu's trigger. Once the upload
-has ended `analysis.do` is opened, which moves no focus.
+"Restore the sample" (`sample.ts`) is an upload (`upload(items, "sample")`): its questions are the clash dialog with the
+sample's words and follow the clash rules below ("Keep mine" focused, the focus back to the menu's trigger). Opening
+`analysis.do` once the upload has ended moves no focus.
 
 ### A dialog that follows another (the clash chain)
 
@@ -171,8 +181,8 @@ sequenceDiagram
   D->>D: cleanup and microtask T2, opener 1 gets the focus
 ```
 
-T1 can also run before the upload goes on (after "Replace with uploaded" the upload first awaits `store.write`). If T1 runs before clash 2 opens, it gives the
-focus to opener 1, and clash 2 takes opener 1 as the active element. The result is the same.
+T1 can also run before the upload goes on (after "Replace with uploaded" the upload first awaits `store.write`). Then
+T1 gives the focus to opener 1, and clash 2 takes it as the active element: the same result.
 
 ### A dialog whose opener leaves the page (other-tab over the stopping banner)
 
@@ -196,8 +206,7 @@ sequenceDiagram
   D->>F: focusStable(), the editor, else More actions
 ```
 
-Both orders of the two renders end in `focusStable()`: the opener is either the button that has left the page, or
-nothing.
+Both orders of the two renders end in `focusStable()`.
 
 ### A banner leaves with the focus in it
 
@@ -222,10 +231,8 @@ sequenceDiagram
 ```
 
 Dismiss on a banner that uses `useFocusOnLeave` (reset, storage, download-failed, the failed-start banners, the
-editor's save-failed and run-changed, the Files pane's not-text) follows the last two lines, and so does run-changed's
-"Reload from the run". With a `.dta` tab active, `editorCommands.focus()` puts the focus on that tab, so `focusStable`
-stops there and the focus moves once.
-
+editor's save-failed and run-changed, the Files pane's not-text), and run-changed's "Reload from the run", follow the
+last two lines. With a `.dta` tab active, `editorCommands.focus()` puts the focus on that tab, so the focus moves once.
 The banners that hold no control (running, memory) do not use it, nor does the declined banner, which calls
 `focusStable()` itself before it goes.
 
@@ -259,69 +266,50 @@ sequenceDiagram
 ```
 
 The three writes are made synchronously in the click handler, so one render takes them all and the request is taken
-before T runs. When Save resolves false
-(the store refused), the dialog closes, the tab stays and nothing calls `focusAfterClose`. T then gives the focus back
-to the opener (the tab).
+before T runs. When Save resolves false (the store refused), the dialog closes, the tab stays and nothing calls
+`focusAfterClose`; T gives the focus back to the opener (the tab).
 
 ### Phone variants
 
-On a phone, one view shows at a time, so the Editor pane is often hidden.
-
-```mermaid
-sequenceDiagram
-  participant B as a banner on the Log view
-  participant F as focusStable
-  participant Ed as editorCommands.focus
-  participant M as More actions in the top bar
-  B->>F: microtask after it leaves, the focus is on body
-  F->>Ed: focus()
-  Ed-->>F: view.focus() on a hidden pane, the browser moves nothing
-  F->>M: focus the visible More actions button
-```
+On a phone one view shows at a time, so the Editor pane is often hidden and `focusStable` ends on "More actions"
+(rule 3).
 
 | Case | Desktop | Phone |
 |---|---|---|
 | A banner leaves, or a dialog's opener has left | the editor (or the `.dta` tab, or Load) | the editor (or a `.dta` tab's Load) on the Editor view; "More actions" on any other view |
 | Close-tab's Save or "Don't save" | the selected tab in "Open files" | the editor: "Open files" is not shown, and neither is the tree on the Editor view |
-| The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's hand-back gives the focus to its opener. Nothing runs then: with no engine the page offers only "Start engine", which opened the prompt, so the focus is not taken from the Log view by a run. |
+| The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's hand-back gives the focus to its opener. With no engine the page offers only "Start engine", which opened the prompt, so no run takes the focus from the Log view. |
 | A dialog opened from a menu (Reset, Delete all, Clear log) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all, "Log actions" for Clear log | the ⋯ trigger for Reset; the strip's "Files ⋯" ("File actions") for Delete all; the strip's "Log ⋯" ("Log actions") for Clear log |
-| The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear) and cannot take the focus, so `ui/Dialog.tsx` hands it to `focusStable()`: the editor, or "More actions" |
+| The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear), so `ui/Dialog.tsx` hands the focus to `focusStable()` |
 | Find opened from the phone strip's "Log ⋯" | (desktop: the Log head's Find button) | `openFind(null)` takes the focused element, the "Log ⋯" button that `closeMenu` just focused |
 | A tap on the command line while it does not have the focus | the browser's own focus | `log/CommandLine.tsx` takes the tap (`touchend`) and focuses the field itself with `preventScroll`, the caret at the end: the browser's focus would scroll the page up to the field, which iOS does before the page can stop it (`app/viewport.ts`, `docs/phone-keyboard-experiment.md`) |
 
 ### Tests that hold this
 
-- `web/e2e/keyboard.spec.ts`: "a tap on the phone's command line focuses it without scrolling the page, the caret at the end"
+No Node test covers the focus; the rules hold only in a browser.
+
+- `web/e2e/keyboard.spec.ts`: "a tap on the phone's command line focuses it without scrolling the page, …"
 - `web/e2e/states.spec.ts`:
-  - "a banner that goes with the focus in it hands the focus on: the editor, or More actions when it is hidden"
-  - "the editor's and the Files pane's banners hand the focus on too: save-failed, run-changed (Dismiss, Reload from the
-    run), not-text"
-  - "a dialog whose opener has left the page gives the focus to the editor, or More actions, not to the page"
+  - "a banner that goes with the focus in it hands the focus on: …"
+  - "the editor's and the Files pane's banners hand the focus on too: …"
+  - "a dialog whose opener has left the page gives the focus to the editor, …"
   - "with a .dta tab active, a banner that goes with the focus hands it to that tab, in one move"
-  - "from the stopping banner to the waiting banner the focus goes straight across, never through the editor"
+  - "from the stopping banner to the waiting banner the focus goes straight across, …"
   - "the banners above the log: running, stopping (focus on Don't reset), waiting (takes the focus)"
 - `web/e2e/files.spec.ts`:
   - "tabs: … the focus goes to a tab or the tree, never the page, in one move after Save and Don't save"
-  - "the row menu (Shift+F10, right click, the ⋯): Delete asks, …" (the focus after Delete, on the tree's row)
-  - "a folder's menu: New file here and New folder unfold …", 'the "+": the current folder (a tap on a folder's name, or on a file in it), else the top; …', 'the "+" and a
-    name with "/": …' and 'a draft's name is checked part by part …; a rename still refuses "/"' (a draft in a folder), 'the "+" twice from a folder's file row …', 'the "+" after a typed name was written by leaving the field …' (a draft's path counts as its folder) and "a draft's Esc, from a folder's menu or the "+": the focus goes back to the row it came from …"
-  - "New .do file and New folder: the name field has the focus within the tap's microtasks, from the link and from the
-    menu" (rule 8), and the tests after it: Esc (the focus back on the tree's row), Enter, leaving the field (writes only;
-    a tap on a row, on the phone's Log view or on "Files ⋯" keeps what it chose), a name in use, a second New while the
-    first is written
-  - "a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it
-    before the first, not the page"
-- `web/e2e/editor.spec.ts`:
-  - "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab"
-  - "Find in the log: … Esc gives the focus back"
-  - "the Output tabs by keyboard: each key moves the focus to the tab it selects; with Find open, the Log tab drawn again
-    leaves the focus on the tab, not in Find's field"
-- `web/e2e/shell.spec.ts`:
-  - "the layout: … the ⋯ menu works by keyboard"
-  - "the folded file list: … Esc folds it and gives the focus back"
-  - "the folded file list with no files: opened by keyboard, the focus goes to the head's File actions, once"
-
-No Node test covers the focus. The rules hold only in a browser.
+  - "the row menu (Shift+F10, right click, the ⋯): Delete asks, …" (the focus after Delete)
+  - a draft in a folder: "a folder's menu: New file here and New folder unfold …", 'the "+": the current folder …',
+    'the "+" and a name with "/": …', "a draft's name is checked part by part …", 'the "+" twice from a folder's file
+    row …', 'the "+" after a typed name was written by leaving the field …' and "a draft's Esc, from a folder's menu or
+    the "+": …"
+  - "New .do file and New folder: the name field has the focus within the tap's microtasks, …" (rule 8), and the tests
+    after it: Esc, Enter, leaving the field, a name in use, a second New while the first is written
+  - "a clash dialog that follows another (Keep mine, then the next clash at once): …"
+- `web/e2e/editor.spec.ts`: "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to
+  that tab"; "Find in the log: … Esc gives the focus back"; "the Output tabs by keyboard: …"
+- `web/e2e/shell.spec.ts`: "the layout: … the ⋯ menu works by keyboard"; "the folded file list: … Esc folds it and
+  gives the focus back"; "the folded file list with no files: …"
 
 ### If you change this
 
@@ -331,13 +319,11 @@ No Node test covers the focus. The rules hold only in a browser.
   `el.contains(activeElement)` is never true and nothing is handed on.
 - **`editorCommands.focus()` must focus synchronously.** `focusStable` reads `activeElement` right after it. A `.dta`
   tab's own target must win in that call, or the focus moves twice (the e2e test records every `focusin`).
-- **An answer that places the focus sets its request in the same turn as `dialog = null`.** The render that closes
-  the dialog then takes the request before the dialog's microtask hand-back. That is why the close-tab dialog stays
-  open while Save writes: after an `await`, the dialog would give the focus to the opener first, and then the close
-  would move it again.
-- **No timer stands in for a render.** A request is a signal its target takes in its own render; a target drawn later
-  than the action (Delete's rows, once the list is read again) gets its request when that is done (Delete awaits a
-  fresh list), not after a guessed delay.
+- **An answer that places the focus sets its request in the same turn as `dialog = null`,** so the render that closes
+  the dialog takes the request before the dialog's hand-back. That is why the close-tab dialog stays open while Save
+  writes: after an `await`, the dialog would give the focus to the opener first, and the close would move it again.
+- **No timer stands in for a render.** A target drawn later than the action (Delete's rows, once the list is read
+  again) gets its request when that is done (Delete awaits a fresh list), not after a guessed delay.
 - **Keep the opener's `blur()` before `showModal()`, and the `leaving` hand-over.** Without the first, WebKit gives the
   focus back on `close()` before an answer can place it. Without the second, a dialog that follows another takes
   `<body>` as its opener.
@@ -350,28 +336,27 @@ No Node test covers the focus. The rules hold only in a browser.
 
 - `engine/machine.ts` decides whether a run is taken:
   - `ready`: sent at once (effect `send-run`);
-  - every other state has no `run` cell, so the event is not valid and changes nothing. That includes the states with
-    no engine: a run opens no prompt there, and no state holds a run's code or a "for a run" mark, so nothing runs when
-    the engine becomes ready (`started` always leads to `ready`). With no engine the page offers one action, "Start
-    engine" (next section). (Until 2026-11-12 the machine held the run in `none` and `declined`, sent it on `started`
-    and dropped it with an effect when the start did not happen; the maintainer removed that, and then the prompt a
-    run opened: `docs/phase2-history.md`, "Post-merge review".)
+  - every other state has no `run` cell, so the event is not valid and changes nothing, the states with no engine
+    included: a run opens no prompt, no state holds a run's code or a "for a run" mark, and nothing runs when the
+    engine becomes ready (`started` always leads to `ready`). The maintainer removed the held run, and then the prompt a
+    run opened, on 2026-11-12 (`docs/phase2-history.md`, "Post-merge review").
   - Every exit from `running`, `breaking` or `waiting` has one `end-run`, as its last effect: `END` (`run-ended`,
     `run-failed`), `RESET` (`reset`, `crashed`, `break-timeout`, or Break with no `SharedArrayBuffer`) and `LOST`.
-- `engine.ts` `run(code, head)` dispatches the event and answers whether the run started (true) or was refused, from
-  the step. It throws while a step is in progress (`stepping`). A step writes the `engine` signal before it performs its effects
-  (`apply`).
-- `run.ts` turns that into a `Requested`, `{how, done}`: `done` is `current.promise` for a started run (`began()`, which
-  the effect `send-run` called inside the step, made it), and `Promise.resolve(null)` for a refused one.
+- `engine.ts` `run(code, head)` dispatches the event and answers, from the step, whether the run started (true) or was
+  refused. It throws while a step is in progress (`stepping`). A step writes the `engine` signal before it performs its
+  effects (`apply`).
+- `run.ts` turns that into a `Requested`, `{how, done}`: `done` is `current.promise` for a started run (made by
+  `began()`, which the effect `send-run` called inside the step), and `Promise.resolve(null)` for a refused one.
   `runCode` returns `done`; `requestRun` (the editor) and `runCommand` return the whole `Requested`.
 - `runCommand(text)` adds `kind: "command"`, `fresh_locals: false`, and `history` when it started.
 
 ### With no engine: "Start engine"
 
-With no engine, nothing on the page offers to run, and one action is offered: starting the engine. `app/start.ts` is
-the one statement of it: `startOffer(state)` says what "Start engine" does in a state, or null when the state is not
-"no engine"; `startEngine()` does it (the toolbar's button, the command line's button and Ctrl/Cmd+Enter all call it);
-`noEngine()` is `startOffer() !== null`. It runs nothing, and nothing runs when the engine becomes ready.
+What the page shows with no engine is in SPEC 3.4 (Run), 3.5 (the command line) and section 5 (the states). In the
+code, `app/start.ts` is the one statement of it: `startOffer(state)` says what "Start engine" does in a state, or null
+when the state is not "no engine"; `startEngine()` does it (the toolbar's button, the command line's button and
+Ctrl/Cmd+Enter all call it); `noEngine()` is `startOffer() !== null`. It runs nothing, and nothing runs when the engine
+becomes ready.
 
 | State | `startOffer` | The toolbar's Run | A press, or Ctrl/Cmd+Enter | The command line |
 |---|---|---|---|---|
@@ -387,63 +372,54 @@ the one statement of it: `startOffer(state)` says what "Start engine" does in a 
 | `other-tab-idle` | `take-over` | "Start engine" (hidden with the other run controls, and under the blocking dialog) | `ask`: the take-over dialog again (the state stays; no lock is taken, nothing starts). Only its "Use dofile in this tab" takes over | off, hint "Start the engine to run code"; "Start engine" |
 | `other-tab-taking` | `off` | "Start engine", off (hidden) | nothing started; the "isn't running in this tab" toast | off, hint "The engine isn't running"; "Start engine", off |
 
-"Off" in this table is never the `disabled` attribute. The toolbar's Run and the command line's button are
-`aria-disabled` with `.off`; the command line's field is `aria-disabled` and read-only. All stay focusable.
-
-A button that keeps the focus through "Start engine", "Starting…" and "Run" (the toolbar's Run, the phone's Run and Break
-pill, the command line's three buttons: one element each) ignores a held Enter's repeats (`ui/keys.ts`
-`ignoreHeldEnter`), so a key held down on "Start engine" presses it once: it starts nothing twice, toasts once, and
-runs nothing when the engine is ready. A hint's `help x` link has the same rule: held during a run or a start it toasts
-once, and held in `ready` it runs `help x` once.
+"Off" in this table is never the `disabled` attribute: the toolbar's Run and the command line's button are
+`aria-disabled` with `.off`, the command line's field is `aria-disabled` and read-only, and all stay focusable.
 
 - **Why not `disabled`: the focus.** These states change under the visitor's hands: a start fails while a command is
-  being typed, and a press of "Start engine" after a failed start turns that very button into "Starting…" (the
-  toolbar) or into the off "Run command" (the command line, the same element). A `disabled` element that has the focus
-  loses it to `<body>`. `aria-disabled` keeps the focus where it was, which is the pattern `RunControls.tsx` already
-  used for `running`; handing the focus on (as a banner that leaves does) would instead take it out of the field the
-  visitor is typing in, and it would not come back when the engine does. The field's text is never changed.
+  typed, and "Start engine" pressed after a failed start turns that very button into "Starting…" (the toolbar) or the
+  off "Run command" (the command line, the same element). A `disabled` element that has the focus loses it to
+  `<body>`; `aria-disabled` keeps it where it was (the pattern `RunControls.tsx` already used for `running`). Handing
+  the focus on, as a banner that leaves does, would take it out of the field the visitor is typing in, and it would
+  not come back with the engine. The field's text is never changed.
+- **A held Enter acts once.** A button that keeps the focus through "Start engine", "Starting…" and "Run" (the
+  toolbar's Run, the phone's Run and Break pill, the command line's three buttons: one element each) ignores a held
+  Enter's repeats (`ui/keys.ts` `ignoreHeldEnter`): it starts nothing twice, toasts once, and runs nothing when the
+  engine is ready. A hint's `help x` link held during a run or a start toasts once, and held in `ready` runs `help x`
+  once. Ctrl/Cmd+Enter (one window listener in `Editor.tsx`;
+  not with a dialog open, nor in another text field, which keeps it) ignores the key's repeats, and a dialog ignores a
+  repeated Enter (`ui/Dialog.tsx`), so the repeats do not press the prompt's "Download", which has the focus.
 - **An off control that is pressed is not silent**, except Run while a run is on: Enter in the field with text, and a
-  press of the off "Run command" or of the off Run, show the toast Ctrl/Cmd+Enter shows in that state
-  (`editor/words.ts` `refusedRunWords`); Enter in the off field, and a press of the off "Start engine", show the
-  field's hint. So a second click at the spot where "Start engine" was is answered: "The engine is starting. Try again
-  when it is ready."
-- **A returning visitor whose browser has the engine** never sees "Start engine": the page load shows "Run", disabled,
-  then `cache-checked` starts the engine by itself ("Starting…", off), then "Run". A first visit shows "Run",
-  off, for the moment of the page load, then the prompt, with "Start engine" under it.
-- **The toolbar does not move.** "Start engine" is one of the labels the Run button holds in its one cell (`ui/Icon.tsx`
-  `Labels`), so the button is as wide with "Run" as with "Start engine" (`e2e/shell.spec.ts`, "the toolbar does not
-  move"). The command line's button reserves no width: it is "Run command" (on a phone the 44 px icon button) with an
-  engine and "Start engine", in words on a phone too, without one; the field takes what is left.
-- **Run selection** is disabled with no engine (the phone's one button stays "Start engine" with a selection).
-- **The command line** is off with no engine. That never changes its text: a typed draft stays, greyed, and
-  is usable when the engine is back. The hint is the placeholder, so it shows only while the field is empty (on a phone it is set in the UI font,
-  smaller, so it shows whole beside the wider button). Hint and
-  draft are the muted color at full opacity on `--surface-2` (the text contrast, 4.5, in both themes; an e2e test
-  measures it).
+  press of the off "Run command" or the off Run, show the toast Ctrl/Cmd+Enter shows in that state (`editor/words.ts`
+  `refusedRunWords`); Enter in the off field and a press of the off "Start engine" show the field's hint. So a second
+  click where "Start engine" was is answered: "The engine is starting. Try again when it is ready."
+- **The toolbar does not move**: "Start engine" is one of the labels in the Run button's one cell (`ui/Icon.tsx`
+  `Labels`; `e2e/shell.spec.ts`, "the toolbar does not move"). The command line's button reserves no width (SPEC 3.5).
 - **A paste** into the command line is decided before anything changes (`log/pasterun.ts` `pastePlan`). With no engine
-  it is an ordinary paste, whatever it holds (the field is read-only then, so this guards the instant before it is
-  drawn so). With an engine that is there or on its way but not `ready`, a paste of lines is refused whole (the table
-  under "Three pasted lines").
-- **Load, Import and the log's `help x` links** are off with no engine: `aria-disabled` and `.off` (the take-over
-  button's pattern), still focusable. A press reaches no machine and opens no prompt; a toast says why, by the offer
-  (`start.ts` `startFirst`): where "Start engine" can start it, "Start the engine to load wages.dta", "Start the engine
-  to import survey.csv", "Start the engine to see help regress"; where nothing can start it from the page (`off`), "The
-  engine isn't running: can't load wages.dta" (and "can't import survey.csv", "can't see help regress").
-- **A held Ctrl/Cmd+Enter acts once.** The key works anywhere on the page (one window listener in `Editor.tsx`; not with a dialog open, and not in another text field, which keeps it) and ignores the key's repeats, and a dialog ignores a repeated Enter
-  (`ui/Dialog.tsx`), so the repeats do not press the prompt's "Download", which has the focus once the prompt is open.
+  it is an ordinary paste (the field is read-only then; this guards the instant before it is drawn so). With an engine
+  that is there or on its way but not `ready`, a paste of lines is refused whole (the table under "Three pasted lines").
+- **Load, Import and the log's `help x` links** are off with no engine (`aria-disabled` and `.off`, still focusable). A
+  press reaches no machine and opens no prompt; a toast says why, by the offer (`start.ts` `startFirst`): "Start the
+  engine to load wages.dta" (to import survey.csv, to see help regress), or where nothing can start it from the page
+  (`off`), "The engine isn't running: can't load wages.dta" (can't import survey.csv, can't see help regress).
+- **Run selection** is disabled with no engine (the phone's one button stays "Start engine" with a selection).
+- **The command line's look with no engine** is in SPEC 3.5. Not there: on a phone the hint is set in the UI font,
+  smaller, so it shows whole beside the wider button; the hint and draft are the muted color at full opacity on
+  `--surface-2` (contrast 4.5 in both themes, measured by an e2e test).
+- **A returning visitor whose browser has the engine** never sees "Start engine" (SPEC section 5). A first visit shows
+  "Run", off, for the moment of the page load, then the prompt, with "Start engine" under it.
 
 ### Where a run starts
 
 | Control | Calls | When it can be pressed |
 |---|---|---|
-| Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready`; off in every other state with an engine or one on its way: `aria-disabled`, never `disabled`, so a focused Run keeps the focus and a second Enter cannot reach Break. With no engine it is "Start engine" or "Not started" (the table above) and runs nothing. |
-| Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | enabled in `ready` with a selection; `disabled` in every other state, `running` too (not `aria-disabled`) |
-| Ctrl/Cmd+Enter (anywhere on the page) | `runEither()`: with no engine `startEngine()`; else Run selection with a selection, else Run; held, it acts once | in any state: with no engine it does what "Start engine" does (the table above); in `ready` it runs; in the other states the run is refused (`run.ts` `requestRun`), and a toast says why by the state (`editor/words.ts` `refusedRunWords`) |
+| Run (`editor/RunControls.tsx`) | `editorCommands.runFile()`: the active text tab's whole text, `kind: "file"`, fresh locals; with no text tab, the toast "No file is open to run" | enabled in `ready`; off (`aria-disabled`, never `disabled`) in every other state with an engine or one on its way, so a focused Run keeps the focus and a second Enter cannot reach Break. With no engine, the table above. |
+| Run selection | `runSelection()`: the selected whole lines, `kind: "selection"`, locals kept | enabled in `ready` with a selection; `disabled` (not `aria-disabled`) in every other state, `running` too |
+| Ctrl/Cmd+Enter (anywhere on the page) | `runEither()`: with no engine `startEngine()`; else Run selection with a selection, else Run; held, it acts once | any state: with no engine as "Start engine"; in `ready` it runs; in the other states the run is refused (`run.ts` `requestRun`) with a toast by the state (`refusedRunWords`) |
 | Break | `running`: `breakRun()` ("Break", or "Break (reset)" with no cross-origin isolation); `waiting`: "Reset now", `eng.reset()` with no question | disabled in `breaking` ("Stopping…") and when no run is on |
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile(path)` for the file whose run the reset cut (`rerunPath`), then the banner is dismissed | drawn only for a Break or a crash that cut a file run (not after a Reset the visitor asked for); enabled in `ready` with that file open as a text tab |
-| The command line | `runCommand(text)` | in `ready` it runs. With an engine that is not ready, or one on its way, the field is on and the command is refused with a toast (the button is off). Off with no engine |
-| A hint's `help x` link (`log/LogView.tsx`) | `runCommand(text)` | in `ready` the machine accepts it. While a run is on or a start is on its way, the machine refuses it and a toast says why (`editor/words.ts` `refusedRunWords`, the command line's words). Off with no engine (`aria-disabled`, a toast) |
+| The command line | `runCommand(text)` | in `ready` it runs. With an engine not ready, or on its way, the field is on and the command is refused with a toast (the button is off). Off with no engine |
+| A hint's `help x` link (`log/LogView.tsx`) | `runCommand(text)` | in `ready` it runs; during a run or a start the machine refuses it with the command line's toast (`refusedRunWords`). Off with no engine |
 | Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`; off with no engine (`aria-disabled`, a toast); `disabled` in the other states |
 
 The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` on `engine`, `followErrors` on
@@ -451,33 +427,13 @@ The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` o
 
 ### One command's fate
 
-```mermaid
-stateDiagram-v2
-  state "runCommand(text)" as sub
-  state "refused" as refused
-  state "running" as running
-  state "ended by the engine" as ended
-  state "cut by a reset" as cut
-  state "cut by another tab" as taken
-  [*] --> sub
-  sub --> refused: empty text, or a state with no run cell
-  sub --> running: ready, send-run
-  running --> ended: run-ended or run-failed
-  running --> cut: reset, crash, Break timeout, Break with no SharedArrayBuffer
-  running --> taken: lock-lost
-  refused --> [*]
-  ended --> [*]
-  cut --> [*]
-  taken --> [*]
-```
-
 | Fate | `how` | `done` settles with | `lastRun` | `history` | The command line's text |
 |---|---|---|---|---|---|
-| Refused | `refused` | null, at once | unchanged | unchanged | kept |
-| Ran (from `ready`) | `started` | the result, after the after-run work | the run, written in the step that ended it | + the command (not twice in a row) | cleared |
-| Its op failed in the worker | `started` | the machine's rc 9998, kind `run-failed` | the run, rc 9998 (the worker stays) | + | cleared |
-| Cut by a reset | `started` | the machine's rc 9998, kind `break`, `crash` or `user` | null (`engine-gone`), then the cut run, rc 9998, in the same step | + | cleared |
-| Cut by another tab | `started` | the machine's rc 9998, kind `stopped` | null (`engine-gone`), and not written again | + | cleared |
+| Refused (empty text, or a state with no `run` cell) | `refused` | null, at once | unchanged | unchanged | kept |
+| Ran (from `ready`, `send-run`; ended by `run-ended`) | `started` | the result, after the after-run work | the run, written in the step that ended it | + the command (not twice in a row) | cleared |
+| Its op failed in the worker (`run-failed`) | `started` | the machine's rc 9998, kind `run-failed` | the run, rc 9998 (the worker stays) | + | cleared |
+| Cut by a reset (reset, crash, Break timeout, Break with no `SharedArrayBuffer`) | `started` | the machine's rc 9998, kind `break`, `crash` or `user` | null (`engine-gone`), then the cut run, rc 9998, in the same step | + | cleared |
+| Cut by another tab (`lock-lost`) | `started` | the machine's rc 9998, kind `stopped` | null (`engine-gone`), and not written again | + | cleared |
 
 `runCode` (Run, Run selection) is the same without `history` and the field. Its head is `kind: "file"` or
 `"selection"`, and `began` adds a run-head to the log and, on a phone, sets `phoneTab` to `"log"`.
@@ -524,7 +480,7 @@ What a view may rely on, and when:
 | Later, as each answers | `data`, `rows`, `macros`, `memory` (`refreshData`); `files` and the open tabs (`afterRun`). |
 | `done` has settled | All of the above. An after-run read that failed leaves its signal as it was. A failed file list, and an open tab's follow-up that throws, go to the console; `refreshData` drops its error. |
 
-`refreshData` sends its four reads synchronously inside the end step (`client.ts` `#send` posts at once). So they are
+`refreshData` sends its four reads synchronously inside the end step (`client.ts` `#send` posts at once), so they are
 ahead, in the worker's queue, of any run started after the step.
 
 ### Three pasted lines, the second fails
@@ -552,29 +508,27 @@ sequenceDiagram
   Note over R: the done of a and b settle later, after their after-run reads, and are ignored
 ```
 
-- **Why `whenEnds` waits on `lastRun`.** `lastRun` is written in the step that ends the run. `done` settles only
+- **Why `whenEnds` waits on `lastRun`.** `lastRun` is written in the step that ends the run; `done` settles only
   after the after-run reads. Between the two the engine is `ready`, so an Enter or a Run pressed then would take the
-  engine, and the next pasted line would be refused. Starting it in a microtask after the step leaves no gap. It cannot
-  start inside the step: `run()` would throw.
+  engine and the next pasted line would be refused. Starting it in a microtask after the step leaves no gap; inside the
+  step, `run()` would throw.
 - **Why `done` is still awaited.** A line cut by another tab writes no new `lastRun`: `done` settles with kind
-  `stopped`. `done` settling also stops the effect, so no wait
-  outlives its run. The first of the two to come wins (`over`).
+  `stopped`. `done` settling also stops the effect, so no wait outlives its run. The first of the two wins (`over`).
 
 | `stop.why` | When | Lines counted as run | Toast (`inTurnWords`) |
 |---|---|---|---|
 | `block` | the line opens a block, a `/*` comment it does not close, or holds `///` (`opensBlock`); it is not sent | those before it | "N of T pasted lines not run: line L starts a block, a comment or a /// command; run those from the editor" |
-| refused whole (`pastePlan`: `refused`) | the engine is there or on its way but not `ready` when the paste comes (the page load, a download, a start, a run) | none: no line is sent | "T of T pasted lines not run: the engine can't take a command now". The paste is prevented and the field is exactly as it was: nothing is pasted, nothing cleared, and the text before and after the cursor stays. (Before 2026-11-12 the field was cleared, line 1 was refused and put back, and the other lines and the text after the cursor were lost.) |
+| refused whole (`pastePlan`: `refused`) | the engine is there or on its way but not `ready` when the paste comes (the page load, a download, a start, a run) | none: no line is sent | "T of T pasted lines not run: the engine can't take a command now". The paste is prevented and the field is exactly as it was: nothing pasted, nothing cleared, the text around the cursor kept (until 2026-11-12 the field was cleared and the lines after the first and the text after the cursor were lost). |
 | `refused` | `how` is `refused` for a line after the first (the engine was `ready` when the paste began, and was not when this line's turn came) | those before it | "N of T pasted lines not run: the engine can't take a command now". The line goes back into the field if the field is empty and not off (`pasterun.ts` `putBack`: with no engine by then, nothing is put into the off field). |
 | `error` | rc is not 0: an error, Break's rc 1, or rc 9998 (a reset, `run-failed`) | up to and with it | "N of T pasted lines not run: line L ended with r(rc)" |
 | `taken` | `done` gave kind `stopped` | up to and with it | "N of T pasted lines not run: another tab took over the engine during line L" |
 | none | every line ran | all | no toast |
 
-When the last line ends with an error or is cut by another tab, nothing is left (`total - ran` is 0), and there is no
-toast: its error is in the log. A last line that is refused or a block's leaves one line, and the toast shows.
-
-With no engine no line is run at all: the paste is an ordinary paste (`pastePlan` answers before `pastedLines` is
-asked). An engine lost while pasted lines run keeps the rules above: `taken` when another tab took it during a line,
-`error` (rc 9998) when a reset cut the line.
+When the last line ends with an error or is cut by another tab, nothing is left (`total - ran` is 0) and there is no
+toast: its error is in the log. A last line that is refused or a block's leaves one line, and the toast shows. With no
+engine no line is run: the paste is an ordinary paste (`pastePlan` answers before `pastedLines` is asked). An engine
+lost while pasted lines run keeps the rules above: `taken` when another tab took it, `error` (rc 9998) when a reset cut
+the line.
 
 ### Invariants a change must keep
 
@@ -584,15 +538,14 @@ asked). An engine lost while pasted lines run keeps the rules above: `taken` whe
 - **With no engine nothing offers to run.** A new control that runs code reads `start.ts` `noEngine()` and is off
   then; a new way to start the engine calls `startEngine()`, so another tab's engine is never taken without the
   take-over dialog.
-- **`done` always settles.** A started run settles through `end-run` (every exit from a running state has one). A
-  refused run settles at once. The after-run work uses
-  `Promise.allSettled`, so a failed read does not keep `done` open.
+- **`done` always settles.** A started run settles through `end-run` (every exit from a running state has one), a
+  refused run at once, and the after-run work uses `Promise.allSettled`, so a failed read does not keep `done` open.
 - **No run starts during a step.** A view never calls `runCode` or `runCommand` inside a handler given to `connectRun`,
-  or inside a signal effect on `engine` or `lastRun`. Both are written only during a step, so the call throws. A `log`
+  or inside a signal effect on `engine` or `lastRun`: both are written only during a step, so the call throws. A `log`
   write from a step (`began`, `ended`) throws too. A streamed chunk and "Clear log" write `log` outside a step, where
   the call does not throw: during a run it is refused, and after "Clear log" in `ready` the run starts. Start the next
   run after the step: in a microtask, or when `done` settles.
-- **`ended` comes after the `engine` signal has its new state.** When the machine cut the run, it also comes after
+- **`ended` comes after the `engine` signal has its new state,** and, when the machine cut the run, after
   `engine-gone`.
 - **A cut of kind `stopped` writes no `lastRun`.** The tab no longer owns the engine, and a quick take-over may already
   have started a new one.
@@ -600,33 +553,24 @@ asked). An engine lost while pasted lines run keeps the rules above: `taken` whe
 ### Tests that hold this
 
 - `web/test/app.test.ts`:
-  - "a run: the streamed log grows one item and the result's log replaces it; graphs, lastRun, results and the
-    after-run calls"
+  - "a run: the streamed log grows one item and the result's log replaces it; …"
   - "a crash cuts a run: the new state first, then engine-gone, then the cut run's result; …"
-  - "runCode while a run is on does nothing; with no engine a run is refused, settles with null at once and opens no
-    prompt, and after Start engine, Not now or a failed start nothing runs"
+  - "runCode while a run is on does nothing; with no engine a run is refused, …"
   - "run() called while a step is in progress throws before it queues anything"
   - "runCommand: added to history (not twice in a row), …"
-  - "runCommand: a command that does not run is not in history (so the field keeps it): refused, with no engine too,
-    where it opens no prompt; …"
+  - "runCommand: a command that does not run is not in history (so the field keeps it): …"
   - "a run whose op failed in the worker (run-failed) is not a reset: …"
-  - "Stop download declines; a run then is refused and opens no prompt; Start engine opens the prompt and runs nothing,
-    not when the engine is ready either; Run then runs"
-  - "Start engine: what each engine state offers (start.ts startOffer), every state named; the words of the off
-    controls and the hint"
-  - "Start engine pressed (startEngine, the buttons' and Ctrl/Cmd+Enter's one action) in each state: the prompt, a new
-    try, the take-over dialog, or nothing; …"
-  - "C1: a run cut by losing the tab lock does not set lastRun, and the store is not listed afterwards"
+  - "Stop download declines; a run then is refused and opens no prompt; …"
+  - "Start engine: what each engine state offers (start.ts startOffer), …"
+  - "Start engine pressed (startEngine, the buttons' and Ctrl/Cmd+Enter's one action) in each state: …"
+  - "C1: a run cut by losing the tab lock does not set lastRun, …"
   - "J1: pasted lines: a line cut because another tab took the engine stops the rest; …"
-  - "a paste is decided before anything changes (pastePlan): with no engine an ordinary paste …; with an engine that
-    is not ready, refused whole with the toast's words; ready, the lines run; no line is put back into an off field"
-  - "J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)"
+  - "a paste is decided before anything changes (pastePlan): …"
+  - "J5: a run's promise settles even when the after-run work throws (…)"
 - `web/test/machine.test.ts`:
-  - "property: a transition from running, breaking or waiting to a state that is none of those has exactly one end-run,
-    as its last effect; no other has one"
-  - "property: no run is held: send-run comes only from a run in ready, with that run's code and head, and no state
-    keeps a run's code"
-  - "scenario 12. with no engine a run is not valid; Start engine (ask) opens the prompt and nothing runs: …"
+  - "property: a transition from running, breaking or waiting to a state that is none of those has exactly one end-run, …"
+  - "property: no run is held: …"
+  - "scenario 12. with no engine a run is not valid; …"
   - "property: a transition from ready, running, breaking or waiting to a state that does not hold the same worker has
     engine-gone, once"
 - `web/test/editor.test.ts`:
@@ -634,45 +578,33 @@ asked). An engine lost while pasted lines run keeps the rules above: `taken` whe
   - "pasted lines stop before a block's, a comment's or a /// line, …"
   - "pasted lines: the next starts only once the one before has ended"
   - "a paste with no line break is an ordinary paste; …"
-  - "a dialog's held-Enter rule (ui/keys.ts isHeldEnter): only a repeat of Enter, …"
-  - "a refused Ctrl/Cmd+Enter's toast: the words by the engine's state; none where a run is taken or the key does what
-    Start engine does (the download prompt, the take-over dialog)"
-- `web/test/imports.test.ts`:
-  - "events get in through two doors: …; transition() is called once"
-  - "each signal has one writer: …"
+  - "a dialog's held-Enter rule (ui/keys.ts isHeldEnter): …"
+  - "a refused Ctrl/Cmd+Enter's toast: …"
+- `web/test/imports.test.ts`: "events get in through two doors: …"; "each signal has one writer: …"
 - `web/e2e/editor.spec.ts`:
   - "the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; …"
-  - "the command line with no engine: disabled, with the hint while it is empty; the button is Start engine; a paste is
-    an ordinary paste; a typed draft stays through a loss of the engine and runs when the engine is back"
-  - "with no engine nothing offers to run: Run is Start engine and Ctrl/Cmd+Enter does what it does, once while held;
-    Run selection is off; nothing runs when the engine is ready"
-  - "with no engine Import and the log's help links are off: aria-disabled and still focusable, and a press only says
-    why"
-  - "while the engine starts, a command is refused with words and the draft stays; a start that fails under the caret,
-    and Start engine pressed by keyboard, leave the focus where it was; Ctrl/Cmd+Enter after a failed start tries
-    again, and says why where it cannot"
+  - "the command line with no engine: …"
+  - "with no engine nothing offers to run: …"
+  - "with no engine Import and the log's help links are off: …"
+  - "while the engine starts, a command is refused with words and the draft stays; …"
   - "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to that tab" (Start engine
     opens the prompt, and nothing runs once the engine is ready)
   - "Ctrl/Cmd+Enter that the engine does not take says why in a toast and starts nothing; …"
-- `web/e2e/shell.spec.ts`: "first visit: … Run is Start engine, which brings the prompt back; a run does nothing and
-  opens no prompt"; "the toolbar does not move: …; Run is Start engine with no engine"
-- `web/e2e/states.spec.ts`: "a second tab: Start engine goes into the take-over dialog, never straight to a start; the
-  dialog's button takes over"; "where nothing can start the engine from the page …: the command line and its Start
-  engine are off, and say so; …"; "the phone's command line at 320 px with no engine: the hint shows whole beside Start
-  engine, …"
+- `web/e2e/shell.spec.ts`: "first visit: … Run is Start engine, …"; "the toolbar does not move: …"
+- `web/e2e/states.spec.ts`: "a second tab: Start engine goes into the take-over dialog, …"; "where nothing can start
+  the engine from the page …"; "the phone's command line at 320 px with no engine: …"
 - `web/e2e/output.spec.ts`: "a .dta tab with no engine …; Load is off and a press only says why"
 
 ### If you change this
 
 - **Taking the rc from `done` in `whenEnds`** leaves a gap between two pasted lines in which another run takes the
-  engine. The next line is then refused.
+  engine, and the next line is refused.
 - **Changing `Promise.allSettled` to `Promise.all` in `ended`** leaves `done` unsettled when an open tab's follow-up
   fails, and a paste then waits for ever (J5).
-- **Holding a run again** (sending it when the engine is ready) would need a state field, the promise that waits for
-  it and an effect for each way it is let go; that is what was removed on 2026-11-12. The no-held-run property in
-  `machine.test.ts` fails first.
+- **Holding a run again** ("No run is held", above) would bring back a state field, a promise and an effect per way out,
+  removed on 2026-11-12; the no-held-run property in `machine.test.ts` fails first.
 - **The order of writes in `ended`:** log and graphs, then `lastRun`, then `results`. The editor's error mark and
-  `whenEnds` react to `lastRun`. Moving `lastRun` earlier gives them a log that is not final.
+  `whenEnds` react to `lastRun`; moving it earlier gives them a log that is not final.
 - **The `RunHead` object is passed through unchanged**, from `runCode` through the machine to `began` and the run-head
   item. `codeOf` (section 4) and the editor's running-lines mark (`marked?.head === run`) look it up by identity.
 
@@ -748,10 +680,10 @@ flowchart LR
 | **A reset** | unchanged | unchanged | unchanged | unchanged | every mark cleared, the closed files' too (`lastRun` is null in the `engine-gone` effect); the running lines cleared | unchanged | unchanged |
 
 What "the run changed" means: the worker compares `/work` before and after the run by modification time and size, and
-writes the changes in `store.applyRun` (`engine/store.ts`). It leaves out any path the page changed during the run,
-because the page's version wins. `RunResult.files` lists only what it wrote. `files.ts` `afterRun` calls `followOpen`
-for each listed path that is open in a text tab. `followOpen` reads it, decodes it strictly (BOM kept, null when not
-UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRun`.
+writes the changes in `store.applyRun` (`engine/store.ts`), leaving out any path the page changed during the run (the
+page's version wins). `RunResult.files` lists only what it wrote. `files.ts` `afterRun` calls `followOpen` for each
+listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM kept, null when not UTF-8), and calls
+`editorCommands.ranOver`, which applies `ranover.ts` `followRun`.
 
 ### Rules a change must keep
 
@@ -770,36 +702,29 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
 
 ### Tests that hold this
 
-- `web/test/editor.test.ts`:
-  - "a run's version of an open file (editor/ranover.ts): compared with line breaks as the editor holds them; …"
-  - "a file's form (editor/ranover.ts): its line break, the more common one, \n on a tie or with none, and its BOM; …"
-  - "the error mark's rule (editor/errormark.ts): …"
-- `web/test/app.test.ts`:
-  - "a run that rewrites an open file: the editor follows it (ranOver); the banner when it keeps the tab's text: …"
-  - "setDirty sets one tab's dot; decodeText takes strict UTF-8 only"
-- `web/test/files-ui.test.ts`:
-  - "openFile: a text file gets a tab, made active, before the editor is told; …"
-  - "closing a tab: …"
-  - "rename: an open file, and a folder with open files under it: the tabs follow, then the editor is told for each"
-  - "upload over an open file: … Replace reloads it in the editor; one no longer text closes its tab"
-  - "rename: a .dta tab renamed to .csv opens again as text in its place; …"
+- `web/test/editor.test.ts`: "a run's version of an open file (editor/ranover.ts): …"; "a file's form
+  (editor/ranover.ts): …"; "the error mark's rule (editor/errormark.ts): …"
+- `web/test/app.test.ts`: "a run that rewrites an open file: the editor follows it (ranOver); …"; "setDirty sets one
+  tab's dot; decodeText takes strict UTF-8 only"
+- `web/test/files-ui.test.ts`: "openFile: a text file gets a tab, made active, before the editor is told; …"; "closing
+  a tab: …"; "rename: an open file, and a folder with open files under it: …"; "upload over an open file: …"; "rename:
+  a .dta tab renamed to .csv opens again as text in its place; …"
 - `web/e2e/editor.spec.ts`:
   - "the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast, a failed save shows a banner; …"
-  - "a failed save's banner goes when the editor's text is replaced: Reload from the run, Replace with uploaded"
-  - "a rename while Save writes: the save follows the tab to its new name (clean, its toast), and so does a failed
-    save's banner"
+  - "a failed save's banner goes when the editor's text is replaced: …"
+  - "a rename while Save writes: …"
   - "a Save pressed while a rename is being written saves under the new name, not the old one"
   - "a Save pressed while a delete is being written does not bring the file back"
   - "Save keeps a file's form: …"
   - "the error line keeps to its text when the tab is left and shown again"
-  - "the error line goes with its tab: a file closed and opened again with the same text has none"
+  - "the error line goes with its tab: …"
   - "a run that rewrites open files: …"
   - "a clean tab of a .csv with \r\n line breaks follows a run that rewrites it: …"
   - "a file's form follows the store's text the editor takes: …"
 
 ### If you change this
 
-- **`ranOver` calls `setDirty` itself.** The `follow` listener sees only the shown view's transactions. A hidden tab
+- **`ranOver` calls `setDirty` itself.** The `follow` listener sees only the shown view's transactions; a hidden tab
   changed through `update()` gives the listener nothing.
 - **The error mark's effects (`followRuns`, `followErrors`) must read only their one signal.** If they also read
   `shown`, a tab switch would place the error again at the run's line number, not where its text has moved.
@@ -820,7 +745,7 @@ UTF-8), and calls `editorCommands.ranOver`, which applies `ranover.ts` `followRu
 ### The problem
 
 The log is plain text that the engine prints, with no marks. The engine reports, for each graph, only the line number
-in the code it was sent (`RunResult.graph_lines`), and not where in the log that line ran. `log/align.ts` `echoLines`
+in the code it was sent (`RunResult.graph_lines`), not where in the log that line ran. `log/align.ts` `echoLines`
 walks the log's echoes beside the code to find, for each code line, the index of its echo.
 
 ### The pieces
@@ -831,7 +756,7 @@ walks the log's echoes beside the code to find, for each code line, the index of
   - the text `end of do-file`, which is classed `out`.
 - **`runError(lines)`:** the last `err` line that is not `r(N);`.
 - **The code** (`editor/commands.ts` `codeOf`): a `WeakMap` from the run's `RunHead` to the code sent, which
-  `Editor.tsx` `start` fills before `runCode`. A command has no run-head. `LogView` takes its first echo's text as
+  `Editor.tsx` `start` fills before `runCode`. A command has no run-head: `LogView` takes its first echo's text as
   the code. A run started from elsewhere (the test hook) has no code, so its links go to the run's end.
 - **Per code line** (`blocks`, `comments`):
   - `inside` a block: `{ }`, `program define` … `end`, `mata` … `end`. `inBlocks` exports it.
@@ -845,10 +770,8 @@ walks the log's echoes beside the code to find, for each code line, the index of
   - The lookups use a binary search (`atLeast`), so the walk is linear in the log.
 - **`endFirst[i]`** (a backward pass): whether an `end of do-file` comes after log line `i` and before the next echo of
   a `do` that shows its echoes.
-- **The walk's state:**
-  - `p`: the next code line to find.
-  - `depth`: the nested do-files open.
-  - `jump`: whether a top-level echo may be taken and looked for further down.
+- **The walk's state:** `p`, the next code line to find; `depth`, the nested do-files open; `jump`, whether a
+  top-level echo may be taken and looked for further down.
 
 `opens(x)` is true for `do` or `include`, after any `capture`, `quietly` and `noisily` prefixes (abbreviated too),
 when its echoes show: no prefix, or `noisily` last.
@@ -953,7 +876,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
 
 ### Late rather than wrong
 
-Where the walk cannot know which echo is a line's, the line gets none, and its link goes to the run's end. A link in
+Where the walk cannot know which echo is a line's, the line gets none, and its link goes to the run's end: a link in
 the wrong place is worse than a late one. These cases give no echo on purpose:
 
 - **An echo that may belong to a do-file run from a block** (a loop, a program, an `if`): after such a `do`, or after
@@ -985,23 +908,19 @@ later identical line, and a graph's link then goes in the wrong place (`docs/pha
   - "echoLines: a do-file run from a block opens nothing, and the walk stays in step after it"
   - "echoLines: after lines echoed in another form (a mata block) the walk finds the next line further down"
   - "echoLines: capture noisily do shows its file's echoes, which are passed over; quietly do shows none"
-  - "echoLines: a do-file run from a loop, then a line its file holds too: the main file's echo, after the loop's runs"
-  - "echoLines: a do-file run from a program: a later line its file holds is not taken for the program's echo"
+  - "echoLines: a do-file run from a loop, then a line its file holds too: …"
+  - "echoLines: a do-file run from a program: …"
   - "echoLines: a do-file that runs a do-file from a loop is passed over whole"
   - "echoLines: `n` is noisily too (cap n do shows its file's echoes); include and noi do"
-  - "echoLines: a quietly or capture block echoes nothing inside; a line there is not taken for a later line's echo"
-  - "echoLines: a line in a /* */ comment is not taken for the echo of the same line after it; a comment's continued
-    line is"
+  - "echoLines: a quietly or capture block echoes nothing inside; …"
+  - "echoLines: a line in a /* */ comment is not taken for the echo of the same line after it; …"
   - "inBlocks: a local or global's braces open no block"
-  - "nestedTarget and unsavedTarget: the file a do or include runs, and the open file with unsaved edits it is" (also
-    `echoed` on a top-level and a body echo)
-  - "runError: the error a run ended with is its last error line, not one capture noisily caught before it"
+  - "nestedTarget and unsavedTarget: …" (also `echoed` on a top-level and a body echo)
+  - "runError: the error a run ended with is its last error line, …"
   - the three ".log tokenizer" tests
-- `web/e2e/editor.spec.ts`:
-  - "Run: the run-head, the graph after its echo, the error line marked, Go to line, the last run; Run selection keeps
-    locals"
-  - "the log: under an error, the OQ-10 note where the engine's own words do not say it"
-  - "S 15's note under a nested do in a loop: one note, after the loop's echo of that line, however many passes run it"
+- `web/e2e/editor.spec.ts`: "Run: the run-head, the graph after its echo, the error line marked, Go to line, …"; "the
+  log: under an error, the OQ-10 note where the engine's own words do not say it"; "S 15's note under a nested do in a
+  loop: …"
 - `web/e2e/shell.spec.ts`: "key hints: … the Editor and Log views with a nested do's note …"
 
 ### If you change this

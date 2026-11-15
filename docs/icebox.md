@@ -4,7 +4,7 @@ Things knowingly left for later, by area. Each item says what it is, where it sh
 
 Rules:
 - An item enters when the maintainer puts it here.
-- It leaves when it is fixed, dropped, or promoted to a plan (`docs/prototype1-plan.md` or a later one).
+- It leaves when it is fixed, dropped, or promoted to a plan (`docs/phase2-plan.md` or a later one).
 - Nothing here blocks a merge.
 
 Paths are relative to `web/src/app/`.
@@ -155,7 +155,7 @@ estimated splits) are the study's, not checked again here.
   macros and results are lost, as after a restart); and how the page says so (a banner, the status bar, what the Run
   button then offers). 2026-11-13.
 - **A run whose first command is `clear all` restarts the engine first** (from "Later UI work" item 9 of
-  `docs/prototype1-plan.md`, now in `docs/phase2-history.md`; moved here 2026-11-13; nothing in that work is built before step 6). The restart frees the
+  `docs/phase2-plan.md`, "Later UI work"; moved here 2026-11-13; nothing in that work is built before step 6). The restart frees the
   engine's WebAssembly memory, which never shrinks otherwise (the status bar's "Engine memory" only grows until a restart).
   First step: measure how long a restart from the cached snapshot takes; build it only if that is under about 2 s.
   `clear all` anywhere else in a run clears as today. 2026-11-13.
@@ -186,3 +186,11 @@ estimated splits) are the study's, not checked again here.
   "Summary statistics", "Extensions to generate"), 2 more near them, and 2 or 3 one-line option descriptions (`beta`,
   `level`, `noconstant`). A rewording is an engine patch; the maintainer: "no engine patches that are non critical for
   correctness until phase 2(web editor) is done". A full audit of the 156 other help topics is about 3 to 5 hours. 2026-11-13.
+
+## Vendoring (added 2026-11-15)
+
+- **The vendored clean-room policy's Portuguese link is dead.** `scripts/vendor_opendta.py` copies upstream's
+  `docs/clean-room-policy.md` as `src/dofile/_vendor/opendta/CLEAN_ROOM_POLICY.md` and not its translation, so the file's
+  "Português" link to `clean-room-policy.pt-BR.md` points at nothing. Not to be fixed: the maintainer keeps the English file's
+  name `CLEAN_ROOM_POLICY.md` (like `THIRD_PARTY_NOTICES.md` beside it, and as `LICENSE-POLICY.md` links to it) and does
+  not need the translation. A link check over the whole tree reports this one. 2026-11-15.

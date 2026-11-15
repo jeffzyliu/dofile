@@ -20,7 +20,7 @@ kept after a session ends.
   2 × 1,000,000 characters in the worker, uploads up to `--file-limit` MB (1024 default). **No limits on memory, CPU
   time across calls, disk use in the workdir, or number of sessions per client.**
 - `request_upload` and `request_download` URLs are built from `--public-url`.
-- The sandbox (denylist + audit hook) is defense in depth, not a security boundary ([phase1-plan.md](phase1-plan.md),
+- The sandbox (denylist + audit hook) is defense in depth, not a security boundary ([phase1-plan.md](archive/phase1-plan.md),
   component 2). A public server needs a container as the boundary.
 
 ## Open decisions (recommendation first)
