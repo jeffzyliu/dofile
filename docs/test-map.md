@@ -193,7 +193,8 @@ Specs:
   - Panes never remounted; banners; toast position; no key names on a phone.
   - The status bar's "Not affiliated with StataCorp" (at 1440 px, not at 1199 px, not on the iPhone).
 - `keyboard.spec.ts`: the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, at 390 by 844 px:
-  layout while it is open and after, a tap on the command line, a new file's name field, the drag guard.
+  layout while it is open and after, a tap on the command line (touch profiles only), a new file's name field, the
+  drag guard.
 - `files.spec.ts`: files, tabs and the file panel.
   - The tree by keyboard; tabs with and without unsaved edits; Save; inline rename; row and head menus; delete.
   - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page.
