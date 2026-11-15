@@ -333,6 +333,9 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   2026-11-13, 24 Firefox runs each before and after the `focusRow` rewrite passed, and 16 of 16 passed on `main`
   (00821e2)
   locally. Kept here until about ten more runs have passed.
+- `files.spec.ts` "a renamed row drawn after the visitor clicked another row leaves the focus on that row" failed once
+  in Firefox: the clicked row (`c.do`) was not focused at line 325 ("inactive"). Run 43756793188 (`[firefox]`, on #57
+  `3771de5`, 2026-11-15), a pull request that changed only Markdown and comments. Cause not found.
 
 ## Running them
 
