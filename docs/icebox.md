@@ -9,6 +9,17 @@ Rules:
 
 Paths are relative to `web/src/app/`.
 
+## Claude Code plugin (added 2026-11-15, high priority)
+
+Paths in this section are from the repository root.
+
+- **Rewrite the plugin system, and consider bundling the MCP server in the plugin.** High priority, put here by the
+  maintainer: "rewriting the plugin system and consider bundling the mcp server within the plugin, as many plugins
+  already do", so that one install sets up both the server and the log hook. Today the server is added by hand
+  (`claude mcp add dofile -- dofile-mcp ...`, README.md) and the plugin (`.claude-plugin/marketplace.json`,
+  `plugins/dofile-log/`) only adds the hook that shows each `run_do` log in the terminal. Left because it is not started.
+  2026-11-15.
+
 ## Accessibility (from the library sizing study, 2026-11-11; read from the code and tests, not run with a screen reader)
 
 Each item was checked against the code on 2026-11-11 and is stated as the code behaves. Left as not critical for the
