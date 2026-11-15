@@ -2,6 +2,7 @@
 
 The web demo: the engine in Pyodide inside a Web Worker, and a Preact page on top of it. The root `CLAUDE.md` still
 applies. Where to read:
+
 - `web/README.md`: what each script and folder does, with times.
 - `docs/phase2-plan.md`: the plan, its status and next steps (read it first when picking that work up).
 - `docs/design/SPEC.md`: the build spec (section 5: the state machine; 6: the engine's types; 7: the file store; 8: the
