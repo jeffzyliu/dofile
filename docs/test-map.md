@@ -170,32 +170,61 @@ folded file list's rename, the .dta tab's focus and the banner's hand-off to a .
   goes when a banner or a dialog's opener leaves; the running, stopping, waiting, storage, reset and download-failed
   banners; the one-clock test (`page.clock`: the Break pill or status bar equal to the banner's time, "Stopping…" and
   its countdowns); with an engine, Reset's dialog, when Reset asks, and the reset banner's "Run the file again".
-- `editor.spec.ts` (step 4b): Ctrl/Cmd+Enter (from toolbar buttons and form controls, blocked by an open menu, during
-  a run, held); with no engine, typing and the unsaved dot, Ctrl/Cmd+S on several layouts, the focus ring in forced
-  colors, a failed save's banner, a rename of the open file and a Save that answers after it, a Save during a rename's
-  or a delete's write; Save keeps a file's form (`\r\n`, a BOM, a renamed file's new type); .csv, .log, Stata, .md and
-  .json tokens, a file dropped on the editor, 16 px on a phone; the log's formatting in both themes, the run-head,
-  Download log; Find in the log; the unsplit Output tabs by keyboard; Clear log; the error line and its rule; the notes
-  at a run's end at several widths and the OQ-10 notes; a command's Break note; Import and a hint's help link off with
-  no engine. With an engine: the command line with no engine, during a start and after a failed one (words, pastes,
-  toasts, the focus, a new try); a .dta tab; Run, Run selection and Break, with their notes and marks; the command
-  line (Enter, ↑, pastes); the phone keyboard's field flags and straightened quotes; a run that rewrites open files
-  (clean, edited, `.dta`, `\r\n` and BOM versions, "Reload from the run", the reset banner's cut file after a rename);
-  a do-file with a BOM in a nested `do` (ODT-34) and S 15's note; the log following its end through runs and pastes,
-  and keeping a place the visitor scrolled to.
-- `landing.spec.ts` (step 5): the landing page at `/` and the editor at `/app/`; the links between them (Open the
-  editor, About dofile, Close editor, Browsers that work at `/#browsers`, the commands at `/commands/`); the download
-  size equal to the build's; the theme button (shared with the editor, the first paint, its word and icons by width);
-  Copy (the clipboard, "Copied", sizes, contrast); the banner's rows; welcome.do and the run's log scrolling by
-  keyboard at 980 px; axe in both themes; no sideways scroll; forced colors; the site's addresses, redirects, 404s and
-  isolation headers (`/app/` only); each page requests only its own assets; both pages complete with scripts off.
-- `commands.spec.ts` (step 5): every name of `commands.json` once and in order, in columns, the shortest form in bold,
-  the prefixes, `shell` and `webuse` marked off; the filter (its matching, the count, a prefix-only match, the empty
-  message); no link to a help page and no manual or help-file wording.
-- `sample.spec.ts` (step 5): a first visit lists the sample and opens `analysis.do`, a later visit writes nothing;
-  never over a visitor's files, and not under `?test` alone; Restore the sample (its menu place, the toast, "already
-  here", the clash dialog's Keep mine and Replace); the sample runs in the real engine at `/app/` to a table and a
-  graph; where the browser keeps no storage, the sample's write brings no storage banner and the visitor's change does.
+- `editor.spec.ts` (step 4b; the post-merge round added a Save during a rename's write and one during a delete's write, "the error line goes with its tab: a file closed and opened again with the same text has none" (renamed), the reset banner's cut file following a rename, open or closed): Ctrl/Cmd+Enter with the focus on a toolbar button runs the file once and does not press it; a checkbox, radio, button or contenteditable="false" area does not keep Ctrl/Cmd+Enter while a text field, textarea or editable element does, and an open menu blocks it (the probes are made in the page); with no engine, typing and the unsaved dot (an undo back clears it), Ctrl/Cmd+S and
+  its toast (Ctrl+S and Cmd+S each pressed by name, so both save from the editor in every profile on any host; Ctrl+S
+  on a Cyrillic layout, an event made in the page with key "ы" and code KeyS, saves and prevents the browser's Save
+  page, and its repeats save nothing more), the focused editor's ring (an outline that forced colors give a system color while they drop the box-shadow; Chromium and Firefox, since WebKit forces no colors), a failed save's banner and its Download, a rename of
+  the open file that keeps its text and edits; a failed save's banner that goes when the editor takes the store's text again ("Reload from the run", "Replace with uploaded"); a Save that answers after its tab was renamed, which leaves the tab clean with the toast under the new name, and a failed one whose banner names the new name; Save keeps a file's form (a `\r\n` file edited and saved holds
+  `\r\n` throughout and is clean, an edit taken back to it clears the dot, the save-failed banner's Download has
+  `\r\n`, and so has the file renamed and saved; a `\n` file stays `\n`; a file's BOM is not in the editor, Save
+  writes a .csv's back and drops a .do's, keeping its `\r\n`; a renamed file follows its new name at the next Save: a .do
+  saved without its BOM stays without as .txt, a .csv's BOM goes when it is saved as .do); a .csv's
+  columns and a .log's lines in the editor, the Stata tokens, .md and .json tokens, a file dropped on the editor (uploaded, the text
+  unchanged), the editor's 16 px on a phone; the log's formatting as computed styles in light and dark (echo bold, output
+  400, error red and bold, hint and note muted; the phone's hint block), Go to line and the help link shown, the
+  run-head, Download log without the head, run-head or notes; Find in the log (every match counted and numbered in
+  the log's order, Enter and Shift+Enter, "none", the Log tab shown first when unsplit, Esc back to the Find button or
+  the phone strip's "Log ⋯"); the unsplit Output tabs by keyboard (each arrow, Home and End moves the focus to the tab
+  it selects, and with Find open the Log drawn again leaves the focus on its tab, not in Find's field); Clear log asks first (the head's "Clear…", or the strip's "Log ⋯" menu item on a phone: Cancel and
+  Esc keep the log and the graphs and give the focus back to the opener; "Clear log" removes them, the head stays, and the focus
+  does not fall to the page when the head's button is disabled by it) and is disabled with nothing to clear; the error line that keeps to its text across a tab switch, and its rule (a command and another file's run leave it; a
+  run of the file, a reset and the line's deletion clear it), and back when its file is closed and opened again with the same text (not with other text); the notes at a run's end wrapping in the Log pane with Go to line in view (1440, 1200, 900 and 700 px, and the phone); the OQ-10 notes under an error (the error the run ended with, not one `capture noisily` caught; and none for the tempfile,
+  whose note the engine prints); the phone ⋯'s Save off on a .dta tab; a command's Break note with no line, and a
+  phone's inline graph on its run's card; with no engine, Import and a hint's `help x` link off (`aria-disabled`, `.off`,
+  still focusable; a press only shows the toast "Start the engine to import t.csv" or "… to see help summarize": no
+  prompt, no drop, nothing in `history`), and on again with an engine. With an
+  engine: the command line with no engine first (disabled, the hint as its placeholder, whole and at the text contrast
+  in both themes; "Start engine" in words in place of "Run command", wider than the phone's 44 px icon, the field
+  taking what is left; a paste of two lines is not prevented and runs nothing, opens no prompt, shows no toast and
+  drops nothing; "Start engine" opens the prompt; ready, nothing ran; a typed draft stays through a loss of the engine,
+  readable, and Enter runs it when the engine is back); nothing offers to run with no engine (the toolbar has "Start
+  engine" and no Run; Run selection disabled with a selection; a held Ctrl/Cmd+Enter opens the prompt once and its
+  repeats do not press "Download"; the button does the same; ready, nothing ran and nothing was dropped; then
+  Ctrl/Cmd+Enter runs); a start in progress and a failed start, with the build's list held and then refused by the
+  test (a command typed during the download: Enter and the off "Run command" give the "starting" toast and the text
+  stays; a paste of lines is prevented, the field unchanged, with "3 of 3 pasted lines not run…"; the start fails with
+  the field focused: it is off, keeps its text and the focus, and Enter says the hint; the command line's "Start
+  engine" by keyboard tries again and the off "Run command" in its place keeps the focus, a second Enter there gives
+  the toast and no third request; the toolbar's "Start engine" by keyboard becomes "Starting…", `aria-disabled`, still
+  focused, and a second Enter gives the toast; Ctrl/Cmd+Enter in the editor after a failed start tries again, Ctrl/Cmd+Enter from anywhere on the page runs (not in the command line, not with a dialog open, once while held), with no
+  toast; with reason "updated" it gives the toast and no request); a .dta tab (Save off; the command line disabled; Start engine opens the prompt; the focus on its tab when the engine's
+  prompt closes by itself, and nothing ran); Run (the run-head, the
+  graph link after the echo of its line or inline on a phone, the error line marked, Go to line, the status bar or the
+  phone's strip), Run selection (Ctrl/Cmd+Enter or the phone's "Run line 7", with the locals an earlier run set); Break
+  (its note "before line N" and its Go to line, no error mark, the pill's time on a phone, and on a phone the pill
+  tapped on the Editor view shows the Log view); the command line (Enter, ↑, a paste of lines that stops at an error
+  with its toast, an ordinary paste, one line with its line break that runs nothing); the phone keyboard's flags (with no engine, the `engine` signal set to show `ready` so the field is on: the command line's autocorrect, autocapitalize, spellcheck and enterkeyhint, the phone's Run icon button or the desktop's text button, never both; typed curly quotes and an em dash straightened with the caret kept, a paste, a drop and an en dash left; in the editor, typed curly quotes straight in a .do and kept in a .md, a paste kept; with an engine, on the phone only: a tap on Run runs the text and leaves the focus in the field, an empty field runs nothing); a run that rewrites open files (a
+  clean tab shows the run's version; one with edits keeps them, unsaved, with the run-changed banner and "Reload from
+  the run", on a phone also on the Log view; the same text again changes nothing and keeps the selection; a clean tab
+  shown the run's new rows keeps its selection, and one undo takes the change back; a `.dta` saved over the open file
+  keeps its text, unsaved, with the not-text banner and no reload, and a run that then writes the editor's text makes the tab clean and takes the banner away; the banner follows a rename and goes with the tab); a clean tab of a `.csv` with `\r\n` breaks that a run rewrites shows the run's version, with no dot and no banner; a
+  file's form follows what the editor takes from the store (a run's `\r\n` version, shown or kept with edits, saved
+  with `\r\n`; "Reload from the run" of a version with a BOM and `\r\n` after a run's `\n` one, saved with both), and a do-file with a BOM fails in a nested
+  `do` with r(198) (ODT-34, in the page's engine), runs from the editor (Run sends no BOM), and once saved from the
+  editor has no BOM and runs in a nested `do`; S 15's note under a nested `do` of a file with unsaved edits in a loop: one, after the loop's echo of that line, though the loop runs the file twice; Ctrl/Cmd+Enter during a run says so in a toast and starts nothing, pressed when ready it runs with no toast, and a held key's repeats run nothing. The Break test's loop is `while 1`, so Break always lands inside it. The log follows its end through seven runs of wide lines (the running banner shrinks the pane by its height and gives it back each run), also scrolled sideways; it keeps its place after the visitor scrolls up, and follows again once scrolled back to the end (a wheel event stands in for the visitor's input). Pasted lines (12 wide `display` lines and a `foreach {` that stops the paste) leave the log at its end after each of three pastes, with the banner going and coming back for each line, and a paste leaves a log the visitor scrolled up where it was.
+- `landing.spec.ts` (step 5): the landing page at `/` (content, no placeholder left) and the editor at `/app/`; Open the editor and back (the wordmark, or the phone's About dofile), the editor showing the sample's `analysis.do`; the other-tab dialog's Close editor and the failed-start banner's Browsers that work (a new tab at `/#browsers`), each asserted by the landing page's own content, not the URL; the commands link (`/commands/`); the download size in the text equals the build's (`/app/start-files.json`) rounded as the prompt does; the theme button cycles and is the editor's choice too, and the first paint has it with every module blocked; the theme button keeps its word at the profile's width (a phone too) and shows three different icons, and at 320 px shows the icon only (named, inside the viewport) while the word shows at 360 px; Copy (stubbed clipboard, the button's clipboard icon, its face "Copied" for 2 s at the same size with its name kept, the live region, the ok color's contrast in both themes); each Copy button inside its code box (at least 24 px high) and the one-line box no higher than its line; the banner's five rows one line-height apart (the phone's hero, or welcome.do); welcome.do and the run's log at 980 px: named regions in the tab order that scroll sideways by keyboard, the page not; axe in both themes on both pages, and on the landing page at 980 px; no sideways scroll, and the banner's color in forced colors; the site's addresses (the pages at `/` and `/commands/`, the editor under `/app/`, `/app` and `/commands` redirected with the query kept, `/landing.html`, `/commands.html`, `/_headers` and missing pages a 404, the isolation headers on `/app/` only); the landing and commands pages request only their own `/assets/` script, stylesheet and fonts, nothing under `/app/`; with scripts off both pages are complete, with no button that needs a script.
+- `commands.spec.ts` (step 5): every name of `commands.json` once and in order, in columns, the shortest form in bold, the prefixes, `shell` and `webuse` marked off; the filter (contains, case and spaces ignored, the count, a prefix-only match that hides the commands' section and counts "1 prefix", the empty message with the prefixes' note hidden, the list back); no link to a help page and no manual or help-file wording.
+- `sample.spec.ts` (step 5): a first visit lists the sample and opens `analysis.do`, a later visit writes nothing (the mark; a deleted file stays deleted); never over a visitor's files, and not under `?test` alone; Restore the sample as an upload (position above Delete all files…, the toast, `analysis.do` made the active tab, "already here", the clash dialog on a changed file with the sample's words: Keep mine focused and keeps it, Replace with the sample restores it, other files untouched); the sample runs in the real engine at `/app/` to a table and a graph; where the browser keeps no storage, the sample's write brings no storage banner and the visitor's own change does.
 - `step2.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the URL flag.
 - `fixtures.spec.ts` (no browser page): `retryFirstGoto` in `fixtures.ts`, which the `page` fixture applies to every
   test's page (and `engine.spec.ts`, `step2.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on a
