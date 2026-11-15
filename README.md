@@ -44,7 +44,8 @@
 - A sandbox for code it did not write: dangerous commands are disabled, and a PEP 578 audit hook blocks subprocesses
   and the network, confines writes to the working folder and reads to the folders it is given.
 - Tested against reference results: a corpus of do-files checked against statsmodels and linearmodels to 1e-6, and the
-  engine's own cases compared with Stata 14 logs, in CI on Python and in the browser engine.
+  engine's own cases compared with Stata 14 logs: on Python in every CI run, and in the browser engine whenever the
+  engine changes.
 
 | Dark theme, Data view | On a phone |
 | --- | --- |
