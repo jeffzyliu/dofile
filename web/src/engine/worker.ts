@@ -4,6 +4,7 @@
 
 import type { BrotliWasmType } from "brotli-wasm";
 import { loadPyodide } from "pyodide";
+import { PART_FAILED, PART_LANDED, PART_PENDING, useNative, waitStep } from "./lazy-part.ts";
 import { MIB } from "./memcap.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
 import {
@@ -74,7 +75,7 @@ let py: SnapshotPy,
   browser: Browser,
   interrupt: Int32Array | null = null,
   fromSnapshot = false,
-  brotliPick: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
+  brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
 let queue = Promise.resolve();
 let store: WorkerStore | null = null,
   storeError = ""; // the file store, or why there is none
@@ -478,10 +479,7 @@ async function loadFromSnapshot(
 // slower. Then the browser's own decoder unpacks it off this thread (nativeSoon); the brotli-wasm unpack, the write and
 // the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (idleStep), so a
 // run sent meanwhile waits for one step at most.
-const PART_PENDING = 0,
-  PART_LANDED = 1,
-  PART_FAILED = 2,
-  IDLE_MS = 1000,
+const IDLE_MS = 1000,
   PROGRESS_MS = 100, // at most one {graphics: "progress"} this often
   DECODE_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
 let share: {
@@ -509,7 +507,13 @@ let share: {
   prefetching: { stop: AbortController; done: Promise<void> } | null = null, // no shared buffer: the worker's own fetch
   fetchSaid = false, // waitGraphics said "pending" before this graph's own fetch
   fresh = false, // the part arrived damaged: the next fetch must skip the HTTP cache
+  copies = 0, // no shared buffer: this worker's copies of the part, counted (copyNow)
+  nativeFailedOn: number | null = null, // the copy (copyNow) the browser's decoder failed on
   writtenInRun = 0; // performance.now() when a graph of this run wrote the part
+
+// Which copy of the part is there: the page's fetches of it (each new copy follows one), or this worker's own
+const copyNow = () => (share?.hdr ? Atomics.load(share.hdr, 2) : copies);
+const nativeNow = () => useNative(brotliMode, hasNativeBrotli(), nativeFailedOn, copyNow());
 
 // The part as the page left it: its state, and a copy of the bytes (landed) or the reason (failed)
 function partNow(): [number, Uint8Array<ArrayBuffer> | string | null] {
@@ -581,56 +585,71 @@ function waitGraphics(ms: number): string {
     return why;
   }
   for (;;) {
-    if (interrupt && Atomics.load(interrupt, 0) !== 0) {
-      Atomics.store(interrupt, 0, 0);
-      return "break";
-    }
-    try {
-      if (decoded) {
-        writePart("in a run");
-        writtenInRun = performance.now();
-        return "";
-      }
-      if (decode) {
-        decodeStep();
-        continue;
-      }
+    let tries = 0,
+      part = null as Uint8Array<ArrayBuffer> | string | null; // set by read()
+    const read = () => {
       // tries before the state: a retry started between the two loads must show as new tries, not as a failure
       // already the new try's (the graph would wait until a Break)
-      const tries = share!.hdr ? Atomics.load(share!.hdr, 2) : 0;
-      const [state, part] = partNow();
-      if (state === PART_LANDED) {
-        decodeStep(part as Uint8Array);
-        continue;
-      }
-      if (!share!.hdr) {
-        // the page cannot hand the part over while this graph runs. "pending" first, so that browser.py prints its
-        // waiting line and sends the log before this call blocks for the download
-        if (!fetchSaid) {
+      tries = share!.hdr ? Atomics.load(share!.hdr, 2) : 0;
+      const [state, now] = partNow();
+      part = now;
+      return { state, tries, shared: Boolean(share!.hdr) };
+    };
+    try {
+      const step = waitStep(
+        {
+          interrupted: Boolean(interrupt && Atomics.load(interrupt, 0) !== 0),
+          decoded: Boolean(decoded),
+          decoding: Boolean(decode),
+          askedAt,
+          fetchSaid,
+        },
+        read,
+      );
+      switch (step) {
+        case "break":
+          Atomics.store(interrupt!, 0, 0);
+          return "break";
+        case "write":
+          writePart("in a run");
+          writtenInRun = performance.now();
+          return "";
+        case "decode-more":
+          decodeStep();
+          continue;
+        case "decode":
+          decodeStep(part as Uint8Array);
+          continue;
+        case "say-fetching":
+          // the page cannot hand the part over while this graph runs. "pending" first, so that browser.py prints its
+          // waiting line and sends the log before this call blocks for the download
           fetchSaid = true;
           self.postMessage({ graphics: "fetching" });
           return "pending";
+        case "fetch": {
+          const why = fetchPartNow();
+          if (why) return why;
+          continue;
         }
-        const why = fetchPartNow();
-        if (why) return why;
-        continue;
-      }
-      if (state === PART_FAILED) {
-        // once per run, ask the page for another fetch and wait for it (Break still works); its failure is final
-        if (askedAt === null) {
+        case "give-up":
+          return part as string;
+        case "ask-again":
           askedAt = tries;
           self.postMessage({ graphics: "again" });
-        } else if (tries !== askedAt) return part as string;
-        Atomics.wait(share!.hdr, 0, PART_FAILED, ms);
-        return "pending";
+          Atomics.wait(share!.hdr!, 0, PART_FAILED, ms);
+          return "pending";
+        case "wait-failed":
+          Atomics.wait(share!.hdr!, 0, PART_FAILED, ms);
+          return "pending";
+        case "wait-pending":
+          Atomics.wait(share!.hdr!, 0, PART_PENDING, ms);
+          return "pending";
       }
     } catch (e) {
       const why = damaged(e);
       graphicsError = ""; // this graph says it; the next one waits for the page's fresh fetch
       return why;
     }
-    Atomics.wait(share!.hdr, 0, PART_PENDING, ms);
-    return "pending";
   }
 }
 
@@ -660,6 +679,7 @@ function fetchPartNow(): string {
     if (bytes.length !== share!.file.size)
       throw new Error(`${url}: ${bytes.length} bytes arrived, the build's list says ${share!.file.size}`);
     Object.assign(share!, { bytes, error: undefined });
+    copies++;
     fresh = false;
     console.info(
       `[dofile] graphics part: fetched by the worker in a run (no shared buffer) ${since(t0).toFixed(2)}s, ${bytes.length} bytes`,
@@ -710,6 +730,7 @@ function prefetch(): Promise<void> {
         throw new Error(`${url}: ${n} bytes arrived, the build's list says ${share!.file.size}`);
       if (stop.signal.aborted || share!.bytes || graphicsWritten) return; // a graph fetched it meanwhile
       share!.bytes = out;
+      copies++;
       fresh = false;
       console.info(
         `[dofile] graphics part: fetched by the worker (no shared buffer) ${since(t0).toFixed(2)}s, ${n} bytes`,
@@ -744,7 +765,7 @@ function prefetched(stop: AbortController) {
 // unpacks with brotli-wasm itself and the result is dropped. Does nothing where there is no native decoder (Chromium).
 function nativeSoon() {
   if (!started || !share || native || decode || decoded || graphicsWritten || graphicsError) return;
-  if (!hasNativeBrotli() || brotliPick === "wasm") return;
+  if (!nativeNow()) return;
   setTimeout(startNative, 0); // a task of its own: never inside the answer to `startup`
 }
 
@@ -756,7 +777,8 @@ function startNative() {
     file = share.file;
   if (bytes.length !== file.size || bytes.length === file.raw) return; // not brotli: the wasm step says what is wrong
   native = true;
-  const t0 = performance.now();
+  const t0 = performance.now(),
+    copy = copyNow();
   inflateNative(bytes, file.raw)
     .then(
       (raw) => {
@@ -765,7 +787,7 @@ function startNative() {
       },
       (e) => {
         console.warn(`[dofile] graphics part: native brotli failed (${e?.message ?? e}); using brotli-wasm`);
-        brotliPick = "wasm"; // the next step starts the brotli-wasm decode, which gives the error if it is damaged
+        nativeFailedOn = copy; // the next step starts the brotli-wasm decode, which gives the error if it is damaged
       },
     )
     .finally(() => {
@@ -796,8 +818,7 @@ function idleStep() {
       if (state !== PART_LANDED) return; // the op graphics calls idleSoon when it lands
       const bytes = part as Uint8Array<ArrayBuffer>,
         file = share!.file;
-      if (hasNativeBrotli() && brotliPick !== "wasm" && bytes.length === file.size && bytes.length !== file.raw)
-        return startNative(); // normally under way already (nativeSoon); its end calls idleSoon
+      if (nativeNow() && bytes.length === file.size && bytes.length !== file.raw) return startNative(); // normally under way already (nativeSoon); its end calls idleSoon
       decodeStep(bytes);
     } else {
       // after the write, the import of what a first graph needs: the three heavy modules one at a time, then 20 a step
@@ -829,8 +850,8 @@ function forget(path: string) {
 type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A : never, id: number) => unknown };
 
 const lifecycle: Handlers<LifecycleOps> = {
-  async mount({ indexURL, snapshot, built, files, brotli: brotliMode, memcap }: MountArgs) {
-    brotliPick = brotliMode;
+  async mount({ indexURL, snapshot, built, files, brotli, memcap }: MountArgs) {
+    brotliMode = brotli;
     snapshotBase = snapshot ?? "";
     if (!snapshot) stage("python"); // a snapshot start names its own steps (loadFromSnapshot)
     const io: Io = { stdout: (l) => console.log(l), stderr: (l) => console.warn(l) };
@@ -838,7 +859,7 @@ const lifecycle: Handlers<LifecycleOps> = {
     const tRuntime = performance.now();
     const capBytes = (memcap ?? 0) * MIB;
     if (snapshot) {
-      const { loaded, summary } = await loadFromSnapshot(snapshot, built, files, indexURL, io, brotliMode, capBytes);
+      const { loaded, summary } = await loadFromSnapshot(snapshot, built, files, indexURL, io, brotli, capBytes);
       py = loaded;
       Object.assign(startup, { mode: "snapshot", ...summary });
     } else {
