@@ -1,18 +1,9 @@
-// The engine controller: the one caller of the state machine (src/engine/machine.ts). It holds the machine, feeds it
-// events, performs the effects each step gives, and writes the `engine` signal from the machine's state. It decides
-// nothing itself: which state follows which event, and what must be done then, is the machine's table. The design:
-// docs/archive/prototype1-step3.5-c-design.md (items 5 and 7); the data-flow map: docs/archive/prototype1-step3.5-c-diagrams.md, 1.
+// The engine controller: the one caller of the state machine (src/engine/machine.ts). It feeds the machine events,
+// performs the effects each step gives, and writes the `engine` signal from the machine's state. Which state follows
+// which event is the machine's table, not decided here.
 //
-//   an action (start, decline, run, ...) or lost()      dispatch(event)          events WITHOUT a ticket only
-//   an answer to an effect (the lock, the download,     reply(effect)(answer)    THE ONE PLACE a ticket is put on an event
-//   the worker, the Break timer)
-//                                   both: enqueue -> transition (THE ONE CALL) -> the `engine` signal -> perform(effect)...
-//
-// The page's order at load (main.tsx, the only module that constructs or connects):
-//   connectFiles(store);  connectRun(handlers);  connectEngine({ client, lock, snapshot, manual });  open();
-// Views call the actions below and read the `engine` signal; they never reach the transport. `call` is the page's one
-// provider of read ops. What a run leaves (results, data, memory, ...) is run.ts's, which hears of a run and of a new or
-// lost engine through the handlers given to connectRun.
+// Events come in by two doors: dispatch() for an action or lost() (no ticket), and reply() for an answer to an effect
+// (the one place a ticket is put on an event). Both enqueue, then transition, then the signal, then perform.
 
 import type { Builds, Lifecycle, Reader } from "../engine/client.ts";
 import type {
@@ -43,24 +34,24 @@ import type { EngineState, FailReason, RunHead, Stage } from "./types.ts";
 
 // ---- the words ----
 
-/** The stages a start goes through, in order (OQ-11): the snapshot start, or ?snapshot=0. */
+/** The stages a start goes through, in order: the snapshot start, or ?snapshot=0. */
 export const stagesOf = (snapshot: boolean): Stage[] =>
   snapshot
     ? ["download", "unpack", "python", "files", "engine"]
     : ["download", "python", "files", "packages", "engine"];
 
-/** What the live region and the dialog's rows say at each stage (S 2's stage list): `stageNow` in states/words.ts is the one
- *  list. The status bar says the same phrase with a small first letter, after its "Starting · ". */
+/** What the live region and the dialog's rows say at each stage. The status bar says the same phrase with a small first
+ *  letter, after its "Starting · ". */
 export const stageWords: Record<Stage, string> = stageNow;
 export const stageStatus = Object.fromEntries(
   Object.entries(stageNow).map(([k, v]) => [k, v[0].toLowerCase() + v.slice(1)]),
 ) as Record<Stage, string>;
 
-/** The message of a start that failed with reason "updated". 4d's "Reload the page" keys on the reason, not on these words. */
+/** The message of a start that failed with reason "updated". Views key on the reason, not on these words. */
 export const UPDATED = "dofile has a newer version on this site. Reload the page to use it.";
 
-/** What a failed start tells the visitor (`message`), by reason: what happened and what they can do, in plain words. The
- *  developer's cause (a file name, a byte count, `npm run snapshot`) is `detail`, and goes to the console. */
+/** What a failed start tells the visitor (`message`), by reason: what happened and what they can do, in plain words.
+ *  The developer's cause is `detail`, and goes to the console. */
 export const FAILED: Record<FailReason, string> = {
   "no-wasm": "This browser can't run the engine: it has no WebAssembly support. Try another browser.",
   download: "The engine didn't download completely. Check your connection, then try again.",
@@ -72,7 +63,7 @@ export const FAILED: Record<FailReason, string> = {
 export const FAILED_TWICE =
   "The engine failed twice while starting, so it won't try again by itself. Reload the page to try again.";
 
-/** The fixed lines of the live region (the effect `say`). A stage's line is stageWords. */
+/** The fixed lines of the live region. A stage's line is stageWords. */
 const SAY: Record<Exclude<Line, { stage: Stage }>, string> = {
   ready: "Engine ready",
   reset: "Engine reset",
@@ -83,9 +74,8 @@ const SAY: Record<Exclude<Line, { stage: Stage }>, string> = {
 
 // ---- the wiring ----
 
-/** What run.ts does for the engine (connectRun): a run began (its head, and the theme it is sent with), a chunk of its
- *  log came, it ended with `result` (always after the `engine` signal has the new state; when the machine cut the run,
- *  after engineGone), an engine is ready, the engine is gone. A handler must not call run(): a step is in progress. */
+/** What run.ts does for the engine (connectRun). `ended` comes after the `engine` signal has the new state, and when
+ *  the machine cut the run, after engineGone. A handler must not call run(): a step is in progress. */
 export interface RunHandlers {
   began(head: RunHead, theme: "light" | "dark"): void;
   log(text: string): void;
@@ -93,7 +83,6 @@ export interface RunHandlers {
   engineReady(): void;
   engineGone(): void;
 }
-/** The tab lock (engine/tab.ts, tabLock). */
 type Lock = { take(o?: { steal?: boolean }): Promise<boolean> };
 /** An event that changed nothing: its type, the ticket it presented (when it has one), the state it found, and why. */
 export type Drop = { type: Event["type"]; n?: number; row: RowName; why: "stale" | "not-valid" };
@@ -103,25 +92,26 @@ export type Drop = { type: Event["type"]; n?: number; row: RowName; why: "stale"
 let wiring: object = {};
 let env: Env | null = null;
 let reader: Reader | null = null; // the transport's read ops: `call`
-// what performs an effect: it alone holds the transport's Lifecycle and Builds, and the tab lock (performer())
 let perform: (effect: Effect) => void = () => {
   throw new Error("the engine controller is not connected: call connectEngine() first");
 };
 let machine: Machine | null = null; // null until open()
 let queue: Event[] = []; // events raised while a step's effects are performed
 let stepping = false; // a step is in progress: its effects are being performed
-let dropped: Drop[] = []; // the drop record (the last DROPS_KEPT)
+let dropped: Drop[] = []; // the last DROPS_KEPT
 const DROPS_KEPT = 200;
-// The two handles. Each is made by one effect and released by another; neither decides a state.
+// handles made by one effect and released by another
 let breakTimer: ReturnType<typeof setTimeout> | undefined; // start-break-timer, cancel-break-timer
 let download: { n: Ticket; stop: AbortController } | null = null; // start-download, abort-download
 let runs: RunHandlers = { began() {}, log() {}, ended() {}, engineReady() {}, engineGone() {} };
 
-/** Wire the controller to the page's transport and tab lock. `snapshot`: the snapshot start (not ?snapshot=0). `manual`:
- *  ?test=manual, no start until the test calls start(). `graceMs`: how long Break waits before the engine is reset.
- *  `canInterrupt`: whether Break can ask a run to stop (a SharedArrayBuffer exists; the tests may say). A second call
- *  replaces the wiring: the machine, the queue, the handles and the drop record are cleared, and nothing of the earlier
- *  wiring can act any more. open() then starts the new machine. */
+/** Wire the controller to the page's transport and tab lock. A second call replaces the wiring: the machine, the queue,
+ *  the handles and the drop record are cleared, and nothing of the earlier wiring can act any more. open() then starts
+ *  the new machine.
+ *  @param snapshot - the snapshot start (not ?snapshot=0)
+ *  @param manual - ?test=manual: no start until the test calls start()
+ *  @param graceMs - how long Break waits before the engine is reset
+ *  @param canInterrupt - whether Break can ask a run to stop (a SharedArrayBuffer exists; the tests may say) */
 export function connectEngine({
   client,
   lock,
@@ -153,13 +143,13 @@ export function connectEngine({
   perform = performer(client, client, lock);
 }
 
-/** Give the controller what run.ts does for it (main.tsx: connectRun(handlers)). */
+/** Give the controller what run.ts does for it. */
 export function connectRun(handlers: RunHandlers) {
   runs = handlers;
 }
 
 /** The events that changed nothing since connectEngine, oldest first (the last 200): a stale answer, or an event that is
- *  not valid in the state it found. The tests assert the exact list; the test hook has it too. */
+ *  not valid in the state it found. */
 export const drops = (): Drop[] => [...dropped];
 
 // ---- events in, effects out ----
@@ -178,8 +168,8 @@ export function open(): void {
   drain(null);
 }
 
-/** An action, or the tab lock lost: an event without a ticket. Returns its step when it ran at once (the queue was
- *  empty: an action called from an event handler), or null when it had to wait for a step in progress. */
+/** An event without a ticket. Returns its step when it ran at once, or null when it had to wait for a step in
+ *  progress. */
 function dispatch(event: PlainEvent): Step | null {
   return enqueue(event);
 }
@@ -190,7 +180,7 @@ const reply = <K extends Answered>(effect: TicketedEffect & { do: K }): Reply<K>
   return (answer) => {
     if (mine !== wiring) return; // a reply of an earlier wiring does nothing
     const said: AnyAnswer = answer;
-    enqueue({ ...said, n: effect.n }); // THE ONE PLACE a ticket is put on an event
+    enqueue({ ...said, n: effect.n }); // the one place a ticket is put on an event
   };
 };
 
@@ -209,7 +199,7 @@ function drain(watched: Event | null): Step | null {
   stepping = true;
   try {
     for (let event = queue.shift(); event && machine; event = queue.shift()) {
-      const step = transition(machine, event); // THE ONE CALL of transition
+      const step = transition(machine, event);
       if (event === watched) mine = step;
       apply(step, event);
     }
@@ -221,10 +211,9 @@ function drain(watched: Event | null): Step | null {
 
 /** One step: the machine, then the `engine` signal, then the effects, in order. An event that changed nothing is
  *  recorded instead. The effects are performed also when a subscriber of the signal throws (a view's effect that calls
- *  run() during the step, say): a step whose state is shown and whose effects are not would leave, on a reset, the old
- *  worker live. The subscriber's error still goes to whoever raised the event. A performer that throws is another
- *  matter, and a bug in the wiring (the transport's start() with a worker still live): the step's later effects are not
- *  performed, the error goes to whoever raised the event, and the events queued behind it run with the next event. */
+ *  run() during the step, say): a state shown with its effects not performed would leave, on a reset, the old worker
+ *  live. The subscriber's error still goes to whoever raised the event. A performer that throws is a bug in the wiring:
+ *  the step's later effects are not performed, and the events queued behind it run with the next event. */
 function apply(step: Step, event: Event | null) {
   const before = machine;
   machine = step.machine;
@@ -245,8 +234,7 @@ function apply(step: Step, event: Event | null) {
   }
 }
 
-/** The state as views see it: the same tag, without the tickets, with the visitor's words. The one
- *  writer of the `engine` signal. It drops and adds fields; it maps no names. */
+/** The state as views see it: the same tag, without the tickets, with the visitor's words. */
 function view(state: State): EngineState {
   switch (state.s) {
     case "checking-lock":
@@ -280,10 +268,10 @@ function view(state: State): EngineState {
 /** Whether a download or a list fetch failed because the site was updated: from the error's kind, never its text. */
 const updated = (e: ClientError): boolean => e?.kind === "updated";
 
-/** The effect performer. Only this function's result holds the transport's Lifecycle and Builds, and the tab lock. */
+/** The effect performer: the only holder of the transport's Lifecycle and Builds, and the tab lock. */
 function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: Effect) => void {
-  /** start-download: download() fills the Cache. An AbortError (abort-download) raises nothing. A download that fails for
-   *  any cause other than another build is reason "download". */
+  /** An AbortError (abort-download) raises nothing. A failure for any cause other than another build is reason
+   *  "download". */
   function startDownload(n: Ticket, say: Reply<"start-download">) {
     const stop = new AbortController();
     download = { n, stop };
@@ -304,8 +292,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         },
       );
   }
-  /** send-run: run.ts is told the run began, then the worker is sent the code. A run whose worker was ended says
-   *  nothing: the machine has cut it already. */
+  /** A run whose worker was ended says nothing: the machine has cut it already. */
   function sendRun({ n, code, head }: Extract<Effect, { do: "send-run" }>, say: Reply<"send-run">) {
     const theme = S.resolvedTheme.value;
     runs.began(head, theme);
@@ -384,7 +371,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "close-dialog":
         if (S.dialog.value?.d !== effect.dialog) return;
         S.dialog.value = null;
-        // the Editor takes it from the render that removed the dialog (the page is inert while it is open)
+        // the page is inert while a dialog is open: the editor takes the focus from the render that removed it
         if (effect.focusEditor) editorAsked.value = {};
         return;
       case "add-reset-banner":
@@ -401,42 +388,38 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
 
 // ---- the actions: each is one event. The machine's table says where each acts; anywhere else it does nothing. ----
 
-/** "Download 48 MB", "Try again", and every start the visitor begins: the download fills the Cache, then the worker
- *  starts. Acts in `none`, `asking`, `declined` and `failed`. A second press does nothing. */
+/** "Download 48 MB", "Try again", and every start the visitor begins. Acts in `none`, `asking`, `declined` and `failed`. */
 export function start(): void {
   dispatch({ type: "start" });
 }
 
-/** Show the engine's prompt: "Start engine" (start.ts startEngine) and the declined banner's button. In `none`, `asking`
- *  and `declined` it is the download prompt (`asking`); in `other-tab-idle` the take-over dialog, where the visitor
- *  chooses (the state stays). It starts nothing. */
+/** Show the engine's prompt: the download prompt in `none`, `asking` and `declined`; the take-over dialog in
+ *  `other-tab-idle` (the state stays). It starts nothing. */
 export function ask(): void {
   dispatch({ type: "ask" });
 }
 
-/** "Not now". Acts in `asking`, and in `downloading`, where it also aborts the download (what arrived stays in the cache). */
+/** "Not now". Acts in `asking`, and in `downloading`, where it also aborts the download (what arrived stays cached). */
 export function decline(): void {
   dispatch({ type: "decline" });
 }
 
-/** "Stop download": the fetches are aborted, and the state goes to `declined` (what arrived stays in the cache). */
+/** "Stop download": the fetches are aborted, and the state goes to `declined` (what arrived stays cached). */
 export function stopDownload(): void {
   dispatch({ type: "stop-download" });
 }
 
-/** Reset (confirmed in its dialog) and "Reset now": a new worker; the data in memory is lost, the files stay. Acts in
- *  `ready`, `running`, `breaking` and `waiting`. */
+/** A new worker: the data in memory is lost, the files stay. Acts in `ready`, `running`, `breaking` and `waiting`. */
 export function reset(): void {
   dispatch({ type: "reset" });
 }
 
-/** "Use dofile in this tab": take the lock from the other tab, then go on as a page load. Acts in `other-tab-idle`; a
- *  second press while the take-over is in progress does nothing. */
+/** "Use dofile in this tab": take the lock from the other tab, then go on as a page load. Acts in `other-tab-idle`. */
 export function takeOver(): void {
   dispatch({ type: "take-over" });
 }
 
-/** The tab lock was taken by another tab (tabLock's onLost): whatever this tab was doing ends, and it is blocked. */
+/** The tab lock was taken by another tab: whatever this tab was doing ends, and it is blocked. */
 export function lost(): void {
   dispatch({ type: "lock-lost" });
 }
@@ -447,16 +430,14 @@ export function breakRun(): void {
   dispatch({ type: "break" });
 }
 
-/** "Don't reset: wait for it": the Break stays asked; the run stops after this command. Acts in `breaking`. */
+/** "Don't reset: wait for it": the run stops after this command. Acts in `breaking`. */
 export function keepWaiting(): void {
   dispatch({ type: "keep-waiting" });
 }
 
-/** Run `code` (run.ts calls this; views call run.ts). true: the engine was ready, and the run began (run.ts has been
- *  told). false: any other state; nothing happens, now or later (with no engine the page offers "Start engine", not a
- *  run: start.ts).
- *  It must not be called while a step is in progress (from a handler given to connectRun): it throws, before anything is
- *  queued. Code that wants to run something when a run ends does it after the run's promise resolves. */
+/** Run `code` (views call run.ts, which calls this).
+ *  @returns true when the engine was ready and the run began; false in any other state, and nothing happens, now or later.
+ *  @throws when a step is in progress (from a handler given to connectRun), before anything is queued. */
 export function run(code: string, head: RunHead): boolean {
   if (stepping)
     throw new Error(
@@ -465,9 +446,8 @@ export function run(code: string, head: RunHead): boolean {
   return dispatch({ type: "run", code, head })?.outcome === "taken";
 }
 
-/** A read op (describe, browse, matrix, macros, memory, describe_file): the page's one way to ask the engine for data.
- *  run.ts asks after each run; a view asks only for what it alone shows (`matrix`, `describe_file`). It raises no event.
- *  Rejects with the transport's error: kind "no-engine" with no worker, "reset" when a reset cut it. */
+/** A read op: the page's one way to ask the engine for data. It raises no event. Rejects with the transport's error:
+ *  kind "no-engine" with no worker, "reset" when a reset cut it. */
 export function call<K extends ViewOp>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
   if (!reader) throw new Error("the engine controller is not connected: call connectEngine() first");
   return reader.query(op, args);

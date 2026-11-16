@@ -1,26 +1,13 @@
-// Keep the screen awake while the engine is working for the visitor. On a phone, when the screen locks during the
-// download (about 48 MB), the engine's start or a long run, the browser suspends the page and may discard it, and the
-// work is lost. The Screen Wake Lock API (`navigator.wakeLock.request("screen")`) asks the browser not to lock the screen.
-//
-// The policy is one table, WAKE_LOCK: the engine's state name to whether the lock is wanted there. It is a Record over
-// every state name, so a state added to the machine does not compile until it has an answer here. To widen or narrow the
-// policy, change a line of it. This module only reads the `engine` signal; it decides no engine state.
-//
-// What the module does: it asks for the lock when the state first wants it and lets it go when the state no longer does.
-// The browser lets a lock go by itself when the page is hidden (and for other reasons, such as a low battery), so it
-// listens to the lock's `release` event and to `visibilitychange`, and asks again when the page is visible and the lock is
-// still wanted. A request can be refused (not allowed, low battery, page hidden): then it does nothing, says nothing and
-// tries again at the next change. At most one lock is held; a lock that arrives after it is no longer wanted is let go
-// at once. A browser without the API: the watcher does nothing. There is no setting and no message to the visitor.
-// test/wakelock.test.ts drives this with a fake `wakeLock` and a fake document.
+// Keeps the screen awake while the engine works for the visitor: on a phone, a locked screen during the download, the
+// start or a long run suspends the page, and the browser may discard it. Uses the Screen Wake Lock API; a browser
+// without it gets no lock and no message. test/wakelock.test.ts drives this with a fake `wakeLock` and document.
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import * as S from "./state.ts";
 import type { EngineState, EngineStateName } from "./types.ts";
 
-/** Whether the lock is wanted in each engine state: while the engine works for the visitor (the download, each stage of
- *  the start, a run and Break's waiting states), not while it is idle, absent, failed, waiting for the visitor's answer
- *  or another tab's. */
+/** Whether the lock is wanted in each engine state: while the engine works for the visitor, not while it is idle,
+ *  absent, failed, or waiting for an answer. A Record, so a state added to the machine needs an answer here. */
 export const WAKE_LOCK: Record<EngineStateName, boolean> = {
   "checking-lock": false, // the page load, a moment: no work yet
   "checking-cache": false,
@@ -48,7 +35,10 @@ export type WakeLockLike = { request(type: "screen"): Promise<WakeLockSentinel> 
 /** What it uses of `document`. */
 export type VisibilityDocument = Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
 
-/** Start watching the engine's state. Returns `stop`, which lets the lock go and removes the listeners. */
+/** Ask for the lock when the engine state first wants it and let it go when it no longer does. The browser also
+ *  releases it by itself (page hidden, low battery), so this asks again on `release` and `visibilitychange` while it is
+ *  still wanted. A refused request is silent and tried again at the next change. At most one lock is held.
+ *  @returns `stop`, which lets the lock go and removes the listeners. */
 export function watchWakeLock({
   wakeLock = globalThis.navigator?.wakeLock,
   doc = globalThis.document,

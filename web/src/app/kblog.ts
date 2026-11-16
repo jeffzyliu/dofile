@@ -1,12 +1,10 @@
-// The keyboard experiment's overlay (?kblog; docs/phone-keyboard-experiment.md): a list over the top of the page of the
-// events around a phone's on-screen keyboard, with times, so one sitting on a real iPhone shows the order Safari gives
-// them in. main.tsx imports this module only with the flag, so without it none of this is in the page.
+// The keyboard experiment's overlay (?kblog; docs/phone-keyboard-experiment.md): one row per event around a phone's
+// on-screen keyboard, to show the order Safari gives them in. Each row also goes to the console.
 //
-// One row per event: the time in ms since the tap that began the sequence (a touch with no text field focused), the
-// event, then the visual viewport's offsetTop and height, window.scrollY, window.innerHeight, the layout viewport's
-// height (<html>'s clientHeight) and .app's top on screen. `raf` rows are the frames in which one of those changed with
-// no event (sampled for 1.5 s after each event), `focusin` adds the caret's bottom (`c…`) when there is a selection. The
-// overlay takes no taps (pointer-events: none) and no focus; each row also goes to the console.
+// Columns: ms since the tap that began the sequence (a touch with no text field focused), the event, the visual
+// viewport's offsetTop and height, window.scrollY, window.innerHeight, <html>'s clientHeight and .app's top on screen.
+// `raf` rows are frames in which one of those changed with no event (sampled for 1.5 s after each event); `focusin`
+// adds the caret's bottom (`c...`) when there is a selection.
 
 /** The overlay's element, for the e2e test. */
 export const KBLOG_ID = "kblog";

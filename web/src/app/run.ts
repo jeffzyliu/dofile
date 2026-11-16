@@ -1,19 +1,11 @@
-// The run controller: what a run leaves in the state: the log, lastRun, results, graphs, history, and after the run the
-// data, rows, macros, memory and the file list (docs/design/SPEC.md, sections 3.5 and 4). It is the one writer of those
-// signals (state.ts, runWriter). Views start runs with runCode() and runCommand(), ask for more rows with moreRows(), and
-// add a .png opened from the files with addFileGraph(); they never write these signals themselves.
+// The run controller: what a run leaves in the state (docs/design/SPEC.md, sections 3.5 and 4). It does not read the
+// engine's state: a run goes to engine.run(), which answers at once whether it started or was refused (nothing is kept
+// to run later). What happens to a run and to the engine reaches this file through `handlers`.
 //
-// It does not read the engine's state. A run goes to the engine controller (engine.run()), which answers at once whether
-// it started or was refused (the engine is not ready: nothing runs, and nothing is kept to run later); the state machine
-// decides. What happens to a run and to the engine reaches this file through `handlers`, which
-// main.tsx gives to the engine controller (connectRun): began (a run started), log (a chunk of its log), ended (its
-// result, also when the machine cut it), engineReady, and engineGone (a reset, or another tab took the engine: nothing of
-// the old engine is in memory).
-//
-// The log streams: the worker sends chunks while the run prints, and they grow one text item. When the result comes, its
-// `log` replaces that item's text, never adds to it: the stream can stop short of the log with no marker (the log cap,
-// the sandbox notes added after the run). A result the machine made itself (rc 9998: a reset, or a run whose op failed in
-// the worker) has no log of its own, so what streamed in stays, with the reason as a note.
+// The log streams: chunks grow one text item. When the result comes, its `log` replaces that item's text, never adds to
+// it: the stream can stop short of the log with no marker (the log cap, the sandbox notes added after the run). A result
+// the machine made itself (rc 9998: a reset, or a run whose op failed in the worker) has no log of its own, so what
+// streamed in stays, with the reason as a note.
 
 import type { BrowseRows, RunResult } from "../engine/types.ts";
 import * as engine from "./engine.ts";
@@ -22,7 +14,7 @@ import * as S from "./state.ts";
 import { runWriter as W } from "./state.ts";
 import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
 
-export const MAX_GRAPHS = 20; // the graphs a session keeps (OQ-21); the oldest go first
+export const MAX_GRAPHS = 20; // the graphs a session keeps; the oldest go first
 
 /** The run in progress: its number, how it was started, what streamed in, and its promise. */
 type Current = {
@@ -39,21 +31,17 @@ let runs = 0; // runs so far in this page: each run's items carry its number
 let graphCount = 0; // graphs drawn since the log was cleared: their numbers
 let current: Current | null = null;
 
-/** What the engine controller calls (main.tsx: connectRun(handlers)). */
+/** What the engine controller calls (connectRun). */
 export const handlers: engine.RunHandlers = { began, log: streamed, ended, engineReady, engineGone };
 
-/** What asking for a run gave, known at once. "started": the engine was ready and the run began; `done` settles with its
- *  result (after the after-run reads). "refused": any other state (the page load, a start or a run in progress, no
- *  engine); nothing happens, now or once the engine is ready, and `done` is null at once. With no engine the views offer
- *  no run (start.ts: "Start engine"), so a refusal there is only a guard. */
+/** What asking for a run gave, known at once. "started": `done` settles with its result, after the after-run reads.
+ *  "refused": the engine was not ready; nothing happens, now or later, and `done` is null at once. */
 export type Requested = { how: "started"; done: Promise<RunResult> } | { how: "refused"; done: Promise<null> };
 
-/** Ask the engine controller for a run (the state machine decides; engine.run()), and what that gave at once
- *  (Requested): the editor's Ctrl/Cmd+Enter says why in a toast when it was refused. */
+/** Ask the engine controller for a run. */
 export function requestRun(code: string, head: RunHead): Requested {
   if (!engine.run(code, head)) return { how: "refused", done: Promise.resolve(null) };
-  // the effect send-run called began() in the step that run() made, so the run is `current`; it is not only when the
-  // engine controller tells other handlers than this module's (main.tsx: connectRun(handlers))
+  // began() ran in the step that run() made, so the run is `current`, unless connectRun got other handlers
   if (!current)
     throw new Error(
       "a run started and run.ts's began() was not called: the engine controller is not connected to run.ts's handlers (connectRun(handlers))",
@@ -61,15 +49,14 @@ export function requestRun(code: string, head: RunHead): Requested {
   return { how: "started", done: current.promise };
 }
 
-/** Run `code` as `head` says (section 4). Resolves with the result, or null when it did not run (see Requested). */
+/** Run `code` as `head` says (SPEC section 4). Resolves with the result, or null when it did not run. */
 export function runCode(code: string, head: RunHead): Promise<RunResult | null> {
   return requestRun(code, head).done;
 }
 
-/** One command, as the command line, Load and Import send it (section 4): run with kind "command" and the locals kept.
- *  Only a command that runs ("started": the engine is `ready`) is added to `history` (not twice in a row), also when the
- *  run ends in an error, and only then does the command line clear its field. One that does not run ("refused") is not in
- *  `history`, and its text stays in the field. An empty command is refused. */
+/** One command, as the command line, Load and Import send it: kind "command", the locals kept. A command that runs is
+ *  added to `history` (not twice in a row), also when it ends in an error; one that is refused is not, and an empty
+ *  command is refused. */
 export function runCommand(text: string): Requested {
   const command = text.trim();
   if (!command) return { how: "refused", done: Promise.resolve(null) };
@@ -79,13 +66,13 @@ export function runCommand(text: string): Requested {
   return requested;
 }
 
-/** A run started (the effect `send-run`): its items go into the log. `theme`: what the run is sent as plot_theme. */
+/** A run started: its items go into the log. `theme` is what the run is sent as plot_theme. */
 function began(head: RunHead, theme: "light" | "dark") {
   const id = ++runs;
   if (head.kind !== "command" && S.layout.value === "phone") S.phoneTab.value = "log"; // Run opens the Log tab
   const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.value === 0 }];
   W.engineRuns.value++; // now, not after the run: a reset that cuts it starts the count again, and the next run is first
-  const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for S 15's note under a nested do
+  const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for the note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");
   let done!: (result: RunResult) => void;
@@ -102,8 +89,8 @@ function streamed(chunk: string) {
   setText(current.id, current.streamed);
 }
 
-/** The run ended (the effect `end-run`): with the engine's result, or with the machine's own (rc 9998) when it was cut.
- *  When a reset or another tab cut it, the effect `engine-gone` came first, in the same step. */
+/** The run ended, with the engine's result, or with the machine's own (rc 9998) when it was cut. When a reset or another
+ *  tab cut it, engineGone came first, in the same step. */
 function ended(r: RunResult) {
   const run = current;
   if (!run) return;
@@ -146,7 +133,7 @@ function ended(r: RunResult) {
   });
 }
 
-/** An engine is ready (the effect `engine-ready`): its memory. */
+/** An engine is ready: read its memory. */
 function engineReady() {
   engine.call("memory").then(
     (m) => {
@@ -156,7 +143,7 @@ function engineReady() {
   );
 }
 
-/** The engine is gone (the effect `engine-gone`): a reset, or another tab has it. Nothing of it is in memory. */
+/** The engine is gone (a reset, or another tab has it): nothing of it is in memory. */
 function engineGone() {
   W.engineRuns.value = 0;
   W.results.value = W.macros.value = null;
@@ -187,9 +174,9 @@ function addGraphs(r: RunResult, id: number, theme: "light" | "dark") {
   keepGraphs(added);
 }
 
-/** A .png opened from the files (4a's openFile): it joins the session's graphs and is the one shown. Its colors are its
- *  own; `theme` is the page's at the time. The same file opened again replaces its entry (the new image, the same `n`,
- *  the same place) and selects it; one that has dropped out of the last 20 is added again. `png`: base64. */
+/** A .png opened from the files: it joins the session's graphs and is the one shown. Its colors are its own; `theme` is
+ *  the page's at the time. The same file opened again replaces its entry (same `n`, same place) and selects it; one that
+ *  has dropped out of the last 20 is added again. `png` is base64. */
 export function addFileGraph(path: string, png: string): Graph {
   const i = W.graphs.value.findIndex((g) => g.from === "file" && g.path === path);
   if (i >= 0) {
@@ -208,8 +195,8 @@ function keepGraphs(added: Graph[]) {
   S.graphIndex.value = W.graphs.value.length - 1; // the latest graph is the one shown
 }
 
-/** The data, its first rows, the macros and the memory, after a run (and whenever a view needs them fresh). With no
- *  engine, or when the engine is reset meanwhile, nothing is written: the calls reject, and engine-gone clears these. */
+/** Read the data, its first rows, the macros and the memory. With no engine, or when it is reset meanwhile, nothing is
+ *  written: the calls reject, and engineGone clears these. */
 export async function refreshData() {
   try {
     const [data, rows, macros, memory] = await Promise.all([
@@ -227,8 +214,8 @@ export async function refreshData() {
   }
 }
 
-/** "Show 50 more": the next rows of the data, appended to `rows`. Nothing is appended if a run or a new engine replaced
- *  `rows` meanwhile. Resolves true when rows were added. */
+/** "Show 50 more": append the next rows of the data to `rows`, unless a run or a new engine replaced `rows` meanwhile.
+ *  @returns true when rows were added. */
 export async function moreRows(count = 50): Promise<boolean> {
   const from = W.rows.value;
   if (!from || "error" in from || from.more <= 0) return false;
@@ -246,14 +233,13 @@ export async function moreRows(count = 50): Promise<boolean> {
 }
 
 /** Whether "Clear log" has anything to remove: a log item other than the head and the streaming run's text item (which
- *  clearLog keeps), or a graph. The button and the menu items are disabled when it is false, so no dialog asks about
- *  nothing. Reads signals: call it while drawing. */
+ *  clearLog keeps), or a graph. Reads signals: call it while drawing. */
 export function canClearLog(): boolean {
   return W.graphs.value.length > 0 || W.log.value.some((i) => !(i.t === "head" || (i.t === "text" && i.streaming)));
 }
 
-/** "Clear log" (after the clear-log dialog's answer; log/ClearLogDialog.tsx): the log and the graphs, not the data. The head (banner and versions) stays, as a fresh page shows it. A run
- *  in progress keeps its text item, so its log still arrives. */
+/** Clear the log and the graphs, not the data. The head stays, as a fresh page shows it. A run in progress keeps its
+ *  text item, so its log still arrives. */
 export function clearLog() {
   W.log.value = W.log.value.filter((i) => i.t === "head" || (i.t === "text" && i.streaming));
   W.graphs.value = [];

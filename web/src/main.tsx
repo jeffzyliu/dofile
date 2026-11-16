@@ -1,15 +1,5 @@
-// The editor page: the transport, the controllers, the layout. docs/design/SPEC.md is the build spec; app/App.tsx
-// says which file holds each part.
-//
-// This is the only module that constructs or connects anything (test/imports.test.ts checks it): one transport
-// (EngineClient) with its worker factory, one tab lock, and connectFiles, connectRun and connectEngine, each once. So
-// each of those exists once for each page.
-//
-// The order at load: the tab lock, then keepFiles() and the store (files listed), then the cache check, and the download
-// and the start (asking first unless this build's start files are all in the Cache). A tab without the lock starts no
-// worker and writes nothing (`store.blocked`), and shows "dofile is open in another tab"; the tab that loses the lock
-// ends its worker and shows the same. All of that is the engine's state machine (engine/machine.ts), which
-// app/engine.ts's open() starts.
+// The editor page: builds the transport, the tab lock and the controllers, and renders the layout. It is the only
+// module that constructs or connects anything (test/imports.test.ts checks it).
 import "./styles/ui.css";
 import "./styles/app.css";
 import { effect } from "@preact/signals";
@@ -37,11 +27,11 @@ const client = new EngineClient({
   wheel: here(__WHEEL__),
   extraWheels: __EXTRA_WHEELS__.map(here),
   buildId: __BUILD_ID__,
-  // the snapshot start takes Pyodide's runtime from the page's own origin (public/pyodide/); ?snapshot=0 uses the CDN
+  // the snapshot start takes Pyodide's runtime from the page's own origin; ?snapshot=0 uses the CDN
   indexURL: snapshotStart ? here("pyodide/") : __PYODIDE__,
   store,
-  startFiles: here("start-files.json"), // the build's list of start files, for cached(), download() and build(): the one statement of the build
-  // the memory snapshot `npm run snapshot` builds; no fallback when it is missing or stale: the engine is `failed`, with the cause
+  startFiles: here("start-files.json"),
+  // no fallback when the snapshot is missing or stale: the engine is `failed`, with the cause
   snapshot: snapshotStart ? here("snapshot/") : undefined,
   brotli,
   memcap: memcap.mb,
@@ -49,29 +39,24 @@ const client = new EngineClient({
 console.info(capLine(memcap));
 
 applyTheme();
-// the layout follows the width: the phone's under 700 px (SPEC section 2)
 const narrow = matchMedia("(max-width: 699.98px)");
 const fit = () => {
   S.layout.value = narrow.matches ? "phone" : "desktop";
 };
 fit();
 narrow.addEventListener("change", fit);
-// a phone's on-screen keyboard: .app sized to the area above it (app/viewport.ts). ?kblog shows an overlay of the
-// viewport's events, to measure the keyboard on a real phone (docs/phone-keyboard-experiment.md); without it the
-// overlay's module is not loaded.
+// Without ?kblog the overlay's module is not loaded.
 const viewport = watchViewport({ enabled: () => S.isPhone.value });
 if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
 effect(() => {
   S.isPhone.value;
   viewport.update();
 });
-// the screen stays awake while the engine works (app/wakelock.ts)
 watchWakeLock();
-// the engine's state on <html>, for the tests and for CSS that needs it
+// the engine's state on <html>, for the tests and for CSS
 effect(() => {
   document.documentElement.dataset.engine = S.engine.value.s;
-}); // one of the machine's sixteen names
-// leaving with unsaved edits gets the browser's own warning (SPEC 3.2)
+});
 addEventListener("beforeunload", (e) => {
   if (S.tabs.value.some((t) => t.dirty)) e.preventDefault();
 });

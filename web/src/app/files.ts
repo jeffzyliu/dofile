@@ -1,9 +1,6 @@
-// The file service: owns `files` (the store's list), `fresh` (what the last run wrote) and `persisted`, and adds the
-// storage banner (S 19: once per visit, when persisted() is false and the files change; 4d draws it) and the
-// download-failed banner (downloadAll() below). The file tree (step 4a) reads them and changes files through the store itself (`store.write`, `rename`, `remove`, `mkdir`, `zip`):
-// each change calls store.onChange, which lists the store again here. docs/design/SPEC.md, sections 3.1 and 7.
-// It also performs two effects of the engine's state machine (app/engine.ts calls them): own(), when the tab lock is this
-// tab's, and block(), when another tab took it. The store starts blocked (app/store.ts).
+// The file service: lists the store into `files`, tracks `fresh` and `persisted`, and adds the storage and
+// download-failed banners. Views change files through the store itself; each change calls store.onChange, which lists
+// the store again here. docs/design/SPEC.md, sections 3.1 and 7.
 
 import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
@@ -24,12 +21,11 @@ type Storage = Parameters<typeof keepFiles>[0];
 let store: Store | null = null;
 let storage: Storage; // navigator.storage, or the tests' own
 let warned = false; // the storage banner was added in this visit
-// the sample's paths while the first visit writes them (sample.ts): those writes bring no storage banner; any other change
-// made meanwhile (an upload, a run) does
+// the sample's paths while the first visit writes them: those writes bring no storage banner; any other change made
+// meanwhile (an upload, a run) does
 let seeding: ReadonlySet<string> = new Set();
 
-/** The store the page uses (main.tsx), and the browser's storage manager (the tests give theirs). The store's changes
- *  list it again. */
+/** Use `s` as the page's store (its changes list it again) and `manager` as the browser's storage manager. */
 export function connectFiles(s: Store, manager: Storage = globalThis.navigator?.storage) {
   store = s;
   storage = manager;
@@ -40,27 +36,27 @@ export function connectFiles(s: Store, manager: Storage = globalThis.navigator?.
   };
 }
 
-/** The effect `own-files`: the tab lock is this tab's. The store is unblocked, the browser is asked to keep the files,
- *  and the store is listed. Nothing waits for the list. */
+/** The tab lock is this tab's: unblock the store, ask the browser to keep the files, list the store. Nothing waits for
+ *  the list. */
 export function own() {
   if (!store) return;
   store.blocked = false;
   keep(storage);
   refresh();
-  // a first visit with no files: the sample (sample.ts). Writing it is not a change of the visitor's, so it does not bring
-  // the storage banner (S 19) before they have done anything. seedSample never rejects.
+  // Writing the sample is not a change of the visitor's, so it does not bring the storage banner before they have done
+  // anything. seedSample never rejects.
   seeding = new Set(SAMPLE_PATHS);
   seedSample().finally(() => {
     seeding = new Set();
   });
 }
 
-/** The effect `block-store`: another tab took the tab lock. This tab writes nothing from now on. */
+/** Another tab took the tab lock: this tab writes nothing from now on. */
 export function block() {
   if (store) store.blocked = true;
 }
 
-// the files changed (the page's change, `row`, or a run's): S 19's banner, once per visit, if the browser may clear them
+// the files changed (the page's change, `row`, or a run's): the storage banner, once per visit, if the browser may clear them
 function changed(row?: PendingRow) {
   if ((row && seeding.has(row.path)) || warned || S.persisted.value !== false) return;
   warned = true;
@@ -86,11 +82,8 @@ export function keep(manager: Storage = globalThis.navigator?.storage) {
 }
 
 /** After a run: `fresh` is what it created or changed, and the list is read again. An open text tab whose file the run
- *  rewrote follows it (editorCommands.ranOver): the same text again changes nothing; with no unsaved edits it shows the
- *  run's version, keeping the caret and the undo history; with edits, or when the run's version is not text (binary,
- *  or not UTF-8), it keeps its text, takes the run's version as the saved one (the tab stays unsaved, so Save then
- *  replaces the run's version knowingly), and the banner run-changed says so (with "Reload from the run" when the run's
- *  version is text). A file the run deleted keeps its tab (not handled: a Save writes it again). */
+ *  rewrote follows it (editorCommands.ranOver): with no unsaved edits it shows the run's version; otherwise it keeps its
+ *  text and the banner run-changed says so. A file the run deleted keeps its tab (a Save writes it again). */
 export function afterRun(changes: FileChange[] | undefined) {
   W.fresh.value = new Set((changes ?? []).filter((c) => c.status !== "removed").map((c) => c.name));
   if (changes?.length) changed();
@@ -127,12 +120,10 @@ export async function textInStore(path: string): Promise<string | null> {
   }
 }
 
-/** "Download all (.zip)": made in the page from the store, with or without an engine. Resolves true once the zip is
- *  handed to the browser, false when not: with no file in the store (folders do not count) it makes no zip and says
- *  nothing (the buttons are disabled then: `hasFiles`); a store that cannot be read (the browser will not open the
- *  database) adds the banner `download-failed` (one: a second failure replaces it) with its "Try again", says it once in
- *  the live region, and logs the cause to the console. A later download that works removes that banner. It never
- *  rejects. */
+/** "Download all (.zip)": made in the page from the store, with or without an engine. Never rejects.
+ *  @returns true once the zip is handed to the browser; false with no file in the store (folders do not count: no zip,
+ *  no message, the buttons are disabled then) or when the store cannot be read (the banner `download-failed`, the live
+ *  region and the console say so). A later download that works removes the banner. */
 export async function downloadAll(): Promise<boolean> {
   if (!store) return false;
   try {

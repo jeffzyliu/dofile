@@ -1,14 +1,7 @@
-// Where each banner goes, and which view draws it. A pane shows its banners above its content: <BannerSlot place>.
-// Two sources:
-//  - the engine's states (`engine`, `isolated`), not in `banners`: states/banners.tsx's EditorStateBanners and
-//    LogStateBanners (step 4d);
-//  - the `banners` signal, one entry per banner, added by its owner (state.ts addBanner) and removed by Dismiss or when
-//    its cause goes (dismiss). Each kind's view is in its owner's file:
-//      reset, storage, download-failed: states/banners.tsx (step 4d) · not-text: files/banners.tsx (step 4a)
-//      save-failed, run-changed: editor/banners.tsx (step 4b; run-changed added when 4b and 4d were joined)
-// Add a kind here, in types.ts and in SPEC.md section 8 together.
-// `phone: "every"`: on a phone every view's slot draws it (the phone's Data and Results views have a slot, "output", for
-// these only), so it is seen whichever view is shown; the hidden views are display: none, so it is read and tabbed once.
+// Where each banner goes, and which view draws it: a pane shows its banners above its content (<BannerSlot place>).
+// The engine's states (`engine`, `isolated`) are not in `banners`: states/banners.tsx draws them. Add a kind here, in
+// types.ts and in SPEC.md section 8 together.
+// `phone: "every"`: on a phone every view's slot draws it, so it is seen whichever view is shown.
 import type { ComponentType } from "preact";
 import { RunChangedBanner, SaveFailedBanner } from "./editor/banners";
 import { NotTextBanner } from "./files/banners";
