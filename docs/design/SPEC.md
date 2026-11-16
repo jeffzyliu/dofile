@@ -57,7 +57,8 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
 - **From the build, never literals:** the version, and the download size: 48.4 MB for the snapshot start today (42.1 MB
   snapshot, 5.75 MB runtime, 0.53 MB for the brotli decoder's .wasm; the 0.52 MB of the page's own files came with the page and are not in it). The build writes `start-files.json` (`{built, buildId, snapshot, files:
   [{path, size, compressed, download}], size, compressed, download}`; a file's `compressed` is an estimate, brotli quality 5, never more than
-  `size`; the list's `download` is the sum of `compressed` over the files marked `download`, the page's own files left out) and puts that
+  `size`; the list's `download` is the sum of `compressed` over the files marked `download`, the page's own files left out, plus
+  the size of a lazy snapshot's graphics part, which follows "ready" and is not a start file) and puts that
   download size in the page as `<meta name="dofile-engine-bytes">`, so the prompt has it before any download
   (OQ-12). The build fails if it cannot write either.
 
@@ -621,7 +622,14 @@ As built:
   when that is one) and no `kind`; every other failure is a client error with a `kind` (an unreachable list:
   `failed`/`download`). It checks the list's build (`checkBuild`, below) before fetching anything, fetches with
   `cache: "no-cache"`, and never caches a file whose byte count is not the listed size.
-  `download()` is the Cache's only writer: the worker only reads it. Before it fetches, and only when no worker is live, it
+  `download()` is the Cache's writer for the start files; the worker only reads it. A lazy snapshot's graphics part is the
+  one other entry: the page's `#graphics` (client.ts) puts it in the same Cache, only once the part has arrived whole at its
+  listed size and the build's heap is already there, and `download()`'s clean-up keeps it (the list names it in
+  `snapshot.graphics`). `download()`'s `total` is the list's `download` less the part (what comes before the start); the
+  dialog says the part's size under its bar ("+ 7.7 MB of graphics after the start"), and the part's own progress goes to
+  the status bar and the phone's strip ("Graphs loading" and a ring, `onGraphics`). The part is fetched after the start
+  files on a first visit, else once the engine has started (a return visit reads nothing of it before "ready"); a failed
+  fetch is tried again when a graph finds it failed (that graph waits for the try), and when the browser comes back online. Before it fetches, and only when no worker is live, it
   deletes every entry of that Cache that is not one of the list's `download` files at its URL (relative to the list): the same
   build kept at an older address (the editor's move to another path or origin with an unchanged snapshot) would otherwise stay until the next
   snapshot. The list's own files are never deleted, so a resumed download keeps what it has.
@@ -698,7 +706,20 @@ calls noted. None of the new calls or options changes the MCP schema.
 interface LifecycleOps {                         // sent only by the transport's start() and run()
   mount:   { args: MountArgs; result: void };    boot: { args: BootArgs; result: About };
   startup: { args: void; result: Startup };      run:  { args: { code: string } & RunOptions; result: RunResult };
+  graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
+// `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
+// start files: Int32 [state 0 pending / 1 landed / 2 failed, byte count, attempt (the page's fetches of it; a graph that
+// finds it failed posts {graphics: "again"} and waits for one more), 0] then from byte 16 (PART_HEADER) the compressed part (or the reason), in `sab`;
+// `sab` null (no SharedArrayBuffer): the worker fetches the part itself once started, and the page never does (a graph
+// that finds it missing stops that fetch and makes a synchronous request); the worker tells the page how it goes, for the
+// "Graphs loading" ring and the download total: {graphics: "fetching"}, {graphics: "progress", received}, {graphics: "landed"},
+// {graphics: "failed", why}, and {graphics: "damaged"} when it dropped its copy (its next fetch skips the HTTP cache). Only a graph waits for it. Nothing of it happens
+// in the worker before `startup` is answered; then the browser's own decoder (off the thread) unpacks it once it is there,
+// and a brotli-wasm unpack, the write and the import of what a first graph needs run only once the engine has been idle
+// (no run sent or running) for 1 s, one short step per task.
+type BootArgs = { wheel: Wheel; extraWheels?: Wheel[]; interruptBuffer?: Int32Array | null;
+  graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null } };
 interface ReadOps {                              // declared to change nothing: anyone may send them, through query()
   describe: { args: DescribeArgs; result: DataSummary };   describe_file: { args: { path: string }; result: DataSummary };
   matrix: { args: { name: string }; result: Matrix };      macros: { args: void; result: Macros };

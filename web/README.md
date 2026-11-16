@@ -113,7 +113,7 @@ no such object.
 **The download size** shown before the engine is fetched is written by the build into `dist/app/index.html`
 (`<meta name="dofile-engine-bytes">`, read as `engineBytes` in `src/app/state.ts`): the `download` size of
 `dist/app/start-files.json`: the compressed bytes of the files the page fetches (the snapshot, the runtime, the brotli decoder),
-not of the page's own files, which came with it, and the download's progress counts toward the same total. The dev server writes the same tag from `public/` (without the
+not of the page's own files, which came with it, plus a lazy snapshot's graphics part (fetched after the start; "Graphs loading" and a ring show its progress). The download's progress counts the files before the start, and its dialog names the part's size under the bar. The dev server writes the same tag from `public/` (without the
 page's own files). The landing page states the same number, rounded.
 
 **Cross-origin isolation.** `vite.config.ts` sets `COOP`/`COEP` in the dev server (every response) and in the editor's

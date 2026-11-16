@@ -91,7 +91,11 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   Rebuild it (`npm run snapshot`) after a change to the dofile code, a wheel or the Pyodide version: `vite build` fails on
   a stale one. Its loader is a patched copy of Pyodide's that throws if Pyodide's text changes, so a Pyodide upgrade needs
   the patch updated (`docs/pyodide-snapshot.md`). `download()` in the transport is the only writer of the start files'
-  Cache (checked against `start-files.json`, the one statement of the build); the worker only reads it.
+  Cache (checked against `start-files.json`, the one statement of the build); the worker only reads it. One exception, a
+  lazy snapshot's graphics part: the page's `#graphics` in `client.ts` also writes it (fetched after the start files or once
+  started, only when the heap is there); the worker never does, and `download()`'s clean-up keeps it. Without a
+  SharedArrayBuffer the worker fetches the part itself and the page does not (nor writes it to the Cache); the worker's
+  messages (`fetching`, `progress`, `landed`, `failed`) are how the page shows the download.
 - **The files live in dofile's own store** (`src/engine/store.ts`, IndexedDB `dofile`), not in the worker; `/work` is an
   in-memory copy, no IDBFS. **The journal is the only way a page change reaches `/work`** (a `pending` row, then the op
   `sync`). Never write a file through the worker alone. A run's changes are found by **modification time and size**; do

@@ -87,7 +87,9 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
   the **bundle** (site-packages as files, 91 MB, 3,559 files, needed because the snapshot holds memory, not the
   filesystem). They are written **brotli 11** as `heap.brotli.bin` (19.1 MB) and `site-packages.brotli.bin` (18.5 MB),
   37.6 MB in all (46.5 MB, the heap 26.5, before the library copies were zeroed and the docstrings stripped; see
-  "Making the files smaller"). The small files are `dso.json`, `files.json`, the patched `pyodide.asm.patched.mjs` and
+  "Making the files smaller"). Since the lazy graphics part the default build is smaller: heap 15.1 MB and bundle 12.2 MB
+  at brotli 11, with matplotlib and what only it needs in a third file, `graphics.brotli.bin` (7.7 MB; File size table); the
+  figures in this paragraph and the start-time tables below are of the build without it (`SNAPSHOT_NO_MPL=0`). The small files are `dso.json`, `files.json`, the patched `pyodide.asm.patched.mjs` and
   `manifest.json` (the build record, not deployed: the wheel's name and SHA-256, the extra wheels' SHA-256s, the Pyodide
   version, a build time, each big file's compressed and decompressed size). The build decodes both files again with the
   page's decoder and fails if they differ.
@@ -225,8 +227,8 @@ is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.mjs` and `web/src
 | Zero the copies of native libraries in the heap | **Done, the default** | heap 26.5 → 22.2; total 46.5 → 42.3 | Emscripten keeps each `.so`'s bytes after `dlopen`, and the bundle has them too: 135 of 136 buffers (30.5 MB raw) were identical to their files. `zeroLibraryCopies` |
 | Strip docstrings and asserts (`PYTHONOPTIMIZE=2`) | **Done, the default** (since 2026-11-07) | heap 22.2 → 19.8; total 42.3 → 39.9 | `SNAPSHOT_STRIP_DOCS=0` builds without it; the manifest records `optimize: 2`. It removes every library's `assert`s, so it rests on the checks below (identical results to the unstripped build), not on a proof |
 | Files named `.bin`, kept compressed in the browser | **Done** | the Cache API holds 40 MB, not 229 | a `.br` name makes hosts send `Content-Encoding: br`, and the browser decodes before the cache sees it |
-| Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" | the first graph then pays about 0.9 s (0.3 s with `.pyc` files); needs the bundle in two parts and a fetch. [Experiment](lazy-matplotlib.md#experiment-loading-matplotlib-lazily) |
-| Ship `.pyc` files for the lazily loaded part | **Not done** (part of the row above) | 0.6 s of the 0.87 s first graph is compiling | |
+| Leave matplotlib out of the snapshot and fetch it after "ready" | **Done, the default** (`SNAPSHOT_NO_MPL=0` builds the single snapshot) | brotli 11, 2026-11-15 build: heap 15.11 MB, bundle 12.22 MB, a third file `graphics.brotli.bin` 7.69 MB (32.9 MB raw, 1,822 files); before "ready" the start files are 33.87 MB, with the part 41.57 MB (`start-files.json`'s `download`, which the page shows) | the page fetches the part after the start files and hands it to the worker in a SharedArrayBuffer; only a graph waits for it (Break while waiting is rc 1); a return visit reads it from the Cache and imports matplotlib in the background. Design, numbers and limits: [lazy-matplotlib.md](lazy-matplotlib.md) |
+| Ship `.pyc` files for the lazily loaded part | **Done** (part of the row above) | 5.2 MB raw of `.pyc` in the part | the modules the four graph kinds and the export import, compiled at build time; the build raises if the part lacks them |
 | Leave out the bundle's tests (6.6 MB raw) and type stubs (1.5 MB raw) | **Done, the default** | bundle 20.74 → 18.50 (−2.24 MB, 10.8%); raw 99.5 → 91.4 MB; heap unchanged (21.1, build to build it varies by about 0.1) | `isDeadWeight` in `snapshot.ts`: every file under a folder named `tests` or `test`, and `*.pyi` and `py.typed`. It was 294 test files (almost all scipy data) and 275 stubs; no `.so` and no `testing` folder matched, and `check-snapshot` passes. An experiment first measured it as −2.10 MB for tests and −0.14 MB for stubs |
 | Zero the second copy of `libopenblas.so` (under a dlopen handle the library log does not hold) | **Done, the default** | heap 21.12 → 19.79 (−1.33 MB, brotli 11); `zeroLibraryCopies` now walks every handle: 138 copies, 37.5 MB raw, none left | `scipy.libs/libopenblas.so` is first loaded as a dependency of a scipy extension, then dlopened by Pyodide's package loader, which makes a second handle with its own 6.5 MB copy |
 | Zero the heap's free memory | **Tried early, no gain** (34.0 against 34.3 at brotli 5; no large free blocks were left); **Done, the default** (E6 P2), measured after the openblas row above | heap 19.79 → 19.12 (−0.67 MB, brotli 11) | `zeroFreeMemory`: malloc every free block under a heap cap, zero it, free it. What was left was old data in small free blocks (6.6 MB raw), not large blocks |
@@ -450,8 +452,8 @@ done is in [File size](#file-size-what-is-done-and-what-is-not)):
    (136 MB heap, 229 MB decompressed during the start) is the open question.
 2. ~~**Decide on stripping docstrings**~~ done 2026-11-07: the default (2.4 MB less); the checks on the quality-11 build
    match the unstripped build.
-3. **Load matplotlib and its dependencies on the first graph instead of in the snapshot** (not done; File size table;
-   plan: [Experiment: loading matplotlib lazily](lazy-matplotlib.md#experiment-loading-matplotlib-lazily)).
+3. ~~**Load matplotlib and its dependencies on the first graph instead of in the snapshot**~~ done (the lazy graphics part: File size table;
+   design: [lazy-matplotlib.md](lazy-matplotlib.md)).
 4. **Normal boot: import scipy lazily and download the packages lazily** (not done). This helps first visits without a
    big download; combine with the snapshot for return visits.
 5. Smaller things (File size table): the bundle's tests and type stubs (done), the 12 MB the package install adds to the heap (explained, and
