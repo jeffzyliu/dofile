@@ -43,7 +43,7 @@ current inputs. Wheel = a wheel in the root `dist/` (`npm run wheel`, `package.j
 | `snapshot` | `wheel`, `make-snapshot.mjs` | nothing: it reads W, X from `dist/`, `web/wheels/` (via `install-engine.ts`) and P from `node_modules` | S | the only writer of `public/snapshot/` |
 | `check-snapshot` | `wheel`, `check-snapshot.mjs` | S, fresh (`:168-174`, rc 2 if stale); W, X from `dist/` | none | never reads staged W, X, P |
 | `check-pytest`, `check-numeric` | `wheel`, the script | nothing | none | `installEngine` reads `dist/`, `web/wheels/` |
-| `pretest` / `test` | `wheel`; `node --test` | nothing staged. `test/harness.ts:15-23` reads `dist/`, `web/wheels/`; `engine.test.ts:350`, `snapshot-native.test.ts` read `public/snapshot` and skip when it is missing or stale | none | 5 tests skip with no snapshot (G0's baseline) |
+| `pretest` / `test` | `wheel`; `node --test` | nothing staged; one test loads the config: `test/site.test.ts:304-309` spawns `vite build` and `vite build --mode site` with no URLs and expects "Say which addresses ..." (`:398`), on a checkout where nothing is staged (the CI `unit` job runs `npm test` before any build), so `staged()` must not run at module load or before the URLs check. `test/harness.ts:15-23` reads `dist/`, `web/wheels/`; `engine.test.ts:350`, `snapshot-native.test.ts` read `public/snapshot` and skip when it is missing or stale | none | 5 tests skip with no snapshot (G0's baseline) |
 | `dev` | `wheel`, `build-id.ts --warn`, `together.ts dev`: two `vite` | W, X, P, S (S missing: the page says so; stale: a warning, the page "updated") | W, X, P (twice, racing) | serves `public/` at `/`; `devStartFiles()` (`:85`) lists `public/` and reads its manifest on every request |
 | `build` | `wheel`, `vite build`, `vite build --mode site` | W, X, P, S fresh: the editor build copies all of `public/` into `dist/app/`, and `writeStartFiles` (`:362`) throws on a stale S; with no S it builds and the page fails "no snapshot in this build" | W, X, P (twice) | the site build needs only the wheel's file name (the landing page's version, `:138`) and `dist/app/start-files.json` |
 | `build:local` | `DOFILE_URLS=local npm run build` | as `build` | as `build` | |
@@ -59,7 +59,7 @@ current inputs. Wheel = a wheel in the root `dist/` (`npm run wheel`, `package.j
 | Where | Steps that touch staging | Needs staged |
 |---|---|---|
 | **deploy.yml** (`:54`, a push to `main`) | the `build-web` action, then `wrangler deploy` x2 | via the action: everything below. **This path comes first: a merge deploys.** |
-| **build-web** (`action.yml:28`, `:33-44`, `:47-53`) | (1) `npm ci && npm run wheel`; (2) restore `web/public/snapshot` by a hash key (`:37`); on a hit, `node scripts/build-id.ts` says whether the cached S is of this wheel, else `npm run snapshot` (quality 11); (3) `npm run build && check-sizes.ts` | (3): W, X, P (staged by the config, so by the build itself), S (cache or built). The wheel is built **twice** (1, then inside `build`). A cache hit passes step 2 against wheel 1 and step 3 against wheel 2: it is safe only because the rebuilt wheel has the same bytes, and a difference fails the build (closed, never a stale deploy) |
+| **build-web** (`action.yml:28`, `:33-44`, `:47-53`) | (1) `npm ci && npm run wheel`; (2) restore `web/public/snapshot` by a hash key (`:37`); on a hit, `node scripts/build-id.ts` says whether the cached S is of this wheel, else `npm run snapshot` (quality 11); (3) `npm run build && check-sizes.ts` | (3): W, X, P (staged by the config, so by the build itself), S (cache or built). On a cache miss the wheel is built **three times** (1; `npm run snapshot` runs `wheel`; then inside `build`), on a hit twice. A cache hit passes step 2 against wheel 1 and step 3 against wheel 2: it is safe only because the rebuilt wheel has the same bytes, and a difference fails the build (closed, never a stale deploy) |
 | **preview.yml** (`:60`) | the same action, with two workers.dev addresses; then `wrangler versions upload` x2 | as build-web |
 | **web.yml `unit`** (`:77-82`) | `npm test` (wheel), `npm run build` with `DOFILE_URLS=production` | W, X, P by the build; **no snapshot**: the build passes with `built: null`. `npm run build` is the only check that the production addresses build |
 | **web.yml `e2e`** x4 (`:134`) | `npm run e2e` at quality 5, per project | as `e2e` above |
@@ -71,23 +71,36 @@ it needs: node_modules (`npm ci`, or a symlink: the config already tolerates one
 root `dist/` (never a shared one: `wheel` deletes there), W, X, P staged, S at `SNAPSHOT_QUALITY=5` (pixels do not depend on
 the quality; G0's `g0-snapshot.log` shows 13 s), and a build with `DOFILE_URLS=local` made under the same `E2E_PORT` the previews
 will listen on (`global-setup.ts` refuses a build for other ports, `:21-25`). That is today's `e2e` without `playwright test`;
-no script is that. Today N7 would have to spell `npm run snapshot && npm run build:local` itself, wheel twice. With R5 it
-calls one script (`e2e:prepare` in section 3), and its compare mode, in the checkout under test, calls the same one.
+no script is that. N7 runs in phase 0, and its baselines are built at the start of phase 2, before R5 (item 2.15), so the commits it builds
+have no `e2e:prepare`. N7 therefore spells `SNAPSHOT_QUALITY=5 E2E_PORT=<p> npm run snapshot && DOFILE_URLS=local npm run
+build` (or `npm run build:local`). R5 keeps those names and effects, so the same text works before and after it (the wheel
+is built twice, harmless by byte-identity). `e2e:prepare` (section 3) is a tidy-up for R5's own scripts, not something N7
+depends on.
 
 ## 3. The design
 
 **One writer.** `scripts/stage.ts` owns W, X, P; `make-snapshot.mjs` keeps S. Disjoint paths: stage never touches
 `public/snapshot/`, snapshot never touches the rest, so build-web's cache of S stays valid across a stage. Stage:
-(1) takes the inputs from `inputs()` (S9's `wheels()`), (2) deletes every `*.whl` and `public/pyodide/` in `public/` first
-(this ends problem 2), (3) copies, (4) writes `public/stage.json`: the inputs record (`BuildInputs`: wheel name and hash, extra
+(1) takes the inputs from `inputs()` (S9's `wheels()`), (2) deletes `public/stage.json` first, then every `*.whl` and `public/pyodide/` in `public/`
+(this ends problem 2), (3) copies, (4) writes `public/stage.json` **last**, so a stage that died half-way leaves no record: the inputs record (`BuildInputs`: wheel name and hash, extra
 wheels' hashes, Pyodide version). That file follows the precedent of S's `manifest.json`: Vite copies it, and the build
 removes it from `dist/app/` in the same `closeBundle` that removes the manifest (`start-files.ts:105`).
 
 **The config only reads.** A `staged()` function, next to `staleness()` in `build-id.ts`, compares `stage.json` with
-`inputs()` and returns the reason or null, in the words `staleness()` uses ("the staged files are stale: the dofile wheel
-differs ...; run `npm run stage`"). The editor's `build` and `serve` check it and throw; **`preview` and the site build do
-not look at `public/` at all** (the landing page's version comes from the wheel's name, via `inputs()`; if S9 wants none of
-`dist/` there, `stage.json` carries the name). A site build or a preview made without a wheel then works. Cost: the dev server
+`inputs()` **and checks that every file the record names exists with the recorded size** (the wheels and the three Pyodide
+files; the wasm is about 9 MB, so a size check is cheap and a hash is not needed), and returns the reason or null, in the
+words `staleness()` uses ("the staged files are stale: the dofile wheel differs ...; run `npm run stage`"). A unit test
+covers it: a deleted `pyodide.asm.wasm` and a record of other inputs each give a reason. Without the file check, a deleted
+file under a matching record would ship, which the config's copy-at-every-load never allowed.
+
+Which consumer reads what, since the config today calls `readInputs()` at module load (`:47`), which throws without a
+wheel (`build-id.ts:33`): **`inputs()` becomes lazy**, called where it is used, not at module load. The editor (`build`
+and `serve`) needs it for the defines (`__WHEEL__`, `__BUILD_ID__`, `__ABOUT__`, `:299-303`) and calls `staged()`, **inside
+`editor()`, after the URLs check** (`:398`), never at module load. The editor preview (`editorPreview()`) needs neither: it
+serves `dist/`. The site build needs only the wheel's version (`about(inputs).dofile`, `:138`), so it calls `inputs()` in
+`fillSite`, and **still needs a wheel in `dist/`**; it does not read `public/` (the site has `publicDir: false`).
+Report 10's "no wheel needed" for the pages-only mode stays untrue. A preview made without a wheel then works; a site build
+does not. Cost: the dev server
 checks once at start, not per request. "Stale" has then four named states, each with its fix: staged (`npm run stage`),
 snapshot (`npm run snapshot`), page (reload), dev server (restart).
 
@@ -97,7 +110,7 @@ names and effects, but compose raw steps, so `wheel` runs once:
 | Script after R5 | Runs |
 |---|---|
 | `stage` | `wheel`, `stage.ts` |
-| `snapshot` | `wheel`, `make-snapshot` (S does not need a stage; keeping `wheel` only) |
+| `snapshot` | `wheel`, `snapshot:make` (internal: the node script; S does not need a stage). `snapshot:make` is what `e2e:prepare`, `cf:dev`, `deploy` and build-web run after `stage`, so none rebuilds the wheel |
 | `build`, `build:local` | `stage`, then `build:vite` (new, internal: the two `vite build`s) |
 | `dev` | `stage`, `build-id.ts --warn`, `together.ts dev` |
 | `e2e:prepare` (new; N7 uses it) | `stage`, `snapshot:make` (internal: the node script), `DOFILE_URLS=local` `build:vite` |
@@ -126,7 +139,7 @@ sections: `build` (what makes S: `src/dofile/**`, `pyproject.toml`, `uv.lock`, `
 `web/package.json`, `web.yml`). Readers, in shell, so the `changes` job needs no Node: `git diff --name-only
 "origin/$BASE...HEAD" -- <both sections>` for ENGINE, and `git ls-files -- <build section> | xargs sha256sum | sha256sum`
 for the key (an output of a first step in build-web, then `actions/cache`'s `key:`). A unit test (new, small) fails when a
-relative import of `make-snapshot.mjs` (and its imports, one level) is in neither section: drift ends there, not in a review.
+relative import of `make-snapshot.mjs` (and its imports, one level) is in neither section: drift ends there, not in a review. A second test: every pathspec matches at least one tracked file (a typo matches nothing and `git ls-files` still succeeds, giving a weaker key silently).
 Against: `hashFiles` is what GitHub documents for keys and a shell hash of tracked files is ours to keep right; the key is also
 more exact (tracked files only: a file the runner generates cannot change it). The `web.yml:57` "code" pattern and
 `preview.yml`'s `paths` list are different questions (what needs the tests; what changes the build) and stay as they are.
@@ -138,10 +151,15 @@ names its fix. S9 puts the snapshot's other knobs (quality, no-mpl, ...) in the 
 
 ## 4. Changes R5 makes (so the sections above can be checked)
 
+This note reads pre-S9 code (S9 comes first: `scripts/lib`, the config split into plugin modules, `wheel` no longer deleting old
+wheels). R5's builder re-maps every `vite.config.ts`, `build-id.ts` and `wheel` line reference below at the start. Once `wheel`
+stops deleting `dist/dofile-*.whl`, "the newest by `sort().at(-1)`" (`build-id.ts:31`) may pick a release wheel, so S9's
+`wheels()` must return the wheel just built.
+
 `scripts/stage.ts` (new), `snapshot-inputs.txt` (new) with its test; `build-id.ts` (`staged()`); `vite.config.ts` loses
-`:47-68` and the editor's `build` and `serve` check instead; `package.json` (table in section 3); `web.yml:50` and
-`action.yml:28-44,53` (read the table; one `stage` step; no second `wheel`); `.gitignore` (`public/stage.json`);
-`web/CLAUDE.md`, `web/README.md` (scripts table; `public/` row), `docs/deploying.md` (the build-web line),
+the copies (`:54-68`), makes `inputs()` lazy (`:47-49`) and the editor's `build` and `serve` check `staged()` instead; `package.json` (table in section 3); `web.yml:50` (the `.md` filter at `:56` stays unless the new `git diff -- <pathspecs>` replaces it; while it stays, a README-only change does not run the snapshot job though README goes into the wheel: say which, and drop README.md from the drift claim if it stays) and
+`action.yml:28-44,53` (read the table; the action runs `stage`, then (the cache-hit check with `build-id.ts`, else) `snapshot:make`, then `build:vite` and `check-sizes.ts`: the wheel is built once, by `stage`, never again); `.gitignore` (`public/stage.json`);
+`web/CLAUDE.md`, `web/README.md` (scripts table; `public/` row; the ENGINE description at `README.md:164`), `docs/deploying.md` (the build-web line),
 `docs/test-map.md` if a test file is added. Checked by: `npm test`, `npm run e2e` (all four projects: one build per job now), and
 two things nobody has checked: **the wheel is byte-identical across two builds** (the first acceptance step of R5: `sha256` of
 two `npm run wheel`; build-web's cache-hit path already relies on it, see section 2; a hash that differs would already make `npm run snapshot` followed by `npm run build` stale today), and a local `npm run deploy` dry run (`wrangler deploy --dry-run`) shows no second wheel in
@@ -151,7 +169,7 @@ two `npm run wheel`; build-web's cache-hit path already relies on it, see sectio
 
 | # | Choice | Recommendation | Against |
 |---|---|---|---|
-| 1 | `stage` includes the wheel build (`wheel` then copy), or only copies | **includes it**: one command to type, and `stage.ts` still fails with the old "run `npm run wheel`" if called alone with no wheel | a hand-built wheel (a changed `DOFILE_WHEEL_DIR`, say) is staged only by calling `node scripts/stage.ts` directly |
+| 1 | `stage` includes the wheel build (`wheel` then copy), or only copies | **includes it**: one command to type, and `stage.ts` still fails with the old "run `npm run wheel`" if called alone with no wheel | none beyond one more command to type for a hand-copied wheel (`node scripts/stage.ts` alone). `DOFILE_WHEEL_DIR` is read only by `test/harness.ts:15`; no staging path honors it today |
 | 2 | the one table is a plain pathspec file read by shell, or a `.ts` module read by Node steps | **the pathspec file**: the `changes` job stays free of Node, and `build-id.ts` need not know CI | a second format next to `urls.ts`; the test above is what keeps it honest |
 | 3 | `dev` stages at start only (above), or the config re-stages on a `stage.json` change | **at start only**: the same as today in effect, and no writer in the config | a dev server that outlives a wheel change needs a restart (it says so) |
 | 4 | `preview` and the site build stop reading `public/` and `dist/` | **yes** | a preview of a folder no build wrote fails on the missing folder, not on the wheel: the clearer failure |
