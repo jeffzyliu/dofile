@@ -308,18 +308,34 @@ def test_graph_commands_skip_a_graph_that_cannot_be_drawn(eng, monkeypatch):
     assert r.log.endswith("\n(graph 2 could not be drawn: RuntimeError: no luck)\n")  # first line only
 
 
-def test_a_graph_that_cannot_be_drawn_is_named_in_the_log(eng):
-    bad = 'scatter y x, title("$\\frac{a}$")'  # matplotlib's mathtext raises ValueError
-    r = eng.run(f"scatter y x\n{bad}\nscatter y x", images=True)
-    assert r.rc == 0 and r.new_graphs == 3 and len(r.images) == 2
-    lines = [ln for ln in r.log.splitlines() if "could not be drawn" in ln]
-    assert len(lines) == 1 and lines[0].startswith("(graph 2 could not be drawn: ValueError: ")
-    ok = eng.run("scatter y x", images=True)
-    assert len(ok.images) == 1 and "could not be drawn" not in ok.log
-    # graphs beyond the shown set are never drawn, so never reported
-    many = eng.run(f"{bad}\n" + "scatter y x\n" * 5, images=True)
-    assert len(many.images) == 5 and "could not be drawn" not in many.log
-    assert "could not be drawn" not in eng.run(bad).log  # no images asked for
+BAD = "$\\frac{a}$"  # matplotlib's mathtext cannot parse it
+
+
+def test_graph_text_matplotlib_cannot_draw_fails_the_command(eng):
+    # in Stata the graph command draws, so it fails there; the check runs whether or not images are asked for
+    for images in (True, False):
+        r = eng.run(f'scatter y x\nscatter y x, title("{BAD}")\nscatter y x', images=images)
+        assert r.rc == 198 and r.new_graphs == 1 and len(r.images) == (1 if images else 0)
+        assert "title: matplotlib cannot draw this text: Expected \\frac{num}{den}" in r.log
+        assert "could not be drawn" not in r.log
+    r = eng.run(f'capture scatter y x, title("{BAD}")\ndisplay _rc\nscatter y x', images=True)
+    assert r.rc == 0 and r.log.count("198") == 1 and len(r.images) == 1
+    for opt, part in [
+        (f'ytitle("{BAD}")', "ytitle"),
+        (f'xtitle("{BAD}")', "xtitle"),
+        (f'note("{BAD}")', "note"),
+        (f'subtitle("ok" "{BAD}")', "subtitle"),
+        (f'legend(label(1 "{BAD}"))', "legend"),
+        (f'xlabel(1 "{BAD}")', "xlabel"),
+    ]:
+        r = eng.run(f"scatter y x, {opt}")
+        assert r.rc == 198 and r.new_graphs == 0 and f"{part}: matplotlib cannot draw this text" in r.log, opt
+
+
+def test_graph_text_with_dollar_signs_that_mathtext_reads_draws(eng):
+    for title in ["Price ($) by weight ($)", "Cost in $ only", "Rate $\\alpha_1$ and $x^2$", "plain"]:
+        r = eng.run(f'scatter y x, title("{title}")', images=True)
+        assert r.rc == 0 and len(r.images) == 1 and "could not be drawn" not in r.log, title
 
 
 def test_graph_lines(eng, tmp_path):

@@ -156,9 +156,10 @@ Use `ereturn list` / `return list` in `run_do` to see every name for any other c
 until `graph export`. `run_do` works like a notebook instead: with `graphs` true (the default), the last 5
 graphs that the call drew are attached as PNG images (MCP image content, 100 dpi), after the text block that
 holds the JSON result. A call that draws no graph attaches nothing; graphs from earlier calls are not sent
-again. `new_graphs` says how many were drawn, so an agent knows when some were left out. A graph that cannot be drawn (a title matplotlib cannot
-parse, say) is left out too, the call still ends rc 0, and the end of the log says
-`(graph 2 could not be drawn: ValueError: ...)`. Pass
+again. `new_graphs` says how many were drawn, so an agent knows when some were left out. A text matplotlib cannot draw (a title with a bad `$...$` formula, say) fails the graph command, as
+a graph Stata cannot draw would: rc 198, the graph is not stored, and the log names the part
+(`title: matplotlib cannot draw this text: Expected \frac{num}{den}, ...`). Any other graph that cannot be drawn is left out of the
+images, the call still ends rc 0, and the end of the log says `(graph 2 could not be drawn: ValueError: ...)`. Pass
 `graphs: false` to save context; `graph export` and `get_file` still work for any graph in memory.
 The structured result (`structuredContent`) is the same either way.
 

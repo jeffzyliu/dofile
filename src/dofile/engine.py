@@ -282,6 +282,62 @@ def _install_tick() -> None:
     brk.check = checked
 
 
+def _graph_texts(g):
+    """(part, text) for each text the graph will draw that holds a `$`: every string in its options (titles, axis
+    titles and labels, notes, legend, text(), ...), its panel titles and its layers' labels and extras (marker and bar
+    labels, categories, pie labels, matrix names); a combined graph's children too. matplotlib reads math between `$`
+    signs, so a string without one needs no check."""
+
+    def walk(part, v):
+        if isinstance(v, str):
+            if "$" in v:
+                yield part, v
+        elif isinstance(v, dict):
+            for k, x in v.items():
+                yield from walk(part or str(k), x)
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                yield from walk(part, x)
+
+    yield from walk("", g.opts)
+    for p in g.panels:
+        yield from walk("panel title", p.title)
+        for ly in p.layers:
+            yield from walk("label", ly.label)
+            yield from walk("label", ly.extra)
+    for c in g.children:
+        yield from _graph_texts(c)
+
+
+_mathtext = None
+
+
+def _check_graph_text(g) -> None:
+    """In Stata a graph is drawn by its command, so a graph it cannot draw fails that command. dofile draws only after
+    the run, so when the graph is stored (inside the command) each text with a `$` is parsed by matplotlib's mathtext,
+    line by line as Text does, and one it rejects fails the command with r(198)."""
+    from ._vendor.opendta.core.errors import StataError
+
+    texts = [(part, line) for part, t in _graph_texts(g) for line in t.split("\n") if "$" in line]
+    if not texts:
+        return
+    from matplotlib import cbook, mathtext
+    from matplotlib.font_manager import FontProperties
+
+    global _mathtext
+    if _mathtext is None:  # one parser: its cache of parsed texts is per instance
+        _mathtext = mathtext.MathTextParser("path"), FontProperties()
+    parser, prop = _mathtext
+    for part, line in texts:
+        if cbook.is_math_text(line):
+            try:
+                parser.parse(line, dpi=72, prop=prop)
+            except ValueError as e:
+                # the message is "\n<text>\n   ^\nParseSyntaxException: Expected ..., found ...  (at char 5), (line:1, ...)"
+                why = (str(e).strip().splitlines() or [""])[-1].split("Exception: ")[-1].split("  (at char")[0]
+                raise StataError(198, f"{part}: matplotlib cannot draw this text: {why}", explain=False) from None
+
+
 def _tracked_store():
     """OpenDTA's graph store, also recording each graph drawn (put), so a call can report its new graphs and the
     command that drew each one, as (text, line) (`command`, set by the Engine)."""
@@ -295,6 +351,7 @@ def _tracked_store():
             self.command = lambda: ("", None)
 
         def put(self, g, *, replace: bool) -> None:
+            _check_graph_text(g)
             super().put(g, replace=replace)
             self.drawn.append(g)
             self.commands.append(self.command())
