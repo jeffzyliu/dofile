@@ -3,7 +3,7 @@
 //
 // A signal with one owner is exported read-only (ReadonlySignal): a view that assigns one fails `npm run check`. Its
 // owner writes it through a writer object, and test/imports.test.ts checks that each writer is imported only by its
-// owner: `engineWriter` by engine.ts, `runWriter` by run.ts, `filesWriter` by files.ts. `toast`, `banners` and `announce`
+// owner: `engineWriter` and `graphicsWriter` by engine.ts, `runWriter` by run.ts, `filesWriter` by files.ts. `toast`, `banners` and `announce`
 // are written through the helpers below. The signals that views write themselves stay plain signals.
 //
 // On @preact/signals-core, so the Node tests import this file as it is. Components read the same signals through
@@ -57,6 +57,12 @@ export const engineWriter = {
 };
 export const engine: ReadonlySignal<EngineState> = engineWriter.engine; // engine.ts, after every step of the state machine
 export const isolated = signal(Boolean(globalThis.crossOriginIsolated)); // set once at load
+/** The writer of the graphics part's progress. Only app/engine.ts imports it. Progress is not an engine state: it does not go through the machine. */
+export const graphicsWriter = {
+  part: signal<import("../engine/types.ts").GraphicsProgress | null>(null), // the transport's onGraphics (engine.ts)
+};
+/** A lazy snapshot's graphics part (client.ts, onGraphics): null with none. The status bar shows it until it lands. */
+export const graphicsPart: ReadonlySignal<import("../engine/types.ts").GraphicsProgress | null> = graphicsWriter.part;
 
 // The download size for the prompt, in bytes as a host sends them: the build writes start-files.json's `download` size
 // into the page (<meta name="dofile-engine-bytes">, vite.config.ts), so it is there at load, before any download.

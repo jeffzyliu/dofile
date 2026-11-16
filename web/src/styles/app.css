@@ -1077,6 +1077,33 @@ input.filter::placeholder {
   }
 }
 
+/* "Graphs loading" and its ring (editor/StatusBar.tsx GraphsLoading): the status bar and the phone's strip; never cut */
+.graphs-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  flex: none;
+  white-space: nowrap;
+}
+.graphs-loading .ring {
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg); /* the arc starts at the top */
+}
+.graphs-loading .ring circle {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2.5;
+}
+.graphs-loading .ring circle + circle {
+  stroke: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .graphs-loading .ring circle + circle {
+    transition: stroke-dasharray var(--dur-fast) linear;
+  }
+}
+
 /* the phone: the strip under the top bar, a graph in the log, the hint as a block, the wide-table note */
 .phone-strip {
   display: flex;

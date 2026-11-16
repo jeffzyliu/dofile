@@ -10,7 +10,7 @@
 import type { ComponentChildren } from "preact";
 import { stageStatus, stagesOf } from "../engine.ts";
 import { snapshotStart } from "../env";
-import { engine, lastRun, memory, persisted } from "../state.ts";
+import { engine, graphicsPart, lastRun, memory, persisted } from "../state.ts";
 import type { EngineState } from "../types.ts";
 import { resetsIn, since } from "./clock.ts";
 import { lastRunWords, linesWords, memoryTitle, memoryWords, ticking } from "./words.ts";
@@ -96,6 +96,7 @@ export function StatusBar() {
       </span>
       {(st.s === "breaking" || st.s === "waiting") && <span>{ticking(since(st.t0))}</span>}
       {st.s === "ready" && <LastRunText />}
+      <GraphsLoading />
       {mem && <span title={memoryTitle}>{memoryWords(mem)}</span>}
       <span class="spacer" />
       <span class="affiliation">
@@ -110,5 +111,37 @@ export function StatusBar() {
         <span>{kept ? "Files are kept in this browser" : "Files may be cleared by this browser"}</span>
       )}
     </footer>
+  );
+}
+
+/** A lazy snapshot's graphics part while it downloads after the start: "Graphs loading" and a ring of its percent (the
+ *  status bar; the phone's strip, log/CommandLine.tsx PhoneStrip). Nothing before the engine started, once it landed, or
+ *  after a failed fetch (it is fetched again; a graph's own error says why). Not a live region (the status bar's rule). */
+export function GraphsLoading() {
+  const g = graphicsPart.value,
+    s = engine.value.s;
+  if (g?.state !== "fetching" || !(s === "ready" || s === "running" || s === "breaking" || s === "waiting"))
+    return null;
+  const pct = g.total ? Math.min(100, (100 * g.received) / g.total) : 0,
+    mb = (n: number) => (n / 1e6).toFixed(1);
+  return (
+    <span
+      class="graphs-loading"
+      data-graphics="fetching"
+      role="progressbar"
+      aria-label={`Graphs loading, ${mb(g.received)} of ${mb(g.total)} MB`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+      title={`${mb(g.received)} of ${mb(g.total)} MB`}
+    >
+      <svg class="ring" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="6" pathLength="100" />
+        <circle cx="8" cy="8" r="6" pathLength="100" stroke-dasharray={`${pct} 100`} />
+      </svg>
+      <span class="graphs-loading-words" aria-hidden="true">
+        Graphs loading
+      </span>
+    </span>
   );
 }

@@ -37,7 +37,7 @@ import { useRef } from "preact/hooks";
 import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
 import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
-import { stateWords } from "../editor/StatusBar";
+import { GraphsLoading, stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryTitle, memoryWords, refusedRunWords, seconds, ticking } from "../editor/words.ts";
 import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
@@ -328,6 +328,7 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
     <div class="phone-strip">
       {parts}
       {!(st.s === "ready" && r) && mem && <span title={memoryTitle}>{memoryWords(mem, true)}</span>}
+      <GraphsLoading />
       {children}
     </div>
   );

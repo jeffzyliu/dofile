@@ -37,7 +37,7 @@ import { BREAK_GRACE_MS } from "../engine/types.ts";
 import { editorAsked } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
-import { engineWriter } from "./state.ts";
+import { engineWriter, graphicsWriter } from "./state.ts";
 import { stageNow } from "./states/words.ts";
 import type { EngineState, FailReason, RunHead, Stage } from "./types.ts";
 
@@ -137,6 +137,9 @@ export function connectEngine({
   graceMs?: number;
   canInterrupt?: boolean;
 }) {
+  client.onGraphics?.((p) => {
+    graphicsWriter.part.value = p; // only progress for the status bar: no state is decided by it
+  });
   clearTimeout(breakTimer);
   download?.stop.abort();
   breakTimer = undefined;

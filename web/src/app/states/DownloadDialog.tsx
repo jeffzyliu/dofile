@@ -13,7 +13,7 @@
 import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";
 import { LANDING_URL, snapshotStart } from "../env";
-import { dialog, engine, engineBytes } from "../state.ts";
+import { dialog, engine, engineBytes, graphicsPart } from "../state.ts";
 import type { Stage } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { useNow } from "./clock.ts";
@@ -79,6 +79,9 @@ function ProgressDialog() {
   const done = st.s === "starting-list" || st.s === "starting-worker" ? st.done : {};
   const elapsed = busy ? Math.max(0, (now - (st as { t0: number }).t0) / 1000) : 0;
   const stepNo = current ? stages.indexOf(current) + 1 : 0;
+  // a lazy snapshot's graphics part: not in the bar (download() counts what comes before the start), said under it
+  const part = graphicsPart.value,
+    later = part && part.state !== "landed" ? `${(part.total / 1e6).toFixed(1)} MB` : null;
   return (
     <Dialog
       key="progress"
@@ -116,6 +119,7 @@ function ProgressDialog() {
           >
             <i style={{ width: `${pct ?? 0}%` }} />
           </div>
+          {later && <p class="meta">{`+ ${later} of graphics after the start`}</p>}
         </>
       ) : current ? (
         <div class="row">
@@ -134,7 +138,7 @@ function ProgressDialog() {
               s === "download" && st.s === "downloading" && st.total
                 ? ofTotal(st.received, st.total)
                 : finished
-                  ? s === "download" && size
+                  ? s === "download" && size && !part // a lazy part still to come: not the whole size
                     ? `${size} · ${secs(done[s] ?? 0)}`
                     : secs(done[s] ?? 0)
                   : null;
