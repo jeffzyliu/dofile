@@ -1,7 +1,7 @@
 // The sample project's page logic (src/app/sample.ts) on the real store over fake-indexeddb, no DOM: the first visit
 // writes it into an empty store and opens analysis.do, and never over a visitor's own files; "Restore the sample" is an
-// upload of it. Also: the generated module is what scripts/make-sample.ts makes from web/sample/, and the files hold only
-// our own words.
+// upload of it. Also: the generated module is what scripts/make-sample.ts makes from web/sample/, and the files hold
+// only our own words.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -12,7 +12,8 @@ import { effect } from "@preact/signals-core";
 import { moduleText } from "../scripts/make-sample.ts";
 import type { ClashAnswer } from "../src/app/files/actions.ts";
 
-// localStorage and a page's location, which Node lacks: state.ts reads the first at load, sample.ts the second when called
+// localStorage and a page's location, which Node lacks: state.ts reads the first at load, sample.ts the second when
+// called
 const memory = new Map<string, string>();
 Object.assign(globalThis, {
   localStorage: {
@@ -215,7 +216,8 @@ test("Restore the sample asks about a sample file open with unsaved edits, even 
     reloads.map((r) => r[0]),
     ["analysis.do"],
   );
-  // the editor is given the file's text as it reads a file: the sample's own form, "\n" and no BOM (its Save then keeps it)
+  // the editor is given the file's text as it reads a file: the sample's own form, "\n" and no BOM (its Save then keeps
+  // it)
   const given = reloads[0][1];
   assert.equal(given, dec(sample.sampleFiles()[0].bytes));
   assert.ok(!given.includes("\r") && !given.startsWith("\uFEFF"));
@@ -231,7 +233,8 @@ test("Restore the sample over an open tab whose file has \\r\\n and a BOM: the e
   assert.equal(reloads[0][1], dec(sample.sampleFiles()[1].bytes));
 });
 
-// S 19: where the browser may clear the files, the sample's own writes bring no storage banner; the visitor's first change does
+// S 19: where the browser may clear the files, the sample's own writes bring no storage banner; the visitor's first
+// change does
 async function seededWithoutStorage() {
   connectFiles(store, notKept);
   own();

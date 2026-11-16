@@ -79,8 +79,8 @@ const LIST = {
 };
 
 // A fetch that sends each file in 1,000-byte pieces. `hold`: a path whose answer stops after its first piece until the
-// request is aborted. `missing`: a path that is a 404. `offline`: a path whose fetch fails as with no network. `short`: a
-// path that arrives 100 bytes short, with status 200. `calls`: the URLs asked for; `modes`: the cache mode of each.
+// request is aborted. `missing`: a path that is a 404. `offline`: a path whose fetch fails as with no network. `short`:
+// a path that arrives 100 bytes short, with status 200. `calls`: the URLs asked for; `modes`: the cache mode of each.
 function fakeFetch({
   hold,
   missing,
@@ -190,7 +190,8 @@ test("download: every start file goes into the Cache, the counts rise to the tot
 test("download: an entry of the build's Cache that the list does not name (the same build at an older address) is dropped; the list's own are kept and not fetched again", async () => {
   const caches = fakeCaches(),
     { fetch, calls } = fakeFetch();
-  const cache = await caches.open("dofile-snapshot-777"); // the same build, cached when the editor was at the site's root
+  // the same build, cached when the editor was at the site's root
+  const cache = await caches.open("dofile-snapshot-777");
   const old = ["https://dofile.test/snapshot/heap.bin", "https://dofile.test/pyodide/pyodide.asm.wasm"];
   for (const url of old) await cache.put(url, new Response("the same build, at the old address"));
   await cache.put(`${BASE}snapshot/dso.json`, new Response(FILES["snapshot/dso.json"][0])); // from an earlier try
@@ -378,8 +379,8 @@ test("download: a list from another build than the page says so before anything 
   assert.equal((await same.download()).cached, true);
 });
 
-// The id is scripts/build-id.ts's: the page's from the stamp and the files it is built from, the list's from the stamp and
-// the snapshot's record (vite.config.ts). Here both come from the real function.
+// The id is scripts/build-id.ts's: the page's from the stamp and the files it is built from, the list's from the stamp
+// and the snapshot's record (vite.config.ts). Here both come from the real function.
 test('checkBuild: a list of another stamp, extra wheel, Pyodide version or dofile wheel is "updated"; the same stamp and inputs pass', () => {
   const inputs: { wheelHash: string; extraWheels: Record<string, string>; pyodide: string } = {
     wheelHash: "a".repeat(64),
@@ -613,7 +614,8 @@ test("no WebAssembly: start-failed with reason no-wasm, and no worker is made", 
   await assert.rejects(startWorker(eng), { type: "start-failed", reason: "no-wasm" });
   assert.equal(workers.length, 0);
   assert.equal(eng.worker, null);
-  eng.end(1, { kind: "failed", reason: "no WebAssembly" }); // the machine's FAIL ends a worker that never was: nothing to do
+  // the machine's FAIL ends a worker that never was: nothing to do
+  eng.end(1, { kind: "failed", reason: "no WebAssembly" });
 });
 
 test("start() with a worker still live throws; end() of another worker than the live one throws; after end() the next start works", async () => {
@@ -673,7 +675,8 @@ test("error kinds: an op's error keeps the worker's name; end() fails the pendin
     const running = runOn(eng, "while 1 {\n}"),
       waiting = eng.query("describe");
     eng.end(live(eng), ending);
-    await assert.rejects(running, error, `${ending.kind}: the run`); // the machine has cut the run already: its performer says nothing
+    // the machine has cut the run already: its performer says nothing
+    await assert.rejects(running, error, `${ending.kind}: the run`);
     await assert.rejects(waiting, error, `${ending.kind}: a query`);
     assert.equal(eng.worker, null);
     await assert.rejects(runOn(eng, "display 1"), { kind: "no-engine" }, "run() with no live worker");
@@ -815,7 +818,8 @@ test("a run whose op fails in the worker rejects with kind op; the worker stays 
       );
   });
   await startWorker(eng);
-  await assert.rejects(runOn(eng, "bad"), { kind: "op", name: "PythonError", message: "MemoryError" }); // the performer then says run-failed
+  // the performer then says run-failed
+  await assert.rejects(runOn(eng, "bad"), { kind: "op", name: "PythonError", message: "MemoryError" });
   assert.equal(eng.worker, workers[0], "the worker is the same");
   assert.deepEqual(await runOn(eng, "good"), { rc: 0, log: "ok" });
 });
@@ -961,7 +965,8 @@ test("build(): a list of another build rejects with kind updated; one that does 
   await assert.rejects(eng.build(), { kind: "updated", message: /^dofile was updated: reload the page/ });
   const offline = snapshotStart(listFetch({ offline: true }).fetch);
   await assert.rejects(offline.eng.build(), { kind: "failed", reason: "download" });
-  const none = scripted(starts, { snapshot: `${BASE}snapshot/`, fetch: listFetch().fetch }); // a snapshot start with no list
+  // a snapshot start with no list
+  const none = scripted(starts, { snapshot: `${BASE}snapshot/`, fetch: listFetch().fetch });
   await assert.rejects(none.eng.build(), { kind: "failed", reason: "unknown", message: /no snapshot in this build/ });
   // a list of another build that also lacks the snapshot is "updated": the comparison comes first
   const both = scripted(starts, {
@@ -996,8 +1001,8 @@ test("start: a worker that cannot be made is start-failed, reason unknown; the s
 });
 
 // The live worker's record keeps what end() said (`ended`). It is for the moment a step's answer and end() come in the
-// same tick: the step is settled already, so end() finds nothing pending to reject, and the start's next line runs after
-// end() returned.
+// same tick: the step is settled already, so end() finds nothing pending to reject, and the start's next line runs
+// after end() returned.
 test("a start whose step is answered in the same tick as end(): nothing more is posted or said, the facts stay, and the store is not attached to the dead worker", async () => {
   for (const at of ["mount", "startup"] as const) {
     const store = fakeStore(),
@@ -1044,7 +1049,8 @@ test("a start that is ended while it waits for `startup` says nothing more, and 
   const { eng } = scripted((m, post, _port, index) => {
     if (m.op === "mount") post({ id: m.id, result: undefined });
     else if (m.op === "boot") post({ id: m.id, result: { dofile: `worker ${index}` } });
-    else if (m.op === "startup" && index > 0) post({ id: m.id, result: { mode: "normal", worker: index } }); // the first never answers
+    // the first never answers
+    else if (m.op === "startup" && index > 0) post({ id: m.id, result: { mode: "normal", worker: index } });
   });
   const first: Said = [];
   eng.start(1, null, (a) => first.push(a));

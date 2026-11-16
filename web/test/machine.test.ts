@@ -1,11 +1,6 @@
-// The engine's state machine (src/engine/machine.ts), alone: no controller, no transport, no clock.
-//  - the table: every state by every event, with the variants of the cells that depend on a payload or on the machine.
-//    A new state or event fails `npm run check` until its cells are written.
-//  - the properties over every cell and every step of every scenario.
-//  - the race scenarios, each a short list of events with the state and every effect after each.
-//  - the lines that must not compile (`@ts-expect-error`).
-// Every machine is reached from initial() by events, and every ticket is copied from an effect, a state or a machine.
-// The scenarios name tickets by their numbers (the lock 1, the cache check 2, the download 3, the worker 4).
+// The engine's state machine (src/engine/machine.ts), alone: no controller, no transport, no clock. The table (every
+// state by every event: a new state or event fails `npm run check` until its cells are written), the properties over
+// it, the race scenarios, and the lines that must not compile (`@ts-expect-error`).
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -150,7 +145,8 @@ function numbered(at: At, n: number): Ticket {
   throw new Error(`no ticket ${n} on this path`);
 }
 
-/** `f` as an event at `at`: an answer gets its effect's ticket (or `n`), and each event comes 1000 ms after the last. */
+/** `f` as an event at `at`: an answer gets its effect's ticket (or `n`), and each event comes 1000 ms after the
+ *  last. */
 function eventAt(at: At, f: Feed, o: { n?: Ticket; at?: number } = {}): Event {
   const time = o.at ?? at.clock + 1000;
   return isAnswer(f) ? { ...f, n: o.n ?? asked(at, ASKED_BY[f.type]), at: time } : { ...f, at: time };
@@ -169,7 +165,8 @@ function go(at: At, f: Feed, o: { n?: Ticket; at?: number } = {}): At {
 
 type Options = { env?: Partial<Env>; crashed?: boolean };
 /** The machine in row `name`, by the shortest path: a normal load for most. `crashed`: with the crash count at 1 (it
- *  survives a failed start and "Try again"): the starting rows after a crash, and the rows reached by the events after it. */
+ *  survives a failed start and "Try again"): the starting rows after a crash, and the rows reached by the events after
+ *  it. */
 function row(name: RowName, o: Options = {}): At {
   const at = reach(name, o);
   assert.equal(at.m.state.s, name, `the path to ${name}`);
@@ -399,8 +396,9 @@ const wantEnd =
     };
   };
 
-// The crash count survives a failed start and "Try again". These rows can be reached with it at 1 (`none`, the page load
-// and the other-tab rows cannot: losing the lock sets it back to 0), and a cell that does not name the count must leave it.
+// The crash count survives a failed start and "Try again". These rows can be reached with it at 1 (`none`, the page
+// load and the other-tab rows cannot: losing the lock sets it back to 0), and a cell that does not name the count must
+// leave it.
 const CAN_HAVE_CRASHED = new Set<RowName>([
   "asking",
   "declined",
@@ -1178,9 +1176,10 @@ test("the matrix built from transition() has the grid's cells: not valid, stale,
 });
 
 // ---- SPEC section 5's transition matrix ----
-// docs/design/SPEC.md section 5 holds the matrix as five Markdown tables, one per group of events. A cell is `·` (the event
-// is not valid), `STALE` (an event with a ticket, in a state that holds none) or the states it can lead to, separated by
-// ", ". `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` prints the tables from matrix(); the test compares them.
+// docs/design/SPEC.md section 5 holds the matrix as five Markdown tables, one per group of events. A cell is `·` (the
+// event is not valid), `STALE` (an event with a ticket, in a state that holds none) or the states it can lead to,
+// separated by ", ". `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` prints the tables from matrix(); the test
+// compares them.
 const SPEC_GROUPS: [string, EventType[]][] = [
   ["A. The visitor's engine actions", Object.keys(A.none) as EventType[]],
   ["B. Tab lock and cache check", Object.keys(B.none) as EventType[]],
@@ -1201,7 +1200,8 @@ function specTables(): string {
     ].join("\n"),
   ).join("\n\n");
 }
-/** The cells of SPEC section 5's matrix, "state x event" -> the cell's text; a cell given twice is listed in `twice`. */
+/** The cells of SPEC section 5's matrix, "state x event" -> the cell's text; a cell given twice is listed in
+ *  `twice`. */
 function specMatrix(): { cells: Map<string, string>; twice: string[] } {
   const text = readFileSync(fileURLToPath(new URL("../../docs/design/SPEC.md", import.meta.url)), "utf8");
   const section = text.slice(text.indexOf("\n## 5. "), text.indexOf("\n## 6. "));
@@ -1596,7 +1596,8 @@ const SCENARIOS: Record<string, () => At[]> = {
         { do: "say", line: "download-stopped" },
       ])
       .go({ type: "start" }, { s: "downloading", download: 4, received: 0 }, [{ do: "start-download", n: 4 }])
-      .drop({ type: "download-progress", received: 5, total: 9 }, "stale", 3) // the first download's reply is bound to 3
+      // the first download's reply is bound to 3
+      .drop({ type: "download-progress", received: 5, total: 9 }, "stale", 3)
       .go(
         { type: "download-progress", received: 7, total: 9 },
         { s: "downloading", download: 4, received: 7, total: 9 },
@@ -1887,8 +1888,8 @@ test("property: over every path, the effects never make a second worker while on
 });
 
 // ---- what must not compile ----
-// Each line marked @ts-expect-error fails `npm run check` if it starts to compile: the compiler's refusals are not lost.
-// `dispatch` and `reply` stand for the controller's (src/app/engine.ts), with the same signatures.
+// Each line marked @ts-expect-error fails `npm run check` if it starts to compile: the compiler's refusals are not
+// lost. `dispatch` and `reply` stand for the controller's (src/app/engine.ts), with the same signatures.
 
 // @ts-expect-error an effect with a ticket and no row
 export type NoRow = Expect<AnswersOk<Omit<Answers, "interrupt">>>;

@@ -1,5 +1,6 @@
 // The page's controllers (src/app/engine.ts, run.ts, files.ts) on a stand-in transport, store and tab lock.
-// The machine's table is machine.test.ts, the real transport client.test.ts, the worker engine.test.ts and files.test.ts.
+// The machine's table is machine.test.ts, the real transport client.test.ts, the worker engine.test.ts and
+// files.test.ts.
 //
 // Every wiring ends with the drop record as the test expects it: empty, unless the test provokes a race and names the
 // events that must be dropped (expectDrops). It is asserted when the wiring is replaced (setUp) and when the test ends
@@ -121,9 +122,10 @@ type FakeWorker = {
 };
 type FakeDownload = { signal: AbortSignal; progress: (progress: Progress) => void; done: Later<Downloaded> };
 
-// A transport that does what the test says, when it says: each download(), build() and run() waits on a promise the test
-// settles, and a worker says what the test makes it say (worker.reply). It keeps the transport's own rules: start() with a
-// worker still live throws, end() fails the ended worker's run and its waiting read ops with the ending's kind.
+// A transport that does what the test says, when it says: each download(), build() and run() waits on a promise the
+// test settles, and a worker says what the test makes it say (worker.reply). It keeps the transport's own rules:
+// start() with a worker still live throws, end() fails the ended worker's run and its waiting read ops with the
+// ending's kind.
 class FakeTransport implements Reader, Lifecycle, Builds {
   isCached: boolean | Promise<boolean> = false; // what cached() answers
   deaf = false; // download() does not hear its abort: the test can still complete it
@@ -255,8 +257,8 @@ type Wiring = {
   transport?: Reader & Lifecycle & Builds;
 };
 let client: FakeTransport, store: ReturnType<typeof fakeStore>, lock: ReturnType<typeof fakeLock>;
-/** A new wiring: a transport (the stand-in, unless the test gives one), a store (blocked, as app/store.ts opens it) and a
- *  tab lock. open() then starts the machine. */
+/** A new wiring: a transport (the stand-in, unless the test gives one), a store (blocked, as app/store.ts opens it) and
+ *  a tab lock. open() then starts the machine. */
 function wire({
   free = true,
   snapshot = true,
@@ -496,7 +498,8 @@ test("the controller on the real transport, with a scripted worker: ready, a run
   state("ready");
   assert.deepEqual(S.data.value, { op: "describe" });
 
-  // the worker crashes during a run, with a read op waiting: the real end() fails both, and the machine's own result ends the run
+  // the worker crashes during a run, with a read op waiting: the real end() fails both, and the machine's own result
+  // ends the run
   const cutRun = runCode("long", FILE),
     waiting = engine.call("describe_file", { path: "d.dta" });
   await sleep(10);
@@ -505,7 +508,8 @@ test("the controller on the real transport, with a scripted worker: ready, a run
   await assert.rejects(waiting, { kind: "reset", reset: "crash", message: SENTENCE("the engine crashed (boom)") });
   const cut = (await cutRun)!;
   assert.deepEqual([cut.rc, cut.kind, cut.error], [9998, "crash", SENTENCE("the engine crashed (boom)")]);
-  await until("ready"); // the real build() (no list: null), then start(): it would throw if the old worker were still live
+  // the real build() (no list: null), then start(): it would throw if the old worker were still live
+  await until("ready");
   assert.deepEqual([workers.length, workers[0].terminated, transport.worker === workers[1]], [2, true, true]);
   assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (boom)", kind: "crash", run: FILE }]);
   // what the ended worker still says goes through its own reply, with its own ticket: the machine drops it
@@ -537,7 +541,8 @@ test("the controller on the real transport, with a scripted worker: ready, a run
     { type: "start", row: "failed-twice", why: "not-valid" },
   ]);
 
-  // a start that fails before a worker exists (no WebAssembly): the machine's end-worker finds no worker, and that is not an error
+  // a start that fails before a worker exists (no WebAssembly): the machine's end-worker finds no worker, and that is
+  // not an error
   let made = 0;
   const none = new EngineClient({
     wheel: "dofile.whl",
@@ -852,7 +857,8 @@ test("Break: `breaking` with the deadline, then `waiting` on Don't reset; the ru
   assert.equal(state("breaking").resetAt, resetAt);
   engine.keepWaiting();
   state("waiting");
-  const ended = result({ rc: 0, log: "the last command finished\n" }); // the run had ended before a safe point: its own rc
+  // the run had ended before a safe point: its own rc
+  const ended = result({ rc: 0, log: "the last command finished\n" });
   client.run1.done.ok(ended);
   assert.equal(await done, ended, "not rewritten");
   state("ready");
@@ -887,7 +893,8 @@ test("the Break timer across two runs on one worker (a simulated clock): the fir
     engine.breakRun();
     assert.equal(state("breaking").resetAt, Date.now() + 5000);
     mock.timers.tick(2000);
-    client.run1.done.ok(result({ rc: 1, log: "--Break--\nr(1);\n" })); // the engine takes the Break, before the deadline
+    // the engine takes the Break, before the deadline
+    client.run1.done.ok(result({ rc: 1, log: "--Break--\nr(1);\n" }));
     await micro();
     state("ready");
     assert.equal(S.lastRun.value!.rc, 1);
@@ -2170,7 +2177,8 @@ test("the phone keyboard: a scroll of the page that no update has seen is scroll
 });
 
 test("the phone keyboard: the drag guard cancels a touchmove that no scroller under the finger can follow, only while the keyboard is open", () => {
-  // elements as a chain of parents; `room` says which of them can scroll towards the end (+1), the start (-1), or neither
+  // elements as a chain of parents; `room` says which of them can scroll towards the end (+1), the start (-1), or
+  // neither
   const page = { parentElement: null as unknown },
     bar = { parentElement: page },
     pane = { parentElement: page, room: [-1, 1] },
@@ -2256,7 +2264,8 @@ test("J1: pasted lines: a line cut because another tab took the engine stops the
   });
   state("running");
   assert.equal(client.run1.args.code, "display 1");
-  engine.lost(); // another tab takes the engine: the line's run is cut (rc 9998, kind "stopped"), and lastRun is not written
+  // another tab takes the engine: the line's run is cut (rc 9998, kind "stopped"), and lastRun is not written
+  engine.lost();
   state("other-tab-idle");
   await sleep(20);
   // "Use dofile in this tab", the engine starts again, and the visitor runs something

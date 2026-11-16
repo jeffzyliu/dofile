@@ -1,5 +1,5 @@
-// The build's identity (scripts/build-id.ts): the stale-snapshot check and the id given to the page and the list. No Vite,
-// no snapshot needed.
+// The build's identity (scripts/build-id.ts): the stale-snapshot check and the id given to the page and the list. No
+// Vite, no snapshot needed.
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -84,8 +84,8 @@ test("buildId: the same stamp and inputs give the same id, whatever the order of
   assert.notEqual(buildId("s", old), buildId("s", { ...two, extraWheels: {} }));
 });
 
-// writeStartFiles (the build's last step) on a folder like dist/: the page, and a snapshot with its record. Synthetic inputs:
-// no real wheel or snapshot is needed.
+// writeStartFiles (the build's last step) on a folder like dist/: the page, and a snapshot with its record. Synthetic
+// inputs: no real wheel or snapshot is needed.
 test("writeStartFiles: a stale snapshot fails the build and writes nothing; a current one gives the list the build id and leaves no manifest.json; no snapshot is built: null", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "dofile-start-files-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

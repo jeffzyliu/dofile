@@ -1,5 +1,5 @@
-// The file store (src/engine/store.ts) by itself, with no engine and no worker: its API, the pending journal, the zip, a
-// failing transaction; and the tab lock and storage.persist() (src/engine/tab.ts).
+// The file store (src/engine/store.ts) by itself, with no engine and no worker: its API, the pending journal, the zip,
+// a failing transaction; and the tab lock and storage.persist() (src/engine/tab.ts).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -309,8 +309,8 @@ test("the after-run write: a folder the page made covers only itself; a chain of
     { name: "out/t.txt", status: "created", bytes: 3 },
     { name: "d/y.txt", status: "removed", bytes: 0 },
   ]);
-  // under a folder the page renamed: listed. f.txt (the page renamed that file), q/inner.txt (under a file the page wrote)
-  // and `file` (where the page has a folder) are dropped and not listed
+  // under a folder the page renamed: listed. f.txt (the page renamed that file), q/inner.txt (under a file the page
+  // wrote) and `file` (where the page has a folder) are dropped and not listed
   assert.deepEqual(skipped, ["folder/a.txt", "folder/new.txt"]);
   assert.deepEqual(await pendingRows(store), [], "the eight rows are gone");
   assert.deepEqual(await paths(store), [

@@ -123,7 +123,8 @@ function importsOf(path: string): Import[] {
     let file: string | null = null;
     if (spec.startsWith(".")) {
       const base = resolve(web, dirname(path), spec);
-      const found = [base, `${base}.ts`, `${base}.tsx`].find((p) => existsSync(p) && statSync(p).isFile()); // a view may leave the extension out
+      // a view may leave the extension out
+      const found = [base, `${base}.ts`, `${base}.tsx`].find((p) => existsSync(p) && statSync(p).isFile());
       assert.ok(found, `${path}: cannot resolve ${spec}`);
       file = relative(web, found);
     }
@@ -218,7 +219,8 @@ test("the import graph: the landing and commands pages (src/site/) import nothin
   const loads = [...editorHtml.matchAll(/<(?:script|link)[^>]*\b(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(loads.includes("/src/main.tsx"), "index.html loads the editor's entry");
   for (const l of loads) assert.ok(!l.includes("/site/"), `index.html loads ${l}`);
-  // CSS: an @import or url() of a stylesheet in src/site/ only from src/site/; src/site/'s CSS only of src/site/ and src/styles/
+  // CSS: an @import or url() of a stylesheet in src/site/ only from src/site/; src/site/'s CSS only of src/site/ and
+  // src/styles/
   const css = files("src", /\.css$/);
   assert.ok(css.includes("src/site/site.css") && css.includes("src/styles/ui.css"), "the walk found the stylesheets");
   for (const f of css) {
@@ -327,7 +329,8 @@ test("events get in through two doors: enqueue() is called only in dispatch() an
   );
   assert.equal(count(text, /\bqueue = /), 1, "and it is emptied in one place, connectEngine()");
   assert.equal(count(bodyOf(text, "export function connectEngine("), /\bqueue = \[\]/), 1);
-  // view() takes the machine's State and gives the views' EngineState: its return type is the third check on EngineState
+  // view() takes the machine's State and gives the views' EngineState: its return type is the third check on
+  // EngineState
   assert.equal(count(text, /\bfunction view\(state: State\): EngineState \{/), 1);
   assert.equal(
     count(text, /\bengineWriter\.engine\.value = view\(/),
@@ -453,8 +456,8 @@ test("no counter or flag outside the machine decides a state: the old ones are g
     /\b(gen|attempt|lockGen|errorRestarts|taking|was|queued|QueuedRun|dropRun|drop-run|hadEngine|stageAt|STAGE_OF|StatusText|onRestart|onStatus|resetResult|breakTimer|resetAt|STARTABLE|RESETTABLE)\b/;
   const found = having(SRC, gone);
   // What is left of those names: `resetAt` of `breaking`, which views read (also in app/editor/clock.ts, for the Break
-  // countdown); the controller's handle on the Break timer, which decides no state; and in the worker, `was`, a local name
-  // in saveRun for the files as they were before a run.
+  // countdown); the controller's handle on the Break timer, which decides no state; and in the worker, `was`, a local
+  // name in saveRun for the files as they were before a run.
   assert.deepEqual(Object.keys(found).sort(), [
     "src/app/editor/clock.ts",
     "src/app/engine.ts",

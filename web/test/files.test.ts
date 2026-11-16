@@ -49,8 +49,9 @@ async function same(store: FileStore, eng: EngineClient) {
 // Stata code that writes `content` to the file `path`
 const writes = (path: string, content: string) =>
   `file open f using ${path}, write replace\nfile write f "${content}"\nfile close f`;
-// Start a run whose code has `display "go"` in it: `going` resolves when that line has reached the page (the log streams
-// before each command), so a test makes its changes while what follows (a `sleep`) goes on. No guess of how long it takes.
+// Start a run whose code has `display "go"` in it: `going` resolves when that line has reached the page (the log
+// streams before each command), so a test makes its changes while what follows (a `sleep`) goes on. No guess of how
+// long it takes.
 function untilGo(eng: EngineClient, code: string) {
   let log = "",
     go!: () => void;
@@ -695,7 +696,8 @@ test("after a start that failed, every store call works and nothing is journalle
   const failed = assert.rejects(startWorker(eng), { type: "crashed", cause: "error", detail: "blocked" });
   await store.write("while-failing.do", bytes("display 1")); // a worker exists for a moment: journalled, and harmless
   await failed;
-  eng.end(live(eng), { kind: "failed-twice", reason: "the engine's worker failed twice (blocked); reload the page" }); // the machine's TWICE
+  // the machine's TWICE
+  eng.end(live(eng), { kind: "failed-twice", reason: "the engine's worker failed twice (blocked); reload the page" });
   await store.write("a/b.do", bytes("display 2"));
   await store.mkdir("c");
   await store.rename("a/b.do", "c/b.do");
@@ -809,8 +811,8 @@ test("the engine with its own database: the old /work database is left alone; Br
     assert.deepEqual(dbs.dofile.stores.pending, []);
   });
 
-  // The Break timer, its deadline and "Don't reset" are the machine's and the controller's (machine.test.ts, app.test.ts).
-  // Here: what the engine does with the request (the `interrupt` effect) while no timer cuts it.
+  // The Break timer, its deadline and "Don't reset" are the machine's and the controller's (machine.test.ts,
+  // app.test.ts). Here: what the engine does with the request (the `interrupt` effect) while no timer cuts it.
   await t.test(
     "interrupt() during a long command: it is not cut; it ends by itself, then the run stops with rc 1 and the data",
     async () => {

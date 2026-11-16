@@ -6,7 +6,8 @@ import { signal } from "@preact/signals-core";
 import type { EngineState, EngineStateName } from "../src/app/types.ts";
 import { WAKE_LOCK, wantsWakeLock, watchWakeLock } from "../src/app/wakelock.ts";
 
-/** Every engine state name. A name missing here does not compile (the check below), and the table must have the same. */
+/** Every engine state name. A name missing here does not compile (the check below), and the table must have the
+ *  same. */
 const NAMES = [
   "checking-lock",
   "checking-cache",

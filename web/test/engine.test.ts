@@ -1,7 +1,7 @@
 // The engine worker and the transport in Node: worker.ts in a worker thread, Pyodide, the built dofile wheel (run
-// `uv build --wheel` first). No state machine: the test starts and ends the workers itself (harness.ts). The page's file
-// changes go through a store in this thread (fake-indexeddb): its journal and the op `sync`. `files` and `read` are the
-// worker's views of /work.
+// `uv build --wheel` first). No state machine: the test starts and ends the workers itself (harness.ts). The page's
+// file changes go through a store in this thread (fake-indexeddb): its journal and the op `sync`. `files` and `read`
+// are the worker's views of /work.
 
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -34,7 +34,8 @@ const extraWheels = readdirSync(`${root}/web/wheels`)
   .map((f) => ({ name: f, bytes: readFileSync(`${root}/web/wheels/${f}`) }));
 
 // Every worker started here is ended when the file's tests are done, passed or failed: a failing assertion skips the
-// `eng.worker.terminate()` at the end of its test, and a live worker keeps the process (and so `npm test`) from exiting.
+// `eng.worker.terminate()` at the end of its test, and a live worker keeps the process (and so `npm test`) from
+// exiting.
 const started = new Set<Worker>();
 after(() => {
   for (const w of started) w.terminate();
@@ -64,19 +65,21 @@ function pageStore() {
   return { store, createWorker: () => storeWorker({ store }) };
 }
 // Everything about the engine that a visitor's code or the page can observe, gathered with the read ops and one run of
-// commands that change nothing (the probe). What it does not see: a change below a variable's display format (the values
-// are compared as `list` prints them), and state inside Python that no command shows (a cache, the heap).
+// commands that change nothing (the probe). What it does not see: a change below a variable's display format (the
+// values are compared as `list` prints them), and state inside Python that no command shows (a cache, the heap).
 // `graphs`: list the graphs in memory too. Only `graph dir` lists them, and it sets r(list) (as Stata's does), so it is
 // in the probe only once r() is already what it leaves: the test runs `graph dir` first.
 async function fingerprint(eng: EngineClient, graphs: boolean) {
-  const described = await eng.query("describe"); // the variables in order, with type, format and labels; the counts; the file name
+  // the variables in order, with type, format and labels; the counts; the file name
+  const described = await eng.query("describe");
   const nobs = "nobs" in described ? described.nobs : 0;
-  const rows = await eng.query("browse", { limit: Math.max(nobs, 1) }); // every value of every observation, in the data's order
+  // every value of every observation, in the data's order
+  const rows = await eng.query("browse", { limit: Math.max(nobs, 1) });
   const macros = await eng.query("macros"); // the locals and the globals
   const { data_bytes } = await eng.query("memory"); // the data's size (not the heap, which may grow)
   const files = await eng.query("files"); // /work, with sizes and times
-  // the sort order, the user's matrices, the graphs in memory: the probe's log. Its results: r() and e() (scalars, macros,
-  // the matrices' sizes), and that the probe itself changed neither.
+  // the sort order, the user's matrices, the graphs in memory: the probe's log. Its results: r() and e() (scalars,
+  // macros, the matrices' sizes), and that the probe itself changed neither.
   const probe = await runOn(eng, `display "sorted by: \`: sortedby'"\nmatrix dir${graphs ? "\ngraph dir" : ""}`);
   assert.equal(probe.rc, 0, probe.log);
   assert.deepEqual(
@@ -164,8 +167,8 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     assert.match(engine_commit!, /^[0-9a-f]{40}$/);
   });
 
-  // ReadOps is a declaration (types.ts): anyone may send one, at any time, because each is said to change nothing. No type
-  // can prove that of a call into Python: this is the evidence.
+  // ReadOps is a declaration (types.ts): anyone may send one, at any time, because each is said to change nothing. No
+  // type can prove that of a call into Python: this is the evidence.
   await t.test(
     "the read ops change nothing: the engine's fingerprint is the same after each, called twice",
     async () => {
@@ -202,7 +205,8 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
         }
         return before;
       };
-      // 1. With r() as the visitor's code left it. What the fingerprint sees: data in a sort order, r() and e() with their
+      // 1. With r() as the visitor's code left it. What the fingerprint sees: data in a sort order, r() and e() with
+      //    their
       // matrices, macros, a user matrix, files.
       const first = await unchangedByEveryReadOp(false);
       assert.match(first.log, /sorted by: y x/);
@@ -341,7 +345,8 @@ test("files can be listed, written and read while the engine is still loading, a
 });
 
 // The snapshot start (npm run snapshot builds public/snapshot/). Skipped when it has not been built, or is stale (built
-// from other wheels or another Pyodide: a build refuses it, and so does the page's checkBuild: the test after this one).
+// from other wheels or another Pyodide: a build refuses it, and so does the page's checkBuild: the test after this
+// one).
 const snapshotDir = fileURLToPath(new URL("../public/snapshot/", import.meta.url));
 const manifest = readManifest();
 const current = inputs(),
@@ -461,8 +466,9 @@ test("a heap cap on a snapshot start: small objects fill the heap, the run ends 
   // Globals of 1000 characters: each pass adds about 115 MB of strings, none of them large enough to be refused alone.
   // The heap fills wherever the next allocation is: in a command (r(909)), or in the interpreter's own work
   // between commands (a loop, or Python looking up a module file: OSError ENOMEM), which was rc 9999 and, with the
-  // ballast still held, a PythonError "Error in sys.excepthook: MemoryError" out of the run. After the first refusal the
-  // heap stays full, so more passes meet the other places too. Each ends as r(909) (or fits); the page's memory query still answers.
+  // ballast still held, a PythonError "Error in sys.excepthook: MemoryError" out of the run. After the first refusal
+  // the heap stays full, so more passes meet the other places too. Each ends as r(909) (or fits); the page's memory
+  // query still answers.
   const big = "x".repeat(1000);
   const fill = (name: string, n: number) => runOn(eng, `forvalues i = 1/${n} {\n global ${name}_\`i' "${big}"\n}`);
   let r = await runOn(eng, "display 1");

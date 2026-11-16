@@ -175,8 +175,8 @@ test("a production build's canonical links: each page's production address", () 
 });
 
 test("the editor's location is one setting: scripts/urls.ts, read by the config, the e2e config and the scripts", () => {
-  // the editor is at the root of its own origin; the two addresses the pages link each other by are whole URLs ending in a slash
-  // (links are joined to them), the production ones unless the environment says otherwise
+  // the editor is at the root of its own origin; the two addresses the pages link each other by are whole URLs ending
+  // in a slash (links are joined to them), the production ones unless the environment says otherwise
   assert.match(EDITOR_BASE, /^\/(.*\/)?$/);
   assert.match(
     web("scripts/urls.ts"),
@@ -195,11 +195,12 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     "scripts/measure-startup.mjs",
   ])
     assert.match(web(f), /from "\.{1,2}\/(scripts\/)?urls\.ts"/, f);
-  // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=` (an
-  // HTML attribute), followed by anything but a letter or digit ("/app/", "/app?test", "/app.html", "/app#x"). Comments may
-  // name it. Read: the sources (CSS and JSON too), the scripts, the e2e tests, the configs, the pages, the workflows and
-  // the local actions (.github/actions/). A path made by joining strings ("/" + "app") is not caught: never write one.
-  // The editor is at the root of its own origin, so the check runs on "/app/", where it was before it had an origin.
+  // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=`
+  // (an HTML attribute), followed by anything but a letter or digit ("/app/", "/app?test", "/app.html", "/app#x").
+  // Comments may name it. Read: the sources (CSS and JSON too), the scripts, the e2e tests, the configs, the pages, the
+  // workflows and the local actions (.github/actions/). A path made by joining strings ("/" + "app") is not caught:
+  // never write one. The editor is at the root of its own origin, so the check runs on "/app/", where it was before it
+  // had an origin.
   const walk = (dir: string): string[] =>
     readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)), { withFileTypes: true }).flatMap((e) =>
       e.isDirectory()
@@ -226,14 +227,14 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     assert.match(probe.replace("/app", path), spelled, probe);
   assert.doesNotMatch(`"${path}s/"`, spelled, "another name that starts the same");
   for (const f of files) assert.doesNotMatch(web(f), spelled, f);
-  // Nor the origins: the production addresses are scripts/urls.ts's, and a link to another origin is made from SITE_URL and
-  // EDITOR_URL (the Wrangler configs spell the two domains without a scheme, and a test below compares them)
+  // Nor the origins: the production addresses are scripts/urls.ts's, and a link to another origin is made from SITE_URL
+  // and EDITOR_URL (the Wrangler configs spell the two domains without a scheme, and a test below compares them)
   const origin = /["'`]https?:\/\/(?:app\.)?dofile\.dev/;
   for (const probe of ['"https://dofile.dev/"', "`https://app.dofile.dev`", "'http://dofile.dev'"])
     assert.match(probe, origin, probe);
   for (const f of files) assert.doesNotMatch(web(f), origin, `${f}: an address of the site's origins`);
-  // and no e2e test opens the editor's flags at the site's root when the editor is under a path ("/?test" is the landing page
-  // there): the editor's addresses are relative to Playwright's baseURL
+  // and no e2e test opens the editor's flags at the site's root when the editor is under a path ("/?test" is the
+  // landing page there): the editor's addresses are relative to Playwright's baseURL
   if (EDITOR_BASE !== "/")
     for (const f of files.filter((f) => f.startsWith("e2e/")))
       assert.doesNotMatch(
@@ -243,7 +244,8 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
       );
 });
 
-/** Runs `args` in web/ with the environment's DOFILE_URLS, DOFILE_SITE_URL and DOFILE_EDITOR_URL replaced by `env`'s. */
+/** Runs `args` in web/ with the environment's DOFILE_URLS, DOFILE_SITE_URL and DOFILE_EDITOR_URL replaced by
+ *  `env`'s. */
 const withURLs = (env: Record<string, string>, args: string[]) => {
   const inherited: Record<string, string | undefined> = { ...process.env, ...env };
   for (const k of ["DOFILE_URLS", "DOFILE_SITE_URL", "DOFILE_EDITOR_URL"]) if (!(k in env)) delete inherited[k];

@@ -1,5 +1,5 @@
-// The Output tabs' logic (src/app/output/format.ts): how a number is shown, a matrix as text, the Results tab's sections
-// and groups, a long Browse cell cut short, a graph's label and alt text, sizes.
+// The Output tabs' logic (src/app/output/format.ts): how a number is shown, a matrix as text, the Results tab's
+// sections and groups, a long Browse cell cut short, a graph's label and alt text, sizes.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
