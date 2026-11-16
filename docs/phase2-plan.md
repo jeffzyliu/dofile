@@ -177,6 +177,8 @@ run first", was dropped: the queued run is gone, #26).
    Clear log; it works during a run; command line only (in a do-file it stays an error, with a hint). `clear` keeps its meaning.
 8. **Remember the open tabs across reloads.** A tab without the engine's lock neither reads nor writes storage, so the tab that
    holds the lock would keep them. Open: how the maintainer saw Home open `analysis.do` (the code opens it on a first visit only).
+   Scheduled first after the audit (the maintainer, 2026-11-16): the active tab too, in localStorage or the store. The
+   audit's workspace design note leaves room for it (`docs/web-audit-plan.md`, section 6).
 
 Deferred to prototype 2 (decided 2026-11-10): the Help tab; highlighters for .py, .R, .tex, .sql and .yaml; the
 unknown-command underline and per-file list; the selection-run warning about an unset local; unpacking a .zip on upload. Also P2:

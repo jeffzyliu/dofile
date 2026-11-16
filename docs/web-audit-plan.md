@@ -7,7 +7,7 @@ defined in the proposal's section 3.
 
 **Status (2026-11-16).** Not started. Scope decided by the maintainer: proposal B, plus four redesigns moved in from C
 (R7 through the design note, R5, the focus-target registry of R3, R1) and screenshots as a net for the view moves.
-Section 2 lists the decisions; two are not final (the old-names blacklist, and the branch model).
+Section 2 lists the decisions; all are made.
 
 ## 1. Scope
 
@@ -16,17 +16,17 @@ Section 2 lists the decisions; two are not final (the old-names blacklist, and t
 | Nets | N1 to N6; **N7 (new): screenshots for phase 2** |
 | Design notes | S0 (now also decides R7's ownership); **R5 note**; **R1 note** |
 | Bugs | B1 to B5 |
-| Consistency | C1 to C4 |
+| Consistency | C1 to C4; **C5 (new): phone toast placement** |
 | Moves | S1 to S6, S9; S7 and S8 **without their graphics halves**; S9 **without its staging half** |
 | Redesigns moved in | **R7r**: what S0 leaves of R7, the split of `state.ts` by owner. **R5**, in place of S9's staging half. **R3r**: the focus-target registry, in place of S6's exported handles. **R1**, in place of the graphics halves of S7 and S8 |
 | Sweeps | W1 to W7 |
 
 Left for after the audit (section 8): R2, the DOM test harness of R3, R4, and the rest of R6.
 
-About 49 builder items: the proposal's 42 for B, less 3 halves, plus 3 design notes that were not counted or are new,
-N7, R5, R3r (counted as one more: the registry is larger than the handles it replaces), R7r and R1's 3. Scaled from the
-proposal's guess for B, that is 13 to 21 million agent tokens. The proposal said 45 to 47 for this scope; that left out
-the notes and N7.
+About 50 builder items: the proposal's 42 for B, less 3 halves, plus 3 design notes that were not counted or are new,
+N7, R5, R3r (counted as one more: the registry is larger than the handles it replaces), R7r, R1's 3 and C5. Scaled from
+the proposal's guess for B, that is 13 to 21 million agent tokens. The proposal said 45 to 47 for this scope; that left
+out the notes and N7.
 
 ## 2. Decisions
 
@@ -35,11 +35,12 @@ Numbers are the proposal's section 8. All are the maintainer's, 2026-11-16, unle
 | # | Decision | Answer | Effect here |
 |---|---|---|---|
 | 2 | Delete the `DOFILE_EDITOR_BASE` mode | Yes | S9 deletes it |
-| 3 | Two `imports.test.ts` rules | The cast count in `machine.ts` stays. The old-names blacklist: **open** | N1 keeps both until the second is answered |
+| 3 | Two `imports.test.ts` rules | The cast count in `machine.ts` stays. The old-names blacklist is dropped | N1 keeps the first and deletes the second |
 | 4 | The CSS rule on `data-engine^="other-tab"` | It goes | C1 replaces it with a class the view sets |
-| 5 | Pull request grouping | **Awaits a last word:** an integration branch per session | Section 5 is written for it |
+| 5 | Pull request grouping | One branch per session, true merges; `main` frozen for the duration | Section 5 |
 | 6 | Fable for S0 | Yes; other uses asked one at a time, with the reason | S0 on Fable; the spawning session still asks |
 | 7 | The engine gaps B2 and B3 inside the audit | Yes; the SPEC changes with the behaviour | Phase 1's engine lane |
+| 8 | The phone toast arithmetic, once left out | In, as C5; the maintainer checks it on a real phone and is told when it can be tried | Phase 2, lane c |
 | 9 | Which redesigns move into B | All four, and the screenshots | Section 1 |
 
 ## 3. Rules
@@ -74,7 +75,7 @@ Models, by risk. "S/h + O" is a Sonnet builder at high effort with an Opus revie
 | Fable, high | S0 (authorized; Opus, high if the session's yes is not given) |
 | Opus, high | B1, B2, B3, S1, S2, S7, S8, the R1 note (a candidate for Fable: ask), R1 |
 | S/h + O | N1, S3, S5, S6 with R3r, R7r, R5 |
-| Sonnet, medium | N2 to N7, B4, B5, C1 to C4, S4, S9, W1 to W7, the R5 note |
+| Sonnet, medium | N2 to N7, B4, B5, C1 to C5, S4, S9, W1 to W7, the R5 note |
 | Haiku | doc sync, renames, `docs/test-map.md` edits |
 
 N1's Opus reviewer has one job: to match each removed assertion to its replacement (the proposal's risk 3).
@@ -159,6 +160,7 @@ baseline taken from `main`.
 | c | S5: `runText`, scroll-follow, `CommandLine.tsx`, state logic out of `App.tsx` | S1 (both edit `state.ts`) and S4 (its one command bar is also in `CommandLine.tsx`) | 2.11 |
 | c | S6 with R3r: one roving-key hook, one modal trap, the focus-target registry, owner functions for the shared signals | S3, S5, and S7 merged (both edit `app/engine.ts`) | 2.12 |
 | c | R7r: `state.ts` split by owner, as S0 lays out; the e2e hook's `state` object unchanged | S6 | 2.13 |
+| c | C5: phone toast placement. When it is merged into the session's branch and the preview is up, the orchestrator tells the maintainer, with the four cases to try on a real phone; the session's merge to `main` waits for that check | R7r | 2.16 |
 | d, build | S9, without staging (its clauses are below) | start | 2.14 |
 | d | R5: `public/` staged by one script, the config only reads it (its clauses are below) | S9, the R5 note approved | 2.15 |
 
@@ -225,29 +227,35 @@ How the two fit together:
 ## 5. Branches and pull requests
 
 **One integration branch per session** (`audit/0-nets`, `audit/1-bugs`, `audit/2a-moves`, `audit/2b-moves`,
-`audit/3-close`), cut from `main` when the session starts. Assumed until the maintainer confirms it (decision 5).
+`audit/3-close`), cut from `main` when the session starts. Decided by the maintainer 2026-11-16, who also means to
+freeze `main` for the duration.
 
-- Each number in the phase tables is a pull request **into the session's branch**: 35 in all. The orchestrator merges
+- Each number in the phase tables is a pull request **into the session's branch**: 36 in all. The orchestrator merges
   it there once its reviewer accepts and its checks pass. "Merged" in an After column means merged there.
+- **An item is merged with a merge commit too, never rebased or squashed.** The commits the reviewer read land with
+  their hashes unchanged; one item is one merge, named by its id, and `git revert -m 1` takes it out whole; an item
+  stacked on another needs no rebase when its base lands; and no agent rewrites history. `git log --first-parent` on
+  the session's branch lists the items, and on `main` the five sessions.
 - At the session's end gate the branch becomes **one pull request to `main`**, merged with a merge commit so that the
   items stay apart in the history. Five merges to `main`, each a deploy.
 - Before that merge the maintainer looks at the branch's preview (`preview.yml` builds one for every pull request), on
   a real phone where the session touched views. This is the only check on a real device before production.
-- `main` is merged into the branch when the session starts each day's work and again before the gate.
+- If `main` moves all the same (the freeze is the maintainer's to keep or lift), it is merged into the branch before
+  the gate.
 
-Why not 35 pull requests to `main`, as the proposal first recommended:
+Why not 36 pull requests to `main`, as the proposal first recommended:
 - every merge to `main` deploys the live demo, and under the views the only net is an emulated phone;
 - a lane no longer waits for the maintainer between items, so stacking and "X merged" cost nothing;
 - a mistake found at the gate is fixed on the branch, before production;
-- the maintainer reviews five times, with a preview, not 35 times.
+- the maintainer reviews five times, with a preview, not 36 times.
 
 Why not one branch for the whole audit:
-- other work keeps landing on `main` in the same files (eleven commits in `web/src/engine` on the day of the surveys);
-  a branch that lives for weeks has to port each of them onto moved code;
-- the first deploy would carry every change at once: a regression seen in production then has 35 suspects;
+- a freeze of `main` is easier to hold for a session than for the whole audit, and whatever lands meanwhile has to be
+  ported onto moved code;
+- the first deploy would carry every change at once: a regression seen in production then has 36 suspects;
 - an audit that stalls leaves a branch nobody can merge. A session's branch is days old at most.
 
-What it costs against 35 to `main`: bug fixes reach production at the session's end, not one by one; and a session's
+What it costs against 36 to `main`: bug fixes reach production at the session's end, not one by one; and a session's
 merge is larger to read. CI already runs for a pull request into any branch (`web.yml`, `ci.yml` and `lint.yml` have no
 branch filter).
 
@@ -268,7 +276,10 @@ Each is one page in `docs/design/`, written by one agent that changes no code, a
 - what the e2e hook exposes after the split. `main.tsx` hands the whole `state` module to the hook, and the specs read
   it 179 times in 12 files. The starting point: the hook keeps one `state` object, assembled from the owner modules, so
   that a split changes no e2e read (converting the reads is R6, which is not in this plan);
-- the Node tests that must exist before each view loses its logic.
+- the Node tests that must exist before each view loses its logic;
+- room for one later feature, not built here: remembering the open tabs and the active tab across reloads
+  (`docs/phase2-plan.md`, "Later UI work", item 8; the tab that holds the engine's lock keeps them). The owner of the
+  tabs is where that state would be saved and restored.
 It reads reports 03, 05 and 06, `web/CLAUDE.md`, and the files they name. It checks one assumption by trying it: that
 `cm.ts`, or its state half, loads under Node.
 
@@ -325,5 +336,5 @@ of the planning surveys.
   dependency graph. Not checked: whether B2 or B4 also edit `ResetDialog.tsx`, which C1 edits; whether S2's first half
   edits `state.ts` while S5 runs.
 - N7 is a design on paper: nobody has measured how stable screenshots of this page are.
-- The token figures are scaled guesses. The count of 35 pull requests assumes no item is split. The branch model of
+- The token figures are scaled guesses. The count of 36 pull requests assumes no item is split. The branch model of
   section 5 was not reviewed.
