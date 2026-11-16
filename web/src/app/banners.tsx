@@ -21,7 +21,8 @@ export type Place = "files" | "editor" | "log" | "output";
 const VIEWS: { [K in BannerName]: { place: Place; phone?: "every"; view: ComponentType<{ banner: BannerOf<K> }> } } = {
   reset: { place: "log", view: ResetBanner },
   storage: { place: "editor", view: StorageBanner },
-  "download-failed": { place: "editor", phone: "every", view: DownloadFailedBanner }, // "Download all" is on every view's ⋯
+  // "Download all" is on every view's ⋯
+  "download-failed": { place: "editor", phone: "every", view: DownloadFailedBanner },
   "not-text": { place: "files", view: NotTextBanner },
   "save-failed": { place: "editor", view: SaveFailedBanner },
   "run-changed": { place: "editor", phone: "every", view: RunChangedBanner }, // a run from the Log view's command line

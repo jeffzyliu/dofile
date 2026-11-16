@@ -105,9 +105,11 @@ export const isPhone = computed(() => layout.value === "phone");
 export const runWriter = {
   log: signal<LogItem[]>([{ t: "head" }]), // "Clear log" keeps the head
   lastRun: signal<LastRun | null>(null),
-  engineRuns: signal(0), // runs begun on the engine now live: 0 on a new or reset engine, whatever a run cut left (Reset's question)
+  // runs begun on the engine now live: 0 on a new or reset engine, whatever a run cut left (Reset's question)
+  engineRuns: signal(0),
   history: signal<string[]>([]), // the commands run through runCommand()
-  results: signal<Results | null>(null), // results, macros, data, rows and memory are null when the engine is gone (a reset, another tab)
+  // results, macros, data, rows and memory are null when the engine is gone (a reset, another tab)
+  results: signal<Results | null>(null),
   macros: signal<Macros | null>(null),
   data: signal<DataSummary | null>(null),
   rows: signal<BrowseRows | null>(null),
@@ -125,8 +127,9 @@ export const rows: ReadonlySignal<BrowseRows | null> = runWriter.rows;
 export const memory: ReadonlySignal<Memory | null> = runWriter.memory;
 export const pickedVar = signal<string | null>(null); // the Data tab
 export const graphs: ReadonlySignal<Graph[]> = runWriter.graphs;
-// An index into `graphs`, which keeps the last 20 (run.ts MAX_GRAPHS): the oldest drop off the front, so an index moves.
-// Find a graph by its `n` (graphs.value.findIndex(g => g.n === n)), never keep an index: the log's links carry `n`.
+// An index into `graphs`, which keeps the last 20 (run.ts MAX_GRAPHS): the oldest drop off the front, so an index
+// moves. Find a graph by its `n` (graphs.value.findIndex(g => g.n === n)), never keep an index: the log's links carry
+// `n`.
 export const graphIndex = signal(0);
 export const graphFull = signal(false); // the full-size graph view is open, on graphIndex
 
@@ -152,15 +155,17 @@ const toastText = signal<string | null>(null),
   toastIsError = signal(false),
   announced = signal("");
 export const toast: ReadonlySignal<string | null> = toastText; // set through showToast(); it clears itself (toastMs)
-export const toastError: ReadonlySignal<boolean> = toastIsError; // the toast reports an error (the warning icon), not a confirmation
+// the toast reports an error (the warning icon), not a confirmation
+export const toastError: ReadonlySignal<boolean> = toastIsError;
 export const dialog = signal<Dialog>(null); // the one open dialog; it sets null when it closes
 export const banners: ReadonlySignal<Banner[]> = bannerList; // through addBanner() and dismiss()
 export const announce: ReadonlySignal<string> = announced; // the hidden live region, through say()
 
 let saying: string[] = []; // what say() was given in this 50 ms window
-/** Say `text` once in the hidden live region (role=status, polite). What is said in one 50 ms window is said as one text,
- *  joined by ". ": a new text in the region cuts a polite one short, so "Engine reset" then "Run ended: …" in the same
- *  tick would lose the first. The same words twice in one window are said once; in a row across windows, twice. */
+/** Say `text` once in the hidden live region (role=status, polite). What is said in one 50 ms window is said as one
+ *  text, joined by ". ": a new text in the region cuts a polite one short, so "Engine reset" then "Run ended: …" in the
+ *  same tick would lose the first. Only a repeat straight after the same words in the window is dropped (A, B, A says
+ *  all three); across windows the same words are said again. */
 export function say(text: string) {
   if (saying.at(-1) === text) return;
   saying.push(text);

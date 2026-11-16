@@ -4,7 +4,7 @@ import type { About } from "../engine/types.ts";
 
 const q = new URLSearchParams(location.search);
 
-/** What the page shows of the engine before one has started. Compiled in (scripts/build-id.ts): the page is built
+/** What the page shows of the engine, with or without one running. Compiled in (scripts/build-id.ts): the page is built
  *  against one wheel, so these are what `boot` answers (test/engine.test.ts compares them). */
 export const ABOUT: Pick<About, "dofile" | "engine_commit" | "stata_version"> = __ABOUT__;
 
@@ -17,7 +17,7 @@ export const testMode = q.get("test"); // null: no hook
 /** ?brotli=wasm: brotli-wasm instead of the browser's own decoder for the snapshot (to compare them). */
 export const brotli = q.get("brotli") ?? undefined;
 
-/** The cap on the engine's heap for this device (engine/memcap.ts). ?memcap=<MB> overrides the device rule (0: no cap). */
+/** The cap on the engine's heap for this device (engine/memcap.ts). ?memcap=<MB> overrides it (0: no cap). */
 export const memcap = chooseCap(factsOf(navigator), q.get("memcap"));
 
 /** The landing page (web/landing.html), a URL ending in "/". In dev it is the pages' dev server at this page's own host

@@ -3,9 +3,9 @@
 // to run later). What happens to a run and to the engine reaches this file through `handlers`.
 //
 // The log streams: chunks grow one text item. When the result comes, its `log` replaces that item's text, never adds to
-// it: the stream can stop short of the log with no marker (the log cap, the sandbox notes added after the run). A result
-// the machine made itself (rc 9998: a reset, or a run whose op failed in the worker) has no log of its own, so what
-// streamed in stays, with the reason as a note.
+// it: the stream can stop short of the log with no marker (the log cap, the sandbox notes added after the run). A
+// result the machine made itself (rc 9998: a reset, or a run whose op failed in the worker) has no log of its own, so
+// what streamed in stays, with the reason as a note.
 
 import type { BrowseRows, RunResult } from "../engine/types.ts";
 import * as engine from "./engine.ts";
@@ -71,7 +71,8 @@ function began(head: RunHead, theme: "light" | "dark") {
   const id = ++runs;
   if (head.kind !== "command" && S.layout.value === "phone") S.phoneTab.value = "log"; // Run opens the Log tab
   const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.value === 0 }];
-  W.engineRuns.value++; // now, not after the run: a reset that cuts it starts the count again, and the next run is first
+  // now, not after the run: a reset that cuts it starts the count again, and the next run is first
+  W.engineRuns.value++;
   const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for the note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");
@@ -89,8 +90,8 @@ function streamed(chunk: string) {
   setText(current.id, current.streamed);
 }
 
-/** The run ended, with the engine's result, or with the machine's own (rc 9998) when it was cut. When a reset or another
- *  tab cut it, engineGone came first, in the same step. */
+/** The run ended, with the engine's result, or with the machine's own (rc 9998) when it was cut. When a reset or
+ *  another tab cut it, engineGone came first, in the same step. */
 function ended(r: RunResult) {
   const run = current;
   if (!run) return;
@@ -108,8 +109,8 @@ function ended(r: RunResult) {
   setText(id, own ? run.streamed : r.log, end);
   if (own && r.error) W.log.value = [...W.log.value, { t: "note", text: r.error }];
   addGraphs(r, id, run.theme);
-  // a run cut because another tab took the lock (kind "stopped") is not this tab's last run: engine-gone cleared lastRun,
-  // and a quick take-over may already have started a new engine
+  // a run cut because another tab took the lock (kind "stopped") is not this tab's last run: engine-gone cleared
+  // lastRun, and a quick take-over may already have started a new engine
   if (!(own && r.kind === "stopped")) W.lastRun.value = end;
   if (r.results) W.results.value = r.results;
   S.say(
@@ -175,8 +176,8 @@ function addGraphs(r: RunResult, id: number, theme: "light" | "dark") {
 }
 
 /** A .png opened from the files: it joins the session's graphs and is the one shown. Its colors are its own; `theme` is
- *  the page's at the time. The same file opened again replaces its entry (same `n`, same place) and selects it; one that
- *  has dropped out of the last 20 is added again. `png` is base64. */
+ *  the page's at the time. The same file opened again replaces its entry (same `n`, same place) and selects it; one
+ *  that has dropped out of the last 20 is added again. `png` is base64. */
 export function addFileGraph(path: string, png: string): Graph {
   const i = W.graphs.value.findIndex((g) => g.from === "file" && g.path === path);
   if (i >= 0) {

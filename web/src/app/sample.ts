@@ -44,7 +44,8 @@ export async function seedSample(): Promise<boolean> {
       return false;
     }
     await put();
-    saved.set(MARK, "1"); // only once it is all there: a seed cut short is tried again on a later visit to an empty store
+    // only once it is all there: a seed cut short is tried again on a later visit to an empty store
+    saved.set(MARK, "1");
     await openFile(SAMPLE_MAIN);
     return true;
   } catch (e) {
@@ -53,9 +54,9 @@ export async function seedSample(): Promise<boolean> {
   }
 }
 
-/** The file menu's "Restore the sample": an upload of the sample's files, so a file the visitor changed, or has open with
- *  unsaved edits, is asked about like an upload's clash, and one that holds the sample's bytes already is left alone.
- *  Other files are never touched. Then analysis.do is opened, when the store has it. */
+/** The file menu's "Restore the sample": an upload of the sample's files, so a file the visitor changed, or has open
+ *  with unsaved edits, is asked about like an upload's clash, and one that holds the sample's bytes already is left
+ *  alone. Other files are never touched. Then analysis.do is opened, when the store has it. */
 export async function restoreSample(): Promise<void> {
   try {
     await upload(

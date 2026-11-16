@@ -56,7 +56,8 @@ export function block() {
   if (store) store.blocked = true;
 }
 
-// the files changed (the page's change, `row`, or a run's): the storage banner, once per visit, if the browser may clear them
+// the files changed (the page's change, `row`, or a run's): the storage banner, once per visit, if the browser may
+// clear them
 function changed(row?: PendingRow) {
   if ((row && seeding.has(row.path)) || warned || S.persisted.value !== false) return;
   warned = true;
@@ -74,7 +75,8 @@ export async function refresh() {
   }
 }
 
-/** Ask the browser once to keep the files; `persisted` gets what persisted() says now, and again when persist() answers. */
+/** Ask the browser once to keep the files; `persisted` gets what persisted() says now, and again when persist()
+ *  answers. */
 export function keep(manager: Storage = globalThis.navigator?.storage) {
   return keepFiles(manager, (kept) => {
     W.persisted.value = kept;
@@ -82,8 +84,9 @@ export function keep(manager: Storage = globalThis.navigator?.storage) {
 }
 
 /** After a run: `fresh` is what it created or changed, and the list is read again. An open text tab whose file the run
- *  rewrote follows it (editorCommands.ranOver): with no unsaved edits it shows the run's version; otherwise it keeps its
- *  text and the banner run-changed says so. A file the run deleted keeps its tab (a Save writes it again). */
+ *  rewrote follows it (editorCommands.ranOver): with no unsaved edits it shows the run's version, if that is text;
+ *  otherwise it keeps its text and the banner run-changed says so. A file the run deleted keeps its tab (a Save writes
+ *  it again). */
 export function afterRun(changes: FileChange[] | undefined) {
   W.fresh.value = new Set((changes ?? []).filter((c) => c.status !== "removed").map((c) => c.name));
   if (changes?.length) changed();

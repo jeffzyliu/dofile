@@ -41,8 +41,10 @@ export type EngineState =
   | { s: "asking" } // the download prompt is open
   | { s: "declined" }
   | { s: "downloading"; received: number; total: number; t0: number }
-  | { s: "starting-list"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> } // a restart fetches the build's list; no worker yet
-  | { s: "starting-worker"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> } // done: seconds per finished stage
+  // a restart fetches the build's list; no worker yet
+  | { s: "starting-list"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }
+  // done: seconds per finished stage
+  | { s: "starting-worker"; stage: Stage; t0: number; done: Partial<Record<Stage, number>> }
   | { s: "ready" }
   | { s: "running"; run: RunHead; t0: number }
   | { s: "breaking"; run: RunHead; t0: number; resetAt: number }
@@ -55,8 +57,8 @@ export type EngineStateName = EngineState["s"];
 
 /** true when V has the tags of the machine's State. */
 export type SameTags<V extends { s: string }> = Equal<V["s"], State["s"]>;
-/** The type of every field, over every member. `keyof` of a union lists only the keys all members share, so each member is
- *  taken on its own: FieldOf<{ s: "a"; x: 1 } | { s: "b"; y: "t" }> is "a" | 1 | "b" | "t". */
+/** The type of every field, over every member. `keyof` of a union lists only the keys all members share, so each member
+ *  is taken on its own: FieldOf<{ s: "a"; x: 1 } | { s: "b"; y: "t" }> is "a" | 1 | "b" | "t". */
 type FieldOf<T> = T extends unknown ? T[keyof T] : never;
 /** true when no field of any member of V is a ticket. */
 export type NothingHidden<V> = Equal<Extract<FieldOf<V>, Ticket>, never>;
@@ -82,13 +84,13 @@ export interface OpenTab {
   dirty: boolean;
 } // the text lives in CodeMirror
 
-/** The log, as items. A run adds a run-head (none for one command), then one text item that the streamed chunks grow and
- *  the run's complete log replaces, then one graph item per image it drew. `run` on a text item is the run's number (a
- *  graph's `run` is the same), so the view can put each graph's link after the echo of line `Graph.line`.
+/** The log, as items. A run adds a run-head (none for one command), then one text item that the streamed chunks grow
+ *  and the run's complete log replaces, then one graph item per image it drew. `run` on a text item is the run's number
+ *  (a graph's `run` is the same), so the view can put each graph's link after the echo of line `Graph.line`.
  *  On the text item: `unsaved` is the open files with unsaved edits when the run started (for the note under a nested
- *  `do` of one of them); `end` is set when the run ends, the same object as `lastRun` for that run, so an older run keeps
- *  its own rc, line, skipped and store_error. A run the machine cut (rc 9998) keeps what streamed in, and its reason
- *  follows as a note. */
+ *  `do` of one of them); `end` is set when the run ends, the same object as `lastRun` for that run, so an older run
+ *  keeps its own rc, line, skipped and store_error. A run the machine cut (rc 9998) keeps what streamed in, and its
+ *  reason follows as a note. */
 export type LogItem =
   | { t: "head" }
   | { t: "runhead"; run: RunHead; first: boolean }

@@ -148,8 +148,8 @@ export function connectRun(handlers: RunHandlers) {
   runs = handlers;
 }
 
-/** The events that changed nothing since connectEngine, oldest first (the last 200): a stale answer, or an event that is
- *  not valid in the state it found. */
+/** The events that changed nothing since connectEngine, oldest first (the last 200): a stale answer, or an event that
+ *  is not valid in the state it found. */
 export const drops = (): Drop[] => [...dropped];
 
 // ---- events in, effects out ----
@@ -388,7 +388,8 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
 
 // ---- the actions: each is one event. The machine's table says where each acts; anywhere else it does nothing. ----
 
-/** "Download 48 MB", "Try again", and every start the visitor begins. Acts in `none`, `asking`, `declined` and `failed`. */
+/** "Download 48 MB", "Try again", and every start the visitor begins. Acts in `none`, `asking`, `declined` and
+ *  `failed`. */
 export function start(): void {
   dispatch({ type: "start" });
 }
@@ -424,8 +425,8 @@ export function lost(): void {
   dispatch({ type: "lock-lost" });
 }
 
-/** Break: ask the run to stop. `breaking` until it stops or the grace time runs out (`resetAt`), and then a reset. A page
- *  that cannot ask (not cross-origin isolated) is reset at once. Acts in `running`. */
+/** Break: ask the run to stop. `breaking` until it stops or the grace time runs out (`resetAt`), and then a reset. A
+ *  page that cannot ask (not cross-origin isolated) is reset at once. Acts in `running`. */
 export function breakRun(): void {
   dispatch({ type: "break" });
 }
@@ -436,7 +437,8 @@ export function keepWaiting(): void {
 }
 
 /** Run `code` (views call run.ts, which calls this).
- *  @returns true when the engine was ready and the run began; false in any other state, and nothing happens, now or later.
+ *  @returns true when the engine was ready and the run began; false in any other state, and nothing happens, now or
+ *  later.
  *  @throws when a step is in progress (from a handler given to connectRun), before anything is queued. */
 export function run(code: string, head: RunHead): boolean {
   if (stepping)
@@ -453,6 +455,6 @@ export function call<K extends ViewOp>(op: K, args?: ReadOps[K]["args"]): Promis
   return reader.query(op, args);
 }
 
-/** Whether a result is the machine's own rc 9998, with no log of its own: a run cut (a reset, another tab) or, with kind
- *  "run-failed", a run whose op failed in the worker (the worker stays). */
+/** Whether a result is the machine's own rc 9998, with no log of its own: a run cut (a reset, another tab) or, with
+ *  kind "run-failed", a run whose op failed in the worker (the worker stays). */
 export const fromClient = (r: RunResult) => r.rc === RC_RESET && "kind" in r;
