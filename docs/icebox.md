@@ -208,14 +208,13 @@ estimated splits) are the study's, not checked again here.
 
 ## Web audit: the redesigns (added 2026-11-16)
 
-- **Proposal C of `docs/web-audit-proposal.md`: seven redesigns, R1 to R7** (its section 3, "Redesigns", and section 4).
-  The audit runs as proposal B. The maintainer broadly agrees with every item of C and left them for after B, **R1 and
-  R5 first**:
-  - R1: the lazy graphics part as one pure machine on both threads, with a Node harness. Its first step is on `main`
-    (`engine/lazy-part.ts`). It waits until that code has stopped changing.
-  - R5: a staged `public/` made by one script, which the Vite config only reads.
-  - R2 (a ticket per run), R3 (a DOM test harness and a focus-target registry), R4 (CSS by component, behind screenshot
-    baselines), R6 (the e2e hook as a small named surface), R7 (one workspace module).
+- **What is left of proposal C of `docs/web-audit-proposal.md`** (its section 3, "Redesigns", and section 4). The audit
+  runs as proposal B with four redesigns moved in (R7, R5, the focus-target registry of R3, R1): the plan is
+  `docs/web-audit-plan.md`. The maintainer wants the rest done after it:
+  - R2: a ticket per run in the engine machine.
+  - R3, its other half: a DOM test harness for views (a new dev dependency).
+  - R4: CSS by component, at the start of the later UI work.
+  - R6, what the audit leaves of it: the e2e hook as a small named surface.
+  - R1, only if the lazy graphics part was still changing when the audit reached it.
 
-  R1 and R5 each replace a part of B (the proposal's section 4, "B and the two redesigns chosen first", and its open
-  decision 8.9). 2026-11-16.
+  Each gets a planning task first: `docs/web-audit-plan.md`, section 8. 2026-11-16.

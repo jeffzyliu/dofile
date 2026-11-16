@@ -3,8 +3,9 @@
 The plan for the audit named in `docs/phase2-plan.md` ("The audit"): what is wrong in `web/`, what to do about it, three
 sizes of doing it, and how to run it. It is a proposal, not an execution plan: the items are not yet briefs.
 
-**Status (2026-11-16).** The maintainer chose proposal B. Proposal C's redesigns are in `docs/icebox.md` ("Web audit:
-the redesigns"), with R1 and R5 first. Section 8 lists what is decided and what is still open.
+**Status (2026-11-16).** The maintainer chose proposal B, then moved four of C's redesigns into it (R7 through S0, R5,
+the focus-target registry of R3, R1) with screenshots as a net. The execution plan is `docs/web-audit-plan.md`. What is
+left of C is in `docs/icebox.md` ("Web audit: the redesigns"). Section 8 lists what is decided and what is still open.
 
 **How it was made.** A planning session (Fable 5.2) wrote it from ten read-only survey reports, then revised it after a
 fresh-context review (verdict "accept after fixes"; all five must-fix and all should-fix findings are applied, and the
@@ -322,7 +323,7 @@ the builder's tier or above. A failing check goes to `orchestrate:investigator`;
 
 ## 8. Decisions for you
 
-Decided: 1. Open: 2 to 7 and 9. Item 8 is a list, not a question.
+Decided: 1 and 9. Open: 2 to 7. Item 8 is a list, not a question.
 
 1. **Which proposal.** Decided 2026-11-16: B. C is in the icebox, R1 and R5 first.
 2. **`DOFILE_EDITOR_BASE`.** No workflow, npm script, README or CLAUDE file sets it. SPEC section 8 documents it and
@@ -347,9 +348,10 @@ Decided: 1. Open: 2 to 7 and 9. Item 8 is a list, not a question.
    - the phone toast arithmetic: only a real device can verify it;
    - the dark palette stated once: SPEC decision DS-6 already says "not now";
    - fewer e2e specs per browser: needs timings first.
-9. **Which redesigns move into B** (section 4, "What doing B first would waste"). I recommend: R7 through S0, R5 in
-   S9, the focus-target registry in S6, and R1 last in the engine lane once the lazy graphics part has settled; R2, the
-   DOM harness, R4 and the rest of R6 stay in the icebox. Also there: whether to take screenshots as a net for phase 2.
+9. **Which redesigns move into B** (section 4, "What doing B first would waste"). Decided 2026-11-16: all four that
+   the section recommends (R7 through S0, R5 in S9, the focus-target registry in S6, R1 last in the engine lane once the
+   lazy graphics part has settled), and the screenshots as a net for phase 2. R2, the DOM harness, R4 and the rest of
+   R6 stay in the icebox; `docs/web-audit-plan.md`, section 8, lists how each is planned after the audit.
 
 ## 9. Not verified
 
