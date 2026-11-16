@@ -399,12 +399,11 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // ---- a lazy snapshot's graphics part (experiment E1c, docs/lazy-matplotlib.md) ----
   // matplotlib is not in the snapshot but in one more file (build.files.graphics), which the page fetches (a worker busy in
   // Python cannot advance a fetch of its own; without a SharedArrayBuffer the worker fetches it and tells the page how it
-  // goes, #workerSaysGraphics): after the start files on a first visit
-  // (download()), else once the engine has started (a return visit reads it from the Cache then: nothing of it before
-  // "ready"). It is kept in the build's Cache only beside start files that are there already (a start that read nothing
-  // from the Cache writes nothing to it). The worker reads it from a SharedArrayBuffer, so a graph blocked in Python sees
-  // it land. A failed fetch is tried again when a graph finds it failed (that graph waits for the try), and
-  // when the browser is back online.
+  // goes, #workerSaysGraphics) at the end of download(): after the start files on a first visit, and on a return visit
+  // (download() finds them all in the Cache) from the Cache at once, while the worker starts. It is kept in the build's
+  // Cache only beside start files that are there already (a start that read nothing from the Cache writes nothing to it).
+  // The worker reads it from a SharedArrayBuffer, so a graph blocked in Python sees it land. A failed fetch is tried again
+  // when a graph finds it failed (that graph waits for the try), and when the browser is back online.
 
   // onGraphics(listener): the part's progress, now and at each change (the status bar shows it until it lands)
   onGraphics(listener: (p: GraphicsProgress) => void): () => void {
@@ -645,7 +644,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         : { indexURL: this.indexURL, brotli: this.brotli, memcap: this.memcap };
     // Two steps (see worker.ts), then where the start's time went. Every step goes through this worker's own record: one
     // that resumes after end() rejects with what end() said, and reaches no other worker.
-    const part = this.#graphicsOf(build); // asked for once started: a return visit reads nothing of it before "ready"
+    const part = this.#graphicsOf(build); // asked for at the end of download(), the Cache read of a return visit too
     // without a shared buffer the part is this worker's own (a restarted worker has none): shown as not begun until it says
     if (part && !part.sab) this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
     const steps = async () => {

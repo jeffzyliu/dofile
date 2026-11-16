@@ -64,6 +64,8 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 - The browser entry point's JSON API, and the ballast the memory cap relies on.
 - Mapping of foreign paths; the `numpy.linalg` shim.
 - Guards: the web highlighter's command list matches the engine, and no new path sites appear in the engine.
+- The lazy graphics part (two tests): a graph waits for it, and a Break or a failure stops only that graph; the run's log
+  so far reaches the page before the graph waits.
 
 **10. Packaging** (`test_version.py`, `test_vendor.py`, `test_sample_data.py`)
 - Version stamps, the `MCP-SCHEMA.md` version line, the vendor stamp; the patched vendored package has no undefined
@@ -276,6 +278,8 @@ Specs:
   phone's strip on iphone); written and imported while idle; a graph that waits while it lands draws; a return visit reads
   it from the Cache and a run at ready ends before the part is unpacked (not WebKit); offline on a first visit a graph is
   r(199) with a clear message, no lasting label, and the next graph once online fetches it and draws.
+  - A return visit (a persistent profile, so every project): the page's "landed (cache)" line comes before "ready" (the
+    page's own clock), a graph sent at ready draws, the part is written once and fetched once.
   - A damaged part: the graph says it arrived damaged, the Cache entry is dropped, the next graph fetches it and draws.
   - Without cross-origin isolation (no SharedArrayBuffer): the worker alone makes one `fetch()` of the part and the
     graph's synchronous XHR one request, the page never fetches it; a graph at ready draws without waiting for a held

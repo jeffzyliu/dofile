@@ -609,7 +609,7 @@ controller performs that through the transport. Its interface is three parts:
   worker's. It never puts a ticket on an event: what a worker has to say goes through `reply`, which the controller bound to
   the ticket.
 - **`Builds`**: `cached()`, `download({onProgress, signal})`, `build()` and `forgetDownload()`: the build's list and its files in
-  the Cache.
+  the Cache; `onGraphics?(listener)`, the progress of a lazy snapshot's graphics part (optional: a fake may have none).
 
 The transport does not restart, count crashes, hold a timer, make run results or know a state name, and it awaits nothing
 before it makes a worker. One worker is live at a time: `start()` with one still live throws, and so does `end(n)` for a
@@ -628,7 +628,7 @@ As built:
   `snapshot.graphics`). `download()`'s `total` is the list's `download` less the part (what comes before the start); the
   dialog says the part's size under its bar ("+ 7.7 MB of graphics after the start"), and the part's own progress goes to
   the status bar and the phone's strip ("Graphs loading" and a ring, `onGraphics`). The part is fetched after the start
-  files on a first visit, else once the engine has started (a return visit reads nothing of it before "ready"); a failed
+  files on a first visit, and from the Cache while the engine starts on a return visit (at the end of `download()`); a failed
   fetch is tried again when a graph finds it failed (that graph waits for the try), and when the browser comes back online. Before it fetches, and only when no worker is live, it
   deletes every entry of that Cache that is not one of the list's `download` files at its URL (relative to the list): the same
   build kept at an older address (the editor's move to another path or origin with an unchanged snapshot) would otherwise stay until the next
@@ -734,7 +734,9 @@ type ToWorker = { [K in Op]: { id: number; op: K; args: Ops[K]["args"] } }[Op];
 type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
 type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: number; error: string; name: string }
                | { id: number; log: string }    // a chunk of a running run's log (OQ-1)
-               | { stage: Stage };              // a start-up stage began
+               | { stage: Stage }               // a start-up stage began
+               | { graphics: "again" | "damaged" | "fetching" | "landed" }   // the lazy graphics part (below)
+               | { graphics: "progress"; received: number } | { graphics: "failed"; why: string };
 // `mount`'s arguments: the start's folders, and for a snapshot start the build's list (built, and the two big files)
 type MountArgs = { indexURL?: string; brotli?: string }
   & ({ snapshot: string; built: number; files: SnapshotFiles } | { snapshot?: undefined; built?: undefined; files?: undefined });

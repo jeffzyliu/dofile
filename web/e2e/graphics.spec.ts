@@ -7,15 +7,20 @@
 // isolation) graphs still draw: the worker alone fetches the part, the page never does, yet the page shows the download
 // (the worker tells it) and a graph that fetches it in a run says it is waiting; a damaged part is not taken from the HTTP
 // cache again. While the part downloads
-// after the start, "Graphs loading" and a ring show (the status bar; the phone's strip). The part's request is held or
-// refused with page.route (the route sees the page's requests and its worker's).
+// after the start, "Graphs loading" and a ring show (the status bar; the phone's strip). A return visit reads the part from
+// the Cache while the engine starts, not once it has started. The part's request is held or refused with page.route (the route sees the
+// page's requests and its worker's).
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, startEngine, test } from "./fixtures";
+import { expect, keepFiles, retryFirstGoto, startEngine, test } from "./fixtures";
 
 type Hook = { run(code: string): Promise<any>; breakRun(): void; state: { engine: { value: { s: string } } } };
 declare global {
   interface Window {
     __dofile: Hook;
+    __partSeen: { ready: number; lines: [number, string][] }; // the return-visit test's clock (its init script)
   }
 }
 
@@ -120,6 +125,85 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
   const again = await run(page, "clear\nset obs 5\ngen x = _n\nscatter x x");
   expect(again.images).toHaveLength(1);
   expect(seen.hits, "read from the Cache, not fetched again").toBe(1);
+});
+
+// A persistent profile on disk (engine.spec.ts, the default start): WebKit drops the Cache API of Playwright's in-memory
+// context on a reload, so this is a real return visit on every project. The order is read off the page's own clock (an init
+// script: the page's "[dofile] graphics part" lines and the first "ready"), not the order console events arrive in.
+test("a return visit reads the part from the Cache before ready; a graph sent at ready draws", async ({
+  playwright,
+  browserName,
+}, testInfo) => {
+  const dir = mkdtempSync(join(tmpdir(), "dofile-e2e-"));
+  const u = testInfo.project.use;
+  const context = await playwright[browserName].launchPersistentContext(dir, {
+    baseURL: u.baseURL,
+    userAgent: u.userAgent,
+    viewport: u.viewport,
+    deviceScaleFactor: u.deviceScaleFactor,
+    isMobile: u.isMobile,
+    hasTouch: u.hasTouch,
+  });
+  try {
+    await keepFiles(context);
+    await context.addInitScript(() => {
+      const seen: Window["__partSeen"] = { ready: 0, lines: [] };
+      window.__partSeen = seen;
+      const info = console.info.bind(console);
+      console.info = (...args: unknown[]) => {
+        const text = args.map(String).join(" ");
+        if (text.includes("[dofile] graphics part")) seen.lines.push([performance.now(), text]);
+        info(...args);
+      };
+      // the document, not its <html>: an init script may run before the parser has made that element
+      new MutationObserver(() => {
+        if (!seen.ready && document.documentElement?.dataset.engine === "ready") seen.ready = performance.now();
+      }).observe(document, { attributes: true, subtree: true, attributeFilter: ["data-engine"] });
+    });
+    const page = await context.newPage();
+    retryFirstGoto(page);
+    const seen = { hits: 0 };
+    await page.route(PART, async (route) => {
+      seen.hits++;
+      await route.continue();
+    });
+    const worker: string[] = []; // the worker's lines ("written"), as console events
+    page.on("console", (m) => {
+      if (m.text().includes("[dofile] graphics part: written")) worker.push(m.text());
+    });
+    const partSeen = () => page.evaluate(() => window.__partSeen);
+
+    // a first visit: the part is fetched after the start files and kept in the Cache
+    await page.goto("?test");
+    await startEngine(page);
+    await ready(page);
+    await expect
+      .poll(async () => (await partSeen()).lines.map(([, l]) => l).join("\n"), { timeout: 120_000 })
+      .toMatch(/landed \(network\)/);
+
+    // the return visit: a graph as soon as the engine is ready
+    worker.length = 0;
+    await page.reload();
+    await startEngine(page);
+    await ready(page);
+    const drawn = await run(page, "clear\nset obs 5\ngen x = _n\nscatter x x");
+    expect(drawn.rc, drawn.log).toBe(0);
+    expect(drawn.images).toHaveLength(1);
+    const after = await partSeen();
+    const lines = after.lines.map(([, l]) => l).join("\n");
+    const landed = after.lines.find(([, l]) => l.includes("landed (cache)"));
+    expect(landed, lines).toBeTruthy();
+    expect(after.ready, "ready was seen").toBeGreaterThan(0);
+    expect(landed![0], `read from the Cache before "ready" (${landed![0]} < ${after.ready} ms)`).toBeLessThan(
+      after.ready,
+    );
+    expect(seen.hits, "read from the Cache, not fetched again").toBe(1);
+    await expect.poll(() => worker.length).toBe(1);
+    expect(worker.length, "written once").toBe(1);
+  } finally {
+    await context.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("a graph submitted while the part downloads waits for it and draws", async ({ page }) => {

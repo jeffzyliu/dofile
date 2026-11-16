@@ -280,7 +280,7 @@ export interface SnapshotFiles {
   snapshot: SnapshotFile;
   bundle: SnapshotFile;
   /** A lazy snapshot only (SNAPSHOT_NO_MPL=1, docs/lazy-matplotlib.md): matplotlib and what only it needs, left out of the
-   *  heap and the bundle. Not a start file: the page fetches it (client.ts, #graphics; after the start files, or once started) and keeps it in the
+   *  heap and the bundle. Not a start file: the page fetches it (client.ts, #graphics; at the end of download(): after the start files on a first visit, from the Cache while the worker starts on a return visit) and keeps it in the
    *  build's Cache. snapshot.ts, packGraphics, has its layout. */
   graphics?: SnapshotFile;
 }

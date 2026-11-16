@@ -34,8 +34,9 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   (no download again). A failed or offline part gives rc 199 "graphs are not available: …"; other work is unaffected; a
   graph that finds it failed asks the page for one more fetch (`{graphics: "again"}`) and waits for it, so once online the
   next graph draws; its failure is final for that run. The page also fetches it again on the `online` event. A run that does not graph never touches any of it.
-- **A return visit's start and its non-graph runs are not slowed; a graph sent before the idle work is done pays for it in the run.** The page reads the part from the Cache only once the engine has started, and the
-  worker does nothing of it before `startup` is answered. Then the browser's own brotli decoder (Firefox, Safari; it runs
+- **A return visit's start and its non-graph runs are not slowed; a graph sent before the idle work is done pays for it in the run.** The page asks for the part at the end of `download()`: on a first visit after the start files are in (so it never takes
+  bandwidth from them), on a return visit at once, so it is read from the Cache while the worker starts ("landed (cache)"
+  comes before "ready"). The worker does nothing of it before `startup` is answered. Then the browser's own brotli decoder (Firefox, Safari; it runs
   off the worker's thread) unpacks it as soon as it is there, run or no run. A brotli-wasm unpack (Chromium) in 256 KB
   steps, the write, and the import of what a first graph needs (the three heavy modules one per step, then 20) run on the
   engine's thread, so only after the engine has been idle (no run sent or running) for 1 s, one step per task: a run sent meanwhile waits

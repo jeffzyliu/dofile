@@ -617,6 +617,9 @@ function waitGraphics(ms: number): string {
         decodeStep();
         continue;
       }
+      // tries before the state: a retry the page starts between the two loads then shows as a change of tries, not as a
+      // failure that is already the new try's (which would leave this graph waiting until a Break)
+      const tries = share!.hdr ? Atomics.load(share!.hdr, 2) : 0;
       const [state, part] = partNow();
       if (state === PART_LANDED) {
         decodeStep(part as Uint8Array);
@@ -636,7 +639,6 @@ function waitGraphics(ms: number): string {
       }
       if (state === PART_FAILED) {
         // a failed fetch: once per run, ask the page for another and wait for it (Break still works); its failure is final
-        const tries = Atomics.load(share!.hdr, 2);
         if (askedAt === null) {
           askedAt = tries;
           self.postMessage({ graphics: "again" });
