@@ -1169,6 +1169,26 @@ test("graphics part: the worker says it is damaged: dropped from the Cache, pend
   assert.deepEqual(new Uint8Array(await (await cache.match(PART_URL))!.arrayBuffer()), content(PART.size, 2));
 });
 
+test("graphics part: after a damaged copy, a re-fetch that fails is retried with cache reload too, until a copy lands", async () => {
+  const caches = fakeCaches(),
+    f = partFetch([1, "offline", 2]),
+    page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed");
+  await sleep(5);
+  page.say("damaged");
+  await f.release();
+  await until(() => page.states.at(-1) === "failed", "the re-fetch failed");
+  await sleep(5);
+  page.say("again");
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed again");
+  assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 2), "the fresh copy");
+  assert.deepEqual(f.modes, ["no-cache", "reload", "reload"], "a 304 would hand back the damaged copy");
+});
+
 test("graphics part: a failed fetch writes the reason with state failed; the worker's `again` fetches it once more, and so does the browser coming back online", async (t) => {
   // Node has no window events: a stand-in for addEventListener("online", ..., { once: true })
   const online: (() => void)[] = [],

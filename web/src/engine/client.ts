@@ -37,6 +37,7 @@ type GraphicsPart = {
   sab: SharedArrayBuffer | null;
   loading: Promise<void> | null;
   progress: GraphicsProgress;
+  damaged: boolean; // the worker found the last copy damaged: fetched past the HTTP cache until a copy lands
 };
 /** A call waiting for the worker's answer. */
 type Pending = { resolve: (value: any) => void; reject: (error: ClientError) => void; onLog?: (text: string) => void };
@@ -392,6 +393,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         sab: typeof SharedArrayBuffer === "undefined" ? null : new SharedArrayBuffer(PART_HEADER + file.size),
         loading: null,
         progress: { state: "pending", received: 0, total: file.size },
+        damaged: false,
       };
     }
     return this.#graphics;
@@ -412,7 +414,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   }
 
   // A part that failed is fetched again; the worker sees it pending, and a waiting graph waits for it.
-  #retryGraphics(part: GraphicsPart, fresh = false): void {
+  #retryGraphics(part: GraphicsPart): void {
     if (this.#graphics !== part || !part.sab || part.progress.state !== "failed" || part.loading) return;
     const hdr = new Int32Array(part.sab, 0, 4);
     Atomics.store(hdr, 1, 0);
@@ -421,7 +423,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     Atomics.notify(hdr, 0);
     this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
     this.#tellGraphics(part);
-    part.loading = this.#fetchGraphics(part, fresh).finally(() => {
+    part.loading = this.#fetchGraphics(part, part.damaged).finally(() => {
       part.loading = null;
     });
   }
@@ -430,7 +432,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   #refetchDamaged(part: GraphicsPart): void {
     if (this.#graphics !== part || part.loading || part.progress.state !== "landed") return;
     part.progress = { ...part.progress, state: "failed" }; // so that #retryGraphics takes it
-    this.#retryGraphics(part, true);
+    part.damaged = true;
+    this.#retryGraphics(part);
   }
 
   async #fetchGraphics(part: GraphicsPart, fresh = false): Promise<void> {
@@ -460,6 +463,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         throw new Error(`${part.url}: ${bytes.length} bytes arrived, the build's list says ${part.file.size}`);
       new Uint8Array(sab, PART_HEADER).set(bytes);
       const hdr = new Int32Array(sab, 0, 4);
+      part.damaged = false;
       Atomics.store(hdr, 1, bytes.length);
       Atomics.store(hdr, 0, 1); // landed
       Atomics.notify(hdr, 0);

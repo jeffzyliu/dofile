@@ -8,8 +8,8 @@ export const PART_PENDING = 0,
 /** The part as a waiting graph reads it. `tries`: the page's fetches of it, read before `state`. */
 export type PartRead = { state: number; tries: number; shared: boolean };
 
-/** What a waiting graph does next: "read" is never returned; the read is `read()`, made only when needed (a copy of up
- *  to 33 MB). "wait-failed" and "wait-pending": wait on the header for a change from that state, then answer "pending". */
+/** What a waiting graph does next. The part is read through `read()`, only when needed (a copy of up to 33 MB).
+ *  "wait-failed" and "wait-pending": wait on the header for a change from that state, then answer "pending". */
 export type WaitStep =
   | "break"
   | "write"

@@ -47,7 +47,8 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   than main's first graph). A graph that arrives while the browser's own decoder is unpacking (Firefox, Safari) cannot
   wait for it, a worker blocked in Python never sees the promise settle: it decodes with brotli-wasm itself, and the
   native result is dropped, so the files are written once. A copy the native decoder fails on goes to brotli-wasm,
-  which says whether it is damaged; the fresh copy fetched after that is native again (`useNative`, `lazy-part.ts`). Not done: letting that graph use the native result. The
+  which says whether it is damaged; with a shared buffer, the fresh copy the page fetches after that is unpacked
+  natively again (`useNative`, `lazy-part.ts`). Not done: letting that graph use the native result. The
   decoder's output comes through promises on the worker's own event loop, which a graph blocked in Python never runs; a
   SharedArrayBuffer does not help, since nothing outside the worker holds the raw bytes. Only a decode on another thread
   (the page, or a nested worker) into a ~33 MB SharedArrayBuffer that the graph `Atomics.wait`s on would; that covers
