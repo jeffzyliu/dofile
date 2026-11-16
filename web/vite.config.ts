@@ -152,7 +152,7 @@ const fillSite = (html: string, path: string, engineBytes: number) => {
 const isSitePage = (path: string) => Object.keys(SITE_FILES).some((p) => path.endsWith(`/${p}`));
 
 /** The editor's built list, for the site's build: the download size its pages state. */
-function editorList(): { compressed: number } {
+function editorList(): { download: number } {
   const file = `${editorSource}/start-files.json`;
   if (!existsSync(file))
     throw new Error(
@@ -217,7 +217,7 @@ const sitePages: Plugin = {
     order: "pre",
     handler(html, ctx) {
       if (!isSitePage(ctx.path)) return html;
-      return fillSite(html, ctx.path, ctx.server ? JSON.parse(devStartFiles()).compressed : editorList().compressed);
+      return fillSite(html, ctx.path, ctx.server ? JSON.parse(devStartFiles()).download : editorList().download);
     },
   },
 };
@@ -354,7 +354,7 @@ const editor = (dev: boolean): UserConfig => ({
       transformIndexHtml: (html, ctx) =>
         isSitePage(ctx.path)
           ? html
-          : html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).compressed)}\n</head>`),
+          : html.replace("</head>", `  ${engineBytesMeta(JSON.parse(devStartFiles()).download)}\n</head>`),
     },
     {
       name: "start-files",

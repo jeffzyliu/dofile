@@ -58,7 +58,7 @@ export const engineWriter = {
 export const engine: ReadonlySignal<EngineState> = engineWriter.engine; // engine.ts, after every step of the state machine
 export const isolated = signal(Boolean(globalThis.crossOriginIsolated)); // set once at load
 
-// The download size for the prompt, in bytes as a host sends them: the build writes start-files.json's `compressed` total
+// The download size for the prompt, in bytes as a host sends them: the build writes start-files.json's `download` size
 // into the page (<meta name="dofile-engine-bytes">, vite.config.ts), so it is there at load, before any download.
 // null: not a built page (a dev server with no snapshot).
 function metaEngineBytes(doc: Document | undefined = globalThis.document): number | null {
