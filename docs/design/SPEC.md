@@ -1221,7 +1221,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     "Loaded wages.dta" and "Couldn't load wages.dta: r(601)"; the alt text "Graph 2: scatter wage educ" (a command that
     another kept graph shares) and "Graph 3" (a graph with no command); a thumbnail's name "Show graph 2: scatter wage
     educ", the thumbnails' list "Graphs"; the full-size view's name "Full-size graph" and, on a phone, "Previous" and
-    "Next"; the toasts "Couldn't read the matrix", "Couldn't copy: the browser refused" and "Couldn't copy the image: the browser refused"; a matrix opened in place: "Reading e(b)…", "Couldn't read e(b): <reason>" ("the engine isn't running" with no engine), the buttons' names "View e(b)" and "Hide e(b)"; Browse with every row shown "500
+    "Next"; the toasts "Couldn't read the matrix", "Couldn't copy: the browser refused" and "Couldn't copy the image: the browser refused"; a matrix opened in place: "Reading e(b)…", "Couldn't read e(b): <reason>" ("the engine isn't running" with no engine), the buttons' names "e(b), 1 x 3" (the caret) and "Copy e(b)" (the icon); Browse with every row shown "500
     rows · read only"; the live region's "More rows shown" (Show 50 more) and "Copied" (Copy image in the full-size
     view).
   - **4d** `states/DownloadDialog.tsx` (the prompt and "dofile is open in another tab", built as far as the start and the
