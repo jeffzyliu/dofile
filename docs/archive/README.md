@@ -9,4 +9,5 @@ and `docs/web-engine-data-flow.md` say how things are today.
   engine protocol, 02 worker and storage, 03 controllers and state, 04 census, 05 and 06 views, 07 unit tests, 08 e2e,
   09 CSS, 10 build and scripts), and 11, the review of the proposal's first draft. They read `main` at 145a557, and their
   line numbers are that commit's. Every finding was read from the code, not reproduced. The proposal cites them by
-  finding id (`03-F1`). 2026-11-16.
+  finding id (`03-F1`). Also there: `00-survey-brief.md`, what every survey was told to look for, and `census/`, the
+  scripts and knip config behind report 04. 2026-11-16.
