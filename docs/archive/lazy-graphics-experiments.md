@@ -235,11 +235,30 @@ against the lazy part with its follow-up fixes (`d33873c`) (`firefox`):
 
 `warmedBeforeSubmit` was false in all 10 during-import rows. A graph at ready costs more on Firefox than on Chromium
 (+0.45 s) or WebKit (+0.39 s) in section 2, and is the only row over the 0.5 s bar measured from "ready"; from the page's
-start it is +0.43 s. The worker's idle lines on the return visit gave the part's native unpack as about 1.06 s and the
-write of 1822 files as about 0.06 s (`firefox`), against 0.09-0.13 s native on WebKit (`timing-E1c`). A graph that
-arrives during that unpack decodes with brotli-wasm itself, so the slow native unpack is not shown to be the graph row's
-cause; the run's own steps were not split. Whether brotli-wasm is faster than the native decoder on Firefox was not
-measured.
+start it is +0.43 s.
+
+**Where it goes** (`ffinv`: return visit, unthrottled, n = 5, the worker's own lines; the decoders also timed alone in a
+module worker on a page without Pyodide). A graph sent at the instant of "ready" cannot take the browser decoder's result,
+which is in flight, because the worker is blocked in Python: it unpacks with brotli-wasm in the run.
+
+| | Firefox | WebKit | Chromium |
+|---|---|---|---|
+| Graph at ready, ready to image | 0.68-0.73 | 0.59 (0.58-0.59) | 0.58 (0.57-0.59) |
+| of it: brotli-wasm unpack, write, import and draw | 0.22, 0.09, 0.40 | 0.14, 0.02, 0.36 (first rep) | 0.14-0.15, 0.03, 0.43 (first rep) |
+| The part alone, native `DecompressionStream` | 0.066 (0.060-0.069) | 0.060 (0.059-0.067) | none |
+| The part alone, brotli-wasm in 256 KB steps | 0.115 (0.112-0.119) | 0.099 (0.098-0.113) | 0.098 (0.096-0.116) |
+
+Firefox's native decoder is not slow: in the app it took 0.06 s (n = 3). The worker's line "written while idle (unpack
+(native) 1.06s ...)" counts from the decode's start to the write, and the write waits until the engine has been idle
+for `IDLE_MS` (1 s), so it is mostly that wait. Firefox is about 0.1 s slower than WebKit in the brotli-wasm unpack and
+the write of 1822 files; the in-app brotli-wasm unpack (0.22 s) is twice the stand-alone one, not explained.
+
+A graph sent later is faster (Firefox, submit to image): 0.51-0.56 s from 200 ms to 1 s after ready (the native result
+is there; write, import and draw remain), 0.19 s at 1.3 s, 0.10 s from 1.7 s (the idle work done). `?brotli=wasm` on
+Firefox gave the same graph run (no contention with the native decode) and a slower start, since it also decodes the heap
+and the bundle with brotli-wasm: warm ready 1.11 (1.10-1.11) against 0.86 (0.85-0.87). With `IDLE_MS` 250 (a trial,
+Firefox only) a graph 0.5 s after ready took 0.25 s and from 0.8 s about 0.10 s, against 0.53-0.56 s; at 0-0.2 s no
+change. Its cost to a non-graph run sent in that window, and its effect on phones, WebKit and Chromium, were not measured.
 
 ## 7. Never measured
 
