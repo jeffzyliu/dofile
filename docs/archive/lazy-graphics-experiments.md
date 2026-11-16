@@ -217,9 +217,33 @@ browsers without native brotli (gzip is about 1.5 times larger by the table and 
 the one-sample row, both computed from the rows above; native `DecompressionStream("gzip")` exists in Chromium); decoding
 the part in split chunks; and a decode worker for Chromium. None of them was built.
 
-## 6. Never measured
+## 6. Firefox, after the merge
 
-- Firefox's timing (the harness cannot run it; Firefox and the iPhone profile ran in the e2e suite only).
+`measure-startup.mjs --engine firefox` (added for this run; unthrottled only). Firefox 159.0 (Playwright), one Mac,
+snapshot mode, brotli 11, n = 5, load average 1.8-3.5; main before the lazy part (`0430fd2`, matplotlib in the heap)
+against the lazy part with its follow-up fixes (`d33873c`) (`firefox`):
+
+| Row | Before the lazy part | Lazy part | Difference |
+|---|---|---|---|
+| Return visit, ready (display job) | 1.07 (1.07-1.08) | 0.89 (0.89-0.89) | -0.18 s, not real |
+| First visit, ready (display job) | 1.28 (1.26-1.49) | 1.08 (1.08-1.30) | -0.20 s, not real |
+| Return visit, graph at ready, image minus ready | 0.10 (0.10-0.10) | 0.73 (0.72-0.74) | +0.63 s, real |
+| First visit, graph at ready, image minus ready | 0.10 | 0.74 | +0.64 s, real |
+| Return visit, graph at ready, image from the page's start | 1.19 (1.17-1.22) | 1.62 (1.61-1.63) | +0.43 s |
+| Non-graph run at ready, result minus ready | 0.00-0.01 | 0.07 | not real |
+| During the background import (lazy only), from submit | | display 0.06 (0.04-0.07), graph 0.32 (0.31-0.33) | |
+
+`warmedBeforeSubmit` was false in all 10 during-import rows. A graph at ready costs more on Firefox than on Chromium
+(+0.45 s) or WebKit (+0.39 s) in section 2, and is the only row over the 0.5 s bar measured from "ready"; from the page's
+start it is +0.43 s. The worker's idle lines on the return visit gave the part's native unpack as about 1.06 s and the
+write of 1822 files as about 0.06 s (`firefox`), against 0.09-0.13 s native on WebKit (`timing-E1c`). A graph that
+arrives during that unpack decodes with brotli-wasm itself, so the slow native unpack is not shown to be the graph row's
+cause; the run's own steps were not split. Whether brotli-wasm is faster than the native decoder on Firefox was not
+measured.
+
+## 7. Never measured
+
+- Firefox throttled, and Firefox's memory (section 6 is unthrottled timing only).
 - Android, and any phone other than the maintainer's iPhone.
 - Memory peak on the final build: only single Mac samples from the earlier build (`inv-memory`) and an estimate for the
   page-side unpack (`parallel`). Phone memory, jetsam events and garbage collection were not measured.
