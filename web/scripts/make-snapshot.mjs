@@ -1,7 +1,7 @@
 // Builds the Pyodide memory snapshot the page starts from by default, unless ?snapshot=0 (`npm run snapshot`): Python started, the dofile wheel
 // installed, numpy, scipy, matplotlib, openpyxl and the engine's modules imported and one program run, so the page doesn't
 // repeat that. Writes public/snapshot/ (gitignored): the heap image and the site-packages bundle, brotli-compressed
-// (about 40 MB at brotli 11 with docstrings stripped; 229 MB uncompressed), plus small JSON files and a manifest, the snapshot's build record (what it was built from:
+// (about 38 MB at brotli 11 with docstrings stripped; 229 MB uncompressed), plus small JSON files and a manifest, the snapshot's build record (what it was built from:
 // scripts/build-id.ts, inputs()). Rebuild after changing the dofile wheel, a wheel in web/wheels/ or the pyodide version: a build
 // refuses a stale snapshot, and in development the page says "updated" (scripts/build-id.ts, staleness). Needs the network once
 // (micropip fetches openpyxl from PyPI); numpy and the rest come from node_modules/pyodide.
