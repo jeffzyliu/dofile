@@ -3,7 +3,8 @@
 export const LOCK = "dofile-engine";
 
 /**
- * One tab owns the engine and the files: it holds the Web Lock "dofile-engine" until it closes or another tab takes over.
+ * One tab owns the engine and the files: it holds the Web Lock "dofile-engine" until it closes or another tab takes
+ * over.
  * @param onLost - called when another tab took the lock.
  * @returns `take()` resolves true when this tab owns the lock, false when another does. `take({ steal: true })` always
  * resolves true, and the other tab's onLost runs. Without Web Locks (a page that is not a secure context, such as

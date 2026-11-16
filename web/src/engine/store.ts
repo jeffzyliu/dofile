@@ -46,7 +46,8 @@ const req = <T>(r: IDBRequest<T>) =>
     r.onsuccess = () => ok(r.result);
     r.onerror = () => err(r.error);
   });
-const under = (path: string) => IDBKeyRange.bound(`${path}/`, `${path}0`, false, true); // "0" is the character after "/"
+// "0" is the character after "/"
+const under = (path: string) => IDBKeyRange.bound(`${path}/`, `${path}0`, false, true);
 const exact = (data: Uint8Array): ArrayBuffer =>
   data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`); // `path` is `top` or under it
@@ -120,13 +121,13 @@ export class FileStore {
     this.onClosed = null; // the engine client's: called when the browser closed the database under us
   }
 
-  /** Called when a worker starts, and with null when it is gone (or has no store of its own). While `sync` is null a change
-   *  writes no `pending` row: the next worker copies the whole store.
+  /** Called when a worker starts, and with null when it is gone (or has no store of its own). While `sync` is null a
+   *  change writes no `pending` row: the next worker copies the whole store.
    *  @param onClosed - called when the browser closes the database (another page deleted or upgraded it, "Clear site
-   *  data"): /work then holds files the store may no longer have, which the journal cannot say. After a deleted database
-   *  the new worker's mount copies the store as it is now; after an upgrade by another page this page still opens
-   *  version 1, which fails (VersionError): the new worker mounts with a store error and an empty /work, and the store
-   *  is detached from it. */
+   *  data"): /work then holds files the store may no longer have, which the journal cannot say. After a deleted
+   *  database the new worker's mount copies the store as it is now; after an upgrade by another page this page still
+   *  opens version 1, which fails (VersionError): the new worker mounts with a store error and an empty /work, and the
+   *  store is detached from it. */
   attach(sync: FileStore["sync"], { onClosed = null }: { onClosed?: null | (() => void) } = {}) {
     Object.assign(this, { sync, onClosed });
   }
@@ -168,10 +169,10 @@ export class FileStore {
     }
   }
 
-  /** A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then `sync`.
-   *  Changes apply in the order called: `tx` makes its transaction right after the shared `opened` promise, and IndexedDB
-   *  runs readwrite transactions over the same stores in the order made (a write called before a rename is moved by it;
-   *  the page's Save relies on that: app/files/actions.ts fileTurn). */
+  /** A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then
+   *  `sync`. Changes apply in the order called: `tx` makes its transaction right after the shared `opened` promise, and
+   *  IndexedDB runs readwrite transactions over the same stores in the order made (a write called before a rename is
+   *  moved by it; the page's Save relies on that: app/files/actions.ts fileTurn). */
   async change<T>(row: PendingRow, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
     if (this.blocked) throw new Error("dofile is open in another tab");
     const sync = this.sync;
@@ -297,19 +298,19 @@ export class FileStore {
   }
 
   /**
-   * After a run: write what it did to /work, and give back the page's version of what the page changed meanwhile. With no
-   * changes (the worker's `sync`) it is only the second part. One transaction, so a page change lands wholly before it
-   * (its row is read here) or wholly after it (its row waits for the next one). The journal is emptied.
-   *  - What the page changed (a `pending` row for a write, remove or rename: the path, anything under it, both names of a
-   *    rename) keeps the page's version: the run's change to it is left out.
+   * After a run: write what it did to /work, and give back the page's version of what the page changed meanwhile. With
+   * no changes (the worker's `sync`) it is only the second part. One transaction, so a page change lands wholly before
+   * it (its row is read here) or wholly after it (its row waits for the next one). The journal is emptied.
+   *  - What the page changed (a `pending` row for a write, remove or rename: the path, anything under it, both names of
+   *    a rename) keeps the page's version: the run's change to it is left out.
    *  - A folder the page made (a mkdir row) keeps only itself: the run's files under it are written.
    *  - Above something the page changed or made, the run can still make a folder, and its removal of a folder holds if
    *    nothing is left under it; a file the run put where the page has a folder is left out.
    * @param changes - what the run did to each path; status is "created", "modified" or "removed".
    * @returns `files`: what was written (files only). `skipped`: files the run created or changed that were left out
-   * because they are under a folder the page renamed or removed (a file the page saved, removed or renamed itself is not
-   * listed: the page's version wins). `resync`: what the worker must put into /work to have the page's version: `paths`
-   * to replace with the records in `infos` and `data`, and `dirs` to make.
+   * because they are under a folder the page renamed or removed (a file the page saved, removed or renamed itself is
+   * not listed: the page's version wins). `resync`: what the worker must put into /work to have the page's version:
+   * `paths` to replace with the records in `infos` and `data`, and `dirs` to make.
    */
   async applyRun(changes: RunChange[]): Promise<AppliedRun> {
     return this.tx(ALL, "readwrite", async (t) => {

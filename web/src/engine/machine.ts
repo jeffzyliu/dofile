@@ -484,7 +484,8 @@ const TABLE: { [R in RowName]: Row<R> } = {
     "lock-lost": LOST,
     stage: (m, e) => {
       const { stage, t0, done } = m.state;
-      if (e.stage === stage) return step(m); // a stage seen twice (the snapshot start reads the cache after the download)
+      // a stage seen twice (the snapshot start reads the cache after the download)
+      if (e.stage === stage) return step(m);
       // a stage that comes back adds up its time
       return step(
         {
@@ -566,7 +567,8 @@ const TABLE: { [R in RowName]: Row<R> } = {
       e.owned
         ? OWN(m, [{ do: "close-dialog", dialog: "other-tab", focusEditor: false }])
         : step({ ...m, state: { s: "other-tab-idle" } }),
-    "lock-lost": (m) => step({ ...m, state: { s: "other-tab-idle" } }), // the take-over is cancelled: its answer is then stale
+    // the take-over is cancelled: its answer is then stale
+    "lock-lost": (m) => step({ ...m, state: { s: "other-tab-idle" } }),
   },
 };
 

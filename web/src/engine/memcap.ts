@@ -1,15 +1,16 @@
 // Which devices cap the engine's WebAssembly heap, and how much (docs/browser-engine.md, "The memory cap"). By device,
 // not by layout width: a narrow desktop window has the memory of its machine.
 //
-// Why: iOS kills the tab when the heap grows past what it allows (about 1 GB seen on an iPhone) and never answers a failed
-// grow, so the engine must refuse to ask. Under the cap, a big allocation raises MemoryError (r(909)); data and session stay.
+// Why: iOS kills the tab when the heap grows past what it allows (about 1 GB seen on an iPhone) and never answers a
+// failed grow, so the engine must refuse to ask. Under the cap, a big allocation raises MemoryError (r(909)); data and
+// session stay.
 
 /** The cap on a phone, in MiB. The heap is 3.5 to 6 times the data (generate and replace copy a column), so this holds
  *  roughly 150 to 250 MB of data. Above the restored heap (130 MB), under where an iPhone died (1.1 GB). */
 export const PHONE_CAP_MB = 750;
 
-/** What the rule reads of the browser. `mobile`: navigator.userAgentData?.mobile; `deviceMemory`: navigator.deviceMemory
- *  (GB, a power of two, at most 8). Both are Chromium only. */
+/** What the rule reads of the browser. `mobile`: navigator.userAgentData?.mobile; `deviceMemory`:
+ *  navigator.deviceMemory (GB, a power of two, at most 8). Both are Chromium only. */
 export interface DeviceFacts {
   userAgent: string;
   maxTouchPoints: number;

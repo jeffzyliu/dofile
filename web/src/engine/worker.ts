@@ -38,7 +38,8 @@ import type {
   ToWorker,
 } from "./types.ts";
 
-/** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in (test/node-worker.ts). */
+/** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in
+ *  (test/node-worker.ts). */
 type WorkerStore = Pick<FileStore, "takeAll" | "applyRun">;
 declare global {
   var dofileStore: WorkerStore | undefined;
@@ -162,8 +163,8 @@ function takePageVersion({ resync }: AppliedRun) {
   for (const path of resync.dirs) py.FS.mkdirTree(`${ROOT}/${path}`);
 }
 
-// The folders above `path` (and `path` itself, with `self`) are folders in the store: a file /work has at one of them goes,
-// and is not owed any more.
+// The folders above `path` (and `path` itself, with `self`) are folders in the store: a file /work has at one of them
+// goes, and is not owed any more.
 function foldersAt(path: string, self: boolean) {
   const parts = path.split("/");
   for (let n = 1; n <= parts.length - (self ? 0 : 1); n++) {
@@ -177,12 +178,12 @@ function foldersAt(path: string, self: boolean) {
 }
 
 /**
- * After a run: writes what it did to /work to the store, and /work then takes the page's version of what the page changed
- * meanwhile. Files the run created or changed are written, files that were there before and are gone are deleted, the
- * rest is not read at all.
- * Why modification time and size: the wait in `run` makes the time enough for any write of one byte or more. A truncation
- * is not stamped by MEMFS (its setattr takes no time with a size, and a write of 0 bytes sets none), so a run that
- * empties a file changes only its size.
+ * After a run: writes what it did to /work to the store, and /work then takes the page's version of what the page
+ * changed meanwhile. Files the run created or changed are written, files that were there before and are gone are
+ * deleted, the rest is not read at all.
+ * Why modification time and size: the wait in `run` makes the time enough for any write of one byte or more. A
+ * truncation is not stamped by MEMFS (its setattr takes no time with a size, and a write of 0 bytes sets none), so a
+ * run that empties a file changes only its size.
  * @param before - walk() from before the run.
  * @returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again).
  */
@@ -234,8 +235,8 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
 }
 
 // Starting is two steps so the page can show the user's files early. `mount` is an ordinary queued op, so every `sync`
-// posted after it waits for it. `boot` runs outside the queue, so `sync`, `files` and `read` are answered while it loads;
-// the ops that need the engine (run, describe, matrix) wait for it.
+// posted after it waits for it. `boot` runs outside the queue, so `sync`, `files` and `read` are answered while it
+// loads; the ops that need the engine (run, describe, matrix) wait for it.
 let bootDone: { ok: () => void; err: (e: unknown) => void };
 const booted = new Promise<void>((ok, err) => {
   bootDone = { ok, err };
@@ -264,7 +265,8 @@ async function fetchBytes(url: string, cache?: Cache, init?: RequestInit): Promi
 const fetchJSON = async (url: string, cache?: Cache) =>
   JSON.parse(new TextDecoder().decode(await fetchBytes(url, cache)));
 
-// The Cache of this build's start files (openCache). A refusal (private mode, blocked storage) is reported; any other error is thrown.
+// The Cache of this build's start files (openCache). A refusal (private mode, blocked storage) is reported; any other
+// error is thrown.
 async function snapshotCache(built: number, refused: (e: any) => void): Promise<Cache | undefined> {
   if (typeof caches === "undefined") {
     refused(Object.assign(new Error("there is no Cache API here (not a secure context?)"), { name: "NoCacheAPI" }));
@@ -284,9 +286,10 @@ function asWasm(res: Response, url: string): Response {
   return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/wasm" } });
 }
 
-// Pyodide's loader has no option to be given the .wasm's bytes, so while the engine starts every GET in this worker goes
-// through here: it looks in `cache` first (a miss goes to the network and is not stored), and a fetch that fails rejects
-// `failed`, because Pyodide's loader only logs a failed .wasm and then waits for ever. `restore()` puts the real fetch back.
+// Pyodide's loader has no option to be given the .wasm's bytes, so while the engine starts every GET in this worker
+// goes through here: it looks in `cache` first (a miss goes to the network and is not stored), and a fetch that fails
+// rejects `failed`, because Pyodide's loader only logs a failed .wasm and then waits for ever. `restore()` puts the
+// real fetch back.
 function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>; restore: () => void } {
   const real = self.fetch;
   let fail!: (error: Error) => void;
@@ -318,8 +321,8 @@ function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>
   };
 }
 
-// In a browser the patched loader is imported from the cached bytes (a blob: URL), so the start does not fetch it twice;
-// if the browser will not import that, from its own URL.
+// In a browser the patched loader is imported from the cached bytes (a blob: URL), so the start does not fetch it
+// twice; if the browser will not import that, from its own URL.
 async function importLoader(
   url: string,
   cache: Cache | undefined,
@@ -361,7 +364,8 @@ async function loadBrotli(): Promise<BrotliWasmType> {
   return (await import("brotli-wasm")).default;
 }
 
-// `built` and `files` come from the build's list (start-files.json), which the page already checked against its own build.
+// `built` and `files` come from the build's list (start-files.json), which the page already checked against its own
+// build.
 async function loadFromSnapshot(
   base: string,
   built: number,
@@ -410,8 +414,8 @@ async function loadFromSnapshot(
     brotliWasm = brotli; // for the graphics part, which a waiting graph unpacks synchronously (waitGraphics)
     lap(hadCache ? "read from cache" : "download");
     stage("unpack");
-    // The browser's own brotli decoder when it has one (brotli-wasm took 25 s for the 229 MB on an iPhone); `?brotli=wasm`
-    // forces brotli-wasm. Node keeps the wasm decoder, so the tests run what the build checks.
+    // The browser's own brotli decoder when it has one (brotli-wasm took 25 s for the 229 MB on an iPhone);
+    // `?brotli=wasm` forces brotli-wasm. Node keeps the wasm decoder, so the tests run what the build checks.
     const native = !isFile && brotliMode !== "wasm" && hasNativeBrotli();
     const timed = async (
       file: SnapshotFile,
@@ -422,7 +426,8 @@ async function loadFromSnapshot(
         const [out, decoder] = await unpackAsync(brotli, packed, file, native);
         return [out, since(t), decoder];
       } catch (e) {
-        await cache?.delete(`${base}${file.name}`).catch(() => {}); // a damaged or wrong file: the next start fetches it again
+        // a damaged or wrong file: the next start fetches it again
+        await cache?.delete(`${base}${file.name}`).catch(() => {});
         throw e;
       }
     };
@@ -944,9 +949,9 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
   {
     if (interrupt) interrupt[0] = 0; // a Break pressed while idle must not stop this run
     const before = walk(ROOT);
-    // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets a
-    // later time than any file had before (saveRun tells a same-size rewrite by it). A time after now (a clock that was
-    // ahead) is left out: any rewrite changes it anyway.
+    // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets
+    // a later time than any file had before (saveRun tells a same-size rewrite by it). A time after now (a clock that
+    // was ahead) is left out: any rewrite changes it anyway.
     const now = Date.now(),
       newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
     while (Date.now() <= newest) {

@@ -8,8 +8,9 @@ export const BREAK_GRACE_MS = 5000;
 
 /** One start-up stage. The snapshot start has no "packages"; ?snapshot=0 has no "unpack". */
 export type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
-/** Why the engine did not start: worked out from an error's `kind`, `reason` and `name` by whoever raises the event, never
- *  from its text. "updated": the site was updated since the page loaded (offer "Reload the page", keyed on this reason). */
+/** Why the engine did not start: worked out from an error's `kind`, `reason` and `name` by whoever raises the event,
+ *  never from its text. "updated": the site was updated since the page loaded (offer "Reload the page", keyed on this
+ *  reason). */
 export type FailReason = "no-wasm" | "download" | "memory" | "updated" | "unknown";
 /** What a run sends and how the page names it (SPEC section 4). `lines` are 1-based lines of the active file. */
 export interface RunHead {
@@ -23,7 +24,8 @@ export type Build = { built: number; files: SnapshotFiles };
 
 // ---- the worker protocol (SPEC section 6) ----
 
-// The ops, in three sets. The set decides who can send an op: the transport's types (client.ts) let nothing else through.
+// The ops, in three sets. The set decides who can send an op: the transport's types (client.ts) let nothing else
+// through.
 
 /** Ops that change the engine. */
 export interface LifecycleOps {
@@ -35,8 +37,8 @@ export interface LifecycleOps {
    *  (without one the worker fetches the part itself and the page sends this never). */
   graphics: { args: void; result: void };
 }
-/** Ops DECLARED to change nothing: not the data, r(), e(), the macros, the matrices, the graphs, the sort order, the log
- *  or /work. Anyone may send one. The declaration is tested (test/engine.test.ts, the fingerprint), not proved. */
+/** Ops DECLARED to change nothing: not the data, r(), e(), the macros, the matrices, the graphs, the sort order, the
+ *  log or /work. Anyone may send one. The declaration is tested (test/engine.test.ts, the fingerprint), not proved. */
 export interface ReadOps {
   describe: { args: DescribeArgs; result: DataSummary };
   describe_file: { args: { path: string }; result: DataSummary };
@@ -48,7 +50,8 @@ export interface ReadOps {
   read: { args: { path: string }; result: Uint8Array };
 }
 /** The op that brings the page's file changes into /work. It carries nothing: the worker reads the journal (`pending`),
- *  takes the store's version of those paths and clears the journal, in one transaction, then puts that version into /work. */
+ *  takes the store's version of those paths and clears the journal, in one transaction, then puts that version into
+ *  /work. */
 export interface JournalOps {
   sync: { args: void; result: void };
 }
@@ -83,8 +86,9 @@ export type BootArgs = {
   graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null };
 };
 
-/** `mount`'s arguments. A snapshot start has `snapshot` (the URL of its folder, ending in "/"), `built` (which names the
- *  Cache, `dofile-snapshot-<built>`) and `files` (its two big files), from the build's list. `?snapshot=0` has none. */
+/** `mount`'s arguments. A snapshot start has `snapshot` (the URL of its folder, ending in "/"), `built` (which names
+ *  the Cache, `dofile-snapshot-<built>`) and `files` (its two big files), from the build's list. `?snapshot=0` has
+ *  none. */
 export type MountArgs = {
   indexURL?: string;
   brotli?: string;
@@ -153,8 +157,8 @@ export interface FileChange {
 }
 
 export type ResetKind = "break" | "crash" | "user";
-/** The `kind` of an rc 9998 run result (machine.ts, cutResult): a reset, another tab took the engine ("stopped"), or the
- *  run's op failed in the worker ("run-failed": that worker stays). */
+/** The `kind` of an rc 9998 run result (machine.ts, cutResult): a reset, another tab took the engine ("stopped"), or
+ *  the run's op failed in the worker ("run-failed": that worker stays). */
 export type CutKind = ResetKind | "stopped" | "run-failed";
 
 export interface RunResult {
@@ -258,7 +262,8 @@ export interface StartFiles {
   buildId: string;
   size: number;
   compressed: number; // every file's compressed size, the page's own included
-  download: number; // the compressed size of the files `download()` fetches (`download: true`): the size the visitor is told
+  // the compressed size of the files `download()` fetches (`download: true`): the size the visitor is told
+  download: number;
   snapshot: SnapshotFiles; // the snapshot's two big files, for `mount`
   // `path` is relative to the list's URL; `size` is on disk, `compressed` as a host sends it; `download`: download()
   // fetches it (the rest came with the page)
@@ -291,8 +296,8 @@ export interface SnapshotFiles {
    *  build's Cache. snapshot.ts, packGraphics, has its layout. */
   graphics?: SnapshotFile;
 }
-/** public/snapshot/manifest.json: what the snapshot was built from (scripts/build-id.ts, BuildInputs), its time and its two
- *  big files. The build's record, not deployed: scripts/start-files.ts copies from it into start-files.json.
+/** public/snapshot/manifest.json: what the snapshot was built from (scripts/build-id.ts, BuildInputs), its time and its
+ *  two big files. The build's record, not deployed: scripts/start-files.ts copies from it into start-files.json.
  *  `extraWheels`: file name -> SHA-256 of web/wheels/*.whl (a manifest without it is stale). */
 export interface SnapshotManifest {
   wheel: string;

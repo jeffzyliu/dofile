@@ -42,7 +42,8 @@ type GraphicsPart = {
 };
 /** A call waiting for the worker's answer. */
 type Pending = { resolve: (value: any) => void; reject: (error: ClientError) => void; onLog?: (text: string) => void };
-/** The live worker's record: its number, its calls, its interrupt buffer. `ended`: what end() rejected its calls with. */
+/** The live worker's record: its number, its calls, its interrupt buffer. `ended`: what end() rejected its calls
+ *  with. */
 type Live = {
   n: number;
   worker: Worker;
@@ -125,11 +126,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   #graphicsListeners = new Set<(p: GraphicsProgress) => void>();
 
   /**
-   * @param snapshot - the URL (ending in "/") of a snapshot from scripts/make-snapshot.mjs; a snapshot start needs startFiles.
+   * @param snapshot - the URL (ending in "/") of a snapshot from scripts/make-snapshot.mjs; a snapshot start needs
+   * startFiles.
    * @param brotli - "wasm" forces brotli-wasm over the browser's own decoder.
    * @param memcap - the cap on the engine's WebAssembly heap, in MiB (memcap.ts); none: no cap.
    * @param extraWheels - wheels installed after the dofile one (web/wheels/).
-   * @param buildId - the page's build id (scripts/build-id.ts); a list of start files with another id is refused (checkBuild).
+   * @param buildId - the page's build id (scripts/build-id.ts); a list of start files with another id is refused
+   * (checkBuild).
    * @param store - while a worker is live, it tells the worker of each change the page makes.
    * @param startFiles - the URL of start-files.json, or the list itself; download(), build() and cached() need it.
    */
@@ -264,14 +267,15 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
   }
 
-  /** Fetch the start files into the Cache the worker reads, before a worker exists. A file already cached is not fetched
-   *  again, so a second try resumes by file. A file that does not arrive whole is not kept. Rejects with an AbortError when
-   *  `signal` aborts; kind "failed", reason "download" for a missing file or one of the wrong size; "updated" for another
-   *  build's list; kind "failed", reason "unknown" for a Cache that breaks other than by refusing storage.
+  /** Fetch the start files into the Cache the worker reads, before a worker exists. A file already cached is not
+   *  fetched again, so a second try resumes by file. A file that does not arrive whole is not kept. Rejects with an
+   *  AbortError when `signal` aborts; kind "failed", reason "download" for a missing file or one of the wrong size;
+   *  "updated" for another build's list; kind "failed", reason "unknown" for a Cache that breaks other than by refusing
+   *  storage.
    *  @param onProgress - counts bytes as a host sends them (compressed): each file's decoded bytes are scaled to its
    *  compressed size, and the files that came with the page count as received from the start.
-   *  @returns `cached: false` when there is nothing to fill (no snapshot start, no Cache API, storage refused): the worker
-   *  then downloads by itself, uncounted. */
+   *  @returns `cached: false` when there is nothing to fill (no snapshot start, no Cache API, storage refused): the
+   *  worker then downloads by itself, uncounted. */
   async download({
     onProgress = (_progress) => {},
     signal = undefined,
@@ -321,7 +325,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     const one = async (f: StartFile) => {
       const url = new URL(f.path, list.base).href;
       if (await cache.match(url)) return count(f, f.size); // kept from an earlier try
-      const res = await this.fetch(url, { signal: stop.signal, cache: "no-cache" }); // not an older build's file from the HTTP cache
+      // not an older build's file from the HTTP cache
+      const res = await this.fetch(url, { signal: stop.signal, cache: "no-cache" });
       if (!res.ok) throw fail(`${url}: ${res.status}`, "failed", { reason: "download" });
       const chunks: Uint8Array<ArrayBuffer>[] = [],
         reader = res.body!.getReader();
@@ -352,7 +357,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     try {
       await Promise.all(list.files.filter((f) => f.download).map((f) => one(f).catch(failed)));
     } catch (e: any) {
-      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build }; // the browser would not keep a file
+      // the browser would not keep a file
+      if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };
       throw e;
     } finally {
       signal?.removeEventListener("abort", abort);
@@ -539,9 +545,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
    *  made right after it queue behind mount. A worker that failed is not ended here: the machine ends it. Throws while
    *  another worker is live.
    *  @param build - what `mount` needs (null: the normal start); nothing is fetched first.
-   *  @param reply - says `stage` as each begins, then `started`; `start-failed` with no WebAssembly, no worker, or a step
-   *  that failed in the worker; `crashed` when the worker errors or the browser closes the file storage, at any time
-   *  while it is live. */
+   *  @param reply - says `stage` as each begins, then `started`; `start-failed` with no WebAssembly, no worker, or a
+   *  step that failed in the worker; `crashed` when the worker errors or the browser closes the file storage, at any
+   *  time while it is live. */
   start(n: number, build: Build | null, reply: Reply<"start-worker">): void {
     if (this.#live) throw new Error(`start(${n}): worker ${this.#live.n} is still live`);
     if (!this.wasm) {
@@ -633,7 +639,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         this.#wantGraphics(build);
       },
       (e: ClientError) => {
-        // "op": mount, boot or startup failed in the worker. Any other kind: the worker was ended, and whoever ended it knows.
+        // "op": mount, boot or startup failed in the worker. Any other kind: the worker was ended, and whoever ended it
+        // knows.
         if (e.kind === "op") reply({ type: "start-failed", reason: reasonOf(e), detail: e.message });
       },
     );

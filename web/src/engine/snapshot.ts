@@ -1,11 +1,13 @@
-// Starts the engine from a Pyodide memory snapshot (built by `npm run snapshot`, scripts/make-snapshot.mjs; docs/pyodide-snapshot.md)
-// instead of importing numpy, scipy, matplotlib and dofile. Runs in Node (the build script) and in worker.ts.
+// Starts the engine from a Pyodide memory snapshot (built by `npm run snapshot`, scripts/make-snapshot.mjs;
+// docs/pyodide-snapshot.md) instead of importing numpy, scipy, matplotlib and dofile. Runs in Node (the build script)
+// and in worker.ts.
 
 import type { BrotliWasmType } from "brotli-wasm";
 import type { PyodideAPI, PyodideConfig } from "pyodide";
 import type { SnapshotFile } from "./types.ts";
 
-// Pyodide's Emscripten module, plus what its types leave out: patchAsm's library log and replay, and the loader's functions.
+// Pyodide's Emscripten module, plus what its types leave out: patchAsm's library log and replay, and the loader's
+// functions.
 type PyodideModule = Awaited<ReturnType<NonNullable<PyodideConfig["createPyodideModule"]>>>;
 /** One library load, as patchAsm's log records it (dso.json). */
 export interface DsoRecord {
@@ -62,12 +64,12 @@ const SKIPS = [
   ],
 ];
 
-// The most the heap may grow to. This Pyodide creates its WebAssembly memory inside pyodide.asm.wasm (480 pages to 4 GB), so
-// no Emscripten option caps it; what can be capped is malloc's growth: the loader's emscripten_resize_heap refuses a
-// request over getHeapMax(). A big allocation then fails inside Python (MemoryError, r(909)) instead of the browser
-// killing the tab (iOS does not return a failed grow). `dofileHeapMax` (bytes) comes from the module's configuration; the
-// snapshot's build sets none, so it keeps 4 GB. The restore's own growMemory() bypasses the cap, so the cap must leave
-// room above the restored heap (130 MB).
+// The most the heap may grow to. This Pyodide creates its WebAssembly memory inside pyodide.asm.wasm (480 pages to 4
+// GB), so no Emscripten option caps it; what can be capped is malloc's growth: the loader's emscripten_resize_heap
+// refuses a request over getHeapMax(). A big allocation then fails inside Python (MemoryError, r(909)) instead of the
+// browser killing the tab (iOS does not return a failed grow). `dofileHeapMax` (bytes) comes from the module's
+// configuration; the snapshot's build sets none, so it keeps 4 GB. The restore's own growMemory() bypasses the cap, so
+// the cap must leave room above the restored heap (130 MB).
 const HEAP_MAX = ["getHeapMax=()=>4294901760", 'getHeapMax=()=>Module["dofileHeapMax"]??4294901760'] as const;
 
 function replaceAll(src: string, pairs: readonly (readonly string[])[]): string {
@@ -96,15 +98,15 @@ export function patchAsm(src: string, { noTrampoline = false } = {}): string {
   return replaceAll(src, [[ALLOC, ALLOC_PATCHED], ...SKIPS, HEAP_MAX, ...(noTrampoline ? [NO_TRAMPOLINE] : [])]);
 }
 
-// Pyodide writes the pointer of a WebAssembly trampoline function into the Python runtime (in the heap) at start, except on
-// iOS, where it writes 0 (getPyEMTrampolinePtr tests the user agent). A snapshot restores the heap of the machine that
-// made it, so one made with the trampoline fails on an iPhone with "call_indirect to a signature that does not match".
-// This makes the loader behave as on iOS everywhere, so one snapshot starts in every browser. SNAPSHOT_TRAMPOLINE=1 keeps
-// Pyodide's choice. The build and the restore must use the same patched loader.
+// Pyodide writes the pointer of a WebAssembly trampoline function into the Python runtime (in the heap) at start,
+// except on iOS, where it writes 0 (getPyEMTrampolinePtr tests the user agent). A snapshot restores the heap of the
+// machine that made it, so one made with the trampoline fails on an iPhone with "call_indirect to a signature that does
+// not match". This makes the loader behave as on iOS everywhere, so one snapshot starts in every browser.
+// SNAPSHOT_TRAMPOLINE=1 keeps Pyodide's choice. The build and the restore must use the same patched loader.
 const NO_TRAMPOLINE = ["let isIOS=globalThis.navigator&&(", "let isIOS=true||globalThis.navigator&&("];
 
-// Errors that mean the browser will not give us storage: full, blocked, private mode, or no Cache API. The engine can start
-// without the cache. Any other Cache API error is a bug and is not swallowed.
+// Errors that mean the browser will not give us storage: full, blocked, private mode, or no Cache API. The engine can
+// start without the cache. Any other Cache API error is a bug and is not swallowed.
 const STORAGE_REFUSALS = new Set([
   "QuotaExceededError",
   "SecurityError",
@@ -122,8 +124,9 @@ export async function openCache(caches: CacheStorage, built: number): Promise<Ca
   return caches.open(name);
 }
 
-// Two JS objects are still held after micropip's download of openpyxl (a fetch Response and its arrayBuffer method), and
-// nothing uses them again, so the serializer stores them as null.
+// Making a snapshot: loadPyodide's options (makeOptions), then the snapshot itself (makeSnapshot). Two JS objects are
+// still held after micropip's download of openpyxl (a fetch Response and its arrayBuffer method), and nothing uses them
+// again, so the serializer stores them as null.
 export const makeOptions = (create: CreateModule): PyodideConfig => ({
   _makeSnapshot: true,
   createPyodideModule: create,
@@ -135,13 +138,13 @@ export const makeSnapshot = (py: SnapshotPy): Uint8Array => {
 };
 
 /**
- * Zeroes the heap copy of every library Python opened with dlopen, so it compresses to nothing (the snapshot carried each
- * twice: 30 MB, 4.4 MB compressed). Emscripten keeps the bytes in a buffer the library's handle points to (size at
+ * Zeroes the heap copy of every library Python opened with dlopen, so it compresses to nothing (the snapshot carried
+ * each twice: 30 MB, 4.4 MB compressed). Emscripten keeps the bytes in a buffer the library's handle points to (size at
  * handle+32, address at handle+28, path at handle+36); the site-packages bundle holds the same files, and the restore
- * links from the filesystem and never reads the buffers. A buffer that differs from its file is left alone. Every handle
- * is visited, not only the library log's: a library first loaded as another's dependency and then dlopened by Pyodide's
- * package loader (libopenblas) has a second handle with its own copy (6.5 MB raw, 1.3 MB compressed). Call it before
- * makeSnapshot.
+ * links from the filesystem and never reads the buffers. A buffer that differs from its file is left alone. Every
+ * handle is visited, not only the library log's: a library first loaded as another's dependency and then dlopened by
+ * Pyodide's package loader (libopenblas) has a second handle with its own copy (6.5 MB raw, 1.3 MB compressed). Call it
+ * before makeSnapshot.
  */
 export function zeroLibraryCopies(py: SnapshotPy): { zeroed: number; bytes: number; kept: number } {
   const m = py._module;
@@ -204,8 +207,8 @@ export function zeroFreeMemory(py: SnapshotPy): { bytes: number; blocks: number 
 
 // Files the bundle leaves out (path relative to site-packages): everything under a folder named `tests` or `test`
 // (6.6 MB raw, almost all scipy test data) and type stubs (`*.pyi`, `py.typed`: 1.5 MB). Nothing imports them at run
-// time; the Stata cases of `npm run check-snapshot` pass without them. Whole folder names only: `testing` (numpy.testing),
-// `latest` and `pytest` stay.
+// time; the Stata cases of `npm run check-snapshot` pass without them. Whole folder names only: `testing`
+// (numpy.testing), `latest` and `pytest` stay.
 export function isDeadWeight(relPath: string): boolean {
   const parts = relPath.split("/");
   return parts.slice(0, -1).some((d) => d === "tests" || d === "test") || /\.pyi$|(^|\/)py\.typed$/.test(relPath);
@@ -303,8 +306,9 @@ export function restoreOptions(
     const reserved = m._malloc(hi);
     if (reserved > lo) throw snapshotError(`snapshot: cannot reserve ${lo}..${hi}, malloc returned ${reserved}`);
     m.__dsoReplay = dso.map((r) => ({ ...r }));
-    // Each dlopen needs a scope object (`global ? null : {}`) that collects the exports of its local dependencies; without
-    // it a later call fails with "Dynamic linking error: cannot resolve symbol" (scipy's LAPACK wrapper needs dsytrf_).
+    // Each dlopen needs a scope object (`global ? null : {}`) that collects the exports of its local dependencies;
+    // without it a later call fails with "Dynamic linking error: cannot resolve symbol" (scipy's LAPACK wrapper needs
+    // dsytrf_).
     for (const r of dso)
       m.loadDynamicLibrary(
         r.libName,
@@ -322,9 +326,9 @@ export function restoreOptions(
 }
 
 // ---- compressed files ----
-// The snapshot and the bundle are stored and sent brotli-compressed (quality 11: 229 MB -> 46 MB) and decompressed on every
-// start. The browser's own Content-Encoding is not used, so the Cache API keeps the compressed bytes and no host setting
-// changes the size. brotli-wasm runs the same decoder in the browser and in Node.
+// The snapshot and the bundle are stored and sent brotli-compressed (quality 11: 229 MB -> 46 MB) and decompressed on
+// every start. The browser's own Content-Encoding is not used, so the Cache API keeps the compressed bytes and no host
+// setting changes the size. brotli-wasm runs the same decoder in the browser and in Node.
 
 /** Decodes brotli `input` into exactly `rawSize` bytes, in steps: the peak memory is about the output plus one step (a
  *  one-shot decode holds the output in wasm memory and again as a copy). */
@@ -376,7 +380,8 @@ export function* inflateSteps(
   return out;
 }
 
-/** Whether the browser has a brotli DecompressionStream. brotli-wasm decoded at about 9 MB/s on an iPhone (229 MB: 25 s). */
+/** Whether the browser has a brotli DecompressionStream. brotli-wasm decoded at about 9 MB/s on an iPhone (229 MB: 25
+ *  s). */
 export function hasNativeBrotli() {
   try {
     new DecompressionStream("brotli" as CompressionFormat);
@@ -407,7 +412,8 @@ export async function inflateNative(input: Uint8Array<ArrayBuffer>, rawSize: num
   return out;
 }
 
-/** `file` is a manifest entry. A host that applied its own Content-Encoding hands over bytes already decoded (length === raw). */
+/** `file` is a manifest entry. A host that applied its own Content-Encoding hands over bytes already decoded (length
+ *  === raw). */
 export function unpack(
   brotli: BrotliWasmType,
   bytes: Uint8Array,
