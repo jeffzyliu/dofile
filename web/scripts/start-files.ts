@@ -26,7 +26,7 @@ function compressedSize(bytes: Uint8Array): number {
 // `stamp`: the build's stamp (vite.config.ts, made once per build or dev-server start); none: no build id.
 // `manifest`: the snapshot's build record, public/snapshot/manifest.json (it is not deployed: the build removes it from
 // dist/); null: no snapshot.
-// Returns { built, buildId, snapshot, files: [{ path, size, compressed, download }], size, compressed }, the one statement
+// Returns { built, buildId, snapshot, files: [{ path, size, compressed, download }], size, compressed, download }, the one statement
 // of the build: the page reads it, and gives the worker what it needs from it (client.ts, start; the worker reads no manifest):
 //   built      the snapshot's build time (its manifest), which names the Cache the files are kept in; null: no snapshot
 //   buildId    scripts/build-id.ts, buildId(stamp, the manifest): equal to the page's only when both are of one build run and
@@ -39,6 +39,8 @@ function compressedSize(bytes: Uint8Array): number {
 //   download   true: download() fetches it into the Cache before the engine starts (the snapshot, the runtime, and the
 //              brotli decoder's .wasm, which the worker loads as it starts). false: it came with the page (index.html
 //              and the rest of assets/).
+//   compressed the sum over every file, the page's own too; download: the sum over the files marked download, which is the size
+//              the visitor is told (the page's meta tag, the landing page) and the total of the download's progress
 // The snapshot's manifest.json is read here, at build time, and is not a start file: the start never fetches it.
 // (A .ts file because a test imports it: test/build-id.test.ts.)
 type List = Omit<StartFiles, "built" | "buildId" | "snapshot"> & {
@@ -81,7 +83,8 @@ export function listStartFiles(
     }
   }
   const sum = (key: "size" | "compressed") => files.reduce((n, f) => n + f[key], 0);
-  return { built, buildId: id, snapshot, files, size: sum("size"), compressed: sum("compressed") };
+  const download = files.reduce((n, f) => n + (f.download ? f.compressed : 0), 0);
+  return { built, buildId: id, snapshot, files, size: sum("size"), compressed: sum("compressed"), download };
 }
 
 // The page reads the download size from its own HTML, so the prompt has the number at load, offline too
@@ -89,7 +92,7 @@ export function listStartFiles(
 export const engineBytesMeta = (bytes: number) => `<meta name="dofile-engine-bytes" content="${bytes}">`;
 const META = /\s*<meta name="dofile-engine-bytes" content="\d+">/g;
 
-// After a build: write the list as `dir`/start-files.json and its compressed total into `dir`/index.html, and remove the
+// After a build: write the list as `dir`/start-files.json and its download size into `dir`/index.html, and remove the
 // snapshot's manifest.json from `dir` (Vite copied it from public/). Throws if it cannot (the build then fails: a page
 // without the number would show a prompt without a size), and if the snapshot is not of `inputs`, what the page is built
 // from (scripts/build-id.ts, staleness). With no snapshot the list says so (built: null) and the build goes on, as the
@@ -108,18 +111,11 @@ export function writeStartFiles(
     entry = list.files.find((f) => f.path === "index.html");
   const html = entry ? readFileSync(`${dir}/index.html`, "utf8").replace(META, "") : "";
   if (!html.includes("</head>")) throw new Error(`start-files: no index.html with a <head> in ${dir}`);
+  // index.html is not a download file, so the number in it does not change the number: one pass
   const rest = { size: list.size - entry!.size, compressed: list.compressed - entry!.compressed };
-  const page = (total: number) => Buffer.from(html.replace("</head>", `  ${engineBytesMeta(total)}\n</head>`));
-  // the number is part of the file it measures: a few rounds settle it
-  let total = list.compressed;
-  for (let i = 0; i < 5; i++) {
-    const next = rest.compressed + compressedSize(page(total));
-    if (next === total) break;
-    total = next;
-  }
-  const text = page(total);
-  Object.assign(entry!, { size: text.length, compressed: total - rest.compressed });
-  Object.assign(list, { size: rest.size + text.length, compressed: total });
+  const text = Buffer.from(html.replace("</head>", `  ${engineBytesMeta(list.download)}\n</head>`));
+  Object.assign(entry!, { size: text.length, compressed: compressedSize(text) });
+  Object.assign(list, { size: rest.size + text.length, compressed: rest.compressed + entry!.compressed });
   writeFileSync(`${dir}/index.html`, text);
   writeFileSync(`${dir}/start-files.json`, JSON.stringify(list));
   rmSync(`${dir}/snapshot/manifest.json`, { force: true }); // the build's record, not a file of the site

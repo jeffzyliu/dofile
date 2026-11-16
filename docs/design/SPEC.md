@@ -54,10 +54,11 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
 - **Runtime:** for the snapshot start, `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` are copied from the
   `pyodide` npm package at build time and served from the page's own origin. `?snapshot=0` keeps the CDN: a diagnostic mode.
-- **From the build, never literals:** the version, and the download size: 48.6 MB for the snapshot start today (42.1 MB
-  snapshot, 5.75 MB runtime, 0.68 MB page and small files). The build writes `start-files.json` (`{built, buildId, snapshot, files:
-  [{path, size, compressed, download}], size, compressed}`; `compressed` is an estimate, brotli quality 5, never more than
-  `size`) and puts the total in the page as `<meta name="dofile-engine-bytes">`, so the prompt has it before any download
+- **From the build, never literals:** the version, and the download size: 48.4 MB for the snapshot start today (42.1 MB
+  snapshot, 5.75 MB runtime, 0.53 MB for the brotli decoder's .wasm; the 0.52 MB of the page's own files came with the page and are not in it). The build writes `start-files.json` (`{built, buildId, snapshot, files:
+  [{path, size, compressed, download}], size, compressed, download}`; a file's `compressed` is an estimate, brotli quality 5, never more than
+  `size`; the list's `download` is the sum of `compressed` over the files marked `download`, the page's own files left out) and puts that
+  download size in the page as `<meta name="dofile-engine-bytes">`, so the prompt has it before any download
   (OQ-12). The build fails if it cannot write either.
 
 ## 2. Pages and layout
@@ -1346,7 +1347,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   Ctrl elsewhere), `Labels({labels, at})` (a control's labels in one cell: it keeps the size of the widest; only
   `labels[at]` is seen and named), `Placeholder`.
 - **Pinned down or changed:** `engineBytes` is `number | null` (null: no meta tag, a dev server with no snapshot); it is
-  the meta tag, which holds start-files.json's `compressed` total; the page fetches nothing for it. `t0` of `starting-list` and `starting-worker` is when
+  the meta tag, which holds start-files.json's `download` size (the files the page fetches, not its own); the page fetches nothing for it. `t0` of `starting-list` and `starting-worker` is when
   the current stage began, and a stage seen twice adds up in `done` (the snapshot start reads the cache after
   `download()`). `outputTab` has no "help" (P2). New signals: `layout` ("phone" under 700 px), `resolvedTheme` (computed:
   what a run sends as `plot_theme`), `graphFull`. Kept in localStorage: `dofile.theme`, `dofile.split`, `dofile.wrap`. Whether
@@ -1571,7 +1572,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   `src/site/` and the stylesheets (CSS `@import`s too), and nothing imports them, the editor's `index.html` and CSS included (`test/imports.test.ts`): no signals, no store, no tab lock, so
   reading the landing page never touches the editor's files. `web/scripts/site-pages.ts` fills the pages at build time (a
   plugin in `vite.config.ts`): `{{version}}` (the package's version, `0.1.0.dev1`, OQ-20), `{{engine-mb}}` (`Math.round` of
-  the compressed total in MB, the editor prompt's number: in dev from `public/`, in a build from the editor's
+  the download size in MB, the editor prompt's number: in dev from `public/`, in a build from the editor's
   `start-files.json`), `{{editor-url}}` (section 8, "URLs") and the commands list.
 - **Landing page** as drawn (`L`): desktop two columns, the phone's hero, both banner drawings and `welcome.do` hidden from
   screen readers with a plain copy that holds no link; Copy buttons that name what they copy (the button says "Copied" for

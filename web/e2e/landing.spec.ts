@@ -133,7 +133,7 @@ test("the download size in the text is the build's: the editor prompt's number, 
   request,
 }) => {
   const list = await (await request.get("start-files.json")).json();
-  const mb = String(Math.round(list.compressed / 1e6));
+  const mb = String(Math.round(list.download / 1e6));
   await page.goto(SITE);
   const text = (await page.locator("main").textContent()) ?? "";
   const found = [...text.matchAll(/about (\d+) MB/g)].map((m) => m[1]);

@@ -227,7 +227,8 @@ export interface StartFiles {
   built: number;
   buildId: string;
   size: number;
-  compressed: number;
+  compressed: number; // every file's compressed size, the page's own included
+  download: number; // the compressed size of the files `download()` fetches (`download: true`): the size the visitor is told
   snapshot: SnapshotFiles; // the snapshot's two big files, for `mount`
   files: { path: string; size: number; compressed: number; download: boolean }[];
 }

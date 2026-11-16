@@ -68,6 +68,7 @@ const LIST = {
   built: 777,
   size: 19_100,
   compressed: 13_300,
+  download: 13_100, // the page's own index.html (200) is not in it
   snapshot: {
     snapshot: { name: "heap.bin", raw: 40_000, size: 10_000 },
     bundle: { name: "bundle.bin", raw: 900, size: 300 },
@@ -158,13 +159,17 @@ test("download: every start file goes into the Cache, the counts rise to the tot
   const done = await client(fetch, caches).download({ onProgress: (p) => seen.push(p) });
   assert.deepEqual(
     done,
-    { cached: true, received: 13_300, total: 13_300, build: BUILD },
+    { cached: true, received: 13_100, total: 13_100, build: BUILD },
     "with what mount needs of the list it has just checked",
   );
-  assert.deepEqual(seen[0], { received: 200, total: 13_300 }, "the page's own files are here already");
-  assert.deepEqual(seen.at(-1), { received: 13_300, total: 13_300 });
+  assert.deepEqual(
+    seen[0],
+    { received: 0, total: 13_100 },
+    "the total is the files fetched: the page's own (200) are not in it",
+  );
+  assert.deepEqual(seen.at(-1), { received: 13_100, total: 13_100 });
   assert.ok(seen.length > 10, "progress while the bytes arrive, not once per file");
-  for (let i = 1; i < seen.length; i++) assert.ok(seen[i].received > seen[i - 1].received && seen[i].total === 13_300);
+  for (let i = 1; i < seen.length; i++) assert.ok(seen[i].received > seen[i - 1].received && seen[i].total === 13_100);
   assert.deepEqual(calls.map((u) => u.slice(BASE.length)).sort(), [
     "pyodide/pyodide.asm.wasm",
     "snapshot/dso.json",
@@ -245,7 +250,7 @@ test("download: abort stops the fetches and rejects; a second try keeps the fini
     ["pyodide/pyodide.asm.wasm", "snapshot/dso.json"],
     "finished files are kept, the unfinished one is not",
   );
-  assert.equal(seen.at(-1), 200 + 3_000 + 100 + 1_000, "it had counted the big file's first piece");
+  assert.equal(seen.at(-1), 3_000 + 100 + 1_000, "it had counted the big file's first piece");
   assert.equal(eng.worker, null, "no worker: the page goes back to having no engine");
 
   const second = fakeFetch(),
@@ -253,9 +258,9 @@ test("download: abort stops the fetches and rejects; a second try keeps the fini
   eng.fetch = second.fetch as typeof globalThis.fetch;
   const done = await eng.download({ onProgress: (p) => again.push(p.received) });
   assert.deepEqual(second.calls, [`${BASE}snapshot/heap.bin`], "only the unfinished file is fetched, from its start");
-  assert.equal(again[0], 200);
-  assert.ok(again.includes(3_300), "the kept files count at once");
-  assert.equal(again.at(-1), 13_300);
+  assert.equal(again[0], 0);
+  assert.ok(again.includes(3_100), "the kept files count at once");
+  assert.equal(again.at(-1), 13_100);
   assert.equal(done.cached, true);
 
   // already aborted: nothing is fetched

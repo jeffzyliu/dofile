@@ -308,9 +308,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // resumes keeps what it has; and not while a worker is live, which may be reading this Cache (the machine downloads
     // only before a worker exists).
     if (!this.#live) await dropUnlisted(cache, list);
-    const total = list.compressed,
+    const total = list.download, // the files below, not the page's own (they are here already)
       got = new Map<StartFile, number>();
-    let received = list.files.reduce((n, f) => n + (f.download ? 0 : f.compressed), 0),
+    let received = 0,
       last = -1;
     const count = (f: StartFile, bytes: number) => {
       // `bytes` of this file are here, decoded

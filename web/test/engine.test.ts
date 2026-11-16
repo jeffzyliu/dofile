@@ -359,6 +359,7 @@ const startFiles = manifest && {
   files: [],
   size: 0,
   compressed: 0,
+  download: 0,
 };
 
 test("engine from a memory snapshot: native code, graphs, files, Break; the worker needs no manifest.json", {
