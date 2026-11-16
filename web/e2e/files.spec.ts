@@ -1335,12 +1335,12 @@ test("a drop anywhere on the page: the Files pane is marked while a drag is over
   });
   expect(seen).toBe(false);
   // while a dialog is open a drop uploads nothing
-  await openDialog(page, { d: "delete", paths: ["dropped.do"] });
   await page.evaluate(() => {
     const w = window as unknown as { __dt?: DataTransfer };
     w.__dt = new DataTransfer();
     w.__dt.items.add(new File(["display 2\n"], "later.do", { type: "text/plain" }));
   });
+  await openDialog(page, { d: "delete", paths: ["dropped.do"] });
   await fire("drop");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);

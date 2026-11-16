@@ -1,3 +1,7 @@
+// The app shell in real browsers: the layouts, the theme button, the ⋯ menu (Esc and Tab), the download prompt's "Not
+// now", "Start engine" as the way back to it and a run that does nothing with no engine; a stale snapshot refused with
+// reason "updated" (plain words in its message, the cause in its detail); ?snapshot=0 still starts. Also the phone
+// toast's place and the failed "Download all" banner.
 import { engineState, expect, putFiles, SAMPLE, settled, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
   type EngineSeed,
@@ -7,7 +11,6 @@ import {
   seedStatusBar,
   showEngine,
   showPhoneTab,
-  showToast,
 } from "./seed";
 
 test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; Run is Start engine, which brings the prompt back; a run does nothing and opens no prompt", async ({
@@ -424,7 +427,7 @@ test("the folded file list with no files: opened by keyboard, the focus goes to 
 // On a phone the page itself never scrolls: only panes do (an iPhone scrolled the page a few px). The emulated iPhone has
 // no real keyboard or toolbars, and Playwright cannot make a real touch scroll, so this guards the layout: the document is
 // no taller or wider than the window, and a scroll by script (and a wheel, where the browser takes one) leaves it at the
-// top. app/viewport.ts's keyboard handling is tested in test/app.test.ts.
+// top. app/viewport.ts's keyboard handling is tested in test/app-viewport.test.ts.
 test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) => {
   test.skip(!isMobile, "the iPhone profile");
   await page.goto("?test=manual");
@@ -524,8 +527,7 @@ test("phone: the toast is above the command line and the tab bar, and above the 
   await page.emulateMedia({ reducedMotion: "reduce" }); // the toast's place, not its way in
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  await showPhoneTab(page, "log");
-  await showToast(page, "Saved analysis.do");
+  await showPhoneTab(page, "log", { toast: "Saved analysis.do" });
   await settled(page);
   const rects = () =>
     page.evaluate(() => {

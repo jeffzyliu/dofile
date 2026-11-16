@@ -90,8 +90,7 @@ test("a .dta tab whose name a command can't hold says so, and Load and Copy are 
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
   await putFiles(page, { "a`b'.dta": new Array(16).fill(0) });
-  await showTabs(page, [{ path: "a`b'.dta", kind: "dta", dirty: false }], "a`b'.dta");
-  await showPhoneTab(page, "editor");
+  await showTabs(page, [{ path: "a`b'.dta", kind: "dta", dirty: false }], "a`b'.dta", "editor");
   const view = page.locator(".dta-view");
   await expect(view.locator(".why")).toHaveText("Its name has a character a command can't use: rename the file.");
   await expect(view.locator(".cmd")).toHaveCount(0);
@@ -111,8 +110,7 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
       page.evaluate(() => window.__dofile.state.files.value.some((f: { path: string }) => f.path === "data/wages.dta")),
     )
     .toBe(true);
-  await showTabs(page, [{ path: "data/wages.dta", kind: "dta", dirty: false }], "data/wages.dta");
-  await showPhoneTab(page, "editor");
+  await showTabs(page, [{ path: "data/wages.dta", kind: "dta", dirty: false }], "data/wages.dta", "editor");
   const view = page.locator(".dta-view");
   await expect(view.locator(".bar").first()).toHaveText("data/wages.dta · 2 KB"); // 2048 bytes, as the file tree says
   await expect(view.locator(".cmd")).toHaveText('use "data/wages.dta", clear');
@@ -509,8 +507,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
 
   // ---- a .dta tab, with an engine ----
   await run(page, 'save "wages.dta", replace\nclear');
-  await showTabs(page, [{ path: "wages.dta", kind: "dta", dirty: false }], "wages.dta");
-  await showPhoneTab(page, "editor");
+  await showTabs(page, [{ path: "wages.dta", kind: "dta", dirty: false }], "wages.dta", "editor");
   const view = page.locator(".dta-view");
   await expect(view.locator(".bar").first()).toContainText("wages.dta · 160 obs · 35 vars");
   await expect(view.locator("tbody tr")).toHaveCount(35);

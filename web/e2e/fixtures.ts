@@ -69,7 +69,7 @@ export const settled = (page: Page) =>
   page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
 /** Wait until the tab lock has answered, so the store takes writes. */
-export const unblocked = (page: Page) => page.waitForFunction(() => window.__dofile.store.blocked === false);
+export const unblocked = (page: Page) => page.waitForFunction(() => window.__dofile?.store.blocked === false);
 
 /** Write files into the store: text, or bytes as an array of numbers. */
 export async function putFiles(page: Page, files: Record<string, string | number[]>) {

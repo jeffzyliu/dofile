@@ -4,7 +4,7 @@
 // Safari does is for the real iPhone. Every profile runs them at a phone's size (the phone layout is under 700 px).
 import type { Page } from "@playwright/test";
 import { expect, settled, test, unblocked } from "./fixtures"; // storage kept by default (fixtures.ts)
-import { seedGraphs, showEngine, showGraphFull, showPhoneTab, showToast } from "./seed";
+import { seedGraphs, showPhoneTab } from "./seed";
 
 const PHONE = { width: 390, height: 844 };
 /** The editor page at a phone's size with the test hook and no engine, `query` added to the URL. */
@@ -32,8 +32,7 @@ test("the keyboard's layout: with the keyboard open, .app is the visible area fr
 }) => {
   await open(page);
   await expect(page.locator("#kblog")).toHaveCount(0);
-  await showPhoneTab(page, "log");
-  await showToast(page, "Saved analysis.do");
+  await showPhoneTab(page, "log", { toast: "Saved analysis.do" });
   await keyboard(page, 400);
   await settled(page);
   expect(await rect(page, ".app")).toEqual({ top: 0, bottom: 400, height: 400 });
@@ -58,8 +57,9 @@ test("the keyboard's layout: the full-size graph view covers the visible area wi
 }) => {
   const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
   await open(page);
-  await seedGraphs(page, [{ n: 1, png: PNG, theme: "light", from: "run", run: 1, command: "scatter y x", line: 1 }]);
-  await showGraphFull(page);
+  await seedGraphs(page, [{ n: 1, png: PNG, theme: "light", from: "run", run: 1, command: "scatter y x", line: 1 }], {
+    full: true,
+  });
   await expect(page.getByRole("dialog", { name: "Full-size graph" })).toBeVisible();
   await settled(page); // the view takes the focus, and viewport.ts looks again (no keyboard here) before the next line
   await keyboard(page, 400);
@@ -77,8 +77,7 @@ test("a tap on the phone's command line focuses it without scrolling the page, t
 }) => {
   test.skip(!hasTouch, "taps need a touch profile");
   await open(page);
-  await showPhoneTab(page, "log");
-  await showEngine(page, { s: "ready" }); // with no engine the field is read-only
+  await showPhoneTab(page, "log", { engine: { s: "ready" } }); // with no engine the field is read-only
   const field = page.locator(".cmdline input");
   await field.fill("display 1");
   await field.evaluate((el) => (el as HTMLInputElement).blur());

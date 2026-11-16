@@ -19,17 +19,27 @@ export type PhoneTab = State["phoneTab"]["value"];
 export type Tabs = State["tabs"]["value"];
 export type Selection = DofileHook["selection"]["value"];
 
-/** Show an engine state (the machine stays where it is). */
-export const showEngine = (page: Page, engine: EngineSeed) =>
-  page.evaluate((v) => {
-    (window.__dofile.state.engine as Writable<"engine">).value = v as EngineState;
-  }, engine);
+/** Show an engine state (the machine stays where it is), and open `dialog` in the same step. */
+export const showEngine = (page: Page, engine: EngineSeed, dialog?: Dialog) =>
+  page.evaluate(
+    (v) => {
+      (window.__dofile.state.engine as Writable<"engine">).value = v.engine as EngineState;
+      if (v.dialog) window.__dofile.state.dialog.value = v.dialog;
+    },
+    { engine, dialog },
+  );
 
-/** Show a view of the phone's bottom bar. */
-export const showPhoneTab = (page: Page, tab: PhoneTab) =>
-  page.evaluate((t) => {
-    window.__dofile.state.phoneTab.value = t;
-  }, tab);
+/** Show a view of the phone's bottom bar, and in the same step a toast and/or an engine state. */
+export const showPhoneTab = (page: Page, tab: PhoneTab, also: { toast?: string; engine?: EngineSeed } = {}) =>
+  page.evaluate(
+    (v) => {
+      const S = window.__dofile.state;
+      S.phoneTab.value = v.tab;
+      if (v.also.engine) (S.engine as Writable<"engine">).value = v.also.engine as EngineState;
+      if (v.also.toast !== undefined) S.showToast(v.also.toast);
+    },
+    { tab, also },
+  );
 
 /** The theme, as the page sets it (signal and `data-theme`). */
 export const showTheme = (page: Page, theme: "light" | "dark") =>
@@ -75,10 +85,25 @@ export const seedLog = (page: Page, items: LogItems) =>
     window.__dofile.state.runWriter.log.value = v;
   }, items);
 
-export const seedGraphs = (page: Page, graphs: Graphs) =>
-  page.evaluate((v) => {
-    window.__dofile.state.runWriter.graphs.value = v;
-  }, graphs);
+/** Put these graphs in the Output pane; `full` opens the full-size view in the same step. */
+export const seedGraphs = (page: Page, graphs: Graphs, { full = false } = {}) =>
+  page.evaluate(
+    (v) => {
+      window.__dofile.state.runWriter.graphs.value = v.graphs;
+      if (v.full) window.__dofile.state.graphFull.value = true;
+    },
+    { graphs, full },
+  );
+
+/** Put these graphs and log items where a run would have, in one step. */
+export const seedRunOutput = (page: Page, { graphs, log }: { graphs: Graphs; log: LogItems }) =>
+  page.evaluate(
+    (v) => {
+      window.__dofile.state.runWriter.graphs.value = v.graphs;
+      window.__dofile.state.runWriter.log.value = v.log;
+    },
+    { graphs, log },
+  );
 
 /** The last run, which marks the error line of its file (null: none). */
 export const seedLastRun = (page: Page, run: LastRun) =>
@@ -96,14 +121,15 @@ export const showGraphFull = (page: Page) =>
 export const markDirty = (page: Page, path: string, on = true) =>
   page.evaluate(([p, d]) => window.__dofile.state.setDirty(p, d), [path, on] as const);
 
-/** These tabs open, `active` the one shown. */
-export const showTabs = (page: Page, tabs: Tabs, active: string | null) =>
+/** These tabs open, `active` the one shown (and `phoneTab` the phone's view, when given). */
+export const showTabs = (page: Page, tabs: Tabs, active: string | null, phoneTab?: PhoneTab) =>
   page.evaluate(
     (v) => {
       window.__dofile.state.tabs.value = v.tabs;
       window.__dofile.state.activeTab.value = v.active;
+      if (v.phoneTab) window.__dofile.state.phoneTab.value = v.phoneTab;
     },
-    { tabs, active },
+    { tabs, active, phoneTab },
   );
 
 /** The editor with these tabs open (`active` shown), no dialog, `engine` shown and `selection` made. */

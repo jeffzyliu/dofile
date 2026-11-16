@@ -9,7 +9,7 @@ import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE, LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
 import { expect, isPhone, test } from "./fixtures";
-import { openDialog, showEngine } from "./seed";
+import { showEngine } from "./seed";
 
 /** The editor's address, and the page's address without its query and hash: origin and path. */
 const EDITOR = new URL(EDITOR_BASE, LOCAL_EDITOR_URL).href;
@@ -80,8 +80,7 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
 test("the other-tab dialog's Close editor leaves for the landing page", async ({ page }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-  await showEngine(page, { s: "other-tab-idle" });
-  await openDialog(page, { d: "other-tab" });
+  await showEngine(page, { s: "other-tab-idle" }, { d: "other-tab" });
   await page
     .getByRole("alertdialog", { name: "dofile is open in another tab" })
     .getByRole("button", { name: "Close editor" })

@@ -13,6 +13,7 @@ import {
   seedGraphs,
   seedLastRun,
   seedLog,
+  seedRunOutput,
   showEngine,
   showTheme,
   showUnsplitOutput,
@@ -661,18 +662,15 @@ test("the log's formatting: echoes bold, output normal, errors red and bold, hin
 }) => {
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  await page.evaluate(() => {
-    const S = window.__dofile.state;
-    S.runWriter.log.value = [
-      { t: "head" },
-      {
-        t: "text",
-        run: 1,
-        text: '. summarize x if sex == 1\nnumber of obs 3\n(path C:\\a\\b.dta is b.dta in the working folder)\nsex not found\n  → "sex" is not a variable.\n    How to fix: write "sex" with the quotes.\n    Learn more: help summarize\nr(111);\n',
-        end: { kind: "file", path: "a.do", fresh_locals: true, rc: 111, line: 17, seconds: 0.38 },
-      },
-    ];
-  });
+  await seedLog(page, [
+    { t: "head" },
+    {
+      t: "text",
+      run: 1,
+      text: '. summarize x if sex == 1\nnumber of obs 3\n(path C:\\a\\b.dta is b.dta in the working folder)\nsex not found\n  → "sex" is not a variable.\n    How to fix: write "sex" with the quotes.\n    Learn more: help summarize\nr(111);\n',
+      end: { kind: "file", path: "a.do", fresh_locals: true, rc: 111, line: 17, seconds: 0.38 },
+    },
+  ]);
   if (isPhone(page)) await view(page, "Log");
   const log = page.getByRole("log", { name: "Log" });
   await expect(log.locator(".echo")).toHaveText(". summarize x if sex == 1");
@@ -726,15 +724,12 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
 }) => {
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  await page.evaluate(() => {
-    const S = window.__dofile.state;
-    S.runWriter.log.value = [
-      { t: "head" }, // "Try: help regress": 1
-      { t: "runhead", run: { kind: "file", path: "regress.do", fresh_locals: true }, first: false }, // 1
-      { t: "text", run: 1, text: ". regress y x\nREGRESS output\n" }, // 2
-      { t: "note", text: "a regress note" }, // 1
-    ];
-  });
+  await seedLog(page, [
+    { t: "head" }, // "Try: help regress": 1
+    { t: "runhead", run: { kind: "file", path: "regress.do", fresh_locals: true }, first: false }, // 1
+    { t: "text", run: 1, text: ". regress y x\nREGRESS output\n" }, // 2
+    { t: "note", text: "a regress note" }, // 1
+  ]);
   const phone = isPhone(page);
   if (phone) await view(page, "Log");
   else {
@@ -824,23 +819,21 @@ test("Clear log asks first: Cancel and Esc keep the log and the graphs, Clear lo
 }) => {
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  await page.evaluate(() => {
-    const S = window.__dofile.state;
-    S.runWriter.log.value = [
+  await seedRunOutput(page, {
+    log: [
       { t: "head" },
       { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: true },
       { t: "text", run: 1, text: ". display 1\n1\n" },
       { t: "note", text: "a note of the page" },
-    ];
-    // a 1 x 1 PNG
-    S.runWriter.graphs.value = [
+    ],
+    graphs: [
       {
-        n: 1,
+        n: 1, // a 1 x 1 PNG
         png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAfbLI3wAAAABJRU5ErkJggg==",
         theme: "light",
         from: "run",
       },
-    ];
+    ],
   });
   const phone = isPhone(page);
   if (phone) await view(page, "Log");
@@ -1071,13 +1064,12 @@ test("the log: a command stopped by Break names no line; a phone's inline graph 
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-  await page.evaluate((png) => {
-    const S = window.__dofile.state;
-    S.runWriter.graphs.value = [
-      { n: 1, png, theme: "dark", from: "run", run: 1, command: "scatter y x", line: 1 },
-      { n: 2, png, theme: "light", from: "run", run: 1, command: "scatter x y", line: 2 },
-    ];
-    S.runWriter.log.value = [
+  await seedRunOutput(page, {
+    graphs: [
+      { n: 1, png: PNG, theme: "dark", from: "run", run: 1, command: "scatter y x", line: 1 },
+      { n: 2, png: PNG, theme: "light", from: "run", run: 1, command: "scatter x y", line: 2 },
+    ],
+    log: [
       { t: "text", run: 1, text: ". scatter y x\n\n. scatter x y\n\n" },
       {
         t: "text",
@@ -1085,8 +1077,8 @@ test("the log: a command stopped by Break names no line; a phone's inline graph 
         text: ". sleep 5000\n--Break--\nr(1);\n",
         end: { kind: "command", fresh_locals: false, rc: 1, line: 1, seconds: 2 },
       },
-    ];
-  }, PNG);
+    ],
+  });
   if (isPhone(page)) await view(page, "Log");
   const log = page.getByRole("log", { name: "Log" });
   await expect(log.locator(".note")).toHaveText("Stopped by Break. The data is as the last complete command left it.");
@@ -1390,10 +1382,7 @@ test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open 
   await ready(page);
   await open(page, "a.do");
   const lastKind = () => page.evaluate(() => window.__dofile.state.lastRun.value?.kind ?? null);
-  const forget = () =>
-    page.evaluate(() => {
-      (window.__dofile.state.lastRun as { value: unknown }).value = null;
-    });
+  const forget = () => seedLastRun(page, null);
   const logLength = () => page.evaluate(() => window.__dofile.state.log.value.length);
 
   // the focus on nothing (the page's body): the key runs the file
@@ -1465,10 +1454,7 @@ test("Ctrl/Cmd+Enter: a checkbox, a button or a contenteditable=false area does 
   await ready(page);
   await open(page, "a.do");
   const lastKind = () => page.evaluate(() => window.__dofile.state.lastRun.value?.kind ?? null);
-  const forget = () =>
-    page.evaluate(() => {
-      (window.__dofile.state.lastRun as { value: unknown }).value = null;
-    });
+  const forget = () => seedLastRun(page, null);
   // elements the page itself has no outside a dialog: made here, focused, and removed
   await page.evaluate(() => {
     const host = document.createElement("div");

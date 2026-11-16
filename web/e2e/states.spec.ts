@@ -15,7 +15,6 @@ import {
   closeDialog,
   dismissBanner,
   type EngineSeed,
-  openDialog,
   type PhoneTab,
   seedLog,
   showEngine,
@@ -54,8 +53,7 @@ test("no engine: the banner brings the prompt back; Not now leads to the banner 
 test("the progress dialog: the download with its time and bytes, then the stages with their times", async ({
   page,
 }) => {
-  await showEngine(page, { s: "downloading", received: 14.2e6, total: 48e6, t0: Date.now() - 6000 });
-  await openDialog(page, { d: "download" });
+  await showEngine(page, { s: "downloading", received: 14.2e6, total: 48e6, t0: Date.now() - 6000 }, { d: "download" });
   const dlg = page.getByRole("dialog", { name: "Getting the engine ready" });
   await expect(dlg).toBeVisible();
   await expect(dlg.getByText("Downloading", { exact: true })).toBeVisible();
@@ -86,8 +84,7 @@ test("the progress dialog: the download with its time and bytes, then the stages
 test("another tab: the take-over button is aria-disabled while it is in progress, with the same label", async ({
   page,
 }) => {
-  await showEngine(page, { s: "other-tab-idle" });
-  await openDialog(page, { d: "other-tab" });
+  await showEngine(page, { s: "other-tab-idle" }, { d: "other-tab" });
   const dlg = page.getByRole("alertdialog", { name: "dofile is open in another tab" });
   const use = dlg.getByRole("button", { name: "Use dofile in this tab" });
   await expect(dlg.getByRole("button", { name: "Close editor" })).toBeFocused();
@@ -342,8 +339,7 @@ test("a dialog whose opener has left the page gives the focus to the editor, or 
   await showEngine(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 3000 });
   await expect(page.getByRole("button", { name: "Don't reset: wait for it" })).toBeFocused();
   // another tab takes the lock during the Break: the stopping banner goes, the other-tab dialog opens over it
-  await showEngine(page, { s: "other-tab-idle" });
-  await openDialog(page, { d: "other-tab" });
+  await showEngine(page, { s: "other-tab-idle" }, { d: "other-tab" });
   const dlg = page.getByRole("alertdialog", { name: "dofile is open in another tab" });
   await expect(dlg.getByRole("button", { name: "Close editor" })).toBeFocused();
   // "Use dofile in this tab" went through: the dialog closes, and its opener (Don't reset) is gone
