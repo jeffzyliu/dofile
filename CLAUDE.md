@@ -90,10 +90,12 @@ changes the schema. The "For dofile `0.1.x`" line of `MCP-SCHEMA.md` is edited b
   example datasets; write from documented behavior. No GPL/AGPL code or dependencies. The Stata reference logs stay out
   of distributions.
 - `legacy/` holds the 2020 OpenStata repos (gitignored); leave it alone.
-- **`main` is protected: never push to it.** Every change is a pull request (it need not be up to date with
-  `main`: the run on `main` tests the merge), and `ci ok`, `web ok` and `lint ok` must pass. A pull request that
-  holds a reformat commit named in `.git-blame-ignore-revs` is merged with a merge commit (a rebase or squash changes
-  its hash); any merge method works otherwise. **A merge to `main` deploys the web demo** once its tests pass.
+- **`main` is protected: never push to it**, except to merge a pull request by fast-forward when the user says so for
+  that pull request: `git push origin <sha>:main` once its checks pass and `main` is still its base. Every change is a
+  pull request (it need not be up to date with `main`: the run on `main` tests the merge), and `ci ok`, `web ok` and
+  `lint ok` must pass. A pull request that holds a reformat commit named in `.git-blame-ignore-revs` is merged with a
+  merge commit (a rebase or squash changes its hash); any merge method works otherwise. **A merge to `main` deploys
+  the web demo** once its tests pass.
 - CI and deploy: the table at the top of `docs/deploying.md` (every workflow, its trigger, required check and secrets).
 - Where to look (`docs/`): `phase2-plan.md` (web demo; read it first: status and next steps), `phase3-plan.md` (hosted
   multi-user MCP server), `opendta-issues.md` (known OpenDTA problems), `agent-ergonomics.md`, `releasing.md` (PyPI),
