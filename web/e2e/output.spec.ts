@@ -334,7 +334,8 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
       .evaluate((td) => {
         const css = getComputedStyle(td);
         const inner = td.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
-        const used = [...td.children].reduce((sum, c) => sum + c.getBoundingClientRect().width, 0);
+        const boxes = [...td.children].map((c) => c.getBoundingClientRect()); // from the first's left to the last's right:
+        const used = boxes.length ? Math.max(...boxes.map((b) => b.right)) - Math.min(...boxes.map((b) => b.left)) : 0; // gaps count
         return { spare: inner - used, cut: td.scrollWidth > td.clientWidth };
       });
     return m.cut ? -1 : m.spare;
@@ -474,6 +475,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await expect(grid).toBeVisible();
   await expect(page.getByRole("button", { name: "Hide e(b)" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "e(b): 1 x 3" })).toHaveAttribute("aria-expanded", "true"); // the value too
+  expect(await room(/^e\(b\):/), "Hide and Copy are not cut").toBeGreaterThanOrEqual(SLACK);
   await page.getByRole("button", { name: "Hide e(b)" }).click(); // Hide closes once, it does not toggle twice
   await expect(page.locator(".rs .mat")).toHaveCount(0);
   expect((await copied(page)).length, "View, Hide and the row's clicks copy nothing").toBe(beforeView);

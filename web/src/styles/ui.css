@@ -1099,7 +1099,7 @@ button {
   width: 30%;
 }
 .rs col.act {
-  width: 88px; /* "✓ Copied" and "↵ Copy" whole, with the cell's padding (e2e/output.spec.ts measures them) */
+  width: 96px; /* "✓ Copied", "↵ Copy" and a matrix's "Hide Copy" whole, with the cell's padding (e2e/output.spec.ts measures them) */
 }
 .rs td {
   padding: 4px var(--s3);

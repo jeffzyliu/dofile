@@ -346,7 +346,7 @@ body {
   margin: 0;
 } /* Browse is a heading that looks like the sub-head it is */
 
-/* a button that looks like a link: "Show 50 more", a matrix's View and Hide */
+/* a button that looks like a link: "Show 50 more", a matrix's View, Hide and Copy */
 .link-btn {
   color: var(--accent);
   text-decoration: underline;
@@ -358,6 +358,11 @@ body {
   color: var(--muted);
   cursor: default;
   text-decoration: none;
+}
+/* a matrix row's View (or Hide) and Copy: a little more than a space apart; the act column (ui.css, 96 px) is sized to
+   hold them with room to spare (e2e/output.spec.ts measures it) */
+.rs .act .link-btn + .link-btn {
+  margin-left: var(--s1);
 }
 
 /* Data: the filter field, text cells, a cut cell */
