@@ -1,19 +1,17 @@
-// Phase 2 step 4: the proof-of-concept page in a real browser. What Node can't check: cross-origin isolation, Break
-// through the real interrupt buffer, files kept in IndexedDB across a reload and a new engine, load times.
+// The proof-of-concept page in a real browser: cross-origin isolation, files kept in IndexedDB across a reload, Run and
+// Save against the editor.
 
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-// The proof-of-concept page is gone (prototype 1, step 3): these four tests need its editor and file list (#run,
-// #status, #files, window.__editor, confirm()) and are rewritten against the new page's flows in step 6
-// (docs/phase2-plan.md). Until then they are marked fixme. The cases that need no editor moved: Break, reload and
-// reset, the package formats and the cached snapshot start to e2e/engine.spec.ts; the stale snapshot and the
-// ?snapshot=0 start to e2e/shell.spec.ts. The half of the old first test that needs the editor is the fourth test here.
+// The proof-of-concept page is gone: these tests need its editor and file list (#run, #status, #files, window.__editor,
+// confirm()), so they are marked fixme until they are rewritten against the editor's flows. The cases that need no
+// editor are in engine.spec.ts and shell.spec.ts.
 test.fixme(true, "bound to the proof-of-concept page; step 6 rewrites it against the new page");
 
-// The page starts from the memory snapshot by default (`npm run snapshot`, then the build copies public/snapshot/); ?snapshot=0
-// is the normal boot. Both helpers check the status line's breakdown, so a page that silently started the other way fails.
+// The page starts from the memory snapshot by default (`npm run snapshot`); ?snapshot=0 is the normal boot. Both helpers
+// check the status line's breakdown, so a page that silently started the other way fails.
 const SNAPSHOT_BOOT =
   /\[(download|read from cache) [\d.]+ s, unpack [\d.]+ s \(heap [\d.]+ s, site-packages [\d.]+ s, decoder (native|wasm)\), restore [\d.]+ s, files [\d.]+ s, engine [\d.]+ s/;
 const NORMAL_BOOT = /\[runtime [\d.]+ s, files [\d.]+ s, packages [\d.]+ s, engine [\d.]+ s\]/;
@@ -156,8 +154,8 @@ test("Save writes the file; Discard opens the other file", async ({ page }) => {
   await expect(page.locator(".cm-content")).toContainText('display "KEPT"');
 });
 
-// The editor half of the proof of concept's first test ("the page runs .do code on uploaded files, breaks, and keeps
-// files"), kept for step 6: Run does not save, Save does, and a reload brings the saved text back into the editor.
+// The editor half of the old first test: Run does not save, Save does, and a reload brings the saved text back into the
+// editor.
 test("Run doesn't save; Save writes the file, and a reload brings the editor's text back", async ({ page }) => {
   await page.goto("./");
   await ready(page);

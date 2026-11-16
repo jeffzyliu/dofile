@@ -1,7 +1,5 @@
-// The engine in real browsers, through the page's test hook (main.tsx): the cases of the proof of concept's poc.spec.ts
-// that need no editor, moved here in prototype 1, step 3. Files go in with store.write, code runs through the run
-// controller (window.__dofile.run), Break and Reset through the engine controller (breakRun, reset). Step 6 turns them
-// into the flows' tests.
+// The engine in real browsers, through the page's test hook (main.tsx). Files go in with store.write, code runs through
+// the run controller (window.__dofile.run), Break and Reset through the engine controller (breakRun, reset).
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -119,9 +117,9 @@ scatter lwage yrsed`,
   expect(r.log).toContain("M=15528");
 });
 
-// The two package gaps of 2026-11-09, in every browser: xlwt/xlrd (legacy .xls) and pyreadstat (built for Pyodide,
-// web/wheels/), which reads SAS transport and SPSS files without pandas. `export sasxport` needs pandas, which the page
-// leaves out: it must say so with rc 199 (ODT-32), not crash.
+// The two package gaps in every browser: xlwt/xlrd (legacy .xls) and pyreadstat (built for Pyodide, web/wheels/), which
+// reads SAS transport and SPSS files without pandas. `export sasxport` needs pandas, which the page leaves out: it must
+// say so with rc 199 (ODT-32), not crash.
 test("legacy .xls and the ReadStat formats work: xlwt, xlrd and pyreadstat are installed", async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
   await page.goto("?test");
@@ -151,8 +149,7 @@ display "SAV=" _N " " x[4] " " s[2]`,
 });
 
 // The default start, from the memory snapshot: download() fills the Cache before each start, so the start reads it from
-// there, a reload too, with no download prompt; what the browser keeps is the compressed files; with the Cache deleted,
-// a reload asks again.
+// there, a reload too, with no download prompt; with the Cache deleted, a reload asks again.
 test("the default start: from the memory snapshot, runs native code and a graph, and caches it; the prompt only when nothing is cached", async ({
   playwright,
   browserName,
@@ -226,10 +223,10 @@ test("the default start: from the memory snapshot, runs native code and a graph,
   }
 });
 
-// The cap on the engine's heap (engine/memcap.ts, snapshot.ts HEAP_MAX): the page passes ?memcap=<MB> to the worker, a big
-// allocation fails inside Python as MemoryError, which the engine reports as r(909), and the data and the engine stay. The
-// iPhone project is capped by its user agent (750 MB) in every other test too. 400 MB is above the restored heap (130 MB)
-// and under what 10 million doubles and the copies `generate` makes need (about 1 GB uncapped).
+// The cap on the engine's heap (engine/memcap.ts, snapshot.ts HEAP_MAX): the page passes ?memcap=<MB> to the worker, a
+// big allocation fails inside Python as MemoryError, which the engine reports as r(909), and the data and the engine
+// stay. The iPhone project is capped by its user agent (750 MB) in every other test too. 400 MB is above the restored
+// heap (130 MB) and under what 10 million doubles and the copies `generate` makes need (about 1 GB uncapped).
 const CAP_MB = 400;
 async function overTheCap(page: Page, query: string) {
   const logged: string[] = [];

@@ -1,13 +1,7 @@
-// Prototype 1, step 2, in real browsers: what Node cannot check (docs/design/SPEC.md, section 7, tests 9 and 10). The tab
-// lock between two pages; the counted download into the Cache, and a start that then uses those bytes; no request to
-// another origin; the store's zip. Since step 3 the page is the app shell: these tests reach the client, the store and
-// the state through the page's test hook, and click the shell's own dialogs (the download prompt, the take-over). They
-// move to the flows' tests in step 6.
-// The hook (main.tsx): with ?test in the URL, window.__dofile = { engine (the transport: its facts `worker` and `startup`,
-// cached() and download(); it starts and runs nothing by itself), store, start (the controller's: the download, then the
-// worker), persisted, engineBytes, state (the signals of src/app/state.ts), run (a run through the controller), breakRun
-// and reset (the engine controller's), drops (the events that changed nothing) }; with ?test=manual the page starts no
-// engine until start() is called. The store is blocked until the tab lock answers.
+// What Node cannot check (docs/design/SPEC.md, section 7, tests 9 and 10): the tab lock between two pages; the counted
+// download into the Cache, and a start that then uses those bytes; no request to another origin; the store's zip. The
+// tests reach the client, the store and the state through the page's test hook (main.tsx; with ?test=manual the page
+// starts no engine until start() is called), and click the shell's own dialogs (the download prompt, the take-over).
 import type { BrowserContext, Page } from "@playwright/test";
 import { LOCAL_SITE_URL } from "../scripts/urls.ts";
 import { expect, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)

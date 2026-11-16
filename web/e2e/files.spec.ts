@@ -1,8 +1,7 @@
-// Prototype 1, step 4a: the file tree, the editor's tabs, upload and its name clashes, the row menus, opening files
+// The file tree, the editor's tabs, upload and its name clashes, the row menus, opening files, in real browsers
 // (docs/design/SPEC.md, sections 3.1, 3.2, 3.10, 3.11). No engine is needed (?test=manual): files go in through the test
-// hook's store or the upload inputs. There is no editor until step 4b, so no tab can become dirty by typing: the tests
-// make the edits with the hook's state.setDirty(path, true); the close-tab dialog's Save saves through step 4b's editor
-// and closes the tab (e2e/editor.spec.ts types real edits).
+// hook's store or the upload inputs. Dirty tabs are made with the hook's state.setDirty(path, true); the close-tab
+// dialog's Save saves through the editor and closes the tab (editor.spec.ts types real edits).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
@@ -187,7 +186,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   });
   await again();
   await recordMoves(page);
-  await ask.getByRole("button", { name: "Save", exact: true }).click(); // step 4b's editor saves it, then the tab closes
+  await ask.getByRole("button", { name: "Save", exact: true }).click(); // the editor saves it, then the tab closes
   await expect(ask).toBeHidden();
   await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
   await expect(page.locator(".toast")).toHaveText("Saved a.do");
@@ -424,7 +423,7 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
     "New folder",
     "Upload a folder",
     "Download all (.zip)",
-    "Restore the sample", // step 5, above Delete all files… (OQ-13)
+    "Restore the sample", // above Delete all files…
     "Delete all files…",
   ]);
   await head.getByRole("menuitem", { name: "Delete all files…" }).click();

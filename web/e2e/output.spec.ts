@@ -1,13 +1,12 @@
-// Prototype 1, step 4c, in real browsers: the Output tabs (Graph, Data, Results), the full-size graph view and a .dta file's
-// tab (docs/design/SPEC.md, sections 3.7 to 3.9 and 3.11; src/app/output/). Step 4a's openFile and 4b's editor are not
-// built when this is written, so the tests reach the page through its test hook: `run` runs code through the run
-// controller, `state` holds the signals (a test sets `tabs`, `activeTab`, `phoneTab` and `graphFull` itself, which
-// views may write). The clipboard is replaced by a recorder in every page (reading the real one needs a permission each
-// browser handles its own way), so a test reads what the page copied.
+// The Output tabs (Graph, Data, Results), the full-size graph view and a .dta file's tab in real browsers
+// (src/app/output/). The tests reach the page through its test hook: `run` runs code through the run controller, `state`
+// holds the signals (a test sets `tabs`, `activeTab`, `phoneTab` and `graphFull` itself, which views may write). The
+// clipboard is replaced by a recorder in every page (reading the real one needs a permission each browser handles its own
+// way), so a test reads what the page copied.
 //  - The empty states and a .dta tab with no engine need none: `?test=manual`.
 //  - Everything else is one test with an engine (each start costs a while): one run draws three graphs, fits a model and
 //    leaves a wide dataset, and the tabs are checked against that. On the phone profile there is no Graph tab (graphs
-//    show in the log, 4b), so only the full-size view is checked there, opened through `graphFull`.
+//    show in the log), so only the full-size view is checked there, opened through `graphFull`.
 import type { Page } from "@playwright/test";
 import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 

@@ -1,8 +1,7 @@
-// Before any test: the servers the tests will talk to must serve this folder's build, and it must be a build made for the
-// local origins. `reuseExistingServer` takes whatever listens on the port, which can be the preview server of another checkout
-// or worktree, with another build. And a build with the production addresses (`DOFILE_URLS=production`) links the pages to
-// dofile.dev and app.dofile.dev, so every test that crosses between them would leave localhost: `npm run e2e` builds with
-// DOFILE_URLS=local.
+// Before any test: the servers must serve this folder's build, made for the local origins. `reuseExistingServer` takes
+// whatever listens on the port, which can be another checkout's preview server with another build. And a build with the
+// production addresses would link the pages to dofile.dev and app.dofile.dev, so every test that crosses between them
+// would leave localhost: `npm run e2e` builds with DOFILE_URLS=local.
 import { readdirSync, readFileSync } from "node:fs";
 import { EDITOR_OUT, LOCAL_EDITOR_URL, LOCAL_SITE_URL, SITE_OUT } from "../scripts/urls.ts";
 

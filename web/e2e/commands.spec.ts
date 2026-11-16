@@ -1,6 +1,5 @@
-// Prototype 1, step 5: the commands page (docs/design/SPEC.md, section 3.12, OQ-18) in real browsers. The page is on the site's
-// origin (SITE), not the editor's (Playwright's baseURL). The list is written
-// into the page by the build from src/stata/commands.json, so it is there with no script; the script adds the filter.
+// The commands page in real browsers. It is on the site's origin (SITE), not the editor's (Playwright's baseURL). The
+// build writes the list into the page, so it is there with no script; the script adds the filter.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";

@@ -1,6 +1,6 @@
 // The e2e tests' shared `test`: Playwright's, with storage kept by default. In a Playwright browser
-// navigator.storage.persisted() is false, so every page would add the storage banner (S 19) as soon as the files change.
-// Here every page of the test's context answers true to persisted() and persist(), unless the test turns it off:
+// navigator.storage.persisted() is false, so every page would add the storage banner as soon as the files change. Here
+// every page of the test's context answers true to persisted() and persist(), unless the test turns it off:
 //   import { test, expect } from "./fixtures";
 //   test.use({ persisted: false });   // in a file or a describe: the browser's own answers
 // A context the test makes itself (launchPersistentContext, browser.newContext) is not covered: call keepFiles(context).
@@ -10,11 +10,10 @@ import { type BrowserContext, test as base, errors, expect, type Page } from "@p
 
 export { expect };
 
-/** Get past the download prompt on a page opened with `?test` (not `?test=manual`): wait until the page has decided (the
- *  page load is over: the state is no longer `checking-lock` or `checking-cache`), and if it asks (this build's start
- *  files are not all in the Cache, as in a fresh context), press Download through the test hook's start(). If they are
- *  cached the page has started by itself and this does nothing. Call it after each goto and reload that should start the
- *  engine. */
+/** Get past the download prompt on a page opened with `?test` (not `?test=manual`): wait until the page has decided
+ *  (the state is no longer `checking-lock` or `checking-cache`), and if it asks (the start files are not all in the
+ *  Cache, as in a fresh context), press Download through the test hook's start(). Call it after each goto and reload
+ *  that should start the engine. */
 export async function startEngine(page: Page) {
   await expect
     .poll(
@@ -41,8 +40,8 @@ export const keepFiles = (context: BrowserContext) =>
   });
 
 /** Make `page.goto` retry once when it times out while the page is still at about:blank. On Linux, WebKit now and then
- *  cancels a fresh page's first navigation (WebKit bug 325840) and goto waits out its timeout with nothing loaded. Nothing
- *  else is retried: another error, a timeout on a page that has already left about:blank, a second timeout. */
+ *  cancels a fresh page's first navigation (WebKit bug 325840) and goto waits out its timeout with nothing loaded.
+ *  Nothing else is retried: another error, a timeout on a page that has left about:blank, a second timeout. */
 export function retryFirstGoto(page: Page) {
   const goto = page.goto.bind(page);
   page.goto = async (url, options) => {

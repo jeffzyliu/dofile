@@ -1,7 +1,7 @@
 // The goto retry (fixtures.ts, retryFirstGoto): a fresh page's first navigation that times out is tried once more;
 // nothing else is. The page is a stand-in whose goto fails as scripted, because a real stalled navigation does not repeat
 // the same way in each engine (Chromium aborts the retry while the stalled request is still pending); no browser is
-// needed and each test takes a moment. The fixture itself is exercised by every other spec's page.goto.
+// needed. The fixture itself is exercised by every other spec's page.goto.
 import { errors, type Page } from "@playwright/test";
 import { expect, retryFirstGoto, test } from "./fixtures";
 

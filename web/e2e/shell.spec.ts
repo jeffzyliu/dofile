@@ -1,8 +1,7 @@
-// Prototype 1, step 3: the app shell in real browsers. The layouts, the theme button, the ⋯ menu (Esc and Tab), the
-// download prompt's "Not now", "Start engine" as the way back to it and a run that does nothing with no engine; and two cases moved from the proof of concept's poc.spec.ts that do not need the
-// editor: a stale snapshot is refused with reason "updated" (plain words in its message, the cause in its detail), and
-// ?snapshot=0 still starts. Also the phone toast's place and the failed "Download all" banner. Step 6 replaces these with
-// the flows' tests.
+// The app shell in real browsers: the layouts, the theme button, the ⋯ menu (Esc and Tab), the download prompt's "Not
+// now", "Start engine" as the way back to it and a run that does nothing with no engine; a stale snapshot refused with
+// reason "updated" (plain words in its message, the cause in its detail); ?snapshot=0 still starts. Also the phone
+// toast's place and the failed "Download all" banner.
 import type { Page } from "@playwright/test";
 import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
@@ -85,7 +84,7 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
     await page.keyboard.press("ArrowRight");
     await expect(views.getByRole("tab", { name: "Data" })).toBeFocused();
     await expect(page.getByRole("tabpanel", { name: "Data" })).toBeVisible();
-    // the theme is in the phone's ⋯ menu (OQ-14); the file actions are the Files view's "Files ⋯", not in it
+    // the theme is in the phone's ⋯ menu; the file actions are the Files view's "Files ⋯", not in it
     await page.getByRole("button", { name: "More actions" }).click();
     await expect(page.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveCount(0);
     // Theme cycles and keeps the menu open, the focus on it and its name updated; Enter cycles again
@@ -214,10 +213,10 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN), moved from poc.spec.ts.
 test("?snapshot=0: the normal boot still starts and runs the sample", async ({ page, browserName }) => {
   // Not in the two WebKit projects (webkit, iphone): there, on Linux, the normal boot now and then never finishes loading
-  // its packages (2 of about 49 CI runs on 2026-11-12, none in Chromium or Firefox; every download had arrived, Pyodide
-  // printed "Loading ..." and never "Loaded"; a stall, not a slow start, so a longer wait does not help). The snapshot
-  // start, the page's default, has not shown it. What this skip leaves untested: WebKit's normal boot. The machine has no
-  // timeout for a start that stalls: a start watchdog is a later item.
+  // its packages (2 of about 49 CI runs, none in Chromium or Firefox; every download had arrived, Pyodide printed
+  // "Loading ..." and never "Loaded"; a stall, not a slow start, so a longer wait does not help). The snapshot start, the
+  // page's default, has not shown it. What this skip leaves untested: WebKit's normal boot. The machine has no timeout
+  // for a start that stalls.
   test.skip(browserName === "webkit", "WebKit on Linux: the normal boot's package load stalls now and then");
   // This test has failed now and then in Firefox, cause unknown: a failed start must say why (the state's reason and detail,
   // and what the page logged) instead of waiting out the poll and reporting only that the state was not "ready".
@@ -410,7 +409,7 @@ test("the editor and the log are never mounted again when the layout changes", a
   }
 });
 
-// 700 to 1199 px: the file list is folded away behind a labelled "Files" button with the count of files (OQ-14).
+// 700 to 1199 px: the file list is folded away behind a labelled "Files" button with the count of files.
 test("the folded file list: the Files button says what it does and how many files; it opens by keyboard, focus goes in, Esc folds it and gives the focus back", async ({
   page,
 }) => {

@@ -1,12 +1,7 @@
-// Prototype 1, step 4b, in real browsers: the editor, Run, Break, the log, the run-head, the command line, the status bar
-// and the phone's strip (docs/design/SPEC.md, sections 3.3 to 3.6 and 4; src/app/editor/, src/app/log/).
-//  - With no engine (?test=manual): editing, the unsaved dot, Save (Ctrl/Cmd+S) and a failed save's banner, the close-tab
-//    dialog's Save, a .csv's columns and a .log's lines in the editor, a file dropped on the editor, the editor's text
-//    size on a phone; and the log's formatting, measured as computed styles in both themes, from log items the test
-//    writes through the hook (state.runWriter: the run controller's writer, which only a test may touch this way).
-//  - With an engine (one start per test): Run and the run-head, the error mark and "Go to line", the graph link after
-//    the echo of its line (inline on a phone), the status bar or the phone's strip, Run selection, Break's note, the
-//    command line (Enter, ↑, a paste of several lines that stops at an error, an ordinary paste).
+// The editor, Run, Break, the log, the run-head, the command line, the status bar and the phone's strip in real browsers
+// (docs/design/SPEC.md, sections 3.3 to 3.6 and 4; src/app/editor/, src/app/log/). Tests with no engine use `?test=manual`
+// (the log's formatting is measured as computed styles from log items written through state.runWriter); those with an
+// engine start one per test.
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)

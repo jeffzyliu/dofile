@@ -1,12 +1,12 @@
-// Prototype 1, step 5: the sample project (docs/design/SPEC.md, section 3.12; web/sample/) in real browsers. A first visit
-// to an empty store writes it and opens analysis.do; a visitor's own files are never written over; "Restore the sample"
-// is in the file menu and is an upload of the sample (a file that differs is asked in the clash dialog). The first-visit load is off under `?test` unless the
-// URL also has `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
+// The sample project (web/sample/) in real browsers. A first visit to an empty store writes it and opens analysis.do; a
+// visitor's own files are never written over; "Restore the sample" is in the file menu and is an upload of the sample (a
+// file that differs is asked in the clash dialog). The first-visit load is off under `?test` unless the URL also has
+// `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE } from "../scripts/urls.ts";
 import { expect, startEngine, test } from "./fixtures";
 
-// the test hook (window.__dofile) is untyped here: the specs of step 4 declare theirs per file
+// the test hook (window.__dofile) is untyped here: each spec declares its own
 const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 /** The files in the store (not folders), by path. */
 const stored = (page: Page) =>

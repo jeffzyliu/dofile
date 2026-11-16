@@ -1,11 +1,11 @@
-// Prototype 1, step 4d, in real browsers: the dialogs and states (docs/design/SPEC.md, sections 3.10 and 5; src/app/states/).
-// With `?test=manual` the machine is in `none` and takes no step by itself, so a test sets the `engine` signal through the
+// The dialogs and states in real browsers (docs/design/SPEC.md, sections 3.10 and 5; src/app/states/). With
+// `?test=manual` the machine is in `none` and takes no step by itself, so a test sets the `engine` signal through the
 // hook to show a state that is hard to reach (a failed start of each reason, Break pending, ...); that is a view test, not
 // a machine test (test/machine.test.ts decides the states). The real machine is used where it is cheap: the prompt's
-// "Not now" and the declined banner's "Start engine" go through ask() and decline(). One test starts a real engine
-// for Reset: its dialog (asked once anything has run on the engine), Cancel, Reset, the reset banner. Where the focus goes when a
-// banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the stand-in and
-// for 4b's CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
+// "Not now" and the declined banner's "Start engine" go through ask() and decline(). One test starts a real engine for
+// Reset: its dialog (asked once anything has run on the engine), Cancel, Reset, the reset banner. Where the focus goes
+// when a banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the
+// stand-in and for CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
 import type { Locator, Page } from "@playwright/test";
 import { expect, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
@@ -459,7 +459,7 @@ test("the banners above the log: running, stopping (focus on Don't reset), waiti
   await expect(stopping).toContainText("This command can't stop until it ends.");
   await expect(stopping).toContainText(/In [23] s the engine is reset:/);
   await expect(stopping.getByRole("button", { name: "Don't reset: wait for it" })).toBeFocused();
-  // Break pending for 0.5 s only: "Stopping…" already, but no button and no focus moved yet (SPEC OQ-21)
+  // Break pending for 0.5 s only: "Stopping…" already, but no button and no focus moved yet
   await show(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 4500 });
   await expect(stopping).toBeVisible();
   await expect(stopping.getByRole("button")).toHaveCount(0);

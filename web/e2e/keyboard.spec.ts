@@ -1,4 +1,4 @@
-// The phone's on-screen keyboard (app/viewport.ts, the ?kblog overlay app/kblog.ts; the iPhone measurements behind them:
+// The phone's on-screen keyboard (app/viewport.ts, the ?kblog overlay app/kblog.ts; the iPhone measurements:
 // docs/phone-keyboard-experiment.md). No profile here has a real on-screen keyboard, so these tests guard the layout
 // with viewport.ts's attributes set by script, the editor's caret with a stand-in visualViewport, and the overlay; what
 // Safari does is for the real iPhone. Every profile runs them at a phone's size (the phone layout is under 700 px).

@@ -1,12 +1,10 @@
-// Prototype 1, step 5: the landing page and its links (docs/design/SPEC.md, sections 3.12 and 8) in real browsers. The
-// landing page is static HTML at the root of the site's origin (SITE: scripts/urls.ts's LOCAL_SITE_URL), the commands page at
-// SITE/commands/, and the editor a single-page app at the root of its own origin (EDITOR, with its base: LOCAL_EDITOR_URL,
-// Playwright's baseURL, so a relative URL is the editor's). The tests assert the landing page's own content after each link,
-// not only the URL: a host that answers a missing page with the editor would pass a URL check with no landing page. And they
-// compare the whole address, origin included: "/" is a path of both origins.
-// Also: the build's numbers in the text, the theme button (one choice for the whole site), the Copy buttons, and axe on the
-// real page in both themes (the design checks `npm run axe` etc. read the mockups from file: URLs; the built pages need a
-// server, so the same rules run here).
+// The landing page and its links in real browsers. The landing page is static HTML at the root of the site's origin (SITE:
+// LOCAL_SITE_URL), the commands page at SITE/commands/, the editor a single-page app at the root of its own origin
+// (EDITOR: LOCAL_EDITOR_URL, Playwright's baseURL, so a relative URL is the editor's). The tests assert the landing
+// page's own content after each link, not only the URL: a host that answers a missing page with the editor would pass a
+// URL check. And they compare the whole address, origin included: "/" is a path of both origins. Also: the build's
+// numbers in the text, the theme button, the Copy buttons, and axe on the real page in both themes (`npm run axe` reads
+// the mockups from file: URLs; the built pages need a server).
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE, LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
