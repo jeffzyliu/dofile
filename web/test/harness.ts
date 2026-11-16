@@ -119,7 +119,7 @@ export const runOn = (
   { onLog = () => {}, ...options }: RunOptions & { onLog?: (text: string) => void } = {},
 ): Promise<RunResult> => client.run(live(client), { code, ...options }, onLog);
 
-// ---- a stand-in worker, for the transport without an engine (client.test.ts, app.test.ts) ----
+// ---- a stand-in worker, for the transport without an engine (client.test.ts, the app-*.test.ts files) ----
 
 /** A message the transport posts; `args` as the op has them. */
 export type Message = { id: number; op: Op; args: any };
