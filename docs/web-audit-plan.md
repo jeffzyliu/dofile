@@ -7,8 +7,7 @@ defined in the proposal's section 3.
 
 **Status (2026-11-16).** Not started. Scope decided by the maintainer: proposal B, plus four redesigns moved in from C
 (R7 through the design note, R5, the focus-target registry of R3, R1) and screenshots as a net for the view moves.
-Decisions 2 to 7 of the proposal's section 8 are open; section 2 below says what each blocks and what is assumed until
-it is answered.
+Section 2 lists the decisions; two are not final (the old-names blacklist, and the branch model).
 
 ## 1. Scope
 
@@ -29,19 +28,19 @@ N7, R5, R3r (counted as one more: the registry is larger than the handles it rep
 proposal's guess for B, that is 13 to 21 million agent tokens. The proposal said 45 to 47 for this scope; that left out
 the notes and N7.
 
-## 2. Open decisions and what is assumed
+## 2. Decisions
 
-Numbers are the proposal's section 8.
+Numbers are the proposal's section 8. All are the maintainer's, 2026-11-16, unless marked open.
 
-| # | Decision | Blocks | Assumed until answered |
+| # | Decision | Answer | Effect here |
 |---|---|---|---|
-| 2 | Delete the `DOFILE_EDITOR_BASE` mode | S9 and the R5 note | The R5 note is written for both answers; S9 waits |
-| 3 | Delete two `imports.test.ts` rules outright | two deletions inside N1 | N1 keeps both rules |
-| 4 | The CSS rule on `data-engine^="other-tab"` | nothing | It stays |
-| 5 | Pull request grouping | how many merges (section 5) | One pull request per number in the phase tables |
-| 6 | Fable for S0 | S0's model | Opus, high. Fable needs the maintainer's yes in the session that spawns it |
-| 7 | The engine gaps B2 and B3 inside the audit | phase 1's engine lane | Inside |
-| 9 | Which redesigns move into B | - | **Decided 2026-11-16:** all four, and the screenshots |
+| 2 | Delete the `DOFILE_EDITOR_BASE` mode | Yes | S9 deletes it |
+| 3 | Two `imports.test.ts` rules | The cast count in `machine.ts` stays. The old-names blacklist: **open** | N1 keeps both until the second is answered |
+| 4 | The CSS rule on `data-engine^="other-tab"` | It goes | C1 replaces it with a class the view sets |
+| 5 | Pull request grouping | **Awaits a last word:** an integration branch per session | Section 5 is written for it |
+| 6 | Fable for S0 | Yes; other uses asked one at a time, with the reason | S0 on Fable; the spawning session still asks |
+| 7 | The engine gaps B2 and B3 inside the audit | Yes; the SPEC changes with the behaviour | Phase 1's engine lane |
+| 9 | Which redesigns move into B | All four, and the screenshots | Section 1 |
 
 ## 3. Rules
 
@@ -72,7 +71,8 @@ Models, by risk. "S/h + O" is a Sonnet builder at high effort with an Opus revie
 
 | Tier | Items |
 |---|---|
-| Opus, high | B1, B2, B3, S1, S2, S7, S8, the R1 note, R1, S0 (unless Fable) |
+| Fable, high | S0 (authorized; Opus, high if the session's yes is not given) |
+| Opus, high | B1, B2, B3, S1, S2, S7, S8, the R1 note (a candidate for Fable: ask), R1 |
 | S/h + O | N1, S3, S5, S6 with R3r, R7r, R5 |
 | Sonnet, medium | N2 to N7, B4, B5, C1 to C4, S4, S9, W1 to W7, the R5 note |
 | Haiku | doc sync, renames, `docs/test-map.md` edits |
@@ -117,7 +117,8 @@ build). Animations off, fonts loaded before the first shot. The list is fixed he
 gate, since phase 1 adds a banner. Its builder reports how stable two baselines of one commit are; a state that will not
 hold still is dropped from the list, not loosened.
 
-**End gate.** All eight pull requests merged, G0's checks again on `main`, S0 and the R5 note read by the maintainer.
+**End gate.** All eight pull requests merged into the session's branch, G0's checks again on it, S0 and the R5 note read
+by the maintainer. Then the branch goes to `main` (section 5); the same at the end of every later session.
 
 ### Phase 1: bugs and names (session 2)
 
@@ -129,7 +130,7 @@ Each bug starts with a failing test and is its own pull request.
 | a | B3: a Break before the worker takes the run is kept | B2 | 1.2 |
 | a | B4: decide from kinds | B3, and C1 merged (both edit `states/words.ts`) | 1.3 |
 | a | C4, then C2: the visitor's words, small helpers; registry types, the controller cycles | B4 (so after C1: they share `StatusBar.tsx`, `DownloadDialog.tsx`, `FileBar.tsx`) | 1.4 |
-| b, views | C1: engine-state predicates stated once | phase 0 | 1.5 |
+| b, views | C1: engine-state predicates stated once; the CSS rule on `data-engine` replaced by a class the run controls take from the predicate, with an e2e check that the toolbar keeps its size and the buttons are unseen in the other-tab states | phase 0 | 1.5 |
 | b | B5: three small ones in views | C1, and B2 merged (both edit `LogView.tsx`) | 1.6 |
 
 B3 checks `browser.py` first; a Python change needs a new wheel and snapshot, and ruff. Its builder records in the
@@ -139,7 +140,7 @@ audit's log, for R2: whether the three small edits close the gap, and the tests 
 
 ### Phase 2: moves (sessions 3 and 4)
 
-**Start gate.** S0 approved. Decision 2 answered. N7's list of states checked against phase 1's changes, then its
+**Start gate.** S0 approved. N7's list of states checked against phase 1's changes, then its
 baseline taken from `main`.
 
 | Lane | Item | After | Pull request |
@@ -163,7 +164,7 @@ baseline taken from `main`.
 
 **S9 and R5, clause by clause.** S9: `scripts/lib`; `vite.config.ts` split into plugin modules; every snapshot knob in
 the manifest; `npm run commands` through a temp file; `wheel` stops deleting the release wheels in the root `dist/`; the
-denied-commands list generated; `measure-startup` and `compare-pytest` moved or folded; and, if decision 2 is yes, the
+denied-commands list generated; `measure-startup` and `compare-pytest` moved, not folded away; and the
 `DOFILE_EDITOR_BASE` mode deleted. R5: file staging out of the config into one script; `wheel` once per `e2e`; the two
 CI file lists generated from one table (R5 changes those workflows anyway).
 
@@ -177,7 +178,8 @@ branch the maintainer names as live, touches `client.ts`'s graphics methods, `wo
 is not so when lane a reaches it, the lane ends at S8, phase 2 closes without R1, and R1 heads section 8's list. The
 graphics halves of S7 and S8 are not done in either case.
 
-**Sessions.** Session 3 runs lane a to S8, lane b to B1, S4 and S9. Session 4 runs the rest. Lane c is the long one: it
+**Sessions.** Session 3 runs lane a to S8, lane b to B1, S4 and S9, and ends with the phase's end gate on what it
+built. Session 4 runs the rest. Lane c is the long one: it
 waits on lane b twice.
 
 **End gate.** G0's checks on every browser project; the engine checks of phase 1; N7 against the phase's start baseline,
@@ -202,14 +204,52 @@ A sweep that has to change a test or a shared doc logs the change for W5 or the 
 and that stays open there: the design checks on the real pages, the accessibility items, the split of the main chunk,
 the contrast check, the first deploy's checks. This file and the proposal stay where they are until section 8 is done.
 
-## 5. Pull requests
+### After phase 3: an independent audit (session 6)
 
-One per number above is 35, not the 13 the proposal estimated: that estimate did not count each bug and each move apart.
-Each must be releasable alone, since a merge to `main` deploys.
+`ponytail:ponytail-audit` over `web/`, run under the orchestrate skill, as a read that owes nothing to this plan. It
+looks for other things than the plan did (bugs with a concrete case, data loss, what breaks under load, risky code
+with no test, code that should not exist), reports at most 20 findings a run, and changes nothing.
 
-If 35 merges are too many (decision 5), the grouping that loses least is one pull request per lane per phase, with each
-bug still alone, about 18: a regression then bisects to a lane, not to an item, and a lane's last item waits for its
-first to be reviewed.
+How the two fit together:
+- The orchestrator spawns one read-only agent per region (the seven sweep regions, or fewer). Each is a
+  general-purpose agent, since the plugin's own agent types cannot invoke a skill, and its brief carries the orchestrate
+  rules such an agent needs.
+- **A region agent is given the code and nothing else**: not the proposal, this plan, the reports or the audit's log.
+  Told what was fixed, it would confirm it. It invokes the skill on its region, at the load "one visitor, one tab, the
+  files in the browser", and writes the skill's report to a file.
+- The orchestrator then does what the agents may not: drops what the audit's log shows as known or decided, merges
+  duplicates across regions, ranks what is left, and checks each must-fix by reading the code.
+- Models by region, as in section 3: Opus for the engine, storage and file-write regions, Sonnet for the rest.
+- Output: `docs/archive/web-audit-surveys/`, one merged report. Its findings are section 8's first input.
+
+## 5. Branches and pull requests
+
+**One integration branch per session** (`audit/0-nets`, `audit/1-bugs`, `audit/2a-moves`, `audit/2b-moves`,
+`audit/3-close`), cut from `main` when the session starts. Assumed until the maintainer confirms it (decision 5).
+
+- Each number in the phase tables is a pull request **into the session's branch**: 35 in all. The orchestrator merges
+  it there once its reviewer accepts and its checks pass. "Merged" in an After column means merged there.
+- At the session's end gate the branch becomes **one pull request to `main`**, merged with a merge commit so that the
+  items stay apart in the history. Five merges to `main`, each a deploy.
+- Before that merge the maintainer looks at the branch's preview (`preview.yml` builds one for every pull request), on
+  a real phone where the session touched views. This is the only check on a real device before production.
+- `main` is merged into the branch when the session starts each day's work and again before the gate.
+
+Why not 35 pull requests to `main`, as the proposal first recommended:
+- every merge to `main` deploys the live demo, and under the views the only net is an emulated phone;
+- a lane no longer waits for the maintainer between items, so stacking and "X merged" cost nothing;
+- a mistake found at the gate is fixed on the branch, before production;
+- the maintainer reviews five times, with a preview, not 35 times.
+
+Why not one branch for the whole audit:
+- other work keeps landing on `main` in the same files (eleven commits in `web/src/engine` on the day of the surveys);
+  a branch that lives for weeks has to port each of them onto moved code;
+- the first deploy would carry every change at once: a regression seen in production then has 35 suspects;
+- an audit that stalls leaves a branch nobody can merge. A session's branch is days old at most.
+
+What it costs against 35 to `main`: bug fixes reach production at the session's end, not one by one; and a session's
+merge is larger to read. CI already runs for a pull request into any branch (`web.yml`, `ci.yml` and `lint.yml` have no
+branch filter).
 
 ## 6. The three design notes
 
@@ -236,7 +276,7 @@ It reads reports 03, 05 and 06, `web/CLAUDE.md`, and the files they name. It che
 snapshot): every npm script and every workflow, with `snapshot`, the `check-*` scripts, `preview`, `cf:dev`, `deploy`
 and the `build-web` action among them, and N7's baseline command. For each, what must be staged and when. Then the two
 CI lists, and how staleness is told afterwards. The deploy path comes first: a merge deploys. It answers report 10's
-worry (the "one command" feel of `npm run dev`) and is written for both answers to decision 2.
+worry (the "one command" feel of `npm run dev`).
 
 **The R1 note.** Written from the code of its day, not from the reports. The table of states and events on both threads
 (the page's fetch and hand-over; the worker's wait, idle steps, native decode and own fetch); the 22 variables as one
@@ -256,13 +296,13 @@ them.
 
 ## 8. After the audit: planning the rest of C
 
-These are planning tasks, not builds. Each ends in a section of one new file, `docs/web-audit-redesigns.md`. They run
-in a session of their own (session 6), after phase 3, on the code as the audit left it, and read the audit's log and
-the two phase 3 reports in `docs/archive/web-audit-surveys/`.
+These are planning tasks, not builds. Each ends in a section of one new file, `docs/web-audit-redesigns.md`. They run in
+a session of their own (session 7), after the independent audit, on the code as the audit left it, and read the audit's
+log and the two phase 3 reports in `docs/archive/web-audit-surveys/`.
 
 | # | For | Task | Who | Output |
 |---|---|---|---|---|
-| 1 | all | Read the audit's log, phase 3's census and its whole-diff review for what the audit did not close. | orchestrator | the list the tasks below start from |
+| 1 | all | Read the audit's log, phase 3's census, its whole-diff review and the independent audit for what the audit did not close. | orchestrator | the list the tasks below start from |
 | 2 | R1, if it did not run | Check the condition on R1; if it holds, write the R1 note (section 6). | Opus, high | the note, and R1's three items scheduled |
 | 3 | R2 | From B3's record in the audit's log: did the simple fix close the gap, and which tests pin it. Then design the ticket per run: where the ticket travels (the interrupt buffer's one word is Pyodide's; a second word, or a message; and the case with no shared buffer at all), what the machine issues and checks, which cells of SPEC section 5 and which tests in `machine.test.ts` change. | Opus, high | a design note; R2 as items with sizes; a recommendation to do it or drop it, since report 01 would do it only if B3 fell short |
 | 4 | R3, the harness | A trial, not a design: two views that still hold behaviour after the audit (candidates: `Dialog`, the tree) tested under two candidate libraries. Record what each gets wrong about focus against the browsers, the dependency's size and licence, and how many of the remaining e2e-only behaviours a harness could cover. | Sonnet, high | a comparison and a yes or no; the dependency needs the maintainer's approval |
@@ -285,4 +325,5 @@ of the planning surveys.
   dependency graph. Not checked: whether B2 or B4 also edit `ResetDialog.tsx`, which C1 edits; whether S2's first half
   edits `state.ts` while S5 runs.
 - N7 is a design on paper: nobody has measured how stable screenshots of this page are.
-- The token figures are scaled guesses. The count of 35 pull requests assumes no item is split.
+- The token figures are scaled guesses. The count of 35 pull requests assumes no item is split. The branch model of
+  section 5 was not reviewed.

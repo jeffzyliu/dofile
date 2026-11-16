@@ -96,7 +96,7 @@ Size: S under 150 changed lines, M under 500, L more. Risk is the risk of a beha
 
 | id | Item | Size, risk | Source |
 |---|---|---|---|
-| N1 | `imports.test.ts` and the verbatim-line checks in `site.test.ts:112-113`: replace text pins with Biome restricted imports, compiler types and one path table; keep the transitive reachability test. Each removed assertion gets a named replacement in the same change, including the `ignoreHeldEnter` counts and the writable-signal count. Rewrites `web/CLAUDE.md` lines 82-88 to match. The two outright deletions (the old-names blacklist, the cast counts) wait for decision 8.3. Needed before S5 to S8, not before the B items. | M, low | 07-F1 to F4, F7; 01-F13 |
+| N1 | `imports.test.ts` and the verbatim-line checks in `site.test.ts:112-113`: replace text pins with Biome restricted imports, compiler types and one path table; keep the transitive reachability test. Each removed assertion gets a named replacement in the same change, including the `ignoreHeldEnter` counts and the writable-signal count. Rewrites `web/CLAUDE.md` lines 82-88 to match. The cast count in `machine.ts` stays a test; the old-names blacklist is deleted only if decision 8.3 says so. Needed before S5 to S8, not before the B items. | M, low | 07-F1 to F4, F7; 01-F13 |
 | N2 | Split `app.test.ts` (2,486 lines) along the controllers; shared wiring into `test/wiring.ts`; one `resetState()`. | M, low | 07-F5, F6 |
 | N3 | e2e: one typed hook module in place of three hand-typed copies; named helpers for the roughly 25 places that write a signal; duplicated helpers into `fixtures.ts`; the app's own CSS-class selectors (about 150 uses) moved to roles and names where one exists. | M, low | 08-E1, E2, E5, E8 |
 | N4 | e2e leftovers. First confirm that poc's two other flows ("Run does not save, Save does, reload brings the text back"; "a switch with unsaved edits asks") are covered elsewhere, or port them; add a live test of the `beforeunload` guard; then delete `poc.spec.ts` and rename `step2.spec.ts`. Same change: `web/CLAUDE.md` 92-93, `web/README.md` 97, `docs/test-map.md` 200 and 275, SPEC 1462, 1464, 1696. Runs after N3 (both edit `e2e/`). | S, low | 08-E6, E7, E9 |
@@ -117,7 +117,7 @@ Size: S under 150 changed lines, M under 500, L more. Risk is the risk of a beha
 
 | id | Item | Size, risk | Source |
 |---|---|---|---|
-| C1 | Engine-state predicates (`engineUp`, `runOn`) stated once; no state-name set in a view. The one CSS rule on a state-name prefix stays unless you decide otherwise (decision 8.4): a test requires exactly that rule. | S, low | 05-F12; 06-F6 |
+| C1 | Engine-state predicates (`engineUp`, `runOn`) stated once; no state-name set in a view. The one CSS rule on a state-name prefix goes (decision 8.4): the run controls take a class from the predicate, and the test becomes "no CSS reads `data-engine`". | S, low | 05-F12; 06-F6 |
 | C2 | Registry types into `app/types.ts` (import cycles 10 to 3); break the three controller cycles. | S, low | 06-F9; 03-F11 |
 | C3 | The shared-buffer protocol in one module used by `client.ts` and `worker.ts`: `lazy-part.ts` already names the states; it also gets the header's layout (state, length, tries; `PART_HEADER` is in `snapshot.ts`), and `client.ts` uses the names. | S, low | 01-F12; 02-F5 |
 | C4 | The visitor's words out of the engine controller; one byte formatter; one UTF-8 decode; one "reload a tab from bytes". | S, low | 01-F11; 06-F14; 03-F14 |
@@ -154,7 +154,7 @@ by no survey; W3 and W7 are their first read.
 | S6 | Shared UI: one roving-key hook (the editor tabs onto `Tablist`); the full-size viewer onto the shared modal trap; focus targets through exported handles, not label selectors; owner functions for `dialog`, `phoneTab` and `activeTab`, including the engine controller's writes to `dialog`. | M + M, med | 06-F3, F4, F8, F12; 05-F4; 03-F7, F9; 01-F10 |
 | S7 | Transport: per-start facts onto the start record; the controller's module-level wiring and download handle. **Graphics half** (see "What doing B first would waste", section 4): the graphics part out of `client.ts` into its own module; the four hand-over tests in `client.test.ts` are its net. | M + M, med | 01-F2, F6, F9 |
 | S8 | Worker: split into imported modules (the `/work` mirror with unit tests, boot and loader, a typed declarative dispatch). **Graphics half**: the graphics state into one object that owns it, along the seam `lazy-part.ts` started (decisions pure, `worker.ts` acts). A move, not a redesign. Imported modules are safe; separate chunks are not (iOS runs the worker twice). | M + M + S + M, med to high | 02-F4, F6, F7, F8, F13 |
-| S9 | Build: `scripts/lib` (argument parsing, the shard pool written three times, one `wheels()`); `vite.config.ts` split into plugin modules; **staging half**: file staging out of module load; every snapshot knob in the manifest; the two CI file lists generated from one table; `npm run commands` writes through a temp file; `wheel` stops deleting the release wheels in the root `dist/` and runs once per `e2e`; the denied-commands list generated, not parsed from `browser.py` by regex; `measure-startup.mjs` and `compare-pytest.mjs` moved or folded. If decision 8.2 is yes: delete the `DOFILE_EDITOR_BASE` mode in `vite.config.ts` (six branches), `urls.ts`, `site.test.ts` (five sites), the e2e reads and `measure-startup`, and SPEC section 8. | M + M + S, med | 10-F2 to F10 |
+| S9 | Build: `scripts/lib` (argument parsing, the shard pool written three times, one `wheels()`); `vite.config.ts` split into plugin modules; **staging half**: file staging out of module load; every snapshot knob in the manifest; the two CI file lists generated from one table; `npm run commands` writes through a temp file; `wheel` stops deleting the release wheels in the root `dist/` and runs once per `e2e`; the denied-commands list generated, not parsed from `browser.py` by regex; `measure-startup.mjs` and `compare-pytest.mjs` moved or folded. Decision 8.2 is yes: delete the `DOFILE_EDITOR_BASE` mode in `vite.config.ts` (six branches), `urls.ts`, `site.test.ts` (five sites), the e2e reads and `measure-startup`, and SPEC section 8. | M + M + S, med | 10-F2 to F10 |
 
 ### Redesigns (proposal C only; in the icebox, R1 and R5 first)
 
@@ -297,8 +297,8 @@ the builder's tier or above. A failing check goes to `orchestrate:investigator`;
   `check-snapshot`, `check-pytest`, `check-numeric` and `uv run poe test tests`.
 - Stop rule: two failed fix rounds on an item, or an item at twice its size, goes back to you.
 
-**Optional cross-check.** Your installation has `ponytail:ponytail-audit`, a one-shot whole-repo audit. Running it over
-`web/` after phase 3 would give a read that did not come from this plan. I did not read that skill.
+**Independent cross-check.** After the audit, `ponytail:ponytail-audit` is run over `web/` as a read that did not come
+from this plan (`docs/web-audit-plan.md`, section 4, "After phase 3").
 
 ## 6. Cost
 
@@ -333,29 +333,34 @@ the builder's tier or above. A failing check goes to `orchestrate:investigator`;
 
 ## 8. Decisions for you
 
-Decided: 1 and 9. Open: 2 to 7. Item 8 is a list, not a question.
+Decided: 1, 2, 4, 6, 7, 9, and half of 3. Open: the other half of 3; 5 awaits a last word. Item 8 is a list.
 
 1. **Which proposal.** Decided 2026-11-16: B, widened by decision 9.
-2. **`DOFILE_EDITOR_BASE`.** No workflow, npm script, README or CLAUDE file sets it. SPEC section 8 documents it and
-   already calls it "a one-origin layout the scripts and the e2e tests no longer build"; `site.test.ts` and two e2e
-   specs read it. Delete the mode? I recommend yes, unless you plan to serve the editor under a path.
-3. **Two rules of yours that N1 would delete outright.** `web/CLAUDE.md` states both: the grep for old flag names
-   (line 73) and "`machine.ts` is pure with two casts" (line 85). The unit-test survey calls them history and exact
-   counts that fail on harmless edits. I recommend deleting both and keeping their intent in types (the transport's
-   type knows no state name; the `Ticket` brand). They are your rules, so N1 keeps them until you say.
-4. **The CSS rule on `data-engine^="other-tab"`.** It is the one place CSS reads a state name, and a test requires
-   exactly that rule, so it was deliberate. I recommend leaving it.
-5. **Pull request grouping.** About 13 pull requests straight to `main`, or one integration branch merged once. I
-   recommend the 13: CI tests each merge, and a regression bisects to one theme.
-6. **Fable for S0.** One design note. It decides the shape of the three riskiest items; I recommend yes.
-7. **The engine gaps inside the audit** (B2, B3). They change machine cells and the SPEC. I recommend keeping them in:
-   they are the correctness half of what you asked for.
+2. **`DOFILE_EDITOR_BASE`.** Decided 2026-11-16: delete the mode. The editor is served only on its own subdomain, by
+   its own Worker. (S9 does it.)
+3. **Two rules of yours that N1 would have deleted outright.** `web/CLAUDE.md` states both.
+   - "`machine.ts` is pure with two casts" (line 85): **it stays, whole.** The rule is not wrong: the file has exactly
+     two casts today. My reason to delete the count was that it fails on a harmless third cast. That is weak here: the
+     audit does not restructure `machine.ts`, a cast in the one pure file deserves a look, and the fix is to change a
+     number with a reason. The purity checks beside it move to Biome and the compiler in N1; the count stays a test.
+   - The grep for old flag names (line 73): open. It forbids ordinary local names (`was`, `attempt`) anywhere in `src`
+     and pins history. I recommend deleting it; N1 keeps it until you say.
+4. **The CSS rule on `data-engine^="other-tab"`.** Decided 2026-11-16: it goes. The test beside it does not need the
+   rule; it only guards the rule's spelling. C1 has the run controls take a class from the engine-state predicate, the
+   sheet hides that class, and the test becomes "no CSS reads `data-engine`".
+5. **Pull request grouping.** The maintainer leans to an integration branch; so do I, one per session, not one for
+   the whole audit (`docs/web-audit-plan.md`, section 5, has the reasons). The plan assumes that until confirmed.
+6. **Fable for S0.** Decided 2026-11-16: "yes, authorized. in general, look for opportunities to use Fable when it is
+   appropriate, but of course ask permission and justify." The session that spawns it still asks, as the orchestrate
+   skill requires. The next candidate to ask for is the R1 note.
+7. **The engine gaps inside the audit** (B2, B3). Decided 2026-11-16: inside. Wrong behaviour is fixed and the SPEC
+   changes with it: the code and the SPEC are still kept in step.
 8. **Left out of every proposal**, with the reason:
    - accessibility items, design checks, security headers, deploy checks: out of scope as you set it, including "Tab
      out of the open menu at phone width";
    - `check-pytest` and `check-numeric` in CI: they run at each phase gate here; adding them to CI is a cost decision;
    - splitting the main chunk: CodeMirror is most of it, and the build survey guesses a lazy split buys little;
-   - the phone toast arithmetic: only a real device can verify it;
+   - the phone toast arithmetic: only a real device can verify it (asked of the maintainer 2026-11-16: it may come in);
    - the dark palette stated once: SPEC decision DS-6 already says "not now";
    - fewer e2e specs per browser: needs timings first.
 9. **Which redesigns move into B** (section 4, "What doing B first would waste"). Decided 2026-11-16: all four that
