@@ -963,7 +963,7 @@ export const banners: ReadonlySignal<Banner[]>;          // their owners, throug
 export const announce: ReadonlySignal<string>;           // the hidden live region: through say() (controllers, showToast, views)
 ```
 
-**As built** (steps 3 and 3.5; the step 4 agents write against this and the header of `web/src/app/App.tsx`, which say the same):
+**As built** (steps 3 and 3.5; the step 4 agents write against this):
 - **Files.** The signals: `web/src/app/state.ts` (TypeScript on `@preact/signals-core`, so the Node tests import it as it is;
   components read the same signals through `@preact/signals`). The types above: `web/src/app/types.ts`; section 6's:
   `web/src/engine/types.ts`. Everything in `web/src/engine/`, the controllers and `web/test/` is TypeScript, which Node runs by
@@ -1044,7 +1044,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (localStorage); computed `isPhone` (the layout is the phone's: read it, never pass a `phone` prop) and `hasFiles`
     (the store has a file; folders do not count).
 - **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
-  three times in step 4, its header says which: the phone ⋯'s file actions and the focus on the tree's row when 4a was
+  three times in step 4: the phone ⋯'s file actions and the focus on the tree's row when 4a was
   joined, and the phone's Save off on a .dta tab when 4b and 4d were joined.) A part reads any signal; it writes only those listed for it.
   - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`

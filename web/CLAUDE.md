@@ -48,6 +48,13 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   types); Node strips the types, so imports spell the `.ts` extension and only erasable syntax is allowed (no `enum`,
   `namespace` or constructor parameter properties; `npm run check` enforces it). The engine's types are
   `src/engine/types.ts`; keep them and SPEC section 6 in step.
+- **Comments are sparse; the code says the rest.** A file header is 1-3 lines on the file's role, only when the name does
+  not say it: no inventory of files, callers or signals. JSDoc on a function or type only for what its name and types
+  leave out (units, what null means, an ordering, why). Inline comments only for a non-obvious why: a browser quirk, a
+  race, a workaround. Each fact lives in one place (a type, a test name, this file, a doc): point to it ("the plain
+  logic: tree.ts"), never restate it or describe what another file does. No history or provenance (steps, issue IDs,
+  dates, review rounds: git has them) and no links into `docs/archive/`. Keep hard-won knowledge (browser quirks,
+  measured numbers, why a simpler way failed) on the line that handles it, shortened.
 - **State.** One module of signals, `src/app/state.ts`. A signal with one owner is exported `ReadonlySignal`, so a view
   that assigns it fails `npm run check`. The controllers (`src/app/engine.ts`, `run.ts`, `files.ts`, `start.ts`) are `.ts`
   files that import no `.tsx`, tested in Node (`test/app.test.ts`). Views read signals and call the controllers'
@@ -76,7 +83,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   only in `#send`; only `main.tsx` constructs or connects, and the store is opened once on each thread; each signal has
   one writer; every `:hover` rule is inside `(hover: hover)`. A rule that breaks one fails `npm test`: fix the code, not
   the test, unless the rule has changed. Tests that read source text must not depend on how a line is wrapped.
-- **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the comment above it in `main.tsx`);
+- **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
   `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is
   blocked until the tab lock answers: a test waits for `!store.blocked` before it writes. `<html data-engine>` always holds
   the state name. The tests in `e2e/poc.spec.ts` are fixme until step 6 rewrites them.
@@ -103,8 +110,8 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   not drop either (`test/files.test.ts`, "a run that empties a file"). Contract: SPEC section 7.
 - **One tab owns the files and the engine**: the Web Lock `dofile-engine` (`src/engine/tab.ts`). A tab without it starts
   no worker and writes nothing (`store.blocked`).
-- **Errors from `client.ts` carry a `kind`** (its header lists them); the worker answers `{id, error, name}`. Keep both on
-  a new failure path: the page decides from them, never from the text.
+- **Errors from `client.ts` carry a `kind`** (`ClientError` in `src/engine/types.ts` lists them); the worker answers
+  `{id, error, name}`. Keep both on a new failure path: the page decides from them, never from the text.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
   entry made iOS Safari run it twice.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`

@@ -1,26 +1,10 @@
-// The command line is one line. Text pasted into it with line breaks runs each line in turn (the maintainer's decision,
-// 2026-11-11), as if each were typed and run with Enter, the next only once the one before has ended:
-//  - a paste with no line break, or with line breaks only at its end (one copied line), is an ordinary paste
-//    (pastedLines answers null); the browser then pastes it as it is, and a one-line field drops the breaks;
-//  - the field's text before and after the cursor joins the first and the last pasted line, as a paste would put them;
-//  - lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too;
-//  - with no engine (start.ts) no pasted line runs: the paste is an ordinary paste (pasterun.ts pastePlan checks the
-//    engine first), into a field that is off then;
-//  - with an engine that is there or on its way but not `ready` (the page load, a start, a run) a paste of lines is
-//    refused whole, before anything changes: nothing is pasted, the field keeps its text, and a toast says that none of
-//    the lines ran (pastePlan);
-//  - the lines stop at the first one that is not run (refused: the page load, a start or a run in progress), that ends
-//    with an error (any rc but 0, Break's rc 1 too), or whose run is cut because another tab took the engine (the rest
-//    never go to the engine this tab gets back). The rest are not run, and the page says how many in a toast; a refused
-//    line goes back into the field, as a typed one stays, unless the field is off by then (pasterun.ts putBack);
-//  - a block (`forvalues i = 1/3 {` ... `}`, `program define` ... `end`, `mata` ... `end`), a comment that goes on to
-//    the next lines (`/*` ... `*/`) or a command continued with `///` cannot run this way, one line at a time (a pasted
-//    `/*`, `drop _all`, `*/` would run `drop _all`): the lines stop before the line that opens it (it is not sent), and
-//    the toast says to run it from the editor.
-// Plain TypeScript, no DOM: tested in Node (test/editor.test.ts). log/CommandLine.tsx gives runInTurn the real runner.
+// The command line is one line: text pasted into it with line breaks runs each line in turn, as if each were typed and
+// run with Enter, the next only once the one before has ended. No DOM, so Node tests it.
 import { opensEndBlock } from "./align.ts";
 
-/** The lines a paste runs, or null when the pasted text has no line break (an ordinary paste). */
+/** The lines a paste runs, or null for an ordinary paste: no line break, or breaks only at the end (one copied line),
+ *  which a one-line field drops. The field's text before and after the cursor joins the first and the last pasted line,
+ *  as a paste would put them. Lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too. */
 export function pastedLines(before: string, pasted: string, after: string): string[] | null {
   const text = pasted.replace(/[\r\n]+$/, ""); // trailing line breaks do not count: one copied line is an ordinary paste
   if (!/[\r\n]/.test(text)) return null;
@@ -54,12 +38,15 @@ function opensComment(line: string): boolean {
   return depth > 0;
 }
 
-/** Whether a line cannot run on its own: it opens a block (`{` at its end, `program define`, `mata`), a comment that
+/** Whether a line cannot run on its own (one line at a time, a pasted comment around `drop _all` would run it): it
+ *  opens a block (`{` at its end, `program define`, `mata`), a comment that
  *  goes on (`/*` with no `*/ `) or goes on to the next line (`; ///`). */
 export const opensBlock = (line: string) =>
   /\{\s*$/.test(line) || line.includes("///") || opensEndBlock(line) || opensComment(line);
 
-/** Run `lines` one after the other through `runOne`, as the module's header says. */
+/** Run `lines` one after the other through `runOne`, each once the one before has ended. They stop at the first line
+ *  that is refused, that ends with any rc but 0 (Break's rc 1 too), or whose run is cut because another tab took the
+ *  engine; and before a line that opensBlock, which is not sent. */
 export async function runInTurn(lines: readonly string[], runOne: RunOne): Promise<InTurn> {
   for (let i = 0; i < lines.length; i++) {
     if (opensBlock(lines[i])) return { total: lines.length, ran: i, stop: { line: i + 1, why: "block" } };

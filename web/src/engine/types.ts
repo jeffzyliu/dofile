@@ -222,7 +222,16 @@ export interface DescribeArgs {
 
 // ---- client.ts ----
 
-/** client.ts's errors: an Error with a `kind` (the header of client.ts lists them). */
+/** An error the transport (client.ts) rejects with. By `kind`:
+ *  - "failed": download() or build(): the list or a file did not arrive as the list says (`reason` "download"), or the
+ *    build has no snapshot, or the Cache broke (`reason` "unknown"). Also a call cut because its worker's start failed.
+ *  - "failed-twice": a call cut because its worker failed twice while starting.
+ *  - "updated": the list is of another build than the page (checkBuild); the page must reload.
+ *  - "reset": a call cut by a reset; `reset` says which.
+ *  - "stopped": a call cut because another tab took the engine.
+ *  - "no-engine": query() or run() with no live worker.
+ *  - "op": the worker answered the call with an error; `name` is the worker's error name.
+ *  download() rejects with an AbortError instead when its signal aborts. */
 export interface ClientError extends Error {
   kind: "failed" | "failed-twice" | "updated" | "reset" | "stopped" | "no-engine" | "op";
   reason?: "no-wasm" | "download" | "memory" | "unknown"; // "failed", from download() and build()
@@ -255,6 +264,8 @@ export interface StartFiles {
   compressed: number; // every file's compressed size, the page's own included
   download: number; // the compressed size of the files `download()` fetches (`download: true`): the size the visitor is told
   snapshot: SnapshotFiles; // the snapshot's two big files, for `mount`
+  // `path` is relative to the list's URL; `size` is on disk, `compressed` as a host sends it; `download`: download()
+  // fetches it (the rest came with the page)
   files: { path: string; size: number; compressed: number; download: boolean }[];
 }
 

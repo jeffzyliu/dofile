@@ -1,27 +1,6 @@
-// The transport: the page's side of the engine worker (worker.ts), and the build's files before a worker exists. It
-// decides nothing. The state machine (machine.ts) says when a worker starts and ends; the controller (src/app/engine.ts)
-// performs that here. Its interface is three parts (docs/archive/prototype1-step3.5-c-design.md, item 7):
-//   Reader     query(op, args): the read ops (types.ts, ReadOps). Safe at any time, from anywhere.
-//   Lifecycle  start(n, build, reply), end(n, ending), run(n, args, onLog), interrupt(n): what changes the engine. Only the
-//              effect performer holds this.
-//   Builds     cached(), download(), build(), forgetDownload(): the build's list and its files in the Cache.
-// `n` is the live worker's number: the performer passes the effect's ticket, and the transport only compares it. It never
-// puts it on an event: what a worker's start has to say goes through the `reply` given with it (stage, started,
-// start-failed, crashed), which the controller has bound to the ticket.
-// The transport does not restart, count crashes, hold a timer, make run results or know a state name, and it awaits
-// nothing before it makes a worker. One worker is live at a time: start() with one still live throws.
-//
-// Errors. Every error the transport rejects with has a `kind`:
-//   "failed"        download() or build(): the build's list or a file did not arrive as the list says (`reason`
-//                   "download"), or the build has no snapshot, or the Cache broke (`reason` "unknown"). Also a call cut
-//                   because its worker's start failed.
-//   "failed-twice"  the call was cut because its worker failed twice while starting.
-//   "updated"       download() or build(): the build's list is of another build than the page (checkBuild); reload.
-//   "reset"         the call was cut by a reset. `reset`: "break" | "crash" | "user".
-//   "stopped"       the call was cut because another tab took the engine.
-//   "no-engine"     query() or run() with no live worker.
-//   "op"            the worker answered the call with an error; `name` is the worker's error name.
-// download() rejects with an AbortError (the signal's reason when that is one) when its signal aborts.
+// The transport: the page's side of the engine worker (worker.ts), and the build's start files before a worker exists.
+// It decides nothing: the controller (app/engine.ts) calls it when the state machine says. One worker is live at a
+// time; `n` is that worker's ticket, which the transport only compares.
 
 import type { Ending, Reply } from "./machine.ts";
 import { isStorageRefusal, openCache, PART_HEADER } from "./snapshot.ts";
@@ -94,14 +73,14 @@ export interface Builds {
 
 const fail = (message: string, kind: ClientError["kind"], more: Partial<ClientError> = {}): ClientError =>
   Object.assign(new Error(message), { kind, ...more });
-// what download() rejects with when the caller's signal aborted: an AbortError, whatever reason the caller gave
+/** An AbortError, whatever reason the caller aborted with. */
 const aborted = (signal: AbortSignal) =>
   signal.reason?.name === "AbortError"
     ? signal.reason
     : new DOMException(String(signal.reason?.message ?? signal.reason ?? "aborted"), "AbortError");
 
-// Delete from `cache` every entry that is not one of the list's download files, at the address the page and the worker
-// use for it (relative to the list). Never rejects: a Cache that will not say or delete leaves the entries, as before.
+/** Delete every entry of `cache` that is not one of the list's download files at its address (relative to the list).
+ *  Never rejects. */
 async function dropUnlisted(cache: Cache, list: StartFiles & { base: string }): Promise<void> {
   const keep = new Set(list.files.filter((f) => f.download).map((f) => new URL(f.path, list.base).href));
   // a lazy snapshot's graphics part: not a start file, the page's #graphics keeps it in the same Cache after its first fetch
@@ -145,18 +124,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   #graphics: GraphicsPart | null = null;
   #graphicsListeners = new Set<(p: GraphicsProgress) => void>();
 
-  // createWorker: () => a Worker (in the page: new Worker(new URL("./worker.ts", import.meta.url), {type: "module"}))
-  // snapshot: the URL (ending in "/") of a snapshot built by scripts/make-snapshot.mjs, to start from instead of
-  // installing the packages. Its build (`built`, its two big files) comes from startFiles, which a snapshot start needs.
-  // brotli: "wasm" forces brotli-wasm for the snapshot instead of the browser's own decoder (worker.ts), to compare them
-  // memcap: the cap on the engine's WebAssembly heap in MiB (memcap.ts, the page's rule), sent to each worker with mount; none: no cap
-  // extraWheels: more wheels installed after the dofile one (web/wheels/: pyreadstat), each a URL or {name, bytes} like `wheel`
-  // buildId: the page's build id (scripts/build-id.ts, compiled in by vite.config.ts); a build's list with another one is of
-  //   another build, or (in development) of a stale snapshot, and is refused (checkBuild)
-  // store: the page's FileStore (store.ts). While a worker is live, the store tells it of each change the page makes.
-  // startFiles: the URL of the build's list of start files (start-files.json), or the list itself; download(), build() and
-  //   cached() need it
-  // fetch, caches, wasm: the browser's, unless the tests give their own
+  // snapshot: the URL (ending in "/") of a snapshot from scripts/make-snapshot.mjs; a snapshot start needs startFiles.
+  // brotli: "wasm" forces brotli-wasm over the browser's own decoder (worker.ts), to compare them.
+  // memcap: the cap on the engine's WebAssembly heap, in MiB (memcap.ts); none: no cap.
+  // extraWheels: wheels installed after the dofile one (web/wheels/), each like `wheel`.
+  // buildId: the page's build id (scripts/build-id.ts); a list of start files with another id is refused (checkBuild).
+  // store: while a worker is live, the store tells it of each change the page makes.
+  // startFiles: the URL of start-files.json, or the list itself; download(), build() and cached() need it.
   constructor({
     createWorker,
     wheel,
@@ -212,13 +186,10 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     return this.#live?.worker ?? null;
   }
 
-  // ---- Builds: the build's list and its files in the Cache ----
+  // ---- Builds ----
 
-  // The build's list of start files: { built, buildId, snapshot, files: [{ path, size, compressed, download }], size,
-  // compressed } (scripts/start-files.ts).
-  // `path` is relative to the list's own URL; `size` is the file on disk and `compressed` what a host sends; `download`
-  // marks the files download() fetches (the rest came with the page).
-  // A list that cannot be fetched or read (offline, a host's error page) rejects with kind "failed", reason "download".
+  /** The build's list of start files. `base` is the list's own URL, which the files' paths are relative to. A list that
+   *  cannot be fetched or read (offline, a host's error page) rejects with kind "failed", reason "download". */
   async startList(signal: AbortSignal | undefined = undefined): Promise<StartFiles & { base: string }> {
     if (typeof this.startFiles !== "string") return { base: globalThis.location?.href, ...this.startFiles! };
     try {
@@ -231,10 +202,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
   }
 
-  // The one comparison of the page's build with the list's: the build id (scripts/build-id.ts: the build's stamp, the wheels'
-  // hashes, the Pyodide version). A list of another build (the site was deployed again since the page loaded; in development,
-  // a snapshot of other wheels or another Pyodide than the page, or a dev server restarted since the page loaded) throws kind
-  // "updated". A page without an id (some Node tests) skips it.
+  /** The one comparison of the page's build with the list's. A list of another build throws kind "updated": the site
+   *  was deployed again since the page loaded, or in development the snapshot is stale or the dev server restarted. A
+   *  page without a build id (some Node tests) skips it. */
   checkBuild(list: StartFiles): void {
     if (this.buildId && list.buildId !== this.buildId) {
       throw fail(
@@ -246,8 +216,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
   }
 
-  // What `mount` needs of a list, after the checks: a list of another build is "updated", whatever it lacks; a build with
-  // no snapshot rejects with kind "failed", reason "unknown".
+  /** What `mount` needs of a list. A list of another build is "updated" whatever it lacks; a build with no snapshot is
+   *  kind "failed", reason "unknown". */
   #buildOf(list: StartFiles): Build {
     const none = () =>
       fail("no snapshot in this build: run `npm run snapshot` in web/", "failed", { reason: "unknown" });
@@ -257,18 +227,16 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     return { built: list.built, files: list.snapshot };
   }
 
-  // The build's list, fetched fresh and checked: what `mount` needs of it for a snapshot start. null for the normal start
-  // (?snapshot=0), which has no list. Every restart asks for it (the machine's `starting-list`): the Cache may have been
-  // evicted since the first start, and the worker would then fetch the files of whatever build the site has now. A list
-  // that does not arrive rejects with kind "failed", reason "download"; one of another build with kind "updated".
+  /** The build's list, fetched fresh and checked; null for the normal start (?snapshot=0). Every restart fetches it
+   *  again: the Cache may have been evicted since the first start, and the worker would then fetch whatever build the
+   *  site has now. */
   async build(): Promise<Build | null> {
     if (!this.snapshot) return null;
     return this.#buildOf(await this.startList());
   }
 
-  // Whether every file the build's list marks `download` is in the Cache `dofile-snapshot-<built>` of the list's build: the
-  // page then starts without asking. False when it cannot tell (no snapshot start, no Cache API, the list cannot be fetched,
-  // offline too: no start works offline, since a start needs the list). Never rejects; writes nothing.
+  /** Whether the Cache holds every file the list marks `download`, so the page can start without asking. False when it
+   *  cannot tell (no snapshot start, no Cache API, the list does not arrive, offline). Never rejects or writes. */
   async cached(): Promise<boolean> {
     try {
       if (!this.snapshot || !this.caches) return false;
@@ -283,8 +251,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
   }
 
-  // Delete the start files download() kept (every `dofile-snapshot-*` Cache), so that the next page load downloads them
-  // fresh. The page calls it when a start failed twice for a reason the files may be at fault for. Never rejects.
+  /** Delete every `dofile-snapshot-*` Cache, so the next page load downloads the start files fresh (after a start
+   *  failed twice for a reason the files may be at fault for). Never rejects. */
   async forgetDownload(): Promise<void> {
     try {
       for (const name of (await this.caches?.keys()) ?? [])
@@ -294,17 +262,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
   }
 
-  // Fetch every file the start needs into the Cache the worker reads, before a worker exists, counting bytes.
-  // onProgress({ received, total }): bytes as a host sends them (compressed): the total is the list's, and each file counts
-  // its decoded bytes scaled to its compressed size. The files that came with the page count as received from the start.
-  // A file that is already in the cache is not fetched again, so a second try goes on where the first one stopped (by
-  // file: an unfinished file starts again). `signal` aborts the fetches: download() then rejects with an AbortError.
-  // A file that does not arrive whole (a failed fetch, another size than the list says) is not kept, and download()
-  // rejects (kind "failed", reason "download"); a list from another build than the page rejects with kind "updated"; a
-  // Cache that fails other than by refusing storage rejects with kind "failed", reason "unknown".
-  // Resolves with { cached: true, received, total, build }, or { cached: false, why, build } when there is nothing to fill
-  // (no snapshot start, no Cache API, storage refused): the worker then downloads by itself, uncounted. `build`: what
-  // `mount` needs of the list just checked (null: the normal start), so the start that follows fetches no list.
+  /** Fetch the start files into the Cache the worker reads, before a worker exists. `onProgress` counts bytes as a host
+   *  sends them (compressed): each file's decoded bytes are scaled to its compressed size, and the files that came with
+   *  the page count as received from the start. A file already cached is not fetched again, so a second try resumes by
+   *  file. A file that does not arrive whole is not kept. Rejects with an AbortError when `signal` aborts; kind
+   *  "failed", reason "download" for a missing or short file; "updated" for another build's list; kind "failed", reason
+   *  "unknown" for a Cache that breaks other than by refusing storage. Resolves `cached: false` when there is nothing
+   *  to fill (no snapshot start, no Cache API, storage refused): the worker then downloads by itself, uncounted. */
   async download({
     onProgress = (_progress) => {},
     signal = undefined,
@@ -324,11 +288,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };
       throw fail(String(e?.message ?? e), "failed", { reason: "unknown" });
     }
-    // An entry of this Cache that the list does not name is never read again: the same build's files kept at another
-    // address on this origin (the editor moved to another path with the snapshot unchanged, so the Cache's name
-    // stayed). Drop it, or it keeps tens of MB until the next snapshot. The list's own files stay, so a download that
-    // resumes keeps what it has; and not while a worker is live, which may be reading this Cache (the machine downloads
-    // only before a worker exists).
+    // Entries the list does not name are the same build's files at another address (the editor moved, the snapshot
+    // did not): nothing reads them again, and they keep tens of MB. Skipped while a worker is live, which may be
+    // reading this Cache.
     if (!this.#live) await dropUnlisted(cache, list);
     // the files below, not the page's own (they are here already) nor a lazy graphics part, which follows the start
     // (#graphics; the dialog says how much, from its progress, said here first)
@@ -570,13 +532,12 @@ export class EngineClient implements Reader, Lifecycle, Builds {
 
   // ---- Lifecycle: what changes the engine. Only the effect performer calls these. ----
 
-  // Make worker `n` and start the engine in it: mount, boot, startup, in order. What happens is said through `reply`:
-  // `stage` as each stage begins, then `started`; `start-failed` when there is no WebAssembly, the worker cannot be made,
-  // or mount, boot or startup fails in the worker; `crashed` when the worker errors or the browser closes the file
-  // storage, now or at any time while it is live. It fetches nothing first: `build` is what `mount` needs of the build's
-  // list (null: the normal start). The worker is made before start() returns, so calls made right after it queue behind
-  // "mount" in the worker. A worker that failed is not ended here: the machine says so (end()).
-  // With a worker still live it throws: the machine always ends a worker before it starts another.
+  /** Make worker `n` and start the engine in it: mount, boot, startup. `reply` says `stage` as each begins, then
+   *  `started`; `start-failed` with no WebAssembly, no worker, or a step that failed in the worker; `crashed` when the
+   *  worker errors or the browser closes the file storage, at any time while it is live. `build` is what `mount` needs
+   *  (null: the normal start); nothing is fetched first. The worker exists when start() returns, so calls made right
+   *  after it queue behind mount. A worker that failed is not ended here: the machine ends it. Throws while another
+   *  worker is live. */
   start(n: number, build: Build | null, reply: Reply<"start-worker">): void {
     if (this.#live) throw new Error(`start(${n}): worker ${this.#live.n} is still live`);
     if (!this.wasm) {
@@ -598,8 +559,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       interrupt: typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4)),
     };
     this.#live = live;
-    // A message for a call that end() has dropped finds nothing in `pending`. A stage or an error of a worker that was
-    // ended is still said: its reply carries that worker's ticket, and the machine drops what is out of date.
+    // A stage or an error of an ended worker is still said: its reply carries that worker's ticket, and the machine
+    // drops what is out of date.
     worker.onmessage = ({ data }: MessageEvent<FromWorker>) => {
       if ("stage" in data) return reply({ type: "stage", stage: data.stage });
       if ("graphics" in data) {
@@ -617,11 +578,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       const what = String(e?.message ?? e);
       reply({ type: "crashed", cause: "error", reason: reasonOf({ name: e?.name, message: what }), detail: what });
     };
-    // The page's file changes reach this worker from now on: the store writes the change and a journal row first, then
-    // calls `sync`, and the worker takes the store's version of what the journal names. A sync that end() cuts off loses
-    // nothing: its row stays, and the next worker copies the whole store. If the browser closes the database under the
-    // page (another page deleted it, "Clear site data"), /work may hold files the store no longer has, which no journal
-    // row says: that is `crashed` with cause "storage", so that a new worker copies the store as it is now.
+    // A sync that end() cuts loses nothing: its journal row stays, and the next worker copies the whole store. A
+    // database the browser closes under the page ("Clear site data") may leave /work with files no row explains: that
+    // is `crashed`, cause "storage", so that a new worker copies the store as it is.
     const sync = () => {
       this.#send(live, "sync", undefined).catch((e: ClientError) => {
         if (e.kind === "op")
@@ -655,7 +614,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         interruptBuffer: live.interrupt,
         ...(part && { graphics: { file: part.file, sab: part.sab } }),
       });
-      const startup = await this.#send(live, "startup", undefined); // where the start's time went: the page shows it in its status line
+      const startup = await this.#send(live, "startup", undefined);
       return { about, startup };
     };
     steps().then(
@@ -664,8 +623,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         this.about = about;
         this.startup = startup;
         this.storeError = startup?.storeError ?? null;
-        // A worker with no store cannot read the journal, so the page's changes cannot reach it: the store is detached, and
-        // writes no row that no worker would clear. The start's storeError has said the files are not saved.
+        // A worker with no store cannot read the journal: detach the store, so it writes no row no worker would clear.
         if (this.storeError) this.store?.attach(null);
         reply({ type: "started" });
         this.#wantGraphics(build);
@@ -677,9 +635,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     );
   }
 
-  // End worker `n`: it is terminated, the store is detached from it, and every call of it that is pending rejects with a
-  // ClientError of the ending's kind (`reason` is its message). With no live worker it does nothing (a start that failed
-  // before a worker existed). With another worker live it throws: a bug in the caller.
+  /** Terminate worker `n`, detach the store, and reject its pending calls with a ClientError of the ending's kind (the
+   *  ending's `reason` is the message). With no live worker it does nothing (a start that failed before a worker
+   *  existed); with another worker live it throws. */
   end(n: number, ending: Ending): void {
     const live = this.#live;
     if (!live) return;
@@ -693,33 +651,32 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     for (const p of pending) p.reject(live.ended);
   }
 
-  // Run code on worker `n`. onLog(text) is called with each chunk of the log while the run prints; the chunks are a
-  // preview: the result's `log` replaces them. Resolves with the worker's result. Rejects with kind "op" when the worker
-  // answered the op with an error (that worker stays), and with the ending's kind when the worker was ended meanwhile.
+  /** `onLog` gets each chunk of the log as the run prints: a preview, which the result's `log` replaces. Rejects with
+   *  kind "op" when the worker answered with an error (the worker stays), or the ending's kind when it was ended
+   *  meanwhile. */
   run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
     const live = this.#live;
     if (live?.n !== n) return Promise.reject(fail("the engine is not running", "no-engine"));
     return this.#send(live, "run", args, onLog);
   }
 
-  // Break: ask the run on worker `n` to stop at its next safe point (SIGINT in the shared buffer; the worker clears it
-  // when a run starts). Nothing to do without a SharedArrayBuffer: the machine resets instead (machine.ts, BREAK).
+  /** Break: SIGINT in the shared buffer stops the run at its next safe point (the worker clears it when a run starts).
+   *  Without a SharedArrayBuffer it does nothing: the machine resets instead. */
   interrupt(n: number): void {
     const live = this.#live;
     if (live?.n === n && live.interrupt) Atomics.store(live.interrupt, 0, 2); // SIGINT
   }
 
-  // ---- Reader: the read ops. Anyone may ask. ----
+  // ---- Reader ----
 
-  // A read op (types.ts, ReadOps). With no live worker it rejects with kind "no-engine". While the worker starts or runs
-  // it waits in the worker's queue; if its worker is ended first it rejects with the ending's kind.
+  /** While the worker starts or runs, the call waits in its queue. Rejects with kind "no-engine" with no live worker,
+   *  or with the ending's kind when its worker is ended first. */
   query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
     if (!this.#live) return Promise.reject(fail("the engine is not running", "no-engine"));
     return this.#send(this.#live, op, args);
   }
 
-  // THE ONE PLACE the worker is posted to. The call is kept in the worker's own record until it is answered or the
-  // worker is ended; on a record that has ended it rejects at once with what end() said.
+  // The one place the worker is posted to. On an ended record a call rejects at once with what end() said.
   #send<K extends Op>(
     live: Live,
     op: K,

@@ -106,8 +106,8 @@ whether to take over, and the tab that loses the lock ends its engine. Web Locks
 a LAN there is no lock and every tab owns the engine. HTTPS is not affected.
 
 **The test hook.** With `?test` in the URL the page sets `window.__dofile = { engine, store, start, persisted,
-engineBytes, state, run, breakRun, reset, selection, drops, focusWanted }` for the browser tests (what each is: the comment
-above it in `src/main.tsx`); `?test=manual` also starts no engine until the test calls `start()`. Without the flag there is
+engineBytes, state, run, breakRun, reset, selection, drops, focusWanted }` for the browser tests (the object is in
+`src/main.tsx`); `?test=manual` also starts no engine until the test calls `start()`. Without the flag there is
 no such object.
 
 **The download size** shown before the engine is fetched is written by the build into `dist/app/index.html`

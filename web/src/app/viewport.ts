@@ -1,29 +1,6 @@
-// The phone's on-screen keyboard. By default iOS Safari, Chrome (108+) and Firefox (132+) on Android shrink only the
-// visual viewport when the keyboard opens, not the layout viewport (index.html sets no `interactive-widget`, so Android
-// keeps that default): the keyboard covers the bottom of the page, where the command line and the tab bar are. So on a
-// phone this module watches window.visualViewport and, while the keyboard is open, sets on <html>:
-//   data-keyboard     the keyboard is open: the visual viewport is shorter than the layout viewport by more than
-//                     KEYBOARD px, at a zoom of 1;
-//   --vv-height       the height of the visible area above the keyboard, in CSS px.
-// app.css then gives .app that height from the top, hides the tab bar and puts the toast above the command line there.
-// A browser that still shrinks the layout viewport (an older one) shows no difference between the two; there the
-// keyboard counts as open while a text field has the focus and the page is more than KEYBOARD px shorter than the
-// tallest it has been at this width (a new width, a rotation, starts again). The same attributes are set.
-// With the keyboard closed, nothing is set and .app simply fills the window (position: fixed; inset: 0).
-// A page that is still scrolled as the keyboard closes is scrolled back then too: .app is fixed to the layout viewport, which a pan shortens.
-// Zoomed in (a pinch), the visual viewport is small because of the zoom, not a keyboard: nothing is set then either.
-//
-// Safari also pans the page up to show the focused field, before the page hears of it (iPhone measurements:
-// docs/phone-keyboard-experiment.md). So while the keyboard is open a pan is scrolled straight back, and .app stays at
-// the top: the pan is on screen for one frame. The command line avoids it altogether by taking the focus itself, with
-// preventScroll (log/CommandLine.tsx). Scrolling back also hides the editor's caret again, so the caret is scrolled into
-// the editor's visible part (above the keyboard) when the keyboard opens, and again once it has settled.
-// iOS also lets a drag scroll the window by the keyboard's height, from anything that cannot scroll, even with
-// overflow: hidden (a bar, a short pane, the page's edge); the unpan above would only snap it back each frame. So while
-// the keyboard is open a touchmove guard cancels a drag that no scroller under the finger can follow (CSS touch-action
-// was not enough on an iPhone). The guard and its limits: docs/phone-keyboard-experiment.md, "The drag guard".
-// A real keyboard cannot be tested here: test/app.test.ts drives this with a fake visualViewport, and e2e/keyboard.spec.ts
-// with a stand-in one.
+// The phone's on-screen keyboard. While it is open, <html> gets `data-keyboard` and `--vv-height` (the height of the
+// visible area above it, in CSS px), and app.css fits .app to that area. The iPhone measurements behind it:
+// docs/phone-keyboard-experiment.md.
 import { EditorView } from "@codemirror/view";
 
 /** How much shorter than the layout viewport the visual viewport must be to count as a keyboard (a keyboard is about 260
@@ -114,7 +91,10 @@ export function watchViewport({
   let width = 0,
     tallest = 0, // the tallest layout viewport seen at this width
     quiet = 0; // counts the updates, so only the last one's timer reveals
-  // the drag guard (docs/phone-keyboard-experiment.md): a touchmove nothing under the finger can scroll with is cancelled
+  // The drag guard. While the keyboard is open, iOS lets a drag scroll the window by the keyboard's height from
+  // anything that cannot scroll, even with overflow: hidden; scrolling back would only snap it each frame, and CSS
+  // touch-action was not enough on an iPhone. So a touchmove that nothing under the finger can follow is cancelled. Its
+  // limits: docs/phone-keyboard-experiment.md, "The drag guard".
   let x = 0,
     y = 0,
     guarding = false;
@@ -146,16 +126,23 @@ export function watchViewport({
       tallest = 0;
     }
     tallest = Math.max(tallest, h);
+    // zoomed in (a pinch), the visual viewport is small because of the zoom, not a keyboard
     const unzoomed = Math.abs(vv.scale - 1) < 0.01;
-    const covered = h - vv.height > KEYBOARD; // the keyboard covers the layout viewport (the default)
-    const shrunk = typing() && tallest - h > KEYBOARD; // or the browser shrank the layout viewport for it
+    // iOS Safari, Chrome 108+ and Firefox 132+ on Android shrink only the visual viewport for the keyboard, which then
+    // covers the page's bottom (index.html sets no `interactive-widget`, so Android keeps that default)
+    const covered = h - vv.height > KEYBOARD;
+    // an older browser shrinks the layout viewport too, so the two match: compare with the tallest at this width
+    const shrunk = typing() && tallest - h > KEYBOARD;
     const open = enabled() && unzoomed && (covered || shrunk);
     if (open) {
       const opening = !("keyboard" in root.dataset);
       root.style.setProperty("--vv-height", `${vv.height}px`);
       root.dataset.keyboard = "";
+      // Safari pans the page up to the focused field before the page hears of it: scroll straight back, so the pan
+      // shows for one frame and .app stays at the top
       if (vv.offsetTop > 0 || panned()) scrollTop();
       guard(true);
+      // scrolling back hides the editor's caret again: reveal it now, and again once the viewport has settled
       if (opening) reveal();
       const n = ++quiet;
       later(() => {
@@ -165,8 +152,8 @@ export function watchViewport({
       root.style.removeProperty("--vv-height");
       delete root.dataset.keyboard;
       guard(false);
-      // a scroll that came after the last update (reveal's scrollIntoView on a field that then lost the focus, a quick
-      // tap away) would keep the page panned, so .app, fixed to the layout viewport, stays short (docs/phone-keyboard-experiment.md)
+      // a scroll after the last update (reveal on a field that then lost the focus) would keep the page panned, and
+      // .app, fixed to the layout viewport, short
       if (panned()) scrollTop();
     }
   };
@@ -190,10 +177,9 @@ export function watchViewport({
   };
 }
 
-/** The focused editor's (CodeMirror's) caret scrolled into the editor's visible part, CARET_MARGIN px clear of its
- *  edges; .app, and so the editor, ends above the keyboard. CodeMirror's own scrollIntoView, in its next measure: the
- *  page's layout is final there (the pan scrolled back), and it knows where the caret is on any line, where a DOM range
- *  has no box on an empty line. Nothing when the focus is not in an editor. */
+/** Scroll the focused editor's caret into its visible part (the editor ends above the keyboard). CodeMirror's own
+ *  scrollIntoView, in its next measure: the layout is final there (the pan scrolled back), and it finds the caret on an
+ *  empty line, where a DOM range has no box. */
 function revealCaret() {
   const active = globalThis.document?.activeElement;
   const editor = active?.closest<HTMLElement>(".cm-editor");
@@ -202,5 +188,5 @@ function revealCaret() {
     view.dispatch({
       effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "nearest", yMargin: CARET_MARGIN }),
     });
-  else if (active?.matches?.("input, textarea") && isTextField(active)) active.scrollIntoView({ block: "nearest" }); // a plain field (the Files pane's draft) in a scroller; scroll-margin on the field keeps its reason line in view
+  else if (active?.matches?.("input, textarea") && isTextField(active)) active.scrollIntoView({ block: "nearest" }); // a plain field in a scroller (the Files pane's draft)
 }
