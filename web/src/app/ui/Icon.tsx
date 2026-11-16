@@ -12,6 +12,7 @@ export type IconName =
   | "graph"
   | "file"
   | "check"
+  | "copy"
   | "warn"
   | "split"
   | "unsplit";
