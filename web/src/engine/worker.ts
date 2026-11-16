@@ -497,7 +497,7 @@ let share: {
   idleTimer: ReturnType<typeof setTimeout> | 0 = 0,
   decode: { steps: Generator<number, Uint8Array, void>; t0: number; how: string; longest: number } | null = null,
   native = false, // the browser's decoder is unpacking it (idle only)
-  decoded: { raw: Uint8Array; t0: number; how: string; longest: number } | null = null, // unpacked, not yet written
+  decoded: { raw: Uint8Array; secs: number; how: string; longest: number } | null = null, // unpacked, not yet written
   graphicsWritten = false,
   askedAt: number | null = null, // the tries when this run asked the page to fetch a failed part again
   graphicsError = "", // the part arrived damaged; said once, by the next graph
@@ -555,7 +555,7 @@ function decodeStep(part?: Uint8Array): Uint8Array | null {
     r = decode.steps.next();
   decode.longest = Math.max(decode.longest, since(t));
   if (!r.done) return null;
-  decoded = { raw: r.value, t0: decode.t0, how: decode.how, longest: decode.longest };
+  decoded = { raw: r.value, secs: since(decode.t0), how: decode.how, longest: decode.longest };
   decode = null;
   return r.value;
 }
@@ -567,7 +567,7 @@ function writePart(where: string) {
   graphicsWritten = true;
   decoded = decode = null;
   console.info(
-    `[dofile] graphics part: written ${where} (unpack (${d.how}) ${since(d.t0).toFixed(2)}s, longest step ${d.longest.toFixed(2)}s; write ${n} files ${since(tWrite).toFixed(2)}s)`,
+    `[dofile] graphics part: written ${where} (unpack (${d.how}) ${d.secs.toFixed(2)}s, longest step ${d.longest.toFixed(2)}s; write ${n} files ${since(tWrite).toFixed(2)}s)`,
   );
 }
 
@@ -783,7 +783,8 @@ function startNative() {
     .then(
       (raw) => {
         // a graph that came meanwhile unpacked the part itself (see nativeSoon): this result is spare
-        if (!graphicsWritten && !decode && !decoded) decoded = { raw, t0, how: "native", longest: 0 };
+        // secs: to the decode's end; the write waits for IDLE_MS more
+        if (!graphicsWritten && !decode && !decoded) decoded = { raw, secs: since(t0), how: "native", longest: 0 };
       },
       (e) => {
         console.warn(`[dofile] graphics part: native brotli failed (${e?.message ?? e}); using brotli-wasm`);
