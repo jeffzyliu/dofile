@@ -78,8 +78,8 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/site/**"],
-                    "message": "The editor imports nothing of src/site/"
+                    "group": ["**/site/**", "**/engine/machine*"],
+                    "message": "The editor imports nothing of src/site/; main.tsx never imports the machine: the controller does"
                   }
                 ]
               }

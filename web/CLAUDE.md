@@ -81,14 +81,14 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   that changed nothing is recorded (`drops()`).
 - **Architecture rules are Biome rules, a type check and `test/imports.test.ts`**; a violation fails `npm run check`,
   `npm run lint:strict` or `npm test`: fix the code, not the rule, unless the rule has changed. `biome.json`, by folder:
-  a view imports no transport, machine or `main.tsx`; `engine/` imports no `app/`; no `.ts` imports a `.tsx`;
+  a view imports no transport, machine or `main.tsx`, and `main.tsx` no machine; `engine/` imports no `app/`; no `.ts` imports a `.tsx`;
   `src/site/` imports only `src/site/` and `src/styles/`, and the editor nothing of it; a relative import in a `.ts`
   file spells its extension; `machine.ts` names no clock, timer, console or global. `biome/architecture.grit` (a Biome
-  plugin: each rule's files are a regex on `$filename`, in that file): `machine.ts` imports types only and no random
-  number; `src/app/` takes only types from the transport; only `main.tsx` constructs the transport and the Worker,
+  plugin: each rule's files are a regex on `$filename`, in that file): `machine.ts` imports types only (a default import is left to `tsc`) and names no random number; `src/app/` takes only types from the transport; only `main.tsx` constructs the transport and the Worker,
   connects the controllers, takes the tab lock and calls `open()`; `openStore()` is called only in `src/app/store.ts`
-  and `src/engine/`; only the controller calls `transition()` and `initial()`, and its queue is pushed to only in
-  `enqueue()`, which only `dispatch()` and `reply()` call; each writer object is named only by `state.ts` and its owner;
+  (the page) and `src/engine/worker*.ts` (the Worker); only the controller calls `transition()` and `initial()`, and its
+  queue is written only in `enqueue()` (and emptied in `connectEngine()`), which only `dispatch()` and `reply()` call;
+  `reply()` has no cast and puts its own effect's ticket on the event, and the `engine` signal is written with `view()`; each writer object is named only by `state.ts` and its owner;
   the Worker is posted to only in `#send`; no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
   in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
   the writable signals `state.ts` exports are the views' own. `test/imports.test.ts` holds the rest: no view reaches the

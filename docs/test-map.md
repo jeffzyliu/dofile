@@ -165,6 +165,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
+  - The editor's "Browsers that work" link (`BROWSERS_URL`, JSX, so not importable here) is held by the e2e test in
+    `e2e/landing.spec.ts`: "the failed-start banner's Browsers that work opens the landing page's section in a new tab".
   - The icons: the editor, landing and commands pages link the same three (`src/icons/`), each by a relative path the
     build hashes, and the files exist.
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against

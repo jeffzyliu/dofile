@@ -4,10 +4,14 @@ language js(jsx)
 // covers is the regex on $filename. A rule that breaks fails npm run check and lint:strict: fix the code, unless the
 // rule has changed (web/CLAUDE.md, "Architecture rules").
 
+// A default import (import x from "...") is not matched: the pattern also takes "import type" lines, and no module in
+// src/ has a default export, so tsc catches it.
 pattern value_import($source) {
   or {
     `import { $_ } from $source`,
-    `import * as $_ from $source`
+    `import * as $_ from $source`,
+    `import $source`,
+    `export { $_ } from $source`
   }
 }
 
@@ -26,7 +30,7 @@ or {
     $filename <: r".*/src/engine/machine\.ts$",
     register_diagnostic(span=$m, message="machine.ts imports types only")
   },
-  `Math.random()` as $m where {
+  `Math.random` as $m where {
     $filename <: r".*/src/engine/machine\.ts$",
     register_diagnostic(span=$m, message="machine.ts is pure: no random number")
   },
@@ -50,11 +54,11 @@ or {
     $filename <: not r".*/src/main\.tsx$",
     register_diagnostic(span=$m, message="only src/main.tsx constructs the transport and the Worker, connects the controllers, takes the tab lock and calls open()")
   },
-  // The store is opened once on each thread: in the page's store.ts and in the engine's own code.
+  // The store is opened once on each thread: in the page's store.ts and on the Worker's side (worker*.ts).
   `openStore($_)` as $m where {
     $filename <: r".*/src/.*",
-    $filename <: not r".*/src/(?:engine/.*|app/store\.ts)$",
-    register_diagnostic(span=$m, message="openStore() is called only in src/app/store.ts and src/engine/")
+    $filename <: not r".*/src/(?:engine/worker[^/]*|app/store\.ts)$",
+    register_diagnostic(span=$m, message="openStore() is called only in src/app/store.ts (the page) and src/engine/worker*.ts (the Worker)")
   },
   // Events enter the machine in one place: the controller calls transition() and initial().
   or {
@@ -95,11 +99,28 @@ or {
   or {
     `queue.push($_)`,
     `queue.unshift($_)`,
-    `queue.splice($$$)`
+    `queue.splice($_)`,
+    `queue[$_] = $_`
   } as $m where {
     $filename <: r".*/src/app/engine\.ts$",
     $m <: not within JsFunctionDeclaration(id=`enqueue`),
     register_diagnostic(span=$m, message="the queue is pushed to only in enqueue()")
+  },
+  // The controller's reply() answers with the ticket of its own effect, and the engine signal is written from view().
+  `$_ as $t` as $m where {
+    $filename <: r".*/src/app/engine\.ts$",
+    $m <: within `const reply = $_`,
+    register_diagnostic(span=$m, message="reply() has no cast: it answers with a typed event")
+  },
+  `enqueue($e)` as $m where {
+    $filename <: r".*/src/app/engine\.ts$",
+    $m <: within `const reply = $_`,
+    $e <: not `{ ...said, n: effect.n }`,
+    register_diagnostic(span=$m, message="reply() puts its own effect's ticket on the event: enqueue({ ...said, n: effect.n })")
+  },
+  `engineWriter.engine.value = $v` as $m where {
+    $v <: not `view($_)`,
+    register_diagnostic(span=$m, message="the engine signal is written with view(state), the machine's state")
   },
   `queue = $_` as $m where {
     $filename <: r".*/src/app/engine\.ts$",
