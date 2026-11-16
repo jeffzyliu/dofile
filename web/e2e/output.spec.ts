@@ -473,6 +473,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await page.locator(".rs .row td", { hasText: /^e\(b\)$/ }).click(); // anywhere on the row: it opens
   await expect(grid).toBeVisible();
   await expect(page.getByRole("button", { name: "Hide e(b)" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "e(b): 1 x 3" })).toHaveAttribute("aria-expanded", "true"); // the value too
   await page.getByRole("button", { name: "Hide e(b)" }).click(); // Hide closes once, it does not toggle twice
   await expect(page.locator(".rs .mat")).toHaveCount(0);
   expect((await copied(page)).length, "View, Hide and the row's clicks copy nothing").toBe(beforeView);

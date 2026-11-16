@@ -81,9 +81,11 @@ async function fetchMatrix(name: string, rs: Results): Promise<OpenMatrix> {
 async function readMatrix(name: string): Promise<OpenMatrix | null> {
   const rs = results.value;
   if (!rs) return null;
-  setMatrix(name, { for: rs, status: "loading" });
+  const loading: OpenMatrix = { for: rs, status: "loading" };
+  setMatrix(name, loading);
   const entry = await fetchMatrix(name, rs);
   if (results.value !== rs) return null; // another run replaced the results: this answer is for the old ones
+  if (openMatrices.value[name] !== loading) return null; // hidden (or read again) while it was loading: leave it so
   setMatrix(name, entry);
   return entry;
 }
@@ -202,6 +204,7 @@ function Row({ row }: { row: ResultRow }) {
             type="button"
             class="val"
             aria-label={`${row.name}: ${long}`}
+            aria-expanded={isMatrix ? open !== null : undefined}
             onKeyDown={(e) => {
               if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
                 e.preventDefault();
