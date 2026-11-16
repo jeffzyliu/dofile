@@ -1,6 +1,5 @@
-// The Output tabs' logic (src/app/output/format.ts, step 4c; docs/design/SPEC.md, sections 3.7 to 3.9): how a number is
-// shown, a matrix as text, the Results tab's sections and groups, a long Browse cell cut short, a graph's label and alt
-// text, sizes. The views themselves are checked in the browser (e2e/output.spec.ts).
+// The Output tabs' logic (src/app/output/format.ts): how a number is shown, a matrix as text, the Results tab's sections
+// and groups, a long Browse cell cut short, a graph's label and alt text, sizes.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

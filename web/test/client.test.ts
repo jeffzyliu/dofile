@@ -1,9 +1,6 @@
-// The transport (src/engine/client.ts) alone, without an engine and without the state machine: the counted download into
-// the Cache and the build's list, with a stand-in fetch and Cache (Node has no Cache API; the real ones are checked in the
-// browsers, e2e/step2.spec.ts), and the worker's messages, with a stand-in worker. SPEC.md section 7, test 10, and section
-// 6 (the {id, log} chunks). The transport decides nothing: when a worker starts and ends is the machine's
-// (test/machine.test.ts), and the controller on a stand-in transport is test/app.test.ts. The workers here are numbered
-// 1, 2, 3 by the test (harness.ts, startWorker).
+// The transport (src/engine/client.ts) alone: the counted download into the Cache and the build's list, on a stand-in
+// fetch and Cache (Node has no Cache API), and the worker's messages, on a stand-in worker. The transport decides
+// nothing: when a worker starts and ends is machine.test.ts. The workers are numbered 1, 2, 3 by the test (harness.ts).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

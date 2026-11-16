@@ -1,5 +1,5 @@
-// The screen wake lock (src/app/wakelock.ts) with a fake `wakeLock` and a fake document, as test/app.test.ts does for the
-// phone keyboard. No browser: the sentinels, the visibility and the engine state are all driven here.
+// The screen wake lock (src/app/wakelock.ts) with a fake `wakeLock` and a fake document: the sentinels, the visibility
+// and the engine state are all driven here.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { signal } from "@preact/signals-core";

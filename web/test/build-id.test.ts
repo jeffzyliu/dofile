@@ -1,5 +1,5 @@
-// The build's identity (scripts/build-id.ts): the check that fails a build on a stale snapshot (start-files.ts,
-// writeStartFiles, and the deploy workflow), and the id both the page and the list are given. No Vite, no snapshot needed.
+// The build's identity (scripts/build-id.ts): the stale-snapshot check and the id given to the page and the list. No Vite,
+// no snapshot needed.
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -78,7 +78,7 @@ test("buildId: the same stamp and inputs give the same id, whatever the order of
   ]) {
     assert.notEqual(other, id);
   }
-  // a record from before the extra wheels were recorded (every snapshot older than B2): an id, never a page's
+  // a record from before the extra wheels were recorded (an older snapshot): an id, never a page's
   const { extraWheels: _, ...old } = two;
   assert.match(buildId("s", old), /^[0-9a-f]{64}$/);
   assert.notEqual(buildId("s", old), buildId("s", { ...two, extraWheels: {} }));
@@ -136,7 +136,7 @@ test("writeStartFiles: a stale snapshot fails the build and writes nothing; a cu
     [[null, null, null]],
   );
 
-  // a snapshot from before B2 (no extraWheels): the dev server's list has an id, not the page's, rather than throwing
+  // a snapshot with no extraWheels: the dev server's list has an id, not the page's, rather than throwing
   const { extraWheels: _, ...old } = record;
   const dev = listStartFiles(dir, { stamp: "s", manifest: old as typeof record });
   assert.match(dev.buildId!, /^[0-9a-f]{64}$/);

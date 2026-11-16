@@ -1,8 +1,7 @@
-// The engine worker and the transport, run in Node: worker.ts in a worker thread (as a browser Web Worker), Pyodide, the
-// built dofile wheel. Run `uv build --wheel` in the repo first. No state machine here: the test starts and ends the
-// workers itself (harness.ts, startWorker), as the machine's effects would. The page's file changes go through a store in
-// this thread (fake-indexeddb), as in the page: its journal and the op `sync` (files.test.ts has the store with a running
-// engine in full, store.test.ts the store alone); `files` and `read` are the worker's views of /work.
+// The engine worker and the transport in Node: worker.ts in a worker thread, Pyodide, the built dofile wheel (run
+// `uv build --wheel` first). No state machine: the test starts and ends the workers itself (harness.ts). The page's file
+// changes go through a store in this thread (fake-indexeddb): its journal and the op `sync`. `files` and `read` are the
+// worker's views of /work.
 
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -278,7 +277,7 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
 });
 
 // The machine's RESET(crash) for a first crash: end-worker, then start-worker. That a worker which always fails is not
-// started for ever is the machine's (machine.test.ts, scenario 6) and the controller's (app.test.ts).
+// started for ever is machine.test.ts's and app.test.ts's.
 test("a worker that fails to load says `crashed`; after end() the next start finishes", {
   timeout: 120_000,
 }, async () => {
@@ -341,16 +340,15 @@ test("files can be listed, written and read while the engine is still loading, a
   eng.worker!.terminate();
 });
 
-// The snapshot start (npm run snapshot builds public/snapshot/). Skipped when it has not been built, or is stale: built from
-// other wheels or another Pyodide (a build refuses it; the page's checkBuild too: the test after this one).
+// The snapshot start (npm run snapshot builds public/snapshot/). Skipped when it has not been built, or is stale (built
+// from other wheels or another Pyodide: a build refuses it, and so does the page's checkBuild: the test after this one).
 const snapshotDir = fileURLToPath(new URL("../public/snapshot/", import.meta.url));
 const manifest = readManifest();
 const current = inputs(),
   haveSnapshot = Boolean(manifest) && staleness(manifest!, current) === null;
-// What the build's list (start-files.json, scripts/start-files.ts) says of the snapshot: the transport reads it, compares
-// its build id with the page's (checkBuild), and gives the worker the build's time (`built`) and the snapshot's two big
-// files. The files' own entries are not needed here: the worker reads the files from disk. The page's id is made from the
-// same stamp and the inputs, as vite.config.ts makes both.
+// What the build's list (start-files.json) says of the snapshot: the transport compares its build id with the page's
+// (checkBuild) and gives the worker the build's time (`built`) and the snapshot's two big files. The worker reads the
+// files from disk, so their own entries are not needed here.
 const STAMP = "engine.test.ts";
 const startFiles = manifest && {
   built: manifest.built,
@@ -461,7 +459,7 @@ test("a heap cap on a snapshot start: small objects fill the heap, the run ends 
   });
   await startWorker(eng, await eng.build());
   // Globals of 1000 characters: each pass adds about 115 MB of strings, none of them large enough to be refused alone.
-  // The heap fills wherever the next allocation is: in a command (r(909) by ODT-28), or in the interpreter's own work
+  // The heap fills wherever the next allocation is: in a command (r(909)), or in the interpreter's own work
   // between commands (a loop, or Python looking up a module file: OSError ENOMEM), which was rc 9999 and, with the
   // ballast still held, a PythonError "Error in sys.excepthook: MemoryError" out of the run. After the first refusal the
   // heap stays full, so more passes meet the other places too. Each ends as r(909) (or fits); the page's memory query still answers.

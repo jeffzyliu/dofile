@@ -1,7 +1,6 @@
 // The file store with a running engine: the real worker.ts in a worker thread, the page's store in this thread
 // (fake-indexeddb), as a page and its worker share one database. A page change reaches /work one way: its journal row,
-// then `sync` (store.ts). SPEC.md section 7, tests 2 to 8 and 11; and the worker ops that came with prototype 1 (section 6). The transport alone, with no state machine: the test starts and ends the
-// workers itself (harness.ts, startWorker), as the machine's effects would.
+// then `sync` (store.ts). The test starts and ends the workers itself (harness.ts).
 
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -889,7 +888,7 @@ test("the engine with its own database: the old /work database is left alone; Br
     },
   );
 
-  // ---- the worker ops of prototype 1 (SPEC.md section 6). Python's side is src/dofile/browser.py.
+  // ---- the worker ops (SPEC.md section 6). Python's side is src/dofile/browser.py ----
 
   await t.test("an op's error has the error's name, and a file system error is readable", async () => {
     await assert.rejects(eng.query("read", { path: "nothing-here.txt" }), {

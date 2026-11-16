@@ -1,6 +1,5 @@
 // The memory cap's rule (src/engine/memcap.ts): which devices are capped, and the ?memcap flag. And the loader patch that
 // makes the cap possible (snapshot.ts): it applies to this Pyodide's pyodide.asm.mjs, and fails when the text changes.
-// The cap at work, in a real engine: engine.test.ts ("a heap cap").
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

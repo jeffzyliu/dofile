@@ -1,9 +1,7 @@
-// The sample project's page logic (src/app/sample.ts) on the page's real store over fake-indexeddb, no DOM: the first
-// visit writes it into an empty store and opens analysis.do, and never over a visitor's own files; "Restore the sample"
-// is an upload of it (writes what is missing, asks in the clash dialog before it replaces a file that differs, opens
-// analysis.do) and touches no other file. Also: the generated
-// module is what scripts/make-sample.ts makes from web/sample/, and the files are free of anything but our own words
-// (test/site.test.ts has the clean-room greps). test/sample-run.test.ts runs the do-files in the engine.
+// The sample project's page logic (src/app/sample.ts) on the real store over fake-indexeddb, no DOM: the first visit
+// writes it into an empty store and opens analysis.do, and never over a visitor's own files; "Restore the sample" is an
+// upload of it. Also: the generated module is what scripts/make-sample.ts makes from web/sample/, and the files hold only
+// our own words.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

@@ -1,6 +1,6 @@
 // The landing and commands pages' plain logic (scripts/site-pages.ts, src/site/filter.ts) and what their source says:
-// the commands list is made from src/stata/commands.json and nothing else, the placeholders are all known, the
-// numbers are the build's, and the clean-room greps (docs/phase2-history.md, "Step 5: the clean-room record").
+// the commands list is made from src/stata/commands.json and nothing else, the placeholders are all known, the numbers
+// are the build's, and the clean-room greps.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -198,9 +198,8 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
   // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=` (an
   // HTML attribute), followed by anything but a letter or digit ("/app/", "/app?test", "/app.html", "/app#x"). Comments may
   // name it. Read: the sources (CSS and JSON too), the scripts, the e2e tests, the configs, the pages, the workflows and
-  // the local actions (.github/actions/, where deploy.yml and preview.yml build).
-  // A path made by joining strings ("/" + "app") is not caught: never write one. With the editor at the root of its own origin
-  // there is no path to spell, so the check runs on "/app/", where the editor was before it had an origin of its own.
+  // the local actions (.github/actions/). A path made by joining strings ("/" + "app") is not caught: never write one.
+  // The editor is at the root of its own origin, so the check runs on "/app/", where it was before it had an origin.
   const walk = (dir: string): string[] =>
     readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)), { withFileTypes: true }).flatMap((e) =>
       e.isDirectory()
@@ -417,7 +416,7 @@ test("the theme button of the landing and commands pages has the editor's words,
     assert.ok(web(f).includes(`localStorage.getItem("${site.KEY}")`), f);
 });
 
-// ---- clean room (LICENSE-POLICY.md): what the checks can see; the record is in docs/phase2-history.md ----
+// ---- clean room (LICENSE-POLICY.md): what the checks can see ----
 
 test("clean room: the pages say Stata only as the policy allows, name no real dataset, and keep the trademark line", () => {
   for (const f of ["landing.html", "commands.html"]) {

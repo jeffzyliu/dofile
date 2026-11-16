@@ -1,13 +1,11 @@
 // The engine's state machine (src/engine/machine.ts), alone: no controller, no transport, no clock.
-//  - the table: every row (state) by every event, 16 by 24, with the variants of the cells that depend on a payload or on
-//    the machine. GRID is the five tables of docs/archive/prototype1-step3.5-c-design.md, item 4.2, cell for cell; CELLS says what
-//    each named cell does. A new state or event fails `npm run check` until its cells are written.
-//  - the properties of item 6, over every cell and every step of every scenario.
-//  - the race scenarios of item 8, each a short list of events with the state and every effect after each.
-//  - the lines that must not compile (`@ts-expect-error`): a ticket, a counter, an answer, the Answers map, EngineState.
-// The tests make no ticket and no machine by hand: every machine is reached from initial() by events, and every ticket is
-// copied from an effect, a state or a machine. The scenarios name tickets by their numbers (the lock 1, the cache check 2,
-// the download 3, the worker 4), as plain data to compare with.
+//  - the table: every state by every event, with the variants of the cells that depend on a payload or on the machine.
+//    A new state or event fails `npm run check` until its cells are written.
+//  - the properties over every cell and every step of every scenario.
+//  - the race scenarios, each a short list of events with the state and every effect after each.
+//  - the lines that must not compile (`@ts-expect-error`).
+// Every machine is reached from initial() by events, and every ticket is copied from an effect, a state or a machine.
+// The scenarios name tickets by their numbers (the lock 1, the cache check 2, the download 3, the worker 4).
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -170,9 +168,8 @@ function go(at: At, f: Feed, o: { n?: Ticket; at?: number } = {}): At {
 }
 
 type Options = { env?: Partial<Env>; crashed?: boolean };
-/** The machine in row `name`, by the shortest path: a normal load for most. `crashed`: with the crash count at 1 (ruling 2: it survives a failed start and "Try again"): the
- *  starting rows after a crash, and `failed`, `downloading`, `declined` and `asking` by the events after it (a crash,
- *  the list, a start that fails, "Try again", "Stop download", the prompt). Every row can be reached. */
+/** The machine in row `name`, by the shortest path: a normal load for most. `crashed`: with the crash count at 1 (it
+ *  survives a failed start and "Try again"): the starting rows after a crash, and the rows reached by the events after it. */
 function row(name: RowName, o: Options = {}): At {
   const at = reach(name, o);
   assert.equal(at.m.state.s, name, `the path to ${name}`);
@@ -402,9 +399,8 @@ const wantEnd =
     };
   };
 
-// Ruling 2: the crash count survives a failed start and "Try again". These rows can be reached with it at 1 (`none`, the
-// page load and the other-tab rows cannot: only losing the lock leads to them, and that sets it back to 0), and a cell
-// that does not name the count must leave it: the table test compares it with the machine's before.
+// The crash count survives a failed start and "Try again". These rows can be reached with it at 1 (`none`, the page load
+// and the other-tab rows cannot: losing the lock sets it back to 0), and a cell that does not name the count must leave it.
 const CAN_HAVE_CRASHED = new Set<RowName>([
   "asking",
   "declined",
@@ -1146,8 +1142,7 @@ test("the table's cells: every named cell is used, a state with no ticket has ST
   assert.equal(TYPES.filter((t) => t in ASKED_BY).length, 14, "fourteen events present a ticket");
 });
 
-// The matrix as transition() gives it, for docs/design/SPEC.md section 5 from step E on (rulings 10 and 12): each cell is
-// "·", "STALE", or the states the event leads to. Here it is compared with the grid above.
+// The matrix as transition() gives it: each cell is "·", "STALE", or the states the event leads to.
 function matrix(): Record<RowName, Record<EventType, string>> {
   const cell = (r: RowName, t: EventType) => {
     const steps = CASES.filter((c) => c.row === r && c.type === t && c.name !== "with another ticket").map((c) =>
@@ -1171,7 +1166,7 @@ test("the matrix built from transition() has the grid's cells: not valid, stale,
       else assert.match(built[r][t], /^[a-z-]+( \| [a-z-]+)*$/, `${r} x ${t}`);
     }
   }
-  // a few cells, read off the design's tables
+  // a few cells, written out
   assert.equal(built["checking-lock"]["lock-answered"], "checking-cache | none | other-tab-idle");
   assert.equal(built["starting-worker"].crashed, "starting-list | failed-twice");
   assert.equal(built.running.break, "breaking | starting-list");
@@ -1182,12 +1177,10 @@ test("the matrix built from transition() has the grid's cells: not valid, stale,
   assert.equal(built["other-tab-idle"].ask, "other-tab-idle");
 });
 
-// ---- SPEC section 5's transition matrix (step E, rulings 10 and 12) ----
-// docs/design/SPEC.md section 5 holds the matrix as five Markdown tables under the heading "### Transition matrix": one
-// per group of events, a row for each state, a column for each event. A cell is `·` (the event is not valid in the state),
-// `STALE` (an event with a ticket, in a state that holds none: always dropped), or the states the event can lead to,
-// separated by ", ". The tables are generated from matrix() above: `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts`
-// prints them, and the test below compares what SPEC has, cell by cell, with matrix().
+// ---- SPEC section 5's transition matrix ----
+// docs/design/SPEC.md section 5 holds the matrix as five Markdown tables, one per group of events. A cell is `·` (the event
+// is not valid), `STALE` (an event with a ticket, in a state that holds none) or the states it can lead to, separated by
+// ", ". `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` prints the tables from matrix(); the test compares them.
 const SPEC_GROUPS: [string, EventType[]][] = [
   ["A. The visitor's engine actions", Object.keys(A.none) as EventType[]],
   ["B. Tab lock and cache check", Object.keys(B.none) as EventType[]],
@@ -1293,7 +1286,7 @@ test("initial(): ticket 1, the lock request; lost() and cutResult() are today's 
   for (const r of ROWS) row(r); // every row is reached from initial() by events
 });
 
-// ---- the race scenarios (item 8) ----
+// ---- the race scenarios ----
 
 /** A state as a scenario names it: its tag and the fields that matter, tickets as numbers. */
 type Looks = { s: RowName } & Record<string, unknown>;
@@ -1727,7 +1720,7 @@ for (const [name, run] of Object.entries(SCENARIOS))
     run();
   });
 
-// ---- the properties (item 6): over every cell of the table, every row's path and every step of every scenario ----
+// ---- the properties: over every cell, every row's path and every step of every scenario ----
 
 const everyMove = (): Moved[] => [
   ...CASES.map((c) => ({ before: c.from.m, event: c.event, step: pure(c.from.m, c.event) })),
@@ -1835,7 +1828,6 @@ test("property: every exit from breaking cancels the Break timer, before any end
   }
 });
 
-// Addition A1
 test("property: every exit from downloading that is not that download's own end aborts it, once, with the state's ticket; no other transition aborts", () => {
   let exits = 0;
   for (const m of everyMove()) {

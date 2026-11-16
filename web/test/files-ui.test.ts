@@ -1,7 +1,6 @@
-// Step 4a's plain logic (src/app/files/*.ts) on the page's real store module over fake-indexeddb, with no DOM: the tree's
-// rows and names (tree.ts), opening a file as SPEC 3.11 says (open.ts), and what the file panel and the tabs do (actions.ts:
-// close, rename, delete, upload with its name clashes, a folder's .zip). The editor is stood in for by recording the calls
-// made through `editorCommands`; the views (FilesPane.tsx, EditorTabs.tsx, dialogs.tsx) are tested in e2e/files.spec.ts.
+// The plain logic of src/app/files/*.ts on the real store module over fake-indexeddb, no DOM: tree rows and names
+// (tree.ts), opening a file (open.ts), and the file panel and tab actions (actions.ts). The editor is stood in for by
+// recording the calls made through `editorCommands`.
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
@@ -232,7 +231,7 @@ test("closing a tab: one with no edits closes (the next tab becomes active; the 
   assert.deepEqual(calls, [{ op: "closed", args: ["b.do"], tabs: ["a.do", "c.do"] }]);
   A.closeTab("c.do");
   assert.equal(S.activeTab.value, "a.do", "the last tab: the one to the left");
-  S.setDirty("a.do", true); // no editor yet (step 4b): the test makes the edits
+  S.setDirty("a.do", true); // no editor here: the test makes the edits
   calls = [];
   assert.equal(A.askCloseTab("a.do"), false);
   assert.deepEqual(S.dialog.value, { d: "close-tab", path: "a.do" });
@@ -542,7 +541,7 @@ test("upload over an open file: the clash says it has unsaved edits; Replace rel
   await reset({ "a.do": "old a", "b.do": "old b" });
   await openFile("a.do");
   await openFile("b.do");
-  S.setDirty("a.do", true); // no editor yet (step 4b): the test makes the edits
+  S.setDirty("a.do", true); // no editor here: the test makes the edits
   calls = [];
   const { seen, stop } = answering([
     { replace: true, same: false },
@@ -664,7 +663,7 @@ test("another dialog put in the clash's place with no answer keeps yours for eve
 test("after Do the same with Replace, a clash over an open file with unsaved edits is still asked", async () => {
   await reset({ "a.do": "old a", "b.do": "old b", "c.do": "old c" });
   await openFile("b.do");
-  S.setDirty("b.do", true); // no editor yet (step 4b): the test makes the edits
+  S.setDirty("b.do", true); // no editor here: the test makes the edits
   const { seen, stop } = answering([
     { replace: true, same: true }, // a: replace, and the rest the same
     { replace: false, same: false }, // b: asked all the same, as it has unsaved edits: keep it

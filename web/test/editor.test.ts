@@ -1,8 +1,6 @@
-// The editor's and the log's logic with no DOM (step 4b; docs/design/SPEC.md, sections 3.3 to 3.6 and 4): the .log
-// tokenizer (src/app/log/classify.ts), where a code line is echoed (log/align.ts: the graph links, the nested-do note),
-// the pasted lines of the command line (log/paste.ts), the .csv columns (editor/csv.ts), what a run's version of an open
-// file does to its tab (editor/ranover.ts) and the words of the run-head, the status bar and the Break pill
-// (editor/words.ts). The views are checked in the browser (e2e/editor.spec.ts).
+// The editor's and the log's logic with no DOM: the .log tokenizer (log/classify.ts), where a code line is echoed
+// (log/align.ts), pasted lines (log/paste.ts), .csv columns (editor/csv.ts), what a run does to an open tab
+// (editor/ranover.ts), and the run-head, status bar and Break pill words (editor/words.ts).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -552,7 +550,7 @@ test("nestedTarget and unsavedTarget: the file a do or include runs, and the ope
   assert.equal(unsavedTarget("C:/proj/clean.do", ["code/clean.do"]), "code/clean.do");
   assert.equal(unsavedTarget("clean.do", ["a/clean.do", "b/clean.do"]), null, "two files of that name: neither");
   assert.equal(unsavedTarget("clean.do", []), null);
-  // the log's echo of a nested do in each of its forms, as LogView reads it for S 15's note: a top-level `. `, a loop's
+  // the log's echo of a nested do in each of its forms, as LogView reads it for the nested-do note: a top-level `. `, a loop's
   // or a program's body line `  2. `
   const target = (log: string) =>
     classify(log).map((l) => {
@@ -895,7 +893,7 @@ test("a file's form (editor/ranover.ts): its line break, the more common one, \\
   for (const t of ["a\r\nb\r\n", "a\r\nb", "a\nb\n", "a\nb", "\r\n", "x", "\uFEFFa\r\nb\r\n", "\uFEFFa\nb", "\uFEFF"])
     assert.equal(fileText(editorText(t), formOf(t), "data/t.csv"), t);
   // a do-file or an ado-file (by the name it is saved under, case ignored) is written without its BOM, its line break
-  // kept: the engine reads a BOM as part of the first command (ODT-34)
+  // kept: the engine reads a BOM as part of the first command
   for (const path of ["a.do", "dir/b.DO", "prog.ado", "X.Ado"]) {
     assert.equal(dropsBom(path), true, path);
     assert.equal(fileText("a\nb", { br: "\r\n", bom: true }, path), "a\r\nb", path);

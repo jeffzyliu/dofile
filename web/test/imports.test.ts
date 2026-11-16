@@ -1,7 +1,6 @@
 // The contracts that no type can hold, checked on the source text and the import graph of web/src (and, where said, the
-// whole of web/). docs/archive/prototype1-step3.5-c-design.md: items 5.1 (tickets and replies), 6 (the contracts), 7.2 (the
-// worker is posted to in one place) and 7.4 (single instances). The text is read with comments removed, and where a rule
-// counts a word in code, with the strings' contents removed too. A definition is not a call.
+// whole of web/). The text is read with comments removed, and where a rule counts a word in code, with the strings'
+// contents removed too. A definition is not a call.
 
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -453,10 +452,9 @@ test("no counter or flag outside the machine decides a state: the old ones are g
   const gone =
     /\b(gen|attempt|lockGen|errorRestarts|taking|was|queued|QueuedRun|dropRun|drop-run|hadEngine|stageAt|STAGE_OF|StatusText|onRestart|onStatus|resetResult|breakTimer|resetAt|STARTABLE|RESETTABLE)\b/;
   const found = having(SRC, gone);
-  // What is left of those names. The machine's own: `resetAt` of `breaking`, which views read (`queued`, the run the
-  // machine once held for an engine that was not there, is gone: no name of it is left in web/src). The controller's handle on the Break timer, which decides no state. And in the worker, `was`, a local
-  // name in saveRun for the files as they were before a run.
-  // And step 4b's clock (app/editor/clock.ts), which reads `resetAt` of `breaking` for the countdown ("resets in 4 s", the banner's "In 4 s") and the time Break has been pending.
+  // What is left of those names: `resetAt` of `breaking`, which views read (also in app/editor/clock.ts, for the Break
+  // countdown); the controller's handle on the Break timer, which decides no state; and in the worker, `was`, a local name
+  // in saveRun for the files as they were before a run.
   assert.deepEqual(Object.keys(found).sort(), [
     "src/app/editor/clock.ts",
     "src/app/engine.ts",
@@ -507,8 +505,8 @@ test("every button that Start engine turns into Run keeps ignoring a held Enter:
   assert.equal(wired("src/app/log/LogView.tsx"), 1, "a hint's help link");
 });
 
-// A tap on iOS leaves :hover on until the next tap elsewhere (the Files pane's caret and ⋯ and the heads' "+" stayed gray): every
-// :hover rule of the stylesheets is inside `@media (hover: hover)`.
+// A tap on iOS leaves :hover on until the next tap elsewhere (the Files pane's caret and ⋯ and the heads' "+" stayed
+// gray), so every :hover rule of the stylesheets is inside `@media (hover: hover)`.
 test("every :hover rule is inside (hover: hover)", () => {
   const outside: string[] = [];
   for (const file of ["../src/styles/ui.css", "../src/styles/app.css", "../src/site/site.css"]) {

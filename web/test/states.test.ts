@@ -1,7 +1,5 @@
-// Step 4d's plain logic (src/app/states/words.ts): when Reset asks (not while the engine is new, and always during a run or
-// after one), which file the reset banner runs again, the words of
-// the reset banner and the running banner, the stopping countdown at 0, the action each
-// failed reason gets, the times, and the three drafted notes (OQ-10).
+// The plain logic of src/app/states/words.ts: when Reset asks, which file the reset banner runs again, the reset and
+// running banner words, the stopping countdown, the action each failed reason gets, the times, and the drafted notes.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {

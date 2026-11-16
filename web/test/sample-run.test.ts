@@ -1,6 +1,6 @@
-// The sample project (web/sample/) run in the page's own engine (Pyodide in a worker thread, the built wheel): its do-files
-// end with rc 0 and draw a graph, and the run the landing page shows ("What a run looks like") is the one it makes.
-// Run `uv build --wheel` first. test/sample.test.ts has the page's logic (the first visit, Restore the sample).
+// The sample project (web/sample/) run in the page's own engine (Pyodide in a worker thread, the built wheel): its
+// do-files end with rc 0 and draw a graph, and the run the landing page shows is the one it makes. Run `uv build --wheel`
+// first.
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";

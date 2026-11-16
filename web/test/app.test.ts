@@ -1,13 +1,9 @@
-// The page's controllers (src/app/engine.ts, run.ts, files.ts) on a stand-in transport, store and tab lock: the engine
-// controller feeding the state machine and performing its effects (the `engine` signal with the machine's sixteen state
-// names, asking or not from cached(), the tab lock, the Break timer, the drop record), the streamed log and what a run
-// leaves in the state (SPEC section 8), and section 7's test 13 (a false persisted() reaches the `persisted` signal).
-// The machine's table is tested in machine.test.ts, the real transport in client.test.ts, the worker in engine.test.ts
-// and files.test.ts, and all of it together in the e2e tests.
+// The page's controllers (src/app/engine.ts, run.ts, files.ts) on a stand-in transport, store and tab lock.
+// The machine's table is machine.test.ts, the real transport client.test.ts, the worker engine.test.ts and files.test.ts.
 //
 // Every wiring ends with the drop record as the test expects it: empty, unless the test provokes a race and names the
 // events that must be dropped (expectDrops). It is asserted when the wiring is replaced (setUp) and when the test ends
-// (afterEach), so an event that is stale or not valid in an earlier wiring of a test fails it too.
+// (afterEach), so a stale or invalid event in an earlier wiring of a test fails it too.
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
@@ -876,9 +872,9 @@ test("Break on a page that cannot ask a run to stop (no SharedArrayBuffer) reset
   assert.deepEqual([r.rc, r.kind, r.error], [9998, "break", SENTENCE(reason)]);
 });
 
-// Addition A4: the one answer the stale guard does not protect. Two runs on one worker share its ticket, so a timer left
-// from the first run would reset the second. Every exit from `breaking` emits cancel-break-timer (a property of the
-// machine); this pins that the controller performs it.
+// The one answer the stale guard does not protect: two runs on one worker share its ticket, so a timer left from the
+// first run would reset the second. Every exit from `breaking` emits cancel-break-timer; this pins that the controller
+// performs it.
 test("the Break timer across two runs on one worker (a simulated clock): the first run's timer never fires in the second, whose Break gets its own whole grace time", async () => {
   await readyEngine({ graceMs: 5000 });
   const micro = async () => {
@@ -937,8 +933,7 @@ test("the Break timer across two runs on one worker (a simulated clock): the fir
   }
 });
 
-// SPEC section 7, test 13: keepFiles answers at once with persisted(), and again when persist() is answered; the page's
-// signal gets each answer
+// keepFiles answers at once with persisted(), and again when persist() is answered; the page's signal gets each answer.
 test("a false persisted() reaches the `persisted` signal, and persist()'s answer follows it", async () => {
   const asked = later<boolean>();
   const storage = { persisted: async () => false, persist: () => asked };
@@ -949,8 +944,6 @@ test("a false persisted() reaches the `persisted` signal, and persist()'s answer
   await sleep(5);
   assert.equal(S.persisted.value, true);
 });
-
-// ---- the review of step 3 ----
 
 test("losing the tab lock clears what the old engine left; after a take-over the new engine starts with none of it", async () => {
   await readyEngine();
@@ -1196,7 +1189,6 @@ test("runCode while a run is on does nothing; with no engine a run is refused, s
   assert.equal(client.worker.runs.length, 0, "after a failed start: nothing ran");
 });
 
-// Addition A3
 test("run() called while a step is in progress throws before it queues anything", async () => {
   await readyEngine();
   const thrown: unknown[] = [];
@@ -1230,8 +1222,8 @@ test("run() called while a step is in progress throws before it queues anything"
   client.run1.done.ok(result());
 });
 
-// Addition A2: every machine counts its tickets from 1 along the same path, so a late answer of an earlier wiring would
-// present a ticket the new machine has issued too.
+// Every machine counts its tickets from 1 along the same path, so a late answer of an earlier wiring would present a
+// ticket the new machine has issued too.
 test("a reply of an earlier wiring does nothing: the first wiring's download completes after connectEngine, with the new download's ticket number", async () => {
   await load();
   client.deaf = true; // its download does not hear the abort, and completes
@@ -1252,7 +1244,7 @@ test("a reply of an earlier wiring does nothing: the first wiring's download com
   await begin(); // the new wiring's own download is taken
 });
 
-// Scenario 11 of the design: a wrong ticket. The old download's reply is bound to its own ticket.
+// A wrong ticket: the old download's reply is bound to its own ticket.
 test("an older download still talking: its progress and its end are dropped as stale, and the drop record names them", async () => {
   await load();
   client.deaf = true;
@@ -1275,7 +1267,7 @@ test("an older download still talking: its progress and its end are dropped as s
   ]);
 });
 
-// Scenario 15 of the design: a read op is outside the machine. It raises no event in any of these steps.
+// A read op is outside the machine: it raises no event in any of these steps.
 test("call(): a read op with no worker is rejected (no-engine); one that waits behind a run is cut by a reset (kind reset), or answered after the run", async () => {
   await load();
   engine.decline();
@@ -1833,8 +1825,6 @@ test("setDirty sets one tab's dot; decodeText takes strict UTF-8 only", () => {
   assert.equal(decodeText(Uint8Array.from([0xef, 0xbb, 0xbf, 0x61]), true), "\uFEFFa", "or kept, for the editor");
 });
 
-// ---- the second review of step 3 ----
-
 test('A1: a tab that loses the lock while the files are still being listed: the download is aborted and no worker starts; "Use dofile in this tab" still works', async () => {
   setUp({ cached: true });
   const listed = later<FileInfo[]>();
@@ -1916,7 +1906,7 @@ test("A2: reset() acts only in ready, running, breaking and waiting; never in fa
   state("starting-list"); // ready: it resets
 });
 
-// reset() is refused while a start is in progress (A2), so the second restart is the machine's own: the new worker crashed
+// reset() is refused while a start is in progress, so the second restart is the machine's own: the new worker crashed
 test("A3: two restarts in a row, then one start completes: ready once", async () => {
   await readyEngine();
   engine.reset();
@@ -2254,8 +2244,6 @@ test("the phone keyboard: the editor's caret is revealed at once when the keyboa
   assert.equal(p.vars.size, 0);
   p.stop();
 });
-
-// ---- the review of the step 4 join ----
 
 test("J1: pasted lines: a line cut because another tab took the engine stops the rest; after a take-over and a later run, no leftover line runs", async () => {
   const { runOne } = await import("../src/app/log/pasterun.ts");
