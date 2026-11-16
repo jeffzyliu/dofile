@@ -205,3 +205,17 @@ estimated splits) are the study's, not checked again here.
   "Português" link to `clean-room-policy.pt-BR.md` points at nothing. Not to be fixed: the maintainer keeps the English file's
   name `CLEAN_ROOM_POLICY.md` (like `THIRD_PARTY_NOTICES.md` beside it, and as `LICENSE-POLICY.md` links to it) and does
   not need the translation. A link check over the whole tree reports this one. 2026-11-15.
+
+## Web audit: the redesigns (added 2026-11-16)
+
+- **Proposal C of `docs/web-audit-proposal.md`: seven redesigns, R1 to R7** (its section 3, "Redesigns", and section 4).
+  The audit runs as proposal B. The maintainer broadly agrees with every item of C and left them for after B, **R1 and
+  R5 first**:
+  - R1: the lazy graphics part as one pure machine on both threads, with a Node harness. Its first step is on `main`
+    (`engine/lazy-part.ts`). It waits until that code has stopped changing.
+  - R5: a staged `public/` made by one script, which the Vite config only reads.
+  - R2 (a ticket per run), R3 (a DOM test harness and a focus-target registry), R4 (CSS by component, behind screenshot
+    baselines), R6 (the e2e hook as a small named surface), R7 (one workspace module).
+
+  R1 and R5 each replace a part of B (the proposal's section 4, "B and the two redesigns chosen first", and its open
+  decision 8.9). 2026-11-16.
