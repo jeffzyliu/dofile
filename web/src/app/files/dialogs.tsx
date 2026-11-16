@@ -87,8 +87,8 @@ export function DeleteDialog({ dialog: d }: { dialog: DialogOf<"delete"> }) {
   const folder = d.paths.some((p) => dirs.has(p));
   const remove = () => {
     close();
-    // the row that opened the dialog goes, and the focus with it: the tree's row in the tab order takes it once the list
-    // has been read again (a list made after the delete, so the row is gone from it)
+    // the row that opened the dialog goes, and the focus with it: the tree's row in the tab order takes it once the
+    // list has been read again (a list made after the delete, so the row is gone from it)
     deleteEntries(d.paths)
       .then(refresh)
       .then(

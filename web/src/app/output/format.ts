@@ -73,8 +73,8 @@ export const CELL_MAX = 60;
 const TITLE_MAX = 1000;
 
 /** A Browse cell as the grid draws it. A strL can be thousands of characters with line breaks: `text` is its first
- *  `CELL_MAX` characters on one line (a line break shows as ↵), `cut` is true when that is not the whole value, or it has
- *  a line break, and `title` is the value for a tooltip (at most 1000 characters). A short cell is as it is. */
+ *  `CELL_MAX` characters on one line (a line break shows as ↵), `cut` is true when that is not the whole value, or it
+ *  has a line break, and `title` is the value for a tooltip (at most 1000 characters). A short cell is as it is. */
 export function cutCell(value: string): { text: string; cut: boolean; title: string } {
   const lines = value.includes("\n") || value.includes("\r");
   const flat = lines ? value.replace(/\r\n|\r|\n/g, "↵ ") : value;
@@ -102,8 +102,8 @@ export function graphTitle(g: Graph, all: Graph[]) {
   return subject ? `${graphCounter(g, all)} · ${subject}` : graphCounter(g, all);
 }
 
-/** The picture's alt text: "Graph: scatter wage educ". Several graphs can share one command (a loop draws three from one
- *  line, and `graph_commands` holds the unexpanded command): then each says its number, "Graph 2: scatter y x". */
+/** The picture's alt text: "Graph: scatter wage educ". Several graphs can share one command (a loop draws three from
+ *  one line, and `graph_commands` holds the unexpanded command): then each says its number, "Graph 2: scatter y x". */
 export function graphAlt(g: Graph, all: Graph[]): string {
   const subject = graphSubject(g);
   if (!subject) return `Graph ${g.n}`;
@@ -111,8 +111,8 @@ export function graphAlt(g: Graph, all: Graph[]): string {
   return shared ? `Graph ${g.n}: ${subject}` : `Graph: ${subject}`;
 }
 
-/** The phone's inline graph button's name: "Open graph full size: scatter y x" (a shared command: "Open graph 2 full size: …";
- *  no command: "Open graph 3 full size"). One colon: the alt text's own is not repeated. */
+/** The phone's inline graph button's name: "Open graph full size: scatter y x" (a shared command: "Open graph 2 full
+ *  size: …"; no command: "Open graph 3 full size"). One colon: the alt text's own is not repeated. */
 export function graphOpenName(g: Graph, all: Graph[]): string {
   const subject = graphSubject(g);
   if (!subject) return `Open graph ${g.n} full size`;
@@ -143,8 +143,8 @@ export interface ResultSection {
 }
 
 /** The Results tab's sections from `results` and `macros`, empty groups left out, and no section at all when nothing is
- *  there (the empty state). Only the e() scalars start open (and the r() scalars when e() has none, so `summarize` alone
- *  shows its numbers); Locals start open, Globals folded. A matrix row's value is its size; its name is `e(b)`.
+ *  there (the empty state). Only the e() scalars start open (and the r() scalars when e() has none, so `summarize`
+ *  alone shows its numbers); Locals start open, Globals folded. A matrix row's value is its size; its name is `e(b)`.
  *  No Functions group, and the r() section is just "r()". Globals the engine presets that still hold their preset
  *  value (`system_globals`: S_ADO, F1 ...) are left out; one the user set or changed shows. */
 export function sections(results: Results | null, macros: Macros | null): ResultSection[] {

@@ -69,7 +69,8 @@ export function EditorTabs() {
   );
 }
 
-/** One tab of "Open files"; it takes the focus when a key of the tablist asked for it (docs/web-page-flows.md, section 1). */
+/** One tab of "Open files"; it takes the focus when a key of the tablist asked for it (docs/web-page-flows.md, section
+ *  1). */
 function FileTab({
   t,
   i,

@@ -17,7 +17,8 @@ export type IconName =
   | "split"
   | "unsplit";
 
-/** One of ui.css's icons (a mask in the text color). Decorative: the control around it has the words or an aria-label. */
+/** One of ui.css's icons (a mask in the text color). Decorative: the control around it has the words or an
+ *  aria-label. */
 export const Icon = ({ name }: { name: IconName }) => <span class={`ico i-${name}`} aria-hidden="true" />;
 
 /** True on a Mac (and iPhone, iPad): key chips say ⌘ there, Ctrl elsewhere. */
@@ -37,10 +38,10 @@ export const Key = ({ k, mod = false }: { k: string; mod?: boolean }) => (
 /** aria-keyshortcuts for Ctrl/Cmd + key: "Meta+Enter" on a Mac, "Control+Enter" elsewhere. */
 export const modShortcut = (key: string) => `${isMac ? "Meta" : "Control"}+${key}`;
 
-/** A control's labels laid in one grid cell (ui.css .labels), so the control is as wide and as tall as its widest label in
- *  every state and a change of label moves nothing around it. `labels[at]` is shown; the others are visibility: hidden
- *  and aria-hidden, so the accessible name is the shown label alone. Pass every label the control can have, icons and
- *  key chips included; for one that varies (line numbers, a time) add the widest it can be as a sizer ("Run
+/** A control's labels laid in one grid cell (ui.css .labels), so the control is as wide and as tall as its widest label
+ *  in every state and a change of label moves nothing around it. `labels[at]` is shown; the others are visibility:
+ *  hidden and aria-hidden, so the accessible name is the shown label alone. Pass every label the control can have,
+ *  icons and key chips included; for one that varies (line numbers, a time) add the widest it can be as a sizer ("Run
  *  8888–8888"; digits are tabular there). Each label is centered. Keep the labels short: the widest sets the size.
  *    <button class="btn stop"><Labels at={i} labels={["Break", "Reset", "Stopping…", "Reset now"]} /></button> */
 export const Labels = ({ labels, at }: { labels: ComponentChildren[]; at: number }) => (

@@ -1,5 +1,5 @@
-// Opening a file (docs/design/SPEC.md, section 3.11): every way to open one (the tree, the phone's file switcher, "Go to
-// line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
+// Opening a file (docs/design/SPEC.md, section 3.11): every way to open one (the tree, the phone's file switcher, "Go
+// to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
 import { editorCommands } from "../editor/commands.ts";
 import { addFileGraph } from "../run.ts";
 import {
@@ -41,9 +41,9 @@ function show(path: string) {
   if (isPhone.value) phoneTab.value = "editor";
 }
 
-/** Open `path` from the store as section 3.11 says: `tabs` first, then the editor. Resolves once it is shown; a file the
- *  store cannot read (deleted meanwhile) opens nothing, and the reason goes to the console. A file that is not text,
- *  .dta or .png gets no tab but the not-text banner (one at a time: an earlier file's goes). */
+/** Open `path` from the store as section 3.11 says: `tabs` first, then the editor. Resolves once it is shown; a file
+ *  the store cannot read (deleted meanwhile) opens nothing, and the reason goes to the console. A file that is not
+ *  text, .dta or .png gets no tab but the not-text banner (one at a time: an earlier file's goes). */
 export async function openFile(path: string): Promise<void> {
   if (tabs.value.some((t) => t.path === path)) return show(path);
   const ext = extOf(path);

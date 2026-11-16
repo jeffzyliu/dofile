@@ -27,7 +27,8 @@ export type OpenMatrix =
   | { for: Results; status: "error"; message: string };
 export const openMatrices = signal<Readonly<Record<string, OpenMatrix>>>({});
 
-/** A .dta tab's variables as describe_file answered, by path, for the file as it was when asked (`key`: size and time). */
+/** A .dta tab's variables as describe_file answered, by path, for the file as it was when asked (`key`: size and
+ *  time). */
 export interface DtaVariable {
   name: string;
   label: string | null;
@@ -40,6 +41,6 @@ export interface DtaInfo {
 }
 export const dtaInfo = signal<Readonly<Record<string, DtaInfo>>>({});
 
-/** What opened the full-size view, for the focus to return to: Safari does not focus a button when it is pressed, so the
- *  active element is not enough. The Graph tab's "Open full size" sets it; the view takes it and clears it. */
+/** What opened the full-size view, for the focus to return to: Safari does not focus a button when it is pressed, so
+ *  the active element is not enough. The Graph tab's "Open full size" sets it; the view takes it and clears it. */
 export const fullOpener: { el: HTMLElement | null } = { el: null };

@@ -1,7 +1,7 @@
 // The banners of the engine's states and of the reset (docs/design/SPEC.md, sections 3.10 and 5), drawn with
 // ui/Live.tsx's <Banner>. The engine-state banners above the editor have no role="alert": the machine's `say` says each
 // once, since a banner in the editor slot is display:none on a phone's other views, where an alert is never announced.
-// The words the spec does not give are drafts (words.ts). Focus: docs/web-page-flows.md, section 1.
+// Focus: docs/web-page-flows.md, section 1.
 import { useRef } from "preact/hooks";
 import type { BannerOf } from "../banners";
 import { breakPending, resetsIn, since } from "../editor/clock.ts";
@@ -114,7 +114,8 @@ function FailedBanner({
   );
 }
 
-/** S 5. The banner goes while the prompt is open, so the focus moves to the editor first: the prompt gives it back there. */
+/** S 5. The banner goes while the prompt is open, so the focus moves to the editor first: the prompt gives it back
+ *  there. */
 function DeclinedBanner() {
   return (
     <Banner

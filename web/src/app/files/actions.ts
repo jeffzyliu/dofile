@@ -71,8 +71,8 @@ const kindOf = (path: string) => {
 /** Rename (or move) `from` to `to` in the store; the tabs of it and of everything under it follow (`tabs` first, then
  *  editorCommands.renamed for each open file). A tab whose new name opens another way (a .dta renamed to .csv, a text
  *  file to .dta) is opened again as its new name says, in its place, unless it has unsaved edits (the editor keeps
- *  them); one whose new name opens in no tab (a .png) just closes, and the Graph tab is left alone. Rejects as the store
- *  does (`to` exists, ...). */
+ *  them); one whose new name opens in no tab (a .png) just closes, and the Graph tab is left alone. Rejects as the
+ *  store does (`to` exists, ...). */
 export function renameEntry(from: string, to: string): Promise<void> {
   return fileTurn(() => renameNow(from, to)); // a Save pressed meanwhile waits for the tabs to have the new name
 }
@@ -119,10 +119,10 @@ async function reopenAs(path: string) {
 /** What a new file or folder is called when the name field is left empty or unchanged. */
 export const NEW_NAMES = { file: "untitled.do", folder: "folder" } as const;
 
-/** Make an empty file or a folder when the visitor leaves the name field of a draft row (FilesPane.tsx, docs/web-page-flows.md
- *  section 1): `name` in `dir`, or with no `name` the first free `untitled.do` (`untitled-2.do`, ...) or `folder`. The store
- *  is listed fresh and in a turn, so two quick ones cannot both take a name; a `name` in use rejects with "already exists"
- *  (a write would replace it). Returns its path. */
+/** Make an empty file or a folder when the visitor leaves the name field of a draft row (FilesPane.tsx,
+ *  docs/web-page-flows.md section 1): `name` in `dir`, or with no `name` the first free `untitled.do` (`untitled-2.do`,
+ *  ...) or `folder`. The store is listed fresh and in a turn, so two quick ones cannot both take a name; a `name` in
+ *  use rejects with "already exists" (a write would replace it). Returns its path. */
 export function createEntry(kind: keyof typeof NEW_NAMES, dir = "", name?: string): Promise<string> {
   return fileTurn(async () => {
     const taken = (await store.list()).map((f) => f.path);
@@ -253,11 +253,11 @@ let uploads: Promise<unknown> = Promise.resolve(); // the uploads in progress, o
 /** Upload `items` into the store. Files that clash with none are written first; then each clash is asked in its own
  *  dialog (Keep mine is the default). A clash whose stored bytes are the uploaded ones is neither asked nor written
  *  (it counts as uploaded), unless the file is open with unsaved edits. A clash over an open file with unsaved edits is
- *  asked even after "Do the same" with Replace; keeping it loses nothing, so Esc or Keep mine for the rest need no
- *  question. A clash waits while another dialog is open: it never replaces one. Replacing an open file reloads it in
- *  the editor; one that is no longer UTF-8 text closes its tab. Ends with the toast "3 files uploaded". A file the
- *  store refuses (a path where a folder is, the quota) or whose name holds a control character is counted, and its
- *  reason goes to the console. Uploads run one at a time.
+ *  asked even after "Do the same" with Replace. After Esc, or "Do the same" with Keep mine, the clashes left are kept
+ *  with no question: keeping loses nothing. A clash waits while another dialog is open: it never replaces one.
+ *  Replacing an open file reloads it in the editor; one that is no longer UTF-8 text closes its tab. Ends with the
+ *  toast "3 files uploaded". A file the store refuses (a path where a folder is, the quota) or whose name holds a
+ *  control character is counted, and its reason goes to the console. Uploads run one at a time.
  *  @param words - "sample" (a restore, sample.ts) has the dialog and the toast say "Sample restored", "The sample is
  *  already here" (nothing to write, nothing asked), "Couldn't restore the sample".
  *  @returns the paths written */
@@ -341,7 +341,8 @@ async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
   if (words === "sample") {
     if (failed) showToast("Couldn't restore the sample", "error");
     else if (written.length) showToast("Sample restored");
-    else if (!clashes.length) showToast("The sample is already here"); // none asked: what was asked and kept says nothing
+    // none asked: what was asked and kept says nothing
+    else if (!clashes.length) showToast("The sample is already here");
   } else if (written.length + same || failed) {
     const done = `${written.length + same} ${plural(written.length + same, "file", "files")} uploaded`;
     showToast(failed ? `${done} · ${failed} failed` : done, failed ? "error" : undefined);

@@ -1,6 +1,6 @@
 // The Results tab (docs/design/SPEC.md, section 3.9): one table of name, value and action columns, in groups that fold.
-// Hover and keyboard-focus reveals (every digit, the copy icon) are CSS only (ui.css, "results"). An open matrix and the
-// copied check belong to the `results` they were read for: after another run they are gone (the values could be
+// Hover and keyboard-focus reveals (every digit, the copy icon) are CSS only (ui.css, "results"). An open matrix and
+// the copied check belong to the `results` they were read for: after another run they are gone (the values could be
 // another model's).
 
 import { useId } from "preact/hooks";
@@ -138,7 +138,7 @@ function MatrixGrid({ entry, name }: { entry: OpenMatrix; name: string }) {
               <tr key={i}>
                 <td class="obs">{r}</td>
                 {data[i].slice(0, MAX_COLS).map((v, j) => (
-                  // biome-ignore lint/a11y/useKeyWithClickEvents: cells are for the mouse; the keyboard has the row's Copy
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: cells are mouse-only; the keyboard has the row's Copy
                   <td
                     key={j}
                     class="cell"

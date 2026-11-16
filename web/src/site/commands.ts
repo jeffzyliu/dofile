@@ -1,5 +1,5 @@
-// The commands page's entry (web/commands.html): the shared behavior, and the filter over the lists the build wrote into
-// the page. Without this script the page is the full list; a list with no name left hides its whole section.
+// The commands page's entry (web/commands.html): the shared behavior, and the filter over the lists the build wrote
+// into the page. Without this script the page is the full list; a list with no name left hides its whole section.
 import { countText, filterNames } from "./filter.ts";
 import "./site.ts";
 

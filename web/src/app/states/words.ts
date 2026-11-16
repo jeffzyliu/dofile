@@ -1,5 +1,5 @@
 // The logic and the words of the dialogs and banners that are plain text, with no view and no signal of their own (so
-// Node tests them: test/states.test.ts). The words the spec does not give are drafts (SPEC section 8).
+// Node tests them: test/states.test.ts).
 
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
 import type { EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../types.ts";
@@ -7,7 +7,8 @@ import type { EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../
 /** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by
  *  default). The page's words count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
 export const GRACE_S = BREAK_GRACE_MS / 1000;
-/** The stopping banner's "Don't reset: wait for it" (S 9) and its focus come once the Break has been pending this long. */
+/** The stopping banner's "Don't reset: wait for it" (S 9) and its focus come once the Break has been pending this
+ *  long. */
 export const STOPPING_AFTER_S = 1;
 
 /** A time as the drawings write it: "6 s", "7.1 s" (under 10 s one decimal, else whole seconds). */
@@ -26,10 +27,11 @@ export const stageNow: Record<Stage, string> = {
   engine: "Starting the engine",
 };
 
-/** Whether Reset asks first (S 14): it may reset at once only while the engine is `ready` and nothing has run on it since it
- *  started (a new engine, or one just reset: `engineRuns` 0). Anything the dialog says it clears (data, e() and r(), macros,
- *  Stata scalars and matrices, graphs) can only come from a run, so this asks whenever there may be something and needs no
- *  question put to the engine. A run in progress asks: what it holds is known only when it ends. */
+/** Whether Reset asks first (S 14): it may reset at once only while the engine is `ready` and nothing has run on it
+ *  since it started (a new engine, or one just reset: `engineRuns` 0). Anything the dialog says it clears (data, e()
+ *  and r(), macros, Stata scalars and matrices, graphs) can only come from a run, so this asks whenever there may be
+ *  something and needs no question put to the engine. A run in progress asks: what it holds is known only when it
+ *  ends. */
 export const resetAsks = (state: EngineStateName, engineRuns: number): boolean => state !== "ready" || engineRuns > 0;
 
 /** The bold part of the stopping banner's countdown (S 9). At 0 the reset is under way: no "In 0 s". */
@@ -57,9 +59,10 @@ export function resetWords(kind: ResetKind, reason: string, isolated: boolean): 
   return { head: `The engine was reset: ${why}.`, rest: kept };
 }
 
-/** The file "Run the file again" (the reset banner) runs: the file whose run the reset cut, when it was a run of a whole file
- *  and not a Reset the visitor asked for (`kind` "user"); else null, and the banner has only "Dismiss". A cut selection or
- *  command, or a reset with no run in progress, is not offered: running the file would not be what was cut. */
+/** The file "Run the file again" (the reset banner) runs: the file whose run the reset cut, when it was a run of a
+ *  whole file and not a Reset the visitor asked for (`kind` "user"); else null, and the banner has only "Dismiss". A
+ *  cut selection or command, or a reset with no run in progress, is not offered: running the file would not be what was
+ *  cut. */
 export const rerunPath = (kind: ResetKind, run: RunHead | null): string | null =>
   kind !== "user" && run?.kind === "file" && run.path ? run.path : null;
 
@@ -73,7 +76,8 @@ export function runningWhat(run: RunHead): string {
   return "a command";
 }
 
-/** The first line of the not-started banner (S 6) for a reason; the reason's own sentence (the engine's `message`) follows. */
+/** The first line of the not-started banner (S 6) for a reason; the reason's own sentence (the engine's `message`)
+ *  follows. */
 export const FAILED_HEAD = "The engine didn't start.";
 /** S 6's second sentence, after the reason: what still works. */
 export const FILES_SAFE = "Your files are safe: you can still edit and download them.";

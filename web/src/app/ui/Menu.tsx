@@ -1,13 +1,5 @@
 // Menus: one open at a time, drawn by <MenuHost /> (once, in App.tsx) in the top layer (the popover API where the
 // browser has it) at the trigger's place. docs/design/SPEC.md, section 3.10.
-// The menu owns which item is the active one (`nav`: an index among the items that are not disabled, in drawn order,
-// scroll groups included); the active item takes the focus from its own render (MenuEntry), once the menu is shown and
-// in its place. A picked item closes the menu (focus back to the trigger) before its onSelect runs, so a dialog it opens
-// returns the focus there too. A `{ scroll: [...] }` entry holds items in a scrolling box (`.menu-scroll`: at most 60% of
-// the window's height, always room left for the items around it); the arrow keys still walk the scrolled ones.
-// `items` may be a function: the open menu calls it at each render, so the signals it reads keep the items current.
-// Two ways to open one: <MenuButton label items>...</MenuButton>, or openMenu({ label, items, anchor | at, restore })
-// (Shift+F10, the menu key; a right click).
 
 import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
@@ -15,24 +7,28 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 
 export type MenuItem =
   | "rule"
-  | { scroll: MenuItem[] } // a run of items that scrolls when the menu is taller than the window; the ones around it stay in reach
+  // a run of items in a scrolling box (`.menu-scroll`: at most 60% of the window's height, always room left for the
+  // items around it); the arrow keys still walk the scrolled ones
+  | { scroll: MenuItem[] }
   | {
       label: ComponentChildren;
       onSelect?: () => void;
       href?: string; // a link instead of an action (opens in a new tab: leaving the editor would end the engine)
       hint?: ComponentChildren; // at the right: a key ("F2") or a value (the version)
-      hintIsKey?: boolean; // the hint names a key: hidden from sight on a phone (class key-hint), kept in the item's name
+      // the hint names a key: hidden from sight on a phone (class key-hint), kept in the item's name
+      hintIsKey?: boolean;
       danger?: boolean;
       disabled?: boolean;
       keepOpen?: boolean; // picking it leaves the menu open
       checked?: boolean; // a switch: role="menuitemcheckbox", aria-checked, a track and knob at the right
       current?: boolean; // the open file in a list of files: the menu scrolls it into view when it opens
     };
+/** A function is called at each render of the open menu, so the signals it reads keep the items current. */
 type Items = MenuItem[] | (() => MenuItem[]);
 type Leaf = Exclude<MenuItem, "rule" | { scroll: MenuItem[] }>;
 
-/** An item's hint; one that names a key (`hintIsKey`: "F2") has the class key-hint, which a phone hides from sight as it
- *  hides the key chips (app.css); it stays in the item's accessible name. */
+/** An item's hint; one that names a key (`hintIsKey`: "F2") has the class key-hint, which a phone hides from sight as
+ *  it hides the key chips (app.css); it stays in the item's accessible name. */
 const Hint = ({ item }: { item: { hint?: ComponentChildren; hintIsKey?: boolean } }) => (
   <span class={item.hintIsKey ? "aside key-hint" : "aside"}>{item.hint}</span>
 );
@@ -48,6 +44,9 @@ interface Open {
 
 export const openMenuState = signal<Open | null>(null);
 
+/** Open a menu under `anchor` (its trigger, which gets aria-expanded) or at the point `at` (Shift+F10, the menu key, a
+ *  right click). A picked item closes the menu, with the focus back on `restore` (default `anchor`), before its
+ *  onSelect runs, so a dialog it opens returns the focus there too. */
 export function openMenu({
   label,
   items,
@@ -66,7 +65,8 @@ export function openMenu({
   openMenuState.value = { label, items, anchor, at, restore: restore ?? anchor, focus };
 }
 
-/** Close the open menu; `restoreFocus` gives the focus back to its trigger (Esc, a pick, Tab), not on a click outside. */
+/** Close the open menu; `restoreFocus` gives the focus back to its trigger (Esc, a pick, Tab), not on a click
+ *  outside. */
 export function closeMenu(restoreFocus = true) {
   const m = openMenuState.value;
   if (!m) return;
@@ -74,6 +74,7 @@ export function closeMenu(restoreFocus = true) {
   if (restoreFocus && m.restore?.isConnected) m.restore.focus();
 }
 
+/** A button that opens a menu (openMenu) and keeps its own place as the anchor. */
 export function MenuButton({
   label,
   items,
@@ -118,11 +119,16 @@ export function MenuButton({
 
 const hasPopover = typeof HTMLElement !== "undefined" && "showPopover" in HTMLElement.prototype;
 
+/** The menu owns which item is the active one (`nav`: an index among the items that are not disabled, in drawn order,
+ *  scroll groups included); the active item takes the focus from its own render (MenuEntry), once the menu is shown and
+ *  in its place. */
 export function MenuHost() {
   const m = openMenuState.value;
   const ref = useRef<HTMLDivElement>(null);
-  const [placed, setPlaced] = useState<Open | null>(null); // the menu that is shown and in its place: its items may take the focus
-  const [nav, setNav] = useState<{ of: Open; at: number } | null>(null); // the active item of a menu; none yet: its `focus`
+  // the menu that is shown and in its place: its items may take the focus
+  const [placed, setPlaced] = useState<Open | null>(null);
+  // the active item of a menu; none yet: its `focus`
+  const [nav, setNav] = useState<{ of: Open; at: number } | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;

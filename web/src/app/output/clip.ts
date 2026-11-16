@@ -53,7 +53,8 @@ export function pngBytes(base64: string): Uint8Array<ArrayBuffer> {
 export const pngName = (g: Graph) =>
   (g.from === "file" && g.path ? (g.path.split("/").pop() ?? "") : "") || `graph-${g.n}.png`;
 
-/** Whether this browser can put an image on the clipboard (Firefox before 127 cannot): "Copy image" is off without it. */
+/** Whether this browser can put an image on the clipboard (Firefox before 127 cannot): "Copy image" is off without
+ *  it. */
 export const canCopyImage = () => typeof ClipboardItem !== "undefined" && Boolean(navigator.clipboard?.write);
 
 /** Copy the graph as an image. Resolves whether it was copied; a toast says so. */

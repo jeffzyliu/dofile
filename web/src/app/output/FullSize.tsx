@@ -1,6 +1,7 @@
 // The full-size graph view (docs/design/SPEC.md, section 3.7), over the whole page; open while state.ts `graphFull` is
 // true. A fixed overlay, not a native modal <dialog>: the browser's top layer would cover the toast ("Copied" after
-// Copy image). So it keeps the dialog's promises itself: role="dialog" aria-modal, focus in, Tab kept inside, focus back.
+// Copy image). So it keeps the dialog's promises itself: role="dialog" aria-modal, focus in, Tab kept inside, focus
+// back.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { say as announce, graphFull, graphIndex, graphs } from "../state.ts";

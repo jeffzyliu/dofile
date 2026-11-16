@@ -1,8 +1,9 @@
 // The engine's dialogs: the download prompt and its progress (S 1, S 2, S 3; phone S 8), and "dofile is open in another
 // tab" (WS 6). The latter's first focus is "Close editor": taking over ends the other tab's engine and the data in its
-// memory, so a stray Enter must not do it. WS 6 draws "Close this tab", but a page may close only a tab a script opened,
-// so the button leaves the editor for the landing page instead (LANDING_URL; e2e/landing.spec.ts checks it). The
-// take-over button is aria-disabled (and `.off`) while `other-tab-taking` (a few ms): the machine ignores a second press.
+// memory, so a stray Enter must not do it. WS 6 draws "Close this tab", but a page may close only a tab a script
+// opened, so the button leaves the editor for the landing page instead (LANDING_URL; e2e/landing.spec.ts checks it).
+// The take-over button is aria-disabled (and `.off`) while `other-tab-taking` (a few ms): the machine ignores a second
+// press.
 
 import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";

@@ -1,5 +1,6 @@
-// The file panel (docs/design/SPEC.md, section 3.1): the head menu and the body (tree, dropzone). The rows, keys, rename
-// and drafts follow SPEC 3.1 and docs/web-page-flows.md. Files change through the store (actions.ts), never the worker.
+// The file panel (docs/design/SPEC.md, section 3.1): the head menu and the body (tree, dropzone). The rows, keys,
+// rename and drafts follow SPEC 3.1 and docs/web-page-flows.md. Files change through the store (actions.ts), never the
+// worker.
 import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { downloadAll, refresh } from "../files.ts";
@@ -41,8 +42,8 @@ const folded = signal<ReadonlySet<string>>(new Set());
 const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
 // the current folder ("" is the top): where the "+", New .do file and New folder make their file
 const currentDir = signal("");
-// the focus request (docs/web-page-flows.md, section 1): the row of `path` takes it once drawn; with no path, the row in
-// the tab order. `anywhere`: also from outside the tree
+// the focus request (docs/web-page-flows.md, section 1): the row of `path` takes it once drawn; with no path, the row
+// in the tab order. `anywhere`: also from outside the tree
 export const focusWanted = signal<{ path: string | null; anywhere?: boolean } | null>(null); // the test hook reads it
 interface Renaming {
   id: number; // which field: a commit that ends after another one began leaves it alone
@@ -64,8 +65,8 @@ const setTree = (el: HTMLUListElement | null) => {
 /** Whether the tree is on screen with its rows (not folded away, not on another phone view, not empty). */
 export const treeShown = () => (treeList?.getClientRects().length ?? 0) > 0;
 
-/** Make `path` the row in the tab order and have it take the focus when it is drawn (after a rename, once the store has
- *  been listed again), unless the focus has gone out of the tree by then (TreeRow). */
+/** Make `path` the row in the tab order and have it take the focus when it is drawn (at once for a row on screen; after
+ *  a rename, once the store has been listed again), unless the focus has gone out of the tree by then (TreeRow). */
 function focusRow(path: string) {
   rovingPath.value = path;
   focusWanted.value = { path };
@@ -192,7 +193,8 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   }
   const dir = parentOf(r.path);
   const asked = name.trim() === "" || name === baseName(r.path) ? undefined : name;
-  let problem = asked === undefined ? null : newPathProblem(asked, dir, files.value); // a draft's name may be a path: "sub/x.do" makes sub
+  // a draft's name may be a path: "sub/x.do" makes sub
+  let problem = asked === undefined ? null : newPathProblem(asked, dir, files.value);
   if (problem && !leaving) return keepOpen(r, problem);
   if (leaving && rovingPath.value === r.path) rovingPath.value = r.from; // the draft's path is not a row
   ending = true;
@@ -220,7 +222,8 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   if (problem)
     showToast(`${problem} Made ${baseName(to)} instead.`); // the reason line is gone with the field
   else if (asked?.includes("/")) unfold(parentOf(to)); // a folder the name went through may be folded
-  if (kind === "file" && !leaving) openFile(to); // leaving: the visitor's tap decides what is open and where the focus is
+  // leaving: the visitor's tap decides what is open and where the focus is
+  if (kind === "file" && !leaving) openFile(to);
   if (renaming.value?.id !== r.id) return; // another field was started meanwhile
   renaming.value = null;
   if (!leaving) focusRow(to);
@@ -410,7 +413,8 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
   useRovingFocus(row.path, li, r !== null, tabbable);
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }, anchor: HTMLElement | null = at ? null : el) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor, at, restore: el });
-  // a folder is made current and unfolded, never folded (its caret and Left fold it); a file opens, and its folder is current
+  // a folder is made current and unfolded, never folded (its caret and Left fold it); a file opens, and its folder is
+  // current
   const activate = () => {
     if (row.dir) {
       currentDir.value = row.path;
@@ -422,7 +426,8 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
   };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.target !== e.currentTarget) return; // keys typed in the rename field
-    if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back; Shift stays (Shift+F10 is the menu)
+    // Alt+Left is the browser's Back; Shift stays (Shift+F10 is the menu)
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const i = rows.indexOf(row);
     const go = (j: number) => {
       e.preventDefault();
@@ -531,7 +536,8 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
             aria-hidden="true"
             onClick={(e) => {
               e.stopPropagation();
-              const more = e.currentTarget; // the menu hangs from the ⋯ and a second tap on it closes it, as a MenuButton
+              // the menu hangs from the ⋯ and a second tap on it closes it, as a MenuButton
+              const more = e.currentTarget;
               if (openMenuState.value?.anchor === more) closeMenu();
               else showMenu(more.closest("li") as HTMLElement, undefined, more);
             }}
@@ -552,9 +558,9 @@ function useDrop(ref: { current: HTMLElement | null }) {
   useEffect(() => {
     const pane = ref.current?.closest<HTMLElement>(".files-pane");
     if (!pane) return;
-    // A drag that began in the page is never an upload: Chromium and WebKit list "Files" for an image dragged from it (a
-    // graph). dragend ends it; so does a drop, or the mouse moving again (no mouse events fire during a drag), in case
-    // the dragged element was removed before its dragend.
+    // A drag that began in the page is never an upload: Chromium and WebKit list "Files" for an image dragged from it
+    // (a graph). dragend ends it; so does a drop, or the mouse moving again (no mouse events fire during a drag), in
+    // case the dragged element was removed before its dragend.
     let inPage = false;
     const started = () => {
       inPage = true;

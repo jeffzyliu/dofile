@@ -1,14 +1,12 @@
 // The dialog: a native <dialog> opened modal (the browser makes the rest of the page inert and draws ::backdrop as the
 // scrim), centered on a desktop and a bottom sheet under 700 px (app.css). docs/design/SPEC.md, section 3.10.
-// Mark the safe button `data-autofocus` (Cancel for Delete and Reset); without one, the first button. A destructive
-// button is `.btn.stop.live` and never the default. Esc calls `onCancel`; without it the dialog is blocking. A dialog
-// unmounted with no answer (another replaced it in the `dialog` signal): its owner treats that as Cancel. Render it
-// while it should be open; the `dialog` signal decides that (app/dialogs.tsx maps each kind to its view).
 import type { ComponentChildren } from "preact";
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { focusStable } from "../states/focus.ts";
 import { isHeldEnter } from "./keys.ts";
 
+/** Props of `Dialog`. Mark the safe button `data-autofocus` (Cancel for Delete and Reset); without one, the first
+ *  button has the focus. A destructive button is `.btn.stop.live` and never the default. */
 export interface DialogProps {
   title: ComponentChildren;
   children?: ComponentChildren;
@@ -26,10 +24,13 @@ const heldEnter = (e: KeyboardEvent) => {
 };
 
 // the opener of a dialog that has closed and not yet given the focus back (its microtask below), for a dialog opened
-// meanwhile (the next clash, other-tab over a dialog) to take as its own; <body> is never an opener (a dialog opened with
-// the focus on nothing gives it to focusStable)
+// meanwhile (the next clash, other-tab over a dialog) to take as its own; <body> is never an opener (a dialog opened
+// with the focus on nothing gives it to focusStable)
 let leaving: HTMLElement | null = null;
 
+/** Render it while it should be open: the `dialog` signal decides that (app/dialogs.tsx maps each kind to its view).
+ *  Esc calls `onCancel`; without it the dialog is blocking. A dialog unmounted with no answer (another replaced it in
+ *  the `dialog` signal) is treated by its owner as Cancel. */
 export function Dialog({
   title,
   children,
@@ -62,9 +63,10 @@ export function Dialog({
       if (d.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
       if (d.open) d.close();
       leaving = opener;
-      // after the renders this close is part of (a microtask: states/focus.ts useFocusOnLeave), and only for a focus left
-      // on nothing: a dialog, banner or answer that placed the focus from its render keeps it, so it moves once. Then the
-      // opener, or when it has left the page, the editor or More actions, not <body>. docs/web-page-flows.md, section 1
+      // after the renders this close is part of (a microtask: states/focus.ts useFocusOnLeave), and only for a focus
+      // left on nothing: a dialog, banner or answer that placed the focus from its render keeps it, so it moves once.
+      // Then the opener, or when it has left the page, the editor or More actions, not <body>. docs/web-page-flows.md,
+      // section 1
       queueMicrotask(() => {
         if (leaving === opener) leaving = null;
         if (document.activeElement && document.activeElement !== document.body) return;

@@ -1,6 +1,6 @@
 // The Graph tab (docs/design/SPEC.md, section 3.7): the shown graph on its card, and a foot with a thumbnail for each
-// graph and the actions. `graphIndex` is kept in range here, so a "Clear log" or a drop of the oldest graph never leaves
-// the tab on nothing.
+// graph and the actions. `graphIndex` is kept in range here, so a "Clear log" or a drop of the oldest graph never
+// leaves the tab on nothing.
 
 import type { ComponentChildren } from "preact";
 import { graphFull, graphIndex, graphs } from "../state.ts";
