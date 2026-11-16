@@ -173,9 +173,9 @@ the rest stay where they are for R1. "The graphics section" is what the `main` o
 
 **The condition on R1.** R1 starts only when the lazy graphics part has stopped changing: no open pull request, and no
 branch the maintainer names as live, touches `client.ts`'s graphics methods, `worker.ts`'s graphics section or
-`lazy-part.ts`, and the maintainer says the idle-wait work is done. If that is not so when lane a reaches it, the lane
-ends at S8, phase 2 closes without R1, and R1 heads section 8's list. The graphics halves of S7 and S8 are not done in
-either case.
+`lazy-part.ts`, and the maintainer says the idle-wait work (pull request 74 and what follows from it) is done. If that
+is not so when lane a reaches it, the lane ends at S8, phase 2 closes without R1, and R1 heads section 8's list. The
+graphics halves of S7 and S8 are not done in either case.
 
 **Sessions.** Session 3 runs lane a to S8, lane b to B1, S4 and S9. Session 4 runs the rest. Lane c is the long one: it
 waits on lane b twice.
@@ -238,11 +238,13 @@ and the `build-web` action among them, and N7's baseline command. For each, what
 CI lists, and how staleness is told afterwards. The deploy path comes first: a merge deploys. It answers report 10's
 worry (the "one command" feel of `npm run dev`) and is written for both answers to decision 2.
 
-**The R1 note.** Written from the code of its day, not from the reports. The table of states and events on both
-threads (the page's fetch and hand-over; the worker's wait, idle steps, native decode and own fetch); the 22 variables
-as one record, and which of them S8 already moved; what stays a side effect; how a lazy part is driven through the real
-worker under Node, or why it cannot be; and the limit S8 works under (iOS runs the worker twice: imported modules only,
-no chunk of its own). It names the tests that pin today's behaviour before any line moves.
+**The R1 note.** Written from the code of its day, not from the reports. The table of states and events on both threads
+(the page's fetch and hand-over; the worker's wait, idle steps, native decode and own fetch); the 22 variables as one
+record, and which of them S8 already moved; what stays a side effect; how a lazy part is driven through the real worker
+under Node, or why it cannot be; and the limit S8 works under (iOS runs the worker twice: imported modules only, no
+chunk of its own). It names the tests that pin today's behaviour before any line moves; among them
+`e2e/graphics.spec.ts`, which reads the worker's `[dofile] graphics part` console lines and times the idle wait from
+them.
 
 ## 7. Checks
 
