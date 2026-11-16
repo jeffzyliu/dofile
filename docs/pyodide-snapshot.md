@@ -84,9 +84,9 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
 | `docs/img/make-startup-times.mjs` | draws the chart below |
 
 - The snapshot is made in Node and runs in the browser. Two big files: the **snapshot** (the Python heap, 136 MB) and
-  the **bundle** (site-packages as files, 93 MB, 3,884 files, needed because the snapshot holds memory, not the
-  filesystem). They are written **brotli 11** as `heap.brotli.bin` (19.8 MB) and `site-packages.brotli.bin` (20.0 MB),
-  39.9 MB in all (46.5 MB, the heap 26.5, before the library copies were zeroed and the docstrings stripped; see
+  the **bundle** (site-packages as files, 91 MB, 3,559 files, needed because the snapshot holds memory, not the
+  filesystem). They are written **brotli 11** as `heap.brotli.bin` (21.1 MB) and `site-packages.brotli.bin` (18.5 MB),
+  39.6 MB in all (46.5 MB, the heap 26.5, before the library copies were zeroed and the docstrings stripped; see
   "Making the files smaller"). The small files are `dso.json`, `files.json`, the patched `pyodide.asm.patched.mjs` and
   `manifest.json` (the build record, not deployed: the wheel's name and SHA-256, the extra wheels' SHA-256s, the Pyodide
   version, a build time, each big file's compressed and decompressed size). The build decodes both files again with the
@@ -173,8 +173,8 @@ runs of the page's "ready in X s" (a new browser context is cold, a reload in it
   the normal boot. That is also all the browser stores.
 - **Compressed storage costs 0.3–0.7 s per start** (measured on the 46.5 MB build) against keeping 229 MB decompressed,
   and the download is about 12 MB smaller than the brotli 5 a host would send (52.3 MB).
-- The bundle has only about 8 MB of dead weight (tests, type stubs); the bulk is scipy (41 MB), matplotlib (17) and
-  numpy (11). Trimming it would not change the picture.
+- The bundle's dead weight (tests, type stubs: 8.2 MB raw, 2.2 MB compressed) is left out since 2026-11-15; the bulk is
+  scipy (41 MB), matplotlib (17) and numpy (11), and trimming more would not change the picture.
 - Against plain `vite preview` (no compression, nothing cached) the snapshot took 2.8 s cold and 2.4 s warm: not
   comparable, so not in the table or chart.
 
@@ -227,7 +227,7 @@ is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.mjs` and `web/src
 | Files named `.bin`, kept compressed in the browser | **Done** | the Cache API holds 40 MB, not 229 | a `.br` name makes hosts send `Content-Encoding: br`, and the browser decodes before the cache sees it |
 | Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" | the first graph then pays about 0.9 s (0.3 s with `.pyc` files); needs the bundle in two parts and a fetch. [Experiment](lazy-matplotlib.md#experiment-loading-matplotlib-lazily) |
 | Ship `.pyc` files for the lazily loaded part | **Not done** (part of the row above) | 0.6 s of the 0.87 s first graph is compiling | |
-| Leave out the bundle's tests (6.6 MB raw) and type stubs (1.5 MB raw) | **Not done** | too small to matter | `bundle()` takes every file under site-packages |
+| Leave out the bundle's tests (6.6 MB raw) and type stubs (1.5 MB raw) | **Done, the default** | bundle 20.74 → 18.50 (−2.24 MB, 10.8%); raw 99.5 → 91.4 MB; heap unchanged (21.1, build to build it varies by about 0.1) | `isDeadWeight` in `snapshot.ts`: every file under a folder named `tests` or `test`, and `*.pyi` and `py.typed`. It was 294 test files (almost all scipy data) and 275 stubs; no `.so` and no `testing` folder matched, and `check-snapshot` passes. An experiment first measured it as −2.10 MB for tests and −0.14 MB for stubs |
 | Leave out unused scipy subpackages (`io`, `signal`, `cluster`, `odr`: 4.1 of 40.8 MB raw) | **Not done** | little to gain | the corpus programs import 493 scipy modules |
 | Zero the heap's free memory | **Tried, no gain** | 34.0 against 34.3 at brotli 5 | no large free blocks are left |
 | zstd or gzip instead of brotli | **Tried, rejected** | zstd 22 decoded the heap wrongly without any error; gzip is half as good | the build compares the decoded files with the originals |

@@ -178,6 +178,16 @@ export function zeroLibraryCopies(py: SnapshotPy): { zeroed: number; bytes: numb
   return { zeroed, bytes, kept };
 }
 
+// Files the bundle leaves out (path relative to site-packages): everything under a folder named `tests` or `test`
+// (6.6 MB raw, 294 files, almost all scipy test data) and type stubs (`*.pyi`, `py.typed`: 1.5 MB). Nothing imports them
+// at run time. Checked on the built tree: no `.so` and no `testing` folder (numpy.testing stays) matches, and the 97 Stata
+// cases of `npm run check-snapshot` pass without them. The match is on whole folder names, so `testing`, `latest` and
+// `pytest` are kept.
+export function isDeadWeight(relPath: string): boolean {
+  const parts = relPath.split("/");
+  return parts.slice(0, -1).some((d) => d === "tests" || d === "test") || /\.pyi$|(^|\/)py\.typed$/.test(relPath);
+}
+
 // What to save next to the snapshot: the library log and the site-packages tree (an index and one blob).
 export function bundle(
   py: SnapshotPy,
@@ -190,7 +200,7 @@ export function bundle(
         const full = `${dir}/${name}`,
           st = py.FS.stat(full);
         if (py.FS.isDir(st.mode)) walk(full);
-        else if (py.FS.isFile(st.mode)) files.push(full);
+        else if (py.FS.isFile(st.mode) && !isDeadWeight(full.slice(site.length + 1))) files.push(full);
       }
     };
   walk(site);
