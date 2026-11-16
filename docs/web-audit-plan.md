@@ -49,6 +49,8 @@ The proposal's six rules for every brief (its section 5) stand. Added here:
 
 7. **Start from the code of the day.** The reports read `main` at 145a557. Before a builder starts, its brief's findings
    are checked against the current `main`: a finding that is gone is dropped and recorded, not fixed.
+   The check is a read-only `orchestrate:surveyor` (one per lane or group of items, the regions not overlapping); its
+   report goes into the builders' briefs.
 8. **One lane, one stack.** Items in a lane run in series. An item whose predecessor is not merged yet branches from the
    predecessor's branch and is rebased when it merges. No two open items in different lanes edit the same source or
    test file: where the tables cannot avoid it, the After column orders them. Exempt, with the later pull request
@@ -65,8 +67,9 @@ The proposal's six rules for every brief (its section 5) stand. Added here:
 
 Agents: `orchestrate:builder` per item in its own worktree, then a fresh `orchestrate:reviewer` at the builder's tier or
 above; at most five at once; 80 tool calls per agent; a failing check goes to `orchestrate:investigator`, a long log to
-the Haiku log-watcher. Each phase is one orchestrator session, which asks the maintainer to approve its own plan and
-spawns before it starts (an approval does not pass from one session to the next).
+the Haiku log-watcher; read-only research that ends in a report (rule 7's re-checks, the census, a mapping or a count)
+to an `orchestrate:surveyor`, not a general-purpose agent. Each phase is one orchestrator session, which asks the
+maintainer to approve its own plan and spawns before it starts (an approval does not pass from one session to the next).
 
 Models, by risk. "S/h + O" is a Sonnet builder at high effort with an Opus reviewer.
 
@@ -199,7 +202,7 @@ A sweep that has to change a test or a shared doc logs the change for W5 or the 
 | W5: sweep of `test/` and `e2e/`, with what the other sweeps logged for it | 3.1 to 3.3 | 3.4 |
 | Doc sync: `web/CLAUDE.md`, `web/README.md`, `docs/test-map.md`, SPEC sections 5, 6 and 8, `docs/web-engine-data-flow.md`; among them `web/CLAUDE.md`'s claim that every request gets a ticket (tickets are per worker start, 01-F7) | the sweeps | 3.5 |
 | Whole-diff review, G0 to head, by an Opus reviewer that has read none of the items; its report to `docs/archive/web-audit-surveys/` | 3.5 | 3.6 |
-| The census again, with `docs/archive/web-audit-surveys/census/`, against report 04; its report to the same folder | 3.5 | 3.6 |
+| The census again, by an `orchestrate:surveyor`, with `docs/archive/web-audit-surveys/census/`, against report 04; its report to the same folder | 3.5 | 3.6 |
 
 **End gate.** Every check of every earlier gate, and `uv run poe lint` (W1 sweeps the three Python files). Then
 `docs/phase2-plan.md` records the code audit (this plan) as done. Its audit section lists more than this plan covers,
@@ -214,8 +217,8 @@ with no test, code that should not exist), reports at most 20 findings a run, an
 
 How the two fit together:
 - The orchestrator spawns one read-only agent per region (the seven sweep regions, or fewer). Each is a
-  general-purpose agent, since the plugin's own agent types cannot invoke a skill, and its brief carries the orchestrate
-  rules such an agent needs.
+  general-purpose agent, since the plugin's own agent types (the surveyor among them) cannot invoke a skill, and its
+  brief carries the orchestrate rules such an agent needs.
 - **A region agent is given the code and nothing else**: not the proposal, this plan, the reports or the audit's log.
   Told what was fixed, it would confirm it. It invokes the skill on its region, at the load "one visitor, one tab, the
   files in the browser", and writes the skill's report to a file.
@@ -317,8 +320,8 @@ log and the two phase 3 reports in `docs/archive/web-audit-surveys/`.
 | 2 | R1, if it did not run | Check the condition on R1; if it holds, write the R1 note (section 6). | Opus, high | the note, and R1's three items scheduled |
 | 3 | R2 | From B3's record in the audit's log: did the simple fix close the gap, and which tests pin it. Then design the ticket per run: where the ticket travels (the interrupt buffer's one word is Pyodide's; a second word, or a message; and the case with no shared buffer at all), what the machine issues and checks, which cells of SPEC section 5 and which tests in `machine.test.ts` change. | Opus, high | a design note; R2 as items with sizes; a recommendation to do it or drop it, since report 01 would do it only if B3 fell short |
 | 4 | R3, the harness | A trial, not a design: two views that still hold behaviour after the audit (candidates: `Dialog`, the tree) tested under two candidate libraries. Record what each gets wrong about focus against the browsers, the dependency's size and licence, and how many of the remaining e2e-only behaviours a harness could cover. | Sonnet, high | a comparison and a yes or no; the dependency needs the maintainer's approval |
-| 5 | R4 | Run `census/css.mjs` again. Map each block of `app.css` and `ui.css` to the components the audit left. Decide the layout (a sheet per component, or sections), how the phone breakpoint is stated once, and whether N7's uncommitted baselines are enough or baselines go in the repository. The phone toast arithmetic needs a real device: list it, do not plan it. | Sonnet, high | a mapping table and R4 as items; it is scheduled with the later UI work, not before |
-| 6 | R6 | Count the `state.*` reads left in `e2e/` after rule 9. Name the surface they need and group the reads by helper. | Sonnet, medium | the surface as a typed list, and the conversion as one or two mechanical items |
+| 5 | R4 | Run `census/css.mjs` again. Map each block of `app.css` and `ui.css` to the components the audit left. Decide the layout (a sheet per component, or sections), how the phone breakpoint is stated once, and whether N7's uncommitted baselines are enough or baselines go in the repository. The phone toast arithmetic needs a real device: list it, do not plan it. | surveyor, Sonnet, high | a mapping table and R4 as items; it is scheduled with the later UI work, not before |
+| 6 | R6 | Count the `state.*` reads left in `e2e/` after rule 9. Name the surface they need and group the reads by helper. | surveyor, Sonnet, medium | the surface as a typed list, and the conversion as one or two mechanical items |
 | 7 | all | Order the results, size them, and write the execution plan for what the maintainer keeps. In the same change: replace the icebox entry, repoint `docs/phase2-plan.md`, and move this file and the proposal to `docs/archive/`. | orchestrator | `docs/web-audit-redesigns.md` |
 
 Tasks 3 to 6 are independent and can run at once. About five agents and under a million tokens in all, by the measure
