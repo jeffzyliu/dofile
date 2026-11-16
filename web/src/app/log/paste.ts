@@ -39,8 +39,8 @@ function opensComment(line: string): boolean {
 }
 
 /** Whether a line cannot run on its own (one line at a time, a pasted comment around `drop _all` would run it): it
- *  opens a block (`{` at its end, `program define`, `mata`), a comment that
- *  goes on (`/*` with no `*/ `) or goes on to the next line (`; ///`). */
+ *  opens a block (`{` at its end, `program define`, `mata`), leaves a `/*` comment open, or goes on to the next line
+ *  (`; ///`). */
 export const opensBlock = (line: string) =>
   /\{\s*$/.test(line) || line.includes("///") || opensEndBlock(line) || opensComment(line);
 
