@@ -60,6 +60,45 @@ def leftovers(tree: Path) -> list[str]:
     ]
 
 
+# ruff F821 findings in upstream's code that are not bugs, as (file, name): lines move between commits
+UNDEFINED_OK = {
+    ("estimation/ivregress.py", "W_old"),  # igmm loop: read from the second pass on, after the first pass assigns it
+}
+
+
+def undefined_names(tree: Path) -> list[str]:
+    """ruff F821 over the patched package: a patch that applies cleanly can still call a name that upstream has
+    removed or moved to another module (opendta-odt24 lost its `wexp_macros` import that way)."""
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--isolated",
+            "--no-cache",
+            "--exit-zero",
+            "--select",
+            "F821",
+            "--output-format",
+            "concise",
+            str(tree),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # --exit-zero: findings exit 0 too, so any other rc means ruff did not run (`python -m` gives 1 when it is missing)
+    if run.returncode != 0:
+        sys.exit(f"ruff could not check the vendored package (rc {run.returncode}):\n{run.stderr}")
+    found = []
+    for line in run.stdout.splitlines():
+        m = re.match(r"(.+?):\d+:\d+: F821 Undefined name `(.+)`", line)
+        if m and (Path(m[1]).resolve().relative_to(tree.resolve()).as_posix(), m[2]) not in UNDEFINED_OK:
+            found.append(line)
+    return found
+
+
 def main(commit: str = COMMIT) -> None:
     target = DEST / "opendta"
     with tempfile.TemporaryDirectory() as tmp:
@@ -99,6 +138,12 @@ def main(commit: str = COMMIT) -> None:
     left = leftovers(target) + leftovers(TESTS)
     if left:
         sys.exit("unvendorable imports remain:\n" + "\n".join(left))
+    undefined = undefined_names(target)
+    if undefined:
+        sys.exit(
+            "undefined names in the vendored package (a patch may use a name upstream removed or moved):\n"
+            + "\n".join(undefined)
+        )
 
     (DEST / "__init__.py").write_text(
         '"""Third-party code vendored into dofile. Do not edit; re-run scripts/vendor_opendta.py (changes go in scripts/patches/)."""\n'
