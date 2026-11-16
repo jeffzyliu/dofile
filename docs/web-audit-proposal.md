@@ -14,7 +14,7 @@ reports are in `docs/archive/web-audit-surveys/`, as written (01 to 10 the surve
 
 **Baseline.** The surveys read `main` at 145a557. This text was then corrected against 65c5bd9, eleven commits later;
 those commits changed the lazy graphics part and nothing else under `web/src` (see "Since the surveys" below). Line
-numbers in this file are 65c5bd9's, except `worker.ts`'s, which are pull request 74's (below). Line numbers inside the
+numbers in this file are `main`'s at 3d0f4d7 (pull request 74, below). Line numbers inside the
 reports are 145a557's.
 
 Finding ids are `<report>-<finding>`: `03-F1` is finding F1 of report 03. The reports: 01 engine protocol, 02 worker and
@@ -35,11 +35,13 @@ build and scripts.
 - Root `CLAUDE.md` now lets a pull request be merged by a fast-forward push to `main` when the maintainer says so for
   it.
 
-This branch sits on pull request 74 (head 3d0f4d7, open when this was written), which adds to the above:
+Pull request 74 (3d0f4d7, merged 2026-11-16) adds to the above:
 - `IDLE_MS` is 250, not 1000 (one line more in `worker.ts` from line 482 on). This is the idle-wait work R1 waits for.
-- `e2e/graphics.spec.ts` now times the idle wait from the worker's `[dofile] graphics part` console lines, parsing
-  their text. Two consequences: it is a timing assertion (a lower bound of 0.15 s), to be watched at the first gate;
-  and S8, R1 and the sweep W1 must keep those lines' wording or change the test in the same pull request.
+- `e2e/graphics.spec.ts` now times the idle wait from the worker's `[dofile] graphics part` console lines, parsing their
+  text. Two consequences: it is a timing assertion (a lower bound of 0.15 s), to be watched at the first gate (its
+  authors: on Chromium it could fail on correct code if the page's main thread stalls over 0.25 s at ready; never seen,
+  28 of 28 twice); and S8, R1 and the sweep W1 must keep those lines' wording or change the test in the same pull
+  request.
 - The same spec declares its own `window` globals for a run sent at ready; N3's typed hook takes them in.
 - `measure-startup.mjs` gained `--first-run-delay-ms`. It was used twice in two days: S9 moves it and does not fold
   it away.
@@ -96,7 +98,7 @@ Size: S under 150 changed lines, M under 500, L more. Risk is the risk of a beha
 
 | id | Item | Size, risk | Source |
 |---|---|---|---|
-| N1 | `imports.test.ts` and the verbatim-line checks in `site.test.ts:112-113`: replace text pins with Biome restricted imports, compiler types and one path table; keep the transitive reachability test. Each removed assertion gets a named replacement in the same change, including the `ignoreHeldEnter` counts and the writable-signal count. Rewrites `web/CLAUDE.md` lines 82-88 to match. The cast count in `machine.ts` stays a test; the old-names blacklist is deleted only if decision 8.3 says so. Needed before S5 to S8, not before the B items. | M, low | 07-F1 to F4, F7; 01-F13 |
+| N1 | `imports.test.ts` and the verbatim-line checks in `site.test.ts:112-113`: replace text pins with Biome restricted imports, compiler types and one path table; keep the transitive reachability test. Each removed assertion gets a named replacement in the same change, including the `ignoreHeldEnter` counts and the writable-signal count. Rewrites `web/CLAUDE.md` lines 82-88 to match. The cast count in `machine.ts` stays a test; the old-names blacklist is deleted (decision 8.3). Needed before S5 to S8, not before the B items. | M, low | 07-F1 to F4, F7; 01-F13 |
 | N2 | Split `app.test.ts` (2,486 lines) along the controllers; shared wiring into `test/wiring.ts`; one `resetState()`. | M, low | 07-F5, F6 |
 | N3 | e2e: one typed hook module in place of three hand-typed copies; named helpers for the roughly 25 places that write a signal; duplicated helpers into `fixtures.ts`; the app's own CSS-class selectors (about 150 uses) moved to roles and names where one exists. | M, low | 08-E1, E2, E5, E8 |
 | N4 | e2e leftovers. First confirm that poc's two other flows ("Run does not save, Save does, reload brings the text back"; "a switch with unsaved edits asks") are covered elsewhere, or port them; add a live test of the `beforeunload` guard; then delete `poc.spec.ts` and rename `step2.spec.ts`. Same change: `web/CLAUDE.md` 92-93, `web/README.md` 97, `docs/test-map.md` 200 and 275, SPEC 1462, 1464, 1696. Runs after N3 (both edit `e2e/`). | S, low | 08-E6, E7, E9 |
@@ -121,6 +123,7 @@ Size: S under 150 changed lines, M under 500, L more. Risk is the risk of a beha
 | C2 | Registry types into `app/types.ts` (import cycles 10 to 3); break the three controller cycles. | S, low | 06-F9; 03-F11 |
 | C3 | The shared-buffer protocol in one module used by `client.ts` and `worker.ts`: `lazy-part.ts` already names the states; it also gets the header's layout (state, length, tries; `PART_HEADER` is in `snapshot.ts`), and `client.ts` uses the names. | S, low | 01-F12; 02-F5 |
 | C4 | The visitor's words out of the engine controller; one byte formatter; one UTF-8 decode; one "reload a tab from bytes". | S, low | 01-F11; 06-F14; 03-F14 |
+| C5 | Phone toast placement (added 2026-11-16). The tab bar's height becomes one token (today `61px`, written twice in `app.css` 1204-1227); the view says which case applies (a view with or without the command line), not a `:has()` on the log pane's `hidden`; the six rules in two files become one set. Four cases to verify on a real phone: a view without the command line, the log view, and each with the keyboard open. | S, med | 09-C2, C8 |
 
 ### Sweeps (the "total" in total-code audit)
 
@@ -333,7 +336,7 @@ from this plan (`docs/web-audit-plan.md`, section 4, "After phase 3").
 
 ## 8. Decisions for you
 
-Decided: 1, 2, 4, 6, 7, 9, and half of 3. Open: the other half of 3; 5 awaits a last word. Item 8 is a list.
+All decided, 2026-11-16. Item 8 is a list.
 
 1. **Which proposal.** Decided 2026-11-16: B, widened by decision 9.
 2. **`DOFILE_EDITOR_BASE`.** Decided 2026-11-16: delete the mode. The editor is served only on its own subdomain, by
@@ -343,13 +346,14 @@ Decided: 1, 2, 4, 6, 7, 9, and half of 3. Open: the other half of 3; 5 awaits a 
      two casts today. My reason to delete the count was that it fails on a harmless third cast. That is weak here: the
      audit does not restructure `machine.ts`, a cast in the one pure file deserves a look, and the fix is to change a
      number with a reason. The purity checks beside it move to Biome and the compiler in N1; the count stays a test.
-   - The grep for old flag names (line 73): open. It forbids ordinary local names (`was`, `attempt`) anywhere in `src`
-     and pins history. I recommend deleting it; N1 keeps it until you say.
+   - The grep for old flag names (line 73): **dropped** ("okay, drop the other rule"). It forbade ordinary local names
+     (`was`, `attempt`) anywhere in `src` and pinned history. N1 deletes the test and the words "(a test greps for the
+     old ones)" in `web/CLAUDE.md`.
 4. **The CSS rule on `data-engine^="other-tab"`.** Decided 2026-11-16: it goes. The test beside it does not need the
    rule; it only guards the rule's spelling. C1 has the run controls take a class from the engine-state predicate, the
    sheet hides that class, and the test becomes "no CSS reads `data-engine`".
-5. **Pull request grouping.** The maintainer leans to an integration branch; so do I, one per session, not one for
-   the whole audit (`docs/web-audit-plan.md`, section 5, has the reasons). The plan assumes that until confirmed.
+5. **Pull request grouping.** Decided 2026-11-16: "I approve one branch per session with true merges. I plan to freeze
+   main for the duration anyway". `docs/web-audit-plan.md`, section 5.
 6. **Fable for S0.** Decided 2026-11-16: "yes, authorized. in general, look for opportunities to use Fable when it is
    appropriate, but of course ask permission and justify." The session that spawns it still asks, as the orchestrate
    skill requires. The next candidate to ask for is the R1 note.
@@ -360,7 +364,7 @@ Decided: 1, 2, 4, 6, 7, 9, and half of 3. Open: the other half of 3; 5 awaits a 
      out of the open menu at phone width";
    - `check-pytest` and `check-numeric` in CI: they run at each phase gate here; adding them to CI is a cost decision;
    - splitting the main chunk: CodeMirror is most of it, and the build survey guesses a lazy split buys little;
-   - the phone toast arithmetic: only a real device can verify it (asked of the maintainer 2026-11-16: it may come in);
+   - (the phone toast arithmetic was here: it came in as C5, with the maintainer's check on a real phone);
    - the dark palette stated once: SPEC decision DS-6 already says "not now";
    - fewer e2e specs per browser: needs timings first.
 9. **Which redesigns move into B** (section 4, "What doing B first would waste"). Decided 2026-11-16: all four that

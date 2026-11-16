@@ -76,7 +76,8 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   http (a LAN address: no Cache, no SharedArrayBuffer) the worker fetches the part itself and the ring shows 0 of 7.7 MB while a
   graph's own request runs. On Firefox a graph at "ready" takes 0.73 s against 0.10 s (n = 5, unthrottled; from the page's
   start +0.43 s): brotli-wasm unpack, write and import in the run, as on the other browsers but slower in the first two
-  (archive/lazy-graphics-experiments.md, section 6). Not tested: a real phone over https, Android.
+  (archive/lazy-graphics-experiments.md, section 6). Not tested: a real phone over https, Android. With `IDLE_MS` 250
+  (2026-11-16), also not measured: memory, and typing during the warm-up; a slow CPU only by proxy (efficiency cores).
 - **Not done:** the restart race and the two-tab case are argued, not tested; a part that arrives damaged is dropped from the Cache by the page (the worker posts `{graphics: "damaged"}`), fetched again from the network, and the graph that found it says so (rc 199), the next one waits for the fresh fetch;
   `nodraw` graphs also wait.
 
