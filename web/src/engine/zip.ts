@@ -1,6 +1,4 @@
-// A minimal .zip writer: every entry stored (no compression), names in UTF-8, no ZIP64. Used by store.ts for
-// "Download all (.zip)", in the page, with no engine. The parts go straight into a Blob, so the files are not copied
-// into one big buffer.
+// A minimal .zip writer: every entry stored (no compression), names in UTF-8, no ZIP64.
 
 const TABLE = new Uint32Array(256).map((_, n) => {
   for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
@@ -23,8 +21,10 @@ function dosTime(ms: number): [number, number] {
   ];
 }
 
-// entries: [{ name, data, mtime }]; a folder's name ends in "/" and it has no data. Returns the parts of the file, in
-// order, for `new Blob(parts)`.
+/**
+ * @param entries - a folder's name ends in "/" and it has no data; `mtime` is ms since the epoch.
+ * @returns the parts of the file, in order, for `new Blob(parts)`: the files are not copied into one big buffer.
+ */
 export function zipParts(
   entries: { name: string; data: Uint8Array<ArrayBuffer>; mtime?: number }[],
 ): (ArrayBuffer | Uint8Array<ArrayBuffer>)[] {

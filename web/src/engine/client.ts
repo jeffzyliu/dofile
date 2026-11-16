@@ -124,13 +124,15 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   #graphics: GraphicsPart | null = null;
   #graphicsListeners = new Set<(p: GraphicsProgress) => void>();
 
-  // snapshot: the URL (ending in "/") of a snapshot from scripts/make-snapshot.mjs; a snapshot start needs startFiles.
-  // brotli: "wasm" forces brotli-wasm over the browser's own decoder (worker.ts), to compare them.
-  // memcap: the cap on the engine's WebAssembly heap, in MiB (memcap.ts); none: no cap.
-  // extraWheels: wheels installed after the dofile one (web/wheels/), each like `wheel`.
-  // buildId: the page's build id (scripts/build-id.ts); a list of start files with another id is refused (checkBuild).
-  // store: while a worker is live, the store tells it of each change the page makes.
-  // startFiles: the URL of start-files.json, or the list itself; download(), build() and cached() need it.
+  /**
+   * @param snapshot - the URL (ending in "/") of a snapshot from scripts/make-snapshot.mjs; a snapshot start needs startFiles.
+   * @param brotli - "wasm" forces brotli-wasm over the browser's own decoder.
+   * @param memcap - the cap on the engine's WebAssembly heap, in MiB (memcap.ts); none: no cap.
+   * @param extraWheels - wheels installed after the dofile one (web/wheels/).
+   * @param buildId - the page's build id (scripts/build-id.ts); a list of start files with another id is refused (checkBuild).
+   * @param store - while a worker is live, it tells the worker of each change the page makes.
+   * @param startFiles - the URL of start-files.json, or the list itself; download(), build() and cached() need it.
+   */
   constructor({
     createWorker,
     wheel,
@@ -262,13 +264,14 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
   }
 
-  /** Fetch the start files into the Cache the worker reads, before a worker exists. `onProgress` counts bytes as a host
-   *  sends them (compressed): each file's decoded bytes are scaled to its compressed size, and the files that came with
-   *  the page count as received from the start. A file already cached is not fetched again, so a second try resumes by
-   *  file. A file that does not arrive whole is not kept. Rejects with an AbortError when `signal` aborts; kind
-   *  "failed", reason "download" for a missing file or one of the wrong size; "updated" for another build's list; kind "failed", reason
-   *  "unknown" for a Cache that breaks other than by refusing storage. Resolves `cached: false` when there is nothing
-   *  to fill (no snapshot start, no Cache API, storage refused): the worker then downloads by itself, uncounted. */
+  /** Fetch the start files into the Cache the worker reads, before a worker exists. A file already cached is not fetched
+   *  again, so a second try resumes by file. A file that does not arrive whole is not kept. Rejects with an AbortError when
+   *  `signal` aborts; kind "failed", reason "download" for a missing file or one of the wrong size; "updated" for another
+   *  build's list; kind "failed", reason "unknown" for a Cache that breaks other than by refusing storage.
+   *  @param onProgress - counts bytes as a host sends them (compressed): each file's decoded bytes are scaled to its
+   *  compressed size, and the files that came with the page count as received from the start.
+   *  @returns `cached: false` when there is nothing to fill (no snapshot start, no Cache API, storage refused): the worker
+   *  then downloads by itself, uncounted. */
   async download({
     onProgress = (_progress) => {},
     signal = undefined,
@@ -532,12 +535,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
 
   // ---- Lifecycle: what changes the engine. Only the effect performer calls these. ----
 
-  /** Make worker `n` and start the engine in it: mount, boot, startup. `reply` says `stage` as each begins, then
-   *  `started`; `start-failed` with no WebAssembly, no worker, or a step that failed in the worker; `crashed` when the
-   *  worker errors or the browser closes the file storage, at any time while it is live. `build` is what `mount` needs
-   *  (null: the normal start); nothing is fetched first. The worker exists when start() returns, so calls made right
-   *  after it queue behind mount. A worker that failed is not ended here: the machine ends it. Throws while another
-   *  worker is live. */
+  /** Make worker `n` and start the engine in it: mount, boot, startup. The worker exists when start() returns, so calls
+   *  made right after it queue behind mount. A worker that failed is not ended here: the machine ends it. Throws while
+   *  another worker is live.
+   *  @param build - what `mount` needs (null: the normal start); nothing is fetched first.
+   *  @param reply - says `stage` as each begins, then `started`; `start-failed` with no WebAssembly, no worker, or a step
+   *  that failed in the worker; `crashed` when the worker errors or the browser closes the file storage, at any time
+   *  while it is live. */
   start(n: number, build: Build | null, reply: Reply<"start-worker">): void {
     if (this.#live) throw new Error(`start(${n}): worker ${this.#live.n} is still live`);
     if (!this.wasm) {
@@ -651,9 +655,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     for (const p of pending) p.reject(live.ended);
   }
 
-  /** `onLog` gets each chunk of the log as the run prints: a preview, which the result's `log` replaces. Rejects with
-   *  kind "op" when the worker answered with an error (the worker stays), or the ending's kind when it was ended
-   *  meanwhile. */
+  /** Rejects with kind "op" when the worker answered with an error (the worker stays), or the ending's kind when it was
+   *  ended meanwhile.
+   *  @param onLog - gets each chunk of the log as the run prints: a preview, which the result's `log` replaces. */
   run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
     const live = this.#live;
     if (live?.n !== n) return Promise.reject(fail("the engine is not running", "no-engine"));

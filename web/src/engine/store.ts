@@ -1,23 +1,16 @@
 // The user's files: dofile's own store in IndexedDB, one record per file or folder (docs/design/SPEC.md, section 7).
-// The page works on it directly, with no engine, during a run and after a failed start. The worker (worker.ts) copies it
-// into /work when it starts and writes back what each run changed.
-//   info:    path -> { path, dir, size, mtime }    one record per file or folder
+//   info:    path -> { path, dir, size, mtime }
 //   data:    path -> ArrayBuffer                    a file's bytes
 //   pending: key  -> { op, path, to? }              the journal: a page change that /work has not taken yet
-// The old Emscripten IDBFS database (named "/work") is another database: nothing here opens it.
 //
-// How the page's changes reach /work: one way, the journal. While a worker is live, a page change writes its records
-// and a `pending` row in one transaction, then calls `sync` (the transport's), which posts the worker the op `sync`, with
-// nothing in it. The worker then reads the journal in one transaction (applyRun with no changes): the store's version of
-// every path in it, and the journal emptied. After a run, applyRun does the same in the transaction that writes the
-// run's files. When it starts, the worker copies everything and empties the journal (takeAll). So /work takes the
-// store's version of a path, whichever message or copy finds its row first; a sync that finds the journal empty does
-// nothing, and the order in which the syncs arrive does not matter.
+// A page change writes its records and a `pending` row in one transaction, then calls `sync`, which tells the worker to
+// read the journal (applyRun with no changes). So /work takes the store's version of a path whichever message or copy
+// finds its row first, and the order in which syncs arrive does not matter.
 
 import type { FileChange, FileInfo, PendingRow } from "./types.ts";
 import { zipParts } from "./zip.ts";
 
-/** What a run did to one path in /work (worker.ts saveRun), for applyRun. `data`: a file's bytes, unless removed. */
+/** What a run did to one path in /work, for applyRun. `data`: a file's bytes, unless removed. */
 export interface RunChange {
   path: string;
   dir: boolean;
@@ -26,12 +19,10 @@ export interface RunChange {
   status: FileChange["status"];
   data?: Uint8Array;
 }
-/** What takeAll gives the worker: every record. */
 export interface StoreCopy {
   infos: FileInfo[];
   data: [IDBValidKey, ArrayBuffer][];
 }
-/** What applyRun gives back (see there). */
 export interface AppliedRun {
   files: FileChange[];
   skipped: string[];
@@ -39,10 +30,10 @@ export interface AppliedRun {
 }
 
 export const DB_NAME = "dofile";
-const HIDDEN = ".dofile"; // the engine's own folder: never listed, copied or zipped
+const HIDDEN = ".dofile"; // never listed, copied or zipped
 const ALL = ["info", "data", "pending"];
 
-// a path inside the working folder: relative, with "/", no "..", and not in the hidden folder
+/** Throws unless `path` is inside the working folder: relative, with "/", no "..", not in the hidden folder. */
 export function cleanPath(path: string): string {
   const parts = typeof path === "string" ? path.split("/") : [""];
   if (parts[0] === HIDDEN || parts.some((p) => p === "" || p === "." || p === ".."))
@@ -66,7 +57,6 @@ function parents(path: string): string[] {
   return out;
 }
 
-// the folders above `path`, made if missing
 async function makeParents(t: IDBTransaction, path: string) {
   const info = t.objectStore("info");
   for (const p of parents(path)) {
@@ -76,7 +66,6 @@ async function makeParents(t: IDBTransaction, path: string) {
   }
 }
 
-// `path` and everything under it: [info records, [path, bytes] of the files]
 async function tree(t: IDBTransaction, path: string): Promise<[FileInfo[], [string, ArrayBuffer][]]> {
   const info = t.objectStore("info"),
     data = t.objectStore("data"),
@@ -92,7 +81,7 @@ async function tree(t: IDBTransaction, path: string): Promise<[FileInfo[], [stri
   ];
 }
 
-// `closed()` is called when the browser closes the database under us (another page upgrades or deletes it)
+// `closed()` is called when the browser closes the database under us (another page upgrades or deletes it).
 function open(factory: IDBFactory | null | undefined, closed: () => void) {
   return new Promise<IDBDatabase>((ok, err) => {
     if (!factory) return err(new Error("this browser has no storage for files (IndexedDB)"));
@@ -131,19 +120,19 @@ export class FileStore {
     this.onClosed = null; // the engine client's: called when the browser closed the database under us
   }
 
-  // The engine client calls this when a worker starts, and with null when the worker is gone (or has no store of its own,
-  // so it could never read the journal). While `sync` is null, a change writes no `pending` row: the next worker copies
-  // the whole store. `onClosed`: called when the browser closes the database (another page deleted or upgraded it,
-  // "Clear site data"): /work then holds files the store may no longer have, which the journal cannot say. After a
-  // deleted database the new worker's mount copies the store as it is now; after an upgrade by another page this page
-  // still opens version 1, which fails (VersionError): the new worker mounts with a store error and an empty /work, and
-  // the store is detached from it.
+  /** Called when a worker starts, and with null when it is gone (or has no store of its own). While `sync` is null a change
+   *  writes no `pending` row: the next worker copies the whole store.
+   *  @param onClosed - called when the browser closes the database (another page deleted or upgraded it, "Clear site
+   *  data"): /work then holds files the store may no longer have, which the journal cannot say. After a deleted database
+   *  the new worker's mount copies the store as it is now; after an upgrade by another page this page still opens
+   *  version 1, which fails (VersionError): the new worker mounts with a store error and an empty /work, and the store
+   *  is detached from it. */
   attach(sync: FileStore["sync"], { onClosed = null }: { onClosed?: null | (() => void) } = {}) {
     Object.assign(this, { sync, onClosed });
   }
 
-  // One transaction. It rejects with the browser's error if it fails, and then nothing of it is kept. A database the
-  // browser closed is opened again by the next call.
+  /** One transaction. It rejects with the browser's error if it fails, and then nothing of it is kept. A database the
+   *  browser closed is opened again by the next call. */
   async tx<T>(stores: string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
     this.opened ??= open(this.factory, () => {
       if (this.opened !== mine) return;
@@ -179,12 +168,10 @@ export class FileStore {
     }
   }
 
-  // A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then `sync`
-  // tells the worker, which takes the store's version of what the journal names and empties it.
-  // Changes apply in the order they are called: `tx` makes its transaction right after the shared `opened` promise, so
-  // calls made in order make their transactions in order, and IndexedDB runs readwrite transactions over the same
-  // stores in the order they were made (a write called before a rename is moved by it; the page's Save relies on that:
-  // app/files/actions.ts fileTurn).
+  /** A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then `sync`.
+   *  Changes apply in the order called: `tx` makes its transaction right after the shared `opened` promise, and IndexedDB
+   *  runs readwrite transactions over the same stores in the order made (a write called before a rename is moved by it;
+   *  the page's Save relies on that: app/files/actions.ts fileTurn). */
   async change<T>(row: PendingRow, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
     if (this.blocked) throw new Error("dofile is open in another tab");
     const sync = this.sync;
@@ -205,7 +192,6 @@ export class FileStore {
   // ---- the page's API ----
 
   async list(): Promise<FileInfo[]> {
-    // reads `info` only
     return this.tx(["info"], "readonly", (t) => req(t.objectStore("info").getAll()));
   }
 
@@ -236,7 +222,7 @@ export class FileStore {
     await this.change({ op: "mkdir", path }, (t) => makeParents(t, `${path}/`));
   }
 
-  // a file, or a folder with everything under it
+  /** A file, or a folder with everything under it. */
   async rename(from: string, to: string): Promise<void> {
     cleanPath(from);
     cleanPath(to);
@@ -260,7 +246,7 @@ export class FileStore {
     });
   }
 
-  // the same; a path that is not there is not an error
+  /** A path that is not there is not an error. */
   async remove(path: string): Promise<void> {
     cleanPath(path);
     await this.change({ op: "remove", path }, (t) => {
@@ -271,7 +257,7 @@ export class FileStore {
     });
   }
 
-  // "Download all (.zip)": every file with its folders, made here with no engine. A File, named with the date.
+  /** "Download all (.zip)": every file with its folders. A File, named with the date. */
   async zip(): Promise<File> {
     const [infos, keys, values] = await this.tx(["info", "data"], "readonly", (t) =>
       Promise.all([
@@ -297,7 +283,7 @@ export class FileStore {
 
   // ---- the worker's side ----
 
-  // The engine's start: every record, and the journal emptied, in one transaction (the copy holds every change in it).
+  /** The worker's start: every record, and the journal emptied, in one transaction. */
   async takeAll(): Promise<StoreCopy> {
     return this.tx(ALL, "readwrite", async (t) => {
       const [infos, keys, values] = await Promise.all([
@@ -310,20 +296,21 @@ export class FileStore {
     });
   }
 
-  // After a run: write what it did to /work, and give back the page's version of what the page changed meanwhile.
-  // With no changes (the worker's `sync`) it is only the second part: the page's version of what the journal names.
-  // `changes`: [{ path, dir, size, mtime, status, data? }], status "created", "modified" or "removed". One transaction,
-  // so a page change lands wholly before it (its row is read here) or wholly after it (its row waits for the next one).
-  //  - What the page changed (a `pending` row for a write, remove or rename: the path, anything under it, both names of
-  //    a rename) keeps the page's version: the run's change to it is left out.
-  //  - A folder the page made (a mkdir row) keeps only itself: the run's files under it are written.
-  //  - Above something the page changed or made, the run can still make a folder, and its removal of a folder holds if
-  //    nothing is left under it; a file the run put where the page has a folder is left out.
-  // Returns { files: what was written, as RunResult.files (files only); skipped: the files the run created or changed
-  // that were left out because they are under a folder the page renamed or removed (a file the page saved, removed or
-  // renamed itself is not listed: the page's version wins); resync: what the worker must now put into /work to have the
-  // page's version: `paths` to replace with the records in `infos` and `data`, and `dirs` to make }. The journal is
-  // emptied.
+  /**
+   * After a run: write what it did to /work, and give back the page's version of what the page changed meanwhile. With no
+   * changes (the worker's `sync`) it is only the second part. One transaction, so a page change lands wholly before it
+   * (its row is read here) or wholly after it (its row waits for the next one). The journal is emptied.
+   *  - What the page changed (a `pending` row for a write, remove or rename: the path, anything under it, both names of a
+   *    rename) keeps the page's version: the run's change to it is left out.
+   *  - A folder the page made (a mkdir row) keeps only itself: the run's files under it are written.
+   *  - Above something the page changed or made, the run can still make a folder, and its removal of a folder holds if
+   *    nothing is left under it; a file the run put where the page has a folder is left out.
+   * @param changes - what the run did to each path; status is "created", "modified" or "removed".
+   * @returns `files`: what was written (files only). `skipped`: files the run created or changed that were left out
+   * because they are under a folder the page renamed or removed (a file the page saved, removed or renamed itself is not
+   * listed: the page's version wins). `resync`: what the worker must put into /work to have the page's version: `paths`
+   * to replace with the records in `infos` and `data`, and `dirs` to make.
+   */
   async applyRun(changes: RunChange[]): Promise<AppliedRun> {
     return this.tx(ALL, "readwrite", async (t) => {
       const info = t.objectStore("info"),
@@ -332,7 +319,7 @@ export class FileStore {
       const rows: PendingRow[] = await req(pending.getAll());
       const deep: string[] = [],
         made: string[] = [],
-        gone: string[] = []; // gone: what the page renamed (the old name) or removed
+        gone: string[] = []; // what the page renamed (the old name) or removed
       for (const r of rows) {
         if (r.op === "mkdir") made.push(r.path);
         else deep.push(r.path, ...(r.to ? [r.to] : []));
@@ -368,7 +355,7 @@ export class FileStore {
         if (!c.dir) written.push({ name: c.path, status: c.status, bytes: c.status === "removed" ? 0 : c.size });
       }
       for (const p of emptied.sort((a, b) => b.length - a.length)) {
-        // the deepest first
+        // deepest first
         if ((await req(info.count(under(p)))) === 0) info.delete(p);
       }
       pending.clear();
@@ -386,6 +373,6 @@ export class FileStore {
   }
 }
 
-// indexedDB: the factory to use (the tests pass their own); by default the browser's
+// `indexedDB`: the tests pass their own factory.
 export const openStore = ({ indexedDB = globalThis.indexedDB }: { indexedDB?: IDBFactory | null } = {}) =>
   new FileStore(indexedDB);

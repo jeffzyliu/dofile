@@ -1,16 +1,15 @@
-// Which devices get a cap on the engine's WebAssembly heap, and how much. By device, not by layout width: a narrow desktop
-// window has the memory of its machine. The cap itself is snapshot.ts (HEAP_MAX); docs/browser-engine.md, "The memory cap".
+// Which devices cap the engine's WebAssembly heap, and how much (docs/browser-engine.md, "The memory cap"). By device,
+// not by layout width: a narrow desktop window has the memory of its machine.
 //
 // Why: iOS kills the tab when the heap grows past what it allows (about 1 GB seen on an iPhone) and never answers a failed
-// grow, so the engine must refuse to ask. Under the cap, a big allocation raises MemoryError in Python, which the engine
-// reports as r(909) "op. sys. refuses to provide memory", and the data and the session stay.
+// grow, so the engine must refuse to ask. Under the cap, a big allocation raises MemoryError (r(909)); data and session stay.
 
 /** The cap on a phone, in MiB. The heap is 3.5 to 6 times the data (generate and replace copy a column), so this holds
- *  roughly 150 to 250 MB of data. Above the restored heap (130 MB) with room to work, under where an iPhone died (1.1 GB). */
+ *  roughly 150 to 250 MB of data. Above the restored heap (130 MB), under where an iPhone died (1.1 GB). */
 export const PHONE_CAP_MB = 750;
 
-/** What the rule reads of the browser. `mobile`: navigator.userAgentData?.mobile (Chromium); `deviceMemory`: navigator.deviceMemory
- *  (GB, rounded down to a power of two, at most 8; Chromium only, so Safari and Firefox have none). */
+/** What the rule reads of the browser. `mobile`: navigator.userAgentData?.mobile; `deviceMemory`: navigator.deviceMemory
+ *  (GB, a power of two, at most 8). Both are Chromium only. */
 export interface DeviceFacts {
   userAgent: string;
   maxTouchPoints: number;
@@ -18,7 +17,7 @@ export interface DeviceFacts {
   deviceMemory?: number;
 }
 
-/** `mb`: the cap in MiB, 0 for none (the browser's own limit); `why`: one phrase for the console. */
+/** `mb`: the cap in MiB, 0 for none; `why`: one phrase for the console. */
 export interface Cap {
   mb: number;
   why: string;
@@ -35,8 +34,9 @@ export const factsOf = (nav: NavigatorFacts): DeviceFacts => ({
   deviceMemory: nav.deviceMemory,
 });
 
-/** The cap for this device. `flag`: the URL's ?memcap value (null: absent): whole MiB, 0 for none; it wins over the device rule,
- *  for trying a cap on a real phone or a desktop. Anything else in it is ignored, and the console says so. */
+/** The cap for this device.
+ *  @param flag - the URL's ?memcap value (null: absent): whole MiB, 0 for none. It wins over the device rule. Anything
+ *  else is ignored, and `why` says so. */
 export function chooseCap({ userAgent, maxTouchPoints, mobile, deviceMemory }: DeviceFacts, flag: string | null): Cap {
   let ignored = "";
   if (flag !== null) {
@@ -52,7 +52,6 @@ export function chooseCap({ userAgent, maxTouchPoints, mobile, deviceMemory }: D
   return { mb: 0, why: `not iOS, not a mobile browser, deviceMemory ${deviceMemory ?? "n/a"}${ignored}` };
 }
 
-/** The one console line at start: the cap and why. */
 export const capLine = ({ mb, why }: Cap): string =>
   `[dofile] engine memory cap: ${mb ? `${mb} MB` : "none (the browser's own limit)"}, ${why}`;
 

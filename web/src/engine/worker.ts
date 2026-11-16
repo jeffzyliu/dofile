@@ -1,14 +1,6 @@
-// The engine's Web Worker: Pyodide + the dofile wheel, the user's files in /work.
-// /work is a plain in-memory folder. The files live in dofile's own store in IndexedDB (store.ts), which the page reads
-// and writes directly: "mount" copies the store into /work; a page change is journalled in the store and the op "sync"
-// (with nothing in it) makes the worker take the store's version of what the journal names; after each run the worker
-// writes what the run changed back to the store, and takes the journal in the same transaction (docs/design/SPEC.md,
-// section 7).
-// Protocol (types.ts: Ops, ToWorker, FromWorker): the page posts {id, op, args}; the worker answers {id, result} or
-// {id, error, name}, one op at a time, posts {stage} (a typed id, never text for the page to match) as each start-up
-// stage begins and {id, log} chunks while a run prints. client.ts is the page's side. Python's side: src/dofile/browser.py.
-// The handlers are three objects, one per set of ops (LifecycleOps, ReadOps, JournalOps): a new op must choose its set,
-// here and in types.ts.
+// The engine's Web Worker: Pyodide, the dofile wheel, and the user's files in /work (an in-memory folder; the files
+// live in store.ts). Protocol: types.ts (Ops, ToWorker, FromWorker); the page's side is client.ts. One op at a time;
+// `boot` runs outside the queue. A new op joins one of the three handler sets (LifecycleOps, ReadOps, JournalOps).
 
 import type { BrotliWasmType } from "brotli-wasm";
 import { loadPyodide } from "pyodide";
@@ -46,12 +38,12 @@ import type {
   ToWorker,
 } from "./types.ts";
 
-/** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in for it (test/node-worker.ts). */
+/** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in (test/node-worker.ts). */
 type WorkerStore = Pick<FileStore, "takeAll" | "applyRun">;
 declare global {
-  var dofileStore: WorkerStore | undefined; // the Node tests give the page's store (test/node-worker.ts)
+  var dofileStore: WorkerStore | undefined;
 }
-/** dofile.browser (src/dofile/browser.py) through Pyodide: JSON text in and out. */
+/** dofile.browser (src/dofile/browser.py): JSON text in and out. */
 interface Browser {
   start(root: string): string;
   lazy_graphics(wait: (ms: number) => string): void; // a lazy snapshot (waitGraphics)
@@ -72,7 +64,7 @@ interface Browser {
   memory(): string;
 }
 type Io = { stdout: (line: string) => void; stderr: (line: string) => void };
-// This worker's global scope. The page's types are the DOM's, where `self` is a Window, which has no postMessage(message, transfer).
+// The DOM types make `self` a Window, which has no postMessage(message, transfer).
 declare const self: Window & typeof globalThis & { postMessage(message: unknown, transfer: Transferable[]): void };
 
 const ROOT = "/work",
@@ -88,11 +80,10 @@ let store: WorkerStore | null = null,
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
 let unsaved = new Map<string, { status: FileChange["status"]; dir: boolean }>();
 
-/** Tell the page a start-up stage began. */
 const stage = (id: Stage) => self.postMessage({ stage: id });
-const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`); // `path` is `top` or under it
+const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);
 
-// An error for the page: { message, name }. Emscripten's file system errors carry only a number.
+// Emscripten's file system errors carry only a number.
 function errorForPage(e: any): { message: string; name: string } {
   if (e?.errno != null) {
     const code = Object.keys(py?.ERRNO_CODES ?? {}).find((k) => py.ERRNO_CODES[k] === e.errno);
@@ -103,14 +94,12 @@ function errorForPage(e: any): { message: string; name: string } {
 }
 const failedDownload = (message: string) => Object.assign(new Error(message), { name: "DownloadError" });
 
-// a path from the page, relative to /work; it may not leave it
 function inRoot(path: string): string {
   const full = py.PATH.normalize(`${ROOT}/${path}`);
   if (full !== ROOT && !full.startsWith(`${ROOT}/`)) throw new Error(`not in the working folder: ${path}`);
   return full;
 }
 
-// every file and folder under /work, except the engine's hidden folder
 function walk(dir: string, out: FileInfo[] = []): FileInfo[] {
   for (const name of py.FS.readdir(dir)) {
     if (name === "." || name === ".." || (dir === ROOT && name === HIDDEN)) continue;
@@ -134,7 +123,6 @@ function removeTree(full: string): void {
   py.FS.rmdir(full);
 }
 
-// records of the store ({ infos, data }, as takeAll and applyRun give them) into /work
 function putRecords({ infos, data }: { infos: FileInfo[]; data: [IDBValidKey, ArrayBuffer][] }) {
   const mtimes = new Map(infos.map((i) => [i.path, i.mtime]));
   for (const i of infos) if (i.dir) py.FS.mkdirTree(`${ROOT}/${i.path}`);
@@ -147,11 +135,11 @@ function putRecords({ infos, data }: { infos: FileInfo[]; data: [IDBValidKey, Ar
   }
 }
 
-// "mount": the store's files into /work. With no store (the browser refused, or there is no IndexedDB) /work starts
-// empty, the start's summary says why (startup.storeError), and every run that writes a file says so too (store_error).
+// With no store (the browser refused, or there is no IndexedDB) /work starts empty; startup.storeError says why, and so
+// does the store_error of every run that writes a file.
 async function copyStore() {
   try {
-    store = self.dofileStore ?? openStore(); // dofileStore: the Node tests give the page's store (test/node-worker.ts)
+    store = self.dofileStore ?? openStore();
     putRecords(await store.takeAll());
   } catch (e) {
     store = null;
@@ -160,8 +148,7 @@ async function copyStore() {
   }
 }
 
-// What store.applyRun gives back besides the run's files (`resync`): the page's version of the paths the journal named,
-// which /work now takes. This is the one way a page change reaches /work.
+// Puts the page's version of the paths the journal named (applyRun's `resync`) into /work.
 function takePageVersion({ resync }: AppliedRun) {
   for (const path of resync.paths) {
     if (exists(`${ROOT}/${path}`)) removeTree(`${ROOT}/${path}`);
@@ -176,7 +163,7 @@ function takePageVersion({ resync }: AppliedRun) {
 }
 
 // The folders above `path` (and `path` itself, with `self`) are folders in the store: a file /work has at one of them goes,
-// and is not owed any more. The page's version wins, as everywhere else.
+// and is not owed any more.
 function foldersAt(path: string, self: boolean) {
   const parts = path.split("/");
   for (let n = 1; n <= parts.length - (self ? 0 : 1); n++) {
@@ -189,14 +176,16 @@ function foldersAt(path: string, self: boolean) {
   }
 }
 
-// After a run: what it did to /work, written to the store. `before`: walk() from before the run. Files the run created or
-// changed (another modification time or size) are written, files that were there before and are gone are deleted, and
-// the rest is not read at all. The store leaves out what the page changed meanwhile, and /work then takes the page's
-// version of that. Returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then
-// tries again).
-// Why the two: the wait in `run` makes the time enough for any write of one byte or more (it gets a time later than any
-// time in `before`, or, for a time in the future, another one). A truncation is not stamped by MEMFS (its setattr takes
-// no time with a size, and a write of 0 bytes sets none), so a run that empties a file changes only its size.
+/**
+ * After a run: writes what it did to /work to the store, and /work then takes the page's version of what the page changed
+ * meanwhile. Files the run created or changed are written, files that were there before and are gone are deleted, the
+ * rest is not read at all.
+ * Why modification time and size: the wait in `run` makes the time enough for any write of one byte or more. A truncation
+ * is not stamped by MEMFS (its setattr takes no time with a size, and a write of 0 bytes sets none), so a run that
+ * empties a file changes only its size.
+ * @param before - walk() from before the run.
+ * @returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again).
+ */
 async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipped: string[]; store_error?: string }> {
   const was = new Map(before.map((f) => [f.path, f])),
     now = new Set<string>(),
@@ -244,11 +233,9 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
   return { files: saved.files, skipped: saved.skipped };
 }
 
-// Starting is two steps so the page can show the user's files early:
-//   mount: Pyodide itself and the files in /work. It is an ordinary queued op, so every `sync` posted after it waits
-//          for it (and then finds the journal that mount's copy emptied, or the rows written since).
-//   boot:  the packages, the dofile wheel and the engine. It runs outside the queue, so `sync`, `files` and `read` are
-//          answered while it loads; the ops that need the engine (run, describe, matrix) wait for it.
+// Starting is two steps so the page can show the user's files early. `mount` is an ordinary queued op, so every `sync`
+// posted after it waits for it. `boot` runs outside the queue, so `sync`, `files` and `read` are answered while it loads;
+// the ops that need the engine (run, describe, matrix) wait for it.
 let bootDone: { ok: () => void; err: (e: unknown) => void };
 const booted = new Promise<void>((ok, err) => {
   bootDone = { ok, err };
@@ -262,7 +249,7 @@ booted.catch(() => {}); // the error reaches the page through boot's own answer
 // with its index.html and status 200 must not end up in the cache).
 async function fetchBytes(url: string, cache?: Cache, init?: RequestInit): Promise<Uint8Array<ArrayBuffer>> {
   if (url.startsWith("file:")) {
-    const fsName = "node:fs/promises"; // Node only (the tests); a variable so the bundler leaves it alone
+    const fsName = "node:fs/promises"; // a variable so the bundler leaves it alone
     return new Uint8Array(await (await import(/* @vite-ignore */ fsName)).readFile(new URL(url)));
   }
   const hit = await cache?.match(url);
@@ -277,8 +264,7 @@ async function fetchBytes(url: string, cache?: Cache, init?: RequestInit): Promi
 const fetchJSON = async (url: string, cache?: Cache) =>
   JSON.parse(new TextDecoder().decode(await fetchBytes(url, cache)));
 
-// The Cache holding this build's start files (snapshot.ts, openCache): the page's download() fills it; this worker only
-// reads it.
+// The Cache of this build's start files (openCache). A refusal (private mode, blocked storage) is reported; any other error is thrown.
 async function snapshotCache(built: number, refused: (e: any) => void): Promise<Cache | undefined> {
   if (typeof caches === "undefined") {
     refused(Object.assign(new Error("there is no Cache API here (not a secure context?)"), { name: "NoCacheAPI" }));
@@ -289,21 +275,18 @@ async function snapshotCache(built: number, refused: (e: any) => void): Promise<
   } catch (e) {
     refused(e);
     return undefined;
-  } // a refusal (private mode, blocked storage) is reported; anything else is thrown
+  }
 }
 
-// a .wasm is compiled from its answer as it arrives, which browsers do only for this type
+// Browsers compile a .wasm as it arrives only with this Content-Type.
 function asWasm(res: Response, url: string): Response {
   if (!url.split("?")[0].endsWith(".wasm") || res.headers.get("Content-Type") === "application/wasm") return res;
   return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/wasm" } });
 }
 
-// Pyodide's loader fetches its own files (pyodide.asm.wasm, python_stdlib.zip, pyodide-lock.json) and has no option to be
-// given the .wasm's bytes. So while the engine starts, every GET in this worker goes through here:
-//  - with a `cache`, it looks there first: the start then uses the bytes the page's counted download put there. A miss
-//    goes to the network, and the answer is not stored (see fetchBytes);
-//  - a fetch that fails rejects `failed`: Pyodide's loader only logs a failed .wasm and then waits for ever.
-// Returns { failed, restore }: restore() puts the real fetch back.
+// Pyodide's loader has no option to be given the .wasm's bytes, so while the engine starts every GET in this worker goes
+// through here: it looks in `cache` first (a miss goes to the network and is not stored), and a fetch that fails rejects
+// `failed`, because Pyodide's loader only logs a failed .wasm and then waits for ever. `restore()` puts the real fetch back.
 function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>; restore: () => void } {
   const real = self.fetch;
   let fail!: (error: Error) => void;
@@ -335,8 +318,8 @@ function watchFetch({ cache }: { cache?: Cache } = {}): { failed: Promise<never>
   };
 }
 
-// The patched loader, as a module. In a browser it is imported from the cached bytes (a blob: URL), so the start does
-// not fetch it a second time; if the browser will not import that, from its own URL.
+// In a browser the patched loader is imported from the cached bytes (a blob: URL), so the start does not fetch it twice;
+// if the browser will not import that, from its own URL.
 async function importLoader(
   url: string,
   cache: Cache | undefined,
@@ -355,8 +338,7 @@ async function importLoader(
   }
 }
 
-// The normal boot's loader (?snapshot=0) with the heap cap (snapshot.ts, HEAP_MAX): Pyodide's own pyodide.asm.mjs from the runtime's
-// URL, with that one change, as a module. Only used when there is a cap; with none, Pyodide imports its own loader.
+// The `?snapshot=0` boot's loader with the heap cap (snapshot.ts, HEAP_MAX). Used only when there is a cap.
 async function importCapped(indexURL: string | undefined, bytes: number): Promise<CreateModule> {
   if (!indexURL) throw new Error("a memory cap on the normal boot needs the URL of Pyodide's runtime (indexURL)");
   const url = `${indexURL.endsWith("/") ? indexURL : `${indexURL}/`}pyodide.asm.mjs`;
@@ -369,8 +351,8 @@ async function importCapped(indexURL: string | undefined, bytes: number): Promis
   }
 }
 
-// The brotli-wasm decoder. In a browser it loads its wasm from the page's own files; in Node (the tests) the package's
-// own entry is the one that works (the browser entry fetches its wasm by URL, which Node's fetch cannot do for files).
+// In Node (the tests) the package's own entry is the one that works: the browser entry fetches its wasm by URL, which
+// Node's fetch cannot do for files.
 async function loadBrotli(): Promise<BrotliWasmType> {
   if (typeof process !== "undefined" && process.versions?.node) {
     const mod = "node:module"; // a variable so the bundler leaves it alone
@@ -379,8 +361,7 @@ async function loadBrotli(): Promise<BrotliWasmType> {
   return (await import("brotli-wasm")).default;
 }
 
-// `built` and `files` come from the build's list (start-files.json), which the page read and checked against its own build
-// before it made this worker: no manifest is fetched here.
+// `built` and `files` come from the build's list (start-files.json), which the page already checked against its own build.
 async function loadFromSnapshot(
   base: string,
   built: number,
@@ -394,10 +375,10 @@ async function loadFromSnapshot(
   let last = t0;
   const laps: string[] = [],
     secs: [string, number][] = []; // laps: text for the console; secs: [name, seconds] for the page's summary
-  const notCached: string[] = []; // why there is no Cache to read, if there is none (reported with the timings, and in the console)
+  const notCached: string[] = []; // why there is no Cache to read, if there is none
   const isFile = base.startsWith("file:"); // Node, the tests: no Cache API by design
   const refused = (e: any, url?: string) => {
-    if (!isStorageRefusal(e)) throw e; // not the browser saying no: a bug, shown as the start's error
+    if (!isStorageRefusal(e)) throw e; // a bug, not the browser saying no
     const why = `${e.name}: ${e.message}${url ? ` (${url.split("/").pop()})` : ""}`;
     if (!isFile) {
       notCached.push(why);
@@ -411,14 +392,13 @@ async function loadFromSnapshot(
     secs.push([what, s]);
     last = t;
   };
-  stage("download"); // or reading it from the cache, when the page's download() or an earlier visit filled it
+  stage("download"); // also names reading from the cache
   const { snapshot: snapFile, bundle: bundleFile } = files;
   const cache = isFile ? undefined : await snapshotCache(built, refused);
   const hadCache = Boolean(cache) && Boolean(await cache!.match(`${base}${snapFile.name}`));
-  // from here to the end of the start, fetches read the cache first
   const fetches = isFile ? { failed: new Promise(() => {}), restore() {} } : watchFetch({ cache });
   try {
-    // The two big files are kept in the cache as they were sent, compressed (about 42 MB, not 229), and decompressed here.
+    // The two big files are cached compressed (about 42 MB, not 229) and decompressed here.
     const [snapPacked, dso, index, bundlePacked, create, brotli] = await Promise.all([
       fetchBytes(`${base}${snapFile.name}`, cache),
       fetchJSON(`${base}dso.json`, cache),
@@ -430,8 +410,8 @@ async function loadFromSnapshot(
     brotliWasm = brotli; // for the graphics part, which a waiting graph unpacks synchronously (waitGraphics)
     lap(hadCache ? "read from cache" : "download");
     stage("unpack");
-    // The browser's own brotli decoder when it has one (brotli-wasm took 25 s for the 229 MB on an iPhone); `?brotli=wasm` in
-    // the page's URL forces brotli-wasm, to compare. In Node (the tests) the wasm decoder stays, so they run what the build checks.
+    // The browser's own brotli decoder when it has one (brotli-wasm took 25 s for the 229 MB on an iPhone); `?brotli=wasm`
+    // forces brotli-wasm. Node keeps the wasm decoder, so the tests run what the build checks.
     const native = !isFile && brotliMode !== "wasm" && hasNativeBrotli();
     const timed = async (
       file: SnapshotFile,
@@ -466,8 +446,7 @@ async function loadFromSnapshot(
       `[dofile] snapshot start: ${laps.join(", ")}, total ${((performance.now() - t0) / 1000).toFixed(2)}s` +
         (notCached.length ? `, NOT CACHED: ${[...new Set(notCached)].join("; ")}` : ""),
     );
-    // For the page's status line: the first lap is the download (or the read from the cache), "decompress" is the unpack,
-    // every lap after it (the wasm module, site-packages, re-linking the libraries, the heap) is the restore.
+    // The first lap is the download (or cache read), "decompress" is the unpack, every lap after it is the restore.
     const [[fetched, fetchS], [, unpackS], ...rest] = secs;
     const summary = {
       fetched,
@@ -851,15 +830,13 @@ function idleStep() {
 const startup: Partial<Startup> = {};
 const since = (t: number) => (performance.now() - t) / 1000;
 
-// what a run's failed write to the store still owes, kept right when the page moves or replaces the file
+// A run's refused write is owed to the store until the page moves or replaces the file.
 function forget(path: string) {
   for (const p of [...unsaved.keys()]) if (within(p, path)) unsaved.delete(p);
 }
 
-/** One handler for each op of the set S, with that op's arguments. */
 type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A : never, id: number) => unknown };
 
-// The ops that change the engine: the transport sends them from start() and run() only.
 const lifecycle: Handlers<LifecycleOps> = {
   async mount({ indexURL, snapshot, built, files, brotli: brotliMode, memcap }: MountArgs) {
     brotliPick = brotliMode;
@@ -906,10 +883,9 @@ const lifecycle: Handlers<LifecycleOps> = {
   async boot({ wheel, extraWheels = [], interruptBuffer, graphics }: BootArgs) {
     const tPackages = performance.now();
     if (!fromSnapshot) {
-      // a snapshot has the packages and the wheel in it already
       stage("packages");
-      // no pandas: pyreadstat reads SAS transport and SPSS without it; only export sasxport needs it (about 5 MB more
-      // to download and 2 s on a cold start, docs/pyodide-snapshot.md, "Packages added"), so that command is not available here
+      // No pandas: only export sasxport needs it (about 5 MB more to download and 2 s on a cold start,
+      // docs/pyodide-snapshot.md, "Packages added"), so that command is not available here.
       await py.loadPackage("micropip", { messageCallback: () => {} });
       const names = await Promise.all(
         [wheel, ...extraWheels].map(async (w) => {
@@ -937,7 +913,7 @@ const lifecycle: Handlers<LifecycleOps> = {
     startup.engineS = since(tEngine);
     return about;
   },
-  // While the run prints, {id, log} chunks go to the page (browser.py calls on_output with the log as it grows).
+  // {id, log} chunks go to the page while the run prints.
   async run({ code, fresh_locals, plot_theme }: { code: string } & RunOptions, id: number) {
     try {
       await booted;
@@ -969,9 +945,8 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
     if (interrupt) interrupt[0] = 0; // a Break pressed while idle must not stop this run
     const before = walk(ROOT);
     // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets a
-    // later time than any file had before: saveRun then tells any write of one byte or more by the time, a same-size
-    // rewrite too (a truncation, which MEMFS does not stamp, it tells by the size). A time after now (a file from a clock
-    // that was ahead) is left out: any rewrite changes it anyway.
+    // later time than any file had before (saveRun tells a same-size rewrite by it). A time after now (a clock that was
+    // ahead) is left out: any rewrite changes it anyway.
     const now = Date.now(),
       newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
     while (Date.now() <= newest) {
@@ -986,8 +961,7 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
     );
     const t1 = performance.now();
     Object.assign(result, await saveRun(before));
-    // where the run's time went, for the page's status line (the Python side gave engine and encode); save: writing the
-    // run's files to the store
+    // The Python side gave engine and encode; save is writing the run's files to the store.
     const k = result.timing;
     if (k)
       result.timing = { ...k, parse: (t1 - t0) / 1000 - k.engine - k.encode, save: (performance.now() - t1) / 1000 };
@@ -995,7 +969,6 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
   }
 }
 
-// The ops declared to change nothing (types.ts, ReadOps): anyone may send one.
 const read: Handlers<ReadOps> = {
   // undefined becomes Python's None (null would become JsNull)
   describe: async ({ vars, offset = 0, limit }: DescribeArgs) => {
@@ -1006,7 +979,7 @@ const read: Handlers<ReadOps> = {
     await booted;
     return JSON.parse(browser.matrix(name));
   },
-  // a .dta in /work, without loading it; `path` as the page names it, inside the working folder
+  // a .dta in /work, without loading it
   async describe_file({ path }: { path: string }) {
     await booted;
     inRoot(path);
@@ -1016,25 +989,22 @@ const read: Handlers<ReadOps> = {
     await booted;
     return JSON.parse(browser.macros());
   },
-  // the first rows of the data: 50 from the top unless the page says otherwise
   browse: async ({ vars, offset, limit }: DescribeArgs) => {
     await booted;
     return JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50));
   },
-  // data_bytes from the engine; heap_bytes is the size of this worker's WebAssembly memory
+  // heap_bytes: the size of this worker's WebAssembly memory
   memory: async () => {
     await booted;
     return { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length };
   },
-  // `files` and `read` are views of /work, for the tests: the page lists and reads the store
+  // views of /work, for the tests: the page lists and reads the store
   files: () => walk(ROOT),
   read: ({ path }: { path: string }) => py.FS.readFile(inRoot(path)),
 };
 
-// The page's changes, told by the function the transport gives the store: the store's version of what the journal names
-// (the journal is emptied in the same transaction). A sync that finds the journal empty (a run's after-run write or an
-// earlier sync took it) does nothing. With no store (mount could not open it) there is no journal to read, and the
-// transport attaches none: a sync that arrives before it knows that does nothing.
+// With no store (mount could not open it) there is no journal to read, and the transport attaches no `sync`: one that
+// arrives before it knows that does nothing.
 const journal: Handlers<JournalOps> = {
   async sync() {
     if (store) takePageVersion(await store.applyRun([]));
@@ -1043,7 +1013,6 @@ const journal: Handlers<JournalOps> = {
 
 const ops = { ...lifecycle, ...read, ...journal };
 
-// One op, answered: {id, result}, or {id, error, name}. An op with no arguments is given {}.
 const answer = async ({ id, op, args }: ToWorker) => {
   try {
     if (!ops[op]) throw new Error(`unknown op ${op}`);
@@ -1055,7 +1024,6 @@ const answer = async ({ id, op, args }: ToWorker) => {
   }
 };
 
-// answers: FromWorker
 self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
   if (data.op === "graphics") {
     void answer(data); // outside the queue: it only notes the part, so a run sent after it does not wait for it
@@ -1063,7 +1031,6 @@ self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
   }
   if (data.op === "run") runs++; // at once, not when the queue reaches it: the part's idle steps stop for it (idleStep)
   if (data.op === "boot") {
-    // outside the queue, so `sync`, `files` and `read` are answered while the engine loads
     const { id } = data;
     Promise.resolve(lifecycle.boot(data.args, id)).then(
       (about) => {

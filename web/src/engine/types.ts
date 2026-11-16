@@ -1,13 +1,12 @@
-// The engine's types, shared by worker.ts, client.ts, store.ts and snapshot.ts (which the Node tests run as they are:
-// Node removes the types) and the page. Source: docs/design/SPEC.md, sections 6 and 7; keep the two in step.
+// The engine's types, shared by the worker, the transport, the store and the page. Keep them and docs/design/SPEC.md,
+// sections 6 and 7, in step.
 
 // ---- what the state machine (machine.ts) and the page share ----
 
-/** How long Break waits before the engine is reset: the one place the 5 s is written. The controller (app/engine.ts) gives it
- *  to the machine as `env.graceMs`, and the page's words count from it (app/states/words.ts GRACE_S). */
+/** How long Break waits before the engine is reset: the one place the 5 s is written. */
 export const BREAK_GRACE_MS = 5000;
 
-/** One start-up stage. The snapshot start has no "packages"; ?snapshot=0 has no "unpack" (OQ-11). */
+/** One start-up stage. The snapshot start has no "packages"; ?snapshot=0 has no "unpack". */
 export type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
 /** Why the engine did not start: worked out from an error's `kind`, `reason` and `name` by whoever raises the event, never
  *  from its text. "updated": the site was updated since the page loaded (offer "Reload the page", keyed on this reason). */
@@ -24,10 +23,9 @@ export type Build = { built: number; files: SnapshotFiles };
 
 // ---- the worker protocol (SPEC section 6) ----
 
-// The ops, in three sets. Each op belongs to one, here and in the worker (worker.ts has one handler object per set), and
-// the set decides who can send it: the transport's types (client.ts) let nothing else through.
+// The ops, in three sets. The set decides who can send an op: the transport's types (client.ts) let nothing else through.
 
-/** Ops that change the engine. Sent only by the transport's start() and run(), which only the effect performer calls. */
+/** Ops that change the engine. */
 export interface LifecycleOps {
   mount: { args: MountArgs; result: void };
   boot: { args: BootArgs; result: About };
@@ -49,8 +47,7 @@ export interface ReadOps {
   files: { args: void; result: FileInfo[] }; // /work as it is: for the tests, not for views
   read: { args: { path: string }; result: Uint8Array };
 }
-/** The op that brings the page's file changes into /work. Sent only by the function the transport gives to store.attach,
- *  which the store calls after each change it has journalled. It carries nothing: the worker reads the journal (`pending`),
+/** The op that brings the page's file changes into /work. It carries nothing: the worker reads the journal (`pending`),
  *  takes the store's version of those paths and clears the journal, in one transaction, then puts that version into /work. */
 export interface JournalOps {
   sync: { args: void; result: void };
@@ -87,8 +84,7 @@ export type BootArgs = {
 };
 
 /** `mount`'s arguments. A snapshot start has `snapshot` (the URL of its folder, ending in "/"), `built` (which names the
- *  Cache, `dofile-snapshot-<built>`) and `files` (its two big files): all three from the build's list, start-files.json,
- *  which the page has checked is of its own build. The worker fetches no manifest. `?snapshot=0` has none of the three. */
+ *  Cache, `dofile-snapshot-<built>`) and `files` (its two big files), from the build's list. `?snapshot=0` has none. */
 export type MountArgs = {
   indexURL?: string;
   brotli?: string;
@@ -157,8 +153,8 @@ export interface FileChange {
 }
 
 export type ResetKind = "break" | "crash" | "user";
-/** The `kind` of an rc 9998 run result, which the state machine makes (machine.ts, cutResult): a reset, another tab took
- *  the engine ("stopped"), or the run's op failed in the worker ("run-failed": that worker stays). */
+/** The `kind` of an rc 9998 run result (machine.ts, cutResult): a reset, another tab took the engine ("stopped"), or the
+ *  run's op failed in the worker ("run-failed": that worker stays). */
 export type CutKind = ResetKind | "stopped" | "run-failed";
 
 export interface RunResult {
@@ -256,7 +252,7 @@ export type Downloaded = ({ cached: true; received: number; total: number } | { 
 };
 
 /** The build's list of start files (start-files.json, scripts/start-files.ts): the one statement of the build.
- *  `buildId`: scripts/build-id.ts, from the build's stamp and the snapshot's record; the page compares it with its own (checkBuild). */
+ *  `buildId`: scripts/build-id.ts; the page compares it with its own (checkBuild). */
 export interface StartFiles {
   built: number;
   buildId: string;
@@ -295,9 +291,8 @@ export interface SnapshotFiles {
    *  build's Cache. snapshot.ts, packGraphics, has its layout. */
   graphics?: SnapshotFile;
 }
-/** public/snapshot/manifest.json: what the snapshot was built from (scripts/build-id.ts, BuildInputs), its time and its two big
- *  files. The build's record, not deployed: scripts/start-files.ts refuses a build whose inputs differ from it, and copies
- *  `built`, `files` and the build id made from it into start-files.json; the page and the worker never fetch it.
+/** public/snapshot/manifest.json: what the snapshot was built from (scripts/build-id.ts, BuildInputs), its time and its two
+ *  big files. The build's record, not deployed: scripts/start-files.ts copies from it into start-files.json.
  *  `extraWheels`: file name -> SHA-256 of web/wheels/*.whl (a manifest without it is stale). */
 export interface SnapshotManifest {
   wheel: string;

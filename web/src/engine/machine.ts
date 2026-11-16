@@ -1,31 +1,17 @@
-// The engine's state machine: every state of the engine in the page, every event that can happen to it, and what each
-// event does in each state. One pure function, transition(machine, event), gives the machine after the event and the
-// effects the caller must then perform. The design, with the tables this file holds cell for cell:
-// docs/archive/prototype1-step3.5-c-design.md (items 1 to 5; less the run it held for an engine that was not there, removed on
-// 2026-11-12: with no engine a run is not valid, and `ask`, the page's "Start engine", opens the prompt); the diagrams: docs/archive/prototype1-step3.5-c-diagrams.md.
-//
-// How to read it: State (sixteen members, one per row of the table), Event (twenty-four), Effect; then the shorthands
-// (DOWNLOAD, ASK, STOP, OWN, BREAK, END, FAIL, TWICE, RESET, LOST), then TABLE, one row per state with a cell for each
-// event that is valid in it, then transition(): the stale guard, the lookup, and the one line for an event that is not
-// valid.
-//
-// Pure: only types are imported; no clock (the time comes in the event, `at`), no timer, no console, no signal, no
-// transport, no variable at the top level, and no input is changed. Two casts in the file: mint() and the table lookup.
-// The controller (src/app/engine.ts) is the one caller of transition(); it performs the effects.
+// The engine's state machine: transition(machine, event) gives the machine after the event and the effects the caller
+// must perform. Pure; its tables mirror SPEC section 5 (web/CLAUDE.md has the rules).
+
 import type { Build, CutKind, FailReason, ResetKind, RunHead, RunResult, Stage } from "./types.ts";
 
-/** The rc of a run the machine cut (the session was reset: the data in memory is gone), or whose op failed in the worker. */
+/** The rc of a run the machine cut (the session was reset: the data in memory is gone), or whose op failed. */
 export const RC_RESET = 9998;
 
 // ---- State ----
 
 declare const brand: unique symbol;
-/** The number of one asynchronous request. The machine issues it, a state holds at most one, an answer presents it.
- *  Only mint() in this file makes one; all other code copies it from an effect, a state or a machine. */
+/** The number of one asynchronous request. A state holds at most one; an answer presents it. Only mint() makes one. */
 export type Ticket = number & { readonly [brand]: true };
-/** THE ONE CAST that makes a ticket. Not exported. */
 const mint = (n: number): Ticket => n as Ticket;
-/** The next ticket of a machine: every new ticket is issued + 1. */
 const issue = (m: Machine): Ticket => mint(m.issued + 1);
 
 /** Fixed at load; given once to initial(). */
@@ -36,7 +22,7 @@ export interface Env {
   engineBytes: number | null; // the total shown before the first progress event
   manual: boolean; // ?test=manual: no start until start() is called
 }
-/** Sixteen members, one per row of the transition table. Each has its own literal tag and only its own fields. */
+/** One member per row of the transition table. */
 export type State =
   | { s: "checking-lock"; id: Ticket }
   | { s: "checking-cache"; id: Ticket }
@@ -55,7 +41,6 @@ export type State =
   | { s: "other-tab-idle" }
   | { s: "other-tab-taking"; take: Ticket };
 
-/** The rows of the table are the tags of State: computed, never written out. */
 export type RowName = State["s"];
 /** One member of State, by its tag. */
 export type StateOf<R extends RowName> = Extract<State, { s: R }>;
@@ -150,7 +135,6 @@ export type Effect =
   | { do: "say"; line: Line }
   | { do: "warn"; text: string };
 
-/** The effects that carry a ticket. */
 export type TicketedEffect = Extract<Effect, { n: Ticket }>;
 
 /** The events each effect with a ticket may be answered with; `never`: it is not answered. */
@@ -167,21 +151,16 @@ export interface Answers {
   interrupt: never;
 }
 
-// Answers is checked by the compiler, both ways: three facts about it are types that must come out `true`.
-// The rules are the logic; the types below only carry them out. Four ideas recur in them:
-//  - Distribution: `T extends unknown ? F<T> : never` applies F to each member of a union T on its own.
-//  - Map, then index: `{ [K in keyof X]: ... }[keyof X]` builds an object, then reads every key at once: the union of the values.
-//  - `[T] extends [U]` (in brackets) compares T as a whole and stops distribution; `never` needs it (a bare `never` distributes to nothing).
-//  - `Equal<T, never>` asks "is this set empty?".
-/** true when A and B are exactly the same type (stricter than assignable both ways: it tells `any` and unions apart). */
+// The compiler checks Answers three ways (RowsOk, EventsOk, NoDuplicates below). Idioms used: `T extends unknown ? ...`
+// distributes over a union; `{ [K in keyof X]: ... }[keyof X]` is the union of the values; `[T] extends [U]` does not
+// distribute (a bare `never` would).
+/** true when A and B are exactly the same type (it tells `any` and unions apart). */
 export type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-/** Compiles only for `true`, so `Expect<Equal<X, Y>>` is an assertion: `Expect<false>` is a type error. */
+/** Compiles only for `true`: `Expect<Equal<X, Y>>` is a type assertion. */
 export type Expect<T extends true> = T;
-/** true for a union of two or more types: IsUnion<"a" | "b"> is true, IsUnion<"a"> is false, IsUnion<never> is never. */
+/** true for a union of two or more types; `never` for `never`. */
 type IsUnion<U, V = U> = U extends unknown ? ([V] extends [U] ? false : true) : never;
-/** The effects whose row in A names the event type T. */
 type AskedBy<A, T> = { [K in keyof A]: T extends A[K] ? K : never }[keyof A];
-/** The event types that sit under two effects in A. */
 type Twice<A> = {
   [T in TicketedEvent["type"]]: IsUnion<AskedBy<A, T>> extends false ? never : T;
 }[TicketedEvent["type"]];
@@ -193,37 +172,31 @@ export type AnswersMatchEvents<A> = Equal<A[keyof A], TicketedEvent["type"]>;
 /** 3. No event under two effects. */
 export type NoEventTwice<A> = Equal<Twice<A>, never>;
 
-/** true when A is a right answers map for this machine: all three hold. */
 export type AnswersOk<A> =
   RowsMatchEffects<A> extends true ? (AnswersMatchEvents<A> extends true ? NoEventTwice<A> : false) : false;
 
-/** Each fails `npm run check` on its own line if its rule does not hold for Answers. */
 export type RowsOk = Expect<RowsMatchEffects<Answers>>;
 export type EventsOk = Expect<AnswersMatchEvents<Answers>>;
 export type NoDuplicates = Expect<NoEventTwice<Answers>>;
 
-/** The effects that are answered: their performers get a reply. The keys of Answers whose row is not `never`
- *  (map each key to itself or `never`, then read them all: a row of `never` drops out). */
+/** The effects that are answered: the keys of Answers whose row is not `never`. */
 export type Answered = { [K in keyof Answers]: [Answers[K]] extends [never] ? never : K }[keyof Answers];
 
-/** Omit, for each member of a union on its own. Plain Omit on a union keeps only the keys all members share and
- *  loses each member's own fields: DistributiveOmit<{ type: "a"; x: 1; n: T } | { type: "b"; y: 2; n: T }, "n"> is
- *  { type: "a"; x: 1 } | { type: "b"; y: 2 }. */
+/** Omit for each member of a union; plain Omit would keep only the keys all members share. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-/** Every event with a ticket, without the ticket: all that any performer could say. */
+/** Every event with a ticket, without the ticket. */
 export type AnyAnswer = DistributiveOmit<TicketedEvent, "n">;
 /** What the performer of effect K may say: one of K's answers, without the ticket. */
 export type Answer<K extends Answered> = Extract<AnyAnswer, { type: Answers[K] }>;
-/** The function a performer answers through. The controller binds it to the effect's ticket; the performer writes none. */
+/** What a performer answers through; the controller binds it to the effect's ticket. */
 export type Reply<K extends Answered> = (answer: Answer<K>) => void;
 
-// ---- what the machine makes itself ----
+// ---- helpers ----
 
-/** The sentence of a session that was reset. */
 export const lost = (reason: string): string =>
   `session reset: ${reason}. Data in memory is lost; your files are kept.`;
 
-/** What a run that was cut ends with: every RunResult field and no timing, plus `kind` (why). */
+/** What a cut run ends with: a RunResult with no timing, plus `kind` (why). */
 export const cutResult = (error: string, kind: CutKind): RunResult => ({
   rc: RC_RESET,
   error,
@@ -240,7 +213,7 @@ export const cutResult = (error: string, kind: CutKind): RunResult => ({
   kind,
 });
 
-/** The ticket of what this state waits on or uses; null when it has none. */
+/** The ticket this state waits on or uses; null when it has none. */
 export function ticketOf(state: State): Ticket | null {
   switch (state.s) {
     case "checking-lock":
@@ -269,9 +242,8 @@ export function ticketOf(state: State): Ticket | null {
   }
 }
 
-/** The machine at the page load: it asks for the tab lock. */
 export function initial(env: Env): Step {
-  const first = mint(1); // the first ticket: the counter never has a zero
+  const first = mint(1); // never zero
   return {
     machine: { env, state: { s: "checking-lock", id: first }, issued: first, crashes: 0 },
     effects: [{ do: "take-lock", n: first, steal: false }],
@@ -279,18 +251,15 @@ export function initial(env: Env): Step {
   };
 }
 
-// ---- the shorthands of the tables ----
+// ---- shorthands used by the table ----
 
-/** The machine in one of the rows R: what a cell, or a shorthand used from several rows, is given. */
 type In<R extends RowName> = Machine & { state: StateOf<R> };
 export type EventOf<T extends Event["type"]> = Extract<Event, { type: T }>;
 
 const step = (machine: Machine, effects: Effect[] = []): Step => ({ machine, effects, outcome: "taken" });
 const same = (machine: Machine, outcome: "stale" | "not-valid"): Step => ({ machine, effects: [], outcome });
-/** The first stage of a start: the snapshot start reads the cache first, ?snapshot=0 starts Python. */
 const firstStage = (env: Env): Stage => (env.snapshot ? "download" : "python");
 
-/** DOWNLOAD: `downloading`, with a new ticket. */
 function DOWNLOAD(m: Machine, at: number): Step {
   const next = issue(m);
   return step(
@@ -303,11 +272,9 @@ function DOWNLOAD(m: Machine, at: number): Step {
   );
 }
 
-/** ASK: `asking`, and the download prompt. Nothing else is kept: no run and no reason for the prompt. With no engine
- *  the page offers one action, "Start engine" (the event `ask`); a `run` is not valid there. */
+/** ASK: `asking`, and the download prompt. With no engine, `run` is not valid: "Start engine" sends `ask`. */
 const ASK = (m: Machine): Step => step({ ...m, state: { s: "asking" } }, [{ do: "show-dialog", dialog: "download" }]);
 
-/** STOP: "Stop download", and "Not now" during the download. */
 const STOP = (m: In<"downloading">): Step =>
   step({ ...m, state: { s: "declined" } }, [
     { do: "abort-download", n: m.state.download },
@@ -343,7 +310,7 @@ function BREAK(m: In<"running">, at: number): Step {
   ]);
 }
 
-/** END(result): the run ended and the worker stays. The result is passed on as it is, whatever its rc. */
+/** END(result): the run ended and the worker stays; the result is passed on whatever its rc. */
 function END(m: In<"running" | "breaking" | "waiting">, result: RunResult): Step {
   const effects: Effect[] = [];
   if (m.state.s === "breaking") effects.push({ do: "cancel-break-timer" });
@@ -351,7 +318,7 @@ function END(m: In<"running" | "breaking" | "waiting">, result: RunResult): Step
   return step({ ...m, state: { s: "ready", worker: m.state.worker } }, effects);
 }
 
-/** FAIL(reason, detail): the download, the list or the start failed. The crash count stays. */
+/** FAIL: the download, the list or the start failed. The crash count stays. */
 function FAIL(m: In<"downloading" | "starting-list" | "starting-worker">, reason: FailReason, detail: string): Step {
   const effects: Effect[] = [];
   if (m.state.s === "starting-worker")
@@ -364,7 +331,7 @@ function FAIL(m: In<"downloading" | "starting-list" | "starting-worker">, reason
   return step({ ...m, state: { s: "failed", reason, detail } }, effects);
 }
 
-/** TWICE(reason, detail): a second crash before a start finished. It is not started again. */
+/** TWICE: a second crash before a start finished. It is not started again. */
 function TWICE(m: In<"starting-worker">, reason: FailReason, cause: string): Step {
   const detail = `the engine's worker failed twice (${cause}); reload the page`;
   const effects: Effect[] = [{ do: "end-worker", n: m.state.worker, ending: { kind: "failed-twice", reason: detail } }];
@@ -378,8 +345,8 @@ function TWICE(m: In<"starting-worker">, reason: FailReason, cause: string): Ste
   return step({ ...m, crashes: 0, state: { s: "failed-twice", reason, detail } }, effects);
 }
 
-/** RESET(kind): the worker is ended and a new start begins with the build's list, fetched fresh. A run in progress ends
- *  with rc 9998, as the last effect. The banner and "Engine reset" only when the engine being replaced had been ready. */
+/** RESET: the worker is ended and a new start begins with the build's list, fetched fresh. A run in progress ends with
+ *  rc 9998, as the last effect. The banner and "Engine reset" only when the engine being replaced had been ready. */
 function RESET(
   m: In<"starting-worker" | "ready" | "running" | "breaking" | "waiting">,
   kind: ResetKind,
@@ -413,7 +380,7 @@ function RESET(
   );
 }
 
-/** LOST: another tab took the tab lock. Whatever this tab was doing ends, and it is blocked. */
+/** LOST: another tab took the tab lock. Whatever this tab was doing ends. */
 function LOST(m: In<Exclude<RowName, "other-tab-idle" | "other-tab-taking">>): Step {
   const old = m.state,
     effects: Effect[] = [];
@@ -439,15 +406,13 @@ function LOST(m: In<Exclude<RowName, "other-tab-idle" | "other-tab-taking">>): S
   return step({ ...m, crashes: 0, state: { s: "other-tab-idle" } }, effects);
 }
 
-/** The reason of a RESET(crash), from the crash's cause. */
 const crashReason = (e: EventOf<"crashed">): string =>
   e.cause === "storage" ? "the browser closed the file storage" : `the engine crashed (${e.detail})`;
 
-// ---- the table ----
+// ---- table ----
 
-/** One cell: this row's state and this column's event, both narrowed already. */
 type Cell<R extends RowName, T extends Event["type"]> = (m: In<R>, e: EventOf<T>) => Step;
-/** One row: a cell for each event that is valid in it. An event with no cell is not valid there. */
+/** An event with no cell in a row is not valid there. */
 type Row<R extends RowName> = { [T in Event["type"]]?: Cell<R, T> };
 
 const TABLE: { [R in RowName]: Row<R> } = {
@@ -605,10 +570,9 @@ const TABLE: { [R in RowName]: Row<R> } = {
   },
 };
 
-/** The machine after `e`, and what the caller must do. An event that changes nothing says why in `outcome`: "stale" (it
- *  presents a ticket that is not the state's) or "not-valid" (no cell for it in this state). */
+/** An event that changes nothing says why in `outcome`: "stale" (its ticket is not the state's) or "not-valid". */
 export function transition(m: Machine, e: Event): Step {
-  if ("n" in e && e.n !== ticketOf(m.state)) return same(m, "stale"); // the one stale guard
-  const cell = TABLE[m.state.s][e.type] as Cell<RowName, Event["type"]> | undefined; // THE ONE CAST of the table
-  return cell ? cell(m, e) : same(m, "not-valid"); // the one place an event that is not valid changes nothing
+  if ("n" in e && e.n !== ticketOf(m.state)) return same(m, "stale");
+  const cell = TABLE[m.state.s][e.type] as Cell<RowName, Event["type"]> | undefined;
+  return cell ? cell(m, e) : same(m, "not-valid");
 }

@@ -1,13 +1,14 @@
-// What a tab asks of the browser before it uses the files: the tab lock, and storage that is not cleared.
+// The tab lock and persistent storage.
 
-// One tab owns the engine and the files: it holds the Web Lock "dofile-engine" until it closes or another tab takes over.
-//   const lock = tabLock({ onLost });   // onLost(): another tab took the lock: end the worker, show the take-over dialog
-//   await lock.take()                    // true: this tab owns it. false: another tab does; start no worker, write nothing
-//   await lock.take({ steal: true })     // "Use dofile in this tab": always true; the other tab's onLost runs
-// Without Web Locks (a page that is not a secure context, such as plain HTTP on a LAN), or when the browser refuses the
-// request, there is nothing to hold and take() is true: every such tab owns the engine.
 export const LOCK = "dofile-engine";
 
+/**
+ * One tab owns the engine and the files: it holds the Web Lock "dofile-engine" until it closes or another tab takes over.
+ * @param onLost - called when another tab took the lock.
+ * @returns `take()` resolves true when this tab owns the lock, false when another does. `take({ steal: true })` always
+ * resolves true, and the other tab's onLost runs. Without Web Locks (a page that is not a secure context, such as
+ * plain HTTP on a LAN), or when the browser refuses the request, there is nothing to hold and take() is true.
+ */
 export function tabLock({
   locks = globalThis.navigator?.locks,
   name = LOCK,
@@ -41,10 +42,13 @@ export function tabLock({
   return { take };
 }
 
-// Ask the browser, once, to keep the files, and tell `onAnswer` whether it does: true, false, or null when the browser has
-// no such API. The browser may show its own prompt (Firefox does) and answer much later, or never, so onAnswer is called
-// twice: at once with what persisted() says now, and again when persist() has been answered. Returns the first answer.
-// A persisted() that fails answers null; keepFiles never rejects.
+/**
+ * Ask the browser, once, to keep the files. The browser may show its own prompt (Firefox does) and answer much later,
+ * or never, so `onAnswer` is called twice: at once with what persisted() says now, and again when persist() has been
+ * answered. Never rejects; a persisted() that fails answers null.
+ * @param onAnswer - true, false, or null when the browser has no such API.
+ * @returns the first answer.
+ */
 const asked = new WeakSet();
 export async function keepFiles(
   storage: Pick<StorageManager, "persist" | "persisted"> | null | undefined = globalThis.navigator?.storage,
