@@ -6,7 +6,7 @@ import type { Page } from "@playwright/test";
 import { EDITOR_BASE } from "../scripts/urls.ts";
 import { expect, startEngine, test } from "./fixtures";
 
-// the test hook (window.__dofile) is untyped here: each spec declares its own
+// the test hook (window.__dofile) is untyped here
 const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 /** The files in the store (not folders), by path. */
 const stored = (page: Page) =>

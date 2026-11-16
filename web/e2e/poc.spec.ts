@@ -1,5 +1,5 @@
-// The proof-of-concept page in a real browser: cross-origin isolation, files kept in IndexedDB across a reload, Run and
-// Save against the editor.
+// The proof-of-concept page in a real browser: Run and Save against the editor, and files kept in IndexedDB across a
+// reload.
 
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";

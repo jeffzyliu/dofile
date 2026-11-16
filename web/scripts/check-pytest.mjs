@@ -21,7 +21,7 @@ const repo = fileURLToPath(new URL("../..", import.meta.url));
 const out = resolve(arg("--out", `${repo}/.dofile/pytest-wasm`));
 // dofile tests that make sense in the page's Python. Left out: those that start subprocesses, need the `mcp` package or
 // the repo's src/ tree (test_mcp, test_worker, test_sandbox, test_break, test_dofile_cli, test_vendor, test_conformance,
-// test_stata_compat, test_log_cut), and those covered by web/test (test_browser, test_pathshim, test_linalgshim).
+// test_stata_compat, test_log_cut, test_pathshim), and those covered by web/test (test_browser, test_linalgshim).
 const WEB_TESTS = ["tests/test_engine.py"];
 
 if (args.includes("--child")) {
