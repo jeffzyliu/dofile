@@ -765,6 +765,25 @@ def test_error_command_names_the_failing_command(eng):
     assert eng.run("display 1").error_command is None
 
 
+def test_error_command_names_a_block_error_that_was_never_echoed(eng, tmp_path):
+    """An unclosed block or a stray `}` fails before it runs, so it is never echoed: the last echo is an earlier
+    command, or a blank line's bare `. ` in a do-file run by `do` (OpenDTA 29a3b28 echoes those, as Stata does).
+    Neither is the command that failed (ERG-10)."""
+    assert eng.run("display 1\n\nforeach i in 1 {\n  display 2\n").error_command == "foreach i in 1 {"
+    assert eng.run("display 1\n\n}\n").error_command == "}"
+    (tmp_path / "unclosed.do").write_text("display 1\n\nforeach i in 1 {\n  display 2\n")
+    (tmp_path / "stray.do").write_text("display 1\n\n}\n")
+    (tmp_path / "blank.do").write_text("display 1\n\nnosuchcommand\n")
+    assert eng.run("do unclosed.do").error_command == "foreach i in 1 {"
+    assert eng.run("do stray.do").error_command == "}"
+    assert eng.run("do blank.do").error_command == "nosuchcommand"
+    # what was right stays: a call of a program that failed inside, a quietly block, an echoed stray } of an if block
+    code = "capture program drop p\nprogram p\n  regress nosuch\nend\np"
+    assert eng.run(code).error_command == "p"
+    assert eng.run("quietly {\n  nosuchcommand\n}").error_command == "quietly {"
+    assert eng.run("if 1 {\n  display 1\n  }\n}").error_command == "}"
+
+
 def test_matrix_size_limit_is_checked_before_converting():
     eng = Engine()
     eng.run("matrix A = J(30, 40, 1)")

@@ -18,6 +18,7 @@ Status values: `open`, `fixed` (with the test that covers it). The numbers were 
 | ERG-7 | in a long log the cut keeps a regression table's header and `_cons` and drops the coefficient rows, so the estimate an agent ran the call for (`D`, the treatment effect) is not in the log | `mcp_server._cut_log` | mitigated: `LOG_LIMIT` 12,000 and tables cut last (`tests/test_log_cut.py::test_coefficient_tables_are_cut_last`) |
 | ERG-8 | an unavailable community command gives only `command rdrobust is unrecognized` (rc 199); `ssc install rdrobust` says `command ssc is unrecognized`, so an agent can't tell "not installed" from "never available" | `engine.py` / vendored error text | open |
 | ERG-9 | rc 111 `pop ambiguous abbreviation` doesn't name the variables it could mean (`pop` could be `population` or `popwt`), so an agent can't fix it in one step | vendored error text | open |
+| ERG-10 | `error_command` named the wrong command for an unclosed block or a stray `}` (the last command that ran, `display 1`), and `""` when a do-file's blank line came before it | `engine._failed_command`, `Engine._unechoed_failure` | fixed: `test_error_command_names_a_block_error_that_was_never_echoed` |
 
 ## Details
 
@@ -172,3 +173,16 @@ fails the same way. A hint on rc 199 for a known community name (`rdrobust`, `es
 `summarize ... pop` on `castle.dta` (variables `population`, `popwt`, `l_pop`) stops with `pop ambiguous abbreviation`
 (rc 111), as Stata does. Stata's message has no list either, but an agent can't see the names, so it spent a call
 on `describe_data` to find them. Idea: on rc 111, append the variables that start with the abbreviation.
+
+### ERG-10: `error_command` for an error raised before the command ran
+`error_command` is read from the log: the last `. cmd` echoed before `r(#);`. An unclosed block (`unexpected end of
+file`) or a stray `}` (`unexpected }`) fails before that line runs, so it is never echoed, and the last echo is some
+earlier command: `display 1\n\nforeach i in 1 {` gave `error_command: "display 1"`, which an agent would take as the
+command to fix. Since OpenDTA 29a3b28 a do-file run by `do` (a nested `do`, `dofile run`) echoes its blank lines as a
+bare `. `, as Stata does; when one came last, `error_command` was `""`. Found in the 29a3b28 re-vendor review.
+- Fixed: a bare `. ` is never a command (`_failed_command` returns None for it), and when the command that failed
+  (the engine's record of the line being run, as `error_line` uses) was never echoed, `error_command` is that line:
+  `"foreach i in 1 {"`, `"}"`, also inside a nested do-file. Whatever the log does echo keeps its old answer: a loop's
+  first line, a program's call, `quietly {`, `///` continuations joined.
+- Left: when the same text was echoed earlier in the call (a second `foreach i in 1 {` left open after one that ran),
+  the log's answer stands, as before.

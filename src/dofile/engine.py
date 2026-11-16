@@ -91,7 +91,8 @@ class Result:
     results: dict[str, Any] = field(
         default_factory=lambda: {"e": empty_results(), "r": empty_results(), "e_changed": False, "r_changed": False}
     )
-    error_command: str | None = None  # the echoed command that failed (a loop's first line, for errors in a loop)
+    error_command: str | None = None  # the echoed command that failed (a loop's first line, for errors in a loop;
+    # an unclosed block or a stray } as written, since it is not echoed)
     nobs: int = 0  # dataset in memory after the call
     nvars: int = 0
     new_graphs: int = 0  # graphs drawn by this call
@@ -509,6 +510,24 @@ class Engine:
             return None
         return next((ln.lineno for ln, _ in reversed(frames) if id(ln) in self._top), None)
 
+    def _unechoed_failure(self, log: str) -> str | None:
+        """The command that failed when it was never echoed: an error raised before it ran (a block not closed, a
+        stray `}`), whose log ends at the echo of an earlier command or of a blank line. The innermost do-file's
+        outermost command being run, outside any program (as `error_command` names a loop by its first line); None
+        when it was echoed, so the log's answer stands."""
+        if not self._failure:
+            return None
+        frames = []
+        for f in self._failure[1]:
+            if f is None:  # a program's lines follow
+                break
+            frames.append(f)
+        if not frames:
+            return None
+        deepest = max(depth for _, depth in frames)
+        cmd = _joined([next(ln for ln, depth in frames if depth == deepest).text])
+        return cmd if cmd and cmd not in _echoed(log) else None
+
     def _graph_command(self) -> tuple[str, int | None]:
         """The command of this call's code that is drawing a graph, and its first line: the innermost one being run,
         outside any program (for a program's graph, the line that called it; for a nested do-file's, its `do` line)."""
@@ -597,7 +616,7 @@ class Engine:
             _ticking = None
             self._tee.stop()
         log = self._capture.text  # built once: it joins up to 2 MB
-        failed = _failed_command(log) if rc else None
+        failed = (self._unechoed_failure(log) or _failed_command(log)) if rc else None
         first = max(len(store.drawn) - MAX_IMAGES, 0)
         shown = list(zip(store.drawn, store.commands))[first:] if images else []
         drawn, lost = [], []
@@ -786,21 +805,45 @@ def _summary(d, names: list[str], offset: int, limit: int | None, filename: str 
     }
 
 
+def _joined(parts: list[str]) -> str:
+    """A command's lines as one, `///` continuations joined and runs of spaces made one."""
+    return " ".join(" ".join(p.strip().removesuffix("///") for p in parts).split())
+
+
+_BODY_ECHO = re.compile(r"^\s+\d+\.\s")  # a loop's or a program's body line, `  2.   summarize x`
+
+
 def _failed_command(log: str) -> str | None:
-    """The last command echoed (`. cmd`, with its `> ` continuation lines) before the last `r(#);`."""
+    """The last command echoed (`. cmd`, with its `> ` continuation lines) before the last `r(#);`. None when that
+    echo is a blank line's bare `. ` (a do-file run by `do` echoes its blank lines): it names no command."""
     lines = log.splitlines()
     end = max((i for i, ln in enumerate(lines) if ln.startswith("r(") and ln.rstrip().endswith(");")), default=None)
     if end is None:
         return None
     for i in range(end, -1, -1):
-        if lines[i].startswith(". "):
+        if lines[i].startswith(". ") or lines[i] == ".":
             cmd = [lines[i][2:]]
             for ln in lines[i + 1 : end]:
                 if not ln.startswith("> "):
                     break
                 cmd.append(ln[2:])
-            return " ".join(c.strip().removesuffix("///").strip() for c in cmd)
+            return _joined(cmd) or None
     return None
+
+
+def _echoed(log: str) -> set[str]:
+    """Every command the log echoes (`. cmd` and a body's `  2.   cmd`), continuations joined, as `_joined` gives it."""
+    lines, out = log.splitlines(), set()
+    for i, line in enumerate(lines):
+        m = _BODY_ECHO.match(line)
+        if line.startswith(". ") or m:
+            cmd = [line[m.end() :] if m else line[2:]]
+            for ln in lines[i + 1 :]:
+                if not ln.startswith("> "):
+                    break
+                cmd.append(ln[2:])
+            out.add(_joined(cmd))
+    return out
 
 
 def _last_error(log: str) -> str | None:

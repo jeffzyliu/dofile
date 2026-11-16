@@ -168,8 +168,9 @@ class RunResult(TypedDict):
         str | None,
         Field(
             description="the command that failed, as echoed in the log (for "
-            "an error inside a loop, the loop's first line); "
-            "null on success"
+            "an error inside a loop, the loop's first line; an unclosed block "
+            "or a stray } as written, since it is not echoed); "
+            "null on success or when no command can be named"
         ),
     ]
     log: Annotated[
