@@ -479,7 +479,7 @@ async function loadFromSnapshot(
 // slower. Then the browser's own decoder unpacks it off this thread (nativeSoon); the brotli-wasm unpack, the write and
 // the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (idleStep), so a
 // run sent meanwhile waits for one step at most.
-// IDLE_MS 250 vs 1000: a graph sent 0.5-1.1 s after ready was 0.3-0.5 s faster; a run meeting a step waits as long.
+// IDLE_MS 250 vs 1000: a graph sent 0.5-1.1 s after ready was 0.2-0.5 s faster; a run meeting a step waits as long.
 const IDLE_MS = 250,
   PROGRESS_MS = 100, // at most one {graphics: "progress"} this often
   DECODE_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone

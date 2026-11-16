@@ -182,13 +182,12 @@ const runAtReady = ({ code, delayMs }) => {
     if (document.documentElement.dataset.engine !== "ready" || window.__runStarted) return;
     window.__runStarted = true;
     obs.disconnect();
-    setTimeout(
-      () =>
-        window.__runAndTime(code).then((r) => {
-          window.__firstRun = r;
-        }),
-      delayMs,
-    );
+    const submit = () =>
+      window.__runAndTime(code).then((r) => {
+        window.__firstRun = r;
+      });
+    if (delayMs) setTimeout(submit, delayMs);
+    else submit(); // in the observer itself, as before --first-run-delay-ms
   }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-engine"] });
 };
 const sec = (ms) => Number((ms / 1000).toFixed(2));

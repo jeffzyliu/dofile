@@ -17,6 +17,7 @@ declare global {
     __dofile: Hook;
     __partSeen: { ready: number; lines: [number, string][] }; // the return-visit test's clock (its init script)
     __runAtReady: Promise<any>; // `display 1`, sent by an init script the moment the page says "ready"
+    __runAtReadySent: number; // when, Date.now()
   }
 }
 
@@ -64,9 +65,12 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
   browserName,
 }) => {
   const { release, seen } = await holdPart(page);
-  const lines: string[] = [];
+  const lines: string[] = [],
+    stamped: [number, string][] = []; // Date.now(): stamped by the browser, a Firefox worker's line on arrival (later)
   page.on("console", (m) => {
-    if (m.text().includes("[dofile] graphics part")) lines.push(m.text());
+    if (!m.text().includes("[dofile] graphics part")) return;
+    lines.push(m.text());
+    stamped.push([m.timestamp(), m.text()]);
   });
   await page.goto("?test");
   await startEngine(page);
@@ -107,13 +111,14 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
 
   // WebKit drops the Cache API of Playwright's in-memory context on a reload
   if (browserName === "webkit") return;
-  lines.length = 0;
+  lines.length = stamped.length = 0;
   // sent from the page itself: a poll notices "ready" up to 1 s late, past the part's idle wait (IDLE_MS)
   await page.addInitScript(() => {
     window.__runAtReady = new Promise((done) => {
       new MutationObserver((_, observer) => {
         if (document.documentElement?.dataset.engine !== "ready") return;
         observer.disconnect();
+        window.__runAtReadySent = Date.now();
         done(window.__dofile.run("display 1"));
       }).observe(document, { attributes: true, subtree: true, attributeFilter: ["data-engine"] });
     });
@@ -127,6 +132,15 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
   await expect
     .poll(() => lines.join("\n"), { timeout: 60_000 })
     .toMatch(/landed \(cache\)[\s\S]*written while idle[\s\S]*warmed/);
+  // The wait itself: no step before the run's end + IDLE_MS, so not before it was sent + IDLE_MS (from the part's
+  // landing instead, a part landing inside the wait would fail it). After the wait, on the worker's thread: the write
+  // and a brotli-wasm unpack's steps; a native unpack runs during it. Timers do not fire early: a lower bound.
+  const sent = await page.evaluate(() => window.__runAtReadySent);
+  const [writtenAt, written] = stamped.find(([, l]) => l.includes("written while idle"))!;
+  const [, how, unpackS, writeS] = written.match(/unpack \((\w+)\) ([\d.]+)s.*write \d+ files ([\d.]+)s/)!;
+  const idle = (writtenAt - sent) / 1000 - Number(writeS) - (how === "wasm" ? Number(unpackS) : 0);
+  const timeline = stamped.map(([t, l]) => `${((t - sent) / 1000).toFixed(3)}s ${l}`).join("\n");
+  expect(idle, `idle before the written line's work, after the run was sent:\n${timeline}`).toBeGreaterThan(0.15);
   const again = await run(page, "clear\nset obs 5\ngen x = _n\nscatter x x");
   expect(again.images).toHaveLength(1);
   expect(seen.hits, "read from the Cache, not fetched again").toBe(1);

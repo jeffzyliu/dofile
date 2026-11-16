@@ -42,7 +42,7 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   comes before "ready"). The worker does nothing of it before `startup` is answered. Then the browser's own brotli decoder (Firefox, Safari; it runs
   off the worker's thread) unpacks it as soon as it is there, run or no run. A brotli-wasm unpack (Chromium) in 256 KB
   steps, the write, and the import of what a first graph needs (the three heavy modules one per step, then 20) run on the
-  engine's thread, so only after the engine has been idle (no run sent or running) for 0.25 s, one step per task: a run sent meanwhile waits
+  engine's thread, so only after the engine has been idle (no run sent or running) for 0.25 s (each run's end starts that wait again), one step per task: a run sent meanwhile waits
   for the step in progress (the "written" and "warmed" console lines give the longest step), and, JS being
   single-threaded, no module is half imported. What is measured: a non-graph run at "ready" is not held (Chromium,
   one sample: `display 1` 0.01 s after ready). A graph at "ready" finds nothing unpacked: it decodes (brotli-wasm, in
