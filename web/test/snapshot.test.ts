@@ -10,6 +10,7 @@ import {
   hasNativeBrotli,
   inflate,
   inflateNative,
+  isDeadWeight,
   isStorageRefusal,
   unpack,
   unpackAsync,
@@ -80,4 +81,24 @@ test("only the browser refusing storage is carried on from; every other cache er
     "QuotaExceededError",
   ] as any[])
     assert.equal(isStorageRefusal(e), false, String(e?.name ?? e));
+});
+
+test("the bundle leaves out test folders and type stubs, and nothing that runs", () => {
+  for (const p of [
+    "scipy/io/tests/data/a.mat",
+    "scipy/stats/tests/test_x.py",
+    "pkg/test/data.npy",
+    "numpy/__init__.pyi",
+    "numpy/py.typed",
+  ])
+    assert.equal(isDeadWeight(p), true, p);
+  for (const p of [
+    "numpy/testing/_private/utils.py",
+    "numpy/core/_multiarray_umath.so",
+    "pkg/latest/a.py",
+    "pytest.py",
+    "pkg/tests.py",
+    "pkg/typed_py.typed.py",
+  ])
+    assert.equal(isDeadWeight(p), false, p);
 });
