@@ -109,8 +109,37 @@ test("the pages' links: the editor's address from the build, the site's pages by
     assert.ok(hrefs.includes("{{editor-url}}"), `${f} links to the editor`);
   }
   assert.match(web("landing.html"), /<section class="browsers" id="browsers"/);
-  assert.match(web("src/app/env.ts"), /LANDING_URL = __SITE_URL__/);
-  assert.match(web("src/app/states/banners.tsx"), /BROWSERS_URL = `\$\{LANDING_URL\}#browsers`/);
+});
+
+/** Run `body` with these globals set, then put them back (a module that reads the page's globals when it loads). */
+async function withGlobals(globals: Record<string, unknown>, body: () => Promise<void>) {
+  const before = Object.keys(globals).map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)] as const);
+  for (const [k, value] of Object.entries(globals)) Object.defineProperty(globalThis, k, { configurable: true, value });
+  try {
+    await body();
+  } finally {
+    for (const [k, d] of before) {
+      if (d) Object.defineProperty(globalThis, k, d);
+      else Reflect.deleteProperty(globalThis, k);
+    }
+  }
+}
+
+test("the editor's address for the landing and commands pages is the build's site address (env.ts)", async () => {
+  // a query makes a second instance of the module: it reads the globals when it loads
+  const loadEnv = (query: string): Promise<typeof import("../src/app/env.ts")> =>
+    import(new URL(`../src/app/env.ts?${query}`, import.meta.url).href);
+  const page = (url: string) => ({ __ABOUT__: {}, __DEV_SITE_PORT__: 5174, location: new URL(url) });
+  await withGlobals({ ...page("http://localhost:5173/"), __SITE_URL__: "https://site.test/" }, async () => {
+    const env = await loadEnv("built");
+    assert.equal(env.LANDING_URL, "https://site.test/");
+    assert.equal(env.COMMANDS_URL, "https://site.test/commands/");
+  });
+  // in dev there is no build address: the pages' dev server at the page's own host name
+  await withGlobals({ ...page("http://phone.lan:5173/"), __SITE_URL__: undefined }, async () => {
+    const env = await loadEnv("dev");
+    assert.equal(env.LANDING_URL, "http://phone.lan:5174/");
+  });
 });
 
 test("the three pages have the same icons, each a file of the page's own (./src/icons/, hashed by the build), and they exist", () => {
@@ -412,7 +441,22 @@ test("the theme button of the landing and commands pages has the editor's words,
   assert.deepEqual(site.WORD, app.THEME_LABEL);
   assert.deepEqual(site.ARIA, app.THEME_ARIA);
   assert.deepEqual(site.NEXT, app.THEME_NEXT);
-  assert.match(web("src/app/theme.ts"), new RegExp(`saved\\.set\\("${site.KEY}"`));
+  // and the editor keeps that key in step with its theme signal
+  const { theme } = await import("../src/app/state.ts");
+  const kept = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => kept.get(k) ?? null,
+    setItem: (k: string, v: string) => kept.set(k, v),
+    removeItem: (k: string) => kept.delete(k),
+  };
+  await withGlobals({ localStorage: storage }, async () => {
+    const stop = app.applyTheme();
+    theme.value = "dark";
+    assert.equal(kept.get(site.KEY), "dark");
+    theme.value = "system";
+    assert.equal(kept.has(site.KEY), false);
+    stop();
+  });
   // the pages' first-paint script reads the same key
   for (const f of ["landing.html", "commands.html", "index.html"])
     assert.ok(web(f).includes(`localStorage.getItem("${site.KEY}")`), f);

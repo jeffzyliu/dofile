@@ -33,7 +33,195 @@
         "noExplicitAny": "off",
         "noTemplateCurlyInString": "off",
         "noConfusingVoidType": "off"
+      },
+      "correctness": {
+        "useImportExtensions": "off"
       }
     }
-  }
+  },
+  "plugins": ["./biome/architecture.grit"],
+  "overrides": [
+    {
+      "includes": ["src/app/**/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/engine/client*",
+                      "**/engine/worker*",
+                      "**/engine/machine*",
+                      "**/main",
+                      "**/main.tsx",
+                      "**/site/**"
+                    ],
+                    "message": "A view reads signals and calls the controllers; it never reaches the transport, the machine or main.tsx, nor src/site/"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/main.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/site/**"],
+                    "message": "The editor imports nothing of src/site/"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/app/**/*.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/*.tsx", "**/site/**"],
+                    "message": "A .ts file never imports a .tsx; the editor imports nothing of src/site/"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/engine/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/*.tsx", "**/app/**", "**/site/**"],
+                    "message": "engine/ never imports app/ (nor a .tsx, nor src/site/)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/stata/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/*.tsx", "**/site/**"],
+                    "message": "A .ts file never imports a .tsx; the editor imports nothing of src/site/"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/site/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!./**", "!../styles/**"],
+                    "message": "The pages' scripts import only src/site/ and the stylesheets"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["test/**", "scripts/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/*.tsx"],
+                    "message": "A .ts file never imports a .tsx"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useImportExtensions": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/engine/machine.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Date": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "setTimeout": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "setInterval": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "clearTimeout": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "console": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "performance": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "globalThis": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "window": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)",
+                  "document": "machine.ts is pure: no clock, timer, console or global (the time comes in the event)"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

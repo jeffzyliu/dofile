@@ -1,0 +1,128 @@
+language js(jsx)
+
+// The architecture rules that read code, not text: a Biome plugin, one diagnostic per match. Which files each rule
+// covers is the regex on $filename. A rule that breaks fails npm run check and lint:strict: fix the code, unless the
+// rule has changed (web/CLAUDE.md, "Architecture rules").
+
+pattern value_import($source) {
+  or {
+    `import { $_ } from $source`,
+    `import * as $_ from $source`
+  }
+}
+
+or {
+  // No cast round the Ticket brand: only machine.ts makes a ticket (its one cast is counted by test/imports.test.ts).
+  `$_ as $type` as $m where {
+    $type <: or {
+      `any`,
+      `never`
+    },
+    $filename <: r".*/(?:src/.*|test/machine\.test\.ts)$",
+    register_diagnostic(span=$m, message="no cast to any or never in src/ or the machine's test: a Ticket is made only in machine.ts")
+  },
+  // machine.ts is pure: type imports only, no random number (the clock, timers and console are noRestrictedGlobals).
+  value_import($source) as $m where {
+    $filename <: r".*/src/engine/machine\.ts$",
+    register_diagnostic(span=$m, message="machine.ts imports types only")
+  },
+  `Math.random()` as $m where {
+    $filename <: r".*/src/engine/machine\.ts$",
+    register_diagnostic(span=$m, message="machine.ts is pure: no random number")
+  },
+  // The page's code takes only types from the transport: it never calls it, nor imports the Worker's entry.
+  value_import($source) as $m where {
+    $filename <: r".*/src/app/.*",
+    $source <: r".*engine/(?:client|worker).*",
+    register_diagnostic(span=$m, message="src/app/ takes only types from the transport (import type)")
+  },
+  // Only main.tsx makes the transport and the Worker, connects the controllers, takes the tab lock and calls open().
+  or {
+    `new EngineClient($_)`,
+    `new Worker($_)`,
+    `connectEngine($_)`,
+    `connectFiles($_)`,
+    `connectRun($_)`,
+    `tabLock($_)`,
+    `open()`
+  } as $m where {
+    $filename <: r".*/src/.*",
+    $filename <: not r".*/src/main\.tsx$",
+    register_diagnostic(span=$m, message="only src/main.tsx constructs the transport and the Worker, connects the controllers, takes the tab lock and calls open()")
+  },
+  // The store is opened once on each thread: in the page's store.ts and in the engine's own code.
+  `openStore($_)` as $m where {
+    $filename <: r".*/src/.*",
+    $filename <: not r".*/src/(?:engine/.*|app/store\.ts)$",
+    register_diagnostic(span=$m, message="openStore() is called only in src/app/store.ts and src/engine/")
+  },
+  // Events enter the machine in one place: the controller calls transition() and initial().
+  or {
+    `transition($_)`,
+    `initial($_)`
+  } as $m where {
+    $filename <: r".*/src/.*",
+    $filename <: not r".*/src/(?:app/engine\.ts|engine/machine\.ts)$",
+    register_diagnostic(span=$m, message="only the engine controller (src/app/engine.ts) calls transition() and initial()")
+  },
+  // Each signal has one writer: a writer object is named only by state.ts and its owner.
+  or {
+    `engineWriter`,
+    `graphicsWriter`
+  } as $m where {
+    $filename <: r".*/src/.*",
+    $filename <: not r".*/src/app/(?:state|engine)\.ts$",
+    register_diagnostic(span=$m, message="engineWriter and graphicsWriter are named only by state.ts and app/engine.ts")
+  },
+  `runWriter` as $m where {
+    $filename <: r".*/src/.*",
+    $filename <: not r".*/src/app/(?:state|run)\.ts$",
+    register_diagnostic(span=$m, message="runWriter is named only by state.ts and app/run.ts")
+  },
+  `filesWriter` as $m where {
+    $filename <: r".*/src/.*",
+    $filename <: not r".*/src/app/(?:state|files)\.ts$",
+    register_diagnostic(span=$m, message="filesWriter is named only by state.ts and app/files.ts")
+  },
+  // The controller's queue has one way in: enqueue(), called from dispatch() and reply() only; nothing else puts an
+  // event into the queue or empties it, but connectEngine().
+  `enqueue($_)` as $m where {
+    $filename <: r".*/src/app/engine\.ts$",
+    $m <: not within JsFunctionDeclaration(id=`dispatch`),
+    $m <: not within `const reply = $_`,
+    register_diagnostic(span=$m, message="enqueue() is called only in dispatch() and reply()")
+  },
+  or {
+    `queue.push($_)`,
+    `queue.unshift($_)`,
+    `queue.splice($$$)`
+  } as $m where {
+    $filename <: r".*/src/app/engine\.ts$",
+    $m <: not within JsFunctionDeclaration(id=`enqueue`),
+    register_diagnostic(span=$m, message="the queue is pushed to only in enqueue()")
+  },
+  `queue = $_` as $m where {
+    $filename <: r".*/src/app/engine\.ts$",
+    $m <: not within JsFunctionDeclaration(id=`connectEngine`),
+    register_diagnostic(span=$m, message="the queue is emptied only in connectEngine()")
+  },
+  // The Worker is posted to in one place: EngineClient's #send.
+  `$_.postMessage($_)` as $m where {
+    $filename <: r".*/src/engine/.*",
+    $filename <: not r".*/src/engine/worker\.ts$",
+    $m <: not within JsMethodClassMember(name=`#send`),
+    register_diagnostic(span=$m, message="the page posts to the Worker only in #send")
+  },
+  // Every button that Start engine turns into Run keeps ignoring a held Enter: one that is aria-disabled (never
+  // disabled, so it keeps the focus) in the run controls, the command line and the log; and the phone's Break pill,
+  // which takes the Run button's place.
+  `<button $props>$_</button>` as $m where {
+    $filename <: r".*/src/app/(?:editor|log)/.*",
+    $props <: or {
+      contains `aria-disabled={$_}`,
+      contains `class={$c}` where $c <: r".*pill.*"
+    },
+    $props <: not contains `onKeyDown={ignoreHeldEnter}`,
+    register_diagnostic(span=$m, message="a Run or Break pill button (aria-disabled, or .pill) in editor/ or log/ ignores a held Enter: onKeyDown={ignoreHeldEnter}")
+  }
+}

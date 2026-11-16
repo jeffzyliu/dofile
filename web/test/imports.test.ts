@@ -1,6 +1,7 @@
-// The contracts that no type can hold, checked on the source text and the import graph of web/src (and, where said, the
-// whole of web/). The text is read with comments removed, and where a rule counts a word in code, with the strings'
-// contents removed too. A definition is not a call.
+// The contracts that no type and no lint rule can hold, checked on the source text and the import graph of web/src (and,
+// where said, the whole of web/). The text is read with comments removed, and where a rule counts a word in code, with the
+// strings' contents removed too. Rules a file path can state (who imports whom, who calls what, who names a writer) are
+// in biome.json and biome/architecture.grit; the writable signals are checked by test/signals.types.ts.
 
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -101,19 +102,6 @@ const count = (text: string, pattern: RegExp) =>
 /** The files of `list` whose code has `pattern`, with how often. */
 const having = (list: string[], pattern: RegExp, blank = true) =>
   Object.fromEntries(list.map((f) => [f, count(source(f, blank), pattern)] as const).filter(([, c]) => c));
-/** The body of the function that starts at `marker` (the text up to and with its `{`), braces matched. */
-function bodyOf(text: string, marker: string): string {
-  const at = text.indexOf(marker);
-  assert.ok(at >= 0, `no "${marker}"`);
-  let i = at + marker.length,
-    depth = 1;
-  for (; i < text.length && depth; i++) {
-    if (text[i] === "{") depth++;
-    else if (text[i] === "}") depth--;
-  }
-  return text.slice(at + marker.length, i - 1);
-}
-
 /** The imports of a file: what it names (a path from web/ when it is a file of ours), and whether only types come. */
 type Import = { from: string; file: string | null; typeOnly: boolean };
 function importsOf(path: string): Import[] {
@@ -136,9 +124,16 @@ function importsOf(path: string): Import[] {
   return out;
 }
 
-const SRC = files("src"),
-  ENGINE = "src/app/engine.ts",
-  MAIN = "src/main.tsx";
+const LAYER = {
+  views: "src/app", // its .tsx files
+  transport: /^src\/engine\/(client|worker)/, // the page's transport and the Worker's entry
+  pageTransport: /^src\/engine\/client/, // the page's side of it
+  entry: "src/main.tsx",
+  machine: "src/engine/machine.ts", // the one pure file
+  runController: "src/app/run.ts", // decides nothing about the engine's state
+};
+
+const SRC = files("src");
 
 test("the scanner: comments go, strings stay (or are blanked), and a regular expression or a template is not taken for code", () => {
   assert.equal(code("a // b\nc /* d */ e"), "a \nc   e");
@@ -149,8 +144,8 @@ test("the scanner: comments go, strings stay (or are blanked), and a regular exp
   assert.equal(code("f(`a ${`b ${c} d`} e`) as T", true), "f(`${`${c}`}`) as T");
 });
 
-test("the import graph: no view reaches the transport or the worker; no .tsx imports the machine or main.tsx; the controller takes only types from client.ts", () => {
-  const views = files("src/app", /\.tsx$/);
+test("the import graph: no view reaches the transport or the worker through value imports", () => {
+  const views = files(LAYER.views, /\.tsx$/);
   assert.ok(views.length > 15, `${views.length} views`);
   const reach = (from: string, seen = new Set<string>()): Set<string> => {
     for (const i of importsOf(from))
@@ -160,52 +155,27 @@ test("the import graph: no view reaches the transport or the worker; no .tsx imp
       }
     return seen;
   };
-  for (const view of views) {
-    const reached = reach(view);
-    for (const banned of ["src/engine/client.ts", "src/engine/worker.ts"])
-      assert.ok(!reached.has(banned), `${view} reaches ${banned} through value imports`);
-  }
-  for (const f of SRC.filter((f) => f.endsWith(".tsx"))) {
-    for (const i of importsOf(f)) {
-      assert.notEqual(i.file, "src/engine/machine.ts", `${f} imports the machine`);
-      assert.notEqual(i.file, MAIN, `${f} imports main.tsx`);
-    }
-  }
-  const fromClient = importsOf(ENGINE).filter((i) => i.file === "src/engine/client.ts");
-  assert.deepEqual(
-    fromClient.map((i) => i.typeOnly),
-    [true],
-    "app/engine.ts: one import from client.ts, of types",
-  );
+  for (const view of views)
+    assert.deepEqual(
+      [...reach(view)].filter((f) => LAYER.transport.test(f)),
+      [],
+      `${view} reaches the transport through value imports`,
+    );
   // and the views do reach what they should: the check above is not empty
-  assert.ok(reach("src/app/editor/RunControls.tsx").has(ENGINE) && reach("src/app/App.tsx").has("src/app/state.ts"));
-  assert.ok(reach(MAIN).has("src/engine/client.ts"), "main.tsx is where the transport comes in");
+  const reached = new Set(views.flatMap((v) => [...reach(v)]));
+  assert.ok(
+    [...reached].some((f) => f.startsWith("src/app/") && f.endsWith(".ts")),
+    "views reach the controllers",
+  );
+  assert.ok(reached.has("src/app/state.ts"), "views reach the state");
+  assert.ok(
+    [...reach(LAYER.entry)].some((f) => LAYER.transport.test(f)),
+    "main.tsx is where the transport comes in",
+  );
 });
 
-test("the import graph: engine/ never imports app/; no .ts file imports a .tsx; every relative import in a .ts file spells its extension", () => {
-  for (const f of [...SRC, ...files("test"), ...files("scripts", /\.ts$/)]) {
-    for (const i of importsOf(f)) {
-      if (!i.file) continue;
-      if (f.startsWith("src/engine/")) assert.ok(!i.file.startsWith("src/app/"), `${f} imports ${i.file}`);
-      if (f.endsWith(".ts")) {
-        assert.ok(!i.file.endsWith(".tsx"), `${f} (a .ts file: Node runs it as it is) imports ${i.file}`);
-        assert.match(i.from, /\.(ts|json|mjs|css)$/, `${f}: "${i.from}" must spell its extension`);
-      }
-    }
-  }
-});
-
-test("the import graph: the landing and commands pages (src/site/) import nothing of the editor's, and the editor nothing of theirs", () => {
-  const site = SRC.filter((f) => f.startsWith("src/site/"));
-  assert.ok(site.length >= 4, "src/site/ has the pages' scripts");
-  for (const f of site) {
-    for (const i of importsOf(f)) {
-      assert.ok(i.file, `${f} imports the package "${i.from}": the pages load their own two small scripts only`);
-      assert.match(i.file, /^src\/(site|styles)\//, `${f} imports ${i.file}: only src/site/ and the stylesheets`);
-    }
-  }
-  for (const f of SRC.filter((f) => !f.startsWith("src/site/")))
-    for (const i of importsOf(f)) assert.ok(!i.file?.startsWith("src/site/"), `${f} imports ${i.file}`);
+test("the landing and commands pages (src/site/) load only their own scripts and styles, and the editor's HTML loads nothing of theirs", () => {
+  assert.ok(SRC.filter((f) => f.startsWith("src/site/")).length >= 4, "src/site/ has the pages' scripts");
   // the pages' HTML loads only their own entries
   for (const page of ["landing.html", "commands.html"]) {
     const scripts = [...readFileSync(join(web, page), "utf8").matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map(
@@ -247,34 +217,10 @@ test("TypeScript as Node runs it: only syntax that can be erased, and no JSDoc t
     assert.doesNotMatch(readFileSync(join(web, f), "utf8"), jsdoc, `${f} has a JSDoc type`);
 });
 
-test("machine.ts is pure: only type imports, no clock, timer, console or random number, no variable at the top level, and two casts", () => {
-  const path = "src/engine/machine.ts",
-    text = source(path, true);
-  const imports = importsOf(path);
-  assert.ok(imports.length >= 1);
-  for (const i of imports) assert.equal(i.typeOnly, true, `machine.ts imports a value from ${i.from}`);
-  for (const name of [
-    "Date",
-    "setTimeout",
-    "setInterval",
-    "clearTimeout",
-    "console",
-    "Math.random",
-    "performance",
-    "globalThis",
-    "window",
-    "document",
-    "signal",
-  ]) {
-    assert.equal(count(text, new RegExp(`\\b${name.replace(".", "\\.")}\\b`)), 0, `machine.ts names ${name}`);
-  }
+test("machine.ts has no variable at the top level and two casts (its imports and globals: Biome)", () => {
+  const text = source(LAYER.machine, true);
   assert.equal(count(text, /^(export\s+)?(let|var)\s/m), 0, "a variable at the top level");
   assert.equal(count(text, /\bas\b/), 2, "two casts in the whole file: mint() and the table lookup");
-  assert.equal(
-    count(bodyOf(text, "export function transition(m: Machine, e: Event): Step {"), /\bas\b/),
-    1,
-    "one of them in transition()",
-  );
 });
 
 test("a ticket is made in one place: the cast to Ticket occurs once in the whole of web/, in machine.ts", () => {
@@ -287,211 +233,24 @@ test("a ticket is made in one place: the cast to Ticket occurs once in the whole
     "vite.config.ts",
     "playwright.config.ts",
   ];
-  // in the text as it is, comments and strings too: `grep -r` must find one
+  // in the text as it is, comments and strings too: grep -r must find one
   const found = Object.fromEntries(
     all.map((f) => [f, count(readFileSync(join(web, f), "utf8"), cast)] as const).filter(([, c]) => c),
   );
-  assert.deepEqual(found, { "src/engine/machine.ts": 1 });
-  assert.match(
-    source("src/engine/machine.ts"),
-    new RegExp(`const mint = \\(n: number\\): Ticket => n ${cast.source.replace(/\\b/g, "")};`),
-  );
-  // and no other way round the brand: no cast to `any` or `never`, and no angle-bracket cast to Ticket, anywhere in
-  // web/src or in the machine's own test (which copies every ticket from an effect, a state or a machine)
-  const loose = new RegExp(["\\bas\\s+(any|never)\\b", "<Ticket>"].join("|"));
-  assert.deepEqual(having([...SRC, "test/machine.test.ts"], loose), {});
+  assert.deepEqual(found, { [LAYER.machine]: 1 });
+  // and no angle-bracket cast to Ticket in web/src or in the machine's own test (a cast to any or never: Biome)
+  assert.deepEqual(having([...SRC, "test/machine.test.ts"], /<Ticket>/), {});
 });
 
-test("events get in through two doors: enqueue() is called only in dispatch() and reply(); reply() has no cast; transition() is called once", () => {
-  const text = source(ENGINE, true);
-  assert.equal(count(text, /\benqueue\(/), 3, "its definition and two calls");
-  assert.equal(count(text, /\bfunction enqueue\(/), 1);
+test("the transport knows no state name, and run.ts does not read the engine's state", () => {
+  const client = SRC.filter((f) => LAYER.pageTransport.test(f));
+  assert.ok(client.length > 0, "the walk found the transport");
+  const names = /"(ready|running|breaking|waiting|starting-list|starting-worker|asking|declined|downloading)"/;
+  for (const f of client) assert.equal(count(source(f), names), 0, `${f} names a state`);
   assert.equal(
-    count(bodyOf(text, "function dispatch(event: PlainEvent): Step | null {"), /\benqueue\(/),
-    1,
-    "in dispatch()",
-  );
-  const reply = bodyOf(text, "const reply = <K extends Answered>(effect: TicketedEffect & { do: K }): Reply<K> => {");
-  assert.equal(count(reply, /\benqueue\(/), 1, "in reply()");
-  assert.equal(count(reply, /\bas\b/), 0, "reply() has no cast");
-  assert.match(reply, /if \(mine !== wiring\) return;/, "a reply of an earlier wiring does nothing");
-  assert.match(reply, /enqueue\(\{ \.\.\.said, n: effect\.n \}\)/, "the one place a ticket is put on an event");
-  assert.equal(count(text, /\bn: effect\.n\b/), 1, "and nowhere else");
-  // the queue has one way in, enqueue(): it is pushed to in one place, there, and nothing else puts an event into it
-  assert.equal(count(text, /\bqueue\.(push|unshift|splice|concat)\(|\bqueue\[/), 1);
-  assert.equal(
-    count(
-      bodyOf(text, "function enqueue(happening: PlainEvent | (AnyAnswer & { n: Ticket })): Step | null {"),
-      /\bqueue\.push\(event\)/,
-    ),
-    1,
-    "in enqueue()",
-  );
-  assert.equal(count(text, /\bqueue = /), 1, "and it is emptied in one place, connectEngine()");
-  assert.equal(count(bodyOf(text, "export function connectEngine("), /\bqueue = \[\]/), 1);
-  // view() takes the machine's State and gives the views' EngineState: its return type is the third check on
-  // EngineState
-  assert.equal(count(text, /\bfunction view\(state: State\): EngineState \{/), 1);
-  assert.equal(
-    count(text, /\bengineWriter\.engine\.value = view\(/),
-    1,
-    "the one writer of the `engine` signal writes what view() gives",
-  );
-  assert.equal(count(text, /\bengineWriter\b/), 2, "its import, and that one write");
-  assert.deepEqual(
-    having(SRC, /\btransition\(/),
-    { [ENGINE]: 1, "src/engine/machine.ts": 1 },
-    "the one call, and the definition",
-  );
-  assert.deepEqual(
-    having(SRC, /\binitial\(/),
-    { [ENGINE]: 1, "src/engine/machine.ts": 1 },
-    "open() is the one caller of initial()",
-  );
-});
-
-test("the worker is posted to in one place: postMessage occurs once in client.ts, in #send", () => {
-  const text = source("src/engine/client.ts", true);
-  assert.equal(count(text, /\bpostMessage\(/), 1);
-  assert.equal(count(bodyOf(text, "#send<K extends Op>("), /\bpostMessage\(/), 1);
-  // and the lifecycle ops leave it only from start() and run()
-  for (const op of ["mount", "boot", "startup", "run"])
-    assert.equal(count(source("src/engine/client.ts"), new RegExp(`#send\\(live, "${op}"`)), 1, op);
-  // and the one op of JournalOps from the function start() gives to store.attach, with nothing in it
-  assert.equal(count(source("src/engine/client.ts"), /#send\(live, "sync", undefined\)/), 1, "sync");
-  assert.equal(count(source("src/engine/client.ts"), /#send\(live, "sync"/), 1, "sync");
-});
-
-test("single instances: main.tsx is the only module that constructs or connects; the store is opened in two places, one for each thread", () => {
-  assert.deepEqual(having(SRC, /\bnew EngineClient\(/), { [MAIN]: 1 });
-  assert.deepEqual(having(SRC, /\bnew Worker\(/), { [MAIN]: 1 });
-  const calls = (name: string) => having(SRC, new RegExp(`(?<!function )\\b${name}\\(`));
-  assert.deepEqual(calls("connectEngine"), { [MAIN]: 1 });
-  assert.deepEqual(calls("connectFiles"), { [MAIN]: 1 });
-  assert.deepEqual(calls("connectRun"), { [MAIN]: 1 });
-  assert.deepEqual(calls("tabLock"), { [MAIN]: 1 });
-  assert.deepEqual(calls("openStore"), { "src/app/store.ts": 1, "src/engine/worker.ts": 1 });
-  // the page load: open() is called once, in main.tsx (not `x.open()`, and not its definition, which has a return type)
-  assert.deepEqual(having(SRC, /(?<![.\w])open\(\)(?!\s*:)/), { [MAIN]: 1 });
-  assert.equal(
-    count(source(ENGINE, true), /\bexport function open\(\): void \{/),
-    1,
-    "open is defined in the controller",
-  );
-  // the definitions, which the counts above leave aside
-  for (const [name, file] of [
-    ["connectEngine", ENGINE],
-    ["connectRun", ENGINE],
-    ["connectFiles", "src/app/files.ts"],
-    ["tabLock", "src/engine/tab.ts"],
-    ["openStore", "src/engine/store.ts"],
-  ]) {
-    assert.equal(
-      count(source(file, true), new RegExp(`\\bexport (function ${name}\\(|const ${name} = )`)),
-      1,
-      `${name} is defined in ${file}`,
-    );
-  }
-});
-
-test("each signal has one writer: a writer object is named only by state.ts and its owner", () => {
-  const owners = {
-    engineWriter: ENGINE,
-    graphicsWriter: ENGINE,
-    runWriter: "src/app/run.ts",
-    filesWriter: "src/app/files.ts",
-  };
-  for (const [writer, owner] of Object.entries(owners)) {
-    assert.deepEqual(
-      Object.keys(having(SRC, new RegExp(`\\b${writer}\\b`))).sort(),
-      [owner, "src/app/state.ts"].sort(),
-      writer,
-    );
-  }
-  // a signal that is in a writer object is exported read-only, and the views' own signals are not in one
-  const state = source("src/app/state.ts", true);
-  for (const name of [
-    "engine",
-    "files",
-    "fresh",
-    "persisted",
-    "log",
-    "lastRun",
-    "history",
-    "results",
-    "macros",
-    "data",
-    "rows",
-    "memory",
-    "graphs",
-    "toast",
-    "banners",
-    "announce",
-    "graphicsPart",
-  ]) {
-    assert.match(state, new RegExp(`export const ${name}: ReadonlySignal<`), `${name} is exported read-only`);
-  }
-  for (const name of [
-    "dialog",
-    "tabs",
-    "activeTab",
-    "split",
-    "outputTab",
-    "phoneTab",
-    "pickedVar",
-    "theme",
-    "wrap",
-    "layout",
-    "isolated",
-    "graphIndex",
-    "graphFull",
-  ]) {
-    assert.match(state, new RegExp(`export const ${name} = signal[<(]`), `${name} stays writable`);
-  }
-  assert.equal(count(state, /export const \w+ = signal[<(]/), 13, "no other signal is exported writable");
-});
-
-test("no counter or flag outside the machine decides a state: the old ones are gone from web/src", () => {
-  const gone =
-    /\b(gen|attempt|lockGen|errorRestarts|taking|was|queued|QueuedRun|dropRun|drop-run|hadEngine|stageAt|STAGE_OF|StatusText|onRestart|onStatus|resetResult|breakTimer|resetAt|STARTABLE|RESETTABLE)\b/;
-  const found = having(SRC, gone);
-  // What is left of those names: `resetAt` of `breaking`, which views read (also in app/editor/clock.ts, for the Break
-  // countdown); the controller's handle on the Break timer, which decides no state; and in the worker, `was`, a local
-  // name in saveRun for the files as they were before a run.
-  assert.deepEqual(Object.keys(found).sort(), [
-    "src/app/editor/clock.ts",
-    "src/app/engine.ts",
-    "src/app/types.ts",
-    "src/engine/machine.ts",
-    "src/engine/worker.ts",
-  ]);
-  assert.equal(
-    count(source("src/app/editor/clock.ts", true), gone),
-    count(source("src/app/editor/clock.ts", true), /\bresetAt\b/),
-  );
-  assert.equal(
-    count(source("src/engine/worker.ts", true), gone),
-    count(source("src/engine/worker.ts", true), /\bwas\b/),
-  );
-  assert.match(source("src/engine/worker.ts"), /const was = new Map\(before\.map/);
-  assert.equal(count(source(ENGINE, true), gone), count(source(ENGINE, true), /\b(breakTimer|resetAt)\b/));
-  assert.equal(count(source("src/app/types.ts", true), gone), count(source("src/app/types.ts", true), /\bresetAt\b/));
-  assert.equal(
-    count(source("src/app/states/banners.tsx", true), gone),
-    count(source("src/app/states/banners.tsx", true), /\bresetAt\b/),
-  );
-  assert.equal(
-    count(source("src/engine/machine.ts", true), gone),
-    count(source("src/engine/machine.ts", true), /\bresetAt\b/),
-  );
-  // run.ts does not read the engine's state, and the transport knows no state name
-  assert.equal(count(source("src/app/run.ts", true), /S\.engine\b|\.subscribe\(/), 0, "run.ts subscribes to nothing");
-  assert.equal(
-    count(
-      source("src/engine/client.ts"),
-      /"(ready|running|breaking|waiting|starting-list|starting-worker|asking|declined|downloading)"/,
-    ),
+    count(source(LAYER.runController, true), /S\.engine\b|\.subscribe\(/),
     0,
+    "run.ts subscribes to nothing",
   );
 });
 
@@ -499,13 +258,6 @@ test("the CSS that keys on the engine's state names matches both other-tab state
   const css = readFileSync(join(web, "src/styles/app.css"), "utf8");
   const keyed = [...css.matchAll(/\[data-engine([^\]]*)\]/g)].map((m) => m[1]);
   assert.deepEqual(keyed, ['^="other-tab"'], "one rule, by prefix: other-tab-idle and other-tab-taking");
-});
-
-test("every button that Start engine turns into Run keeps ignoring a held Enter: ignoreHeldEnter is the onKeyDown of the toolbar's Run, the phone's Run and Break pill, and the command line's three buttons; and of the log's help link, which stays live through a run", () => {
-  const wired = (path: string) => count(source(path, true), /onKeyDown=\{ignoreHeldEnter\}/g);
-  assert.equal(wired("src/app/editor/RunControls.tsx"), 3, "the toolbar's Run, the phone's Break pill and Run");
-  assert.equal(wired("src/app/log/CommandLine.tsx"), 3, "Start engine, the phone's send, Run command");
-  assert.equal(wired("src/app/log/LogView.tsx"), 1, "a hint's help link");
 });
 
 // A tap on iOS leaves :hover on until the next tap elsewhere (the Files pane's caret and ⋯ and the heads' "+" stayed
