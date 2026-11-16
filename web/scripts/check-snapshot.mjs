@@ -6,13 +6,15 @@
 // Each compat case runs in its own process (a fresh engine), N at a time (--shards N, default 4), and is killed after
 // --timeout seconds (default 300), reported as a failure "timeout". The cases that are slow in Pyodide start first.
 // Options: --cases a,b,c (only those compat cases; no conformance), --only conformance|compat, --dir, --normal, --pandas (with --normal: load pandas, as the page does not).
-// Exit code 1 if anything differs, times out or crashes. Over 30 minutes for everything. Needs a built snapshot.
+// Exit code 1 if anything differs, times out or crashes; 2 for an unknown case, or a missing or stale snapshot (not with
+// --normal; run `npm run snapshot`). Over 30 minutes for everything. Needs a built snapshot.
 
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
+import { inputs, readManifest, staleness } from "./build-id.ts";
 import { installEngine } from "./install-engine.ts";
 import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "./snapshot-node.ts";
 
@@ -159,6 +161,17 @@ def run_case(case):
 }
 
 // ---- the parent: start the children, collect their results -------------------------------------------------------------
+// A snapshot of another wheel or Pyodide would check the old engine, and its results would say nothing of this checkout.
+if (!args.includes("--normal")) {
+  const record = readManifest(dir);
+  const why = record ? staleness(record, inputs()) : `no snapshot in ${dir}`;
+  if (why) {
+    // `npm run snapshot` writes public/snapshot, or SNAPSHOT_OUT (make-snapshot.mjs): name it when --dir points elsewhere
+    const fix = dir === defaultDir ? "npm run snapshot" : `SNAPSHOT_OUT=${dir} npm run snapshot`;
+    console.error(`${why.replace(/\. Run `npm run snapshot` in web\/$/, "")}. Run \`${fix}\` in web/`);
+    process.exit(2);
+  }
+}
 const shards = Number(arg("--shards", 4)),
   timeoutS = Number(arg("--timeout", 300));
 const only = arg("--only", null),
