@@ -452,7 +452,8 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true }),
   );
-  // a matrix: View opens it in place, Hide folds it, the size copies it as tab-separated text
+  // a matrix: View opens it in place, Hide folds it; a click on the row does the same and copies nothing; Copy copies it
+  // as tab-separated text without opening it; a click on a cell copies that cell
   const log = await logLength(page);
   await page
     .getByRole("button", { name: /^Matrices/ })
@@ -466,13 +467,29 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await expect(grid.locator("th")).toHaveText(["Row", "age", "educ", "_cons"]);
   await expect(grid.locator("tbody tr")).toHaveCount(1);
   expect(await logLength(page)).toBe(log);
-  await page.getByRole("button", { name: "e(b): 1 x 3" }).click();
-  await expect
-    .poll(async () => (await copied(page)).length, "View copies nothing; the size copies once")
-    .toBe(beforeView + 1);
+  await page.getByRole("button", { name: "e(b): 1 x 3" }).click(); // the row toggles: it closes
+  await expect(page.locator(".rs .mat")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "View e(b)" })).toBeVisible();
+  await page.locator(".rs .row td", { hasText: /^e\(b\)$/ }).click(); // anywhere on the row: it opens
+  await expect(grid).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hide e(b)" })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: "Hide e(b)" }).click(); // Hide closes once, it does not toggle twice
+  await expect(page.locator(".rs .mat")).toHaveCount(0);
+  expect((await copied(page)).length, "View, Hide and the row's clicks copy nothing").toBe(beforeView);
+  await page.getByRole("button", { name: "Copy e(b)" }).click();
+  await expect.poll(async () => (await copied(page)).length, "Copy copies once").toBe(beforeView + 1);
   await expect(page.locator(".toast")).toHaveText("Copied e(b)");
-  await expect(page.locator(".rs .copied")).toHaveCount(0); // a matrix row keeps View and Hide: the toast says it
+  await expect(page.locator(".rs .copied")).toHaveCount(0); // a matrix row keeps View and Copy: the toast says it
   expect((await copied(page)).at(-1)).toMatch(/^\tage\teduc\t_cons\n\S+\t[-.\d]+\t[-.\d]+\t[-.\d]+$/);
+  await expect(page.locator(".rs .mat"), "a copy that read the matrix leaves it closed").toHaveCount(0);
+  await page.getByRole("button", { name: "View e(b)" }).click();
+  await expect(grid).toBeVisible();
+  const cell = grid.locator("tbody td.cell").nth(1);
+  const full = await cell.getAttribute("title");
+  await cell.click();
+  await expect(page.locator(".toast")).toHaveText(/^Copied e\(b\)\[\S+, educ\]$/);
+  expect((await copied(page)).at(-1), "a cell copies its own full value").toBe(full);
+  await expect(grid, "a cell's click does not fold the grid").toBeVisible();
   await page.getByRole("button", { name: "Hide e(b)" }).click();
   await expect(page.locator(".rs .mat")).toHaveCount(0);
   // an open matrix closes when another run replaces the results

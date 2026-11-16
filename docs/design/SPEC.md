@@ -269,9 +269,14 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   none). A copy by click leaves no focus ring, also without the clipboard API (plain HTTP). A click that ends a text
   selection in the row (a drag over a name, a double-click) only selects: a drag copies nothing, and a double-click copies
   once (its first click) and keeps the word selected.
-- **Matrices:** the row shows the size ("1 x 3", from the engine's "1x3") and "View", which opens the matrix in place as a
-  grid: no command, nothing in the log or the history. "Hide" folds it; View and Hide do not copy. Copying a matrix (a click
-  on its row) copies tab-separated text; the toast says "Copied e(b)" and View or Hide stays in the action cell.
+- **Matrices:** the row shows the size ("1 x 3", from the engine's "1x3"), "View" and "Copy". View opens the matrix in place
+  as a grid: no command, nothing in the log or the history; "Hide" folds it. A click anywhere on the row (Enter or Space on
+  its value) does what View or Hide does and copies nothing; a click that ends a text selection in the row does nothing.
+  "Copy" (`Copy e(b)`) and Ctrl/Cmd+C on a focused value copy the whole matrix as tab-separated text; the toast says
+  "Copied e(b)", and a copy that had to read the matrix leaves it closed. View, Hide and Copy do not trigger the row's
+  click. A click on a grid cell copies that cell's every digit ("Copied e(b)[y1, age]": row name, column name); a text
+  selection in the grid is not a click; cells are for mouse and touch, with no keyboard navigation (Copy covers it). Every
+  row, and each cell, shows the pointer; a cell tints on hover (`hover: hover`).
 - **Empty** (`S 18`): "No results yet" / "e() and r() appear after an estimation or a command such as `summarize`, with the
   locals and globals your runs set."
 - **Keyboard and ARIA:** values are buttons, each a Tab stop (Tab walks group heads and values in order; no arrow keys);

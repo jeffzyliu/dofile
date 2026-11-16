@@ -1,12 +1,16 @@
 // The Results tab (docs/design/SPEC.md, section 3.9; P/Results, S 18): one table of three fixed columns (name, value,
 // action). Sections "e() · regress", "r()" and "Locals and globals" hold groups that fold (Scalars, Macros, Matrices,
 // Locals, Globals), each with its count. Values show 8 significant digits, and every digit on a hovered row or a value
-// with keyboard focus (CSS only: ui.css, "results"). A click or tap anywhere on a row, or Enter or Ctrl/Cmd+C on its value,
-// copies every digit: the toast names the row ("Copied e(r2)") and the row's action cell says "✓ Copied" for COPIED_MS. A
-// click that ends a text selection in the row (a drag, a double-click) selects, and does not copy.
-// A matrix row shows its size ("1 x 3") and View, which opens the matrix in place as a grid (engine.ts call("matrix"): no
-// command, nothing in the log or the history); Hide folds it; copying a matrix copies tab-separated text (the toast
-// only: View and Hide stay in its cell).
+// with keyboard focus (CSS only: ui.css, "results"). A click or tap anywhere on a scalar or macro row, or Enter or
+// Ctrl/Cmd+C on its value, copies every digit: the toast names the row ("Copied e(r2)") and the row's action cell says
+// "✓ Copied" for COPIED_MS. A click that ends a text selection in the row (a drag, a double-click) selects, and does not
+// act. Every row shows the pointer.
+// A matrix row shows its size ("1 x 3"), View and Copy. View opens the matrix in place as a grid (engine.ts
+// call("matrix"): no command, nothing in the log or the history); Hide folds it. A click anywhere on the row (Enter or
+// Space on its value) does the same as View or Hide and copies nothing. Copy, or Ctrl/Cmd+C on the value, copies the
+// whole matrix as tab-separated text (the toast only); a copy that had to read the matrix leaves it closed. A click on a
+// grid cell copies that cell's every digit ("Copied e(b)[y1, age]"); a click that ends a text selection in the grid does
+// not. Cells are for the mouse and touch; the keyboard has Copy.
 //
 // Values are buttons, each a Tab stop; group heads are buttons with aria-expanded. The folds, the row just copied and the
 // open matrices are signals of view.ts. An open matrix and "✓ Copied" belong to the `results` they were read for: after
@@ -62,28 +66,34 @@ function setMatrix(name: string, m: OpenMatrix | null) {
   openMatrices.value = next;
 }
 
-/** Read matrix `name` of the current results from the engine. Resolves the entry written (null when the results changed
- *  meanwhile and the answer is not for them). */
+/** Ask the engine for matrix `name` as it stands for `rs`. */
+async function fetchMatrix(name: string, rs: Results): Promise<OpenMatrix> {
+  try {
+    const m = await call("matrix", { name });
+    return hasValues(m) ? { for: rs, status: "ready", matrix: m } : { for: rs, status: "error", message: m.error };
+  } catch {
+    return { for: rs, status: "error", message: NO_ENGINE };
+  }
+}
+
+/** Read matrix `name` of the current results from the engine and open it. Resolves the entry written (null when the
+ *  results changed meanwhile and the answer is not for them). */
 async function readMatrix(name: string): Promise<OpenMatrix | null> {
   const rs = results.value;
   if (!rs) return null;
   setMatrix(name, { for: rs, status: "loading" });
-  let entry: OpenMatrix;
-  try {
-    const m = await call("matrix", { name });
-    entry = hasValues(m) ? { for: rs, status: "ready", matrix: m } : { for: rs, status: "error", message: m.error };
-  } catch {
-    entry = { for: rs, status: "error", message: NO_ENGINE };
-  }
+  const entry = await fetchMatrix(name, rs);
   if (results.value !== rs) return null; // another run replaced the results: this answer is for the old ones
   setMatrix(name, entry);
   return entry;
 }
 
-/** Copy a matrix as tab-separated text, reading it first if it is not open; `done` is the toast. */
+/** Copy a matrix as tab-separated text; `done` is the toast. An open matrix is copied as it is; a closed one is read
+ *  without opening it. */
 async function copyMatrix(name: string, done: string) {
-  const open = matrixFor(name, results.value);
-  const entry = open?.status === "ready" ? open : await readMatrix(name);
+  const rs = results.value;
+  const open = matrixFor(name, rs);
+  const entry = open?.status === "ready" ? open : rs ? await fetchMatrix(name, rs) : null;
   if (entry?.status === "ready") await copyText(matrixTsv(entry.matrix), done);
   else showToast("Couldn't read the matrix", "error");
 }
@@ -99,6 +109,12 @@ async function copyValue(row: ResultRow) {
     copiedRow.value = null;
   }, COPIED_MS);
 }
+
+/** A click that ends a text selection inside `box` selects; Enter and Space have detail 0. */
+const endsSelection = (e: MouseEvent, box: Element) => {
+  const s = getSelection();
+  return e.detail > 0 && s !== null && !s.isCollapsed && box.contains(s.anchorNode);
+};
 
 function MatrixGrid({ entry, name }: { entry: OpenMatrix; name: string }) {
   if (entry.status === "loading") return <span class="muted">Reading {name}…</span>;
@@ -129,7 +145,16 @@ function MatrixGrid({ entry, name }: { entry: OpenMatrix; name: string }) {
               <tr key={i}>
                 <td class="obs">{r}</td>
                 {data[i].slice(0, MAX_COLS).map((v, j) => (
-                  <td key={j} title={full(v)}>
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: cells are for the mouse; the keyboard has the row's Copy
+                  <td
+                    key={j}
+                    class="cell"
+                    title={full(v)}
+                    onClick={(e) => {
+                      if (endsSelection(e, e.currentTarget.closest("table") as Element)) return;
+                      copyText(full(v), `Copied ${name}[${r}, ${cols[j]}]`);
+                    }}
+                  >
                     {shown(v)}
                   </td>
                 ))}
@@ -154,16 +179,21 @@ function Row({ row }: { row: ResultRow }) {
   const open = isMatrix ? matrixFor(row.matrix as string, rs) : null;
   const short = isMatrix ? sizeLabel(String(row.value)) : shown(row.value);
   const long = isMatrix ? short : full(row.value);
+  const toggle = () => {
+    if (open) setMatrix(row.matrix as string, null);
+    else readMatrix(row.matrix as string);
+  };
   const copy = () => (isMatrix ? copyMatrix(row.matrix as string, copiedNote(row)) : copyValue(row));
   return (
     <>
-      {/* the row copies on a click anywhere; the value button is the keyboard's target, its Enter and Space click here */}
+      {/* a click anywhere on the row copies it (a matrix row shows or hides its grid); the value button is the keyboard's
+          target, its Enter and Space click here */}
       <tr
         class="row"
         onClick={(e) => {
-          const s = getSelection(); // a click that ends a selection in the row selects; Enter and Space have detail 0
-          if (e.detail > 0 && s && !s.isCollapsed && e.currentTarget.contains(s.anchorNode)) return;
-          copy();
+          if (endsSelection(e, e.currentTarget)) return;
+          if (isMatrix) toggle();
+          else copy();
         }}
       >
         <td>{row.name}</td>
@@ -191,19 +221,31 @@ function Row({ row }: { row: ResultRow }) {
         </td>
         <td class="act">
           {isMatrix ? (
-            <button
-              type="button"
-              class="link-btn"
-              aria-expanded={open !== null}
-              aria-label={`${open ? "Hide" : "View"} ${row.matrix}`}
-              onClick={(e) => {
-                e.stopPropagation(); // View and Hide do not copy the row
-                if (open) setMatrix(row.matrix as string, null);
-                else readMatrix(row.matrix as string);
-              }}
-            >
-              {open ? "Hide" : "View"}
-            </button>
+            <>
+              <button
+                type="button"
+                class="link-btn"
+                aria-expanded={open !== null}
+                aria-label={`${open ? "Hide" : "View"} ${row.matrix}`}
+                onClick={(e) => {
+                  e.stopPropagation(); // the row's click would toggle a second time
+                  toggle();
+                }}
+              >
+                {open ? "Hide" : "View"}
+              </button>{" "}
+              <button
+                type="button"
+                class="link-btn"
+                aria-label={`Copy ${row.matrix}`}
+                onClick={(e) => {
+                  e.stopPropagation(); // Copy does not toggle
+                  copy();
+                }}
+              >
+                Copy
+              </button>
+            </>
           ) : copiedRow.value?.key === row.key &&
             copiedRow.value.for === rs &&
             copiedRow.value.macros === macros.value ? (
