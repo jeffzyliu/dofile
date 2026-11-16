@@ -209,8 +209,8 @@ the two largest engine files are split along seams the code already marks.
 - Cost: about 1.6 times B's.
 
 **The planner's recommendation was B, and none of C now. Decided 2026-11-16: B; C goes to the icebox, and the
-maintainer broadly agrees with every item in it, R1 and R5 first.** The other items keep their triggers: R2 if B3
-proves incomplete, R4 at the start of the later UI work, R3, R6 and R7 when a finding needs them.
+maintainer broadly agrees with every item in it, R1 and R5 first.** Superseded the same day by decision 8.9 (the next
+part): four redesigns moved into B, and the rest are planned after the audit without waiting for a trigger.
 
 ### What doing B first would waste, by redesign
 
@@ -325,7 +325,7 @@ the builder's tier or above. A failing check goes to `orchestrate:investigator`;
 
 Decided: 1 and 9. Open: 2 to 7. Item 8 is a list, not a question.
 
-1. **Which proposal.** Decided 2026-11-16: B. C is in the icebox, R1 and R5 first.
+1. **Which proposal.** Decided 2026-11-16: B, widened by decision 9.
 2. **`DOFILE_EDITOR_BASE`.** No workflow, npm script, README or CLAUDE file sets it. SPEC section 8 documents it and
    already calls it "a one-origin layout the scripts and the e2e tests no longer build"; `site.test.ts` and two e2e
    specs read it. Delete the mode? I recommend yes, unless you plan to serve the editor under a path.
