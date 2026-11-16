@@ -8,7 +8,7 @@
 //    leaves a wide dataset, and the tabs are checked against that. On the phone profile there is no Graph tab (graphs
 //    show in the log), so only the full-size view is checked there, opened through `graphFull`.
 import type { Page } from "@playwright/test";
-import { expect, isPhone, putFiles, ready, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 import { addBanner, type PhoneTab, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
 
 declare global {
@@ -123,7 +123,7 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
   await load.focus();
   await expect(load).toBeFocused();
   await load.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
-  await expect(page.locator(".toast")).toHaveText("Start the engine to load wages.dta");
+  await expect(toastOf(page)).toHaveText("Start the engine to load wages.dta");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
@@ -131,7 +131,7 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
   await expect(view.locator("table")).toHaveCount(0);
   await view.getByRole("button", { name: "Copy the use command" }).click();
   expect(await copied(page)).toEqual(['use "data/wages.dta", clear']);
-  await expect(page.locator(".toast")).toHaveText("Copied");
+  await expect(toastOf(page)).toHaveText("Copied");
 });
 
 test("the Graph, Data and Results tabs and a .dta tab, after a run through the hook", async ({ page, browserName }) => {
@@ -170,11 +170,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     const img = page.locator(".graph-wrap .graph-card img");
     await expect(img).toHaveAttribute("alt", "Graph 3: scatter wage educ"); // two graphs share a command: the number is added
     await expect(page.locator(".foot-title")).toHaveText("graph 3 of 3 · scatter wage educ");
-    await expect(page.locator(".graph-foot .thumb")).toHaveCount(3);
-    await page.locator(".graph-foot .thumb").first().click();
+    await expect(page.getByRole("button", { name: /^Show graph/ })).toHaveCount(3);
+    await page
+      .getByRole("button", { name: /^Show graph/ })
+      .first()
+      .click();
     await expect(img).toHaveAttribute("alt", "Graph: histogram wage");
     await expect(page.locator(".foot-title")).toHaveText("graph 1 of 3 · histogram wage");
-    await expect(page.locator(".graph-foot .thumb").first()).toHaveAttribute("aria-current", "true");
+    await expect(page.getByRole("button", { name: /^Show graph/ }).first()).toHaveAttribute("aria-current", "true");
     expect(await img.evaluate((el: HTMLImageElement) => el.naturalWidth > 0)).toBe(true);
 
     const open = page.getByRole("button", { name: "Open full size" });
@@ -189,14 +192,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     await expect(viewer.locator(".vtitle")).toHaveText("graph 3 of 3 · scatter wage educ");
     await page.keyboard.press("ArrowLeft");
     await expect(viewer.locator(".vtitle")).toHaveText("graph 2 of 3 · scatter wage educ");
-    await expect(page.locator('.visually-hidden[role="status"]')).toHaveText(/Graph 2: scatter wage educ$/); // said
+    await expect(page.getByRole("status")).toHaveText(/Graph 2: scatter wage educ$/); // said
     const copyImage = viewer.getByRole("button", { name: "Copy image" });
     if (await copyImage.isEnabled()) {
       // off in a browser that cannot put an image on the clipboard: a click would wait for it to be enabled
       await copyImage.click();
       await expect(viewer.locator(".vsaid")).toHaveText("Copied");
       expect(await copied(page)).toContain("image:1");
-      await expect(page.locator(".toast")).toBeVisible(); // the toast shows over the view, not under it
+      await expect(toastOf(page)).toBeVisible(); // the toast shows over the view, not under it
     }
     const download = page.waitForEvent("download");
     await viewer.getByRole("button", { name: "Export PNG" }).click();
@@ -215,7 +218,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     await expect(viewer.getByRole("button", { name: "Next" })).toBeDisabled();
     await viewer.getByRole("button", { name: "Previous" }).click();
     await expect(viewer.locator(".vtitle")).toHaveText("graph 2 of 3 · scatter wage educ");
-    await expect(viewer.locator(".graph-card img")).toHaveAttribute("alt", "Graph 2: scatter wage educ");
+    await expect(viewer.getByRole("img")).toHaveAttribute("alt", "Graph 2: scatter wage educ");
     await viewer.getByRole("button", { name: /^Close/ }).click();
     await expect(viewer).toHaveCount(0);
   }
@@ -317,7 +320,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   const plain = await tint("e(rank)"); // a row the pointer has not been on
   await copyBtn("e(N)").click();
   expect((await copied(page)).at(-1)).toBe("160");
-  await expect(page.locator(".toast")).toHaveText("Copied e(N)");
+  await expect(toastOf(page)).toHaveText("Copied e(N)");
   const r2 = rowOf("e(r2)").locator(".val");
   const whole = (await r2.locator(".full").textContent())!; // the digits in sight are .short; .full has all
   const short = (await r2.locator(".short").textContent())!;
@@ -329,7 +332,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   // a click on it copies every digit, and the icon is a check for about 2 s
   await copyBtn("e(r2)").click();
   expect((await copied(page)).at(-1)).toBe(whole);
-  await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
+  await expect(toastOf(page)).toHaveText("Copied e(r2)");
   await expect(copyBtn("e(r2)").locator(".i-check")).toBeVisible();
   await expect(copyBtn("e(r2)")).toHaveCSS("opacity", "1");
   const r2Room = await room("e(r2)");
@@ -389,7 +392,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     .locator(".rs tr.grp")
     .filter({ hasText: /^Locals/ })
     .locator("xpath=following-sibling::tr[1]");
-  const firstLocal = firstLocalRow.locator("button.copy");
+  const firstLocal = firstLocalRow.getByRole("button", { name: /^Copy / });
   const digitsOf = (row: ReturnType<typeof rowOf>) =>
     row.evaluate((tr) => (tr.querySelector(".val .full") ?? tr.querySelector(".val"))!.textContent!);
   await expect(firstLocal).toBeFocused();
@@ -400,7 +403,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   expect(await tint(local)).not.toBe(plain);
   await page.keyboard.press("Enter");
   expect((await copied(page)).at(-1)).toBe(value);
-  await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
+  await expect(toastOf(page)).toHaveText(`Copied ${local}`);
   await page.keyboard.press(tab); // the next row's icon
   await expect(page.locator(".rs .row button.copy:focus")).toHaveCount(1);
   const nextValue = await digitsOf(page.locator(".rs .row").filter({ has: page.locator("button.copy:focus") }));
@@ -414,14 +417,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await page.mouse.move(1, 1);
   await copyBtn("e(r2)").click();
   await page.mouse.move(1, 1);
-  await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
+  await expect(toastOf(page)).toHaveText("Copied e(r2)");
   expect(await page.evaluate(() => document.querySelector(".rs :focus-visible")?.outerHTML ?? null)).toBeNull();
   expect(await tint("e(r2)")).toBe(plain);
   await page.getByRole("button", { name: /^Locals/ }).focus();
   await page.keyboard.press(tab);
   await expect(firstLocal).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
+  await expect(toastOf(page)).toHaveText(`Copied ${local}`);
   await expect(firstLocal).toBeFocused();
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true }),
@@ -473,14 +476,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   expect(matRoom.spare, "the icon is not cut").toBeGreaterThanOrEqual(0);
   await copyBtn("e(b)").click();
   await expect.poll(async () => (await copied(page)).length, "the icon copies once").toBe(beforeView + 1);
-  await expect(page.locator(".toast")).toHaveText("Copied e(b)");
+  await expect(toastOf(page)).toHaveText("Copied e(b)");
   await expect(copyBtn("e(b)").locator(".i-check")).toBeVisible(); // the same check as a scalar's
   expect((await copied(page)).at(-1)).toMatch(/^\tage\teduc\t_cons\n\S+\t[-.\d]+\t[-.\d]+\t[-.\d]+$/);
   await expect(page.locator(".rs .mat"), "a copy that read the matrix leaves it closed").toHaveCount(0);
   await caret.click();
   await expect(grid).toBeVisible();
   await copyBtn("e(b)").click(); // on an open matrix too, the icon does not toggle
-  await expect(page.locator(".toast")).toHaveText("Copied e(b)");
+  await expect(toastOf(page)).toHaveText("Copied e(b)");
   await expect(grid).toBeVisible();
   await caret.focus(); // Ctrl/Cmd+C on the caret copies the whole matrix
   const afterIcon = (await copied(page)).length;
@@ -491,7 +494,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   const cell = grid.locator("tbody td.cell").nth(1);
   const full = await cell.getAttribute("title");
   await cell.click();
-  await expect(page.locator(".toast")).toHaveText(/^Copied e\(b\)\[\S+, educ\]$/);
+  await expect(toastOf(page)).toHaveText(/^Copied e\(b\)\[\S+, educ\]$/);
   expect((await copied(page)).at(-1), "a cell copies its own full value").toBe(full);
   await expect(grid, "a cell's click does not fold the grid").toBeVisible();
   await caret.click();
@@ -520,7 +523,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await view.getByRole("button", { name: "Copy the use command" }).click();
   expect((await copied(page)).at(-1)).toBe('use "wages.dta", clear');
   await view.getByRole("button", { name: "Load" }).click();
-  await expect(page.locator(".toast")).toHaveText("Loaded wages.dta");
+  await expect(toastOf(page)).toHaveText("Loaded wages.dta");
   expect(await page.evaluate(() => window.__dofile.state.history.value.at(-1))).toBe('use "wages.dta", clear');
   await showTab(page, "data");
   await expect(page.locator(".facts")).toContainText("160 obs");

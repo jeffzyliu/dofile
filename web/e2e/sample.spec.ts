@@ -4,7 +4,7 @@
 // `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE } from "../scripts/urls.ts";
-import { expect, isPhone, startEngine, storedText, test, unblocked } from "./fixtures";
+import { expect, isPhone, startEngine, storedText, test, toastOf, unblocked } from "./fixtures";
 
 /** The files in the store (not folders), by path. */
 const stored = (page: Page) =>
@@ -89,14 +89,14 @@ test("Restore the sample is an upload of the sample: what is missing comes back 
   expect(items.indexOf("Restore the sample")).toBeGreaterThan(-1);
   expect(items.indexOf("Restore the sample")).toBe(items.findIndex((t) => t.startsWith("Delete all files")) - 1);
   await page.getByRole("menuitem", { name: "Restore the sample" }).click();
-  await expect(page.locator(".toast")).toHaveText("Sample restored");
+  await expect(toastOf(page)).toHaveText("Sample restored");
   expect(await stored(page)).toEqual([...ALL, "mine.do"].sort());
   expect(await storedText(page, "mine.do")).toBe("display 1\n");
   await expect.poll(active).toBe("analysis.do"); // the sample's main do-file is shown, mine.do stays open
 
   // nothing differs, nothing is missing: not asked, not written
   await restore();
-  await expect(page.locator(".toast")).toHaveText("The sample is already here");
+  await expect(toastOf(page)).toHaveText("The sample is already here");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
 
   // a file of the sample the visitor changed: asked first, in the clash dialog with the sample's words
@@ -111,7 +111,7 @@ test("Restore the sample is an upload of the sample: what is missing comes back 
   await restore();
   await dlg.getByRole("button", { name: "Replace with the sample" }).click();
   await expect(dlg).toHaveCount(0);
-  await expect(page.locator(".toast")).toHaveText("Sample restored");
+  await expect(toastOf(page)).toHaveText("Sample restored");
   await expect.poll(() => storedText(page, "helpers.do")).toContain("a small program that compares");
   expect(await storedText(page, "mine.do")).toBe("display 1\n");
 });

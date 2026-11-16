@@ -78,7 +78,7 @@ test("a tap on the phone's command line focuses it without scrolling the page, t
   test.skip(!hasTouch, "taps need a touch profile");
   await open(page);
   await showPhoneTab(page, "log", { engine: { s: "ready" } }); // with no engine the field is read-only
-  const field = page.locator(".cmdline input");
+  const field = page.getByRole("textbox", { name: "Command" });
   await field.fill("display 1");
   await field.evaluate((el) => (el as HTMLInputElement).blur());
   await field.tap();
@@ -102,7 +102,7 @@ test("?kblog: the overlay lists the events, takes no taps, and is not there with
   expect(through.under).not.toBe("kblog");
   // a focus is listed
   await showPhoneTab(page, "log");
-  await page.locator(".cmdline input").focus();
+  await page.getByRole("textbox", { name: "Command" }).focus();
   await expect(log).toContainText("focusin");
   expect(await page.evaluate(() => document.activeElement?.id)).not.toBe("kblog");
 });

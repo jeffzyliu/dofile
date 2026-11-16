@@ -2,7 +2,7 @@
 // now", "Start engine" as the way back to it and a run that does nothing with no engine; a stale snapshot refused with
 // reason "updated" (plain words in its message, the cause in its detail); ?snapshot=0 still starts. Also the phone
 // toast's place and the failed "Download all" banner.
-import { engineState, expect, putFiles, SAMPLE, settled, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { engineState, expect, putFiles, SAMPLE, settled, startEngine, statusBar, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
   type EngineSeed,
   type Selection,
@@ -26,7 +26,7 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
   await expect(prompt).toBeHidden();
   expect(await engineState(page)).toBe("declined");
   if ((page.viewportSize()?.width ?? 0) >= 700) {
-    await expect(page.locator(".statusbar")).toContainText("No engine · Start engine downloads it");
+    await expect(statusBar(page)).toContainText("No engine · Start engine downloads it");
   }
   // nothing offers to run: the toolbar's Run is "Start engine"
   const bar = page.locator(".toolbar");
@@ -441,7 +441,7 @@ test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) 
     });
     expect(sizes, `${view} view`).toEqual({ h: 0, w: 0 });
     // a wheel over the view (where the browser takes one) and a scroll by script: the page stays at the top
-    const box = (await page.locator(".main").boundingBox())!;
+    const box = (await page.getByRole("main").boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     const wheel = await page.mouse.wheel(0, 400).then(
       () => "ran",
@@ -638,15 +638,15 @@ test("the status bar's 'Not affiliated with StataCorp': in sight from 1200 px wi
 }) => {
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  const note = page.locator(".statusbar .affiliation");
+  const note = statusBar(page).locator(".affiliation");
   if (isMobile) {
-    await expect(page.locator(".statusbar")).toHaveCount(0); // the phone has no status bar
+    await expect(statusBar(page)).toHaveCount(0); // the phone has no status bar
     await expect(note).toHaveCount(0);
     await expect(page.getByText("Not affiliated with StataCorp")).toHaveCount(0);
     return;
   }
   const full = "Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.";
-  const bar = page.locator(".statusbar");
+  const bar = statusBar(page);
   const height = async () => (await bar.boundingBox())!.height;
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(note).toBeVisible();

@@ -7,7 +7,17 @@
 // when a banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the
 // stand-in and for CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
 import type { Locator, Page } from "@playwright/test";
-import { engineState, expect, isPhone, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import {
+  bannerOf,
+  engineState,
+  expect,
+  isPhone,
+  retryFirstGoto,
+  startEngine,
+  statusBar,
+  test,
+  toastOf,
+} from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
   addBanner,
   type Banner,
@@ -32,7 +42,7 @@ test.beforeEach(async ({ page }) => {
 
 test("no engine: the banner brings the prompt back; Not now leads to the banner again", async ({ page }) => {
   await showEngine(page, { s: "declined" });
-  const banner = page.locator(".banner", { hasText: "The engine isn't downloaded." });
+  const banner = bannerOf(page, "The engine isn't downloaded.");
   await expect(banner).toBeVisible();
   await expect(banner).toContainText("You can open, edit, upload and download files; running code needs the engine");
   await expect(banner.getByRole("button", { name: "Start engine" })).toBeVisible();
@@ -45,7 +55,7 @@ test("no engine: the banner brings the prompt back; Not now leads to the banner 
   await prompt.getByRole("button", { name: "Not now" }).click();
   await expect.poll(() => engineState(page)).toBe("declined");
   await expect(prompt).toHaveCount(0);
-  await expect(page.locator(".banner", { hasText: "The engine isn't downloaded." })).toBeVisible();
+  await expect(bannerOf(page, "The engine isn't downloaded.")).toBeVisible();
   // the banner's button was gone while the prompt was open: the prompt gives the focus back to the editor, not to <body>
   await expect.poll(() => inEditor(page)).toBe(true);
 });
@@ -61,7 +71,7 @@ test("the progress dialog: the download with its time and bytes, then the stages
   const bar = dlg.getByRole("progressbar", { name: "Download" });
   await expect(bar).toHaveAttribute("aria-valuetext", /^Downloading the engine, step 1 of 5$/);
   await expect(dlg.getByRole("button", { name: "Stop download" })).toBeVisible();
-  await expect(dlg.locator(".stages li")).toHaveCount(5);
+  await expect(dlg.getByRole("listitem")).toHaveCount(5);
   await expect(dlg.locator(".stages li.now .when")).toHaveText("14.2 of 48 MB");
 
   await showEngine(page, {
@@ -70,7 +80,7 @@ test("the progress dialog: the download with its time and bytes, then the stages
     t0: Date.now() - 2000,
     done: { download: 7.1, unpack: 0.9, python: 0.1 },
   });
-  await expect(dlg.locator(".progress")).toHaveCount(0); // the bar is gone once the download is done
+  await expect(dlg.getByRole("progressbar")).toHaveCount(0); // the bar is gone once the download is done
   await expect(dlg.locator("b", { hasText: "Loading your files" })).toBeVisible();
   await expect(dlg.getByText(/^step 4 of 5 · \d+(\.\d)? s$/)).toBeVisible();
   await expect(dlg.locator(".stages li.done")).toHaveCount(3);
@@ -150,7 +160,7 @@ test("where nothing can start the engine from the page (a failed start that need
   const field = page.getByRole("textbox", { name: "Command" });
   const start = page.locator(".cmdline").getByRole("button", { name: "Start engine" });
   const help = page.getByRole("log", { name: "Log" }).getByRole("button", { name: "help summarize" });
-  const toast = page.locator(".toast");
+  const toast = toastOf(page);
   const clear = () => clearToast(page);
   const failed = (reason: string) => ({ s: "failed" as const, reason, detail: "cause", message: "words" });
   const cases: [string, EngineSeed][] = [
@@ -233,18 +243,19 @@ test("a failed start: the words and the first action follow the reason", async (
   ];
   for (const [reason, words, actions] of cases) {
     await showEngine(page, { s: "failed", reason, detail: "cause", message: `This browser: ${words}.` });
-    const banner = page.locator(".banner").filter({ hasText: "The engine didn't start." });
+    const banner = bannerOf(page, "The engine didn't start.");
     await expect(banner, reason).toBeVisible();
     await expect(page.getByRole("alert"), "the live region says it once; the banner is no alert (C 5)").toHaveCount(0);
     await expect(banner).toContainText(words);
     await expect(banner).toContainText("Your files are safe: you can still edit and download them.");
     await expect(banner).not.toContainText("cause"); // the developer's cause is never shown
-    for (const a of actions) await expect(banner.locator(".btn", { hasText: a })).toBeVisible();
+    for (const a of actions)
+      await expect(banner.getByRole(a === "Browsers that work" ? "link" : "button", { name: a })).toBeVisible();
     if (reason === "no-wasm") await expect(banner.getByRole("button", { name: "Try again" })).toHaveCount(0);
     await expect(banner.getByRole("button", { name: "Download all (.zip)" })).toBeVisible();
   }
   await showEngine(page, { s: "failed-twice", reason: "memory", detail: "x", message: "x" });
-  const twice = page.locator(".banner").filter({ hasText: "The engine stopped after failing twice" });
+  const twice = bannerOf(page, "The engine stopped after failing twice");
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(twice).toContainText("(out of memory)");
   await expect(twice).toContainText("Your files are safe: you can still edit and download them."); // as the failed banner says
@@ -259,7 +270,7 @@ test("Download all in the failure banner is off while the store has no file, and
   await page.waitForFunction(() => window.__dofile.store.blocked === false);
   expect(await page.evaluate(() => window.__dofile.state.files.value.length)).toBe(0);
   await showEngine(page, { s: "failed", reason: "download", detail: "", message: "x" });
-  const button = page.locator(".banner").getByRole("button", { name: "Download all (.zip)" });
+  const button = bannerOf(page).getByRole("button", { name: "Download all (.zip)" });
   await expect(button).toBeDisabled();
   await page.evaluate(() => window.__dofile.store.write("a.do", new TextEncoder().encode("display 1\n")));
   await expect(button).toBeEnabled();
@@ -296,9 +307,7 @@ test("a banner that goes with the focus in it hands the focus on: the editor, or
   await handedOn();
 
   await addBanner(page, { b: "reset", reason: "reset by you", kind: "user", run: null });
-  const dismiss = page
-    .locator(".banner", { hasText: "You reset the engine." })
-    .getByRole("button", { name: "Dismiss" });
+  const dismiss = bannerOf(page, "You reset the engine.").getByRole("button", { name: "Dismiss" });
   await dismiss.focus(); // the keyboard's way: a click does not focus a button in Safari
   await page.keyboard.press("Enter");
   await expect(dismiss).toHaveCount(0);
@@ -320,7 +329,7 @@ test("the editor's and the Files pane's banners hand the focus on too: save-fail
   for (const { banner, words, button = "Dismiss", view = "editor" } of cases) {
     if (ph) await showPhoneTab(page, view);
     await addBanner(page, banner);
-    const press = page.locator(".banner", { hasText: words }).getByRole("button", { name: button });
+    const press = bannerOf(page, words).getByRole("button", { name: button });
     await press.focus(); // the keyboard's way: a click does not focus a button in Safari
     await page.keyboard.press("Enter");
     await expect(press).toHaveCount(0);
@@ -363,9 +372,7 @@ test("with a .dta tab active, a banner that goes with the focus hands it to that
   const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^d\.dta/ });
   await expect(tab).toHaveAttribute("aria-selected", "true");
   await addBanner(page, { b: "reset", reason: "reset by you", kind: "user", run: null });
-  const dismiss = page
-    .locator(".banner", { hasText: "You reset the engine." })
-    .getByRole("button", { name: "Dismiss" });
+  const dismiss = bannerOf(page, "You reset the engine.").getByRole("button", { name: "Dismiss" });
   await dismiss.focus();
   await page.evaluate(() => {
     const seen: string[] = [];
@@ -402,7 +409,7 @@ test("from the stopping banner to the waiting banner the focus goes straight acr
     });
   });
   await showEngine(page, { s: "waiting", run, t0: Date.now() - 9000 }); // "Don't reset: wait for it" was pressed
-  const waiting = page.locator(".banner", { hasText: "Waiting for this command to end." });
+  const waiting = bannerOf(page, "Waiting for this command to end.");
   await expect(waiting).toBeFocused();
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   await expect(waiting).toBeFocused();
@@ -415,14 +422,14 @@ test("the banners above the log: running, stopping (focus on Don't reset), waiti
   if (isPhone(page)) await showPhoneTab(page, "log");
   const run = { kind: "selection", lines: [14, 15], fresh_locals: false };
   await showEngine(page, { s: "running", run, t0: Date.now() - 3400 });
-  const running = page.locator(".banner", { hasText: "Running lines 14–15" });
+  const running = bannerOf(page, "Running lines 14–15");
   await expect(running).toBeVisible();
   await expect(running).toContainText("Break stops between commands.");
   await expect(running).toContainText("the data in memory is lost");
 
   // Break pending for 2 s of the 5: the stopping banner, with 3 s left
   await showEngine(page, { s: "breaking", run, t0: Date.now() - 9000, resetAt: Date.now() + 3000 });
-  const stopping = page.locator(".banner", { hasText: "Stopping…" });
+  const stopping = bannerOf(page, "Stopping…");
   await expect(stopping).toBeVisible();
   await expect(stopping).toContainText("This command can't stop until it ends.");
   await expect(stopping).toContainText(/In [23] s the engine is reset:/);
@@ -433,7 +440,7 @@ test("the banners above the log: running, stopping (focus on Don't reset), waiti
   await expect(stopping.getByRole("button")).toHaveCount(0);
 
   await showEngine(page, { s: "waiting", run, t0: Date.now() - 9000 });
-  const waiting = page.locator(".banner", { hasText: "Waiting for this command to end." });
+  const waiting = bannerOf(page, "Waiting for this command to end.");
   await expect(waiting).toBeVisible();
   await expect(waiting).toBeFocused();
   await expect(waiting).toHaveAttribute("tabindex", "-1");
@@ -451,8 +458,8 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
   if (isPhone(page)) await showPhoneTab(page, "log");
   const run = { kind: "selection", lines: [14, 15], fresh_locals: false };
   const pill = page.locator(".btn.stop.pill .label:not([aria-hidden]) .pill-time");
-  const status = page.locator('.statusbar [data-state="running"]');
-  const banner = page.locator(".banner", { hasText: "Running lines 14–15" });
+  const status = statusBar(page).locator('[data-state="running"]');
+  const banner = bannerOf(page, "Running lines 14–15");
   const fmt = (ms: number) => (ms < 10_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 1000)} s`);
 
   // 9 s to 14 s in steps of 100 ms: the tenths below 10 s, then whole seconds, floored, on both
@@ -469,7 +476,7 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
   // engine confirms (here: ready)
   const pressed = at + 5100;
   await showEngine(page, { s: "breaking", run, t0: pressed - 20_000, resetAt: pressed + 5000 });
-  const stopping = page.locator(".banner", { hasText: "Stopping…" });
+  const stopping = bannerOf(page, "Stopping…");
   const breakBtn = page.getByRole("button", { name: "Stopping…" });
   const keep = stopping.getByRole("button", { name: "Don't reset: wait for it" });
   for (let k = 0; k <= 40; k++) {
@@ -480,8 +487,8 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
       left > 0 ? `In ${left} s the engine is reset:` : "The engine is being reset now:",
     );
     if (!isPhone(page)) {
-      await expect(page.locator(".statusbar")).toContainText(`resets in ${left} s`);
-      await expect(page.locator(".statusbar")).toContainText(` ${fmt(20_000 + 100 * k)}`); // the run's time, in `ticking`'s words
+      await expect(statusBar(page)).toContainText(`resets in ${left} s`);
+      await expect(statusBar(page)).toContainText(` ${fmt(20_000 + 100 * k)}`); // the run's time, in `ticking`'s words
     }
     if (k < 10) await expect(keep).toHaveCount(0);
     else if (k > 10) await expect(keep).toBeFocused();
@@ -495,10 +502,10 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
 test("the storage, reset and download-failed banners", async ({ page }) => {
   await addBanner(page, { b: "storage" });
   await addBanner(page, { b: "download-failed" });
-  const storage = page.locator(".banner", { hasText: "This browser may clear your files" });
+  const storage = bannerOf(page, "This browser may clear your files");
   await expect(storage).toContainText("when it needs space. Download all to keep a copy.");
   await expect(storage.getByRole("button", { name: "Download all (.zip)" })).toBeVisible();
-  const failed = page.locator(".banner", { hasText: "Your files couldn't be downloaded." });
+  const failed = bannerOf(page, "Your files couldn't be downloaded.");
   await expect(failed.getByRole("button", { name: "Try again" })).toBeVisible();
   await failed.getByRole("button", { name: "Dismiss" }).click();
   await expect(failed).toHaveCount(0);
@@ -507,7 +514,7 @@ test("the storage, reset and download-failed banners", async ({ page }) => {
 
   if (isPhone(page)) await showPhoneTab(page, "log");
   await addBanner(page, { b: "reset", reason: "the code did not stop at Break", kind: "break", run: null });
-  const reset = page.locator(".banner", { hasText: "The engine was reset:" });
+  const reset = bannerOf(page, "The engine was reset:");
   await expect(reset).toContainText("The engine was reset: the code did not stop at Break.");
   await expect(reset).toContainText("The data in memory is lost; your files are kept.");
   await expect(reset.getByRole("button", { name: "Run the file again" })).toHaveCount(0); // no run was cut: only Dismiss
@@ -549,7 +556,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
   await dlg.getByRole("button", { name: "Reset" }).click();
   await expect(dlg).toHaveCount(0);
   if (isPhone(page)) await showPhoneTab(page, "log");
-  const banner = page.locator(".banner", { hasText: "You reset the engine." });
+  const banner = bannerOf(page, "You reset the engine.");
   await expect(banner).toBeVisible();
   await expect.poll(() => engineState(page), { timeout: 300_000 }).toBe("ready");
   expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs ?? 0)).toBe(0);
@@ -558,7 +565,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
   await more();
   await expect(dlg).toHaveCount(0);
   await expect.poll(() => engineState(page)).not.toBe("ready");
-  await expect(page.locator(".banner", { hasText: "You reset the engine." })).toBeVisible();
+  await expect(bannerOf(page, "You reset the engine.")).toBeVisible();
 
   // anything a run leaves counts, not only data and e() or r() results: a run that made only a global and a Stata scalar asks
   await expect.poll(() => engineState(page), { timeout: 300_000 }).toBe("ready");
@@ -597,7 +604,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
     run: { kind: "file", path: "again.do", fresh_locals: true },
   });
   if (isPhone(page)) await showPhoneTab(page, "log");
-  const asked = page.locator(".banner", { hasText: "You reset the engine." });
+  const asked = bannerOf(page, "You reset the engine.");
   await expect(asked).toBeVisible();
   await expect(asked.getByRole("button", { name: "Run the file again" })).toHaveCount(0);
   await addBanner(page, {
@@ -606,7 +613,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
     kind: "break",
     run: { kind: "file", path: "again.do", fresh_locals: true },
   });
-  const again = page.locator(".banner", { hasText: "The engine was reset:" });
+  const again = bannerOf(page, "The engine was reset:");
   // the engine is ready, but the cut file is not open as a tab: the button is off until it is
   await addBanner(page, {
     b: "reset",
@@ -643,7 +650,7 @@ test("a hint's help link pressed while a run is on or a start is on its way says
   ]);
   if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Log" }).click();
   const help = page.getByRole("log", { name: "Log" }).getByRole("button", { name: "help summarize" });
-  const toast = page.locator(".toast");
+  const toast = toastOf(page);
   const cases: [string, EngineSeed, string][] = [
     [
       "running",

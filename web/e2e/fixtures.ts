@@ -6,7 +6,7 @@
 // A context the test makes itself (launchPersistentContext, browser.newContext) is not covered: call keepFiles(context).
 // Every page goto is retried once when a fresh page's first navigation stalls (retryFirstGoto, below). A page the test
 // makes itself (context.newPage()) is not covered: call retryFirstGoto(page).
-import { type BrowserContext, test as base, errors, expect, type Page } from "@playwright/test";
+import { type BrowserContext, test as base, errors, expect, type Locator, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -54,6 +54,12 @@ export function retryFirstGoto(page: Page) {
     }
   };
 }
+
+/** The toast and the banner (by its words) have no role; the status bar is the page's footer. */
+export const toastOf = (page: Page) => page.locator(".toast");
+export const bannerOf = (scope: Page | Locator, hasText?: string | RegExp) =>
+  scope.locator(".banner", hasText === undefined ? undefined : { hasText });
+export const statusBar = (page: Page) => page.getByRole("contentinfo");
 
 /** The viewport is under the phone breakpoint (700 px). */
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
