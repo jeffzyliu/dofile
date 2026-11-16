@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Connect, defineConfig, type Plugin, type UserConfig } from "vite";
+import { type Connect, defineConfig, type Plugin, searchForWorkspaceRoot, type UserConfig } from "vite";
 import checker from "vite-plugin-checker";
 import { about, buildId, inputs as readInputs, staleness } from "./scripts/build-id.ts";
 import {
@@ -282,7 +282,18 @@ const editor = (dev: boolean): UserConfig => ({
   // No fallback to the editor for a path that is not a file: a missing page is a 404
   appType: "mpa",
   base: EDITOR_BASE,
-  server: { port: DEV_EDITOR_PORT, strictPort: true }, // the pages' dev server links here
+  server: {
+    port: DEV_EDITOR_PORT, // the pages' dev server links here
+    strictPort: true,
+    // a worktree's node_modules may be a symlink to the main checkout's: Vite serves brotli-wasm's .wasm by its real
+    // path, which is outside the default allow list (403)
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(fileURLToPath(new URL(".", import.meta.url))),
+        realpathSync(fileURLToPath(new URL("./node_modules", import.meta.url))),
+      ],
+    },
+  },
   build: { outDir: editorDefault, emptyOutDir: true },
   define: {
     __WHEEL__: JSON.stringify(wheel),
