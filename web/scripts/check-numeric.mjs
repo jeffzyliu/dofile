@@ -1,8 +1,7 @@
-// Numeric comparison of CPython and Pyodide (`node scripts/check-numeric.mjs [--cases a,b] [--shards 4] [--timeout 600]
-// [--out DIR] [--no-shim]`): runs each Stata 14 comparison program in Pyodide with numeric_probe.py, one process per
-// case, and writes DIR/<case>.json. The CPython side is the same file:
-//   uv run python web/scripts/numeric_probe.py CASE tests_opendta/tools OUT.json
-// and `uv run python web/scripts/compare_numeric.py CPY_DIR WASM_DIR` diffs them number by number.
+// Runs each Stata 14 comparison program in Pyodide with numeric_probe.py, one process per case, and writes
+// DIR/<case>.json: `node scripts/check-numeric.mjs [--cases a,b] [--shards 4] [--timeout 600] [--out DIR] [--no-shim]`.
+// The CPython side is `uv run python web/scripts/numeric_probe.py CASE tests_opendta/tools OUT.json`;
+// `uv run python web/scripts/compare_numeric.py CPY_DIR WASM_DIR` diffs the two number by number.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -24,7 +23,7 @@ if (args.includes("--child")) {
   py.FS.mkdirTree("/od");
   py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests_opendta` }, "/od");
   py.FS.writeFile("/tmp/numeric_probe.py", readFileSync(`${repo}/web/scripts/numeric_probe.py`));
-  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()"); // as browser.start() does
+  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
   py.globals.set("CASE", caseName);
   py.runPython(
     `import sys; sys.path.insert(0, "/tmp"); import numeric_probe; numeric_probe.main(CASE, "/od/tools", "/tmp/result.json")`,

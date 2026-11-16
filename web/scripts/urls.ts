@@ -1,21 +1,17 @@
-// Where the site's pages live: the one setting of the editor's location (docs/design/SPEC.md, section 8, "URLs"). Read by
-// vite.config.ts (the editor's `base` and output folder, the landing page's link to the editor, the editor's link to the
-// landing page, the dev servers' ports, the headers files and the canonical links), by the e2e config and its setup and by
-// scripts/measure-startup.mjs, scripts/start-files.ts and scripts/smoke.ts.
+// Where the site's pages live: the one setting of the editor's location (docs/design/SPEC.md, section 8, "URLs").
 //
 // The site is two origins, built into two folders and deployed as two Workers (wrangler.jsonc, wrangler.app.jsonc):
 //   dist/site/   the landing and commands pages, at https://dofile.dev/
 //   dist/app/    the editor, at the root of https://app.dofile.dev/ (EDITOR_BASE "/", every path cross-origin isolated)
-// `npm run build` makes both. The two URLs they link each other by come from the environment, and a build refuses to start
-// without them (there is no default, so nothing builds for production by accident). One of:
+// `npm run build` makes both. The two URLs they link each other by come from the environment, and a build refuses to
+// start without them (no default, so nothing builds for production by accident). One of:
 //   DOFILE_URLS=production   the production addresses (below): what deploy.yml and `npm run deploy` build
 //   DOFILE_URLS=local        both at localhost (below): what `npm run e2e` builds, and what `npm run preview` serves
 //   DOFILE_SITE_URL=<the landing page's URL> DOFILE_EDITOR_URL=<the editor's URL>   both, each a whole URL ending in "/":
 //                            a preview deployment (two workers.dev addresses), `npm run cf:dev`
-// An empty value counts as unset (a workflow's input that was not given). The dev servers need none: each finds the other at
-// the page's own host name on the other's port (DEV_SITE_PORT, DEV_EDITOR_PORT). DOFILE_EDITOR_BASE moves the editor to a path
-// (it is "/" at its own origin); that and a one-origin layout are not what the scripts or the e2e tests build any more (SPEC
-// section 8, "URLs").
+// An empty value counts as unset. The dev servers need none: each finds the other at the page's own host name on the
+// other's port (DEV_SITE_PORT, DEV_EDITOR_PORT). DOFILE_EDITOR_BASE moves the editor to a path (it is "/" at its own
+// origin).
 
 /** The production addresses: what DOFILE_URLS=production links to. */
 export const PRODUCTION_SITE_URL = "https://dofile.dev/";

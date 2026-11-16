@@ -1,6 +1,8 @@
-// Test counts, printed on demand: docs/test-map.md keeps no numbers (it describes scope).
+// Test counts, printed on demand (docs/test-map.md keeps no numbers).
 //   npm run test-counts          both
-//   npm run test-counts unit     the unit tests only (needs the wheel, `npm run wheel`, and the snapshot for the full numbers: without `npm run snapshot` the snapshot-native file counts 1 and engine.test.ts 2 fewer; runs them: Node has no list mode, and a file may make tests in a loop)
+//   npm run test-counts unit     the unit tests only: it runs them (Node has no list mode, and a file may make tests in a
+//                                loop), so it needs the wheel (`npm run wheel`) and the snapshot (`npm run snapshot`);
+//                                without the snapshot, snapshot-native counts 1 and engine.test.ts 2 fewer
 //   npm run test-counts e2e      the e2e tests only (`playwright test --list`: no server, no build)
 // E2E skips are decided while a test runs, so the list cannot count them: `npx playwright test` ends with "N skipped".
 import { spawn, spawnSync } from "node:child_process";

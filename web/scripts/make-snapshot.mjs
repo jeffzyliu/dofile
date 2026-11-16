@@ -28,11 +28,10 @@ const here = new URL("..", import.meta.url);
 const OUT = process.env.SNAPSHOT_OUT
   ? `${process.env.SNAPSHOT_OUT.replace(/\/*$/, "")}/`
   : fileURLToPath(new URL("public/snapshot/", here));
-// Python runs with PYTHONOPTIMIZE=2 by default: docstrings and `assert` statements are left out of everything imported or
-// compiled in it, in the snapshot and after the restore (the flag is part of the heap). Smaller heap. SNAPSHOT_STRIP_DOCS=0
-// builds without it.
+// PYTHONOPTIMIZE=2 by default: docstrings and `assert` statements are left out of everything imported or compiled, in
+// the snapshot and after the restore (the flag is part of the heap). Smaller heap. SNAPSHOT_STRIP_DOCS=0 builds without.
 const stripDocs = process.env.SNAPSHOT_STRIP_DOCS !== "0";
-// what the snapshot is built from (the dofile wheel, web/wheels/, the Pyodide version), with their hashes: the manifest records it
+// what the snapshot is built from, with their hashes: the manifest records it
 const record = inputs();
 // The lazy graphics part (experiment E1c, docs/lazy-matplotlib.md; the default, SNAPSHOT_NO_MPL=0 builds the old single snapshot):
 // leave matplotlib and what only it needs out of the snapshot: not imported before the heap is taken, its files not in the
@@ -175,8 +174,8 @@ lap(
 
 // Only the compressed files are written, and the page stores them compressed too. They end in .bin, not .br: servers
 // (vite preview, many hosts) send a .br file with Content-Encoding: br, the browser decodes it, and the cache would hold
-// the 229 MB. Brotli quality 11 takes about 3 minutes
-// (the two files in parallel); SNAPSHOT_QUALITY=5 makes a build in seconds that is about 25% bigger, for development.
+// the 229 MB. Brotli quality 11 takes about 3 minutes (the two files in parallel); SNAPSHOT_QUALITY=5 makes a build in
+// seconds that is about 25% bigger, for development.
 const quality = Number(process.env.SNAPSHOT_QUALITY ?? 11);
 const brotliCompress = promisify(zlib.brotliCompress);
 const compress = (data) =>
@@ -281,7 +280,7 @@ writeFileSync(`${OUT}files.json`, JSON.stringify(saved.index));
 writeFileSync(
   `${OUT}manifest.json`,
   JSON.stringify({
-    ...record, // wheel, wheelHash, extraWheels, pyodide: a build compares them with its own (scripts/build-id.ts, staleness)
+    ...record, // a build compares these with its own (build-id.ts, staleness)
     built: Date.now(),
     optimize: stripDocs ? 2 : 0,
     files: {

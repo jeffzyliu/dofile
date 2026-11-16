@@ -1,6 +1,6 @@
-// Writes src/app/sample-files.ts from the sample project's files (web/sample/: analysis.do, helpers.do, data/wages.dta),
-// so the page has them in its own bundle and "Restore the sample" works offline. `npm run sample` runs this; a test
-// (test/sample.test.ts) fails when the module is not what this makes. The data file is made by sample/make_sample.py.
+// Writes src/app/sample-files.ts from the sample project's files (web/sample/), so the page has them in its own bundle
+// and "Restore the sample" works offline. `npm run sample` runs this; test/sample.test.ts fails when the module is
+// not what this makes. The data file is made by sample/make_sample.py.
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 

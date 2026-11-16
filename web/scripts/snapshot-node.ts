@@ -1,5 +1,5 @@
-// Boot Pyodide from a built snapshot in Node, with the restore code the page uses (src/engine/snapshot.ts). Shared by
-// scripts/check-snapshot.mjs and the tests. `dir` is a snapshot folder (default public/snapshot).
+// Boots Pyodide from a built snapshot in Node, with the page's restore code (src/engine/snapshot.ts). `dir` is a
+// snapshot folder (default public/snapshot).
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -30,9 +30,9 @@ export async function bootFromSnapshot(dir = defaultDir, io = { stdout: () => {}
   return { py, manifest };
 }
 
-// Calls into the native libraries (scipy's LAPACK and the rest, matplotlib's font code) that a restore can break by
-// linking them wrong: a call can fail with "Dynamic linking error: cannot resolve symbol" or "table index is out of
-// bounds" at the first use, or end the whole process. Each is [label, python expression, expected value or null].
+// Calls into native libraries (scipy's LAPACK, matplotlib's font code) that a bad restore breaks by linking them wrong:
+// "Dynamic linking error: cannot resolve symbol", "table index is out of bounds" at the first use, or the process ends.
+// Each is [label, python expression, expected value or null].
 export const NATIVE_CHECKS: [string, string, number | null][] = [
   ["scipy.linalg.solve", "float(__import__('scipy.linalg').linalg.solve([[3., 1], [1, 2]], [1., 2])[0])", 0],
   [

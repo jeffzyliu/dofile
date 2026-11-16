@@ -29,10 +29,10 @@
 //
 // The page is served by a small static server that does what a real host does: brotli (quality 5) for text and wasm, long
 // caching for the hashed assets, the isolation headers, and the snapshot's .bin files as they are (already compressed).
-// `vite preview` does none of that and gives other numbers (docs/pyodide-snapshot.md). Pyodide's runtime and packages come from
-// the real jsDelivr CDN, throttled with the rest, so the unthrottled rows depend on this machine's connection.
-// The time is from the page's start (performance.now() = 0) to <html data-engine="ready">, as in the docs' table: an init
-// script notes the moment the attribute changes. When the page asks first (the download prompt: nothing cached, and always with
+// `vite preview` does none of that and gives other numbers (docs/pyodide-snapshot.md). Pyodide's runtime and packages come
+// from the real jsDelivr CDN, throttled with the rest, so the unthrottled rows depend on this machine's connection.
+// The time is from the page's start (performance.now() = 0) to <html data-engine="ready">: an init script notes the
+// moment the attribute changes. When the page asks first (the download prompt: nothing cached, and always with
 // ?snapshot=0), the same script presses Download at once through the test hook's start().
 
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";

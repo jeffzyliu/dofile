@@ -1,13 +1,13 @@
-// Correctness check of a built snapshot (`npm run check-snapshot [-- --dir path --shards 4]`): the engine restored from it
-// must give the results the normal engine gives. In Node, with the same restore code the page uses, it runs:
+// Correctness check of a built snapshot (`npm run check-snapshot [-- --dir path --shards 4]`): in Node, with the page's
+// restore code, the engine restored from it must give the results the normal engine gives. It runs
 //   conformance  the corpus (CHECK values against tests/conformance/data/ref.json to 1e-6), the probes, a graph export
 //   compat       the Stata 14 reference cases of tests_opendta/compat, through compare.py's own functions and its
 //                known differences, as tests/test_stata_compat.py does under CPython
 // Each compat case runs in its own process (a fresh engine), N at a time (--shards N, default 4), and is killed after
-// --timeout seconds (default 300), reported as a failure "timeout". The cases that are slow in Pyodide start first.
-// Options: --cases a,b,c (only those compat cases; no conformance), --only conformance|compat, --dir, --normal, --pandas (with --normal: load pandas, as the page does not).
-// Exit code 1 if anything differs, times out or crashes; 2 for an unknown case, or a missing or stale snapshot (not with
-// --normal; run `npm run snapshot`). Over 30 minutes for everything. Needs a built snapshot.
+// --timeout seconds (default 300): a failure "timeout". Options: --cases a,b,c (only those compat cases; no
+// conformance), --only conformance|compat, --dir, --normal, --pandas (with --normal: load pandas, which the page does not).
+// Exit 1 if anything differs, times out or crashes; 2 for an unknown case, or a missing or stale snapshot (not with
+// --normal; run `npm run snapshot`). Over 30 minutes for everything.
 
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
@@ -55,7 +55,7 @@ if (args.includes("--child")) {
   const kind = arg("--child"),
     mine = arg("--case", "").split(",").filter(Boolean);
   const { py, manifest } = await boot();
-  // what browser.start() does for the page: numpy.linalg must raise LinAlgError (src/dofile/linalgshim.py); --no-shim: the old baseline
+  // --no-shim: the old baseline without numpy.linalg raising LinAlgError
   if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
   const say = (...a) => console.log(`[${kind === "compat" ? mine.join(",") : kind}]`, ...a);
   say(`restored (optimize=${py.runPython("import sys; sys.flags.optimize")}, snapshot built for ${manifest.wheel})`);
@@ -170,7 +170,7 @@ if (!args.includes("--normal")) {
   const record = readManifest(dir);
   const why = record ? staleness(record, inputs()) : `no snapshot in ${dir}`;
   if (why) {
-    // `npm run snapshot` writes public/snapshot, or SNAPSHOT_OUT (make-snapshot.mjs): name it when --dir points elsewhere
+    // when --dir points elsewhere, the fix names it (`npm run snapshot` writes public/snapshot, or SNAPSHOT_OUT)
     const fix = dir === defaultDir ? "npm run snapshot" : `SNAPSHOT_OUT=${dir} npm run snapshot`;
     console.error(`${why.replace(/\. Run `npm run snapshot` in web\/$/, "")}. Run \`${fix}\` in web/`);
     process.exit(2);
@@ -237,10 +237,9 @@ const cases = (wanted ?? allCases).sort((a, b) => {
   return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
 });
 
-// Cases that differ because the page has no pandas (docs/browser-engine.md, "Known gaps in the browser engine"): 1701 and 1911 call
-// `export sasxport`, which needs it, and what follows (import sasxport, describe, list) cascades. The page leaves pandas out on
-// purpose (5 MB, docs/pyodide-snapshot.md). Expected like a strict xfail: a difference is accepted, and one that now passes is
-// reported. `--normal --pandas` loads pandas and expects no difference at all: run it for these two cases after an engine change.
+// Cases that differ because the page has no pandas (5 MB, left out on purpose): 1701 and 1911 call `export sasxport`,
+// and what follows cascades. Expected like a strict xfail: a difference is accepted, and one that now passes is
+// reported. `--normal --pandas` loads pandas and expects no difference: run it for these two after an engine change.
 const EXPECTED_DIFFER = args.includes("--pandas") ? [] : ["1701_datamgmt_options", "1911_datamgmt"];
 const problems = [],
   timeouts = [],

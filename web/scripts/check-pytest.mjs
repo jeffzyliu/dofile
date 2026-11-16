@@ -1,12 +1,10 @@
-// dofile's and OpenDTA's own pytest files, run inside Pyodide (`npm run check-pytest`), to compare with CPython test by
-// test. Complements check-snapshot.mjs, which runs the conformance corpus and the Stata 14 logs: this one runs the unit
-// tests, which reach commands those do not.
+// dofile's and OpenDTA's own pytest files, run inside Pyodide, to compare with CPython test by test (`npm run
+// check-pytest`). check-snapshot.mjs runs the conformance corpus and the Stata 14 logs; this runs the unit tests, which
+// reach commands those do not.
 //
 //   node scripts/check-pytest.mjs [--paths a.py,b.py] [--shards 4] [--timeout 900] [--out DIR] [--no-shim] [--ios]
 //
-// Each test file runs in its own process (a fresh Pyodide, as the page starts one), is killed after --timeout seconds,
-// and writes DIR/<file>.json (see pytest_report.py). Default files: tests_opendta/tests/test_*.py and the dofile tests
-// that make sense without subprocesses (WEB_TESTS). The baseline is the same plugin on CPython:
+// Each test file runs in its own process and writes DIR/<file>.json (see pytest_report.py). The CPython baseline is
 //   uv run python web/scripts/pytest_report.py OUT.json FILE -q -p no:cacheprovider
 // and `node scripts/compare-pytest.mjs BASELINE_DIR DIR` lists the differences.
 
@@ -21,16 +19,15 @@ const args = process.argv.slice(2);
 const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const repo = fileURLToPath(new URL("../..", import.meta.url));
 const out = resolve(arg("--out", `${repo}/.dofile/pytest-wasm`));
-// dofile tests that make sense in the page's Python. Left out, because they start subprocesses, need the `mcp` package or
-// the repo's src/ tree, or assume the numpy.linalg shim is not installed yet (it is, as in the page): test_browser
-// (covered by web/test/engine.test.ts), test_pathshim, test_linalgshim (covered by web/test/linalgshim.test.ts), test_log_cut
-// (mcp_server), test_mcp, test_worker, test_sandbox, test_break, test_dofile_cli, test_vendor, test_conformance, test_stata_compat.
+// dofile tests that make sense in the page's Python. Left out: those that start subprocesses, need the `mcp` package or
+// the repo's src/ tree (test_mcp, test_worker, test_sandbox, test_break, test_dofile_cli, test_vendor, test_conformance,
+// test_stata_compat, test_log_cut), and those covered by web/test (test_browser, test_pathshim, test_linalgshim).
 const WEB_TESTS = ["tests/test_engine.py"];
 
 if (args.includes("--child")) {
   const file = arg("--child");
-  // --ios: Pyodide's loader tests navigator.userAgent for iPhone/iPad and then creates no WebAssembly trampoline function
-  // (getPyEMTrampolinePtr); this makes Node look like that, to run the suite the way an iPhone runs the engine
+  // --ios: Pyodide's loader creates no WebAssembly trampoline function (getPyEMTrampolinePtr) for an iPhone/iPad
+  // navigator.userAgent; this makes Node look like that, to run the suite the way an iPhone runs the engine
   if (args.includes("--ios"))
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
@@ -49,7 +46,7 @@ if (args.includes("--child")) {
   }
   py.FS.mkdirTree("/work");
   py.FS.writeFile("/tmp/pytest_report.py", readFileSync(`${repo}/web/scripts/pytest_report.py`));
-  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()"); // as browser.start() does
+  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
   py.globals.set("FILE", file);
   py.globals.set("OUT", "/tmp/result.json");
   py.runPython(`
@@ -58,7 +55,7 @@ os.chdir("/work"); sys.path.insert(0, "/tmp")
 import pytest_report
 pytest_report.run(OUT, ["/repo/" + FILE, "-q", "-p", "no:cacheprovider", "--rootdir=/repo", "-o", "addopts="])`);
   mkdirSync(out, { recursive: true });
-  // the table is one entry shorter when Pyodide created no trampoline (an iPhone user agent): proof of which mode ran
+  // the table is one entry shorter without the trampoline: proof of which mode ran
   const result = {
     ...JSON.parse(py.FS.readFile("/tmp/result.json", { encoding: "utf8" })),
     wasmTableLength: py._module.wasmTable.length,

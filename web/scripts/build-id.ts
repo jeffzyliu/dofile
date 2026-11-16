@@ -1,20 +1,15 @@
-// The build's identity (prototype 1, step 3.5 B2). One function, buildId(), makes the id on both sides:
-//   the page   vite.config.ts compiles in buildId(stamp, inputs()): the files it is built from;
-//   the list   start-files.json carries buildId(stamp, the snapshot's manifest.json): what the snapshot was built from.
-// The stamp is made once per `vite build` (or dev-server start) and given to both, so the two ids are equal only when page
-// and list are of one build run and the snapshot is of that build's inputs. The client compares them (checkBuild).
-// staleness() says why a snapshot is not of the inputs being built: a build with a stale snapshot fails (start-files.ts,
-// writeStartFiles), and the deploy workflow asks it whether to rebuild the snapshot:
-//   node scripts/build-id.ts [--warn]   exit 0: public/snapshot/ is of the wheels and Pyodide in this checkout; 1: it is not
-//                                       (says why; --warn prefixes "warning: ", for `npm run dev`, which starts anyway)
-// Imported by the tests, so .ts (like install-engine.ts).
+// The build's identity. buildId() makes the id on both sides: the page (vite.config.ts compiles in the id of the files
+// it is built from) and the list (start-files.json carries the id of what the snapshot was built from). The client
+// compares them (checkBuild). One stamp per `vite build` is given to both.
+// `node scripts/build-id.ts [--warn]` exits 0 when public/snapshot/ is of this checkout's wheels and Pyodide, else 1
+// with the reason (`--warn` prefixes "warning: ", for `npm run dev`, which starts anyway). Imported by the tests, so .ts.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { About, SnapshotManifest } from "../src/engine/types.ts";
 
-/** What a snapshot is built from, and what the page is built against. `extraWheels`: file name -> SHA-256, web/wheels/*.whl. */
+/** What a snapshot is built from, and what the page is built against. `extraWheels`: file name -> SHA-256. */
 export interface BuildInputs {
   wheel: string;
   wheelHash: string;
@@ -44,11 +39,8 @@ export function inputs(): BuildInputs {
   return { wheel, wheelHash: sha256(new URL(wheel, dist)), extraWheels, pyodide };
 }
 
-/** What the page shows of the engine without asking it (the "About dofile" hint, the log's head): the package's version,
- *  from the wheel's file name (dofile-0.1.0.dev1-py3-none-any.whl); the vendored engine's commit, from its VENDORED stamp;
- *  and the Stata version it emulates. All three are fixed when the page is built: the page is compiled against one wheel
- *  (vite.config.ts compiles this in as __ABOUT__), and the wheel is built from this tree. The engine says the same when
- *  it starts (`boot` answers About): test/engine.test.ts compares the two. */
+/** What the page shows of the engine without asking it (the "About dofile" hint, the log's head). The wheel's file name
+ *  gives the version; the VENDORED stamp gives the engine's commit. Fixed when the page is built. */
 export function about(
   { wheel }: Pick<BuildInputs, "wheel"> = inputs(),
 ): Pick<About, "dofile" | "engine_commit" | "stata_version"> {

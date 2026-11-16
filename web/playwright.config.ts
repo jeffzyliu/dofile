@@ -3,8 +3,8 @@ import { LOCAL_EDITOR_URL, LOCAL_SITE_URL } from "./scripts/urls.ts";
 
 // The site in three engines and an iPhone profile, served by two `vite preview`s as the two Workers are: the landing and
 // commands pages (dist/site) on one origin, the editor (dist/app, every path isolated) on the next port. The origins are
-// scripts/urls.ts's LOCAL_SITE_URL and LOCAL_EDITOR_URL, which `npm run e2e` builds the pages' links with (DOFILE_URLS=local).
-// E2E_PORT serves the build on another pair of ports, so two worktrees can run the tests at the same time.
+// scripts/urls.ts's LOCAL_SITE_URL and LOCAL_EDITOR_URL (E2E_PORT: another pair of ports, so two worktrees can run the
+// tests at the same time).
 const sitePort = Number(new URL(LOCAL_SITE_URL).port);
 const editorPort = Number(new URL(LOCAL_EDITOR_URL).port);
 
@@ -13,8 +13,8 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts", // the server on the port must serve this folder's build
   timeout: 600_000, // a whole test; the engine-ready waits inside it are 300 s each, and some tests start the engine twice
   reporter: "list",
-  // The editor is the baseURL, so a relative URL is the editor's ("?test", "start-files.json"): page.goto("?test=manual") opens
-  // it. The landing and commands pages are another origin: the tests spell it (LOCAL_SITE_URL, `${LOCAL_SITE_URL}commands/`).
+  // The editor is the baseURL, so a relative URL is the editor's ("?test", "start-files.json"). The landing and commands
+  // pages are another origin: the tests spell it (LOCAL_SITE_URL, `${LOCAL_SITE_URL}commands/`).
   use: { baseURL: LOCAL_EDITOR_URL, trace: "retain-on-failure", screenshot: "only-on-failure" },
   webServer: [
     {

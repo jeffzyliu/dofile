@@ -1,7 +1,6 @@
 // Cloudflare Workers static assets refuse a file over 25 MiB. The brotli-11 snapshot is built only for a deploy (the tests
-// build it at quality 5), so this runs after that build, before wrangler: in .github/actions/build-web (deploy.yml,
-// preview.yml) and in `npm run deploy`. `node scripts/check-sizes.ts`: an error for each file over the limit (exit 1), a
-// warning for each within 2 MiB of it, over the two build folders.
+// build it at quality 5), so this runs after that build, before wrangler. `node scripts/check-sizes.ts`: an error for
+// each file over the limit (exit 1), a warning for each within 2 MiB of it, over the two build folders.
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { EDITOR_OUT, SITE_OUT } from "./urls.ts";

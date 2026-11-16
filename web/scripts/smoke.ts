@@ -1,8 +1,8 @@
 // After a deploy (deploy.yml) or a preview upload (preview.yml): do the two addresses answer as the site should?
-//   node scripts/smoke.ts [<site URL> <editor URL>] [--wait <seconds>]    no URLs: the production ones (scripts/urls.ts)
+//   node scripts/smoke.ts [<site URL> <editor URL>] [--wait <seconds>]    no URLs: the production ones (urls.ts)
 // The landing page answers 200 and its "Open the editor" links to the editor's URL; the editor answers 200 with the
-// cross-origin isolation headers (its _headers). It tries again every 10 s until --wait (default 60) has passed: a new
-// preview alias, or a new custom domain's certificate, can take a while. It checks; it undoes nothing.
+// cross-origin isolation headers. It tries again every 10 s until --wait (default 60): a new preview alias, or a new
+// custom domain's certificate, can take a while. It checks; it undoes nothing.
 import { PRODUCTION_EDITOR_URL, PRODUCTION_SITE_URL } from "./urls.ts";
 
 /** What is wrong with the two addresses now (empty: nothing). `get` is fetch, or a test's stand-in. */

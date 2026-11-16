@@ -1,8 +1,7 @@
-// The list of every file the snapshot start loads, with its size on disk and its compressed size (SPEC.md, OQ-12 a).
-// vite.config.ts writes it as dist/start-files.json after a build (and serves it in dev); the page's download prompt
-// and progress bar take their numbers from it (src/engine/client.ts, download).
-//   node scripts/start-files.ts [dir]      prints the list for a built editor (default: EDITOR_OUT, dist/app/); with no
-//                                          build stamp, no build id
+// The list of every file the snapshot start loads, with its size on disk and its compressed size. vite.config.ts writes
+// it as dist/start-files.json after a build (and serves it in dev); the page's download prompt and progress bar read
+// it. `node scripts/start-files.ts [dir]` prints it for a built editor (default dist/app/), with no build id.
+// A .ts file because test/build-id.test.ts imports it.
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,35 +13,18 @@ import { EDITOR_OUT } from "./urls.ts";
 // Pyodide's own files that the snapshot start needs; vite.config.ts copies them from the npm package into public/pyodide/
 export const RUNTIME_FILES = ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
 
-// What a host sends for these bytes: brotli at quality 5 (about what a CDN does as it serves), or the file as it is when
-// that is no smaller (the snapshot's two big files are brotli already). An estimate: the host decides.
+// What a host sends for these bytes: brotli at quality 5 (about what a CDN does), or the file as it is when that is no
+// smaller (the snapshot's two big files are brotli already). An estimate: the host decides.
 function compressedSize(bytes: Uint8Array): number {
   const packed = zlib.brotliCompressSync(bytes, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } }).length;
   return Math.min(packed, bytes.length);
 }
 
-// `dir`: the folder the editor is served from (dist/app/ after a build: only the editor's files, not the landing and commands
-// pages'; public/ in dev, which has no page files). Paths in the list are relative to it, as the page reads them.
-// `stamp`: the build's stamp (vite.config.ts, made once per build or dev-server start); none: no build id.
-// `manifest`: the snapshot's build record, public/snapshot/manifest.json (it is not deployed: the build removes it from
-// dist/); null: no snapshot.
-// Returns { built, buildId, snapshot, files: [{ path, size, compressed, download }], size, compressed, download }, the one statement
-// of the build: the page reads it, and gives the worker what it needs from it (client.ts, start; the worker reads no manifest):
-//   built      the snapshot's build time (its manifest), which names the Cache the files are kept in; null: no snapshot
-//   buildId    scripts/build-id.ts, buildId(stamp, the manifest): equal to the page's only when both are of one build run and
-//              the snapshot is of that build's inputs; null: no snapshot or no stamp
-//   snapshot   the snapshot's two big files, { snapshot, bundle }, each { name, raw, size } (raw: decompressed; size: as
-//              stored, brotli), as in its manifest; null: no snapshot
-//   path       relative to the page
-//   size       bytes on disk, which is what a fetch counts
-//   compressed bytes a host sends
-//   download   true: download() fetches it into the Cache before the engine starts (the snapshot, the runtime, and the
-//              brotli decoder's .wasm, which the worker loads as it starts). false: it came with the page (index.html
-//              and the rest of assets/).
-//   compressed the sum over every file, the page's own too; download: the sum over the files marked download, which is the size
-//              the visitor is told (the page's meta tag, the landing page) and the total of the download's progress
-// The snapshot's manifest.json is read here, at build time, and is not a start file: the start never fetches it.
-// (A .ts file because a test imports it: test/build-id.test.ts.)
+// `dir`: the folder the editor is served from (dist/app/ after a build, public/ in dev, which has no page files). Paths
+// in the list are relative to it, as the page reads them. `stamp`: the build's stamp (none: no build id). `manifest`:
+// public/snapshot/manifest.json, not deployed (the build removes it from dist/); null: no snapshot. Returns the
+// build's StartFiles (types.ts). `download` marks the files that download() fetches into the Cache before the engine
+// starts; the rest came with the page. The manifest is read at build time only: the start never fetches it.
 type List = Omit<StartFiles, "built" | "buildId" | "snapshot"> & {
   built: number | null;
   buildId: string | null;
@@ -91,15 +73,15 @@ export function listStartFiles(
 }
 
 // The page reads the download size from its own HTML, so the prompt has the number at load, offline too
-// (src/app/state.ts, engineBytes). index.html is not hashed, so the build can write into it.
+// (state.ts, engineBytes). index.html is not hashed, so the build can write into it.
 export const engineBytesMeta = (bytes: number) => `<meta name="dofile-engine-bytes" content="${bytes}">`;
 const META = /\s*<meta name="dofile-engine-bytes" content="\d+">/g;
 
 // After a build: write the list as `dir`/start-files.json and its download size into `dir`/index.html, and remove the
-// snapshot's manifest.json from `dir` (Vite copied it from public/). Throws if it cannot (the build then fails: a page
-// without the number would show a prompt without a size), and if the snapshot is not of `inputs`, what the page is built
-// from (scripts/build-id.ts, staleness). With no snapshot the list says so (built: null) and the build goes on, as the
-// page then fails with "no snapshot in this build". Returns the list.
+// snapshot's manifest.json from `dir` (Vite copied it from public/). Throws if it cannot (a page without the number
+// would show a prompt without a size), and if the snapshot is not of `inputs` (build-id.ts, staleness). With no snapshot
+// the list says so (built: null) and the build goes on: the page then fails with "no snapshot in this build". Returns
+// the list.
 export function writeStartFiles(
   dir: string,
   {
