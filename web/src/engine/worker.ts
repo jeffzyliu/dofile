@@ -771,14 +771,14 @@ function nativeSoon() {
 
 function startNative() {
   if (!share || native || decode || decoded || graphicsWritten || graphicsError) return;
-  const [state, part] = partNow();
+  const copy = copyNow(), // before the part: a fetch the page starts meanwhile must not take this copy's failure
+    [state, part] = partNow();
   if (state !== PART_LANDED) return;
   const bytes = part as Uint8Array<ArrayBuffer>,
     file = share.file;
   if (bytes.length !== file.size || bytes.length === file.raw) return; // not brotli: the wasm step says what is wrong
   native = true;
-  const t0 = performance.now(),
-    copy = copyNow();
+  const t0 = performance.now();
   inflateNative(bytes, file.raw)
     .then(
       (raw) => {
