@@ -31,40 +31,34 @@ import {
 import commandData from "./src/stata/commands.json" with { type: "json" };
 
 // Two builds make the site (`npm run build`), and two dev servers serve it (docs/design/SPEC.md, section 8, "URLs"):
-//  - the editor (`vite build`): a single-page app at the root of its own origin (EDITOR_BASE "/", scripts/urls.ts), built into
-//    dist/app/ (EDITOR_OUT, or `--outDir`) with its public/ files (the wheels, the runtime, the snapshot), start-files.json
-//    and _headers (every path isolated: the host's setting). Vite empties the folder first.
-//  - the landing and commands pages (`vite build --mode site`): static HTML at the root of another origin, dist/site/index.html
-//    and dist/site/commands/index.html (SITE_OUT, or `--outDir`), with their own two small scripts and stylesheet in assets/.
-//    Built after the editor: they say the editor's download size, read from its start-files.json (in EDITOR_OUT, or
-//    DOFILE_EDITOR_DIR). Nothing of public/ and no script of the editor's. It refuses to build into the editor's own folder.
+//  - the editor (`vite build`): a single-page app at the root of its own origin (EDITOR_BASE "/", scripts/urls.ts), built
+//    into dist/app/ (EDITOR_OUT, or `--outDir`) with its public/ files, start-files.json and _headers.
+//  - the landing and commands pages (`vite build --mode site`): static HTML at the root of another origin, in dist/site/
+//    (SITE_OUT, or `--outDir`). Built after the editor: they say its download size, read from its start-files.json
+//    (EDITOR_OUT, or DOFILE_EDITOR_DIR). It refuses to build into the editor's own folder.
 //  - Both builds refuse to start unless the environment names the addresses they link each other by (scripts/urls.ts). A
-//    production build gives each page a canonical link; any other build writes `X-Robots-Tag: noindex` into a _headers file
-//    in each folder (the pages' folder has one only then, or when the editor is on their origin).
-//  - `vite` (dev): the editor's server, on DEV_EDITOR_PORT; `vite --mode site`: the pages' at / and /commands/, on
-//    DEV_SITE_PORT (`npm run dev` starts both). Each links to the other at the page's own host name on the other's port.
-//    With EDITOR_BASE other than "/" (a path on the pages' origin) the editor's server serves the two pages too.
-//  - `vite preview`: the editor's folder (every path isolated, as its _headers says), or with `--mode site` the pages'.
+//    production build gives each page a canonical link; any other build writes `X-Robots-Tag: noindex` into _headers.
+//  - `vite` (dev) serves the editor on DEV_EDITOR_PORT; `vite --mode site` the pages on DEV_SITE_PORT (`npm run dev` starts
+//    both). With EDITOR_BASE other than "/" the editor's server serves the two pages too.
+//  - `vite preview` serves the editor's folder, or with `--mode site` the pages'.
 
-// What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in ../dist, `npm run wheel`), the extra
-// wheels (web/wheels/: pyreadstat built for Pyodide) and the Pyodide version, with their hashes.
+// What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in ../dist), the extra wheels
+// (web/wheels/: pyreadstat built for Pyodide) and the Pyodide version, with their hashes.
 const inputs = readInputs(),
   wheel = inputs.wheel,
   extraWheels = Object.keys(inputs.extraWheels);
-// The build's stamp: one per `vite build`, or per dev-server start (this file is loaded once for each). The page's build id
-// and the one start-files.json carries are both made with it, so they are equal only for a page and a list of one build run
-// whose snapshot is of these inputs (client.ts, checkBuild).
+// One stamp per `vite build`, or per dev-server start (this file is loaded once for each). The page's build id and the one
+// in start-files.json are both made with it (client.ts, checkBuild).
 const stamp = randomUUID();
 
-// the dofile wheel and the extra wheels, served from public/; the page installs the extra ones after the dofile wheel
+// the dofile wheel and the extra wheels, served from public/
 mkdirSync(new URL("./public/", import.meta.url), { recursive: true });
 copyFileSync(new URL(`../dist/${wheel}`, import.meta.url), new URL(`./public/${wheel}`, import.meta.url));
 for (const f of extraWheels)
   copyFileSync(new URL(`./wheels/${f}`, import.meta.url), new URL(`./public/${f}`, import.meta.url));
 
 // The snapshot start takes Pyodide's runtime from the page's own origin: its three files are copied from the npm package
-// into public/pyodide/ (gitignored). ?snapshot=0, the normal boot, keeps the CDN (the same version as the npm package),
-// which also has the packages.
+// into public/pyodide/ (gitignored). ?snapshot=0, the normal boot, keeps the CDN, which also has the packages.
 const pyodide = inputs.pyodide;
 mkdirSync(new URL("./public/pyodide/", import.meta.url), { recursive: true });
 for (const f of RUNTIME_FILES)
@@ -73,21 +67,19 @@ for (const f of RUNTIME_FILES)
     new URL(`./public/pyodide/${f}`, import.meta.url),
   );
 
-// start-files.json: every file the snapshot start loads, with its size on disk and its compressed size, and the build id
-// (scripts/start-files.ts). A build writes it into dist/ once the page's own files exist, and its total into dist/index.html;
-// it fails on a stale snapshot. The dev server makes it from public/ (the snapshot and the runtime, no page files), again
-// whenever the snapshot was rebuilt: a stale snapshot is then `updated` in the page (and said here), and one rebuilt to
-// these inputs while the server runs is accepted without a restart (same stamp, same inputs).
+// start-files.json (scripts/start-files.ts): a build writes it into dist/ once the page's own files exist, and its total
+// into dist/index.html; it fails on a stale snapshot. The dev server makes it from public/, again whenever the snapshot
+// was rebuilt: a stale snapshot is then `updated` in the page, and one rebuilt to these inputs while the server runs is
+// accepted without a restart (same stamp, same inputs).
 const publicDir = fileURLToPath(new URL("./public", import.meta.url)),
   siteDir = fileURLToPath(new URL(`./${SITE_OUT}`, import.meta.url)), // the pages' root: what their Worker serves
-  // the editor's build: EDITOR_OUT unless `vite build --outDir` says otherwise (the build takes the resolved folder);
-  // the site's build reads the editor's start-files.json from DOFILE_EDITOR_DIR, else from here
+  // the editor's build: EDITOR_OUT unless `vite build --outDir` says otherwise; the site's build reads the editor's
+  // start-files.json from DOFILE_EDITOR_DIR, else from here
   editorDefault = fileURLToPath(new URL(`./${EDITOR_OUT}`, import.meta.url)),
   editorSource = resolve(process.env.DOFILE_EDITOR_DIR ?? editorDefault);
 /** A build's output folder, as Vite resolved it (`build.outDir`, or `--outDir`). */
 const outDirOf = (config: { root: string; build: { outDir: string } }) => resolve(config.root, config.build.outDir);
-/** Whether the editor is on another origin than the static pages (EDITOR_URL a whole URL; none given: a dev or preview
- *  server, which serve the editor's own origin). */
+/** Whether the editor is on another origin than the static pages (EDITOR_URL a whole URL; none: a dev or preview server). */
 const editorElsewhere = EDITOR_URL === undefined || /^[a-z][a-z0-9+.-]*:/i.test(EDITOR_URL);
 let devList = { key: "", json: "" };
 function devStartFiles() {
@@ -111,9 +103,9 @@ function devStartFiles() {
 }
 
 // SharedArrayBuffer (the Break button) needs cross-origin isolation. The headers go on every response, 304s included:
-// WebKit refuses a worker script whose cached 304 reply lacks COEP. The static host must do the same (dist/app/_headers, for
-// every path of the editor). The dev server sends them everywhere (the checker's panel, a frame, needs them too); the editor's preview
-// too (its _headers says every path); the pages' preview, like their host, none (unless the editor is on their origin).
+// WebKit refuses a worker script whose cached 304 reply lacks COEP. The static host must do the same (dist/app/_headers).
+// The dev server sends them everywhere (the checker's panel, a frame, needs them too); the editor's preview too; the
+// pages' preview, like their host, none (unless the editor is on their origin).
 const isolate: Connect.NextHandleFunction = (_req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
@@ -124,8 +116,7 @@ const isolateEditor: Connect.NextHandleFunction = (req, res, next) =>
 
 // A folder's other addresses go to the folder, the query kept, as the host does (Cloudflare's html_handling
 // "auto-trailing-slash", seen in `wrangler dev`): /commands, /commands.html and /commands/index.html to /commands/;
-// /index.html to /. `folders`: the folders of the origin served, each with a slash at each end ("/commands/"; "/" is no folder
-// but the root, whose /index.html goes to /).
+// /index.html to /. `folders`: the origin's folders, each with a slash at each end ("/commands/"; "/" is the root).
 const slash =
   (...folders: string[]): Connect.NextHandleFunction =>
   (req, res, next) => {
@@ -142,8 +133,7 @@ const slash =
     res.writeHead(307, { Location: `${to}${url.search}` }).end();
   };
 
-// The landing and commands pages: the version, the download size, the editor's address and the commands list
-// (scripts/site-pages.ts). `path` is the page's source path in web/ ("/landing.html").
+// The landing and commands pages, filled (scripts/site-pages.ts). `path` is the page's source path in web/ ("/landing.html").
 const fillSite = (html: string, path: string, engineBytes: number) => {
   const tokens = { version: about(inputs).dofile, engineMB: engineMB(engineBytes), editorURL: EDITOR_URL };
   const filled = fillTokens(html, tokens);
@@ -161,11 +151,9 @@ function editorList(): { download: number } {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
-// A dev server's static pages: / and /commands/ from web/landing.html and web/commands.html, filled and transformed as a
-// build does, before Vite's own pages (so / is never the editor's index.html). The editor's address comes from the request's
-// Host header (`editorURL`), the address the browser used: a phone on the LAN gets the computer's. The pages' source files
-// are not served as pages under `root` (the pages' server: "/"; the editor's, when it is under a path: EDITOR_BASE, which
-// then also serves the pages' scripts).
+// A dev server's static pages: / and /commands/, filled and transformed as a build does, before Vite's own pages (so /
+// is never the editor's index.html). The editor's address comes from the request's Host header, so a phone on the LAN
+// gets the computer's. The pages' source files are not served as pages under `root`.
 const sitePagesDev = (root: string, editorURL: (host: string) => string): Plugin => ({
   name: "site-pages-dev",
   apply: "serve",
@@ -191,8 +179,8 @@ const sitePagesDev = (root: string, editorURL: (host: string) => string): Plugin
   },
 });
 
-// A production build's canonical links (scripts/site-pages.ts, canonicalURL): the copies the same Workers serve at their
-// workers.dev addresses then defer to the production ones. Other builds have none (their _headers say noindex instead).
+// A production build's canonical links (canonicalURL): the copies served at workers.dev addresses defer to the production
+// ones. Other builds have none (their _headers say noindex instead).
 const canonical: Plugin = {
   name: "canonical",
   apply: "build",
@@ -222,9 +210,8 @@ const sitePages: Plugin = {
   },
 };
 
-// The site's build: each page to the path it is served at, and the headers file (the editor's isolation, when the editor is
-// on this origin; noindex, when the build is not production's; else none). It refuses to write into the editor's own folder: with the editor at the root
-// of its origin (EDITOR_BASE "/"), the landing page would take the place of the editor's index.html.
+// The site's build: each page to the path it is served at, and the headers file. It refuses to write into the editor's own
+// folder: with the editor at the root of its origin, the landing page would take the place of the editor's index.html.
 let siteOut = siteDir;
 const siteFiles: Plugin = {
   name: "site-files",
@@ -250,8 +237,7 @@ const siteFiles: Plugin = {
   },
 };
 
-// The landing and commands pages' build (`vite build --mode site`), their dev server (`vite --mode site`) and the server of
-// their folder (`vite preview --mode site`).
+// The landing and commands pages' build, dev server and preview (`--mode site`).
 const site = (): UserConfig => ({
   appType: "mpa", // a path that is no file is a 404: never the editor in its place
   base: "/",
@@ -293,8 +279,7 @@ const site = (): UserConfig => ({
 // The editor's build and the dev server.
 let editorOut = editorDefault; // the editor's build folder, as resolved (configResolved below)
 const editor = (dev: boolean): UserConfig => ({
-  // No fallback to the editor for a path that is not a file: a missing page is a 404 (the editor is a single-page app only
-  // in that it is one page; it has no routes of its own)
+  // No fallback to the editor for a path that is not a file: a missing page is a 404
   appType: "mpa",
   base: EDITOR_BASE,
   server: { port: DEV_EDITOR_PORT, strictPort: true }, // the pages' dev server links here
@@ -305,8 +290,8 @@ const editor = (dev: boolean): UserConfig => ({
     __BUILD_ID__: JSON.stringify(buildId(stamp, inputs)), // start-files.json must carry the same (client.ts, checkBuild)
     __PYODIDE__: JSON.stringify(`https://cdn.jsdelivr.net/pyodide/v${pyodide}/full/`),
     __ABOUT__: JSON.stringify(about(inputs)), // the version, the engine's commit, the Stata version: app/env.ts ABOUT
-    // the landing page, from the editor (app/env.ts LANDING_URL): the build's address; null in dev, where the page finds the
-    // pages' dev server at its own host name on DEV_SITE_PORT
+    // the landing page, from the editor (app/env.ts LANDING_URL): the build's address; null in dev, where the page finds
+    // the pages' dev server at its own host name on DEV_SITE_PORT
     __SITE_URL__: JSON.stringify(dev ? null : (SITE_URL ?? null)),
     __DEV_SITE_PORT__: JSON.stringify(DEV_SITE_PORT),
   },
@@ -325,11 +310,10 @@ const editor = (dev: boolean): UserConfig => ({
         server.middlewares.use(isolate);
       },
     },
-    // Biome's linter (biome.json), while the dev server runs and in a build. In development it runs again on each change:
-    // an error opens a panel over the page, a warning is only listed (the badge in the corner, and the terminal). A build
-    // fails on an error and not on a warning; CI and `npm run deploy` refuse warnings too (`npm run lint:strict`).
-    // Formatting is not checked here: `npm run check` and CI do that. Its panel is a frame from the dev server, which the
-    // isolated page refuses unless it has the isolation headers: so cross-origin-isolation comes first.
+    // Biome's linter (biome.json), in dev and in a build. In dev it runs on each change: an error opens a panel over the
+    // page, a warning is only listed. A build fails on an error, not a warning (CI and `npm run deploy` refuse warnings:
+    // `npm run lint:strict`). Its panel is a frame from the dev server, which the isolated page refuses unless it has the
+    // isolation headers: so cross-origin-isolation comes first.
     checker({
       biome: {
         command: "lint",
@@ -360,9 +344,8 @@ const editor = (dev: boolean): UserConfig => ({
       name: "start-files",
       apply: "build",
       // the editor's folder is complete: its files have their final names and sizes. An error here fails the build.
-      // An editor at the root of its own origin is a site of its own: it writes the host's headers file itself (every path
-      // isolated, and noindex in a build that is not production's); under a path, the site's build writes it
-      // (scripts/site-pages.ts, headersFile).
+      // An editor at the root of its own origin writes the host's headers file itself; under a path, the site's build
+      // writes it (site-pages.ts, headersFile).
       closeBundle(error?: Error) {
         if (error) return;
         writeStartFiles(editorOut, { stamp, inputs });
@@ -371,9 +354,10 @@ const editor = (dev: boolean): UserConfig => ({
     },
   ],
   optimizeDeps: { exclude: ["pyodide", "brotli-wasm"] }, // both load a wasm file by URL, which pre-bundling breaks
-  // One file for the worker: no chunks. A chunk (brotli-wasm's, loaded only for a snapshot) imports the bundler's helpers from the
-  // worker's entry file, and iOS Safari then runs the entry a second time as another module; the second copy sets onmessage
-  // again, so every later message reaches a copy that never got "mount" ("undefined is not an object (evaluating 'V.loadPackage')").
+  // One file for the worker: no chunks. A chunk (brotli-wasm's, loaded only for a snapshot) imports the bundler's helpers
+  // from the worker's entry file, and iOS Safari then runs the entry a second time as another module; the second copy
+  // sets onmessage again, so every later message reaches a copy that never got "mount" ("undefined is not an object
+  // (evaluating 'V.loadPackage')").
   worker: { format: "es", rollupOptions: { output: { inlineDynamicImports: true } } },
 });
 
