@@ -69,7 +69,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   imports only, no clock, timer, console or top-level variable; the time comes in the event) and returns the next state
   and the effects. Its state names are the `engine` signal's, `<html data-engine>`'s and SPEC section 5's. **Nothing
   outside it decides a state**: no counter, flag or comparison of state names in the transport, the controllers or a
-  view (a test greps for the old ones). To add a state, event or effect, change its tables; the compiler and
+  view. To add a state, event or effect, change its tables; the compiler and
   `test/machine.test.ts` then say what else must follow. After a change to a cell, run
   `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` and paste the tables into SPEC section 5 (a test compares them).
 - **Who constructs, who connects, who decides.** Only `src/main.tsx` makes the transport (`EngineClient`,
@@ -79,13 +79,23 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **Tickets.** Each asynchronous request gets a `Ticket` from the machine, and the machine drops an answer whose ticket
   is not current. Performers never write a ticket: they answer through the `reply` bound to their effect. Every event
   that changed nothing is recorded (`drops()`).
-- **`test/imports.test.ts` holds what no type can** (each test's name states its rule): no view reaches `client.ts` or
-  `worker.ts`; no `.tsx` imports the machine or `main.tsx`; `engine/` never imports `app/`; no `.ts` imports a `.tsx`; the
-  controller takes only types from `client.ts`; `machine.ts` is pure with two casts, and the cast to `Ticket` occurs once
-  in `web/`; events enter the controller through two doors and `transition()` is called once; the worker is posted to
-  only in `#send`; only `main.tsx` constructs or connects, and the store is opened once on each thread; each signal has
-  one writer; every `:hover` rule is inside `(hover: hover)`. A rule that breaks one fails `npm test`: fix the code, not
-  the test, unless the rule has changed. Tests that read source text must not depend on how a line is wrapped.
+- **Architecture rules are Biome rules, a type check and `test/imports.test.ts`**; a violation fails `npm run check`,
+  `npm run lint:strict` or `npm test`: fix the code, not the rule, unless the rule has changed. `biome.json`, by folder:
+  a view imports no transport, machine or `main.tsx`, and `main.tsx` no machine; `engine/` imports no `app/`; no `.ts` imports a `.tsx`;
+  `src/site/` imports only `src/site/` and `src/styles/`, and the editor nothing of it; a relative import in a `.ts`
+  file spells its extension; `machine.ts` names no clock, timer, console or global. `biome/architecture.grit` (a Biome
+  plugin: each rule's files are a regex on `$filename`, in that file): `machine.ts` imports types only (a default import is left to `tsc`) and names no random number; `src/app/` takes only types from the transport; only `main.tsx` constructs the transport and the Worker,
+  connects the controllers, takes the tab lock and calls `open()`; `openStore()` is called only in `src/app/store.ts`
+  (the page) and `src/engine/worker*.ts` (the Worker); only the controller calls `transition()` and `initial()`, and its
+  queue is written only in `enqueue()` (and emptied in `connectEngine()`), which only `dispatch()` and `reply()` call;
+  `reply()` has no cast and puts its own effect's ticket on the event, and the `engine` signal is written with `view()`; each writer object is named only by `state.ts` and its owner;
+  the Worker is posted to only in `#send`; no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
+  in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
+  the writable signals `state.ts` exports are the views' own. `test/imports.test.ts` holds the rest: no view reaches the
+  transport through value imports (transitive); `machine.ts` has two casts and no top-level variable, and the cast to
+  `Ticket` occurs once in `web/`; the transport names no state and `run.ts` subscribes to nothing; the pages' HTML and
+  CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not
+  depend on how a line is wrapped.
 - **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
   `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is
   blocked until the tab lock answers: a test waits for `!store.blocked` before it writes. `<html data-engine>` always holds
@@ -129,7 +139,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   the old `/app/` path or a production address. The e2e `baseURL` is the editor's origin; the pages are `LOCAL_SITE_URL`.
   What does not follow the editor to a new origin, and the details: SPEC section 8, "URLs".
 - **The landing and commands pages are static HTML** (`landing.html`, `commands.html`) whose code is `src/site/`, which
-  imports only `src/site/` and stylesheets; the editor loads none of it (`test/imports.test.ts`). They work with
+  imports only `src/site/` and stylesheets; the editor loads none of it (`biome.json`, `test/imports.test.ts`). They work with
   scripts off. The build fills their `{{tokens}}` (`scripts/site-pages.ts`); an unknown one fails `test/site.test.ts`.
 - **The sample** is `sample/`; `npm run sample` rebuilds its data and the generated `src/app/sample-files.ts` (a test
   fails when it is stale). Under `?test` the first-visit sample is off unless the URL has `?sample`.

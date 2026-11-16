@@ -175,6 +175,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
+  - The editor's "Browsers that work" link (`BROWSERS_URL`, JSX, so not importable here) is held by the e2e test in
+    `e2e/landing.spec.ts`: "the failed-start banner's Browsers that work opens the landing page's section in a new tab".
   - The icons: the editor, landing and commands pages link the same three (`src/icons/`), each by a relative path the
     build hashes, and the files exist.
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
@@ -195,10 +197,14 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A failed seed write is tried again; where storage is not kept, the seed brings no storage banner.
 - `sample-run.test.ts`: the sample's do-files in the page's engine: rc 0, one graph, every output line of the landing
   page's "What a run looks like" in the log.
-- `imports.test.ts`: architecture rules enforced by scanning source.
-  - Every `:hover` rule is inside `@media (hover: hover)` (SPEC).
-  - Import layering, single writers, one `postMessage` site; no old state flag outside the machine.
-  - The site pages use only `src/site/` and `src/styles/`; `ignoreHeldEnter` is the `onKeyDown` of every Run button.
+- `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
+  checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
+  - No view reaches the transport through value imports (transitive).
+  - `machine.ts`: two casts, no top-level variable; the cast to `Ticket` occurs once in `web/`.
+  - The transport names no state; `run.ts` subscribes to nothing.
+  - The pages' HTML and CSS: `src/site/` apart from the editor's.
+  - The `data-engine` CSS rule; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
+- `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.

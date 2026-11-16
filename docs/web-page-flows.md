@@ -580,7 +580,7 @@ the line.
   - "a paste with no line break is an ordinary paste; …"
   - "a dialog's held-Enter rule (ui/keys.ts isHeldEnter): …"
   - "a refused Ctrl/Cmd+Enter's toast: …"
-- `web/test/imports.test.ts`: "events get in through two doors: …"; "each signal has one writer: …"
+- `web/biome/architecture.grit` (a Biome plugin, run by `npm run check`): the controller's queue has one way in (`enqueue()`, called from `dispatch()` and `reply()`); each signal's writer object is named only by `state.ts` and its owner
 - `web/e2e/editor.spec.ts`:
   - "the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; …"
   - "the command line with no engine: …"
