@@ -968,7 +968,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 - **Files.** The signals: `web/src/app/state.ts` (TypeScript on `@preact/signals-core`, so the Node tests import it as it is;
   components read the same signals through `@preact/signals`). The types above: `web/src/app/types.ts`; section 6's:
   `web/src/engine/types.ts`. Everything in `web/src/engine/`, the controllers and `web/test/` is TypeScript, which Node runs by
-  removing the types. The controllers are `.ts` files that import no `.tsx`, tested in `web/test/app.test.ts`.
+  removing the types. The controllers are `.ts` files that import no `.tsx`, tested in `web/test/app-*.test.ts`.
 - **The wiring.** `web/src/main.tsx` is the only module that constructs or connects anything (a source-text test checks it):
   the transport (`EngineClient`, with its worker factory), the tab lock, and `connectFiles(store)`, `connectRun(handlers)` and
   `connectEngine({client, lock, snapshot, manual})`, each once, in that order, then `open()`. Views never reach the
@@ -1453,7 +1453,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   request that is refused is ignored, with no message; at most one lock is held, and one that arrives after it is no
   longer wanted is let go. A browser without the API gets nothing. No setting, no toast. The module only reads the
   `engine` signal; `main.tsx` starts it once.
-- **Tests.** `web/test/app.test.ts` (the controllers on a stand-in transport, and `viewport.ts` on a stand-in
+- **Tests.** `web/test/app-*.test.ts` (the controllers on a stand-in transport, and `viewport.ts` on a stand-in
   `visualViewport`), `web/e2e/shell.spec.ts` (the shell: the toolbar's boxes in every engine state at three widths, one
   height for the desktop toolbar's buttons and for the pane heads' controls, the phone ⋯'s Theme that keeps the menu
   open, the editor and log never mounted again, the folded file list by keyboard, a phone page that cannot scroll, the
