@@ -11,7 +11,15 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
-import { bundle, inflate, makeOptions, makeSnapshot, patchAsm, zeroLibraryCopies } from "../src/engine/snapshot.ts";
+import {
+  bundle,
+  inflate,
+  makeOptions,
+  makeSnapshot,
+  patchAsm,
+  zeroFreeMemory,
+  zeroLibraryCopies,
+} from "../src/engine/snapshot.ts";
 import { inputs } from "./build-id.ts";
 import { installEngine } from "./install-engine.ts";
 
@@ -79,6 +87,8 @@ const copies = zeroLibraryCopies(py);
 lap(
   `zeroed ${copies.zeroed} copies of native libraries in the heap (${(copies.bytes / 1e6).toFixed(1)} MB; ${copies.kept} left as they were)`,
 );
+const free = zeroFreeMemory(py);
+lap(`zeroed ${(free.bytes / 1e6).toFixed(1)} MB of free memory in the heap (${free.blocks} blocks)`);
 const snapshot = makeSnapshot(py);
 lap(
   `snapshot ${(snapshot.length / 1e6).toFixed(0)} MB, ${saved.index.length} files ${(saved.blob.length / 1e6).toFixed(0)} MB, ${saved.dso.length} libraries`,

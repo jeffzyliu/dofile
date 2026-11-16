@@ -180,7 +180,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Every `:hover` rule is inside `@media (hover: hover)` (SPEC).
   - Import layering, single writers, one `postMessage` site; no old state flag outside the machine.
   - The site pages use only `src/site/` and `src/styles/`; `ignoreHeldEnter` is the `onKeyDown` of every Run button.
-- `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out.
+- `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
+  the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
 - `build-id.test.ts`: build id and the staleness check.
 

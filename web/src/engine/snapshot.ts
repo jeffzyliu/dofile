@@ -32,6 +32,9 @@ export interface DsoRecord {
 export type AsmModule = PyodideModule & {
   growMemory(size: number): void;
   _malloc(size: number): number;
+  _free(ptr: number): void;
+  _sbrk(increment: number): number;
+  dofileHeapMax?: number;
   loadDynamicLibrary(
     name: string,
     flags: { global: boolean; nodelete: boolean; allowUndefined: boolean },
@@ -151,21 +154,26 @@ export const makeSnapshot = (py: SnapshotPy): Uint8Array => {
 };
 
 // Emscripten keeps the bytes of every library Python opened with dlopen in the heap (a buffer the library's handle points
-// to: size at handle+32, address at handle+28), and the site-packages bundle holds the same files, so the snapshot
-// carried each of them twice (30 MB, 4.4 MB compressed). The restore links the libraries from the filesystem and never
-// reads these buffers. Zero each one that is byte-identical to its file (a buffer that differs is left alone, whatever it
-// is now), so it compresses to nothing. Returns {zeroed, bytes, kept}. Call it before makeSnapshot.
+// to: size at handle+32, address at handle+28, the path it was loaded from at handle+36), and the site-packages bundle
+// holds the same files, so the snapshot carried each of them twice (30 MB, 4.4 MB compressed). The restore links the
+// libraries from the filesystem and never reads these buffers (a library's first load is the only reader, and it is done;
+// the restore links it by name again). Zero each one that is byte-identical to its file (a buffer that differs is left
+// alone, whatever it is now), so it compresses to nothing. Every handle is visited, not only the ones the library log
+// holds: a library first loaded as another's dependency and then dlopened by Pyodide's package loader (libopenblas) has a
+// second handle with its own copy, which the log misses (6.5 MB raw, 1.3 MB compressed). Returns {zeroed, bytes, kept}.
+// Call it before makeSnapshot.
 export function zeroLibraryCopies(py: SnapshotPy): { zeroed: number; bytes: number; kept: number } {
   const m = py._module;
   let zeroed = 0,
     bytes = 0,
     kept = 0;
-  for (const r of m.__dsoLog ?? []) {
-    if (!r.handle) continue;
-    const ptr = m.HEAPU32[(r.handle + 28) >> 2],
-      size = m.HEAPU32[(r.handle + 32) >> 2];
+  for (const key of Object.keys(m.LDSO.loadedLibsByHandle)) {
+    const handle = Number(key); // handle 0 is the main module, which has no C struct
+    if (!handle) continue;
+    const ptr = m.HEAPU32[(handle + 28) >> 2],
+      size = m.HEAPU32[(handle + 32) >> 2];
     if (!ptr || !size) continue;
-    const file = m.FS.readFile(r.libName),
+    const file = m.FS.readFile(m.UTF8ToString(handle + 36, 4096)),
       copy = m.HEAPU8.subarray(ptr, ptr + size);
     let same = file.length === size;
     for (let i = 0; same && i < size; i++) if (file[i] !== copy[i]) same = false;
@@ -176,6 +184,41 @@ export function zeroLibraryCopies(py: SnapshotPy): { zeroed: number; bytes: numb
     } else kept++;
   }
   return { zeroed, bytes, kept };
+}
+
+// Zero the heap's free memory, so it compresses to nothing: malloc every free block (1 MB down to 16 bytes, each size
+// until malloc would have to move the break), zero them all, then free them all. Safe because only free memory is
+// written: malloc hands out nothing in use, and free memory's contents are never read by correct C (calloc clears its
+// own); the only other bytes that change are the allocator's bookkeeping, which the frees rewrite, and the break. The
+// heap must not grow (a growth would enlarge the image), so the step runs under the loader's heap cap, which makes
+// malloc return 0 instead of growing memory; the length check after it is a second guard. Returns {bytes, blocks}.
+// Call it before makeSnapshot.
+export function zeroFreeMemory(py: SnapshotPy): { bytes: number; blocks: number } {
+  const m = py._module,
+    len = m.HEAPU8.length,
+    got: [number, number][] = [];
+  let bytes = 0;
+  m.dofileHeapMax = len;
+  try {
+    for (let size = 1 << 20; size >= 16; size >>= 1)
+      for (;;) {
+        const before = m._sbrk(0),
+          p = m._malloc(size);
+        if (!p) break;
+        if (m._sbrk(0) !== before) {
+          m._free(p);
+          break;
+        }
+        got.push([p, size]);
+        bytes += size;
+      }
+    for (const [p, size] of got) m.HEAPU8.fill(0, p, p + size);
+    for (const [p] of got) m._free(p);
+  } finally {
+    delete m.dofileHeapMax;
+  }
+  if (m.HEAPU8.length !== len) throw new Error(`zeroFreeMemory grew the heap ${len} -> ${m.HEAPU8.length}`);
+  return { bytes, blocks: got.length };
 }
 
 // Files the bundle leaves out (path relative to site-packages): everything under a folder named `tests` or `test`

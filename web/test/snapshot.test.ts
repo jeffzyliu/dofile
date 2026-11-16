@@ -12,8 +12,11 @@ import {
   inflateNative,
   isDeadWeight,
   isStorageRefusal,
+  type SnapshotPy,
   unpack,
   unpackAsync,
+  zeroFreeMemory,
+  zeroLibraryCopies,
 } from "../src/engine/snapshot.ts";
 
 const brotli = createRequire(import.meta.url)("brotli-wasm");
@@ -101,4 +104,68 @@ test("the bundle leaves out test folders and type stubs, and nothing that runs",
     "pkg/typed_py.typed.py",
   ])
     assert.equal(isDeadWeight(p), false, p);
+});
+
+// a stand-in for Pyodide's module: a small heap, and the parts of it the two scrub steps use
+const fakePy = (module: object): SnapshotPy => ({ _module: module }) as unknown as SnapshotPy;
+
+test("zeroLibraryCopies zeroes every handle's copy that equals its file, the unlogged ones too, and no other", () => {
+  const heap = new Uint8Array(4096).fill(7),
+    u32 = new Uint32Array(heap.buffer),
+    files: Record<string, Uint8Array> = { "/a.so": new Uint8Array(100).fill(7), "/b.so": new Uint8Array(100).fill(9) };
+  const handle = (at: number, path: string, ptr: number, size: number) => {
+    u32[(at + 28) >> 2] = ptr;
+    u32[(at + 32) >> 2] = size;
+    heap.set(new TextEncoder().encode(`${path}\0`), at + 36);
+  };
+  handle(256, "/a.so", 1024, 100); // identical to its file
+  handle(512, "/b.so", 2048, 100); // differs from its file
+  handle(768, "/a.so", 0, 0); // no buffer
+  const py = fakePy({
+    HEAPU8: heap,
+    HEAPU32: u32,
+    LDSO: { loadedLibsByHandle: { 0: {}, 256: {}, 512: {}, 768: {} } },
+    FS: { readFile: (path: string) => files[path] },
+    UTF8ToString: (at: number) => new TextDecoder().decode(heap.subarray(at, heap.indexOf(0, at))),
+  });
+  assert.deepEqual(zeroLibraryCopies(py), { zeroed: 1, bytes: 100, kept: 1 });
+  assert.ok(heap.subarray(1024, 1124).every((b) => b === 0));
+  assert.ok(heap.subarray(2048, 2148).every((b) => b === 7));
+  assert.equal(heap[1124], 7);
+});
+
+test("zeroFreeMemory zeroes the free blocks only, frees them all again, and lifts its heap cap afterwards", () => {
+  const heap = new Uint8Array(1 << 22).fill(5),
+    free: { at: number; len: number }[] = [{ at: 100_000, len: 3_000_000 }]; // everything else is in use
+  const mod: any = {
+    HEAPU8: heap,
+    _sbrk: () => heap.length,
+    _malloc(size: number) {
+      assert.equal(mod.dofileHeapMax, heap.length, "the cap is on while the step runs");
+      const r = free.find((f) => f.len >= size);
+      if (!r) return 0;
+      const at = r.at;
+      r.at += size;
+      r.len -= size;
+      return at;
+    },
+    _free(at: number) {
+      freed.push(at);
+    },
+  };
+  const freed: number[] = [];
+  const out = zeroFreeMemory(fakePy(mod));
+  assert.ok(out.bytes >= 2_999_000 && out.bytes <= 3_000_000 && out.blocks > 0);
+  assert.equal(freed.length, out.blocks);
+  assert.equal(mod.dofileHeapMax, undefined);
+  assert.ok(heap.subarray(100_000, 100_000 + out.bytes).every((b) => b === 0));
+  assert.equal(heap[99_999], 5);
+  assert.equal(heap[100_000 + out.bytes + 20], 5); // past what malloc handed out (under 16 bytes left)
+
+  // growth of the heap is an error, and the cap comes off anyway
+  const growing: any = { HEAPU8: heap, _sbrk: () => 0, _malloc: () => 0, _free() {} };
+  Object.defineProperty(growing, "HEAPU8", { get: () => new Uint8Array(growing.n++ ? 2 : 1) });
+  growing.n = 0;
+  assert.throws(() => zeroFreeMemory(fakePy(growing)), /grew the heap/);
+  assert.equal(growing.dofileHeapMax, undefined);
 });

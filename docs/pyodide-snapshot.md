@@ -85,8 +85,8 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
 
 - The snapshot is made in Node and runs in the browser. Two big files: the **snapshot** (the Python heap, 136 MB) and
   the **bundle** (site-packages as files, 91 MB, 3,559 files, needed because the snapshot holds memory, not the
-  filesystem). They are written **brotli 11** as `heap.brotli.bin` (21.1 MB) and `site-packages.brotli.bin` (18.5 MB),
-  39.6 MB in all (46.5 MB, the heap 26.5, before the library copies were zeroed and the docstrings stripped; see
+  filesystem). They are written **brotli 11** as `heap.brotli.bin` (19.1 MB) and `site-packages.brotli.bin` (18.5 MB),
+  37.6 MB in all (46.5 MB, the heap 26.5, before the library copies were zeroed and the docstrings stripped; see
   "Making the files smaller"). The small files are `dso.json`, `files.json`, the patched `pyodide.asm.patched.mjs` and
   `manifest.json` (the build record, not deployed: the wheel's name and SHA-256, the extra wheels' SHA-256s, the Pyodide
   version, a build time, each big file's compressed and decompressed size). The build decodes both files again with the
@@ -223,15 +223,16 @@ is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.mjs` and `web/src
 |---|---|---|---|
 | Brotli 11 for both files, decoded in the page by brotli-wasm | **Done, the default** | smallest format tried (see [Making the files smaller](#making-the-files-smaller)) | `SNAPSHOT_QUALITY` (default 11, window 24; 5 is for development: a 7 s build instead of 125 s, about 25% bigger) |
 | Zero the copies of native libraries in the heap | **Done, the default** | heap 26.5 → 22.2; total 46.5 → 42.3 | Emscripten keeps each `.so`'s bytes after `dlopen`, and the bundle has them too: 135 of 136 buffers (30.5 MB raw) were identical to their files. `zeroLibraryCopies` |
+| Zero the second copy of `libopenblas.so` (under a dlopen handle the library log does not hold) | **Done, the default** | heap 21.12 → 19.79 (−1.33 MB, brotli 11); `zeroLibraryCopies` now walks every handle: 138 copies, 37.5 MB raw, none left | `scipy.libs/libopenblas.so` is first loaded as a dependency of a scipy extension, then dlopened by Pyodide's package loader, which makes a second handle with its own 6.5 MB copy |
 | Strip docstrings and asserts (`PYTHONOPTIMIZE=2`) | **Done, the default** (since 2026-11-07) | heap 22.2 → 19.8; total 42.3 → 39.9 | `SNAPSHOT_STRIP_DOCS=0` builds without it; the manifest records `optimize: 2`. It removes every library's `assert`s, so it rests on the checks below (identical results to the unstripped build), not on a proof |
 | Files named `.bin`, kept compressed in the browser | **Done** | the Cache API holds 40 MB, not 229 | a `.br` name makes hosts send `Content-Encoding: br`, and the browser decodes before the cache sees it |
 | Leave matplotlib out of the snapshot and fetch it at the first graph | **Not done** (step 4a of the plan; no code) | estimated about 9.7 less before "ready" | the first graph then pays about 0.9 s (0.3 s with `.pyc` files); needs the bundle in two parts and a fetch. [Experiment](lazy-matplotlib.md#experiment-loading-matplotlib-lazily) |
 | Ship `.pyc` files for the lazily loaded part | **Not done** (part of the row above) | 0.6 s of the 0.87 s first graph is compiling | |
 | Leave out the bundle's tests (6.6 MB raw) and type stubs (1.5 MB raw) | **Done, the default** | bundle 20.74 → 18.50 (−2.24 MB, 10.8%); raw 99.5 → 91.4 MB; heap unchanged (21.1, build to build it varies by about 0.1) | `isDeadWeight` in `snapshot.ts`: every file under a folder named `tests` or `test`, and `*.pyi` and `py.typed`. It was 294 test files (almost all scipy data) and 275 stubs; no `.so` and no `testing` folder matched, and `check-snapshot` passes. An experiment first measured it as −2.10 MB for tests and −0.14 MB for stubs |
 | Leave out unused scipy subpackages (`io`, `signal`, `cluster`, `odr`: 4.1 of 40.8 MB raw) | **Not done** | little to gain | the corpus programs import 493 scipy modules |
-| Zero the heap's free memory | **Tried, no gain** | 34.0 against 34.3 at brotli 5 | no large free blocks are left |
+| Zero the heap's free memory | **Tried early, no gain** (34.0 against 34.3 at brotli 5; no large free blocks were left); **Done, the default** since the row above (E6 P2) | heap 19.79 → 19.12 (−0.67 MB, brotli 11) | `zeroFreeMemory`: malloc every free block under a heap cap, zero it, free it. What was left was old data in small free blocks (6.6 MB raw), not large blocks |
 | zstd or gzip instead of brotli | **Tried, rejected** | zstd 22 decoded the heap wrongly without any error; gzip is half as good | the build compares the decoded files with the originals |
-| Explain the 12 MB the heap gains from installing the packages, before any import | **Not investigated** | the largest piece nothing here removes | |
+| Explain the 12 MB the heap gains from installing the packages, before any import | **Explained** (E6) | at brotli 5, of the 12.8 MB: 5.9 for the 137 library file copies, 1.6 for the openblas copy, 3.8 for free memory with old data, 1.3 for the libraries' data and bss; the first three are now zeroed | what remains is the libraries' data and bss and Python's own objects (0.2 MB over bare Pyodide). Not loading the 36 libraries nothing imports would save at most 0.21 MB: not done |
 | A smaller Pyodide runtime, or self-hosting it | **Self-hosted** (2026-11-10), not smaller | the snapshot start asks nothing of another origin | `vite.config.ts` copies `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` from the npm package into `public/pyodide/` (5.75 MB as a host sends them, 12.3 MB on disk); `?snapshot=0` still loads the runtime and the packages from jsDelivr |
 
 **Start time and memory**
@@ -266,7 +267,7 @@ does not record the quality, but recompressing the decoded heap at quality 11 wi
 `heap.brotli.bin` byte for byte (at quality 5 it does not): that is how to check a built file.
 
 Where the heap's size comes from (snapshot after each stage, brotli 5): bare Pyodide 5.2 MB; packages installed, nothing
-imported 17.2 (not explained: the install itself adds 12); numpy 15.9; scipy 26.1; matplotlib 30.6 (4.5 for importing it,
+imported 17.2 (the install adds 12; explained in the size-steps table); numpy 15.9; scipy 26.1; matplotlib 30.6 (4.5 for importing it,
 and its files cost 7.4 in the bundle); openpyxl and one engine run 34.3.
 
 ## Correctness checks
@@ -453,5 +454,5 @@ done is in [File size](#file-size-what-is-done-and-what-is-not)):
    plan: [Experiment: loading matplotlib lazily](lazy-matplotlib.md#experiment-loading-matplotlib-lazily)).
 4. **Normal boot: import scipy lazily and download the packages lazily** (not done). This helps first visits without a
    big download; combine with the snapshot for return visits.
-5. Smaller things (File size table): the bundle's tests and type stubs, the 12 MB the package install adds to the heap,
-   and openpyxl fetched from PyPI on every cold start.
+5. Smaller things (File size table): the bundle's tests and type stubs (done), the 12 MB the package install adds to the heap (explained, and
+   most of it zeroed), and openpyxl fetched from PyPI on every cold start.
