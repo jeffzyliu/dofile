@@ -266,7 +266,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
    *  sends them (compressed): each file's decoded bytes are scaled to its compressed size, and the files that came with
    *  the page count as received from the start. A file already cached is not fetched again, so a second try resumes by
    *  file. A file that does not arrive whole is not kept. Rejects with an AbortError when `signal` aborts; kind
-   *  "failed", reason "download" for a missing or short file; "updated" for another build's list; kind "failed", reason
+   *  "failed", reason "download" for a missing file or one of the wrong size; "updated" for another build's list; kind "failed", reason
    *  "unknown" for a Cache that breaks other than by refusing storage. Resolves `cached: false` when there is nothing
    *  to fill (no snapshot start, no Cache API, storage refused): the worker then downloads by itself, uncounted. */
   async download({
