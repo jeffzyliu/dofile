@@ -6,7 +6,8 @@
 // Each compat case runs in its own process (a fresh engine), N at a time (--shards N, default 4), and is killed after
 // --timeout seconds (default 300), reported as a failure "timeout". The cases that are slow in Pyodide start first.
 // Options: --cases a,b,c (only those compat cases; no conformance), --only conformance|compat, --dir, --normal, --pandas (with --normal: load pandas, as the page does not).
-// Exit code 1 if anything differs, times out or crashes. Over 30 minutes for everything. Needs a built snapshot.
+// Exit code 1 if anything differs, times out or crashes; 2 for an unknown case, or a missing or stale snapshot (not with
+// --normal; run `npm run snapshot`). Over 30 minutes for everything. Needs a built snapshot.
 
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
@@ -165,7 +166,9 @@ if (!args.includes("--normal")) {
   const record = readManifest(dir);
   const why = record ? staleness(record, inputs()) : `no snapshot in ${dir}`;
   if (why) {
-    console.error(`${why}${record ? "" : ". Run `npm run snapshot` in web/"}`);
+    // `npm run snapshot` writes public/snapshot, or SNAPSHOT_OUT (make-snapshot.mjs): name it when --dir points elsewhere
+    const fix = dir === defaultDir ? "npm run snapshot" : `SNAPSHOT_OUT=${dir} npm run snapshot`;
+    console.error(`${why.replace(/\. Run `npm run snapshot` in web\/$/, "")}. Run \`${fix}\` in web/`);
     process.exit(2);
   }
 }

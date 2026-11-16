@@ -104,7 +104,10 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
   code, so the manifest holds SHA-256s; `vite build` refuses a snapshot whose record differs, and the page (Vite's
   `__BUILD_ID__`, `scripts/build-id.ts`) compares its build id with `start-files.json`'s (Node tests that pass none skip
   the check). Why: on 2026-11-08 a snapshot older than `browser.py` ran the old code. `uv build --wheel` is reproducible,
-  so a rebuild without a code change does not make a snapshot stale. Test: "a snapshot from a different build of the
+  so a rebuild without a code change does not make a snapshot stale. `npm run wheel` first deletes the old `dist/dofile-*.whl`:
+  the scripts take the last wheel in file-name order, and `dofile-0.1.0.dev1` sorts after `dofile-0.1.0`. `npm run dev` warns
+  of a stale or missing snapshot and starts anyway; `npm run check-snapshot` exits 2 (its results would be of the old
+  engine) unless it runs with `--normal`. Test: "a snapshot from a different build of the
   wheel is refused" in `web/e2e/shell.spec.ts`.
 - The snapshot is taken after one program has run in a throwaway engine, so the lazily imported modules (graphs,
   commands) are loaded. The page's real `Engine` is created after the restore.

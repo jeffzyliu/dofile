@@ -5,7 +5,8 @@
 // and list are of one build run and the snapshot is of that build's inputs. The client compares them (checkBuild).
 // staleness() says why a snapshot is not of the inputs being built: a build with a stale snapshot fails (start-files.ts,
 // writeStartFiles), and the deploy workflow asks it whether to rebuild the snapshot:
-//   node scripts/build-id.ts      exit 0: public/snapshot/ is of the wheels and Pyodide in this checkout; 1: it is not (says why)
+//   node scripts/build-id.ts [--warn]   exit 0: public/snapshot/ is of the wheels and Pyodide in this checkout; 1: it is not
+//                                       (says why; --warn prefixes "warning: ", for `npm run dev`, which starts anyway)
 // Imported by the tests, so .ts (like install-engine.ts).
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -108,9 +109,9 @@ export function readManifest(dir: string = snapshotDir): SnapshotManifest | null
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const record = readManifest();
-  const why = record ? staleness(record, inputs()) : `no snapshot in ${snapshotDir}`;
+  const why = record ? staleness(record, inputs()) : `no snapshot in ${snapshotDir}. Run \`npm run snapshot\` in web/`;
   if (why) {
-    console.log(why);
+    console.log(process.argv.includes("--warn") ? `warning: ${why}` : why); // --warn: `npm run dev`, which starts anyway
     process.exit(1);
   }
   console.log(`the snapshot in ${snapshotDir} is of this checkout's wheels and Pyodide ${record!.pyodide}`);
