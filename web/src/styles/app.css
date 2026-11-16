@@ -245,21 +245,6 @@ body {
   grid-row: 4;
 }
 
-/* a step 4 part not built yet (app/ui/Icon.tsx Placeholder) */
-.placeholder {
-  margin: var(--s3);
-  padding: var(--s3);
-  border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.placeholder b {
-  display: block;
-  color: var(--ink);
-  font-weight: var(--w-bold-ui);
-}
-
 /* the editor's place in the Editor pane: hidden, not unmounted, while a .dta tab shows its view (App.tsx) */
 .editor-slot {
   flex: 1;

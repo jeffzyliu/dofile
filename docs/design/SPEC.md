@@ -1369,7 +1369,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `Banner` (`kind` info, warn, error, `role`, `actions`, `focusable`); the live region and `say(text)` (what is said
   in one 50 ms window is said as one text, joined by ". "); the toast and `showToast(text)`; `Icon`, `Key` (⌘ on a Mac,
   Ctrl elsewhere), `Labels({labels, at})` (a control's labels in one cell: it keeps the size of the widest; only
-  `labels[at]` is seen and named), `Placeholder`.
+  `labels[at]` is seen and named).
 - **Pinned down or changed:** `engineBytes` is `number | null` (null: no meta tag, a dev server with no snapshot); it is
   the meta tag, which holds start-files.json's `download` size (the files the page fetches, not its own); the page fetches nothing for it. `t0` of `starting-list` and `starting-worker` is when
   the current stage began, and a stage seen twice adds up in `done` (the snapshot start reads the cache after
