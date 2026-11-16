@@ -1,17 +1,18 @@
 // Where a line of the code a run sent is echoed in its log, so the log can put things after it: each graph's link after
-// the echo of its line (RunResult.graph_lines), and a note after the echo of a nested `do` of a file with unsaved edits.
-// The echoes carry no line numbers, so they are walked beside the code: an echo is a line of the code (`. ` + the line as
-// written; `  2. ` + the line inside a loop or a program; `> ` + a continued line), and an echo that is not the next
-// line the code would echo is passed over. The line numbers decide where a link goes; the text only keeps the two walks
-// in step. Where the walk cannot know which echo is a line's, the line has none (its link goes to the run's end): a link
-// in the wrong place is worse than one at the end.
+// the echo of its line (RunResult.graph_lines), and a note after the echo of a nested `do` of a file with unsaved
+// edits. The echoes carry no line numbers, so they are walked beside the code: an echo is a line of the code (`. ` +
+// the line as written; `  2. ` + the line inside a loop or a program; `> ` + a continued line), and an echo that is not
+// the next line the code would echo is passed over. The line numbers decide where a link goes; the text only keeps the
+// two walks in step. Where the walk cannot know which echo is a line's, the line has none (its link goes to the run's
+// end): a link in the wrong place is worse than one at the end.
 //  - a nested do-file (`. do sub.do` ... `end of do-file`) is passed over whole, when its `do` (or `include`) is a line
-//    of the code outside any block and shows its echoes (no prefix, or `noisily` the last of capture, quietly, noisily);
+//    of the code outside any block and shows its echoes (no prefix, or `noisily` the last of capture, quietly,
+//    noisily);
 //  - a `do` inside a block (`{ }`, a program, a mata block) is echoed once where the block is, and runs later or never:
 //    it opens nothing, and its file's echoes, when they come, are passed over: after it, and after any nested file's
 //    end, a top-level echo is taken only when no `end of do-file` comes before the next `do` (endFirst below);
-//  - a top-level echo (`. x`) that is not the next line is looked for further down (outside blocks), so the walk gets back
-//    in step after lines that are echoed in another form (a mata block's `: ` lines) or not at all;
+//  - a top-level echo (`. x`) that is not the next line is looked for further down (outside blocks), so the walk gets
+//    back in step after lines that are echoed in another form (a mata block's `: ` lines) or not at all;
 //  - lines never echoed are passed over: blank lines, the inside of a `/* */` comment (echoed only as a `> ` line when
 //    the comment began in a command), and the body of a `quietly { }` or `capture { }` block outside a loop or program.
 // The code is indexed by text, so the walk is linear in the log.
@@ -56,8 +57,8 @@ export const opensEndBlock = (line: string) => {
   return PROGRAM.test(rest) || MATA.test(rest);
 };
 
-/** The code's line as an echo shows it, in any of the echo's forms (`. `, a loop's or program's body `  2. `, a continued
- *  `> `), or null for a line that is not an echo. LogView reads a nested `do` from it. */
+/** The code's line as an echo shows it, in any of the echo's forms (`. `, a loop's or program's body `  2. `, a
+ *  continued `> `), or null for a line that is not an echo. LogView reads a nested `do` from it. */
 export function echoed(l: LogLine): string | null {
   if (l.kind !== "echo") return null;
   const t = l.text;
@@ -251,8 +252,8 @@ export function commandEnd(lines: readonly LogLine[], at: number): number {
   return e;
 }
 
-/** The file a `do` or `include` line names, as the store would have it (`.do` added when it has no extension, `\` as `/`,
- *  a leading `./` dropped), or null for another command. */
+/** The file a `do` or `include` line names, as the store would have it (`.do` added when it has no extension, `\` as
+ *  `/`, a leading `./` dropped), or null for another command. */
 export function nestedTarget(command: string): string | null {
   const m = nested(command);
   if (!m) return null;

@@ -1,6 +1,6 @@
 // The banners above the editor. A save that failed: one per file, removed by a later save that works or by a reload.
-// Download is the editor's text, saved or not, in the file's line break. Both banners hand the focus on when they go with
-// the focus in them (useFocusOnLeave).
+// Download is the editor's text, saved or not, in the file's line break. Both banners hand the focus on when they go
+// with the focus in them (useFocusOnLeave).
 import type { BannerOf } from "../banners";
 import { baseName } from "../files/tree.ts";
 import { saveAs, textInStore } from "../files.ts";
@@ -40,8 +40,8 @@ export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }
 
 // A run rewrote an open file that has unsaved edits, or wrote something that is not text over an open file. The editor
 // keeps its text and the tab stays unsaved, so a Save then replaces the run's version knowingly. "Reload from the run"
-// takes the store's version and drops the edits. A save, a reload, a close or a delete of the file removes the banner; a
-// rename moves it (Editor.tsx).
+// takes the store's version and drops the edits. A save, a reload, a close or a delete of the file removes the banner;
+// a rename moves it (Editor.tsx).
 export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }) => {
   const name = baseName(banner.path);
   const text = savedIsText(banner.path);

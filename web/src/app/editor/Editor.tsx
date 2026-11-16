@@ -1,5 +1,6 @@
-// The editor (docs/design/SPEC.md, sections 3.3 and 4): one CodeMirror 6 view, mounted once, and one EditorState per open
-// text tab, swapped in when the tab is shown. The text lives in CodeMirror, not in a signal. mount() fills editorCommands.
+// The editor (docs/design/SPEC.md, sections 3.3 and 4): one CodeMirror 6 view, mounted once, and one EditorState per
+// open text tab, swapped in when the tab is shown. The text lives in CodeMirror, not in a signal. mount() fills
+// editorCommands.
 
 import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
@@ -169,7 +170,8 @@ function start(code: string, head: RunHead, keyed: boolean) {
   if (words) showToast(words, "error");
 }
 
-/** Run a whole file: `at` (the reset banner's "Run the file again" names the file whose run it cut), or the active tab. */
+/** Run a whole file: `at` (the reset banner's "Run the file again" names the file whose run it cut), or the active
+ *  tab. */
 function runFile(keyed = false, at?: string) {
   const path = at === undefined ? activeText() : openText(at);
   if (!path) {
@@ -188,8 +190,9 @@ function runSelection(keyed = false) {
   start(code, { kind: "selection", path, lines, fresh_locals: false }, keyed);
 }
 
-/** Ctrl/Cmd+Enter: with no engine, what the "Start engine" button does (where it can do nothing, a toast says why); else
- *  Run selection with a selection, else Run. It runs nothing when it starts the engine, even once the engine is ready. */
+/** Ctrl/Cmd+Enter: with no engine, what the "Start engine" button does (where it can do nothing, a toast says why);
+ *  else Run selection with a selection, else Run. It runs nothing when it starts the engine, even once the engine is
+ *  ready. */
 function runEither() {
   const offer = startEngine();
   if (offer !== null) {
@@ -234,9 +237,9 @@ function markErrors({ clear, set }: MarkChange) {
 // ---- save ----
 
 // The saves in progress, each with the path its tab has now: renamed() moves it and closed() ends it (null). A save
-// writes in its turn (fileTurn), under the tab's path then, so a rename or delete pressed before it is honoured (closed:
-// nothing is written). A save that answers after a rename leaves its outcome on the tab under the new name; the store
-// has the bytes there too, as its rename is called after the write is issued.
+// writes in its turn (fileTurn), under the tab's path then, so a rename or delete pressed before it is honoured
+// (closed: nothing is written). A save that answers after a rename leaves its outcome on the tab under the new name;
+// the store has the bytes there too, as its rename is called after the write is issued.
 const saving = new Set<{ path: string | null }>();
 
 async function save(path: string | undefined = activeTab.value ?? undefined): Promise<boolean> {
@@ -410,9 +413,10 @@ function focus() {
   [tab, button].find(seen)?.focus();
 }
 
-/** Ctrl/Cmd+S anywhere on the page, the editor too, saves the active tab, once while the key is held. With a dialog open
- *  it saves nothing, so no Save begins behind a dialog that is about to decide what happens to the file. Not
- *  CodeMirror's "Mod-s": Mod is Cmd alone on Apple devices, where Ctrl+S in the editor was swallowed and saved nothing. */
+/** Ctrl/Cmd+S anywhere on the page, the editor too, saves the active tab, once while the key is held. With a dialog
+ *  open it saves nothing, so no Save begins behind a dialog that is about to decide what happens to the file. Not
+ *  CodeMirror's "Mod-s": Mod is Cmd alone on Apple devices, where Ctrl+S in the editor was swallowed and saved
+ *  nothing. */
 function onKey(e: KeyboardEvent) {
   if (isRunKey(e)) return onRunKey(e);
   if (!isSaveKey(e)) return;
@@ -423,8 +427,9 @@ function onKey(e: KeyboardEvent) {
 
 const TEXT_LESS_INPUTS = new Set(["button", "checkbox", "color", "file", "image", "radio", "range", "reset", "submit"]);
 
-/** Whether `target` takes typed text: a textarea, an input of a text-like type, or an editable element (`isContentEditable`
- *  is false under contenteditable="false", and true under an editable ancestor). A checkbox, radio or button does not. */
+/** Whether `target` takes typed text: a textarea, an input of a text-like type, or an editable element
+ *  (`isContentEditable` is false under contenteditable="false", and true under an editable ancestor). A checkbox, radio
+ *  or button does not. */
 function isTextEntry(target: EventTarget | null): boolean {
   if (target instanceof HTMLTextAreaElement) return true;
   if (target instanceof HTMLInputElement) return !TEXT_LESS_INPUTS.has(target.type);
@@ -432,7 +437,8 @@ function isTextEntry(target: EventTarget | null): boolean {
 }
 
 /** Ctrl/Cmd+Enter anywhere on the page does what the toolbar's Run does (runEither). Not with a dialog open, and not in
- *  another text field, which keeps the key. In the editor CodeMirror's keymap has run it already. A held key runs once. */
+ *  another text field, which keeps the key. In the editor CodeMirror's keymap has run it already. A held key runs
+ *  once. */
 function onRunKey(e: KeyboardEvent) {
   if (e.defaultPrevented || e.isComposing || dialog.value) return;
   if (openMenuState.value) return e.preventDefault(); // an open menu: nothing runs, and its focused item is not picked

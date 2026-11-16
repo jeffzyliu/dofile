@@ -1,7 +1,7 @@
 // The log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[]) and draws the head, then per run its run-head and
-// its text, each line by its kind (classify.ts). What goes after a line, graph links and notes, is placed by align.ts;
-// the notes at a run's end follow its last line. The head, run-heads and the page's notes are shown only: Download log
-// has the runs' text alone. The pane follows the end of the log unless the visitor has scrolled up.
+// its text, each line by its kind (classify.ts). What goes after a line's echo, graph links and notes, is placed with
+// align.ts; the notes at a run's end follow its last line. The head, run-heads and the page's notes are shown only:
+// Download log has the runs' text alone. The pane follows the end of the log unless the visitor has scrolled up.
 import { signal } from "@preact/signals";
 import { type ComponentChildren, Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
@@ -24,7 +24,8 @@ import { findAt, findOpen, findText, matches } from "./find.ts";
 
 type TextItem = Extract<LogItem, { t: "text" }>;
 
-const kinds = new WeakMap<TextItem, LogLine[]>(); // each text item's lines, worked out once: an item is replaced when it changes
+// each text item's lines, worked out once: an item is replaced when it changes
+const kinds = new WeakMap<TextItem, LogLine[]>();
 const linesOf = (item: TextItem) => {
   const known = kinds.get(item);
   if (known) return known;
@@ -111,10 +112,10 @@ const Jump = ({ line, path }: { line: number; path?: string }) => (
   </button>
 );
 
-/** A hint's `help x` link: it runs the command. With no engine it is off, aria-disabled and `.off`, still focusable, and
- *  a press only says why in a toast. While a run or a start is on, the command is refused and the toast says why. A held
- *  Enter's repeats are ignored (ui/keys.ts), so the toast shows once and `help x` is not run again when the engine is
- *  free. */
+/** A hint's `help x` link: it runs the command. With no engine it is off, aria-disabled and `.off`, still focusable,
+ *  and a press only says why in a toast. While a run or a start is on, the command is refused and the toast says why. A
+ *  held Enter's repeats are ignored (ui/keys.ts), so the toast shows once and `help x` is not run again when the engine
+ *  is free. */
 function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
   const offer = startOffer(engine.value),
     off = offer !== null;
@@ -241,8 +242,8 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
     }
   });
 
-  // the notes at the run's end are blocks that wrap (.endnote), so a long one and its "Go to line" stay in the pane; each
-  // ends with its line break, which a block's last line does not show, so the log's text keeps its lines
+  // the notes at the run's end are blocks that wrap (.endnote), so a long one and its "Go to line" stay in the pane;
+  // each ends with its line break, which a block's last line does not show, so the log's text keeps its lines
   if (end?.rc === 1)
     out.push(
       <span key="break" class="endnote">
@@ -425,10 +426,11 @@ export function LogView() {
     const box = pre.current?.parentElement;
     if (!box) return;
     // The visitor leaves the end only by an upward scroll that follows their own input (wheel, touch, a press on the
-    // scrollbar, a key; Find's jump to a match counts too). The browser scrolls the box itself as well: it clamps scrollTop
-    // when the box grows (the running banner above it goes) and the box shrinks again before the scroll event is
-    // delivered, so such an event can read "up, and not at the end" with no visitor in it (a paste runs lines in turn: a
-    // banner goes and comes back for each). Such a scroll leaves the flag as it is; the next render puts the end in view.
+    // scrollbar, a key; Find's jump to a match counts too). The browser scrolls the box itself as well: it clamps
+    // scrollTop when the box grows (the running banner above it goes) and the box shrinks again before the scroll event
+    // is delivered, so such an event can read "up, and not at the end" with no visitor in it (a paste runs lines in
+    // turn: a banner goes and comes back for each). Such a scroll leaves the flag as it is; the next render puts the
+    // end in view.
     let last = box.scrollTop;
     let input = -1e9;
     let held = false; // a pointer is down on the box (dragging the scrollbar can last longer than any window)

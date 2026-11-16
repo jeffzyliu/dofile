@@ -1,7 +1,7 @@
 // What the other parts ask of the editor (docs/design/SPEC.md, section 4). Editor.tsx replaces each function when it
 // mounts; until then they do nothing, so the shell runs without an editor. The file list owns `tabs` and `activeTab`
-// and calls open, reload, renamed and closed so the editor's state follows the tab; the editor owns each open file's text
-// and the unsaved dot.
+// and calls open, reload, renamed and closed so the editor's state follows the tab; the editor owns each open file's
+// text and the unsaved dot.
 //
 // Call through the object (`editorCommands.save(path)`), never destructure it or keep a field
 // (`const { save } = editorCommands`): the copy would keep the no-op.
@@ -59,7 +59,7 @@ export const editorCommands = {
   /** A tab was closed (the close-tab dialog's "Don't save" too: its edits go with it) or its file was deleted: drop its
    *  state. The tab has already been removed. */
   closed(_path: string) {},
-  /** Make `path` (default: the active tab) the active tab, opening it when it is not open, put the cursor on line `line`
-   *  (1-based), scroll it into view and focus the editor. */
+  /** Make `path` (default: the active tab) the active tab, opening it when it is not open, put the cursor on line
+   *  `line` (1-based), scroll it into view and focus the editor. */
   goToLine(_line: number, _path?: string) {},
 };

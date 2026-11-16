@@ -1,4 +1,5 @@
-// The error mark of a file (the red bar and tint on a line): the rule, in one place. The mark belongs to the file's last run:
+// The error mark of a file (the red bar and tint on a line): the rule, in one place. The mark belongs to the file's
+// last run:
 //  - set when a run of that file (whole or a selection) ends with an error on a line (any rc but 0 and Break's 1);
 //  - cleared when a new run of that same file starts, when the engine is reset or restarted (`lastRun` becomes null,
 //    which clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line, so no mark
@@ -24,8 +25,8 @@ export function onRunStart(run: RunHead): MarkChange {
   return run.kind !== "command" && run.path ? { clear: run.path, set: null } : NOTHING;
 }
 
-/** `lastRun` changed: null (the engine is gone: a reset or a restart) clears every mark; a command changes none; a run of
- *  a file clears that file's mark and sets it again on its error line. */
+/** `lastRun` changed: null (the engine is gone: a reset or a restart) clears every mark; a command changes none; a run
+ *  of a file clears that file's mark and sets it again on its error line. */
 export function onLastRun(r: LastRun | null): MarkChange {
   if (!r) return { clear: "all", set: null };
   if (r.kind === "command" || !r.path) return NOTHING;

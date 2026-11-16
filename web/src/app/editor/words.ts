@@ -64,7 +64,7 @@ export const memoryWords = (m: Memory, short = false) =>
 export const jumpLine = (r: LastRun): number | null =>
   r.rc !== 0 && r.line !== null && r.kind !== "command" && r.path ? r.line : null;
 
-/** The toast when Ctrl/Cmd+Enter, or a press of the disabled Run, asks for a run the engine does not take. null where
+/** The toast when Ctrl/Cmd+Enter, or a press of the off Run, asks for a run the engine does not take. null where
  *  the key does something: `ready` runs, and with no engine it does what "Start engine" does (`none`, `asking`,
  *  `declined`: the download prompt; `other-tab-idle`: the take-over dialog; a `failed` start that can be tried again is
  *  tried, and one that cannot has the words below). */

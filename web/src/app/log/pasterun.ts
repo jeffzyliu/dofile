@@ -30,13 +30,13 @@ export function pastePlan(before: string, pasted: string, after: string): Paste 
 export const putBack = (lines: readonly string[], r: InTurn, fieldText: string): string | null =>
   r.stop?.why === "refused" && !fieldText && !noEngine() ? lines[r.stop.line - 1] : null;
 
-/** Wait for the end of a command that started: its rc once it has run (lastRun is a new run), or "taken" when its run was
- *  cut because another tab took the engine (`done` settles with kind "stopped", and lastRun is not written). The rc is
- *  taken from lastRun, not from `done`, which settles only after the run's after-run reads: lastRun is written in the
- *  state machine's step that ended the run, and this resolves in a microtask after that synchronous step, so the next
- *  pasted line starts before the page takes any other input. A Run or an Enter pressed between two pasted lines is then
- *  refused as during any run. `done` settling ends the wait too (the first of the two wins), so no wait outlives its
- *  run. */
+/** Wait for the end of a command that started: its rc once it has run (lastRun is a new run), or "taken" when its run
+ *  was cut because another tab took the engine (`done` settles with kind "stopped", and lastRun is not written). The rc
+ *  is taken from lastRun, not from `done`, which settles only after the run's after-run reads: lastRun is written in
+ *  the state machine's step that ended the run, and this resolves in a microtask after that synchronous step, so the
+ *  next pasted line starts before the page takes any other input. A Run or an Enter pressed between two pasted lines is
+ *  then refused as during any run. `done` settling ends the wait too (the first of the two wins), so no wait outlives
+ *  its run. */
 function whenEnds(before: unknown, done: Promise<RunResult>): Promise<number | "taken"> {
   return new Promise((settle) => {
     let stop = () => {};

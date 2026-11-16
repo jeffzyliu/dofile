@@ -107,8 +107,8 @@ function logDecorations(state: EditorState): DecorationSet {
 }
 
 /** In a Stata buffer, typed curly quotes (a phone's Smart Punctuation) become straight ones. `beforeinput`'s type says
- *  whether the keyboard typed the text or replaced a word (never a paste or a drop, which CodeMirror's own handlers take),
- *  and a change that replaces text with a curly quote in it is left alone. */
+ *  whether the keyboard typed the text or replaced a word (never a paste or a drop, which CodeMirror's own handlers
+ *  take), and a change that replaces text with a curly quote in it is left alone. */
 const straightTyping: Extension = (() => {
   let kind = "";
   return [
@@ -143,7 +143,8 @@ export function languageOf(path: string): Extension {
   if (ext === ".csv") return csvColumns(",");
   if (ext === ".tsv") return csvColumns("\t");
   if (ext === ".log") return logKinds;
-  if (ext === ".md") return [markdownLanguage, syntaxHighlighting(docStyle)]; // the language alone: markdown() would bring HTML, CSS and JavaScript
+  // the language alone: markdown() would bring HTML, CSS and JavaScript
+  if (ext === ".md") return [markdownLanguage, syntaxHighlighting(docStyle)];
   if (ext === ".json") return [json(), syntaxHighlighting(docStyle)];
   return [];
 }

@@ -1,5 +1,6 @@
 // The column colors of a .csv or .tsv in the editor (SPEC 3.11): a tokenizer that splits a line at the separators
-// outside double quotes. One line at a time, so a quoted field that holds a line break colors its second line as a new row.
+// outside double quotes. One line at a time, so a quoted field that holds a line break colors its second line as a new
+// row.
 
 /** Columns take the five colors (app.css .csv-c0 to .csv-c4) in turn. */
 export const CSV_COLORS = 5;

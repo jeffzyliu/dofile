@@ -1,5 +1,6 @@
-// The one clock the timers count with, so they agree (docs/design/SPEC.md, S 9): `now` (Date.now(), as the engine
-// states' t0) ticks every 100 ms while a timer shows (a run, a Break, a start), and stands still otherwise.
+// The clock the run, Break and start timers count with, so they agree (docs/design/SPEC.md, S 9): `now` (Date.now(), as
+// the engine states' t0) ticks every 100 ms while a timer shows, and stands still otherwise. The download dialog keeps
+// its own (states/clock.ts).
 import { effect, signal } from "@preact/signals-core";
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
 import { engine } from "../state.ts";

@@ -4,12 +4,12 @@ import { opensEndBlock } from "./align.ts";
 
 /** The lines a paste runs. Lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too.
  *  @param before - the field's text before the cursor, which joins the first pasted line, as a paste would put it
- *  @param pasted - the pasted text
  *  @param after - the field's text after the cursor, which joins the last pasted line
  *  @returns the lines, or null for an ordinary paste: no line break, or breaks only at the end (one copied line),
  *  which a one-line field drops */
 export function pastedLines(before: string, pasted: string, after: string): string[] | null {
-  const text = pasted.replace(/[\r\n]+$/, ""); // trailing line breaks do not count: one copied line is an ordinary paste
+  // trailing line breaks do not count: one copied line is an ordinary paste
+  const text = pasted.replace(/[\r\n]+$/, "");
   if (!/[\r\n]/.test(text)) return null;
   return `${before}${text}${after}`.split(/\r\n|\r|\n/).filter((l) => l.trim() !== "");
 }
@@ -22,7 +22,8 @@ export type RunOne = (line: string) => { how: "started"; done: Promise<number | 
 export interface InTurn {
   total: number;
   ran: number;
-  stop: null | { line: number; why: "refused" | "error" | "block" | "taken"; rc?: number }; // line: 1-based, of the paste
+  // line: 1-based, of the paste
+  stop: null | { line: number; why: "refused" | "error" | "block" | "taken"; rc?: number };
 }
 
 /** Whether a `/*` comment is still open at the end of `line` (strings left out). */
@@ -49,7 +50,8 @@ export const opensBlock = (line: string) =>
 
 /** Run `lines` one after the other through `runOne`, each once the one before has ended.
  *  @returns how far they got. They stop at the first line that is refused, that ends with any rc but 0 (Break's rc 1
- *  too), or whose run is cut because another tab took the engine; and before a line that opensBlock, which is not sent. */
+ *  too), or whose run is cut because another tab took the engine; and before a line that opensBlock, which is not
+ *  sent. */
 export async function runInTurn(lines: readonly string[], runOne: RunOne): Promise<InTurn> {
   for (let i = 0; i < lines.length; i++) {
     if (opensBlock(lines[i])) return { total: lines.length, ran: i, stop: { line: i + 1, why: "block" } };

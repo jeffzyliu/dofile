@@ -1,11 +1,11 @@
-// The .log tokenizer: the engine sends its log as plain text, and the page tells the kinds of line apart here, so a line
-// looks the same in the Log pane and in a .log file in the editor:
+// The .log tokenizer: the engine sends its log as plain text, and the page tells the kinds of line apart here, so a
+// line looks the same in the Log pane and in a .log file in the editor:
 //  - echo: a command as run, `. regress wage educ`; a loop's or a program's body line, `  2.   scatter y x`, and a
 //    continued line, `>   y x` (`///`), but only right after another echo: a `list` row `  1. | 3 |` is output;
 //  - err: `r(111);`, `--Break--`, and the error's message, the line right before the hint (or before `r(111);` when
 //    there is none), unless that line is an echo, empty, indented or `end of do-file`;
-//  - hint: the engine's explanation under an error, from `  → ` down to the line before `r(111);`; its `How to fix:` and
-//    `Learn more:` are shown bold, and `help summarize` after `Learn more:` runs as a command;
+//  - hint: the engine's explanation under an error, from `  → ` down to the line before `r(111);`; its `How to fix:`
+//    and `Learn more:` are shown bold, and `help summarize` after `Learn more:` runs as a command;
 //  - note: what the page's own engine code adds: the path shim's `(path C:\… is cps.dta in the working folder)`, `(cd …
 //    in the working folder)`, the tempfile note, and the header a `log using` file starts with (`name:`, `log:`, ...),
 //    only before the file's first echo: the same lines in a run's output (`log using` prints them) are output;
