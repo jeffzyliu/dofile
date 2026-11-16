@@ -129,6 +129,12 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
   mismatch, stale entries), start and end rules, error kinds, interrupt.
+  - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
+    dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
+    worker's `again` and the browser's `online` fetch it again.
+- `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
+  does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
+  decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
   test,

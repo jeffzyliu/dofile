@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { buildId } from "../scripts/build-id.ts";
 import { EngineClient } from "../src/engine/client.ts";
 import type { Answer } from "../src/engine/machine.ts";
+import { PART_HEADER } from "../src/engine/snapshot.ts";
 import type { FileStore } from "../src/engine/store.ts";
 import type { StartFiles } from "../src/engine/types.ts";
 import type { FakePort, Message, Post } from "./harness.ts";
@@ -1062,4 +1063,153 @@ test("a start that is ended while it waits for `startup` says nothing more, and 
   assert.deepEqual(first, [], "the first start said nothing: not started, and not start-failed");
   assert.deepEqual(eng.startup, { mode: "normal", worker: 1 });
   assert.equal(eng.about!.dofile, "worker 1");
+});
+
+// ---- a lazy snapshot's graphics part, with a shared buffer: the page fetches it and the worker reads it there ----
+
+const PART = { name: "graphics.bin", raw: 9_000, size: 2_000 };
+const LAZY = {
+  ...LIST,
+  download: LIST.download + PART.size,
+  snapshot: { ...LIST.snapshot, graphics: PART },
+};
+const PART_URL = `${BASE}snapshot/${PART.name}`;
+// The graphics part's fetches answer in turn as `answers` says (a copy's seed, or "offline"), each held until the test
+// lets it go (release()); every other file is fakeFetch's. `modes`: the cache mode of each fetch of the part.
+function partFetch(answers: (number | "offline")[]) {
+  const files = fakeFetch(),
+    modes: (RequestCache | undefined)[] = [],
+    gates: (() => void)[] = [];
+  const fetch = async (url: string, init: RequestInit = {}) => {
+    if (url !== PART_URL) return files.fetch(url, init);
+    modes.push(init.cache);
+    const answer = answers.shift();
+    await new Promise<void>((ok) => gates.push(ok));
+    if (answer === undefined || answer === "offline") throw new TypeError("fetch failed");
+    return new Response(content(PART.size, answer));
+  };
+  const release = async () => {
+    await until(() => gates.length > 0, "a fetch of the part");
+    gates.shift()!();
+  };
+  return { fetch, modes, release };
+}
+const until = async (ok: () => boolean, what: string) => {
+  for (let i = 0; i < 400 && !ok(); i++) await sleep(5);
+  assert.ok(ok(), `waited for ${what}`);
+};
+// a page with a lazy build and a worker that answers its start and the op `graphics` (counted), and hands over the
+// shared buffer it was booted with
+function lazyPage(fetch: Fetch, caches: ReturnType<typeof fakeCaches>) {
+  const told: number[] = [],
+    got: { sab: SharedArrayBuffer | null; port: FakePort | null } = { sab: null, port: null };
+  const eng = client(fetch, caches, {
+    startFiles: { base: `${BASE}start-files.json`, ...LAZY } as StartFiles & { base: string },
+    createWorker: () => {
+      const w = fakeWorker((m, post) => {
+        if (m.op === "boot") got.sab = m.args.graphics?.sab ?? null;
+        if (m.op === "graphics") {
+          told.push(m.id);
+          return post({ id: m.id, result: undefined });
+        }
+        starts(m, post);
+      });
+      got.port = w;
+      return w;
+    },
+  });
+  const states: string[] = [];
+  eng.onGraphics((p) => states.push(p.state));
+  const header = () => [...new Int32Array(got.sab!, 0, 3)]; // [state, bytes, tries]
+  const say = (graphics: string) => got.port!.onmessage!({ data: { graphics } });
+  return { eng, got, told, states, header, say };
+}
+const partBytes = (sab: SharedArrayBuffer) => new Uint8Array(sab, PART_HEADER, PART.size).slice();
+
+test("graphics part: the shared buffer is pending while the part is fetched, then landed with its bytes, and kept in the Cache; the worker is told", async () => {
+  const caches = fakeCaches(),
+    f = partFetch([1]),
+    page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  assert.equal(done.cached, true);
+  await startWorker(page.eng, done.build);
+  assert.ok(page.got.sab, "the worker was booted with the shared buffer");
+  assert.deepEqual(page.header(), [0, 0, 0], "pending");
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed");
+  assert.deepEqual(page.header(), [1, PART.size, 0], "landed, its byte count, the first try");
+  assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 1));
+  assert.deepEqual(f.modes, ["no-cache"]);
+  assert.ok((await cached(caches)).includes(`snapshot/${PART.name}`), "kept beside the start files");
+  await until(() => page.told.length > 0, "the op graphics");
+  page.say("again"); // a part that landed is not fetched again
+  await sleep(20);
+  assert.equal(f.modes.length, 1);
+});
+
+test("graphics part: the worker says it is damaged: dropped from the Cache, pending again (tries + 1), and fetched again with cache reload", async () => {
+  const caches = fakeCaches(),
+    f = partFetch([1, 2]),
+    page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed");
+  await sleep(5); // the fetch's own end (part.loading)
+  page.say("damaged");
+  assert.deepEqual(page.header(), [0, 0, 1], "pending at once, one more try");
+  await until(() => f.modes.length === 2, "the second fetch");
+  assert.deepEqual(f.modes, ["no-cache", "reload"], "not the HTTP cache's copy, revalidated or not");
+  assert.ok(!(await cached(caches)).includes(`snapshot/${PART.name}`), "the damaged copy is out of the Cache");
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed again");
+  assert.deepEqual(page.header(), [1, PART.size, 1]);
+  assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 2), "the fresh copy");
+  const cache = await caches.open("dofile-snapshot-777");
+  assert.deepEqual(new Uint8Array(await (await cache.match(PART_URL))!.arrayBuffer()), content(PART.size, 2));
+});
+
+test("graphics part: a failed fetch writes the reason with state failed; the worker's `again` fetches it once more, and so does the browser coming back online", async (t) => {
+  // Node has no window events: a stand-in for addEventListener("online", ..., { once: true })
+  const online: (() => void)[] = [],
+    had = Object.getOwnPropertyDescriptor(globalThis, "addEventListener");
+  Object.defineProperty(globalThis, "addEventListener", {
+    configurable: true,
+    writable: true,
+    value: (type: string, f: () => void) => type === "online" && online.push(f),
+  });
+  t.after(() => {
+    if (had) Object.defineProperty(globalThis, "addEventListener", had);
+    else delete (globalThis as { addEventListener?: unknown }).addEventListener;
+  });
+  const caches = fakeCaches(),
+    f = partFetch(["offline", "offline", 3]),
+    page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await f.release();
+  await until(() => page.states.at(-1) === "failed", "failed");
+  const reason = () => {
+    const [state, n] = page.header();
+    assert.equal(state, 2);
+    return new TextDecoder().decode(new Uint8Array(page.got.sab!, PART_HEADER, n).slice());
+  };
+  assert.match(reason(), /^the graphics files could not be downloaded \(fetch failed\)/);
+  assert.equal(online.length, 1, "a retry waits for the browser to be back online");
+  assert.ok(!(await cached(caches)).includes(`snapshot/${PART.name}`));
+  await sleep(5); // the fetch's own end (part.loading)
+  page.say("again");
+  assert.deepEqual(page.header(), [0, 0, 1], "pending at once, one more try");
+  await f.release();
+  await until(() => page.states.at(-1) === "failed", "failed again");
+  assert.equal(page.header()[2], 1, "the try a waiting graph asked for has failed: tries moved on from its askedAt");
+  assert.match(reason(), /could not be downloaded/);
+  await sleep(5);
+  online.shift()!(); // back online
+  assert.deepEqual(page.header(), [0, 0, 2]);
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed");
+  assert.deepEqual(page.header(), [1, PART.size, 2]);
+  assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 3));
+  assert.deepEqual(f.modes, ["no-cache", "no-cache", "no-cache"], "a failed fetch is not a damaged copy");
 });

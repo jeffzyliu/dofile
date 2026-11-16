@@ -818,7 +818,8 @@ function idleStep() {
       if (state !== PART_LANDED) return; // the op graphics calls idleSoon when it lands
       const bytes = part as Uint8Array<ArrayBuffer>,
         file = share!.file;
-      if (nativeNow() && bytes.length === file.size && bytes.length !== file.raw) return startNative(); // normally under way already (nativeSoon); its end calls idleSoon
+      // normally under way already (nativeSoon); its end calls idleSoon
+      if (nativeNow() && bytes.length === file.size && bytes.length !== file.raw) return startNative();
       decodeStep(bytes);
     } else {
       // after the write, the import of what a first graph needs: the three heavy modules one at a time, then 20 a step

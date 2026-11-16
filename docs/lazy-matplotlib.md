@@ -13,7 +13,7 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   `start-files.json`'s `download` is 41.57 MB with the part, 33.87 MB before "ready".
 - **With a SharedArrayBuffer the page fetches, never the worker** (`client.ts`, `#graphics`): a busy worker cannot advance a fetch. The Cache first
   (at the start, so a return visit has it by "ready"), else the network once the start files are in, with
-  `cache: "no-cache"` and the size checked. It is written to the Cache only when the build's heap is already there. The bytes
+  `cache: "no-cache"` (`"reload"` after the worker found it damaged) and the size checked. It is written to the Cache only when the build's heap is already there. The bytes
   go to the worker in one `SharedArrayBuffer(16 + size)`: Int32 `[state, byte count, tries, 0]` (state 0 pending, 1 landed, 2 failed; `tries`: the page's fetches, counted), then the
   part, or the reason as UTF-8. The page is cross-origin isolated in production (`_headers`: COOP `same-origin`, COEP
   `require-corp` on every path), as Break already needs. Without a SharedArrayBuffer (plain http on a LAN address, say)
@@ -46,7 +46,8 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   the run), writes and imports matplotlib there (Chromium, one sample: ready to image about 0.55 s, about 0.45 s more
   than main's first graph). A graph that arrives while the browser's own decoder is unpacking (Firefox, Safari) cannot
   wait for it, a worker blocked in Python never sees the promise settle: it decodes with brotli-wasm itself, and the
-  native result is dropped, so the files are written once. Not done: letting that graph use the native result. The
+  native result is dropped, so the files are written once. A copy the native decoder fails on goes to brotli-wasm,
+  which says whether it is damaged; the fresh copy fetched after that is native again (`useNative`, `lazy-part.ts`). Not done: letting that graph use the native result. The
   decoder's output comes through promises on the worker's own event loop, which a graph blocked in Python never runs; a
   SharedArrayBuffer does not help, since nothing outside the worker holds the raw bytes. Only a decode on another thread
   (the page, or a nested worker) into a ~33 MB SharedArrayBuffer that the graph `Atomics.wait`s on would; that covers

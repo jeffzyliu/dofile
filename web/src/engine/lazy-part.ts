@@ -46,11 +46,12 @@ export function waitStep(
 }
 
 /**
- * Whether the browser's own decoder unpacks the part.
+ * Whether the browser's own decoder unpacks the part: not a copy it failed on (brotli-wasm then says if it is damaged),
+ * but the fresh copy fetched after that.
  * @param mode - mount's `brotli`: "wasm" forces brotli-wasm
  * @param failedOn - the copy the native decoder failed on, or null
  * @param copy - the copy there is now
  */
-export function useNative(mode: string | undefined, hasNative: boolean, failedOn: number | null, _copy: number) {
-  return hasNative && mode !== "wasm" && failedOn === null;
+export function useNative(mode: string | undefined, hasNative: boolean, failedOn: number | null, copy: number) {
+  return hasNative && mode !== "wasm" && failedOn !== copy;
 }

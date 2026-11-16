@@ -450,7 +450,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (hit) bytes = new Uint8Array(await hit.arrayBuffer());
       else {
         this.#graphicsSay(part, { state: "fetching" });
-        bytes = await this.#downloadGraphics(part);
+        bytes = await this.#downloadGraphics(part, fresh);
         if (cache && (await cache.match(part.heapURL)))
           await cache
             .put(part.url, new Response(bytes, { headers: { "Content-Type": "application/octet-stream" } }))
@@ -483,12 +483,14 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     this.#tellGraphics(part);
   }
 
-  async #downloadGraphics(part: GraphicsPart): Promise<Uint8Array<ArrayBuffer>> {
+  async #downloadGraphics(part: GraphicsPart, fresh: boolean): Promise<Uint8Array<ArrayBuffer>> {
     if (part.url.startsWith("file:")) {
       const fsName = "node:fs/promises"; // Node only (the tests); a variable so the bundler leaves it alone
       return new Uint8Array(await (await import(/* @vite-ignore */ fsName)).readFile(new URL(part.url)));
     }
-    const res = await this.fetch(part.url, { cache: "no-cache" }); // not an older build's part from the HTTP cache
+    // not an older build's part from the HTTP cache; after damage not even a revalidated one (a 304 would hand back the
+    // same bytes)
+    const res = await this.fetch(part.url, { cache: fresh ? "reload" : "no-cache" });
     if (!res.ok) throw new Error(`${part.url}: ${res.status}`);
     const out = new Uint8Array(part.file.size),
       reader = res.body!.getReader();
