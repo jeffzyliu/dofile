@@ -1,16 +1,15 @@
-// The .log tokenizer (OQ-4): the engine sends its log as plain text, and the page tells the kinds of line apart here. The
-// Log pane (log/LogView.tsx) and a .log file in the editor (editor/cm.ts) both use it, so a line looks the same in both:
+// The .log tokenizer: the engine sends its log as plain text, and the page tells the kinds of line apart here, so a line
+// looks the same in the Log pane and in a .log file in the editor:
 //  - echo: a command as run, `. regress wage educ`; a loop's or a program's body line, `  2.   scatter y x`, and a
 //    continued line, `>   y x` (`///`), but only right after another echo: a `list` row `  1. | 3 |` is output;
 //  - err: `r(111);`, `--Break--`, and the error's message, the line right before the hint (or before `r(111);` when
 //    there is none), unless that line is an echo, empty, indented or `end of do-file`;
 //  - hint: the engine's explanation under an error, from `  → ` down to the line before `r(111);`; its `How to fix:` and
-//    `Learn more:` are shown bold, and `help summarize` after `Learn more:` runs as a command (OQ-20);
+//    `Learn more:` are shown bold, and `help summarize` after `Learn more:` runs as a command;
 //  - note: what the page's own engine code adds: the path shim's `(path C:\… is cps.dta in the working folder)`, `(cd …
 //    in the working folder)`, the tempfile note, and the header a `log using` file starts with (`name:`, `log:`, ...),
 //    only before the file's first echo: the same lines in a run's output (`log using` prints them) are output;
 //  - out: everything else, at normal weight.
-// Plain TypeScript, no DOM: tested in Node (test/editor.test.ts).
 
 export type LineKind = "echo" | "out" | "err" | "hint" | "note";
 export interface LogLine {
@@ -67,7 +66,7 @@ function markMessage(out: LogLine[], at: number) {
 }
 
 /** The error a run ended with: its last error line that is not `r(N);` (an error caught earlier, by `capture noisily`,
- *  comes before it), or null. OQ-10's note under it is chosen from this line. */
+ *  comes before it), or null. */
 export function runError(lines: readonly LogLine[]): string | null {
   for (let i = lines.length - 1; i >= 0; i--)
     if (lines[i].kind === "err" && !/^r\(\d+\);$/.test(lines[i].text)) return lines[i].text;
@@ -89,7 +88,7 @@ export function hintParts(line: string): HintPart[] {
   return parts;
 }
 
-/** The text a log download holds: the runs' own log, without the page's head, run-heads and notes (S 15). */
+/** The text a log download holds: the runs' own log, without the page's head, run-heads and notes. */
 export const plainLog = (items: readonly { t: string; text?: string }[]) =>
   items
     .filter((i) => i.t === "text")

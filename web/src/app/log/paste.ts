@@ -2,9 +2,12 @@
 // run with Enter, the next only once the one before has ended. No DOM, so Node tests it.
 import { opensEndBlock } from "./align.ts";
 
-/** The lines a paste runs, or null for an ordinary paste: no line break, or breaks only at the end (one copied line),
- *  which a one-line field drops. The field's text before and after the cursor joins the first and the last pasted line,
- *  as a paste would put them. Lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too. */
+/** The lines a paste runs. Lines that are empty or only spaces are left out; "\r\n" and "\r" are line breaks too.
+ *  @param before - the field's text before the cursor, which joins the first pasted line, as a paste would put it
+ *  @param pasted - the pasted text
+ *  @param after - the field's text after the cursor, which joins the last pasted line
+ *  @returns the lines, or null for an ordinary paste: no line break, or breaks only at the end (one copied line),
+ *  which a one-line field drops */
 export function pastedLines(before: string, pasted: string, after: string): string[] | null {
   const text = pasted.replace(/[\r\n]+$/, ""); // trailing line breaks do not count: one copied line is an ordinary paste
   if (!/[\r\n]/.test(text)) return null;
@@ -44,9 +47,9 @@ function opensComment(line: string): boolean {
 export const opensBlock = (line: string) =>
   /\{\s*$/.test(line) || line.includes("///") || opensEndBlock(line) || opensComment(line);
 
-/** Run `lines` one after the other through `runOne`, each once the one before has ended. They stop at the first line
- *  that is refused, that ends with any rc but 0 (Break's rc 1 too), or whose run is cut because another tab took the
- *  engine; and before a line that opensBlock, which is not sent. */
+/** Run `lines` one after the other through `runOne`, each once the one before has ended.
+ *  @returns how far they got. They stop at the first line that is refused, that ends with any rc but 0 (Break's rc 1
+ *  too), or whose run is cut because another tab took the engine; and before a line that opensBlock, which is not sent. */
 export async function runInTurn(lines: readonly string[], runOne: RunOne): Promise<InTurn> {
   for (let i = 0; i < lines.length; i++) {
     if (opensBlock(lines[i])) return { total: lines.length, ran: i, stop: { line: i + 1, why: "block" } };

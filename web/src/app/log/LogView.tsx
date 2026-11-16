@@ -1,23 +1,7 @@
-// The log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[], run.ts writes it) and draws, top to bottom:
-//  - the head (.head): the banner (aria-hidden) and "dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax" (env.ts ABOUT),
-//    "Files stay in this browser. Try: help regress";
-//  - per run its run-head (.runhead, section 4; none for one command), then its text, each line by its kind from the .log
-//    tokenizer (log/classify.ts; OQ-4): the echo bold (.echo), output at normal weight, the error and its r(N); red and
-//    bold (.err), the engine's hint muted (.hint; its "How to fix:" and "Learn more:" bold, its `help x` a link that runs
-//    it as a command, OQ-20), the path shim's lines muted (.note);
-//  - after the echo of the line that drew it (RunResult.graph_lines, placed by log/align.ts; at the run's end when the
-//    line is not found), each graph: a link "graph 1" (.glink) that shows it in the Graph tab, or on a phone the graph
-//    itself on the card of its run's theme (4c's cardTheme), which opens full size when tapped;
-//  - after the echo of a nested `do` or `include` of a file that had unsaved edits when the run started, S 15's note (a
-//    loop's or program's body line too, which is echoed once: one note, however many passes run the file);
-//  - at the run's end: "Go to line 17" (.jump) after its r(N); (an error in the file, not in a command); after Break,
-//    "Stopped by Break before line 17. The data is as the last complete command left it." (OQ-9) with "Go to line 17"
-//    and no error mark (a command from the command line names no line: "Stopped by Break. The data is ..."); the
-//    files a run wrote that were not kept (`skipped`, `store_error`);
-//  - the page's notes (.note), such as a reset's reason, and under an error the OQ-10 note (states/words.ts noteFor).
-// On a phone the hint is a block (.explain), and a block of output wider than the screen is followed by "← wide table:
-// swipe sideways →". The head, run-heads and the page's notes are shown only: Download log has the runs' text alone.
-// The pane follows the end of the log unless the visitor has scrolled up. role="log".
+// The log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[]) and draws the head, then per run its run-head and
+// its text, each line by its kind (classify.ts). What goes after a line, graph links and notes, is placed by align.ts;
+// the notes at a run's end follow its last line. The head, run-heads and the page's notes are shown only: Download log
+// has the runs' text alone. The pane follows the end of the log unless the visitor has scrolled up.
 import { signal } from "@preact/signals";
 import { type ComponentChildren, Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
@@ -40,7 +24,7 @@ import { findAt, findOpen, findText, matches } from "./find.ts";
 
 type TextItem = Extract<LogItem, { t: "text" }>;
 
-const kinds = new WeakMap<TextItem, LogLine[]>(); // each text item's lines, worked out once (an item is replaced when it changes)
+const kinds = new WeakMap<TextItem, LogLine[]>(); // each text item's lines, worked out once: an item is replaced when it changes
 const linesOf = (item: TextItem) => {
   const known = kinds.get(item);
   if (known) return known;
@@ -48,7 +32,7 @@ const linesOf = (item: TextItem) => {
   kinds.set(item, l);
   return l;
 };
-// each text item's echo of each code line (log/align.ts), worked out once for its code
+// each text item's echo of each code line (align.ts), worked out once for its code
 const aligned = new WeakMap<TextItem, { code: string; echoes: Map<number, number> }>();
 const echoesOf = (item: TextItem, lines: LogLine[], code: string) => {
   const known = aligned.get(item);
@@ -127,10 +111,10 @@ const Jump = ({ line, path }: { line: number; path?: string }) => (
   </button>
 );
 
-/** A hint's `help x` link: it runs the command. With no engine (start.ts) it is off, aria-disabled and `.off`, still
- *  focusable, and a press only says why in a toast ("Start the engine to see help regress"). While a run or a start is
- *  on, the machine refuses the command, and the toast says why (refusedRunWords), as the command line's does. A held
- *  Enter's repeats are ignored (ui/keys.ts), so the toast shows once and `help x` is not run again when the engine is free. */
+/** A hint's `help x` link: it runs the command. With no engine it is off, aria-disabled and `.off`, still focusable, and
+ *  a press only says why in a toast. While a run or a start is on, the command is refused and the toast says why. A held
+ *  Enter's repeats are ignored (ui/keys.ts), so the toast shows once and `help x` is not run again when the engine is
+ *  free. */
 function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
   const offer = startOffer(engine.value),
     off = offer !== null;
@@ -179,7 +163,7 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
   const put = (at: number, el: ComponentChildren) => after.set(at, [...(after.get(at) ?? []), el]);
   const last = lines.length - (lines.at(-1)?.text === "" ? 2 : 1); // the last line with text
 
-  // the code it sent: kept by the editor (commands.ts codeOf); a command is its one echo
+  // the code it sent: kept by the editor (codeOf); a command's is its one echo
   const code = head ? codeOf.get(head) : lines.find((l) => l.kind === "echo")?.text.replace(/^\. ?/, "");
   const echoes = code === undefined ? new Map<number, number>() : echoesOf(item, lines, code);
   for (const g of graphs.value.filter((x) => x.from === "run" && x.run === item.run)) {
@@ -273,8 +257,7 @@ function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChil
       </span>,
     );
   else if (jump !== null && rcAt < 0) out.push(<Jump key="jump" line={jump} path={end!.path} />, "\n");
-  // OQ-10's notes (4d's states/words.ts), under the error the run ended with (classify.ts runError: the last error line
-  // that is not r(N);, not one an earlier `capture noisily` caught)
+  // the note under the error the run ended with (runError: not one an earlier `capture noisily` caught)
   const note = end && end.rc > 1 ? noteFor(end.rc, runError(lines)) : null;
   if (note)
     out.push(
@@ -319,7 +302,7 @@ function logHead(m: Marker) {
   );
 }
 
-/** Find's field, over the log (log/find.ts). */
+/** Find's field, over the log. */
 function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) {
   const field = useRef<HTMLInputElement>(null);
   // once per openFind: a LogView drawn again with Find open (another Output tab and back) takes no focus
@@ -377,9 +360,9 @@ function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) 
 }
 const findAsked = signal(false); // openFind asks; the field takes it when drawn
 let findReturn: HTMLElement | null = null;
-/** Open Find (the Log head's button, the phone's ⋯): the field takes the focus; Esc and Close give it back to `from`
- *  (the phone's ⋯ passes none: the focus is then on the ⋯ button, which the menu gave it back to). On the desktop with
- *  the Output pane unsplit and Graph, Data or Results showing, the Log tab is shown first, so the field can be seen. */
+/** Open Find: the field takes the focus; Esc and Close give it back to `from` (the phone's ⋯ passes none: the focus is
+ *  then on the ⋯ button, which the menu gave it back to). On the desktop with the Output pane unsplit and another tab
+ *  showing, the Log tab is shown first, so the field can be seen. */
 export function openFind(from: HTMLElement | null) {
   findReturn = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
   findAsked.value = true;

@@ -1,19 +1,12 @@
-// What a run's version of an open text file does to its tab (Editor.tsx ranOver; files.ts afterRun calls it), and the
-// text the editor compares: CodeMirror keeps every line break as "\n" (doc.toString()), so a file's text is compared
-// in that form, or a clean tab of a file with "\r\n" breaks would never equal its saved text. Each open file's form is
-// noted when its text is read (formOf: its line break, and whether it starts with a UTF-8 byte order mark), and Save
-// writes the editor's text in it (fileText), so a "\r\n" file stays "\r\n" and a data or other text file with a BOM
-// keeps it; a .do or .ado file is written without one (dropsBom), since the engine reads a BOM as part of the first
-// command (docs/opendta-issues.md, ODT-34), so a do-file saved here can be run by a nested `do`. The rule goes by the name
-// the file is saved under: a rename keeps the noted BOM, and the new name decides at the next Save. A file with both
-// kinds of line break takes the more common one on its first Save. A new or empty file is "\n", without a BOM. The
-// editor never holds the BOM (editorText drops it), so neither Run nor the comparisons see it. The texts given here are
-// decoded with the BOM kept (files/open.ts decodeText(bytes, true)). Plain TypeScript, no DOM: tested in Node
-// (test/editor.test.ts).
+// What a run's version of an open text file does to its tab, and the text the editor compares. CodeMirror keeps every
+// line break as "\n", so texts are compared in that form, or a clean tab of a "\r\n" file would never equal its saved
+// text. Each open file's form (formOf) is noted when its text is read, and Save writes the editor's text in it (fileText).
+// No DOM, so Node tests it.
 
 const BOM = "\uFEFF";
 
-/** `text` as the editor holds it: line breaks "\n" ("\r\n" and "\r" as "\n"), and no leading BOM. */
+/** `text` as the editor holds it: line breaks "\n" ("\r\n" and "\r" as "\n"), and no leading BOM, which neither Run nor the
+ *  comparisons then see. */
 export const editorText = (text: string) => (text.startsWith(BOM) ? text.slice(1) : text).replace(/\r\n?/g, "\n");
 
 export type LineBreak = "\r\n" | "\n";
@@ -28,14 +21,17 @@ export function lineBreakOf(text: string): LineBreak {
 
 /** How a file is written: its line break and whether it starts with a BOM. */
 export type FileForm = { br: LineBreak; bom: boolean };
-/** A new file's form. */
+/** A new or empty file's form. */
 export const PLAIN: FileForm = { br: "\n", bom: false };
 
-/** The form of a file's text (decoded with its BOM kept). */
+/** The form of a file's text, decoded with its BOM kept (files/open.ts decodeText(bytes, true)). A file with both kinds
+ *  of line break takes the more common one on its first Save. */
 export const formOf = (text: string): FileForm => ({ br: lineBreakOf(text), bom: text.startsWith(BOM) });
 
-/** Whether a file of this name is written without its BOM: a do-file or an ado-file (case ignored), which the engine
- *  runs, and which a BOM breaks (ODT-34). */
+/** Whether a file of this name is written without its BOM: a do-file or an ado-file (case ignored). The engine reads a
+ *  BOM as part of the first command (docs/opendta-issues.md, ODT-34), so a do-file saved here could not run in a nested
+ *  `do`. The rule goes by the name it is saved under: a rename keeps the noted BOM, and the new name decides at the next
+ *  Save. */
 export const dropsBom = (path: string) => /\.(do|ado)$/i.test(path);
 
 /** The form the file `path` is written in: `form`, without the BOM for a do-file (dropsBom). After a Save it is the

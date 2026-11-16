@@ -1,38 +1,5 @@
-// The editor (docs/design/SPEC.md, sections 3.3 and 4): one CodeMirror 6 view, mounted once (the layouts never mount it
-// again), and one EditorState per open text tab, swapped in when the tab is shown. The text lives in CodeMirror, not in
-// a signal. It fills editor/commands.ts field by field when it mounts (runFile, runSelection, save, focus, open, reload,
-// renamed, closed, goToLine) and keeps `selection` current.
-//  - What is shown follows `activeTab`: a text tab whose state exists (open() made it), else the empty view. A .dta tab
-//    shows 4c's DtaView in the editor's place (App.tsx hides this one, never unmounts it).
-//  - `data-editor` is on the element that takes the focus: CodeMirror's content with a file shown, the empty view
-//    without one (commands.ts focus(), and the engine's dialog that closes by itself, focus there). With a .dta tab
-//    active, focus() goes to that tab, or its view's Load, outside `[data-editor]` (see focus()).
-//  - The unsaved dot: setDirty(path, text differs from the saved text) on each edit, so undoing back to the saved text
-//    clears it; a save clears it unless the text changed while it was being written. A save that answers after its tab
-//    was renamed answers for the new name (`saving`).
-//  - Save keeps the file's form (ranover.ts formOf, noted at open, reload and a run's new version): its line break and
-//    its UTF-8 byte order mark. The editor's text, which has "\n" only and never a BOM, is written with "\r\n" for a
-//    "\r\n" file and with the BOM for a file that had one, except a .do or .ado file (fileText, dropsBom: by the name it
-//    is saved under); the save-failed banner's Download too (textOf).
-//    The texts compared (the dot, a run's version) and the text Run sends stay in the editor's form.
-//  - Run sends the active tab's whole text (fresh locals); Run selection its whole selected lines (OQ-21); Ctrl/Cmd+Enter
-//    is the one that applies (Ctrl or Cmd on every platform, as Save; held, it runs once). It works anywhere on the page
-//    (one window listener, onRunKey), not with a dialog open and not in another text field; in the editor CodeMirror's
-//    keymap takes it first. With no text tab shown, Run says so in a toast and runs nothing. A
-//    Ctrl/Cmd+Enter the engine does not take (a run on, a start, an engine that cannot be started from here) says why in
-//    a toast (words.ts refusedRunWords); the buttons are disabled then. With no engine (start.ts) Run is "Start engine",
-//    and Ctrl/Cmd+Enter does what that button does (the download prompt, a new try, the take-over dialog) and runs
-//    nothing, now or when the engine is ready. The code of each run is kept by its head (commands.ts
-//    codeOf) for the log's graph links.
-//  - Line marks (cm.ts): the running lines of a selection run (a whole-file run marks none: every line would be marked),
-//    and the error line of the file's last run (not for Break's rc 1, whose line is the command that did not start).
-//    Both move with their text while it is edited.
-//  - Ctrl/Cmd+S saves the active tab wherever the focus is, the editor too (the browser's own Save page is never wanted
-//    here): one window listener, which takes Ctrl or Cmd on every platform, and S on any keyboard layout (keys.ts
-//    isSaveKey); a held key saves once. Not CodeMirror's "Mod-s", whose Mod is Cmd alone on Apple devices, where Ctrl+S
-//    in the editor was swallowed and saved nothing. With a dialog open it saves nothing (the browser's Save page is still kept
-//    away), so no Save begins behind a dialog that is about to decide what happens to the file.
-//  - A file drop is the page's (4a's window listeners): CodeMirror is told it is handled (cm.ts leaveFileDrops).
+// The editor (docs/design/SPEC.md, sections 3.3 and 4): one CodeMirror 6 view, mounted once, and one EditorState per open
+// text tab, swapped in when the tab is shown. The text lives in CodeMirror, not in a signal. mount() fills editorCommands.
 
 import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
@@ -77,13 +44,11 @@ import { editorText, type FileForm, fileText, followRun, formOf, PLAIN, savedFor
 import { refusedRunWords } from "./words.ts";
 
 const states = new Map<string, EditorState>(); // the open text tabs' states, the shown one as it was when it was hidden
-// what the store has of each, as last read or saved, with its line breaks as the editor holds them ("\n", no BOM:
-// ranover.ts editorText), so a clean tab's document equals it; null when a run wrote something that is not text over
-// it (the tab is then unsaved until a save, whatever its text)
+// What the store has of each, in the editor's form (ranover.ts editorText), so a clean tab's document equals it. Null
+// when a run wrote something that is not text over it: the tab is unsaved until a save, whatever its text.
 const savedText = new Map<string, string | null>();
-// each open file's form (line break, BOM), which Save writes (ranover.ts formOf): noted when the editor takes the store's
-// text (open, reload, a run's version that becomes the saved one); a run that writes the same rows in another form
-// changes nothing, so the tab keeps its own
+// Each open file's form (line break, BOM), which Save writes (ranover.ts formOf). Noted when the editor takes the
+// store's text; a run that writes the same rows in another form changes nothing, so the tab keeps its own.
 const forms = new Map<string, FileForm>();
 const scrolled = new Map<string, number>(); // where each was scrolled to
 const shown = signal<string | null>(null); // the path whose state the view shows, or null (the empty view)
@@ -98,7 +63,7 @@ const named = (path: string): Extension => [
   EditorView.contentAttributes.of({ "data-editor": "", "aria-label": `Editor: ${baseName(path)}` }),
 ];
 
-// Ctrl or Cmd, on every platform (CodeMirror's "Mod" is one of them: Cmd on Apple devices, Ctrl elsewhere)
+// Ctrl or Cmd on every platform, not CodeMirror's "Mod" (Cmd alone on Apple devices)
 const runKey = () => {
   runEither();
   return true;
@@ -108,7 +73,7 @@ const keys = [
     { key: "Ctrl-Enter", run: runKey },
     { key: "Meta-Enter", run: runKey },
   ]),
-  // a held Ctrl/Cmd+Enter runs once, as a held Ctrl/Cmd+S saves once: its repeats do nothing (no second run, no toast)
+  // a held Ctrl/Cmd+Enter runs once: its repeats do nothing (no second run, no toast)
   Prec.highest(
     EditorView.domEventHandlers({
       keydown: (e) => {
@@ -195,8 +160,8 @@ function openText(path: string | null): string | null {
 /** The active tab's path when it is a text tab the editor has. */
 const activeText = (): string | null => openText(activeTab.value);
 
-/** Send a run. `keyed`: Ctrl/Cmd+Enter, which has no disabled button to show that Run is off, so a run the engine does
- *  not take (run.ts requestRun: refused) says why in a toast, in the words of the engine's state (words.ts). */
+/** Send a run. A `keyed` run (Ctrl/Cmd+Enter) has no disabled button to show that Run is off, so one the engine does
+ *  not take (requestRun: refused) says why in a toast. */
 function start(code: string, head: RunHead, keyed: boolean) {
   codeOf.set(head, code);
   if (requestRun(code, head).how !== "refused" || !keyed) return;
@@ -204,7 +169,7 @@ function start(code: string, head: RunHead, keyed: boolean) {
   if (words) showToast(words, "error");
 }
 
-/** Run a whole file: `at`, or the active tab (the reset banner's "Run the file again" names the file whose run it cut). */
+/** Run a whole file: `at` (the reset banner's "Run the file again" names the file whose run it cut), or the active tab. */
 function runFile(keyed = false, at?: string) {
   const path = at === undefined ? activeText() : openText(at);
   if (!path) {
@@ -223,12 +188,11 @@ function runSelection(keyed = false) {
   start(code, { kind: "selection", path, lines, fresh_locals: false }, keyed);
 }
 
-/** Ctrl/Cmd+Enter: with no engine, what the "Start engine" button does (start.ts; where it can do nothing, a toast says
- *  why); else Run selection with a selection, else Run (the toolbar's chip says which). */
+/** Ctrl/Cmd+Enter: with no engine, what the "Start engine" button does (where it can do nothing, a toast says why); else
+ *  Run selection with a selection, else Run. It runs nothing when it starts the engine, even once the engine is ready. */
 function runEither() {
   const offer = startEngine();
   if (offer !== null) {
-    // where nothing can start the engine from here, say so (words.ts has words for each such state)
     const words = offer === "off" ? refusedRunWords(engine.value.s) : null;
     if (words) showToast(words, "error");
     return;
@@ -237,8 +201,8 @@ function runEither() {
   else runFile(true);
 }
 
-// The run's marks: a selection run's lines while it runs; the file's error line (editor/errormark.ts says the rule). Each
-// effect depends on its one signal (`engine`, `lastRun`) and on nothing it reads while it marks: `shown` above all, or a
+// The run's marks: a selection run's lines while it runs, and the file's error line (errormark.ts has the rule). Each
+// effect depends on its one signal (`engine`, `lastRun`) and on nothing it reads while it marks, `shown` above all: a
 // tab switch would place the error again at the run's line number, not where its text has moved since.
 let marked: { head: RunHead; path: string } | null = null;
 function followRuns() {
@@ -270,10 +234,9 @@ function markErrors({ clear, set }: MarkChange) {
 // ---- save ----
 
 // The saves in progress, each with the path its tab has now: renamed() moves it and closed() ends it (null). A save
-// writes in its turn (files/actions.ts fileTurn), after a rename or a delete pressed before it has moved or closed the
-// tab, under the tab's path then (closed: nothing is written). One that answers after its tab was renamed leaves its
-// outcome on the tab (the saved text, the form, the dot, the banners, the toast), not under the old name. The store has
-// the bytes under the new name: its rename is called after the write (the turn ends once the write is issued).
+// writes in its turn (fileTurn), under the tab's path then, so a rename or delete pressed before it is honoured (closed:
+// nothing is written). A save that answers after a rename leaves its outcome on the tab under the new name; the store
+// has the bytes there too, as its rename is called after the write is issued.
 const saving = new Set<{ path: string | null }>();
 
 async function save(path: string | undefined = activeTab.value ?? undefined): Promise<boolean> {
@@ -313,7 +276,7 @@ async function save(path: string | undefined = activeTab.value ?? undefined): Pr
   return true;
 }
 
-// ---- what 4a calls ----
+// ---- what the file list calls ----
 
 function open(path: string, file: string) {
   const text = editorText(file); // the saved text as the editor holds it, so it compares with the document
@@ -336,26 +299,24 @@ function reload(path: string, file: string) {
     selection.value = null;
   }
   setDirty(path, false);
-  // the editor has the store's text again: neither a run's banner nor a failed save's (its edits are gone) applies
+  // the editor has the store's text again: neither a run's banner nor a failed save's applies
   for (const b of banners.value) if ((b.b === "run-changed" || b.b === "save-failed") && b.path === path) dismiss(b);
 }
 
 function ranOver(path: string, text: string | null): "same" | "shown" | "kept" {
   const st = current(path);
   if (!st) return "same";
-  // editor/ranover.ts decides, on the texts as the editor holds them (line breaks as "\n")
   const r = followRun(st.doc.toString(), savedText.get(path) ?? null, text);
   if (r.t === "same") return "same"; // rewritten with the same text: nothing changes
   savedText.set(path, text === null ? null : editorText(text));
-  // the run's rows are now the saved ones: their form with them (not when the run wrote the editor's own rows, which
-  // changes nothing the tab shows, or something that is not text)
+  // the run's rows are now the saved ones, and their form with them (not when the run wrote the editor's own rows, or
+  // something that is not text)
   if (text !== null && (r.t === "shown" || r.dirty)) forms.set(path, formOf(text));
-  // no unsaved edits: the run's text, changed in one transaction where the two differ, so the caret, the selection and
-  // the undo history are kept
+  // no unsaved edits: change only where the texts differ, so the caret, the selection and the undo history are kept
   if (r.t === "shown") update(path, { changes: { from: r.from, to: r.to, insert: r.insert } });
   const dirty = r.t === "kept" && r.dirty;
   setDirty(path, dirty);
-  // the editor now has the run's version: an earlier run's banner (one that was not text, say) no longer applies
+  // an earlier run's banner (one that was not text, say) no longer applies
   if (!dirty) for (const b of banners.value) if (b.b === "run-changed" && b.path === path) dismiss(b);
   return r.t === "shown" ? "shown" : dirty ? "kept" : "same";
 }
@@ -372,8 +333,7 @@ function renamed(from: string, to: string) {
   states.set(to, next);
   savedText.set(to, savedText.has(from) ? savedText.get(from)! : "");
   savedText.delete(from);
-  // its form goes with it, the noted BOM too (the store's version has it unless a Save under a do-file name dropped
-  // it): the new name decides at the next Save whether it is written (dropsBom)
+  // its form goes with it, the BOM too: the new name decides at the next Save whether the BOM is written (dropsBom)
   forms.set(to, forms.get(from) ?? PLAIN);
   forms.delete(from);
   // its banners follow it
@@ -390,7 +350,7 @@ function renamed(from: string, to: string) {
   }
   if (marked?.path === from) marked = { ...marked, path: to };
   for (const at of saving) if (at.path === from) at.path = to; // a save in progress answers for the new name
-  // 4a changes `activeTab` before it calls this: the editor then had no state for the new path and showed none
+  // `activeTab` changes before this is called: the editor then had no state for the new path and showed none
   if (activeText() === to && shown.value !== to) show(to);
 }
 
@@ -412,10 +372,10 @@ function closed(path: string) {
 async function goToLine(line: number, path: string | undefined = activeTab.value ?? undefined) {
   if (!path) return;
   await openFile(path); // opens it, or only makes it the active tab (and the Editor view on a phone)
-  editorAsked.value = { path, line }; // taken once the page has drawn it (Editor)
+  editorAsked.value = { path, line }; // taken once the page has drawn it
 }
 
-/** Take a request in `editorAsked`, from the Editor's render: Go to line in the file shown, or the editor's focus. */
+/** Take a request in `editorAsked`, from Editor's render: Go to line in the file shown, or the editor's focus. */
 function takeAsk(ask: { path?: string; line?: number }) {
   editorAsked.value = null;
   if (ask.line === undefined) return focus();
@@ -426,13 +386,14 @@ function takeAsk(ask: { path?: string; line?: number }) {
   view.focus();
 }
 
-/** Put the focus in the editor, at once, without changing the active tab or the phone's view:
- *  - a text tab shown: CodeMirror's content (`[data-editor]`);
- *  - no tab open: the empty view, "No file is open" (`[data-editor]` then);
- *  - a .dta tab active (no editor shows): its tab in "Open files" when that is shown, else the first enabled button of
- *    its view (Load); the focus is then not in `[data-editor]`, and when neither is shown it does not move;
- *  - the Editor pane hidden (a phone on another view): the focus does not move (no check here: the same element is
- *    focused, and the browser focuses none under `display: none`). */
+/** Put the focus in the editor, at once, without changing the active tab or the phone's view. `[data-editor]` marks the
+ *  element that takes it:
+ *  - a text tab shown: CodeMirror's content;
+ *  - no tab open: the empty view;
+ *  - a .dta tab active: its tab in "Open files" when that is shown, else the first enabled button of its view (Load);
+ *    neither is `[data-editor]`, and when neither is shown the focus does not move;
+ *  - the Editor pane hidden (a phone on another view): the focus does not move, as the browser focuses nothing under
+ *    `display: none`. */
 function focus() {
   if (view && shown.value) {
     view.focus();
@@ -449,8 +410,9 @@ function focus() {
   [tab, button].find(seen)?.focus();
 }
 
-/** Ctrl/Cmd+S anywhere on the page saves the active tab, once while the key is held (each repeat is only kept from the
- *  browser's own Save page). With a dialog open it only keeps the browser's Save page away. */
+/** Ctrl/Cmd+S anywhere on the page, the editor too, saves the active tab, once while the key is held. With a dialog open
+ *  it saves nothing, so no Save begins behind a dialog that is about to decide what happens to the file. Not
+ *  CodeMirror's "Mod-s": Mod is Cmd alone on Apple devices, where Ctrl+S in the editor was swallowed and saved nothing. */
 function onKey(e: KeyboardEvent) {
   if (isRunKey(e)) return onRunKey(e);
   if (!isSaveKey(e)) return;
@@ -469,9 +431,8 @@ function isTextEntry(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.isContentEditable;
 }
 
-/** Ctrl/Cmd+Enter anywhere on the page does what the toolbar's Run does (runEither). Not with a dialog open, and not when
- *  the focus is in another text field (the command line, a rename field, Find in the log), which keeps the key. In the
- *  editor CodeMirror's keymap has run it already and marked the event handled. A held key runs once. */
+/** Ctrl/Cmd+Enter anywhere on the page does what the toolbar's Run does (runEither). Not with a dialog open, and not in
+ *  another text field, which keeps the key. In the editor CodeMirror's keymap has run it already. A held key runs once. */
 function onRunKey(e: KeyboardEvent) {
   if (e.defaultPrevented || e.isComposing || dialog.value) return;
   if (openMenuState.value) return e.preventDefault(); // an open menu: nothing runs, and its focused item is not picked
@@ -498,13 +459,13 @@ function mount(host: HTMLElement, emptyView: HTMLElement) {
   };
   const stops = [
     effect(() => {
-      // the active tab (reading `tabs` too: a tab that became a .dta, or closed)
+      // reads `tabs` too, for a tab that became a .dta or closed
       show(activeText());
     }),
     effect(followRuns),
     effect(followErrors),
     effect(() => {
-      // the preference, for every open text tab (a hidden tab's state is updated too)
+      // the "Wrap lines" preference, for hidden tabs' states too
       const ext = wrapExt();
       untracked(() => {
         for (const path of states.keys()) update(path, { effects: wrapping.reconfigure(ext) });

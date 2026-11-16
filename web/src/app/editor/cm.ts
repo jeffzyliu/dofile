@@ -1,8 +1,5 @@
 // The editor's CodeMirror pieces (SPEC 3.3 and 3.11): the highlighting of each kind of file, the line marks, and the
-// guard that leaves a file drop to the page. Editor.tsx puts them together. The class names are ui.css's and app.css's
-// (step 4b's block): tokens .k .s .c .m .num; line marks .cm-sel-line, .cm-run-line, .cm-err-line and their gutter
-// numbers .cm-run-n, .cm-err-n; a .csv's columns .csv-c0 to .csv-c4 and .csv-d; a .log's lines .lg-echo, .lg-err,
-// .lg-hint, .lg-note.
+// guard that leaves a file drop to the page. The class names are in ui.css and app.css.
 import { json } from "@codemirror/lang-json";
 import { markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -89,7 +86,7 @@ const csvColumns = (sep: "," | "\t") =>
     }
   });
 
-/** The line kinds of a .log (log/classify.ts), over the whole text, since a message is known by the line under it. */
+/** The line kinds of a .log (log/classify.ts), over the whole text: a message is known by the line under it. */
 const LOG_LINE = {
   echo: Decoration.line({ class: "lg-echo" }),
   err: Decoration.line({ class: "lg-err" }),
@@ -111,8 +108,7 @@ function logDecorations(state: EditorState): DecorationSet {
 
 /** In a Stata buffer, typed curly quotes (a phone's Smart Punctuation) become straight ones. `beforeinput`'s type says
  *  whether the keyboard typed the text or replaced a word (never a paste or a drop, which CodeMirror's own handlers take),
- *  and a change that replaces text with a curly quote in it is left alone. CodeMirror's content already says
- *  autocorrect="off", spellcheck="false", autocapitalize="off" and writingsuggestions="false". */
+ *  and a change that replaces text with a curly quote in it is left alone. */
 const straightTyping: Extension = (() => {
   let kind = "";
   return [
@@ -224,7 +220,7 @@ export const lineMarksField = StateField.define<Marks>({
   ],
 });
 
-/** The whole lines of the selection, tinted (SPEC 3.3: selected, the soft accent). */
+/** The whole lines of the selection, tinted. */
 const SEL = Decoration.line({ class: "cm-sel-line" });
 export const selectedLines = EditorView.decorations.compute(["selection", "doc"], (state) => {
   const lines = wholeLines(state);
@@ -234,7 +230,7 @@ export const selectedLines = EditorView.decorations.compute(["selection", "doc"]
   return b.finish();
 });
 
-/** The selected lines, 1-based and whole (OQ-21), or null with no selection. A selection that ends at the start of a
+/** The selected lines, 1-based and whole, or null with no selection. A selection that ends at the start of a
  *  line (lines picked by dragging down the margin, or Shift+Down) does not take that line. */
 export function wholeLines(state: EditorState): [number, number] | null {
   const r = state.selection.main;
@@ -247,8 +243,8 @@ export function wholeLines(state: EditorState): [number, number] | null {
 
 // ---- a file drop is the page's ----
 
-/** A drop of files anywhere uploads them (4a: window listeners in the capture phase). CodeMirror would also insert a
- *  dropped file's text: it is told the drop is handled. A drag of text inside the editor still works. */
+/** A drop of files anywhere uploads them (window listeners in the capture phase). CodeMirror would also insert a
+ *  dropped file's text, so it is told the drop is handled. A drag of text inside the editor still works. */
 export const leaveFileDrops = EditorView.domEventHandlers({
   drop: (e) => Boolean(e.dataTransfer?.types.includes("Files")),
   dragover: (e) => Boolean(e.dataTransfer?.types.includes("Files")),

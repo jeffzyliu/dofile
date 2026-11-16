@@ -1,12 +1,6 @@
 // The status bar (docs/design/SPEC.md, sections 3.6 and 5). Not a live region: say() in state.ts announces changes.
-// Left to right: the state's dot and words, with its timer ("Running lines 14–15 · 3.4 s", "Stopping · resets in 4 s",
-// the start's stage and its seconds), the run's time while Break waits; when ready, the last run (`lastRun`: "Last
-// run: whole file (started with no locals) · r(111) at line 17 · 0.38 s", the rc in the error color); "Engine memory 612 MB"
-// (`memory`, the last measured value, also during a run: OQ-8); then at the right "You can edit and upload while it
-// starts" while it starts, else "Files are kept in this browser" or "Files may be cleared by this browser"
-// (`persisted`; nothing while it is unknown), with "Not affiliated with StataCorp" before it (LICENSE-POLICY.md's
-// sentence in full for screen readers and as its title; muted text, no link, no tab stop; from 1200 px only, app.css:
-// under it the bar has no room for it beside the longest last run). The timers count with editor/clock.ts.
+// "Not affiliated with StataCorp" shows from 1200 px only (app.css): under it the bar has no room for it beside the
+// longest last run. Screen readers get the full sentence (AFFILIATION).
 import type { ComponentChildren } from "preact";
 import { stageStatus, stagesOf } from "../engine.ts";
 import { snapshotStart } from "../env";
@@ -20,9 +14,9 @@ const lines = (l?: [number, number]) => (l ? ` ${linesWords(l)}` : "");
 /** LICENSE-POLICY.md's sentence; the status bar shows it short. */
 export const AFFILIATION = "Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.";
 
-/** The state's words: the bold word, then the rest, with its timer. One case for each of the sixteen states: a new state
- *  fails the check until it has its words. The page load (`checking-lock`, `checking-cache`) is "Loading": a word for
- *  the moment before the page knows whether the engine is there (a draft; the spec left it to step 4b). */
+/** The state's words: the bold word, then the rest, with its timer. One case for each state: a new state fails the
+ *  type check until it has its words. The page load (`checking-lock`, `checking-cache`) is "Loading", for the moment
+ *  before the page knows whether the engine is there. */
 export function stateWords(st: EngineState): [ComponentChildren, ComponentChildren] {
   switch (st.s) {
     case "checking-lock":

@@ -1,36 +1,16 @@
 // The Log pane's foot and head actions, and the phone's strip (docs/design/SPEC.md, sections 3.5 and 3.6).
-//  - CommandLine (.cmdline): prompt ".", the input aria-label="Command" (placeholder "Type a command · ↑ ↓ for earlier
-//    ones"; phone: "Type a command"), "Run command" (a text button; on a phone a compact icon button, .send, that keeps
-//    the field's focus so the keyboard stays open, and has aria-disabled while the field is empty). Typed curly quotes
-//    and the em dash become ' " and -- (stata/straighten.ts; a paste is left as pasted). Enter
-//    runs through run.ts's runCommand(text): when the command runs ("started") the field clears; when it does not
-//    ("refused": the page load, a start or a run in progress) the text stays. ↑ ↓ recall `history`, and ↓ past the
-//    newest gives back what was being typed. On a phone it shows on the Log view only (App.tsx).
-//    While the engine is there or on its way but not `ready` (the page load, a start, a run) the field stays on, so a
-//    draft can be typed; the button is off, and Enter, or a press of the off button, says why in a toast (the words
-//    Ctrl/Cmd+Enter gives: editor/words.ts refusedRunWords).
-//    With no engine (start.ts) the field is off and keeps its text, which is usable again when the engine is back;
-//    empty, it shows the hint "Start the engine to run code", and Enter in it says the hint in a toast. The button is
-//    then "Start engine" (start.ts startEngine: the download prompt, a new try after a failed start, the take-over
-//    dialog), in words on a phone too, so it is wider there than the icon; no width is reserved for it, and the field
-//    takes what is left.
+//  - CommandLine: Enter runs the field through runCommand; when the command is "started" the field clears, when it is
+//    "refused" the text stays and a toast says why. ↑ ↓ recall `history`, and ↓ past the newest gives back what was
+//    being typed. The field stays on while the engine is on its way but not `ready`, so a draft can be typed; the
+//    button is off. With no engine the field is off and keeps its text, and the button is "Start engine".
 //    Nothing here is ever `disabled`: an off field is aria-disabled and read-only, an off button aria-disabled and
 //    `.off`. A disabled element loses the focus to the page, and the states change under the visitor's hands (a start
 //    that fails while a command is typed; "Start engine" pressed, which becomes the off "Run command" in its place).
-//    Pasted text with line breaks runs each line in turn (log/paste.ts says the rules: the next line only once the one
-//    before has ended; the lines stop at one that does not run or ends with an error, and before a block's line; a toast
-//    says how many were not run; a line that did not run goes back into the field). What a paste does is decided before
-//    anything changes (log/pasterun.ts pastePlan): with no engine it is an ordinary paste; with an engine that is not
-//    `ready` it is refused whole, the field untouched, with the toast; no line is put back into an off field (putBack).
-//  - LogActions: the Log head's "Find" (log/find.ts) and "Download log" (the runs' text only, as dofile.log; no head,
-//    run-head or note) and "Clear…" (asks first: ClearLogDialog; disabled when canClearLog() is false). It draws both forms: the three links (.log-link) and one "Log actions" ⋯ menu button
-//    (.log-more, logMenuItems()); ui.css shows one by a container query on the head's width (the unsplit head, .tabbed, only: the
-//    split layout's Log head always has room), so the tabs are never clipped.
-//    App.tsx adds Split / Unsplit after them, always visible (icon and word; the word goes first when the head is very narrow). The phone hides the Log head, so the same logMenuItems()
-//    are the phone's "Log ⋯" button in the strip, shown on the Log view.
-//  - PhoneStrip: under the phone's top bar (PH), on every view (the phone has no status bar): after a run "r(111)",
-//    "line 17 · 0.38 s", "Engine 612 MB", "Go to line 17"; while running "Running lines 14–15", "Engine 612 MB"; otherwise the
-//    state's words (the status bar's). Its children go at its right end (App.tsx: "Files ⋯" on the Files view, "Log ⋯" on the Log view).
+//  - LogActions: the Log head's three links (.log-link) and one "Log actions" ⋯ menu button (.log-more); ui.css shows
+//    one by a container query on the head's width (the unsplit head only), so the tabs are never clipped. The phone
+//    hides the Log head, so the same logMenuItems() are the "Log ⋯" button in its strip.
+//  - PhoneStrip: under the phone's top bar, on every view (the phone has no status bar): the last run, or the state's
+//    words. Its children go at its right end.
 import { signal } from "@preact/signals-core";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
@@ -51,7 +31,7 @@ import { openFind } from "./LogView";
 import { inTurnWords, runInTurn } from "./paste.ts";
 import { pastePlan, putBack, runOne } from "./pasterun.ts";
 
-const field = signal(""); // the command line's text (a signal: the pane may be drawn again when the layout changes)
+const field = signal(""); // the command line's text; a signal, as the pane may be drawn again when the layout changes
 let recall = -1; // the history entry ↑ ↓ show, or -1 for the text being typed
 let typed = ""; // what was being typed before ↑
 
@@ -63,7 +43,7 @@ async function runPasted(lines: string[]) {
   if (words) showToast(words, "error");
 }
 
-/** Why the engine takes no command now, in a toast (the words Ctrl/Cmd+Enter gives in the editor). */
+/** Why the engine takes no command now, in a toast. */
 function sayRefused() {
   const words = refusedRunWords(engine.value.s);
   if (words) showToast(words, "error");
@@ -82,11 +62,11 @@ export function CommandLine() {
   const input = useRef<HTMLInputElement>(null);
   const phone = isPhone.value;
   const offer = startOffer(engine.value); // not null: no engine, so the field is off and the button starts the engine
-  const busy = offer === null && engine.value.s !== "ready"; // an engine that takes no command now: the button is off
+  const busy = offer === null && engine.value.s !== "ready"; // the engine takes no command now: the button is off
   const onKey = (e: KeyboardEvent) => {
     const list = history.value;
     if (offer !== null) {
-      // the field is off (read-only): no key changes it, and Enter says what its hint says
+      // read-only: no key changes it, and Enter says what its hint says
       if (e.key === "Enter" && !e.isComposing) {
         e.preventDefault();
         if (!e.repeat) showToast(startHint(offer), "error");
@@ -114,7 +94,7 @@ export function CommandLine() {
     }
   };
   // Typed text only (not a paste or a drop, and not what is already in the field): a phone's Smart Punctuation makes
-  // curly quotes and dashes of what was typed, which Stata-syntax code cannot use (stata/straighten.ts).
+  // curly quotes and dashes of it, which Stata-syntax code cannot use.
   const onInput = (e: Event) => {
     const el = e.currentTarget as HTMLInputElement;
     const ie = e as InputEvent;
@@ -147,9 +127,8 @@ export function CommandLine() {
     recall = -1;
     if (plan.lines.length) runPasted(plan.lines);
   };
-  // on a phone a tap on the unfocused field focuses it here, with preventScroll, instead of the browser's own focus: that
-  // scrolls the page up to the field, which iOS does before the page can stop it (app/viewport.ts); with
-  // preventScroll it does not. The caret goes to the end
+  // On a phone a tap on the unfocused field focuses it here, with preventScroll: the browser's own focus scrolls the
+  // page up to the field, which iOS does before the page can stop it (app/viewport.ts). The caret goes to the end.
   const onTouchEnd = (e: TouchEvent) => {
     const el = input.current;
     if (!el || document.activeElement === el) return;
@@ -176,8 +155,8 @@ export function CommandLine() {
         autocomplete="off"
         autocapitalize="off"
         // autoCorrect, not autocorrect: Preact sets a prop the element has as a property, and where a browser has
-        // `autocorrect` (Safari, Firefox) it is a boolean, so the string "off" would turn it on; this spelling is no
-        // property, so it is set as the attribute (HTML lowercases the name). The other fields do the same.
+        // `autocorrect` (Safari, Firefox) it is a boolean, so the string "off" would turn it on. This spelling is no
+        // property, so it is set as the attribute (HTML lowercases the name).
         autoCorrect="off"
         spellcheck={false}
         enterKeyHint="go"
@@ -192,7 +171,7 @@ export function CommandLine() {
         onTouchEnd={phone ? onTouchEnd : undefined}
       />
       {offer !== null ? (
-        // No engine: the one action is to start it. In words on a phone too (wider than the icon; the field shrinks).
+        // No engine: the one action is to start it, in words on a phone too (wider than the icon; the field shrinks).
         // Where nothing can start it from here it is off, and a press says so.
         <button
           type="button"
@@ -247,7 +226,7 @@ function downloadLog() {
   saveAs(new Blob([plainLog(log.value)], { type: "text/plain" }), "dofile.log");
 }
 
-/** "Clear log…" asks first (ClearLogDialog): the log and the graphs cannot be brought back. */
+/** Asks first (ClearLogDialog): the log and the graphs cannot be brought back. */
 const askClearLog = () => {
   dialog.value = { d: "clear-log" };
 };
@@ -275,8 +254,7 @@ export const LogActions = () => (
   </>
 );
 
-/** The Log head's actions as menu items, in the head's order (as LogActions does them): the phone's "Log ⋯" button in the
- *  strip, since the phone hides the Log head. */
+/** The Log head's actions as menu items, in the head's order. */
 export const logMenuItems = (): MenuItem[] => [
   { label: "Find", onSelect: () => openFind(null) },
   { label: "Download log", onSelect: downloadLog },

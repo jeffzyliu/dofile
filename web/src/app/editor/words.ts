@@ -1,6 +1,5 @@
-// The words of the run-head, the status bar, the phone's strip and the Break pill (SPEC 3.4 to 3.6 and 4). Plain
-// TypeScript, no DOM: tested in Node (test/editor.test.ts). Text in quotes in the spec is used as it is; where it gives
-// none, the words here are drafts for the maintainer (SPEC section 8, "As built in step 4b").
+// The words of the run-head, the status bar, the phone's strip and the Break pill (SPEC 3.4 to 3.6 and 4). Text in
+// quotes in the spec is used as it is; where it gives none, the words here are drafts. No DOM, so Node tests it.
 import type { EngineState, LastRun, Memory, RunHead } from "../types.ts";
 
 /** "line 6" or "lines 6–7". */
@@ -28,7 +27,7 @@ export function pillTime(s: number): string {
 }
 export const PILL_WIDEST = "88 min";
 
-/** The run-head (section 4): the bold word, then the rest. On a phone a selection's head leaves out the file (PH?r). */
+/** The run-head (SPEC section 4): the bold word, then the rest. On a phone a selection's head leaves out the file. */
 export function runheadWords(head: RunHead, first: boolean, phone: boolean): [string, string] {
   if (head.kind === "file") return ["Run", `: ${head.path ?? "the file"}, whole file · starts with no locals`];
   const where = head.lines ? linesWords(head.lines) : "the selection";
@@ -39,9 +38,8 @@ export function runheadWords(head: RunHead, first: boolean, phone: boolean): [st
   ];
 }
 
-/** The status bar's last run, in pieces (E, S 10): "Last run: " + what, then rc (in the error color) and where, then
- *  the time. "whole file (started with no locals)" and "stopped by Break" are drawn; a selection's and a command's words
- *  are drafts. */
+/** The status bar's last run, in pieces (SPEC section 10): "Last run: " + what, then rc (in the error color) and where,
+ *  then the time. */
 export function lastRunWords(r: LastRun): { what: string; rc: string | null; where: string | null; time: string } {
   const what =
     r.rc === 1
@@ -66,11 +64,10 @@ export const memoryWords = (m: Memory, short = false) =>
 export const jumpLine = (r: LastRun): number | null =>
   r.rc !== 0 && r.line !== null && r.kind !== "command" && r.path ? r.line : null;
 
-/** The toast when Ctrl/Cmd+Enter in the editor asks for a run the engine does not take, by the state, as the status bar
- *  picks its words (drafts for the maintainer, from the Run button's own: SPEC section 8). null where the key does
- *  something: `ready` runs, and with no engine it does what "Start engine" does (`none`, `asking`, `declined`: the
- *  download prompt; `other-tab-idle`: the take-over dialog; a `failed` start that can be tried again is tried, and one
- *  that cannot has the words below). */
+/** The toast when Ctrl/Cmd+Enter, or a press of the disabled Run, asks for a run the engine does not take. null where
+ *  the key does something: `ready` runs, and with no engine it does what "Start engine" does (`none`, `asking`,
+ *  `declined`: the download prompt; `other-tab-idle`: the take-over dialog; a `failed` start that can be tried again is
+ *  tried, and one that cannot has the words below). */
 export function refusedRunWords(s: EngineState["s"]): string | null {
   switch (s) {
     case "ready":
@@ -96,5 +93,5 @@ export function refusedRunWords(s: EngineState["s"]): string | null {
   }
 }
 
-/** The tooltip of the memory label. Draft words. */
+/** The tooltip of the memory label. */
 export const memoryTitle = "Memory the engine has reserved. A browser gives it back only when the engine restarts.";

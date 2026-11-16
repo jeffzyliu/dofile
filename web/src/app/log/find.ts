@@ -1,8 +1,7 @@
-// The Log head's "Find" (OQ-16 left its behavior open; step 4b's choice): a field over the log, "Find in the log". Each
-// match of its text (case ignored) is marked; Enter goes to the next one, Shift+Enter to the one before, and the field
-// says "2 of 5". Esc closes it and gives the focus back to what opened it. It searches what the log shows of the runs
-// (the head, run-heads and the page's notes too), one line at a time. The view's state, as signals, since the Log pane
-// may be drawn again when the layout changes. Plain TypeScript: tested in Node (test/editor.test.ts).
+// The Log head's "Find": a field over the log. Each match of its text (case ignored) is marked; Enter goes to the next
+// one, Shift+Enter to the one before, and the field says "2 of 5". It searches what the log shows (the head, run-heads
+// and the page's notes too), one line at a time. The state is signals, since the Log pane may be drawn again when the
+// layout changes.
 import { signal } from "@preact/signals-core";
 
 export const findOpen = signal(false);

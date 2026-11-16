@@ -1,15 +1,13 @@
-// The error mark of a file (the red bar and tint on a line): the rule, in one place (the join of step 4, on the coordinator's
-// word; the maintainer may change it here). The mark belongs to the file's last run:
+// The error mark of a file (the red bar and tint on a line): the rule, in one place. The mark belongs to the file's last run:
 //  - set when a run of that file (whole or a selection) ends with an error on a line (any rc but 0 and Break's 1);
-//  - cleared when a new run of that same file starts, when the engine is reset or restarted (the effect engine-gone sets
-//    `lastRun` to null, which clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no
-//    line, so no mark comes back), and when the marked line is deleted;
-//  - it moves with edits (editor/cm.ts maps it through the changes);
-//  - it lives in the tab's editor state, so it goes when the tab closes (a file opened again has none), and it stays
-//    with a tab that is renamed (a reload of the store's text, a new state, has none); nothing keeps it apart from the tab;
+//  - cleared when a new run of that same file starts, when the engine is reset or restarted (`lastRun` becomes null,
+//    which clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line, so no mark
+//    comes back), and when the marked line is deleted;
+//  - it moves with edits (cm.ts maps it through the changes);
+//  - it lives in the tab's editor state: it goes when the tab closes, stays through a rename, and a reload (a new
+//    state) clears it;
 //  - a command-line command and a run of another file leave it alone.
-// Plain TypeScript with no DOM (only @codemirror/state's types), tested in Node (test/editor.test.ts). Editor.tsx applies
-// what these answer.
+// No DOM (only @codemirror/state's types), so Node tests it. Editor.tsx applies what these answer.
 import { type ChangeSet, MapMode, type Text } from "@codemirror/state";
 import type { LastRun, RunHead } from "../types.ts";
 
