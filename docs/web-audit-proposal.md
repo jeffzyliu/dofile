@@ -9,8 +9,7 @@ the redesigns"), with R1 and R5 first. Section 8 lists what is decided and what 
 **How it was made.** A planning session (Fable 5.2) wrote it from ten read-only survey reports, then revised it after a
 fresh-context review (verdict "accept after fixes"; all five must-fix and all should-fix findings are applied, and the
 revision itself was checked only by the planner). In this file "I" is the planner and "you" is the maintainer. The
-reports are working files and are not in the repository: on the maintainer's machine they are in
-`.claude/orchestrate/20261116-0411-web-audit-plan/reports/`.
+reports are in `docs/archive/web-audit-surveys/`, as written (01 to 10 the surveys, 11 the review of the first draft).
 
 **Baseline.** The surveys read `main` at 145a557. This text was then corrected against 65c5bd9, eleven commits later;
 those commits changed the lazy graphics part and nothing else under `web/src` (see "Since the surveys" below). Line
