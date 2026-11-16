@@ -260,6 +260,12 @@ and the bundle with brotli-wasm: warm ready 1.11 (1.10-1.11) against 0.86 (0.85-
 Firefox only) a graph 0.5 s after ready took 0.25 s and from 0.8 s about 0.10 s, against 0.53-0.56 s; at 0-0.2 s no
 change. Its cost to a non-graph run sent in that window, and its effect on phones, WebKit and Chromium, were not measured.
 
+Later measured on all three browsers (n = 5): `IDLE_MS` 250 against 1000, a graph sent 0.5-1.1 s after ready was
+0.3-0.5 s faster (Chromium, WebKit, Firefox), no change at 0-0.2 s; a non-graph run that meets an import step waits
+0.1-0.2 s at either value, only sooner. With the whole browser on a Mac's efficiency cores (worker about 5.7x slower),
+a graph took 3.2-3.5 s at every delay up to 1.5 s at both values, and the longest import step was 0.9-2.0 s.
+`IDLE_MS` became 250.
+
 ## 7. Never measured
 
 - Firefox throttled, and Firefox's memory (section 6 is unthrottled timing only).
