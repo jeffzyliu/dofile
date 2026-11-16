@@ -141,7 +141,7 @@ by no survey; W3 and W7 are their first read.
 | S4 | Output: the matrix and `.dta` readers into a `.ts` module with tests; one command bar, one variables table, one dismissible banner. | M, med | 06-F5, F7, F13 |
 | S5 | Log and shell: `runText` becomes a tested pure function; scroll-follow in one hook that owns its scroll box; `CommandLine.tsx` split into its four jobs; state logic out of `App.tsx` (after S1: both edit `state.ts`). | M + S + S, med | 05-F6, F8, F10, F13, F14 |
 | S6 | Shared UI: one roving-key hook (the editor tabs onto `Tablist`); the full-size viewer onto the shared modal trap; focus targets through exported handles, not label selectors; owner functions for `dialog`, `phoneTab` and `activeTab`, including the engine controller's writes to `dialog`. | M + M, med | 06-F3, F4, F8, F12; 05-F4; 03-F7, F9; 01-F10 |
-| S7 | Transport: per-start facts onto the start record; the controller's module-level wiring and download handle. **Graphics half** (see "B and the two redesigns chosen first", section 4): the graphics part out of `client.ts` into its own module; the four hand-over tests in `client.test.ts` are its net. | M + M, med | 01-F2, F6, F9 |
+| S7 | Transport: per-start facts onto the start record; the controller's module-level wiring and download handle. **Graphics half** (see "What doing B first would waste", section 4): the graphics part out of `client.ts` into its own module; the four hand-over tests in `client.test.ts` are its net. | M + M, med | 01-F2, F6, F9 |
 | S8 | Worker: split into imported modules (the `/work` mirror with unit tests, boot and loader, a typed declarative dispatch). **Graphics half**: the graphics state into one object that owns it, along the seam `lazy-part.ts` started (decisions pure, `worker.ts` acts). A move, not a redesign. Imported modules are safe; separate chunks are not (iOS runs the worker twice). | M + M + S + M, med to high | 02-F4, F6, F7, F8, F13 |
 | S9 | Build: `scripts/lib` (argument parsing, the shard pool written three times, one `wheels()`); `vite.config.ts` split into plugin modules; **staging half**: file staging out of module load; every snapshot knob in the manifest; the two CI file lists generated from one table; `npm run commands` writes through a temp file; `wheel` stops deleting the release wheels in the root `dist/` and runs once per `e2e`; the denied-commands list generated, not parsed from `browser.py` by regex; `measure-startup.mjs` and `compare-pytest.mjs` moved or folded. If decision 8.2 is yes: delete the `DOFILE_EDITOR_BASE` mode in `vite.config.ts` (six branches), `urls.ts`, `site.test.ts` (five sites), the e2e reads and `measure-startup`, and SPEC section 8. | M + M + S, med | 10-F2 to F10 |
 
@@ -211,21 +211,38 @@ the two largest engine files are split along seams the code already marks.
 maintainer broadly agrees with every item in it, R1 and R5 first.** The other items keep their triggers: R2 if B3
 proves incomplete, R4 at the start of the later UI work, R3, R6 and R7 when a finding needs them.
 
-### B and the two redesigns chosen first
+### What doing B first would waste, by redesign
 
-R1 and R5 each replace a part of B: R1 the graphics halves of S7 and S8, R5 the staging half of S9. Doing those halves
-in B and the redesign after it does the same work twice. So, unless decided otherwise (decision 8.9):
+The maintainer wants every item of C done in the end. So the question for each is whether B does work that the redesign
+then throws away. "Waste" below counts builder items of B that the redesign redoes; the counts are estimates from the
+tables above. Where a survey gave its own order, it is quoted.
 
-- **B leaves the three halves out.** In B the lazy graphics code gets C3 (names) and the sweep W1, and no move. S9 does
-  everything but the staging move.
-- **R5 runs first after B, or inside B's build lane** in place of the staging half. Its code is stable. It needs a short
-  design note before it starts: every reader and writer of the staged files, the two CI lists, and what `npm run dev`
-  becomes.
-- **R1 runs when the lazy graphics part has stopped changing** (the idle-wait measurement was still open when this was
-  written). It needs a design note of its own, like S0: the table of states and events on both threads, read from the
-  code of that day.
+| id | Waste if B runs first | Why | Recommendation |
+|---|---|---|---|
+| R7 | **High: 4 to 5 items.** | S1 to S3 draw three controllers and split `files/actions.ts` four ways; R7 then redraws the same boundaries as one workspace module, and rewrites the new Node tests and the views' call sites a second time. Almost all of R7's cost exists only because B chose other boundaries first. | **Advance, as a decision and not as an item:** S0 decides the ownership R7 wants, and S1 to S3 are built to it. What is left of R7 is the split of `state.ts` by owner (one item, with S6). |
+| R1 | **Medium: 1 to 2 items, and a second pass over the riskiest code.** | The graphics halves of S7 and S8 move code that R1 restructures. The move is not lost (report 02: "a single object that owns its state" comes before a machine), but the code is reviewed and verified in browsers twice. | **Advance into B's engine lane, last**, in place of the two halves, once the part has stopped changing. A design note first. |
+| R5 | **Low to medium: 1 item.** | S9's staging half moves the staging out of module load; R5 moves it again, into a script. Report 10: "I would do it together with [the config split], not alone." | **Advance into S9**, in place of the staging half. |
+| R3, registry | **Low to medium: 1 item.** | S6 replaces label selectors with exported handles; the registry replaces the handles. Report 06 wants the registry "only after FilesPane is split", and S6 already runs after S3. | **Advance into S6**, in place of the handles. |
+| R3, DOM harness | None. | It adds tests and a dependency; B builds nothing it replaces. After B the views are thinner, so there is less to cover. | Later. |
+| R6 | Low. | N3 is R6's first stage by the survey's own design (report 08: before the view refactor "only the typing ... and the helper wrappers for the 25 signal writes; the observation uses can stay"). | Later, with one rule in B's briefs: an e2e read that a move breaks becomes a named helper in the hook; it is not repointed at the signal's new place. |
+| R2 | Low: under 1 item. | B3's page and worker edits are replaced by the ticket; its failing tests and the `browser.py` fix are kept and become R2's acceptance tests. Report 01: "Do it only if [the] simple variant proves incomplete." | Later. Advancing it puts the heaviest change to the machine's tests in the phase meant for small fixes. |
+| R4 | None; the other order wastes. | W6 deletes dead rules first, and S3 to S6 settle the components the sheets would be sorted by. Sorted before B, the sheets are sorted twice. | Later, at the start of the later UI work. |
 
-This takes about three builder items out of B and gives them to R1 and R5.
+**Recommendation: B plus R7 (through S0), R5, the registry half of R3, and R1 last.** That is about 45 to 47 builder
+items against B's 42, and it leaves about 10 for later (R2, the DOM harness, R4, the rest of R6). Doing B whole and then
+all of C is about 63: roughly 7 items done twice. The numbers are rough; the order of the rows is what I am confident
+of.
+
+Two cautions:
+- **R7's "command queue" must not be a queue per operation.** Report 03 argued against it: an upload's clash dialog
+  would hold every Save for as long as the visitor hesitates. The unit of order stays S2's turn (one write and its
+  follow-up). S0 settles this before S1 starts.
+- **R1's timing is not ours to set.** If the lazy graphics part is still changing when the engine lane reaches it, R1
+  runs first after B, and B still leaves the two halves out.
+
+One piece of R4 is worth more during B than after it: screenshots as a net for the view moves, which must change no
+pixel. Taken from `main` at the start of phase 2 and kept out of the repository, they need no baseline files and are not
+invalidated by the later UI work. One builder item; optional.
 
 ## 5. How to run it
 
@@ -330,9 +347,9 @@ Decided: 1. Open: 2 to 7 and 9. Item 8 is a list, not a question.
    - the phone toast arithmetic: only a real device can verify it;
    - the dark palette stated once: SPEC decision DS-6 already says "not now";
    - fewer e2e specs per browser: needs timings first.
-9. **Where R1 and R5 sit against B** (section 4, "B and the two redesigns chosen first"). B does not do the halves
-   they replace; R5 runs in B's build lane or first after B; R1 waits for the lazy graphics part to settle. I recommend
-   that, with R5 inside B's build lane. The other reading is to do B whole and redo those halves later.
+9. **Which redesigns move into B** (section 4, "What doing B first would waste"). I recommend: R7 through S0, R5 in
+   S9, the focus-target registry in S6, and R1 last in the engine lane once the lazy graphics part has settled; R2, the
+   DOM harness, R4 and the rest of R6 stay in the icebox. Also there: whether to take screenshots as a net for phase 2.
 
 ## 9. Not verified
 
