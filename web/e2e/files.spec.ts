@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, isPhone, putFiles, storedText, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { bannerOf, expect, isPhone, putFiles, storedText, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 import type { DofileHook } from "./hook";
 import { markDirty, openDialog } from "./seed";
 
@@ -72,7 +72,7 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect.poll(() => openTabs(page)).toEqual(["a.do"]);
   if (isPhone(page)) {
     // the phone shows the Editor view, titled with the file
-    await expect(page.locator(".topbar .title")).toContainText("a.do");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("a.do");
     await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
   } else {
     await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: "a.do" })).toHaveAttribute(
@@ -149,7 +149,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   await again();
   await ask.getByRole("button", { name: "Save", exact: true }).click();
   await expect(ask).toBeHidden();
-  await expect(page.locator(".banner", { hasText: "a.do couldn't be saved" })).toBeVisible();
+  await expect(bannerOf(page, "a.do couldn't be saved")).toBeVisible();
   expect(await openTabs(page)).toEqual(["a.do", "b.do"]);
   expect(await storedText(page, "a.do")).toBe("1\n");
   await page.evaluate(() => {
@@ -161,7 +161,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   await ask.getByRole("button", { name: "Save", exact: true }).click(); // the editor saves it, then the tab closes
   await expect(ask).toBeHidden();
   await expect.poll(() => openTabs(page)).toEqual(["b.do"]);
-  await expect(page.locator(".toast")).toHaveText("Saved a.do");
+  await expect(toastOf(page)).toHaveText("Saved a.do");
   // one move, once the file is written: to the tab now selected (the phone: the editor), not first back to a.do's tab
   if (!isPhone(page))
     await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: "b.do" })).toBeFocused();
@@ -979,7 +979,7 @@ test('the "+" twice from a folder\'s file row: both drafts are in the folder (th
   await row(page, /^c\.do/).click();
   await showFiles(page);
   await plus(page).click();
-  const field = page.locator("input.rename-field");
+  const field = page.getByRole("textbox", { name: /^New name for / });
   await expect(field).toBeFocused();
   expect(await levelOf(field)).toBe("2");
   // the store's write waits for the test, so the first draft is still not in the list at the second click, on every profile
@@ -1012,7 +1012,7 @@ test('the "+" after a typed name was written by leaving the field: the next draf
   await page.keyboard.type("x");
   await nameField(page, "untitled.do").blur(); // on a phone: a tap on the Log tab
   await expect.poll(() => storePaths(page)).toContain("data/x.do");
-  await expect(page.locator("input.rename-field")).toBeHidden(); // the draft is gone: one row matches x.do
+  await expect(page.getByRole("textbox", { name: /^New name for / })).toBeHidden(); // the draft is gone: one row matches x.do
   await expect(row(page, /^x\.do/)).toBeVisible();
   await showFiles(page);
   await plus(page).click();
@@ -1134,7 +1134,7 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
   await expect(second).toContainText("clash 2 of 3");
   await second.getByRole("checkbox", { name: "Do the same for the other clash" }).check();
   await second.getByRole("button", { name: "Replace with uploaded" }).click();
-  await expect(page.locator(".toast")).toHaveText("3 files uploaded");
+  await expect(toastOf(page)).toHaveText("3 files uploaded");
   expect(await Promise.all(["a.do", "b.do", "c.do", "new.do"].map((p) => storedText(page, p)))).toEqual([
     "old a",
     "new b.do",
@@ -1147,13 +1147,13 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
   await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toContainText("clash 1 of 2");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect(page.locator(".toast")).toHaveText("1 file uploaded"); // z.do; Esc kept a.do and b.do
+  await expect(toastOf(page)).toHaveText("1 file uploaded"); // z.do; Esc kept a.do and b.do
   expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["old a", "new b.do"]);
   // another dialog put over the question (another tab took the engine, say) unmounts it: that answers as Esc does
   await input.setInputFiles(["a.do", "b.do", "y.do", "y2.do"].map(again));
   await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toContainText("clash 1 of 2");
   await openDialog(page, { d: "delete", paths: ["c.do"] });
-  await expect(page.locator(".toast")).toHaveText("2 files uploaded"); // y.do and y2.do; both clashes kept
+  await expect(toastOf(page)).toHaveText("2 files uploaded"); // y.do and y2.do; both clashes kept
   const other = page.getByRole("alertdialog", { name: "Delete c.do?" });
   await expect(other).toBeVisible(); // the upload's end leaves the other dialog open
   await page.keyboard.press("Escape");
@@ -1170,7 +1170,7 @@ test("an upload of a file whose bytes are already stored is not asked about, and
   const dlg = page.getByRole("alertdialog", { name: "b.do is already here" });
   await expect(dlg).toContainText("clash 1 of 1 · the other file is uploaded.");
   await dlg.getByRole("button", { name: "Replace with uploaded" }).click();
-  await expect(page.locator(".toast")).toHaveText("2 files uploaded");
+  await expect(toastOf(page)).toHaveText("2 files uploaded");
   expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["same a", "new b"]);
 });
 
@@ -1292,7 +1292,7 @@ test("Upload a folder keeps its folders (Chromium: Playwright gives a folder to 
   writeFileSync(join(dir, "data", "w.csv"), "a\n1\n");
   await setUp(page, {});
   await page.locator('input[data-upload="folder"]').setInputFiles(dir);
-  await expect(page.locator(".toast")).toHaveText("2 files uploaded");
+  await expect(toastOf(page)).toHaveText("2 files uploaded");
   await expect(row(page, /^pkg\//)).toBeVisible();
   await expect(row(page, /^w\.csv/)).toHaveAttribute("aria-level", "3");
 });
@@ -1319,7 +1319,7 @@ test("a drop anywhere on the page: the Files pane is marked while a drag is over
   await fire("drop");
   await expect(pane).not.toHaveAttribute("data-drop");
   await expect(row(page, /^dropped\.do/)).toBeVisible();
-  await expect(page.locator(".toast")).toHaveText("1 file uploaded");
+  await expect(toastOf(page)).toHaveText("1 file uploaded");
   // the page's listener takes the drop in the capture phase: an element under it never sees it
   const seen = await page.evaluate(() => {
     let reached = false;
@@ -1547,5 +1547,5 @@ test("a new file named ../foo.do: Enter keeps the field open and says why; leavi
   expect(await storePaths(page)).toEqual(["data", "data/c.do"]);
   await row(page, /^c\.do/).click(); // leaving the field
   await expect.poll(() => storePaths(page)).toEqual(["data", "data/c.do", "data/untitled.do"]);
-  await expect(page.locator(".toast")).toHaveText("A name can't go up a folder (..). Made untitled.do instead.");
+  await expect(toastOf(page)).toHaveText("A name can't go up a folder (..). Made untitled.do instead.");
 });

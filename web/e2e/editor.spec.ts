@@ -4,7 +4,18 @@
 // engine start one per test.
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
-import { expect, isPhone, putFiles, ready, startEngine, storedText, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import {
+  bannerOf,
+  expect,
+  isPhone,
+  putFiles,
+  ready,
+  startEngine,
+  statusBar,
+  storedText,
+  test,
+  toastOf,
+} from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
   addBanner,
   clearToast,
@@ -57,7 +68,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
   await page.keyboard.type("display 2");
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(page.locator(".toast")).toHaveText("Saved a.do");
+  await expect(toastOf(page)).toHaveText("Saved a.do");
   expect(await storedText(page, "a.do")).toBe("display 1\ndisplay 2");
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
   // Ctrl+S and Cmd+S both save from the editor, on every platform (ControlOrMeta is the runner's OS's key, which an
@@ -171,7 +182,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await page.keyboard.press("Control+s");
   await page.keyboard.press("Meta+s");
   await expect(ask).toBeVisible();
-  await expect(page.locator(".toast")).toHaveCount(0);
+  await expect(toastOf(page)).toHaveCount(0);
   expect(await page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(true);
   expect(await storedText(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
   await page.keyboard.press("Escape"); // Cancel
@@ -222,7 +233,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await page.keyboard.type("display 4");
   await expect.poll(() => dirty("c.do")).toBe(true);
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(page.locator(".toast")).toHaveText("Saved c.do");
+  await expect(toastOf(page)).toHaveText("Saved c.do");
   expect(await storedText(page, "c.do")).toBe("display 1\r\ndisplay 2\r\ndisplay 3\r\ndisplay 4");
   await expect.poll(() => dirty("c.do")).toBe(false);
   // the saved text is compared in the editor's form: an edit taken back is clean again
@@ -269,7 +280,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await page.keyboard.type("c");
   await page.keyboard.press("Enter");
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(page.locator(".toast")).toHaveText("Saved n.csv");
+  await expect(toastOf(page)).toHaveText("Saved n.csv");
   expect(await storedText(page, "n.csv")).toBe("a\nb\nc\n");
   await expect.poll(() => dirty("n.csv")).toBe(false);
 
@@ -286,7 +297,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type("3,4");
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(page.locator(".toast")).toHaveText("Saved b.csv");
+  await expect(toastOf(page)).toHaveText("Saved b.csv");
   // the bytes as stored, decoded with a BOM kept as "\uFEFF"
   const bytes = async (path: string) =>
     Buffer.from(await page.evaluate(async (p) => [...(await window.__dofile.store.read(p))], path)).toString("utf8");
@@ -318,18 +329,18 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type("display 2");
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(page.locator(".toast")).toHaveText("Saved e.do");
+  await expect(toastOf(page)).toHaveText("Saved e.do");
   expect(await bytes("e.do")).toBe("display 1\r\ndisplay 2");
   // renamed, a file follows its new name at the next Save: e.do, saved without its BOM, stays without as e.txt; b.csv,
   // saved with it, loses it as f.do
   await rename("e.do", "e.txt");
   await page.keyboard.press("ControlOrMeta+s"); // the active tab, wherever the focus is
-  await expect(page.locator(".toast")).toHaveText("Saved e.txt");
+  await expect(toastOf(page)).toHaveText("Saved e.txt");
   expect(await bytes("e.txt")).toBe("display 1\r\ndisplay 2");
   await open(page, "b.csv");
   await rename("b.csv", "f.do");
   await page.keyboard.press("ControlOrMeta+s");
-  await expect(page.locator(".toast")).toHaveText("Saved f.do");
+  await expect(toastOf(page)).toHaveText("Saved f.do");
   expect(await bytes("f.do")).toBe("a,b\r\n1,2\r\n3,4");
 });
 
@@ -339,7 +350,7 @@ test("a failed save's banner goes when the editor's text is replaced: Reload fro
   await setUp(page, { "a.do": "display 1\n" });
   await open(page, "a.do");
   const content = page.locator(".cm-content");
-  const failed = page.locator(".banner", { hasText: "a.do couldn't be saved" });
+  const failed = bannerOf(page, "a.do couldn't be saved");
   const failSave = async () => {
     await content.click();
     await page.keyboard.press("ControlOrMeta+End");
@@ -434,7 +445,7 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
   await page.keyboard.press("ControlOrMeta+s");
   await rename("a.do", "b.do");
   await page.evaluate(() => (window as any).__answer());
-  await expect(page.locator(".toast")).toHaveText("Saved b.do");
+  await expect(toastOf(page)).toHaveText("Saved b.do");
   await expect.poll(tabs).toEqual([["b.do", false]]);
   expect(await storedText(page, "b.do")).toBe("display 1\ndisplay 2");
   // a save that fails and answers after the rename: the banner is the tab's, under its new name
@@ -444,8 +455,8 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
   await page.keyboard.press("ControlOrMeta+s");
   await rename("b.do", "c.do");
   await page.evaluate(() => (window as any).__answer());
-  await expect(page.locator(".banner", { hasText: "c.do couldn't be saved" })).toBeVisible();
-  await expect(page.locator(".banner", { hasText: "b.do couldn't be saved" })).toHaveCount(0);
+  await expect(bannerOf(page, "c.do couldn't be saved")).toBeVisible();
+  await expect(bannerOf(page, "b.do couldn't be saved")).toHaveCount(0);
   expect(await tabs()).toEqual([["c.do", true]]);
 });
 
@@ -544,7 +555,7 @@ test("a Save pressed while a rename is being written saves under the new name, n
     .toEqual(["b.do"]);
   await page.keyboard.press("ControlOrMeta+s");
   await page.evaluate(() => (window as any).__answer());
-  await expect(page.locator(".toast")).toHaveText("Saved b.do");
+  await expect(toastOf(page)).toHaveText("Saved b.do");
   await expect
     .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => [t.path, t.dirty])))
     .toEqual([["b.do", false]]);
@@ -580,7 +591,7 @@ test("a Save pressed while a delete is being written does not bring the file bac
   expect(await page.evaluate(async () => (await window.__dofile.store.list()).map((f: any) => f.path))).toEqual([
     "b.do",
   ]);
-  await expect(page.locator(".toast", { hasText: "Saved" })).toHaveCount(0);
+  await expect(toastOf(page).filter({ hasText: "Saved" })).toHaveCount(0);
 });
 
 test("the editor: a .csv's columns have their colors, a .log's lines their kinds, .md and .json their tokens; a file dropped on it uploads and leaves its text", async ({
@@ -617,7 +628,7 @@ test("the editor: a .csv's columns have their colors, a .log's lines their kinds
       .querySelector(".cm-content")!
       .dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
   });
-  await expect(page.locator(".toast")).toHaveText("1 file uploaded");
+  await expect(toastOf(page)).toHaveText("1 file uploaded");
   await expect(page.locator(".cm-content")).toHaveText("display 1");
   expect(await storedText(page, "dropped.do")).toBe("display 9\n");
   if (isPhone(page)) {
@@ -1342,9 +1353,7 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
     await expect(page.locator(".phone-strip")).toContainText("r(111)");
     await expect(page.locator(".phone-strip")).toContainText("line 6");
   } else
-    await expect(page.locator(".statusbar")).toContainText(
-      "Last run: whole file (started with no locals) · r(111) at line 6",
-    );
+    await expect(statusBar(page)).toContainText("Last run: whole file (started with no locals) · r(111) at line 6");
   await log.getByRole("button", { name: "Go to line 6" }).click();
   await expect(page.locator(".cm-content")).toBeFocused();
   await expect(page.locator(".cm-line.cm-err-line")).toHaveText("summarize nosuch");
@@ -1371,7 +1380,7 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
   await expect(log.locator(".runhead").last()).toContainText("Run selection: line 7");
   expect(await page.evaluate(() => window.__dofile.state.log.value.at(-1).text)).toContain("\n42\n");
   await expect(page.locator(".cm-err-line")).toHaveCount(0); // the new run cleared the old error
-  if (!phone) await expect(page.locator(".statusbar")).toContainText("Last run: line 7 · ");
+  if (!phone) await expect(statusBar(page)).toContainText("Last run: line 7 · ");
 });
 
 test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open and not in another text field; held, it runs once", async ({
@@ -1511,7 +1520,7 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
   if (isPhone(page)) {
     const pill = page.locator(".btn.stop.pill .label:not([aria-hidden]) .pill-time");
     await expect(pill).toHaveText(/^\d+(\.\d)? s$/);
-  } else await expect(page.locator(".statusbar")).toContainText(/Running · \d/);
+  } else await expect(statusBar(page)).toContainText(/Running · \d/);
   await page.waitForTimeout(800);
   if (isPhone(page)) {
     // Break from the Editor view: the Log view shows, where Break's countdown and its outcome are
@@ -1540,7 +1549,7 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
     )
     .toBe(line);
   await expect(page.locator(".cm-err-line")).toHaveCount(0);
-  if (!isPhone(page)) await expect(page.locator(".statusbar")).toContainText("Last run: stopped by Break · r(1)");
+  if (!isPhone(page)) await expect(statusBar(page)).toContainText("Last run: stopped by Break · r(1)");
 });
 
 test("the log follows the end through runs that print wide lines (the running banner shrinks it and takes it back each run), until the visitor scrolls up; scrolling back down, or sideways, resumes or keeps it", async ({
@@ -1618,14 +1627,13 @@ test("the log follows the end while pasted lines run one after another (the runn
     }, text);
   const block = (n: number) =>
     `${Array.from({ length: 12 }, (_, i) => `display "${`${n}.${i} `.padEnd(120 + 9 * i, "x")}"`).join("\n")}\nforeach v in a b {\n`;
-  const stopped = () =>
-    expect(page.locator(".toast")).toContainText("not run: line 13 can't be run from the command line");
+  const stopped = () => expect(toastOf(page)).toContainText("not run: line 13 can't be run from the command line");
   for (let n = 1; n <= 3; n++) {
     await paste(block(n));
     await stopped();
     await ready(page);
     await expect.poll(fromEnd, { message: `at the end after paste ${n}` }).toBeLessThanOrEqual(1);
-    await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
+    await expect(toastOf(page)).toHaveCount(0, { timeout: 15_000 });
   }
   // scrolled up (a wheel event stands in for the visitor's input), the next paste leaves the log where it is
   await log.evaluate((pre) => {
@@ -1672,7 +1680,7 @@ test("the command line: Enter runs and clears, ↑ recalls; a paste of lines run
       return e.defaultPrevented;
     }, text);
   expect(await paste("display 100+1\ndisplay 100+2\n\nnosuchcommand\ndisplay 100+3\n")).toBe(true);
-  await expect(page.locator(".toast")).toHaveText("1 of 4 pasted lines not run: line 3 ended with r(199)");
+  await expect(toastOf(page)).toHaveText("1 of 4 pasted lines not run: line 3 ended with r(199)");
   await expect(log).toContainText("101");
   await expect(log).toContainText("102");
   await expect(log).not.toContainText("103");
@@ -1795,7 +1803,7 @@ test("the command line with no engine: disabled, with the hint while it is empty
   expect(prevented).toBe(false);
   await page.waitForTimeout(100);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".toast")).toHaveCount(0);
+  await expect(toastOf(page)).toHaveCount(0);
   await expect(field).toHaveValue("");
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
@@ -1877,7 +1885,7 @@ test("with no engine nothing offers to run: Run is Start engine and Ctrl/Cmd+Ent
   await page.waitForTimeout(200);
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("asking");
   await expect(prompt).toBeVisible();
-  await expect(page.locator(".toast")).toHaveCount(0);
+  await expect(toastOf(page)).toHaveCount(0);
   await prompt.getByRole("button", { name: "Not now" }).click();
   await expect(prompt).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("declined");
@@ -1920,7 +1928,7 @@ test("while the engine starts, a command is refused with words and the draft sta
   await setUp(page, { "a.do": "display 1\n" });
   await open(page, "a.do");
   const engineIs = () => page.evaluate(() => document.documentElement.dataset.engine);
-  const toast = page.locator(".toast");
+  const toast = toastOf(page);
   const clear = () => clearToast(page);
   const focused = () =>
     page.evaluate(() => {
@@ -2046,7 +2054,7 @@ test("with no engine Import and the log's help links are off: aria-disabled and 
       end: { kind: "command", fresh_locals: false, rc: 111, line: null, seconds: 0.1 },
     },
   ]);
-  const toast = page.locator(".toast");
+  const toast = toastOf(page);
   const quiet = async () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
@@ -2101,7 +2109,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   );
   expect(r?.rc, r?.log).toBe(0);
   await ready(page);
-  const banner = page.locator(".banner", { hasText: "The run changed u.csv." });
+  const banner = bannerOf(page, "The run changed u.csv.");
   if (isPhone(page)) {
     // the run showed the Log view: the banner is there too, before anything else is tapped
     await expect(views(page).getByRole("tab", { name: "Log" })).toHaveAttribute("aria-selected", "true");
@@ -2140,7 +2148,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   await expect.poll(selected).toEqual([2, 2]);
   await run("export delimited using u.csv, replace");
   expect(await selected()).toEqual([2, 2]);
-  await expect(page.locator(".banner")).toHaveCount(0);
+  await expect(bannerOf(page)).toHaveCount(0);
   expect(await dirty()).toBe(false);
   // a run that adds a row: shown in one change, so the selection stays on line 2 and one undo takes the change back
   await run("set obs 3\nreplace a = 3 in 3\nexport delimited using u.csv, replace");
@@ -2156,7 +2164,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
 
   // a version that is not text (a .dta saved under the name): the tab keeps its text, is unsaved, and the banner says so
   await run("save u.csv, replace");
-  const binary = page.locator(".banner", { hasText: "The run changed u.csv, and it is no longer text." });
+  const binary = bannerOf(page, "The run changed u.csv, and it is no longer text.");
   await expect(binary.first()).toContainText(
     "The editor still shows your text; saving it overwrites the file the run wrote.",
   );
@@ -2165,7 +2173,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   expect(await dirty()).toBe(true);
   // a run that writes the editor's own text over it: the tab is clean again and the banner goes
   await run("export delimited using u.csv, replace");
-  await expect(page.locator(".banner", { hasText: "The run changed u.csv" })).toHaveCount(0);
+  await expect(bannerOf(page, "The run changed u.csv")).toHaveCount(0);
   expect(await dirty()).toBe(false);
   await run("save u.csv, replace");
   await expect(binary.first()).toBeAttached();
@@ -2183,9 +2191,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   await page.keyboard.press("Enter");
   // the rename is over when its row has the focus back
   await expect(page.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: /^v\.csv/ })).toBeFocused();
-  await expect(
-    page.locator(".banner", { hasText: "The run changed v.csv, and it is no longer text." }),
-  ).not.toHaveCount(0);
+  await expect(bannerOf(page, "The run changed v.csv, and it is no longer text.")).not.toHaveCount(0);
   await expect(binary).toHaveCount(0);
   if (isPhone(page)) {
     await view(page, "Editor");
@@ -2201,7 +2207,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
     .getByRole("dialog", { name: "Save changes to v.csv?" })
     .getByRole("button", { name: "Don't save" })
     .click();
-  await expect(page.locator(".banner", { hasText: "The run changed v.csv" })).toHaveCount(0);
+  await expect(bannerOf(page, "The run changed v.csv")).toHaveCount(0);
 });
 
 test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites it: the run's version shown, no unsaved dot, no banner", async ({
@@ -2223,7 +2229,7 @@ test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites 
       () => window.__dofile.state.tabs.value.find((t: { path: string }) => t.path === "w.csv")?.dirty,
     ),
   ).toBe(false);
-  await expect(page.locator(".banner", { hasText: "The run changed w.csv" })).toHaveCount(0);
+  await expect(bannerOf(page, "The run changed w.csv")).toHaveCount(0);
   await expect(page.getByRole("img", { name: "unsaved changes" })).toHaveCount(0);
 });
 
@@ -2267,7 +2273,7 @@ test("a file's form follows the store's text the editor takes: a run's version (
   await expect(content).toContainText("mine");
   await save("x.csv", "!");
   expect(await storedText(page, "x.csv")).toBe("a\r\n9\r\nmine!");
-  await expect(page.locator(".banner", { hasText: "The run changed x.csv." })).toHaveCount(0);
+  await expect(bannerOf(page, "The run changed x.csv.")).toHaveCount(0);
 
   // Reload from the run takes the store's text in its form: a run gives x.csv the banner again with a "\n" version, then
   // the store's version changes once more behind the editor (written here as another writer would: a BOM and "\r\n");
@@ -2353,7 +2359,7 @@ test("Ctrl/Cmd+Enter that the engine does not take says why in a toast and start
   await ready(page);
   await open(page, "a.do");
   const content = page.locator(".cm-content");
-  const toast = page.locator(".toast");
+  const toast = toastOf(page);
   const runs = () => page.evaluate(() => window.__dofile.state.log.value.filter((i: any) => i.t === "text").length);
   const toEditor = async () => {
     if (isPhone(page)) await view(page, "Editor"); // a run shows the phone's Log view
