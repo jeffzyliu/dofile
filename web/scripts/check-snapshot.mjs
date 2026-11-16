@@ -13,6 +13,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
+import { inputs, readManifest, staleness } from "./build-id.ts";
 import { installEngine } from "./install-engine.ts";
 import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "./snapshot-node.ts";
 
@@ -159,6 +160,15 @@ def run_case(case):
 }
 
 // ---- the parent: start the children, collect their results -------------------------------------------------------------
+// A snapshot of another wheel or Pyodide would check the old engine, and its results would say nothing of this checkout.
+if (!args.includes("--normal")) {
+  const record = readManifest(dir);
+  const why = record ? staleness(record, inputs()) : `no snapshot in ${dir}`;
+  if (why) {
+    console.error(`${why}${record ? "" : ". Run `npm run snapshot` in web/"}`);
+    process.exit(2);
+  }
+}
 const shards = Number(arg("--shards", 4)),
   timeoutS = Number(arg("--timeout", 300));
 const only = arg("--only", null),

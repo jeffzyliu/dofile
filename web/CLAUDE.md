@@ -17,13 +17,15 @@ Run from `web/` (`npm install` once). The scripts that need the dofile wheel reb
 ```bash
 npm test                  # the engine in Pyodide under Node, the file store, the client, the controllers (~70 s)
 npm run dev               # two dev servers, on the LAN too: the editor on 5173, the landing and commands pages on 5174
+                          #   (prints a warning first when the snapshot is stale; `npm run snapshot` fixes it)
 npm run e2e               # the snapshot, `build:local`, then Chromium, Firefox, WebKit, iPhone (`npx playwright install` once;
                           #   SNAPSHOT_QUALITY=5: the snapshot in seconds; E2E_PORT=4181: ports 4181/4182, not 4173/4174)
 npm run build             # the editor into dist/app/, the pages into dist/site/; needs DOFILE_URLS=production,
                           #   DOFILE_URLS=local (`npm run build:local`), or both DOFILE_SITE_URL and DOFILE_EDITOR_URL
 npm run preview           # the two builds on two ports (4173 pages, 4174 editor, or E2E_PORT and the next)
 npm run snapshot          # the Pyodide memory snapshot the page starts from; again after any engine change
-npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the Stata 14 cases inside Pyodide (~4 min)
+npm run check-snapshot [-- --normal]   # corpus, probes, native calls and the Stata 14 cases inside Pyodide (~4 min);
+                          #   refuses a stale snapshot (rc 2), except with --normal
 npm run check-numeric     # e()/r() of the Stata 14 programs at full precision (~4 min)
 npm run check-pytest [-- --ios]        # OpenDTA's unit tests inside Pyodide (~2 min)
 npm run test-counts [unit|e2e]   # test counts per file and in total (docs/test-map.md keeps none)
