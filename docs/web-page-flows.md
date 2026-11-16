@@ -552,7 +552,7 @@ the line.
 
 ### Tests that hold this
 
-- `web/test/app.test.ts`:
+- `web/test/app-*.test.ts`:
   - "a run: the streamed log grows one item and the result's log replaces it; …"
   - "a crash cuts a run: the new state first, then engine-gone, then the cut run's result; …"
   - "runCode while a run is on does nothing; with no engine a run is refused, …"
@@ -704,7 +704,7 @@ listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM 
 
 - `web/test/editor.test.ts`: "a run's version of an open file (editor/ranover.ts): …"; "a file's form
   (editor/ranover.ts): …"; "the error mark's rule (editor/errormark.ts): …"
-- `web/test/app.test.ts`: "a run that rewrites an open file: the editor follows it (ranOver); …"; "setDirty sets one
+- `web/test/app-*.test.ts`: "a run that rewrites an open file: the editor follows it (ranOver); …"; "setDirty sets one
   tab's dot; decodeText takes strict UTF-8 only"
 - `web/test/files-ui.test.ts`: "openFile: a text file gets a tab, made active, before the editor is told; …"; "closing
   a tab: …"; "rename: an open file, and a folder with open files under it: …"; "upload over an open file: …"; "rename:

@@ -60,9 +60,9 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   knowledge (browser quirks, measured numbers, why a simpler way failed) on the line that handles it, shortened.
 - **State.** One module of signals, `src/app/state.ts`. A signal with one owner is exported `ReadonlySignal`, so a view
   that assigns it fails `npm run check`. The controllers (`src/app/engine.ts`, `run.ts`, `files.ts`, `start.ts`) are `.ts`
-  files that import no `.tsx`, tested in Node (`test/app.test.ts`). Views read signals and call the controllers'
-  actions; they never call the transport or the machine. Dialogs and banners go through the registries `dialogs.tsx` and
-  `banners.tsx`, one view per kind; shared UI pieces are in `src/app/ui/`. A phone piece sits next to its desktop
+  files that import no `.tsx`, tested in Node (`test/app-*.test.ts`, on `test/wiring.ts`; each file starts from
+  `resetState()`). Views read signals and call the controllers' actions; they never call the transport or the machine.
+  Dialogs and banners go through the registries `dialogs.tsx` and `banners.tsx`, one view per kind; shared UI pieces are in `src/app/ui/`. A phone piece sits next to its desktop
   counterpart in `App.tsx`, and components read `isPhone` rather than take a `phone` prop. Toolbar buttons share one
   height (`--control` in `tokens.css`), a pane head's controls another (`--control-sm`).
 - **One state machine decides the engine's state: `src/engine/machine.ts`.** `transition(machine, event)` is pure (type

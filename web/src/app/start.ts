@@ -1,7 +1,7 @@
 // "Start engine": with no engine nothing on the page offers to run, and one action is offered, starting the engine
 // (docs/web-page-flows.md, section 2; docs/design/SPEC.md, sections 3.4, 3.5 and 5). This module is the one statement
 // of which engine states are "no engine" and of what a press of "Start engine" does in each. Plain TypeScript, no DOM:
-// tested in Node (test/app.test.ts).
+// tested in Node (test/app-start.test.ts).
 import * as engine from "./engine.ts";
 import * as S from "./state.ts";
 import { failedActions } from "./states/words.ts";
