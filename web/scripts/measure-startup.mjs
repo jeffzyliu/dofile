@@ -1,12 +1,12 @@
 // Time until the web demo's engine is ready, normal boot vs memory snapshot, by network speed, for a first visit (new
-// browser context: cold caches) and a return visit (a reload in the same context: warm). Chromium (default) or WebKit
-// (--engine webkit: unthrottled only, the throttle is Chromium's DevTools protocol). The built editor (run
+// browser context: cold caches) and a return visit (a reload in the same context: warm). Chromium (default), WebKit or
+// Firefox (--engine webkit|firefox: unthrottled only, the throttle is Chromium's DevTools protocol). The built editor (run
 // `npm run build:local` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes
 // docs/img/startup-times.json, which docs/img/make-startup-times.mjs draws.
 //
 //   node scripts/measure-startup.mjs [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
 //                                    [--first-run display,graph] [--during-import display,graph] [--import-delay-ms 100]
-//                                    [--engine chromium|webkit]
+//                                    [--engine chromium|webkit|firefox]
 //
 // Each return visit then draws a graph (time from submit to the image in the page). With a lazy snapshot the cold visit
 // waits for the graphics part to land before the reload, and the warm graph waits for the warm visit's "warmed" line.
@@ -33,7 +33,7 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
-import { chromium, webkit } from "@playwright/test";
+import { chromium, firefox, webkit } from "@playwright/test";
 import { EDITOR_BASE, EDITOR_OUT } from "./urls.ts";
 
 const args = process.argv.slice(2);
@@ -49,13 +49,14 @@ const NETS = {
   30: { label: "30 Mbps, 50 ms", latency: 50, mbps: 30 },
 };
 const engine = arg("--engine", "chromium");
-if (engine !== "chromium" && engine !== "webkit") throw new Error(`--engine ${engine}: chromium or webkit`);
+const ENGINES = { chromium, webkit, firefox };
+if (!ENGINES[engine]) throw new Error(`--engine ${engine}: chromium, webkit or firefox`);
 const importDelayMs = Number(arg("--import-delay-ms", 100));
 const nets = arg("--nets", "unthrottled,100,30")
   .split(",")
   .map((k) => ({ key: k, ...NETS[k] }));
-if (engine === "webkit" && nets.some((n) => n.mbps))
-  throw new Error("--engine webkit: --nets unthrottled only (the throttle is Chromium's)");
+if (engine !== "chromium" && nets.some((n) => n.mbps))
+  throw new Error(`--engine ${engine}: --nets unthrottled only (the throttle is Chromium's)`);
 if (!existsSync(join(dist, EDITOR_BASE, "index.html")))
   throw new Error(`no web/${EDITOR_OUT}: run \`npm run build:local\` (after \`npm run snapshot\`)`);
 
@@ -123,7 +124,7 @@ await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 // ---- the measurements --------------------------------------------------------------------------------------------------------
-const browser = await (engine === "webkit" ? webkit : chromium).launch();
+const browser = await ENGINES[engine].launch();
 const profiles = []; // WebKit: a profile folder per visit, removed at the end
 // In the page, before its own scripts: the moment <html data-engine> becomes ready, failed or failed-twice; Download pressed
 // at once when the page asks
@@ -402,7 +403,7 @@ writeFileSync(
   JSON.stringify(
     {
       measured: new Date().toISOString().slice(0, 10),
-      browser: `${engine === "webkit" ? "WebKit" : "Chromium"} ${browser.version()}`,
+      browser: `${{ webkit: "WebKit", firefox: "Firefox" }[engine] ?? "Chromium"} ${browser.version()}`,
       reps,
       networks: nets.map((n) => ({ key: n.key, label: n.label })),
       snapshot: { built: list.built, compressedMB: Object.values(list.snapshot).reduce((s, f) => s + f.size, 0) / 1e6 },
