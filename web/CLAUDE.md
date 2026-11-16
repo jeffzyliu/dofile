@@ -89,10 +89,13 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
   `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is
   blocked until the tab lock answers: a test waits for `!store.blocked` before it writes. `<html data-engine>` always holds
-  the state name. The tests in `e2e/poc.spec.ts` are fixme until step 6 rewrites them.
+  the state name. Its type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its
+  own. What a test sets up in the page's state goes through the helpers in `e2e/seed.ts` (`showEngine`, `addBanner`,
+  `seedLog`, ...), not a signal written in the spec. The tests in `e2e/poc.spec.ts` are fixme until step 6 rewrites them.
 - **e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not `@playwright/test`. Its fixture answers
   `persisted()` true (`test.use({ persisted: false })` for the browser's own) and retries a stalled first `goto`; a context
-  or page a test makes itself needs `keepFiles(context)` or `retryFirstGoto(page)`.
+  or page a test makes itself needs `keepFiles(context)` or `retryFirstGoto(page)`. The helpers several specs share
+  (`isPhone`, `ready`, `settled`, `putFiles`, `storedText`, `SAMPLE`) are in `fixtures.ts` too.
 - **Dev servers listen on all interfaces** (LAN phones): every dev HTTP server (`dev`, `preview`, `cf:dev`) keeps `--host`
   or `--ip 0.0.0.0`; give any new one the same.
 - **The snapshot is the page's only start; there is no fallback.** `?snapshot=0` is the normal boot, a developer's

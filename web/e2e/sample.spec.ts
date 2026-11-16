@@ -4,26 +4,21 @@
 // `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE } from "../scripts/urls.ts";
-import { expect, startEngine, test } from "./fixtures";
+import { expect, isPhone, startEngine, storedText, test, unblocked } from "./fixtures";
 
-// the test hook (window.__dofile) is untyped here
-const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 /** The files in the store (not folders), by path. */
 const stored = (page: Page) =>
   page.evaluate(async () =>
-    ((await (window as any).__dofile.store.list()) as { path: string; dir: boolean }[])
+    ((await window.__dofile.store.list()) as { path: string; dir: boolean }[])
       .filter((f) => !f.dir)
       .map((f) => f.path)
       .sort(),
   );
-const textOf = (page: Page, path: string) =>
-  page.evaluate(async (p) => new TextDecoder().decode(await (window as any).__dofile.store.read(p)), path);
 const put = (page: Page, path: string, text: string) =>
-  page.evaluate(([p, t]) => (window as any).__dofile.store.write(p, new TextEncoder().encode(t)), [path, text]);
-const unblocked = (page: Page) => page.waitForFunction(() => (window as any).__dofile.store.blocked === false);
+  page.evaluate(([p, t]) => window.__dofile.store.write(p, new TextEncoder().encode(t)), [path, text]);
 
 async function menu(page: Page) {
-  if (phone(page)) {
+  if (isPhone(page)) {
     await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
   }
   await page.getByRole("button", { name: "File actions" }).click(); // on a phone the "Files ⋯" button in the strip
@@ -38,9 +33,9 @@ test("a first visit lists the sample and opens its main do-file; a later visit d
   await page.goto("?test=manual&sample");
   await unblocked(page);
   await expect.poll(() => stored(page)).toEqual(ALL);
-  await expect.poll(() => page.evaluate(() => (window as any).__dofile.state.activeTab.value)).toBe("analysis.do");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.activeTab.value)).toBe("analysis.do");
   await expect(page.locator(".cm-content")).toContainText("A first look at wages, age and schooling");
-  if (phone(page))
+  if (isPhone(page))
     await expect(page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Editor" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -51,7 +46,7 @@ test("a first visit lists the sample and opens its main do-file; a later visit d
     ).toBeVisible();
 
   // the visitor deletes one; a reload does not bring it back (the mark is kept), nor does it open the tab again
-  await page.evaluate(() => (window as any).__dofile.store.remove("helpers.do"));
+  await page.evaluate(() => window.__dofile.store.remove("helpers.do"));
   await page.reload();
   await unblocked(page);
   await page.waitForTimeout(500);
@@ -76,9 +71,9 @@ test("Restore the sample is an upload of the sample: what is missing comes back 
   await page.goto("?test=manual&sample");
   await unblocked(page);
   await expect.poll(() => stored(page)).toEqual(ALL);
-  const active = () => page.evaluate(() => (window as any).__dofile.state.activeTab.value);
+  const active = () => page.evaluate(() => window.__dofile.state.activeTab.value);
   await put(page, "mine.do", "display 1\n");
-  await page.evaluate(() => (window as any).__dofile.store.remove("helpers.do"));
+  await page.evaluate(() => window.__dofile.store.remove("helpers.do"));
   await expect.poll(() => stored(page)).toEqual(["analysis.do", "data/wages.dta", "mine.do"]);
   const restore = async () => (await menu(page)).getByRole("menuitem", { name: "Restore the sample" }).click();
   // the visitor is in mine.do when they restore
@@ -96,7 +91,7 @@ test("Restore the sample is an upload of the sample: what is missing comes back 
   await page.getByRole("menuitem", { name: "Restore the sample" }).click();
   await expect(page.locator(".toast")).toHaveText("Sample restored");
   expect(await stored(page)).toEqual([...ALL, "mine.do"].sort());
-  expect(await textOf(page, "mine.do")).toBe("display 1\n");
+  expect(await storedText(page, "mine.do")).toBe("display 1\n");
   await expect.poll(active).toBe("analysis.do"); // the sample's main do-file is shown, mine.do stays open
 
   // nothing differs, nothing is missing: not asked, not written
@@ -112,13 +107,13 @@ test("Restore the sample is an upload of the sample: what is missing comes back 
   await expect(dlg.getByRole("button", { name: "Keep mine" })).toBeFocused();
   await dlg.getByRole("button", { name: "Keep mine" }).click();
   await expect(dlg).toHaveCount(0);
-  expect(await textOf(page, "helpers.do")).toBe("* mine\n");
+  expect(await storedText(page, "helpers.do")).toBe("* mine\n");
   await restore();
   await dlg.getByRole("button", { name: "Replace with the sample" }).click();
   await expect(dlg).toHaveCount(0);
   await expect(page.locator(".toast")).toHaveText("Sample restored");
-  await expect.poll(() => textOf(page, "helpers.do")).toContain("a small program that compares");
-  expect(await textOf(page, "mine.do")).toBe("display 1\n");
+  await expect.poll(() => storedText(page, "helpers.do")).toContain("a small program that compares");
+  expect(await storedText(page, "mine.do")).toBe("display 1\n");
 });
 
 test("the sample runs in the real engine to a table and a graph", async ({ page }) => {
@@ -131,7 +126,7 @@ test("the sample runs in the real engine to a table and a graph", async ({ page 
     .poll(() => page.evaluate(() => document.documentElement.dataset.engine), { timeout: 300_000 })
     .toBe("ready");
   const r = await page.evaluate(async () => {
-    const w = (window as any).__dofile;
+    const w = window.__dofile;
     const text = new TextDecoder().decode(await w.store.read("analysis.do"));
     const r = await w.run(text);
     return r && { rc: r.rc, log: r.log as string, images: r.images.length };

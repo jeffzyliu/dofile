@@ -1,51 +1,23 @@
 // The file tree, the editor's tabs, upload and its name clashes, the row menus, opening files, in real browsers
 // (docs/design/SPEC.md, sections 3.1, 3.2, 3.10, 3.11). No engine is needed (?test=manual): files go in through the test
-// hook's store or the upload inputs. Dirty tabs are made with the hook's state.setDirty(path, true); the close-tab
+// hook's store or the upload inputs. Dirty tabs are made with `markDirty` (seed.ts); the close-tab
 // dialog's Save saves through the editor and closes the tab (editor.spec.ts types real edits).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures"; // storage kept by default (fixtures.ts)
-
-type Hook = {
-  state: {
-    setDirty(path: string, on: boolean): void;
-    tabs: { value: { path: string; dirty: boolean }[] };
-    activeTab: { value: string | null };
-    phoneTab: { value: string };
-    files: { value: { path: string }[] };
-  };
-  store: {
-    blocked: boolean;
-    write(path: string, bytes: Uint8Array): Promise<unknown>;
-    read(path: string): Promise<Uint8Array>;
-    list(): Promise<{ path: string }[]>;
-  };
-};
+import { expect, isPhone, putFiles, storedText, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import type { DofileHook } from "./hook";
+import { markDirty, openDialog } from "./seed";
 
 /** Open the page with no engine and write `files` (text, or bytes as an array of numbers) into the store. */
 async function setUp(page: Page, files: Record<string, string | number[]>) {
   await page.goto("?test=manual");
-  await page.waitForFunction(() => (window as unknown as { __dofile: Hook }).__dofile.store.blocked === false);
-  await page.evaluate(async (files) => {
-    const { store } = (window as unknown as { __dofile: Hook }).__dofile;
-    for (const [path, data] of Object.entries(files))
-      await store.write(path, typeof data === "string" ? new TextEncoder().encode(data) : Uint8Array.from(data));
-  }, files);
+  await putFiles(page, files);
   if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
 }
-const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 700;
 const tree = (page: Page) => page.getByRole("tree", { name: "Files" });
 const row = (page: Page, name: string | RegExp) => tree(page).getByRole("treeitem", { name });
-const textOf = (page: Page, path: string) =>
-  page.evaluate(
-    async (p) => new TextDecoder().decode(await (window as unknown as { __dofile: Hook }).__dofile.store.read(p)),
-    path,
-  );
-const setDirty = (page: Page, path: string) =>
-  page.evaluate((p) => (window as unknown as { __dofile: Hook }).__dofile.state.setDirty(p, true), path);
-const openTabs = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.tabs.value.map((t) => t.path));
+const openTabs = (page: Page) => page.evaluate(() => window.__dofile.state.tabs.value.map((t) => t.path));
 
 /** From now on, record every element outside a dialog that takes the focus (`moves`, read them with movesOf). */
 const recordMoves = (page: Page) =>
@@ -121,7 +93,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
   }
   await expect.poll(() => openTabs(page)).toEqual(["a.do", "b.do", "c.do"]);
-  await setDirty(page, "a.do");
+  await markDirty(page, "a.do");
   await expect(row(page, /^a\.do/).getByRole("img", { name: "unsaved changes" })).toBeVisible();
   const ask = page.getByRole("dialog", { name: "Save changes to a.do?" });
   if (isPhone(page)) {
@@ -170,7 +142,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   };
   // Save fails (the store's write rejects): the tab stays open with its edits, and the save-failed banner says so
   await page.evaluate(() => {
-    const s = (window as unknown as { __dofile: Hook }).__dofile.store as Hook["store"] & Record<string, unknown>;
+    const s = window.__dofile.store as DofileHook["store"] & Record<string, unknown>;
     s.realWrite = s.write;
     s.write = () => Promise.reject(new Error("the disk is full"));
   });
@@ -179,10 +151,10 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   await expect(ask).toBeHidden();
   await expect(page.locator(".banner", { hasText: "a.do couldn't be saved" })).toBeVisible();
   expect(await openTabs(page)).toEqual(["a.do", "b.do"]);
-  expect(await textOf(page, "a.do")).toBe("1\n");
+  expect(await storedText(page, "a.do")).toBe("1\n");
   await page.evaluate(() => {
-    const s = (window as unknown as { __dofile: Hook }).__dofile.store as Hook["store"] & Record<string, unknown>;
-    s.write = s.realWrite as Hook["store"]["write"];
+    const s = window.__dofile.store as DofileHook["store"] & Record<string, unknown>;
+    s.write = s.realWrite as DofileHook["store"]["write"];
   });
   await again();
   await recordMoves(page);
@@ -200,7 +172,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
   await row(page, /^a\.do/).click();
   await expect.poll(() => openTabs(page)).toEqual(["b.do", "a.do"]);
-  await setDirty(page, "a.do");
+  await markDirty(page, "a.do");
   if (!isPhone(page))
     await page
       .getByRole("tablist", { name: "Open files" })
@@ -253,7 +225,7 @@ test("rename in place: F2; a name in use keeps the field open with the reason; E
   await page.keyboard.press("Enter");
   await expect(row(page, /^main\.do/)).toBeFocused();
   await expect.poll(() => openTabs(page)).toEqual(["main.do"]);
-  expect(await textOf(page, "main.do")).toBe("1\n");
+  expect(await storedText(page, "main.do")).toBe("1\n");
 });
 
 test("a renamed row drawn after the visitor clicked into the editor leaves the focus in the editor", async ({
@@ -264,7 +236,7 @@ test("a renamed row drawn after the visitor clicked into the editor leaves the f
   await row(page, /^a\.do/).click();
   // the store's lists wait for the test, so the renamed row is drawn only when the test says
   await page.evaluate(() => {
-    const s = (window as any).__dofile.store;
+    const s = window.__dofile.store;
     const real = s.list;
     let answer!: () => void;
     const gate = new Promise<void>((ok) => (answer = ok));
@@ -300,7 +272,7 @@ test("a renamed row drawn after the visitor clicked another row leaves the focus
   await setUp(page, { "a.do": "1\n", "c.do": "3\n" });
   // the store's lists wait for the test, so the renamed row is drawn only when the test says
   await page.evaluate(() => {
-    const s = (window as any).__dofile.store;
+    const s = window.__dofile.store;
     const real = s.list;
     let answer!: () => void;
     const gate = new Promise<void>((ok) => (answer = ok));
@@ -323,7 +295,7 @@ test("a renamed row drawn after the visitor clicked another row leaves the focus
   await page.waitForTimeout(300); // a late focus of the renamed row would have come by now
   await expect(row(page, /^c\.do/)).toBeFocused();
   // the request was ended when b.do was drawn, not left to fire when b.do is made the roving row some other way
-  expect(await page.evaluate(() => (window as any).__dofile.focusWanted.value)).toBeNull();
+  expect(await page.evaluate(() => window.__dofile.focusWanted.value)).toBeNull();
 });
 
 test("a menu's arrow keys skip a disabled item in the middle or at the end, and wrap around", async ({ page }) => {
@@ -354,7 +326,7 @@ test("an item that turns enabled while a menu is open does not move the focus", 
   await page.keyboard.press("End");
   await expect(item("Restore the sample")).toBeFocused();
   await page.evaluate(async () => {
-    const { store } = (window as unknown as { __dofile: Hook }).__dofile; // as a run's output would
+    const { store } = window.__dofile; // as a run's output would
     await store.write("a.do", new TextEncoder().encode("display 1\n"));
   });
   await expect(item("Download all (.zip)")).not.toHaveAttribute("aria-disabled", "true");
@@ -530,18 +502,12 @@ test("the folded file list: Esc in an inline rename cancels the rename and leave
 // the file or folder is written when the field is left
 const nameField = (page: Page, name: string) => page.getByRole("textbox", { name: `New name for ${name}` });
 const storePaths = (page: Page) =>
-  page.evaluate(async () =>
-    (await (window as unknown as { __dofile: Hook }).__dofile.store.list()).map((f) => f.path).sort(),
-  );
+  page.evaluate(async () => (await window.__dofile.store.list()).map((f) => f.path).sort());
 const newFile = (page: Page) => page.getByRole("button", { name: "New .do file" });
 // opening a file takes a phone to the Editor view: the Files view again, for what is drawn there
 const listHas = (page: Page, path: string) =>
-  page.waitForFunction(
-    (p) => (window as unknown as { __dofile: Hook }).__dofile.state.files.value.some((f) => f.path === p),
-    path,
-  );
-const phoneTab = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.phoneTab.value);
+  page.waitForFunction((p) => window.__dofile.state.files.value.some((f) => f.path === p), path);
+const phoneTab = (page: Page) => page.evaluate(() => window.__dofile.state.phoneTab.value);
 const showFiles = async (page: Page) => {
   if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
 };
@@ -637,9 +603,7 @@ test("a new file left by a tap on a row: the tapped file is the active one, and 
   await row(page, /^a\.do/).click();
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
   await listHas(page, "untitled.do");
-  expect(await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.activeTab.value)).toBe(
-    "a.do",
-  );
+  expect(await page.evaluate(() => window.__dofile.state.activeTab.value)).toBe("a.do");
   expect(await openTabs(page)).toEqual(["a.do"]);
 });
 
@@ -678,10 +642,10 @@ test("a new file named a file that exists: Enter keeps the field open with the r
   await expect(field).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByText("a.do already exists here.").first()).toBeVisible();
   expect(await storePaths(page)).toEqual(["a.do"]);
-  expect(await textOf(page, "a.do")).toBe("mine");
+  expect(await storedText(page, "a.do")).toBe("mine");
   await row(page, /^a\.do 4 B/).click(); // the file's row; the draft's has the field
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled.do"]);
-  expect(await textOf(page, "a.do")).toBe("mine");
+  expect(await storedText(page, "a.do")).toBe("mine");
   await expect(page.getByRole("status").filter({ hasText: "Made untitled.do instead." })).toHaveCount(1);
 });
 
@@ -692,12 +656,12 @@ test("a file with the offered name written while the field is open: Enter makes 
   await newFile(page).click();
   await expect(nameField(page, "untitled.do")).toBeFocused();
   await page.evaluate(async () => {
-    const { store } = (window as unknown as { __dofile: Hook }).__dofile; // as a run's output would
+    const { store } = window.__dofile; // as a run's output would
     await store.write("untitled.do", new TextEncoder().encode("a run wrote me"));
   });
   await page.keyboard.press("Enter");
   await expect.poll(() => storePaths(page)).toEqual(["a.do", "untitled-2.do", "untitled.do"]);
-  expect(await textOf(page, "untitled.do")).toBe("a run wrote me");
+  expect(await storedText(page, "untitled.do")).toBe("a run wrote me");
 });
 
 test("a second New while the first one is being written: the second field stays, and the two files get two names", async ({
@@ -721,7 +685,7 @@ test("a second New while the first one is being written: the second field stays,
 test("a new file the store cannot write: the live region says so and no field is left", async ({ page }) => {
   await setUp(page, { "a.do": "1\n" });
   await page.evaluate(() => {
-    const { store } = (window as unknown as { __dofile: Hook }).__dofile;
+    const { store } = window.__dofile;
     store.write = () => Promise.reject(new Error("the quota"));
   });
   await newFile(page).click();
@@ -1171,7 +1135,7 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
   await second.getByRole("checkbox", { name: "Do the same for the other clash" }).check();
   await second.getByRole("button", { name: "Replace with uploaded" }).click();
   await expect(page.locator(".toast")).toHaveText("3 files uploaded");
-  expect(await Promise.all(["a.do", "b.do", "c.do", "new.do"].map((p) => textOf(page, p)))).toEqual([
+  expect(await Promise.all(["a.do", "b.do", "c.do", "new.do"].map((p) => storedText(page, p)))).toEqual([
     "old a",
     "new b.do",
     "new c.do",
@@ -1184,22 +1148,17 @@ test("upload with name clashes: Enter keeps mine; Do the same with Replace repla
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(page.locator(".toast")).toHaveText("1 file uploaded"); // z.do; Esc kept a.do and b.do
-  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "new b.do"]);
+  expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["old a", "new b.do"]);
   // another dialog put over the question (another tab took the engine, say) unmounts it: that answers as Esc does
   await input.setInputFiles(["a.do", "b.do", "y.do", "y2.do"].map(again));
   await expect(page.getByRole("alertdialog", { name: "a.do is already here" })).toContainText("clash 1 of 2");
-  await page.evaluate(() => {
-    (window as unknown as { __dofile: { state: { dialog: { value: unknown } } } }).__dofile.state.dialog.value = {
-      d: "delete",
-      paths: ["c.do"],
-    };
-  });
+  await openDialog(page, { d: "delete", paths: ["c.do"] });
   await expect(page.locator(".toast")).toHaveText("2 files uploaded"); // y.do and y2.do; both clashes kept
   const other = page.getByRole("alertdialog", { name: "Delete c.do?" });
   await expect(other).toBeVisible(); // the upload's end leaves the other dialog open
   await page.keyboard.press("Escape");
   await expect(other).toBeHidden();
-  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "new b.do"]);
+  expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["old a", "new b.do"]);
 });
 
 test("an upload of a file whose bytes are already stored is not asked about, and counts in the toast; the clash left says 'clash 1 of 1'", async ({
@@ -1212,7 +1171,7 @@ test("an upload of a file whose bytes are already stored is not asked about, and
   await expect(dlg).toContainText("clash 1 of 1 · the other file is uploaded.");
   await dlg.getByRole("button", { name: "Replace with uploaded" }).click();
   await expect(page.locator(".toast")).toHaveText("2 files uploaded");
-  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["same a", "new b"]);
+  expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["same a", "new b"]);
 });
 
 test("a clash dialog that follows another (Keep mine, then the next clash at once): the focus goes back to what had it before the first, not the page", async ({
@@ -1231,14 +1190,14 @@ test("a clash dialog that follows another (Keep mine, then the next clash at onc
   }
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(opener).toBeFocused();
-  expect(await Promise.all(["a.do", "b.do"].map((p) => textOf(page, p)))).toEqual(["old a", "old b"]);
+  expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["old a", "old b"]);
 });
 
 test("the clash over an open file with unsaved edits says so", async ({ page }) => {
   await setUp(page, { "a.do": "old a" });
   await row(page, /^a\.do/).click();
   await expect.poll(() => openTabs(page)).toEqual(["a.do"]); // the file is read before its tab opens
-  await setDirty(page, "a.do");
+  await markDirty(page, "a.do");
   await page
     .locator('input[data-upload="files"]')
     .setInputFiles({ name: "a.do", mimeType: "text/plain", buffer: Buffer.from("new") });
@@ -1376,11 +1335,8 @@ test("a drop anywhere on the page: the Files pane is marked while a drag is over
   });
   expect(seen).toBe(false);
   // while a dialog is open a drop uploads nothing
+  await openDialog(page, { d: "delete", paths: ["dropped.do"] });
   await page.evaluate(() => {
-    (window as unknown as { __dofile: { state: { dialog: { value: unknown } } } }).__dofile.state.dialog.value = {
-      d: "delete",
-      paths: ["dropped.do"],
-    };
     const w = window as unknown as { __dt?: DataTransfer };
     w.__dt = new DataTransfer();
     w.__dt.items.add(new File(["display 2\n"], "later.do", { type: "text/plain" }));

@@ -4,39 +4,27 @@
 // engine start one per test.
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
-import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, isPhone, putFiles, ready, startEngine, storedText, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import {
+  addBanner,
+  clearToast,
+  type LastRun,
+  openDialog,
+  seedGraphs,
+  seedLastRun,
+  seedLog,
+  showEngine,
+  showTheme,
+  showUnsplitOutput,
+} from "./seed";
 
-type Hook = {
-  store: {
-    blocked: boolean;
-    write(path: string, bytes: Uint8Array): Promise<unknown>;
-    read(path: string): Promise<Uint8Array>;
-  };
-  state: any; // the signals of src/app/state.ts
-  selection: { value: [number, number] | null };
-  breakRun(): void;
-  run(code: string): Promise<unknown>;
-};
-declare global {
-  interface Window {
-    __dofile: Hook;
-  }
-}
-
-const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 const views = (page: Page) => page.getByRole("tablist", { name: "Views" });
 const view = (page: Page, name: string) => views(page).getByRole("tab", { name }).click();
 
 async function setUp(page: Page, files: Record<string, string>, url = "?test=manual") {
   await page.goto(url);
-  await page.waitForFunction(() => window.__dofile?.store.blocked === false);
-  await page.evaluate(async (files) => {
-    for (const [path, text] of Object.entries(files))
-      await window.__dofile.store.write(path, new TextEncoder().encode(text));
-  }, files);
+  await putFiles(page, files);
 }
-const stored = (page: Page, path: string) =>
-  page.evaluate(async (p) => new TextDecoder().decode(await window.__dofile.store.read(p)), path);
 
 /** Open `name` from the file tree (the Files view on a phone). */
 async function open(page: Page, name: string) {
@@ -46,12 +34,6 @@ async function open(page: Page, name: string) {
     .getByRole("treeitem", { name: new RegExp(`^${name.replace(".", "\\.")}`) })
     .click();
   await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", `Editor: ${name}`);
-}
-
-async function ready(page: Page) {
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset.engine), { timeout: 300_000 })
-    .toBe("ready");
 }
 
 // ---- no engine ----
@@ -75,7 +57,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await page.keyboard.type("display 2");
   await page.keyboard.press("ControlOrMeta+s");
   await expect(page.locator(".toast")).toHaveText("Saved a.do");
-  expect(await stored(page, "a.do")).toBe("display 1\ndisplay 2");
+  expect(await storedText(page, "a.do")).toBe("display 1\ndisplay 2");
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
   // Ctrl+S and Cmd+S both save from the editor, on every platform (ControlOrMeta is the runner's OS's key, which an
   // emulated iPhone on Linux does not take for its own)
@@ -85,7 +67,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   ]) {
     await page.keyboard.insertText("!");
     await page.keyboard.press(key);
-    await expect.poll(() => stored(page, "a.do")).toBe(text);
+    await expect.poll(() => storedText(page, "a.do")).toBe(text);
     await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
   }
   // a layout whose S types no Latin letter (Cyrillic: "ы", in S's place): Ctrl+S saves, and the browser's own Save page
@@ -119,11 +101,11 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
     return { writes, prevented };
   });
   expect(held).toEqual({ writes: 1, prevented: [true, true, true] });
-  await expect.poll(() => stored(page, "a.do")).toBe("display 1\ndisplay 2!!?");
+  await expect.poll(() => storedText(page, "a.do")).toBe("display 1\ndisplay 2!!?");
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
   for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
   await page.keyboard.press("ControlOrMeta+s");
-  await expect.poll(() => stored(page, "a.do")).toBe("display 1\ndisplay 2");
+  await expect.poll(() => storedText(page, "a.do")).toBe("display 1\ndisplay 2");
   // the [data-editor] element is the editor's content, and focus() puts the focus there
   await expect(page.locator("[data-editor]")).toHaveCount(1);
   await expect(page.locator("[data-editor]")).toHaveClass(/cm-content/);
@@ -171,14 +153,12 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await content.click();
   await page.keyboard.press("ControlOrMeta+s");
   await expect(banner).toHaveCount(0);
-  expect(await stored(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
+  expect(await storedText(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
 
   // with a dialog open Ctrl/Cmd+S saves nothing (and the browser's Save page is still kept away)
   await page.keyboard.type("!");
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(true);
-  await page.evaluate(() => {
-    window.__dofile.state.dialog.value = { d: "close-tab", path: "a.do" };
-  });
+  await openDialog(page, { d: "close-tab", path: "a.do" });
   const ask = page.getByRole("dialog", { name: "Save changes to a.do?" });
   await expect(ask).toBeVisible();
   const prevented = await page.evaluate(() => {
@@ -192,7 +172,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
   await expect(ask).toBeVisible();
   await expect(page.locator(".toast")).toHaveCount(0);
   expect(await page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(true);
-  expect(await stored(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
+  expect(await storedText(page, "a.do")).toBe("display 1\ndisplay 2\ndisplay 3");
   await page.keyboard.press("Escape"); // Cancel
   await expect(ask).toBeHidden();
   await content.click();
@@ -242,7 +222,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await expect.poll(() => dirty("c.do")).toBe(true);
   await page.keyboard.press("ControlOrMeta+s");
   await expect(page.locator(".toast")).toHaveText("Saved c.do");
-  expect(await stored(page, "c.do")).toBe("display 1\r\ndisplay 2\r\ndisplay 3\r\ndisplay 4");
+  expect(await storedText(page, "c.do")).toBe("display 1\r\ndisplay 2\r\ndisplay 3\r\ndisplay 4");
   await expect.poll(() => dirty("c.do")).toBe(false);
   // the saved text is compared in the editor's form: an edit taken back is clean again
   await page.keyboard.insertText("x");
@@ -279,7 +259,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await page.keyboard.press("Enter");
   await expect(page.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: /^d\.do/ })).toBeFocused();
   await page.keyboard.press("ControlOrMeta+s"); // the active tab, wherever the focus is
-  await expect.poll(() => stored(page, "d.do")).toBe(crlf);
+  await expect.poll(() => storedText(page, "d.do")).toBe(crlf);
   await expect.poll(() => dirty("d.do")).toBe(false);
 
   await open(page, "n.csv");
@@ -289,7 +269,7 @@ test("Save keeps a file's form: a \\r\\n file edited and saved has \\r\\n throug
   await page.keyboard.press("Enter");
   await page.keyboard.press("ControlOrMeta+s");
   await expect(page.locator(".toast")).toHaveText("Saved n.csv");
-  expect(await stored(page, "n.csv")).toBe("a\nb\nc\n");
+  expect(await storedText(page, "n.csv")).toBe("a\nb\nc\n");
   await expect.poll(() => dirty("n.csv")).toBe(false);
 
   // a BOM: not in the editor (CodeMirror would draw it), the tab clean; Save writes it back, with the file's breaks
@@ -376,10 +356,8 @@ test("a failed save's banner goes when the editor's text is replaced: Reload fro
   };
   // Reload from the run: a run's version in the store and its banner, as files.ts afterRun leaves them
   await failSave();
-  await page.evaluate(async () => {
-    await window.__dofile.store.write("a.do", new TextEncoder().encode("display 3\n"));
-    window.__dofile.state.addBanner({ b: "run-changed", path: "a.do" });
-  });
+  await putFiles(page, { "a.do": "display 3\n" });
+  await addBanner(page, { b: "run-changed", path: "a.do" });
   await page
     .locator(".banner:visible", { hasText: "The run changed a.do." })
     .getByRole("button", { name: "Reload from the run" })
@@ -457,7 +435,7 @@ test("a rename while Save writes: the save follows the tab to its new name (clea
   await page.evaluate(() => (window as any).__answer());
   await expect(page.locator(".toast")).toHaveText("Saved b.do");
   await expect.poll(tabs).toEqual([["b.do", false]]);
-  expect(await stored(page, "b.do")).toBe("display 1\ndisplay 2");
+  expect(await storedText(page, "b.do")).toBe("display 1\ndisplay 2");
   // a save that fails and answers after the rename: the banner is the tab's, under its new name
   await content.click();
   await page.keyboard.insertText("!");
@@ -475,14 +453,12 @@ test("a rename takes the reset banner's cut file to the new name (still one bann
 }) => {
   await setUp(page, { "a.do": "display 1\n" });
   await open(page, "a.do");
-  await page.evaluate(() =>
-    window.__dofile.state.addBanner({
-      b: "reset",
-      reason: "the code did not stop at Break",
-      kind: "break",
-      run: { kind: "file", path: "a.do", fresh_locals: true },
-    }),
-  );
+  await addBanner(page, {
+    b: "reset",
+    reason: "the code did not stop at Break",
+    kind: "break",
+    run: { kind: "file", path: "a.do", fresh_locals: true },
+  });
   if (isPhone(page)) await view(page, "Files");
   await page
     .getByRole("tree", { name: "Files" })
@@ -505,14 +481,12 @@ test("a rename takes the reset banner's cut file along when that file is not ope
   page,
 }) => {
   await setUp(page, { "d/a.do": "display 1\n" }); // no tab for it
-  await page.evaluate(() =>
-    window.__dofile.state.addBanner({
-      b: "reset",
-      reason: "the code did not stop at Break",
-      kind: "break",
-      run: { kind: "file", path: "d/a.do", fresh_locals: true },
-    }),
-  );
+  await addBanner(page, {
+    b: "reset",
+    reason: "the code did not stop at Break",
+    kind: "break",
+    run: { kind: "file", path: "d/a.do", fresh_locals: true },
+  });
   if (isPhone(page)) await view(page, "Files");
   await page.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: /^d/ }).focus();
   await page.keyboard.press("F2");
@@ -573,7 +547,7 @@ test("a Save pressed while a rename is being written saves under the new name, n
   await expect
     .poll(() => page.evaluate(() => window.__dofile.state.tabs.value.map((t: any) => [t.path, t.dirty])))
     .toEqual([["b.do", false]]);
-  expect(await stored(page, "b.do")).toBe("display 1\ndisplay 2");
+  expect(await storedText(page, "b.do")).toBe("display 1\ndisplay 2");
   expect(await page.evaluate(async () => (await window.__dofile.store.list()).map((f: any) => f.path))).toEqual([
     "b.do",
   ]);
@@ -644,7 +618,7 @@ test("the editor: a .csv's columns have their colors, a .log's lines their kinds
   });
   await expect(page.locator(".toast")).toHaveText("1 file uploaded");
   await expect(page.locator(".cm-content")).toHaveText("display 1");
-  expect(await stored(page, "dropped.do")).toBe("display 9\n");
+  expect(await storedText(page, "dropped.do")).toBe("display 9\n");
   if (isPhone(page)) {
     // a phone zooms in on a text field under 16 px: the editor's text and numbers are 16 px or more
     const size = await page.evaluate(() => [
@@ -707,11 +681,8 @@ test("the log's formatting: echoes bold, output normal, errors red and bold, hin
   await expect(log.getByRole("button", { name: "Go to line 17" })).toBeVisible();
   await expect(log.getByRole("button", { name: "help summarize" })).toBeVisible();
   await expect(log.locator(".head")).toContainText("Files stay in this browser. Try: help regress");
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((t) => {
-      window.__dofile.state.theme.value = t;
-      document.documentElement.dataset.theme = t;
-    }, theme);
+  for (const theme of ["light", "dark"] as const) {
+    await showTheme(page, theme);
     const echo = await styleOf(page, ".echo");
     expect(echo.weight, `${theme}: the echo is bold`).toBe(echo.bold);
     expect(echo.color).toBe(echo.ink);
@@ -732,14 +703,12 @@ test("the log's formatting: echoes bold, output normal, errors red and bold, hin
     } else await expect(log.locator(".explain")).toContainText("How to fix:");
   }
   // Download log holds the run's text alone: not the head
-  await page.evaluate(() => {
-    window.__dofile.state.runWriter.log.value = [
-      { t: "head" },
-      { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: true },
-      { t: "text", run: 1, text: ". display 1\n1\n" },
-      { t: "note", text: "a note of the page" },
-    ];
-  });
+  await seedLog(page, [
+    { t: "head" },
+    { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: true },
+    { t: "text", run: 1, text: ". display 1\n1\n" },
+    { t: "note", text: "a note of the page" },
+  ]);
   await expect(log.locator(".runhead")).toHaveText("Run: a.do, whole file · starts with no locals");
   const download = page.waitForEvent("download");
   if (isPhone(page)) {
@@ -770,10 +739,7 @@ test("Find in the log: every match counted and numbered in the log's order, Ente
   if (phone) await view(page, "Log");
   else {
     // unsplit, with the Graph tab showing: Find shows the Log tab first
-    await page.evaluate(() => {
-      window.__dofile.state.split.value = false;
-      window.__dofile.state.outputTab.value = "graph";
-    });
+    await showUnsplitOutput(page, "graph");
   }
   const opener = phone ? page.getByRole("button", { name: "Log actions" }) : page.getByRole("button", { name: "Find" });
   if (phone) {
@@ -828,10 +794,7 @@ test("the Output tabs by keyboard: each key moves the focus to the tab it select
   test.skip(isPhone(page), "the unsplit Output tabs are the desktop's");
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  await page.evaluate(() => {
-    window.__dofile.state.split.value = false;
-    window.__dofile.state.outputTab.value = "log";
-  });
+  await showUnsplitOutput(page, "log");
   await page.getByRole("button", { name: "Find" }).click();
   const field = page.getByRole("searchbox", { name: "Find in the log" });
   await expect(field).toBeFocused();
@@ -948,16 +911,14 @@ test("Clear log is disabled while there is nothing to clear (the head alone), in
     await expect(page.getByRole("button", { name: "Clear log…" })).toBeDisabled();
   }
   // a graph alone is something to clear
-  await page.evaluate(() => {
-    window.__dofile.state.runWriter.graphs.value = [
-      {
-        n: 1,
-        png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAfbLI3wAAAABJRU5ErkJggg==",
-        theme: "light",
-        from: "run",
-      },
-    ];
-  });
+  await seedGraphs(page, [
+    {
+      n: 1,
+      png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAfbLI3wAAAABJRU5ErkJggg==",
+      theme: "light",
+      from: "run",
+    },
+  ]);
   if (isPhone(page)) {
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Log actions" }).click();
@@ -970,15 +931,13 @@ test("the error line keeps to its text when the tab is left and shown again", as
   await open(page, "a.do");
   await open(page, "b.do");
   await open(page, "a.do");
-  await page.evaluate(() => {
-    window.__dofile.state.runWriter.lastRun.value = {
-      kind: "file",
-      path: "a.do",
-      fresh_locals: true,
-      rc: 111,
-      line: 3,
-      seconds: 0.1,
-    };
+  await seedLastRun(page, {
+    kind: "file",
+    path: "a.do",
+    fresh_locals: true,
+    rc: 111,
+    line: 3,
+    seconds: 0.1,
   });
   const err = page.locator(".cm-line.cm-err-line");
   await expect(err).toHaveText("line 3");
@@ -998,25 +957,18 @@ test("the error line keeps to its text when the tab is left and shown again", as
   await expect(err).toHaveText("line 3");
 
   // the mark is the file's last run's (editor/errormark.ts): a command and a run of another file leave it
-  const lastRun = (v: object | null) =>
-    page.evaluate((v) => {
-      window.__dofile.state.runWriter.lastRun.value = v;
-    }, v);
+  const lastRun = (v: LastRun) => seedLastRun(page, v);
   await lastRun({ kind: "command", fresh_locals: false, rc: 111, line: 1, seconds: 0.1 });
   await lastRun({ kind: "file", path: "b.do", fresh_locals: true, rc: 0, line: null, seconds: 0.1 });
   await expect(err).toHaveText("line 3");
   // a run of a.do that starts clears it
-  await page.evaluate(() => {
-    window.__dofile.state.engine.value = {
-      s: "running",
-      run: { kind: "file", path: "a.do", fresh_locals: true },
-      t0: Date.now(),
-    };
+  await showEngine(page, {
+    s: "running",
+    run: { kind: "file", path: "a.do", fresh_locals: true },
+    t0: Date.now(),
   });
   await expect(err).toHaveCount(0);
-  await page.evaluate(() => {
-    window.__dofile.state.engine.value = { s: "none" };
-  });
+  await showEngine(page, { s: "none" });
   // the engine gone (a reset: lastRun null) clears it
   await lastRun({ kind: "file", path: "a.do", fresh_locals: true, rc: 111, line: 5, seconds: 0.1 });
   await expect(err).toHaveText("line 3");
@@ -1040,15 +992,13 @@ test("the error line goes with its tab: a file closed and opened again with the 
   await setUp(page, { "a.do": "line 1\nline 2\nline 3\n", "b.do": "other\n" });
   await open(page, "b.do");
   await open(page, "a.do");
-  await page.evaluate(() => {
-    window.__dofile.state.runWriter.lastRun.value = {
-      kind: "file",
-      path: "a.do",
-      fresh_locals: true,
-      rc: 111,
-      line: 2,
-      seconds: 0.1,
-    };
+  await seedLastRun(page, {
+    kind: "file",
+    path: "a.do",
+    fresh_locals: true,
+    rc: 111,
+    line: 2,
+    seconds: 0.1,
   });
   const err = page.locator(".cm-line.cm-err-line");
   await expect(err).toHaveText("line 2");
@@ -1074,18 +1024,16 @@ test("the error line goes with its tab: a file closed and opened again with the 
 test("the notes at a run's end wrap in the Log pane, so Go to line stays in view, at every width", async ({ page }) => {
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  await page.evaluate(() => {
-    window.__dofile.state.runWriter.log.value = [
-      { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: false },
-      {
-        t: "text",
-        run: 1,
-        text: ". forvalues i = 1/100000 {\n  2.   sleep 10\n  3. }\n--Break--\nr(1);\n",
-        end: { kind: "file", path: "a.do", fresh_locals: true, rc: 1, line: 17, seconds: 2 },
-      },
-      { t: "text", run: 2, text: ". display 1\n1\n" },
-    ];
-  });
+  await seedLog(page, [
+    { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: false },
+    {
+      t: "text",
+      run: 1,
+      text: ". forvalues i = 1/100000 {\n  2.   sleep 10\n  3. }\n--Break--\nr(1);\n",
+      end: { kind: "file", path: "a.do", fresh_locals: true, rc: 1, line: 17, seconds: 2 },
+    },
+    { t: "text", run: 2, text: ". display 1\n1\n" },
+  ]);
   const widths = isPhone(page) ? [page.viewportSize()!.width] : [1440, 1200, 900, 700];
   for (const width of widths) {
     if (!isPhone(page)) await page.setViewportSize({ width, height: 800 });
@@ -1165,37 +1113,35 @@ test("the log: under an error, the OQ-10 note where the engine's own words do no
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
   // the engine's own text for these three errors (src/dofile/browser.py, as a run prints it)
-  await page.evaluate(() => {
-    const end = (rc: number) => ({ kind: "command", fresh_locals: false, rc, line: 1, seconds: 0.1 });
-    window.__dofile.state.runWriter.log.value = [
-      { t: "text", run: 1, text: ". restore\nnothing to restore\nr(622);\n", end: end(622) },
-      {
-        t: "text",
-        run: 2,
-        text: '. reghdfe y x\ncommand reghdfe is unrecognized\n  → "reghdfe" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
-        end: end(199),
-      },
-      {
-        t: "text",
-        run: 3,
-        text: '. use "$T"\nfile /tmp/opendta-1/S__000000.dta not found\nr(601);\n(a tempfile lasts one run: save it under a name to use it in a later run)\n',
-        end: end(601),
-      },
-      // the note is the error's the run ended with, not one capture noisily caught before it (the engine's own log)
-      {
-        t: "text",
-        run: 4,
-        text: '. capture noisily {\n. reghdfe y x\ncommand reghdfe is unrecognized\n  → "reghdfe" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n. }\n\n. regresss y x\ncommand regresss is unrecognized\n  → "regresss" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
-        end: end(199),
-      },
-      {
-        t: "text",
-        run: 5,
-        text: '. capture noisily {\n. regresss y x\ncommand regresss is unrecognized\n  → "regresss" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n. }\n\n. ftools\ncommand ftools is unrecognized\n  → "ftools" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
-        end: end(199),
-      },
-    ];
-  });
+  const end = (rc: number) => ({ kind: "command" as const, fresh_locals: false, rc, line: 1, seconds: 0.1 });
+  await seedLog(page, [
+    { t: "text", run: 1, text: ". restore\nnothing to restore\nr(622);\n", end: end(622) },
+    {
+      t: "text",
+      run: 2,
+      text: '. reghdfe y x\ncommand reghdfe is unrecognized\n  → "reghdfe" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
+      end: end(199),
+    },
+    {
+      t: "text",
+      run: 3,
+      text: '. use "$T"\nfile /tmp/opendta-1/S__000000.dta not found\nr(601);\n(a tempfile lasts one run: save it under a name to use it in a later run)\n',
+      end: end(601),
+    },
+    // the note is the error's the run ended with, not one capture noisily caught before it (the engine's own log)
+    {
+      t: "text",
+      run: 4,
+      text: '. capture noisily {\n. reghdfe y x\ncommand reghdfe is unrecognized\n  → "reghdfe" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n. }\n\n. regresss y x\ncommand regresss is unrecognized\n  → "regresss" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
+      end: end(199),
+    },
+    {
+      t: "text",
+      run: 5,
+      text: '. capture noisily {\n. regresss y x\ncommand regresss is unrecognized\n  → "regresss" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n. }\n\n. ftools\ncommand ftools is unrecognized\n  → "ftools" is not a command known to OpenDTA.\n    Learn more: help opendta\nr(199);\n',
+      end: end(199),
+    },
+  ]);
   if (isPhone(page)) await view(page, "Log");
   await expect(page.getByRole("log", { name: "Log" }).locator(".note")).toHaveText([
     "Nothing was preserved. A run restores its data when it ends, so put preserve and restore in the same run.",
@@ -1248,9 +1194,7 @@ test("the command line: no autocorrect, capitals or suggestions, one Run button 
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   // the field is off with no engine: the `engine` signal is set to show `ready` (the machine stays in `none`; nothing is
   // run here)
-  await page.evaluate(() => {
-    window.__dofile.state.engine.value = { s: "ready" };
-  });
+  await showEngine(page, { s: "ready" });
   if (isPhone(page)) await view(page, "Log");
   const field = page.getByRole("textbox", { name: "Command" });
   for (const [name, value] of Object.entries({
@@ -1360,7 +1304,7 @@ test("a .dta tab: Save is off, and when the engine's dialog closes by itself the
   await expect(page.getByRole("textbox", { name: "Command" })).toBeDisabled();
   await page.locator(".toolbar").getByRole("button", { name: "Start engine" }).click();
   await expect(page.getByRole("dialog", { name: "Download the engine?" })).toBeVisible();
-  await page.evaluate(() => (window as any).__dofile.start());
+  await page.evaluate(() => window.__dofile.start());
   await ready(page);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(tab).toBeFocused();
@@ -1481,9 +1425,7 @@ test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open 
   expect(await lastKind()).toBeNull();
 
   // a dialog open: nothing runs
-  await page.evaluate(() => {
-    window.__dofile.state.dialog.value = { d: "close-tab", path: "a.do" };
-  });
+  await openDialog(page, { d: "close-tab", path: "a.do" });
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+Enter");
   await page.waitForTimeout(300);
@@ -1827,11 +1769,8 @@ test("the command line with no engine: disabled, with the hint while it is empty
   await expect(field).toHaveValue("");
   await expect(field).toHaveAttribute("placeholder", "Start the engine to run code");
   // the hint is to be read: the text contrast (4.5), in both themes
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((t) => {
-      window.__dofile.state.theme.value = t;
-      document.documentElement.dataset.theme = t;
-    }, theme);
+  for (const theme of ["light", "dark"] as const) {
+    await showTheme(page, theme);
     expect(await contrastOf(page, ".cmdline .field", "::placeholder"), `the hint, ${theme}`).toBeGreaterThanOrEqual(
       4.5,
     );
@@ -1873,13 +1812,13 @@ test("the command line with no engine: disabled, with the hint while it is empty
   await expect(page.locator(".toast")).toHaveCount(0);
   await expect(field).toHaveValue("");
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-  expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
+  expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
 
   // Start engine: the download prompt. The engine starts: the field is on, the button runs, and nothing ran
   await start.click();
   await expect(page.getByRole("dialog", { name: "Download the engine?" })).toBeVisible();
-  await page.evaluate(() => (window as any).__dofile.start());
+  await page.evaluate(() => window.__dofile.start());
   await ready(page);
   await page.waitForTimeout(200);
   expect(await page.evaluate(() => window.__dofile.state.lastRun.value)).toBeNull();
@@ -1901,17 +1840,13 @@ test("the command line with no engine: disabled, with the hint while it is empty
   // a typed draft, then the engine is lost (the `engine` signal is set to show `declined`): the field is disabled and
   // keeps the draft, greyed but readable; the hint does not show over it
   await field.fill("display 6*7");
-  await page.evaluate(() => {
-    window.__dofile.state.engine.value = { s: "declined" };
-  });
+  await showEngine(page, { s: "declined" });
   await expect(field).toBeDisabled();
   await expect(field).toHaveValue("display 6*7");
   expect(await contrastOf(page, ".cmdline .field", null), "the draft").toBeGreaterThanOrEqual(4.5);
   await expect(line.getByRole("button", { name: "Start engine" })).toBeVisible();
   // the engine is back: the draft is still there, and Enter runs it
-  await page.evaluate(() => {
-    window.__dofile.state.engine.value = { s: "ready" };
-  });
+  await showEngine(page, { s: "ready" });
   await expect(field).toBeEnabled();
   await expect(field).toHaveValue("display 6*7");
   await field.press("Enter");
@@ -1964,12 +1899,12 @@ test("with no engine nothing offers to run: Run is Start engine and Ctrl/Cmd+Ent
   // the button does the same; the engine starts, and nothing runs by itself
   await start.click();
   await expect(prompt).toBeVisible();
-  await page.evaluate(() => (window as any).__dofile.start());
+  await page.evaluate(() => window.__dofile.start());
   await ready(page);
   await page.waitForTimeout(200);
   expect(await page.evaluate(() => window.__dofile.state.lastRun.value)).toBeNull();
   expect(await page.evaluate(() => window.__dofile.state.log.value.filter((i: any) => i.t === "text").length)).toBe(0);
-  expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
+  expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
   // now Run is Run, and Ctrl/Cmd+Enter runs
   await expect(bar.getByRole("button", { name: "Start engine" })).toHaveCount(0);
   if (isPhone(page)) await view(page, "Editor");
@@ -2000,10 +1935,7 @@ test("while the engine starts, a command is refused with words and the draft sta
   await open(page, "a.do");
   const engineIs = () => page.evaluate(() => document.documentElement.dataset.engine);
   const toast = page.locator(".toast");
-  const clear = () =>
-    page.evaluate(() => {
-      window.__dofile.state.toast.value = null;
-    });
+  const clear = () => clearToast(page);
   const focused = () =>
     page.evaluate(() => {
       const a = document.activeElement;
@@ -2023,7 +1955,7 @@ test("while the engine starts, a command is refused with words and the draft sta
   const line = page.locator(".cmdline");
 
   // "Download" pressed; a command typed during the download; Enter: the toast, and the text stays
-  await page.evaluate(() => (window as any).__dofile.start());
+  await page.evaluate(() => window.__dofile.start());
   await expect.poll(engineIs).toBe("downloading");
   if (isPhone(page)) await view(page, "Log");
   await expect(field).toBeEnabled(); // on, so a draft can be typed
@@ -2105,9 +2037,7 @@ test("while the engine starts, a command is refused with words and the draft sta
   await fail();
   // and where the start cannot be tried again from the page (the `engine` signal set to show reason "updated"): a
   // toast says so, and nothing is tried
-  await page.evaluate(() => {
-    window.__dofile.state.engine.value = { s: "failed", reason: "updated", detail: "cause", message: "words" };
-  });
+  await showEngine(page, { s: "failed", reason: "updated", detail: "cause", message: "words" });
   await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect(toast).toHaveText("Run is not available: the engine isn't running in this tab");
@@ -2121,22 +2051,20 @@ test("with no engine Import and the log's help links are off: aria-disabled and 
 }) => {
   await setUp(page, { "t.csv": "a,b\n1,2\n" });
   await open(page, "t.csv");
-  await page.evaluate(() => {
-    window.__dofile.state.runWriter.log.value = [
-      { t: "head" },
-      {
-        t: "text",
-        run: 1,
-        text: '. summarize sex\nsex not found\n  → "sex" is not a variable.\n    Learn more: help summarize\nr(111);\n',
-        end: { kind: "command", fresh_locals: false, rc: 111, line: null, seconds: 0.1 },
-      },
-    ];
-  });
+  await seedLog(page, [
+    { t: "head" },
+    {
+      t: "text",
+      run: 1,
+      text: '. summarize sex\nsex not found\n  → "sex" is not a variable.\n    Learn more: help summarize\nr(111);\n',
+      end: { kind: "command", fresh_locals: false, rc: 111, line: null, seconds: 0.1 },
+    },
+  ]);
   const toast = page.locator(".toast");
   const quiet = async () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-    expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
+    expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
     expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
   };
   // Import
@@ -2161,9 +2089,7 @@ test("with no engine Import and the log's help links are off: aria-disabled and 
   await expect(toast).toHaveText("Start the engine to see help summarize");
   await quiet();
   // with an engine (the signal set to show `ready`) both are on
-  await page.evaluate(() => {
-    window.__dofile.state.engine.value = { s: "ready" };
-  });
+  await showEngine(page, { s: "ready" });
   await expect(help).not.toHaveAttribute("aria-disabled", "true");
   await expect(help).not.toHaveClass(/\boff\b/);
   if (isPhone(page)) await view(page, "Editor");
@@ -2183,7 +2109,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   await page.keyboard.type("mine");
   await open(page, "t.csv");
   const r = await page.evaluate(() =>
-    (window as any).__dofile.run(
+    window.__dofile.run(
       "clear\nset obs 2\ngenerate a = _n\nexport delimited using t.csv, replace\nexport delimited using u.csv, replace",
     ),
   );
@@ -2300,7 +2226,7 @@ test("a clean tab of a .csv with \\r\\n line breaks follows a run that rewrites 
   await ready(page);
   await open(page, "w.csv");
   const r = await page.evaluate(() =>
-    (window as any).__dofile.run("clear\nset obs 2\ngenerate a = _n\nexport delimited using w.csv, replace"),
+    window.__dofile.run("clear\nset obs 2\ngenerate a = _n\nexport delimited using w.csv, replace"),
   );
   expect(r?.rc, r?.log).toBe(0);
   await ready(page);
@@ -2349,12 +2275,12 @@ test("a file's form follows the store's text the editor takes: a run's version (
   // the clean tab shows the run's version; edited and saved, it has the run's "\r\n"
   await expect(content).toHaveText(/^a\s*1\s*$/);
   await save("w.csv", "2");
-  expect(await stored(page, "w.csv")).toBe("a\r\n1\r\n2");
+  expect(await storedText(page, "w.csv")).toBe("a\r\n1\r\n2");
   // the tab with edits keeps them; saved, they have the run's "\r\n"
   await open(page, "x.csv");
   await expect(content).toContainText("mine");
   await save("x.csv", "!");
-  expect(await stored(page, "x.csv")).toBe("a\r\n9\r\nmine!");
+  expect(await storedText(page, "x.csv")).toBe("a\r\n9\r\nmine!");
   await expect(page.locator(".banner", { hasText: "The run changed x.csv." })).toHaveCount(0);
 
   // Reload from the run takes the store's text in its form: a run gives x.csv the banner again with a "\n" version, then
@@ -2394,7 +2320,7 @@ test("a file's form follows the store's text the editor takes: a run's version (
   await expect(page.getByRole("log", { name: "Log" })).toContainText("42");
   if (isPhone(page)) await view(page, "Editor");
   await page.keyboard.press("ControlOrMeta+s");
-  await expect.poll(() => stored(page, "b.do")).toBe("display 40+2\r\n");
+  await expect.poll(() => storedText(page, "b.do")).toBe("display 40+2\r\n");
   expect((await page.evaluate(async () => [...(await window.__dofile.store.read("b.do"))]))[0]).toBe(0x64); // "d", no BOM
   const after = await nested();
   expect(after.rc, after.log).toBe(0);

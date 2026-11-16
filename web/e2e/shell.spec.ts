@@ -1,38 +1,14 @@
-// The app shell in real browsers: the layouts, the theme button, the ⋯ menu (Esc and Tab), the download prompt's "Not
-// now", "Start engine" as the way back to it and a run that does nothing with no engine; a stale snapshot refused with
-// reason "updated" (plain words in its message, the cause in its detail); ?snapshot=0 still starts. Also the phone
-// toast's place and the failed "Download all" banner.
-import type { Page } from "@playwright/test";
-import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
-
-const state = (page: Page) => page.evaluate(() => document.documentElement.dataset.engine);
-const SAMPLE =
-  "clear\nset obs 200\nset seed 1\ngenerate x = rnormal()\ngenerate y = 1 + 2*x + rnormal()\nregress y x, robust\nscatter y x\n";
-type Hook = {
-  run(code: string): Promise<{ rc: number; images: string[] } | null>;
-  engine: { startup: { mode: string } | null };
-  state: { engine: { value: { s: string; message?: string; detail?: string; reason?: string } } };
-};
-type Signals = Record<string, { value: unknown }>;
-type FullHook = {
-  state: Signals;
-  selection: { value: unknown };
-  store: { blocked: boolean; write(path: string, bytes: Uint8Array): Promise<void> };
-};
-
-/** Write a file into the store through the hook, once the tab lock has unblocked it. */
-async function writeFile(page: Page, path: string) {
-  await page.waitForFunction(() => (window as unknown as { __dofile: FullHook }).__dofile.store.blocked === false);
-  await page.evaluate(
-    (p) =>
-      (window as unknown as { __dofile: FullHook }).__dofile.store.write(p, new TextEncoder().encode("display 1\n")),
-    path,
-  );
-}
-
-/** Two animation frames: what a signal change renders has been laid out. */
-const settled = (page: Page) =>
-  page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+import { engineState, expect, putFiles, SAMPLE, settled, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import {
+  type EngineSeed,
+  type Selection,
+  seedEditorBox,
+  seedLog,
+  seedStatusBar,
+  showEngine,
+  showPhoneTab,
+  showToast,
+} from "./seed";
 
 test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; Run is Start engine, which brings the prompt back; a run does nothing and opens no prompt", async ({
   page,
@@ -45,7 +21,7 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
   await expect(prompt.getByRole("button", { name: /^Download/ })).toBeFocused(); // the default (UX-037)
   await prompt.getByRole("button", { name: "Not now" }).click();
   await expect(prompt).toBeHidden();
-  expect(await state(page)).toBe("declined");
+  expect(await engineState(page)).toBe("declined");
   if ((page.viewportSize()?.width ?? 0) >= 700) {
     await expect(page.locator(".statusbar")).toContainText("No engine · Start engine downloads it");
   }
@@ -56,17 +32,17 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
   await expect(start).toBeEnabled();
   expect(await page.evaluate(() => caches.keys())).toEqual([]); // nothing downloaded: the next visit asks again
   // a run through the run controller: refused. Its promise settles with null at once, and no prompt opens
-  const refused = await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.run('display "RAN"'));
+  const refused = await page.evaluate(() => window.__dofile.run('display "RAN"'));
   expect(refused).toBeNull();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  expect(await state(page)).toBe("declined");
+  expect(await engineState(page)).toBe("declined");
   // Start engine: the same prompt again (one title: no run is behind it), and Not now again
   await start.click();
   await expect(prompt).toBeVisible();
-  expect(await state(page)).toBe("asking");
+  expect(await engineState(page)).toBe("asking");
   await prompt.getByRole("button", { name: "Not now" }).click();
   await expect(prompt).toBeHidden();
-  expect(await state(page)).toBe("declined");
+  expect(await engineState(page)).toBe("declined");
 });
 
 test("the layout: desktop panes or the phone's views; the theme button cycles and is kept; the ⋯ menu works by keyboard", async ({
@@ -141,10 +117,8 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
   await expect(menu.getByRole("menuitem", { name: "Download all (.zip)" })).toHaveAttribute("aria-disabled", "true");
   await expect(menu.getByRole("menuitemcheckbox", { name: "Wrap lines" })).toBeFocused();
   await page.keyboard.press("Escape");
-  await writeFile(page, "a.do");
-  await page.waitForFunction(
-    () => (window as unknown as { __dofile: FullHook }).__dofile.state.hasFiles.value === true,
-  );
+  await putFiles(page, { "a.do": "display 1\n" });
+  await page.waitForFunction(() => window.__dofile.state.hasFiles.value === true);
   // with a file: ArrowDown opens it on the first item, arrows move, Esc closes it and gives the focus back
   await page.keyboard.press("ArrowDown");
   await expect(menu).toBeVisible();
@@ -190,7 +164,7 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
     .poll(
       () =>
         page.evaluate(() => {
-          const s = (window as unknown as { __dofile: Hook }).__dofile.state.engine.value;
+          const s = window.__dofile.state.engine.value;
           return s.s === "failed" ? s.detail : s.s;
         }),
       { timeout: 120_000 },
@@ -198,14 +172,9 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
     .toMatch(
       /^dofile was updated: reload the page \(the site's start files are of the build 000000000000.*npm run snapshot/,
     );
-  expect(
-    await page.evaluate(
-      () => (window as unknown as { __dofile: { engine: { worker: unknown } } }).__dofile.engine.worker,
-    ),
-    "no worker",
-  ).toBeNull();
+  expect(await page.evaluate(() => window.__dofile.engine.worker), "no worker").toBeNull();
   // the visitor's case is a site updated since the page loaded: the reason says so, for "Reload the page"
-  const st = await page.evaluate(() => (window as unknown as { __dofile: Hook }).__dofile.state.engine.value);
+  const st = await page.evaluate(() => window.__dofile.state.engine.value);
   expect(st.reason).toBe("updated");
   expect(st.message).toBe("dofile has a newer version on this site. Reload the page to use it.");
 });
@@ -228,7 +197,7 @@ test("?snapshot=0: the normal boot still starts and runs the sample", async ({ p
   });
   const engineNow = () =>
     page.evaluate(() => {
-      const { s, reason, detail, message } = (window as unknown as { __dofile: Hook }).__dofile.state.engine.value;
+      const { s, reason, detail, message } = window.__dofile.state.engine.value;
       return { s, reason, detail, message };
     });
   const output = () => `the page's console (${logged.length} messages):\n${logged.join("\n")}`;
@@ -248,7 +217,7 @@ test("?snapshot=0: the normal boot still starts and runs the sample", async ({ p
     `the engine is ${now.s}, reason ${now.reason}, detail ${now.detail}, message ${now.message}\n${output()}`,
   ).toBe("ready");
   const r = await page.evaluate(async (code) => {
-    const d = (window as unknown as { __dofile: Hook }).__dofile,
+    const d = window.__dofile,
       r = await d.run(code);
     return { mode: d.engine.startup?.mode, rc: r?.rc, images: r?.images.length };
   }, SAMPLE);
@@ -266,7 +235,7 @@ test("the toolbar does not move: its box and every button's box are the same in 
   await page.evaluate(() => document.fonts.ready); // measured in the page's fonts, not a fallback that is still showing
   const head = { kind: "file", fresh_locals: true };
   // the sixteen states of the engine's state machine (src/app/types.ts, EngineState)
-  const states = [
+  const states: EngineSeed[] = [
     { s: "checking-lock" },
     { s: "checking-cache" },
     { s: "none" },
@@ -298,17 +267,12 @@ test("the toolbar does not move: its box and every button's box are the same in 
         ["a.do", true, [6, 7]],
         ["a.do", true, [1234, 1240]],
       ] as const) {
-        await page.evaluate(
-          ([st, tab, dirty, sel]) => {
-            const d = (window as unknown as { __dofile: FullHook }).__dofile;
-            d.state.dialog.value = null; // the boxes, not the dialogs
-            d.state.engine.value = st;
-            d.state.tabs.value = tab ? [{ path: tab, kind: "text", dirty }] : [];
-            d.state.activeTab.value = tab;
-            d.selection.value = sel;
-          },
-          [st, tab, dirty, sel] as const,
-        );
+        await seedEditorBox(page, {
+          engine: st,
+          tabs: tab ? [{ path: tab, kind: "text", dirty }] : [],
+          active: tab,
+          selection: sel as Selection,
+        });
         await settled(page);
         const boxes = await page.evaluate(() => {
           const box = (e: Element) => {
@@ -360,15 +324,13 @@ test("the desktop toolbar's buttons are all one height, and so are the pane head
   await page.evaluate(() => document.fonts.ready); // measured in the page's fonts, not a fallback that is still showing
   for (const width of [1440, 1024]) {
     await page.setViewportSize({ width, height: 800 });
-    for (const sel of [null, [6, 7]]) {
-      await page.evaluate((sel) => {
-        const d = (window as unknown as { __dofile: FullHook }).__dofile;
-        d.state.dialog.value = null;
-        d.state.engine.value = { s: "ready" };
-        d.state.tabs.value = [{ path: "a.do", kind: "text", dirty: true }];
-        d.state.activeTab.value = "a.do";
-        d.selection.value = sel;
-      }, sel);
+    for (const sel of [null, [6, 7]] as Selection[]) {
+      await seedEditorBox(page, {
+        engine: { s: "ready" },
+        tabs: [{ path: "a.do", kind: "text", dirty: true }],
+        active: "a.do",
+        selection: sel,
+      });
       await settled(page);
       const heights = (selector: string) =>
         page.evaluate(
@@ -421,8 +383,8 @@ test("the folded file list: the Files button says what it does and how many file
   await expect(button).toHaveAttribute("aria-expanded", "false");
   await expect(button).toHaveAttribute("aria-controls", "files-pane");
   await expect(pane).toBeHidden();
-  await writeFile(page, "a.do");
-  await writeFile(page, "data/b.do");
+  await putFiles(page, { "a.do": "display 1\n" });
+  await putFiles(page, { "data/b.do": "display 1\n" });
   await expect(page.getByRole("button", { name: "Files 2" })).toBeVisible();
   const files = page.getByRole("button", { name: "Files 2" });
   await files.focus();
@@ -453,7 +415,7 @@ test("the folded file list with no files: opened by keyboard, the focus goes to 
   await expect(pane).toBeVisible();
   await expect(pane.getByRole("button", { name: "File actions" })).toBeFocused();
   // the request ended there: a file that appears now does not take the focus
-  await page.evaluate(() => (window as any).__dofile.store.write("a.do", new TextEncoder().encode("1\n")));
+  await page.evaluate(() => window.__dofile.store.write("a.do", new TextEncoder().encode("1\n")));
   await expect(pane.getByRole("treeitem", { name: /^a\.do/ })).toBeVisible();
   await page.waitForTimeout(300);
   await expect(pane.getByRole("button", { name: "File actions" })).toBeFocused();
@@ -467,10 +429,8 @@ test("phone: the page cannot scroll; only panes do", async ({ page, isMobile }) 
   test.skip(!isMobile, "the iPhone profile");
   await page.goto("?test=manual");
   await settled(page);
-  for (const view of ["files", "editor", "log", "data", "results"]) {
-    await page.evaluate((v) => {
-      (window as unknown as { __dofile: FullHook }).__dofile.state.phoneTab.value = v;
-    }, view);
+  for (const view of ["files", "editor", "log", "data", "results"] as const) {
+    await showPhoneTab(page, view);
     await settled(page);
     const sizes = await page.evaluate(() => {
       const d = document.scrollingElement!;
@@ -509,10 +469,8 @@ test("a failed Download all shows one banner with Try again, on every phone view
   page,
 }) => {
   await page.goto("?test=manual");
-  await writeFile(page, "a.do");
-  await page.waitForFunction(
-    () => (window as unknown as { __dofile: FullHook }).__dofile.state.hasFiles.value === true,
-  );
+  await putFiles(page, { "a.do": "display 1\n" });
+  await page.waitForFunction(() => window.__dofile.state.hasFiles.value === true);
   type Failing = { __dofile: { store: { zip?(): Promise<File> } }; zipFailed: number };
   await page.evaluate(() => {
     const w = window as unknown as Failing;
@@ -566,11 +524,8 @@ test("phone: the toast is above the command line and the tab bar, and above the 
   await page.emulateMedia({ reducedMotion: "reduce" }); // the toast's place, not its way in
   await page.goto("?test=manual");
   await page.waitForFunction(() => "__dofile" in window);
-  await page.evaluate(() => {
-    const s = (window as unknown as { __dofile: { state: Signals & { showToast(t: string): void } } }).__dofile.state;
-    s.phoneTab.value = "log";
-    s.showToast("Saved analysis.do");
-  });
+  await showPhoneTab(page, "log");
+  await showToast(page, "Saved analysis.do");
   await settled(page);
   const rects = () =>
     page.evaluate(() => {
@@ -602,12 +557,11 @@ test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ m
   isMobile,
 }) => {
   await page.goto("?test=manual");
-  await writeFile(page, "a.do");
+  await putFiles(page, { "a.do": "display 1\n" });
   // a run's log with a nested do of a file that has unsaved edits: its note says how to save
-  await page.evaluate(() => {
-    const W = (window as any).__dofile.state.runWriter;
-    W.log.value = [{ t: "text", run: 1, text: ". do a.do\n\n. display 1\n1\n\nend of do-file\n", unsaved: ["a.do"] }];
-  });
+  await seedLog(page, [
+    { t: "text", run: 1, text: ". do a.do\n\n. display 1\n1\n\nend of do-file\n", unsaved: ["a.do"] },
+  ]);
   // every text in sight that names a key: a text node in the page (.app) whose element and all its ancestors up to .app
   // that have a box (not display: contents) are bigger than the 1 px of a visually hidden one, and which is not
   // visibility: hidden (a toolbar label not shown)
@@ -707,15 +661,14 @@ test("the status bar's 'Not affiliated with StataCorp': in sight from 1200 px wi
   // at 1200 px: the longest last run, memory and "Files may be cleared", and each state's words: nothing overflows or
   // wraps, the last run and the state's words are not cut
   await page.setViewportSize({ width: 1200, height: 900 });
-  await page.evaluate(() => {
-    const S = (window as any).__dofile.state;
-    S.persisted.value = false;
-    S.memory.value = { heap_bytes: 4_096e6, data_bytes: 0 };
-    S.lastRun.value = { kind: "file", path: "a.do", fresh_locals: true, rc: 9999, line: 9999, seconds: 3599 };
+  await seedStatusBar(page, {
+    persisted: false,
+    memory: { heap_bytes: 4_096e6, data_bytes: 0 },
+    lastRun: { kind: "file", path: "a.do", fresh_locals: true, rc: 9999, line: 9999, seconds: 3599 },
   });
   const t0 = Date.now() - 3_599_000;
   const run = { kind: "selection", path: "a.do", lines: [1234, 5678], fresh_locals: false };
-  for (const st of [
+  const lineup: EngineSeed[] = [
     { s: "ready" },
     { s: "starting-worker", stage: "packages", t0, done: {} },
     { s: "running", run, t0 },
@@ -723,8 +676,9 @@ test("the status bar's 'Not affiliated with StataCorp': in sight from 1200 px wi
     { s: "waiting", run, t0 },
     { s: "declined" },
     { s: "failed-twice" },
-  ]) {
-    await page.evaluate((v) => ((window as any).__dofile.state.engine.value = v), st);
+  ];
+  for (const st of lineup) {
+    await showEngine(page, st);
     await expect(bar.locator("[data-state]")).toHaveAttribute("data-state", st.s);
     await expect(note).toBeVisible();
     const fit = await bar.evaluate((el) => {

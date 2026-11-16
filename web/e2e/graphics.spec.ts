@@ -9,12 +9,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, keepFiles, retryFirstGoto, startEngine, test } from "./fixtures";
+import { expect, keepFiles, ready, retryFirstGoto, startEngine, test } from "./fixtures";
 
-type Hook = { run(code: string): Promise<any>; breakRun(): void; state: { engine: { value: { s: string } } } };
 declare global {
   interface Window {
-    __dofile: Hook;
     __partSeen: { ready: number; lines: [number, string][] }; // the return-visit test's clock (its init script)
     __runAtReady: Promise<any>; // `display 1`, sent by an init script the moment the page says "ready"
     __runAtReadySent: number; // when, Date.now()
@@ -22,8 +20,6 @@ declare global {
 }
 
 const PART = "**/snapshot/graphics.brotli.bin";
-const ready = (page: Page) =>
-  expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine), { timeout: 300_000 }).toBe("ready");
 const run = (page: Page, code: string) => page.evaluate((code) => window.__dofile.run(code), code);
 
 /** Hold the part's request until release(); count its requests. */

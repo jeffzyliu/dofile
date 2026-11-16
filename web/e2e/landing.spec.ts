@@ -8,7 +8,8 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE, LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
-import { expect, test } from "./fixtures";
+import { expect, isPhone, test } from "./fixtures";
+import { openDialog, showEngine } from "./seed";
 
 /** The editor's address, and the page's address without its query and hash: origin and path. */
 const EDITOR = new URL(EDITOR_BASE, LOCAL_EDITOR_URL).href;
@@ -16,7 +17,6 @@ const where = (url: string) => {
   const u = new URL(url);
   return u.origin + u.pathname;
 };
-const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 const landingHeading = (page: Page) =>
   page.getByRole("heading", { level: 1, name: "dofile: run Stata-syntax do-files in your browser" });
 /** The visible "Open the editor →": the desktop card's or the phone's hero (the other is display: none). */
@@ -51,7 +51,7 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
   // a first visit: the download prompt is over the page until it is answered, and the sample's analysis.do is open
   await page.getByRole("dialog", { name: "Download the engine?" }).getByRole("button", { name: "Not now" }).click();
   await expect(page.locator(".cm-content")).toContainText("A first look at wages, age and schooling");
-  if (phone(page)) {
+  if (isPhone(page)) {
     await page.getByRole("button", { name: "More actions" }).click();
     // Commands opens the commands page in a new tab too
     const [commands] = await Promise.all([
@@ -80,11 +80,8 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
 test("the other-tab dialog's Close editor leaves for the landing page", async ({ page }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-  await page.evaluate(() => {
-    const s = (window as any).__dofile.state;
-    s.engine.value = { s: "other-tab-idle" };
-    s.dialog.value = { d: "other-tab" };
-  });
+  await showEngine(page, { s: "other-tab-idle" });
+  await openDialog(page, { d: "other-tab" });
   await page
     .getByRole("alertdialog", { name: "dofile is open in another tab" })
     .getByRole("button", { name: "Close editor" })
@@ -99,13 +96,11 @@ test("the failed-start banner's Browsers that work opens the landing page's sect
 }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-  await page.evaluate(() => {
-    (window as any).__dofile.state.engine.value = {
-      s: "failed",
-      reason: "no-wasm",
-      detail: "",
-      message: "This browser has no WebAssembly support.",
-    };
+  await showEngine(page, {
+    s: "failed",
+    reason: "no-wasm",
+    detail: "",
+    message: "This browser has no WebAssembly support.",
   });
   const popup = context.waitForEvent("page");
   await page.getByRole("link", { name: "Browsers that work" }).click();
@@ -281,7 +276,7 @@ test("the banner's rows are one line apart, so its slanted strokes join", async 
       : [...document.querySelectorAll(".file.desktop-only .art-ln")];
     const lh = Number.parseFloat(getComputedStyle(lines[0]).lineHeight);
     return { lh, tops: lines.map((l) => l.getBoundingClientRect().top), shown: lines[0].getClientRects().length > 0 };
-  }, phone(page));
+  }, isPhone(page));
   expect(rows.shown).toBe(true);
   expect(rows.tops).toHaveLength(5);
   for (let i = 1; i < 5; i++) expect(rows.tops[i] - rows.tops[i - 1]).toBeCloseTo(rows.lh, 0);

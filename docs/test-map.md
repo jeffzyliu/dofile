@@ -268,6 +268,9 @@ Specs:
   - Where the browser keeps no storage, the sample's write brings no banner and the visitor's own change does.
 - `step2.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
   URL flag.
+- `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
+  put the page's state in a shape (an engine state, a banner, log items, ...); `fixtures.ts` holds the helpers shared by
+  several specs (`isPhone`, `ready`, `settled`, `putFiles`, `storedText`, `SAMPLE`).
 - `fixtures.spec.ts` (no browser page): `retryFirstGoto` in `fixtures.ts`, which the `page` fixture applies to every
   test's page (and `engine.spec.ts`, `step2.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on
   a page still at `about:blank` is retried once and logs "timed out on a fresh page" (WebKit bug 325840); a second
