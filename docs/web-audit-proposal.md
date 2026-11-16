@@ -14,7 +14,8 @@ reports are in `docs/archive/web-audit-surveys/`, as written (01 to 10 the surve
 
 **Baseline.** The surveys read `main` at 145a557. This text was then corrected against 65c5bd9, eleven commits later;
 those commits changed the lazy graphics part and nothing else under `web/src` (see "Since the surveys" below). Line
-numbers in this file are 65c5bd9's. Line numbers inside the reports are 145a557's.
+numbers in this file are 65c5bd9's, except `worker.ts`'s, which are pull request 74's (below). Line numbers inside the
+reports are 145a557's.
 
 Finding ids are `<report>-<finding>`: `03-F1` is finding F1 of report 03. The reports: 01 engine protocol, 02 worker and
 storage, 03 controllers and state, 04 census (knip, madge, jscpd), 05 and 06 views, 07 unit tests, 08 e2e, 09 CSS, 10
@@ -34,6 +35,15 @@ build and scripts.
 - Root `CLAUDE.md` now lets a pull request be merged by a fast-forward push to `main` when the maintainer says so for
   it.
 
+This branch sits on pull request 74 (head 3d0f4d7, open when this was written), which adds to the above:
+- `IDLE_MS` is 250, not 1000 (one line more in `worker.ts` from line 482 on). This is the idle-wait work R1 waits for.
+- `e2e/graphics.spec.ts` now times the idle wait from the worker's `[dofile] graphics part` console lines, parsing
+  their text. Two consequences: it is a timing assertion (a lower bound of 0.15 s), to be watched at the first gate;
+  and S8, R1 and the sweep W1 must keep those lines' wording or change the test in the same pull request.
+- The same spec declares its own `window` globals for a run sent at ready; N3's typed hook takes them in.
+- `measure-startup.mjs` gained `--first-run-delay-ms`. It was used twice in two days: S9 moves it and does not fold
+  it away.
+
 ## 1. Verdict
 
 The architecture is sound and should stay. The spaghetti is where the code did not follow its own rules.
@@ -51,7 +61,7 @@ The architecture is sound and should stay. The spaghetti is where the code did n
 | 1 | Logic lives in view files, on module-level state, with no Node test | `Editor.tsx` (four parallel Maps per file, and Save), `FilesPane.tsx` (the rename and draft machine), `ResultsTab.tsx` and `DtaView.tsx` (readers), `LogView.tsx` (`runText`, scroll-follow), `App.tsx`, `CommandLine.tsx` | 05-F1, F2, F8, F10; 06-F1, F7; 03-F2 |
 | 2 | File writes are ordered by two unrelated promise chains and by comments | `files/actions.ts` (`fileTurn`, `uploads`), `store.ts` `change()` | 03-F1, F3, F4, F6; 02-F10 |
 | 3 | Failures are computed and then dropped, or decided from text | `storeError` has no reader; `reasonOf` and `words.ts` match regexes; `run.ts` swallows every rejection | 02-F1, F2, F3; 01-F3, F4, F5; 06-F2; 03-F13 |
-| 4 | Lazy graphics is a state machine kept in loose variables on both threads; only its waiting-graph decisions and the page's hand-over have Node tests | `client.ts` 383-540; `worker.ts` 471-850 (22 module-level variables; the idle steps, the native decode and the worker's own fetch decide inline); the header's states are names in `lazy-part.ts` and the literals 0, 1, 2 in `client.ts` | 01-F2, F12; 02-F4, F5 |
+| 4 | Lazy graphics is a state machine kept in loose variables on both threads; only its waiting-graph decisions and the page's hand-over have Node tests | `client.ts` 383-540; `worker.ts` 471-851 (22 module-level variables; the idle steps, the native decode and the worker's own fetch decide inline); the header's states are names in `lazy-part.ts` and the literals 0, 1, 2 in `client.ts` | 01-F2, F12; 02-F4, F5 |
 | 5 | Focus hand-off depends on other components' label strings and on call order | `states/focus.ts`, `Editor.tsx`, `Dialog.tsx`, `Menu.tsx`; five roving-key implementations, two modal implementations | 06-F3, F4, F8, F12; 05-F4 |
 | 6 | One fact, many spellings | engine-state sets in about a dozen view sites, the phone breakpoint six times, three byte formatters | 05-F12; 06-F6, F14; `09-css.md` |
 | 7 | Shared signals anyone may write | `dialog` (8 files), `phoneTab` (6), `activeTab` (3) | 03-F7, F9 |
@@ -99,7 +109,7 @@ Size: S under 150 changed lines, M under 500, L more. Risk is the risk of a beha
 |---|---|---|---|
 | B1 | Uploads and "Restore the sample" take a file turn: **one turn per write and its reopen, never per upload** (a turn around the whole upload would hold every Save while a clash dialog is open). Also the `createEntry` and `followOpen` races. In proposal A, where Save stays in the view, the failing test simulates Save as `fileTurn(() => store.write(...))` in `files-ui.test.ts`. In proposal B this item is done inside S2. | M, med | 03-F1, F4, F5; icebox |
 | B2 | Store failures are shown: the worker returns the error's name; a version change becomes a reload-type failure; `storeError` reaches a banner; a failed `/work` sync no longer says the files "couldn't be kept". Changes machine cells and SPEC section 5. If it bumps the database version, handle `onblocked` (02-F14). | M, med | 02-F1, F2, F3, F11, F14; 01-F5; gaps a and b |
-| B3 | A Break pressed before the worker takes the run is kept. Three layers: `client.ts` clears the buffer at send time; `worker.ts:957` stops clearing at run start; `browser.py` must not drop an interrupt that arrives before `_busy` is set (suspected, check first). A Python change needs a new wheel and snapshot, and ruff. | S to M, med | 01-F1; 02-F9; gap 1 |
+| B3 | A Break pressed before the worker takes the run is kept. Three layers: `client.ts` clears the buffer at send time; `worker.ts:958` stops clearing at run start; `browser.py` must not drop an interrupt that arrives before `_busy` is set (suspected, check first). A Python change needs a new wheel and snapshot, and ruff. | S to M, med | 01-F1; 02-F9; gap 1 |
 | B4 | Decide from kinds: `download-failed` may be "unknown"; memory by error name; the reset banner from the machine's `cause`; a run error of a kind other than "op" is reported, not swallowed; `run.ts` swallows only `no-engine` and `reset`; the leaked subscription in `connectEngine`. | M, low | 01-F3, F4, F8, F14; 06-F2; 03-F13 |
 | B5 | Small ones in views: Find bar's ref read during render (suspected), the full-size viewer's uncleared timer, a doubled `describe_file` (suspected). | S, low | 05-F7; 06-F7, F8 |
 
@@ -363,7 +373,8 @@ Decided: 1 and 9. Open: 2 to 7. Item 8 is a list, not a question.
   `npm test` passes 368 of 373 with 5 skipped (59 s); `lint:strict` was run at 145a557 only. No e2e, build, snapshot or
   `check-*` script was run. The 5 skipped tests all need a snapshot (the snapshot start, the two heap-cap cases, the
   "updated" refusal, native-library calls), so a plain `npm test` does not exercise the snapshot start.
-- The correction against 65c5bd9 read the diff of `web/` since 145a557 and nothing else again. Findings in the engine
+- The correction against 65c5bd9, and then against pull request 74, read the diff of `web/` since 145a557 and nothing
+  else again. Findings in the engine
   reports (01, 02) about the lazy graphics part may be out of date beyond what "Since the surveys" lists.
 - Each survey was capped at 15 findings, so each region has more. The sweeps exist to find them.
 - The plan review checked eight facts against the code and 24 citations against the reports; the rest of this plan
