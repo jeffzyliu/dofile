@@ -1,0 +1,1 @@
+{"entry":["index.html","src/main.tsx","src/engine/worker.ts","landing.html","commands.html","src/site/*.ts","scripts/*","test/*.test.ts","e2e/*.spec.ts","vite.config.ts","playwright.config.ts"],"project":["src/**","scripts/**","test/**","e2e/**","*.ts"],"vite":false,"playwright":false}
