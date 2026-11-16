@@ -267,3 +267,51 @@ print(json.dumps([r["rc"], browser._ballast is not None]))
     assert freed is True  # still freed until the next run starts
     assert kept == 7  # the data is as it was
     assert later == [0, True]
+
+
+LAZY = """
+answers = {answers!r}
+def wait(ms):
+    return answers.pop(0) if answers else ""
+browser.lazy_graphics(wait)
+r = json.loads(browser.run('clear\\nset obs 3\\ngen x = _n\\nscatter x x'))
+print(json.dumps([r["rc"], len(r["images"]), r["nobs"], r["log"]]))
+print(json.dumps(json.loads(browser.run('display 1'))["rc"]))
+"""
+
+
+def test_lazy_graphics_a_graph_waits_for_the_part_and_a_break_or_a_failure_stops_only_it(tmp_path):
+    """A lazy snapshot (web/src/engine/worker.ts, waitGraphics): the graph waits ("pending") until the files are written
+    (""); a Break while waiting is the engine's Break (rc 1, data kept); a part that cannot be had is r(199) with why."""
+    _, (rc, images, nobs, log), after = browser(tmp_path, LAZY.format(answers=["pending", "pending", ""]))
+    assert (rc, images, nobs, after) == (0, 1, 3, 0)
+    assert log.count("(waiting for the graphics files to download)") == 1
+    _, (rc, images, nobs, log), after = browser(tmp_path, LAZY.format(answers=["pending", "break"]))
+    assert (rc, images, nobs, after) == (1, 0, 3, 0)
+    assert "--Break--" in log
+    _, (rc, images, nobs, log), after = browser(tmp_path, LAZY.format(answers=["offline (Failed to fetch)"]))
+    assert (rc, images, nobs, after) == (199, 0, 3, 0)
+    assert "graphs are not available: offline (Failed to fetch)" in log
+
+
+FLUSH = """
+import time
+sent, seen = [], []
+def wait(ms):
+    seen.append("".join(sent))  # what the page had when the graph began its (long) wait
+    time.sleep(0.2)
+    return ""
+browser.lazy_graphics(wait)
+code = 'clear\\nset obs 3\\ngen x = _n\\nforvalues i = 1/2 {\\n    display "line `i\\'"\\n    if `i\\' == 2 scatter x x\\n}'
+r = json.loads(browser.run(code, on_output=sent.append))
+print(json.dumps([r["rc"], len(r["images"]), seen[0]]))
+"""
+
+
+def test_lazy_graphics_the_log_so_far_reaches_the_page_before_a_graph_waits(tmp_path):
+    """A graph inside a loop waits for the graphics part (one wait can take seconds): the lines the run printed just
+    before it are sent first, not held for STREAM_EVERY until the graph is done."""
+    _, (rc, images, seen) = browser(tmp_path, FLUSH)
+    assert (rc, images) == (0, 1)
+    assert "line 1\n" in seen
+    assert "line 2\n" in seen

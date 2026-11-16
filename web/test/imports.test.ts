@@ -393,7 +393,12 @@ test("single instances: main.tsx is the only module that constructs or connects;
 });
 
 test("each signal has one writer: a writer object is named only by state.ts and its owner", () => {
-  const owners = { engineWriter: ENGINE, runWriter: "src/app/run.ts", filesWriter: "src/app/files.ts" };
+  const owners = {
+    engineWriter: ENGINE,
+    graphicsWriter: ENGINE,
+    runWriter: "src/app/run.ts",
+    filesWriter: "src/app/files.ts",
+  };
   for (const [writer, owner] of Object.entries(owners)) {
     assert.deepEqual(
       Object.keys(having(SRC, new RegExp(`\\b${writer}\\b`))).sort(),
@@ -420,6 +425,7 @@ test("each signal has one writer: a writer object is named only by state.ts and 
     "toast",
     "banners",
     "announce",
+    "graphicsPart",
   ]) {
     assert.match(state, new RegExp(`export const ${name}: ReadonlySignal<`), `${name} is exported read-only`);
   }

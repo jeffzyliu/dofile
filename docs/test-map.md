@@ -270,6 +270,17 @@ Specs:
   the memory cap (`?memcap=400`: a 10-million-row `generate` is r(909), the engine stays `ready`, the data is kept),
   also
   on the normal boot (`?snapshot=0&memcap=400`, Chromium only).
+- `graphics.spec.ts` (experiment E1c, a lazy snapshot only; skipped without a graphics part): the part's request held or
+  refused with `page.route`. A run at ready that draws nothing does not wait for it; a Break while a graph waits is rc 1
+  with the data kept and the part fetched once; "Graphs loading" and its ring while it downloads (every project, the
+  phone's strip on iphone); written and imported while idle; a graph that waits while it lands draws; a return visit reads
+  it from the Cache and a run at ready ends before the part is unpacked (not WebKit); offline on a first visit a graph is
+  r(199) with a clear message, no lasting label, and the next graph once online fetches it and draws.
+  - A damaged part: the graph says it arrived damaged, the Cache entry is dropped, the next graph fetches it and draws.
+  - Without cross-origin isolation (no SharedArrayBuffer): the worker alone makes one `fetch()` of the part and the
+    graph's synchronous XHR one request, the page never fetches it; a graph at ready draws without waiting for a held
+    fetch and its log says it waits for the files; the ring shows the download (told by the worker) and goes when it lands;
+    other runs work. A damaged part's retry goes to an address of its own (`fresh=`), not the HTTP cache's.
 - `output.spec.ts` (step 4c): the Output tabs.
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the

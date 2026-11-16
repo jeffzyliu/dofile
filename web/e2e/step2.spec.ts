@@ -21,6 +21,7 @@ type StartFiles = {
   snapshot: {
     snapshot: { name: string; raw: number; size: number };
     bundle: { name: string; raw: number; size: number };
+    graphics?: { name: string; raw: number; size: number }; // a lazy snapshot's graphics part (counted in `download`, not a start file)
   };
 };
 type Progress = { received: number; total: number };
@@ -145,7 +146,8 @@ test.describe(() => {
 
     // the download size is written into the page by the build: the list's download size, with no request for it
     expect(list.download).toBeGreaterThan(30e6);
-    expect(list.download).toBeLessThan(list.compressed); // the page's own files are not downloaded
+    // the page's own files are not downloaded; the graphics part is (it is in `download`, and not in the list's files)
+    expect(list.download - (list.snapshot.graphics?.size ?? 0)).toBeLessThan(list.compressed);
     expect(await page.evaluate(() => window.__dofile.engineBytes)).toBe(list.download);
     expect(await page.locator('meta[name="dofile-engine-bytes"]').getAttribute("content")).toBe(String(list.download));
     expect(list.buildId).toMatch(/^[0-9a-f]{64}$/);
@@ -246,13 +248,15 @@ test("download: the counts reach the total, abort keeps the finished files, and 
     };
   });
   // with what `mount` needs of the list it has just checked, so that the start which follows fetches no list
+  // the total is what comes before the start: a lazy graphics part follows it (the dialog says how much, the status bar shows it)
+  const part = list.snapshot.graphics?.size ?? 0;
   expect(second.done).toEqual({
     cached: true,
-    received: list.download,
-    total: list.download,
+    received: list.download - part,
+    total: list.download - part,
     build: { built: list.built, files: list.snapshot },
   });
-  expect(second.last).toEqual({ received: list.download, total: list.download });
+  expect(second.last).toEqual({ received: list.download - part, total: list.download - part });
   expect(second.first.received).toBe(0); // counts what the download has, from nothing: the page's own files are not in it
   expect(second.rising).toBe(true);
   expect(second.steps).toBeGreaterThan(3); // WebKit hands a local file over in a few big pieces
