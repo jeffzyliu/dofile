@@ -16,6 +16,7 @@ The build spec for the pages is [`SPEC.md`](SPEC.md). This README is the history
 | `system/` | deliverable 5: the component sheet and its README; the tokens are `web/src/styles/tokens.css`, the components `web/src/styles/ui.css` |
 | `specimen/` | the font specimen; the chosen IBM Plex files and their license are in `web/src/styles/fonts/` |
 | `axe.mjs`, `tabwalk.mjs`, `contrast.mjs`, `fonts.mjs` | the checks (`cd web && npm run axe`, `tabwalk`, `contrast`, `fonts`) |
+| [`staging.md`](staging.md) | the R5 note (web audit): who stages `public/`, who reads it, and the design that replaces the config's module-load copies |
 | `shot.mjs` | screenshots any page with Playwright from `web/node_modules` |
 
 Each folder's README has the commands that rebuild its renders; renders are not committed.
