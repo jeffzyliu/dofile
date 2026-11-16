@@ -156,6 +156,7 @@ class EvalContext:
 class Session:
     def __init__(self) -> None:
         self.output = Output()
+        self.output.linesize = lambda: int(float(self.settings.get("linesize", 80)))
         self.macros = MacroStore()
         self.macros.globals.update(DEFAULT_GLOBALS)
         self.scalars: dict[str, Value] = {}
@@ -223,6 +224,8 @@ class Session:
                 changed = ds.changed
                 ds.drop_vars(gone)
                 ds.changed = changed
+        if scope.tempnames and getattr(self, "_classes", None) is not None:
+            self._classes.drop_names(scope.tempnames)      # class objects named by tempname
         for name in scope.tempnames:
             self.scalars.pop(name, None)
             getattr(self, "matrices", {}).pop(name, None)
@@ -245,7 +248,8 @@ class Session:
         return expand(text, self.macros,
                       eval_inline=self._inline_eval,
                       extended=self._extended,
-                      results=self._result_text)
+                      results=self._result_text,
+                      objects=self._class_text)
 
     def _result_text(self, kind: str, name: str) -> str:
         """`r(x)' and the like: text of the macro or scalar; empty if it does not exist."""
@@ -262,6 +266,10 @@ class Session:
         if isinstance(v, Matrix):
             return "matrix"     # VERIFY
         return number_to_macro(float(v))
+
+    def _class_text(self, text: str) -> str:
+        from .lang.classeval import macro_text
+        return macro_text(self, text)
 
     def _inline_eval(self, text: str) -> str:
         v = self.eval(text)

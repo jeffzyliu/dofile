@@ -248,54 +248,67 @@ def teffects(est, y, t, Xo, Z, omodel, tmodel, stat, clusters=None):
 # control function (eteffects)
 # ---------------------------------------------------------------------------
 
-def eteffects(y, t, Xo, Z, stat, clusters=None):
-    """Linear outcome with an endogenous binary treatment (probit): in each arm the outcome
-    regression includes the generalized residual of the treatment probit (Wooldridge). Exactly
-    identified moment conditions: theta = [mu0, mu1, beta0, rho0, beta1, rho1, gamma]."""
+def eteffects(y, t, Xo, Z, stat, clusters=None, omodel="linear"):
+    """Control-function estimator of [TE] eteffects (Methods and formulas): a probit treatment
+    model, the residual nu = t - Phi(z'pi), and in each arm an outcome model in x and nu (linear,
+    probit, fractional probit or exponential mean), all fitted together with the potential-outcome
+    means as an exactly identified GMM problem. POM_j is the mean over the sample (the treated with
+    atet) of m(x'b_1j + nu b_2j). theta = [mu0, mu1, beta0, rho0, beta1, rho1, pi]."""
     n, ko = Xo.shape
-    kz = Z.shape[1]
     d = np.ones(n) if stat != "atet" else t.copy()
     t0 = 1 - t
+    kind = {"linear": "linear", "probit": "probit", "fractional": "probit", "exponential": "poisson"}[omodel]
 
-    def gres(g):
-        zg = Z @ g
-        return t * stats.norm.pdf(zg) / np.clip(stats.norm.cdf(zg), 1e-15, 1) - \
-            t0 * stats.norm.pdf(zg) / np.clip(stats.norm.cdf(-zg), 1e-15, 1)
+    def resid_t(g):
+        return t - stats.norm.cdf(Z @ g)
+
+    def mean(W, a):
+        return _mean(kind, W @ a)[0] if kind != "linear" else W @ a
+
+    def score(W, yv, a):
+        if kind == "linear":
+            return W * (yv - W @ a)[:, None]
+        return glm_score(kind, W, yv, a)
 
     g = glm_fit("probit", Z, t)
-    r = gres(g)
+    W = np.column_stack([Xo, resid_t(g)])
     arms = []
     for tj in (t0, t):
-        W = np.column_stack([Xo, r])
         m = tj > 0
-        arms.append(np.linalg.lstsq(W[m], y[m], rcond=None)[0])
-    (c0, c1) = arms
-
-    def cf(g_, j):                      # control-function term averaged over the target group
-        if stat != "atet":
-            return np.zeros(n)
-        zg = Z @ g_
-        return stats.norm.pdf(zg) / np.clip(stats.norm.cdf(zg), 1e-15, 1)
-
-    m0 = Xo @ c0[:-1] + c0[-1] * cf(g, 0)
-    m1 = Xo @ c1[:-1] + c1[-1] * cf(g, 1)
-    mu = np.array([np.sum(d * m0) / d.sum(), np.sum(d * m1) / d.sum()])
+        if kind == "linear":
+            arms.append(np.linalg.lstsq(W[m], y[m], rcond=None)[0])
+        else:
+            arms.append(glm_fit(kind, W[m], y[m]))
+    c0, c1 = arms
+    mu = np.array([np.sum(d * mean(W, c0)) / d.sum(), np.sum(d * mean(W, c1)) / d.sum()])
     theta = np.concatenate([mu, c0, c1, g])
     k1 = ko + 1
 
-    def gfun(th):
-        mu_, a0, a1, g_ = th[:2], th[2:2 + k1], th[2 + k1:2 + 2 * k1], th[2 + 2 * k1:]
-        r_ = gres(g_)
-        W = np.column_stack([Xo, r_])
-        s0 = t0[:, None] * W * (y - W @ a0)[:, None]
-        s1 = t[:, None] * W * (y - W @ a1)[:, None]
-        sg = glm_score("probit", Z, t, g_)
-        q0 = Xo @ a0[:-1] + a0[-1] * cf(g_, 0)
-        q1 = Xo @ a1[:-1] + a1[-1] * cf(g_, 1)
-        mom = np.column_stack([d * (q0 - mu_[0]), d * (q1 - mu_[1])])
-        return np.column_stack([mom, s0, s1, sg])
+    # the variance takes the probit coefficients as known: the sandwich of the outcome and POM
+    # moments at the estimated residual reproduces Stata's standard errors (compat 1908, 1927).
+    # With atet the parameters are POM0 and ATET, and the ATET moment is t (m1 - POM0) n/nt - ATET
+    # for every observation (the untreated contribute -ATET), as Stata writes it (compat 1927)
+    nt = float(t.sum())
 
-    V = sandwich_m(gfun, theta, n, clusters)
+    def gfun(th):
+        p0, p1, a0, a1 = th[0], th[1], th[2:2 + k1], th[2 + k1:2 + 2 * k1]
+        s0 = t0[:, None] * score(W, y, a0)
+        s1 = t[:, None] * score(W, y, a1)
+        if stat == "atet":
+            mom = np.column_stack([t * (mean(W, a0) - p0) * n / nt, t * (mean(W, a1) - p0) * n / nt - p1])
+        else:
+            mom = np.column_stack([d * (mean(W, a0) - p0), d * (mean(W, a1) - p1)])
+        return np.column_stack([mom, s0, s1])
+
+    th0 = theta[:2 + 2 * k1].copy()
+    if stat == "atet":
+        th0[1] = mu[1] - mu[0]
+    V = sandwich_m(gfun, th0, n, clusters)
+    if stat == "atet":
+        # back to (mu0, mu1) = (POM0, POM0 + ATET)
+        J = np.eye(len(th0))
+        J[1, 0] = 1.0
+        V = J @ V @ J.T
     return theta, V, k1
 
 
@@ -370,3 +383,98 @@ def nnmatch(y, t, X, stat="ate", nn=1, metric="maha", vce_nn=2, S=None):
         var = (np.sum((diff[one] - tau) ** 2) + np.sum(K[zero] * (K[zero] - 1 / M) * s2[zero])) / n1 ** 2
         mu = (yh[one, 0].mean(), y[one].mean())
     return float(tau), float(np.sqrt(max(var, 0.0))), mu, (min(counts), max(counts))
+
+
+# ---------------------------------------------------------------------------
+# multivalued treatments (multinomial logit treatment model)
+# ---------------------------------------------------------------------------
+
+def mlogit_prob(Z, g, L):
+    """P(t = l), l = 0..L-1, with level 0 as the base of the multinomial logit; g stacks the
+    (L - 1) coefficient vectors."""
+    k = Z.shape[1]
+    E = np.column_stack([np.zeros(len(Z))] + [Z @ g[(l - 1) * k:l * k] for l in range(1, L)])
+    E -= E.max(axis=1, keepdims=True)
+    P = np.exp(E)
+    return P / P.sum(axis=1, keepdims=True)
+
+
+def mlogit_score(Z, tcode, g, L):
+    P = mlogit_prob(Z, g, L)
+    return np.column_stack([Z * ((tcode == l) - P[:, l])[:, None] for l in range(1, L)])
+
+
+def mlogit_fit(Z, tcode, L, tol=1e-12, maxit=100):
+    """Multinomial logit by Newton-Raphson."""
+    n, k = Z.shape
+    g = np.zeros(k * (L - 1))
+    for _ in range(maxit):
+        P = mlogit_prob(Z, g, L)
+        grad = mlogit_score(Z, tcode, g, L).sum(axis=0)
+        H = np.zeros((len(g), len(g)))
+        for a in range(1, L):
+            for b in range(1, L):
+                wab = P[:, a] * ((a == b) - P[:, b])
+                H[(a - 1) * k:a * k, (b - 1) * k:b * k] = -(Z * wab[:, None]).T @ Z
+        step = np.linalg.solve(H, grad)
+        g = g - step
+        if np.max(np.abs(step)) < tol:
+            break
+    return g
+
+
+def teffects_multi(est, y, tcode, L, Xo, Z, omodel, stat, tl, clusters=None):
+    """teffects ra, ipw, ipwra and aipw with L >= 2 treatment levels coded 0..L-1 (multinomial
+    logit treatment model). stat: ate, atet (treated level tl) or pomeans. theta = [mu_0 ..
+    mu_{L-1}, beta_0 .. beta_{L-1}, gamma]; returns (theta, V)."""
+    n, ko = Xo.shape
+    om = GLMOutcome(omodel, y) if isinstance(omodel, str) else omodel
+    use_out, use_trt = est != "ipw", est != "ra"
+    kb = (ko + getattr(om, "kaux", 0)) if use_out else 0
+    kz = Z.shape[1] * (L - 1) if use_trt else 0
+    T_ = np.column_stack([(tcode == l).astype(float) for l in range(L)])
+    d = np.ones(n) if stat != "atet" else T_[:, tl]
+
+    def weights(P):
+        if stat == "atet":
+            return T_ * (P[:, [tl]] / P)
+        return T_ / P
+
+    g = mlogit_fit(Z, tcode, L) if use_trt else np.zeros(0)
+    W = weights(mlogit_prob(Z, g, L)) if use_trt else None
+    bs = []
+    if use_out:
+        for l in range(L):
+            bs.append(om.fit(Xo, T_[:, l] if est in ("ra", "aipw") else W[:, l]))
+    if est == "ipw":
+        mu = np.array([np.sum(W[:, l] * y) / np.sum(W[:, l]) for l in range(L)])
+    else:
+        M_ = np.column_stack([om.mean(Xo, b) for b in bs])
+        if est == "aipw":
+            mu = (M_ + W * (y[:, None] - M_)).mean(axis=0)
+        else:
+            mu = (d[:, None] * M_).sum(axis=0) / d.sum()
+    theta = np.concatenate([mu] + bs + [g])
+
+    def gfun(th):
+        mu_ = th[:L]
+        bs_ = [th[L + l * kb:L + (l + 1) * kb] for l in range(L)] if use_out else []
+        g_ = th[L + L * kb:]
+        cols = []
+        if use_trt:
+            W_ = weights(mlogit_prob(Z, g_, L))
+        if est == "ipw":
+            mom = W_ * (y[:, None] - mu_[None, :])
+        else:
+            M2 = np.column_stack([om.mean(Xo, b) for b in bs_])
+            a = T_ if est in ("ra", "aipw") else W_
+            cols = [a[:, [l]] * om.score(Xo, bs_[l]) for l in range(L)]
+            if est == "aipw":
+                mom = M2 + W_ * (y[:, None] - M2) - mu_[None, :]
+            else:
+                mom = d[:, None] * (M2 - mu_[None, :])
+        parts = [mom] + cols + ([mlogit_score(Z, tcode, g_, L)] if use_trt else [])
+        return np.column_stack(parts)
+
+    V = sandwich_m(gfun, theta, n, clusters)
+    return theta, V

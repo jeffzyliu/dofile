@@ -144,7 +144,7 @@ def test_uninstall_restores_real_paths(shim):
 # removes one changes this table: check the new site, hook it in the patch if it opens a user file, then update.
 EXPANDUSER = {
     "commands/adocmd.py": 1,
-    "commands/datacmds.py": 2,
+    "commands/datacmds.py": 1,
     "commands/datasets.py": 1,
     "commands/datautil.py": 1,
     "commands/delimited.py": 1,
@@ -160,6 +160,7 @@ EXPANDUSER = {
     "commands/program.py": 1,
     "commands/putexcel.py": 1,
     "commands/statpkg.py": 1,
+    "commands/statsby.py": 1,
     "commands/system.py": 1,
     "core/hints/files.py": 1,
     "graphics/store.py": 1,

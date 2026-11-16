@@ -1,5 +1,5 @@
 diff --git a/src/dofile/_vendor/opendta/commands/datacmds.py b/src/dofile/_vendor/opendta/commands/datacmds.py
-index 46915ac..a76255c 100644
+index a33d3ad..178546a 100644
 --- a/src/dofile/_vendor/opendta/commands/datacmds.py
 +++ b/src/dofile/_vendor/opendta/commands/datacmds.py
 @@ -22,6 +22,7 @@ from ..lang.words import strip_outer_quotes
@@ -10,7 +10,7 @@ index 46915ac..a76255c 100644
  
  if TYPE_CHECKING:
      from ..session import Session
-@@ -943,6 +944,7 @@ def cmd_outfile(s: "Session", args: str) -> None:
+@@ -796,6 +797,7 @@ def cmd_outfile(s: "Session", args: str) -> None:
      path = Path(os.path.expanduser(strip_outer_quotes(p.using)))
      if path.suffix == "":
          path = path.with_suffix(".dct" if o.get("dictionary") else ".raw")
@@ -18,14 +18,6 @@ index 46915ac..a76255c 100644
      if path.exists() and not o.get("replace"):
          raise StataError(602, f"file {path} already exists")
      if not path.exists() and o.get("replace"):
-@@ -1158,6 +1160,7 @@ def cmd_statsby(s: "Session", args: str) -> None:
-         path = Path(os.path.expanduser(strip_outer_quotes(fname.strip())))
-         if path.suffix == "":
-             path = path.with_suffix(".dta")
-+        path = user_path(path)
-         if path.exists() and "replace" not in rep:
-             raise StataError(602, f"file {path} already exists")
-         write_dta(new, path)
 diff --git a/src/dofile/_vendor/opendta/commands/datasets.py b/src/dofile/_vendor/opendta/commands/datasets.py
 index ef8ecec..69cd495 100644
 --- a/src/dofile/_vendor/opendta/commands/datasets.py
@@ -197,7 +189,7 @@ index 47f2b50..0eb25a6 100644
          raise StataError(602, f"file {fname} already exists")
      fmt, label = R.FORMATS[ext]
 diff --git a/src/dofile/_vendor/opendta/commands/helpcmd.py b/src/dofile/_vendor/opendta/commands/helpcmd.py
-index 171f17b..c95c706 100644
+index 84e627c..6fbada3 100644
 --- a/src/dofile/_vendor/opendta/commands/helpcmd.py
 +++ b/src/dofile/_vendor/opendta/commands/helpcmd.py
 @@ -16,6 +16,7 @@ from ..core.smcl import render_text
@@ -307,7 +299,7 @@ index 2585ec7..867cb21 100644
          opts = (m.group(4) or "").replace(",", " ").split()
          if not folder.is_dir():
 diff --git a/src/dofile/_vendor/opendta/commands/program.py b/src/dofile/_vendor/opendta/commands/program.py
-index c6bdf7e..04e1927 100644
+index 8c7cca0..820fea8 100644
 --- a/src/dofile/_vendor/opendta/commands/program.py
 +++ b/src/dofile/_vendor/opendta/commands/program.py
 @@ -12,6 +12,7 @@ from ..core.errors import (BreakLoop, ContinueLoop, ExitRequest, StataError,
@@ -376,6 +368,19 @@ index 30540b0..6fe4d6c 100644
      if must_exist and not p.exists():
          raise StataError(601, f"file {p} not found")
      return p
+diff --git a/src/dofile/_vendor/opendta/commands/statsby.py b/src/dofile/_vendor/opendta/commands/statsby.py
+index 65b5eb4..e986cef 100644
+--- a/src/dofile/_vendor/opendta/commands/statsby.py
++++ b/src/dofile/_vendor/opendta/commands/statsby.py
+@@ -126,6 +126,8 @@ def cmd_statsby(s: "Session", args: str) -> None:
+         path = Path(os.path.expanduser(strip_outer_quotes(fname.strip())))
+         if path.suffix == "":
+             path = path.with_suffix(".dta")
++        from ..core.userpath import user_path  # dofile patch (PATCH-3)
++        path = user_path(path)
+         if path.exists() and "replace" not in rep:
+             raise StataError(602, f"file {path} already exists")
+         write_dta(new, path)
 diff --git a/src/dofile/_vendor/opendta/core/userpath.py b/src/dofile/_vendor/opendta/core/userpath.py
 new file mode 100644
 index 0000000..fea3f77
@@ -396,10 +401,10 @@ index 0000000..fea3f77
 +def user_path(p: Path) -> Path:
 +    return mapper(p) if mapper is not None else p
 diff --git a/src/dofile/_vendor/opendta/estimation/irf.py b/src/dofile/_vendor/opendta/estimation/irf.py
-index b6e78f9..cc1aa25 100644
+index c34cf9e..3b14c00 100644
 --- a/src/dofile/_vendor/opendta/estimation/irf.py
 +++ b/src/dofile/_vendor/opendta/estimation/irf.py
-@@ -32,6 +32,7 @@ from ..core.formats import format_value
+@@ -31,6 +31,7 @@ from ..core.errors import StataError
  from ..lang.syntax import match_options, parse_standard
  from ..lang.words import split_words
  from ..lazy import lazy
@@ -407,7 +412,7 @@ index b6e78f9..cc1aa25 100644
  
  st = lazy("scipy.stats")
  
-@@ -208,7 +209,7 @@ def _irf_path(name: str) -> Path:
+@@ -201,7 +202,7 @@ def _irf_path(name: str) -> Path:
      p = Path(t)
      if not p.suffix:
          p = p.with_suffix(".irf")

@@ -1,8 +1,8 @@
 diff --git a/src/dofile/_vendor/opendta/commands/registry.py b/src/dofile/_vendor/opendta/commands/registry.py
-index ec8c08b..923003a 100644
+index 4ec2606..ca9d5de 100644
 --- a/src/dofile/_vendor/opendta/commands/registry.py
 +++ b/src/dofile/_vendor/opendta/commands/registry.py
-@@ -34,11 +34,34 @@ def command(name: str, abbrev: str | None = None, *, prefix: bool = False, byabl
+@@ -35,7 +35,7 @@ def command(name: str, abbrev: str | None = None, *, prefix: bool = False, byabl
          raise ValueError(f"abbreviation {minimal!r} is not a prefix of {name!r}")
  
      def deco(fn: CommandFn) -> CommandFn:
@@ -10,6 +10,9 @@ index ec8c08b..923003a 100644
 +        REGISTRY[name] = CommandSpec(name, len(minimal), _python_errors_as_stata(fn), prefix, byable)
          return fn
      return deco
+ 
+@@ -52,6 +52,29 @@ def lazy_commands(module: str, *names: str | tuple[str, str], prefix: bool = Fal
+         command(name, abbrev, prefix=prefix)(run)
  
  
 +def _python_errors_as_stata(fn: CommandFn) -> CommandFn:

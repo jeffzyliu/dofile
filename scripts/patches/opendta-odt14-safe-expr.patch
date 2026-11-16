@@ -1,3 +1,6 @@
+diff --git a/src/dofile/_vendor/opendta/core/safe_expr.py b/src/dofile/_vendor/opendta/core/safe_expr.py
+new file mode 100644
+index 0000000..c9218c0
 --- /dev/null
 +++ b/src/dofile/_vendor/opendta/core/safe_expr.py
 @@ -0,0 +1,41 @@
@@ -42,9 +45,11 @@
 +            return names[node.func.id](*[ev(a) for a in node.args])
 +        raise ValueError(f"invalid expression {text}")
 +    return ev(tree)
+diff --git a/src/dofile/_vendor/opendta/estimation/archmodel.py b/src/dofile/_vendor/opendta/estimation/archmodel.py
+index 88d1cd2..0a93f8f 100644
 --- a/src/dofile/_vendor/opendta/estimation/archmodel.py
 +++ b/src/dofile/_vendor/opendta/estimation/archmodel.py
-@@ -277,10 +277,16 @@
+@@ -277,10 +277,16 @@ def _numlist(v) -> list[int]:
  
  
  def _archm_fn(expr: str):
@@ -62,9 +67,11 @@
      return f
  
  
---- a/src/dofile/_vendor/opendta/estimation/bayes.py
-+++ b/src/dofile/_vendor/opendta/estimation/bayes.py
-@@ -994,7 +994,8 @@
+diff --git a/src/dofile/_vendor/opendta/estimation/bayespost.py b/src/dofile/_vendor/opendta/estimation/bayespost.py
+index a0292d8..7936fba 100644
+--- a/src/dofile/_vendor/opendta/estimation/bayespost.py
++++ b/src/dofile/_vendor/opendta/estimation/bayespost.py
+@@ -41,7 +41,8 @@ def _eval_draws(est, text: str) -> np.ndarray:
          return f"_p{names.index(nm)}"
      py = _BRACE.sub(sub, py).replace("^", "**")
      try:

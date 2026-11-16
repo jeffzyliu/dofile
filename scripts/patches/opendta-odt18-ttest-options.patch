@@ -1,8 +1,8 @@
-diff --git a/src/dofile/_vendor/opendta/commands/summarize.py b/src/dofile/_vendor/opendta/commands/summarize.py
-index a271a7d..686ba6f 100644
---- a/src/dofile/_vendor/opendta/commands/summarize.py
-+++ b/src/dofile/_vendor/opendta/commands/summarize.py
-@@ -365,6 +365,14 @@ def _ha_lines(s: "Session", diff_name: str, hyp: str, stat: str, t: float, df: f
+diff --git a/src/dofile/_vendor/opendta/commands/ttest.py b/src/dofile/_vendor/opendta/commands/ttest.py
+index ac06227..bbcc9ef 100644
+--- a/src/dofile/_vendor/opendta/commands/ttest.py
++++ b/src/dofile/_vendor/opendta/commands/ttest.py
+@@ -186,6 +186,14 @@ def _ha_lines(s: "Session", diff_name: str, hyp: str, stat: str, t: float, df: f
      out.write("".join(line_p).rstrip() + "\n", "result")
  
  
@@ -17,7 +17,7 @@ index a271a7d..686ba6f 100644
  @command("ttest", byable=True)
  def cmd_ttest(s: "Session", args: str) -> None:
      p = parse_standard(args)
-@@ -394,8 +402,10 @@ def cmd_ttest(s: "Session", args: str) -> None:
+@@ -215,8 +223,10 @@ def cmd_ttest(s: "Session", args: str) -> None:
                         other.data[mask & S.valid(other.data)], level, bool(o.get("unequal")),
                         bool(o.get("welch")), names=(v.name, other.name))
              return

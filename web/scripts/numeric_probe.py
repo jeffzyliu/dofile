@@ -14,6 +14,7 @@ as long as the control flow is.
 
 import importlib.util
 import json
+import shutil
 import sys
 import tempfile
 import time
@@ -64,6 +65,9 @@ def main(case, tools, out):
         REGISTRY[name] = dataclasses.replace(cs, fn=wrap(name, cs.fn))
 
     outdir = Path(tempfile.mkdtemp())
+    classes = compare.COMPAT / "do" / "classes"  # 1928_classes finds its .class files at do/classes from the run folder
+    if classes.is_dir():
+        shutil.copytree(classes, outdir / "do" / "classes")
     t0 = time.perf_counter()
     log = ""
     try:

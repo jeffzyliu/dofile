@@ -119,6 +119,10 @@ class Interpreter:
         if ln.kind == "comment":
             self._echo(ln, echo)
             return i + 1
+        if ln.kind == "blank":
+            if echo == "top":
+                self._echo(ln, echo)
+            return i + 1
         if ln.kind == "delimit":
             self._echo(ln, echo)
             out.write(f"delimiter now {ln.text.split()[-1]}\n", "text")
@@ -575,6 +579,12 @@ class Interpreter:
             return
         if text.startswith("!"):
             text = "shell " + text[1:]      # !cmd is a synonym for shell cmd
+        from .classeval import is_statement
+        if is_statement(text):
+            # .obj = .classname.new, .obj.prog args, ... ([P] class)
+            from .classeval import statement
+            statement(self.s, text)
+            return
         word, rest = split_command(text)
         if not word:
             raise StataError(198, "invalid syntax")

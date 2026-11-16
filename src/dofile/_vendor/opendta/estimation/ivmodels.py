@@ -16,8 +16,8 @@ from ..core.stats import chi2_tail
 from ..lazy import lazy
 from . import likelihoods as L
 from .censmodels import _replay, _weighted_probit
-from .mleq import (Block, Engine, aux_row, block_from_pr, block_from_text, display_eq, finish_model, fit_log,
-                   lab, names_in, peek, transformed_row)
+from .mleq import (Engine, aux_row, block_from_pr, block_from_text, display_eq, finish_model, fit_log, lab,
+                   peek, transformed_row)
 from .models2 import _Prep, _tobit_footer, g
 from .regress import comma
 from .results import CoefRow
@@ -55,15 +55,17 @@ def _iv_ml(s: "Session", args: str, cmd: str) -> None:
     if _replay(s, cmd, args):
         return
     dep, exog, endog, inst, opts = _split_iv(args)
-    if len(endog.split()) != 1:
-        raise StataError(198, "only one endogenous regressor is allowed in OpenDTA for now")   # VERIFY
     tobit = cmd == "ivtobit"
     spec = {"twostep": 4, "first": 3, "mfx": 3}
     if tobit:
         spec.update({"ll": 2, "ul": 2})
     o = peek(f"{dep} , {opts}", spec)
     if o.get("twostep"):
-        raise StataError(198, "option twostep is not available yet in OpenDTA")   # TODO twostep
+        return _iv_twostep(s, args, cmd, dep, exog, endog, inst, opts, spec)
+    if len(endog.split()) != 1:
+        # the manual gives the likelihood but not the parameterization of Sigma that Stata reports
+        raise StataError(198, "only one endogenous regressor is allowed with maximum likelihood in OpenDTA "
+                              "for now; use twostep")   # VERIFY
     pr = _Prep(s, f"{dep} {endog} {exog} , {opts}".replace(", ,", ","), spec, extra_vars=inst)
     pr.write_notes(s.output)
     ds = s.data
@@ -183,6 +185,246 @@ def _iv_ml(s: "Session", args: str, cmd: str) -> None:
     display_eq(s, est)
 
 
+def _tobit_fit(y, X, w, lo, hi):
+    """Tobit by maximum likelihood: (b, V of b) with V the inverse information of (b, ln sigma)
+    restricted to b."""
+    from .ml import maximize
+    from .models2 import num_hess
+    left, right = y <= lo, y >= hi
+    mid = ~(left | right)
+
+    def grad_ll(par):
+        b, ls = par[:-1], par[-1]
+        sg = np.exp(ls)
+        eta = X @ b
+        z = (y - eta) / sg
+        ll = np.where(mid, st.norm.logpdf(z) - ls, 0.0)
+        d_eta = np.where(mid, z / sg, 0.0)
+        d_ls = np.where(mid, z * z - 1, 0.0)
+        if np.isfinite(lo):
+            zl = (lo - eta) / sg
+            lc = st.norm.logcdf(zl)
+            r = np.exp(st.norm.logpdf(zl) - lc)
+            ll = np.where(left, lc, ll)
+            d_eta = np.where(left, -r / sg, d_eta)
+            d_ls = np.where(left, -r * zl, d_ls)
+        if np.isfinite(hi):
+            zh = (eta - hi) / sg
+            lc = st.norm.logcdf(zh)
+            r = np.exp(st.norm.logpdf(zh) - lc)
+            ll = np.where(right, lc, ll)
+            d_eta = np.where(right, r / sg, d_eta)
+            d_ls = np.where(right, -r * zh, d_ls)
+        return float(w @ ll), np.concatenate([X.T @ (w * d_eta), [w @ d_ls]])
+
+    def fun(par, todo):
+        with np.errstate(all="ignore"):
+            ll, gr = grad_ll(par)
+        if not np.isfinite(ll):
+            return -np.inf, None, None
+        if todo == 0:
+            return ll, None, None
+        return ll, gr, num_hess(lambda q: grad_ll(q)[1], par)
+    b0, s0 = _ols(y, X, w)
+    r = maximize(fun, np.concatenate([b0, [np.log(max(s0, 1e-6))]]), maxiter=300, tol=1e-12, ltol=1e-14, nrtol=1e-12)
+    V = np.linalg.inv(-r.H)
+    k = X.shape[1]
+    return r.b[:k], V[:k, :k]
+
+
+def _iv_twostep(s: "Session", args: str, cmd: str, dep: str, exog: str, endog: str, inst: str, opts: str,
+                spec: dict) -> None:
+    """Newey's (1987) minimum chi-squared estimator ([R] ivprobit and [R] ivtobit, Methods and
+    formulas): (1) each endogenous regressor on all the exogenous variables X; (2) probit (tobit)
+    of y1 on X and the first-stage residuals, giving alpha~ and lambda; (3) the same on z = (y2, x1)
+    and the residuals (2SIV), giving beta; (4) Omega = the covariance of alpha~ plus that of the
+    regression of y2 (lambda - beta) on X; (5) delta = (D' Omega^-1 D)^-1 D' Omega^-1 alpha~ with
+    D = (Pi, I1); (6) the Wald test of lambda = 0 in the 2SIV fit."""
+    tobit = cmd == "ivtobit"
+    pr = _Prep(s, f"{dep} {endog} {exog} , {opts}".replace(", ,", ","), spec, extra_vars=inst,
+               weights=("fweight", "aweight"))
+    if pr.robust:
+        raise StataError(198, "vce(robust) not allowed with twostep")   # VERIFY
+    pr.write_notes(s.output)
+    ds = s.data
+    mask = pr.smp.mask
+    o = pr.o
+    w = pr.w
+    endogs = endog.split()
+    p = len(endogs)
+    main = block_from_pr(pr, dep)                    # z = (y2, x1, _cons)
+    xb = block_from_text(pr, "x", f"{exog} {inst}", constant=pr.constant)    # X = (x1, x2, _cons)
+    for nm in xb.notes:
+        s.output.write(f"note: {nm} omitted because of collinearity\n", "text")
+    X = xb.X
+    Y2 = np.column_stack([ds.get(v).data[mask].astype(float) for v in endogs])
+    Pi = np.column_stack([np.linalg.lstsq(X * np.sqrt(w)[:, None], Y2[:, j] * np.sqrt(w), rcond=None)[0]
+                          for j in range(p)])
+    Vhat = Y2 - X @ Pi
+    # I1: the columns of X that are the included exogenous variables of z (and the constant)
+    zcols = [c.name for c in main.cols if c.values is not None]
+    xcols = [c.name for c in xb.cols if c.values is not None]
+    if pr.constant:
+        zcols, xcols = zcols + ["_cons"], xcols + ["_cons"]
+    incl = [nm for nm in zcols if nm not in endogs]
+    if len(xcols) - len(incl) < p:
+        raise StataError(481, "equation not identified; must have at least as many instruments not in\n"
+                              "the regression as there are instrumented variables")
+    I1 = np.zeros((len(xcols), len(incl)))
+    for j, nm in enumerate(incl):
+        I1[xcols.index(nm), j] = 1.0
+    ylab = pr.y
+    if tobit:
+        lo = _limit(o.get("ll"))
+        hi = _limit(o.get("ul"))
+        if lo is None and hi is None:
+            raise StataError(198, "must specify at least one of ll() and ul()")   # VERIFY
+        lo_ = -np.inf if lo is None else lo
+        hi_ = np.inf if hi is None else hi
+        y = ylab.astype(float)
+
+        def fit(A):
+            return _tobit_fit(y, A, w, lo_, hi_)
+    else:
+        y = (ylab != 0).astype(float)
+        if np.all(y == y[0]):
+            raise StataError(2000, "outcome does not vary")
+        s.output.write("Checking reduced-form model...\n", "text")
+
+        def fit(A):
+            from .ml import maximize
+            from .models import _probit
+            fun, _ = _probit(y, A, w)
+            r = maximize(fun, np.zeros(A.shape[1]), maxiter=300, tol=1e-12, ltol=1e-14, nrtol=1e-12)
+            return r.b, np.linalg.inv(-r.H)
+    if o.get("first"):
+        # the first-stage regressions, on the excluded instruments and then the included exogenous
+        # variables (compat 1926)
+        from ..commands.syntaxcmd import _temp_name
+        from ..core.dataset import Variable
+        tmp = _temp_name(s)
+        ds.add(Variable(tmp, "byte", mask.astype(float)))
+        try:
+            for v in endogs:
+                s.output.write("First-stage regression\n", "text")
+                s.interp._execute_expanded(f"regress {v} {inst} {exog} if {tmp}")
+        finally:
+            ds.drop_vars([tmp])
+    kx = X.shape[1]
+    # (2) alpha~ and lambda
+    a_full, Va_full = fit(np.column_stack([X, Vhat]))
+    alpha, lam = a_full[:kx], a_full[kx:]
+    J_inv = Va_full[:kx, :kx]
+    # (3) 2SIV on z = (y2, x1) with the residuals; z's columns are ordered as in main (endogenous first)
+    Zm = main.X
+    zpos = {nm: j for j, nm in enumerate(zcols)}
+    b2, V2 = fit(np.column_stack([Zm, Vhat]))
+    kz = Zm.shape[1]
+    beta = np.array([b2[zpos[v]] for v in endogs])
+    lam2, Vlam2 = b2[kz:], V2[kz:, kz:]
+    # (4) Omega
+    u = Y2 @ (lam - beta)
+    sw = np.sqrt(w)
+    XtX = (X * w[:, None]).T @ X
+    cu = np.linalg.solve(XtX, X.T @ (w * u))
+    e = u - X @ cu
+    N = float(w.sum())
+    s2 = float(w @ (e * e)) / (N - kx)                  # VERIFY: the residual degrees of freedom
+    Omega = J_inv + s2 * np.linalg.inv(XtX)
+    # (5) delta, ordered as z (endogenous, included exogenous, _cons)
+    D = np.column_stack([Pi, I1])
+    Oi = np.linalg.inv(Omega)
+    Vd = np.linalg.inv(D.T @ Oi @ D)
+    delta = Vd @ D.T @ Oi @ alpha
+    order = [p + incl.index(nm) if nm not in endogs else endogs.index(nm) for nm in zcols]
+    b = delta[order]
+    V = Vd[np.ix_(order, order)]
+    V = (V + V.T) / 2
+    # (6) exogeneity
+    w_exog = float(lam2 @ np.linalg.solve(Vlam2, lam2))
+    p_exog = float(chi2_tail(w_exog, p))
+    slopes = [j for j, nm in enumerate(zcols) if nm != "_cons"]
+    Vs = V[np.ix_(slopes, slopes)]
+    chi2 = float(b[slopes] @ np.linalg.solve(Vs, b[slopes]))
+    df_m = len(slopes)
+    pv = float(chi2_tail(chi2, df_m))
+    exog_names = [nm for nm in incl if nm != "_cons"]
+    all_inst = " ".join(exog_names + [nm for nm in xcols if nm != "_cons" and nm not in exog_names])
+    from .results import Estimates, coef_table, post, rows_from_columns
+    from .regress import cmdline
+    bmap = {nm: float(b[j]) for j, nm in enumerate(zcols)}
+    semap = {nm: float(np.sqrt(max(V[j, j], 0))) for j, nm in enumerate(zcols)}
+    rows = rows_from_columns(main.cols, bmap, semap, ds, constant=pr.constant)
+    names = [c.name for c in main.cols if c.values is not None] + (["_cons"] if pr.constant else [])
+    est = Estimates(cmd, dep, names, b, V, int(N), "z", None)
+    est.level = pr.smp.level
+    est.vcetype, est.clustvar, est.n_clust = "", "", None
+    est.rows = rows
+    title = "Two-step tobit with endogenous regressors" if tobit else "Two-step probit with endogenous regressors"
+    est.title = title
+    cens = None
+    if tobit:
+        cens = (float(w[y <= lo_].sum()), float(w[(y > lo_) & (y < hi_)].sum()), float(w[y >= hi_].sum()), lo, hi)
+        est.cens = cens
+
+    def display(s_, e_, *, header=True, table=True, level=None, **_kw):
+        out = s_.output
+        if header:
+            # compat 1926: the labels start in column 51
+            out.write("\n", "text")
+            for left, lab_, val in ((title, "Number of obs", comma(N)), ("", f"Wald chi2({df_m})", g(chi2, "%10.2f")),
+                                    ("", "Prob > chi2", g(pv, "%10.4f"))):
+                out.write(f"{left:<50}{lab_:<16}= ", "text")
+                out.write(f"{val:>10}\n", "result")
+            out.write("\n", "text")
+        if not table:
+            return
+        coef_table(s_, "", e_.rows, stat="z", df=None, level=level or e_.level, vcetype="")
+        from .results import footnote  # dofile patch (ODT-9)
+        out.write(footnote(s_, "Instrumented:", endog) + footnote(s_, "Instruments:", all_inst), "text")
+        out.write("-" * 78 + "\n", "text")
+        out.write(f"Wald test of exogeneity:{'':5}chi2({p}) = {w_exog:8.2f}{'':11}Prob > chi2 = {p_exog:6.4f}\n",
+                  "text")
+        if tobit:
+            nl_, nu_, nr_, lo_v, hi_v = e_.cens
+            out.write("\n", "text")
+            out.write(f"{comma(nl_):>14}  left-censored observations"
+                      + (f" at {dep} <= {g(lo_v, '%9.0g')}" if lo_v is not None and nl_ else "") + "\n", "text")
+            out.write(f"{comma(nu_):>14}     uncensored observations\n", "text")
+            out.write(f"{comma(nr_):>14} right-censored observations"
+                      + (f" at {dep} >= {g(hi_v, '%9.0g')}" if hi_v is not None and nr_ else "") + "\n", "text")
+    est.display = display
+    # Stata's lists and order (compat 1926)
+    scalars = [("N", N), ("chi2_exog", w_exog), ("df_exog", float(p)), ("p_exog", p_exog), ("chi2", chi2),
+               ("df_m", float(df_m)), ("p", pv)]
+    rank = float(np.linalg.matrix_rank(V))
+    if tobit:
+        nl_, nu_, nr_ = cens[:3]
+        scalars += [("endog_ct", float(p)), ("rank", rank), ("N_unc", nu_), ("N_lc", nl_), ("N_rc", nr_)]
+        if lo is not None:
+            scalars.append(("llopt", float(lo)))
+        if hi is not None:
+            scalars.append(("ulopt", float(hi)))   # VERIFY
+        macros = [("cmdline", cmdline(cmd, args)), ("cmd", cmd),
+                  ("marginsok", "XB E(passthru) Pr(passthru) YStar(passthru) default"), ("predict", "ivtobit_p"),
+                  ("footnote", "ivtobit_footnote")]
+    else:
+        scalars += [("rank", rank), ("N_cds", 0.0), ("N_cdf", 0.0)]
+        macros = [("cmdline", cmdline(cmd, args)), ("cmd", cmd), ("marginsok", "Pr XB default"),
+                  ("predict", "ivprobit_p"), ("estat_cmd", "ivprobit_estat"), ("footnote", "ivprobit_footnote"),
+                  ("vce", "twostep")]
+    macros += [("depvar", f"{dep} {endog}"), ("insts", all_inst), ("instd", endog), ("method", "twostep"),
+               ("properties", "b V")]
+    extra = []
+    if not tobit:
+        # perfect-predictor rules of probit: none dropped here (compat 1926: 2 x 4 with two
+        # regressors; VERIFY the contents)
+        from ..commands.matrix import Matrix
+        extra = [("rules", Matrix(np.zeros((len(slopes), 4))))]
+    post(s, est, scalars, macros, mask, extra_mats=extra)
+    display(s, est)
+
+
 def _limit(v):
     if v in (None, True, ""):
         return None
@@ -231,7 +473,6 @@ def cmd_ivpoisson(s: "Session", args: str) -> None:
     from .postest import replay
     from .regress import Sample, cmdline
     from .results import Estimates, coef_table, post, rows_from_columns
-    from .models2 import _header
     t = args.strip()
     if not t or t.startswith(","):
         replay(s, "ivpoisson", args)
@@ -379,6 +620,9 @@ def cmd_ivpoisson(s: "Session", args: str) -> None:
                 lam /= 2
             q_old, theta = q, tn
         out.write("\nnote: model is exactly identified\n", "text")
+        theta_init = np.concatenate(pis + [_poisson_start(y, X), np.zeros(E)])
+        gbf = moms(theta).mean(0)
+        Q = float(gbf @ W1 @ gbf)
         Gm = moms(theta)
         A = jac(theta)
         B = _cluster_meat(Gm, cl) / N
@@ -399,7 +643,6 @@ def cmd_ivpoisson(s: "Session", args: str) -> None:
         bfull = theta[order]
         Vfull = Vall[np.ix_(order, order)]
         title = "Exponential mean model with endogenous regressors"
-        Q = None
         n_par = n_mom = len(theta)
     Vfull = (Vfull + Vfull.T) / 2
     kk = len(bfull)
@@ -438,7 +681,7 @@ def cmd_ivpoisson(s: "Session", args: str) -> None:
     inst_all = " ".join([c.name for c in ex_cols] + [c.name for c in Zc])
     est.extra = dict(N=N, df_m=kk, instd=" ".join(c.name for c in Xn), insts=inst_all,
                      title=title, wm_label=wm_label, Q=gcrit, n_par=n_par, n_mom=n_mom)
-    from .panel import _retarget
+    from .ivregress import _retarget
     _retarget(est, Xn, ex_cols, endog_terms, smp.terms)
 
     def display(s_, e, *, header=True, table=True, level=None, **_kw):
@@ -452,6 +695,10 @@ def cmd_ivpoisson(s: "Session", args: str) -> None:
             o_.write(f"GMM weight matrix:     {x['wm_label']}\n\n", "text")   # VERIFY onestep
         if not table:
             return
+        if e.clustvar:
+            # compat 1920
+            o_.write(f"{'(Std. Err. adjusted for ' + format(int(e.n_clust), ',') + ' clusters in ' + e.clustvar + ')':>78}\n",
+                     "text")
         coef_table(s_, e.depvar, e.rows, stat="z", df=None, level=level or e.level, vcetype=e.vcetype)
         from .results import footnote
         o_.write(footnote(s_, "Instrumented:", x['instd']), "text")
@@ -464,7 +711,29 @@ def cmd_ivpoisson(s: "Session", args: str) -> None:
     macros = [("cmdline", cmdline("ivpoisson", args)), ("cmd", "ivpoisson"), ("method", method),
               ("depvar", smp.depname), ("instd", est.extra["instd"]), ("insts", inst_all),
               ("title", title), ("properties", "b V")]   # VERIFY e() lists
+    extra = []
     if method == "gmm":
         macros.append(("wmatrix", wm_label.lower()))
-    post(s, est, scalars, macros, mask)
+    else:
+        # Stata's lists and order for cfunction (compat 1920)
+        E_ = len(Xn)
+        vce_ = "cluster" if cl is not None else "robust"
+        scalars = [("N", float(N)), ("k", float(kk)), ("k_eq", float(1 + 2 * E_)), ("k_aux", float(E_)),
+                   ("k_dv", float(1 + E_)), ("Q", Q), ("J", N * Q), ("J_df", 0.0), ("rank", float(kk))]
+        if cl is not None:
+            scalars.append(("N_clust", float(len(np.unique(cl)))))   # VERIFY place
+        scalars.append(("converged", 1.0))
+        macros = [("cmd", "ivpoisson"), ("cmdline", cmdline("ivpoisson", args)), ("depvar", smp.depname),
+                  ("instd", est.extra["instd"]), ("insts", inst_all), ("estimator", "cfunction"),
+                  ("multiplicative", "multiplicative"), ("title", title), ("winit", "Unadjusted"),
+                  ("gmmestimator", "onestep"), ("wmatrix", vce_), ("vce", vce_), ("vcetype", "Robust")]
+        if cl is not None:
+            macros.append(("clustvar", smp.clustvar))   # VERIFY place
+        macros += [("technique", "gn"), ("properties", "b V"), ("estat_cmd", "ivpoisson_estat"),
+                   ("predict", "ivpoisson_p"), ("footnote", "ivpoisson_footnote"),
+                   ("marginsok", "xb default n pr XBTotal")]
+        from ..commands.matrix import Matrix
+        extra = [("init", Matrix(theta_init[order].reshape(1, -1))), ("W", Matrix(W1)), ("S", Matrix(B)),
+                 ("V_modelbased", Matrix(Vfull))]   # VERIFY contents (only the sizes are in the log)
+    post(s, est, scalars, macros, mask, extra_mats=extra)
     display(s, est)

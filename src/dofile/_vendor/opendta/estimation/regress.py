@@ -3,7 +3,6 @@ vce(cluster), the ANOVA table and the coefficient table of Stata 14."""
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -14,7 +13,7 @@ from ..core.formats import format_value
 from ..lang.syntax import match_options, parse_standard
 from ..lazy import lazy
 from . import fvars
-from .results import CoefRow, Estimates, coef_table, post, rows_from_columns
+from .results import Estimates, coef_table, post, rows_from_columns
 
 # imported on first use (start-up time; see opendta/lazy.py)
 st = lazy("scipy.stats")
@@ -425,7 +424,7 @@ def _anova(s: "Session", est: Estimates) -> None:
 
 
 def _ss_row(name: str, ss: float, df: float, ms: float) -> str:
-    return f"{name:>12} | {g(ss, '%11.0g'):>11}{int(df):>10}{g(ms, '%11.0g'):>12}"
+    return f"{name:>12} | {g(ss, '%11.0g'):>11}{int(df):>10,}{g(ms, '%11.0g'):>12}"   # 2,996 (compat 1926)
 
 
 def _robust_header(s: "Session", est: Estimates) -> None:

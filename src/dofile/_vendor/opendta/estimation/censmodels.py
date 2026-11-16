@@ -13,11 +13,10 @@ from ..core import missing as M
 from ..core.errors import StataError
 from ..core.stats import chi2_tail
 from ..lazy import lazy
-from . import fvars
 from . import likelihoods as L
 from .ml import maximize
 from .mleq import (Block, Engine, aux_row, block_from_pr, block_from_text, constant_only, display_eq,
-                   finish_model, fit_log, lab, make_predict, names_in, offset_values, peek, std_right, sub_options,
+                   finish_model, fit_log, lab, make_predict, names_in, offset_values, peek, read_constraints, std_right,
                    transformed_row)
 from .models import _probit
 from .models2 import _Prep, _log, g
@@ -755,10 +754,9 @@ def cmd_biprobit(s: "Session", args: str) -> None:
         (d1, x1), (d2, x2), rest = eqs
         pr_args = f"{x1} {rest}" if not rest.startswith(",") else f"{x1} {rest}"
     bad = (ds.get(d1).data >= SYS) | (ds.get(d2).data >= SYS)
-    spec = {"partial": 3, "offset1": 7, "offset2": 7}
+    spec = {"partial": 4, "offset1": 7, "offset2": 7, "constraints": 3}
     ob = peek(pr_args, spec)
-    if ob.get("partial"):
-        raise StataError(198, "option partial is not available yet in OpenDTA")   # OpenDTA
+    partial = bool(ob.get("partial"))
     pr = _Prep(s, pr_args, spec, need_dep=False, restrict=~bad,
                extra_vars=names_in(x2, ob.get("offset1"), ob.get("offset2")))
     pr.smp.depname = d1
@@ -766,7 +764,7 @@ def cmd_biprobit(s: "Session", args: str) -> None:
     mask = pr.smp.mask
     y1 = (ds.get(d1).data[mask] != 0).astype(float)
     y2 = (ds.get(d2).data[mask] != 0).astype(float)
-    for yy in (y1, y2):
+    for yy in ((y1 * y2,) if partial else (y1, y2)):
         if np.all(yy == yy[0]):
             raise StataError(2000, "outcome does not vary; remember:\n"
                              "                                  0 = negative outcome,\n"
@@ -782,27 +780,74 @@ def cmd_biprobit(s: "Session", args: str) -> None:
     b2.offset, b2.off_name = offset_values(pr, ob.get("offset2"), None)
     w = pr.w
 
-    def lik(etas, th):
-        ll, d1_, d2_, d_ath = L.biprobit(y1, y2, etas[0], etas[1], th[0])
-        return ll, [d1_, d2_], d_ath.reshape(-1, 1)
+    if partial:
+        # partial observability: only z = y1 y2 is seen, P(z = 1) = Phi2(eta1, eta2; rho)
+        # ([R] biprobit, Methods and formulas)
+        z = y1 * y2
+
+        def lik(etas, th):
+            return L.biprobit_partial(z, etas[0], etas[1], th[0])
+    else:
+        def lik(etas, th):
+            ll, d1_, d2_, d_ath = L.biprobit(y1, y2, etas[0], etas[1], th[0])
+            return ll, [d1_, d2_], d_ath.reshape(-1, 1)
 
     eng = Engine(lik, [b1, b2], w, 1)
+    read_constraints(s, pr, [b1, b2], [("athrho", "_cons")])
     p1 = _weighted_probit(y1, b1.X, w, b1.offset)
     p2 = _weighted_probit(y2, b2.X, w, b2.offset)
-    res = pr.maximize(eng.fun, np.concatenate([p1.b, p2.b, [0.0]]))
-    fit_log(s, pr, "Fitting comparison equation 1:", p1)
-    fit_log(s, pr, "Fitting comparison equation 2:", p2)
-    s.output.write(f"\nComparison:    log likelihood = {g(p1.ll + p2.ll, '%10.0g'):>10}\n", "text")
-    fit_log(s, pr, "Fitting full model:", res)
+    b0 = np.concatenate([p1.b, p2.b, [0.0]])
+    if partial:
+        # comparison: the partial-observability model with rho = 0, fitted from the two probits
+        # (VERIFY: Stata's comparison model and log for partial)
+        k12 = b1.k + b2.k
+        saved = getattr(pr, "cns", None)
+        pr.cns = None
+        e0 = Engine(lambda et, th: (lambda r_: (r_[0], r_[1], None))(L.biprobit_partial(z, et[0], et[1], 0.0)),
+                    [b1, b2], w, 0)
+        c0 = pr.maximize(e0.fun, b0[:k12])
+        pr.cns = saved
+        b0 = np.concatenate([c0.b, [0.0]])
+        res = pr.maximize(eng.fun, b0)
+        fit_log(s, pr, "Fitting comparison model:", c0)
+        fit_log(s, pr, "Fitting full model:", res)
+        ll_c = c0.ll
+    else:
+        res = pr.maximize(eng.fun, b0)
+        for j, (pj, dj) in enumerate(((p1, d1), (p2, d2)), 1):
+            if pr.o.get("nolog"):
+                break
+            s.output.write(f"\nFitting comparison equation {j}:\n\n", "text")
+            # Stata passes constraints() to each comparison probit, where a constraint on another
+            # equation fails (compat 1922)
+            for num in _foreign_constraints(s, pr.o.get("constraints"), dj):
+                s.output.write(f"(note: constraint number {num} caused error r(303))\n", "text")
+            from .ml import print_log
+            print_log(s.output, pj, "log pseudolikelihood" if pr.robust else "log likelihood")
+        s.output.write(f"\nComparison:    log likelihood = {g(p1.ll + p2.ll, '%10.0g'):>10}\n", "text")
+        fit_log(s, pr, "Fitting full model:", res)
+        ll_c = p1.ll + p2.ll
     V, n_clust = pr.vce(res.H, eng.scores(res.b) if pr.robust else None)
     ath, se_ath = float(res.b[-1]), float(np.sqrt(V[-1, -1]))
-    lr = max(2 * (res.ll - (p1.ll + p2.ll)), 0.0)
+    lr = max(2 * (res.ll - ll_c), 0.0)
     p_lr = _chi2p(lr, 1)
-    title_bp = "Seemingly unrelated bivariate probit" if eqs is not None else "Bivariate probit regression"
+    title_bp = ("Partial observability bivariate probit" if partial      # VERIFY title
+                else "Seemingly unrelated bivariate probit" if eqs is not None else "Bivariate probit regression")
 
-    def bp_footer(s_, est):
-        s_.output.write(f"Likelihood-ratio test of rho=0:     chi2(1) ={g(lr, '%8.0g'):>9}    Prob > chi2 = {p_lr:6.4f}\n",
-                        "text")
+    constrained = pr.o.get("constraints") not in (None, True, False)
+    w_rho = (ath / se_ath) ** 2 if se_ath > 0 else SYS
+    if constrained:
+        # with constraints Stata reports the Wald test of rho = 0 (compat 1922)
+        p_w = _chi2p(w_rho, 1) if w_rho < SYS else SYS
+
+        def bp_footer(s_, est):
+            val = g(w_rho, '%8.0g') if w_rho < SYS else "."
+            pv = f"{p_w:6.4f}" if p_w < SYS else "."
+            s_.output.write(f"Wald test of rho=0:{'':17}chi2(1) ={val:>9}    Prob > chi2 = {pv:>6}\n", "text")
+    else:
+        def bp_footer(s_, est):
+            s_.output.write(f"Likelihood-ratio test of rho=0:     chi2(1) ={g(lr, '%8.0g'):>9}    Prob > chi2 = {p_lr:6.4f}\n",
+                            "text")
     slopes = list(range(b1.nslopes)) + [b1.k + i for i in range(b2.nslopes)]
 
     def hdr(est):
@@ -817,13 +862,39 @@ def cmd_biprobit(s: "Session", args: str) -> None:
                        aux_rows_fn=lambda lv: [CoefRow("sep")] + _rho_rows(ath, se_ath, lv), hdr_fn=hdr,
                        depvar_cell="", wald=True, k_eq=3, test_idx=slopes,
                        footer=bp_footer,
-                       extra_scalars=[("rho", float(np.tanh(ath))), ("chi2_c", lr), ("p_c", p_lr)],
-                       extra_macros=[("depvar", f"{d1} {d2}")],
+                       extra_scalars=[("rho", float(np.tanh(ath)))] + ([("ll_c", ll_c)] if partial else []) +
+                                     [("chi2_c", w_rho if constrained else lr), ("k_dv", 2.0), ("k_eq_model", 2.0)],
+                       extra_macros=[("depvar", f"{d1} {d2}"), ("predict", "bipr_p"),
+                                     ("chi2_ct", "Wald" if constrained else "LR"),
+                                     ("user", "bipp_lf" if partial else "bipr_lf"), ("ml_method", "e2")],
+                       # e() as Stata lists it (compat 1922; without constraints, VERIFY)
+                       order=(["rank", "N", "ic", "k", "k_eq", "k_dv", "converged", "rc", "ll", "N_clust", "df_m",
+                               "chi2", "p", "rho", "ll_c", "chi2_c", "k_aux", "k_eq_model"],
+                              ["cmdline", "cmd", "predict", "chi2_ct", "chi2type", "opt", "vce", "vcetype", "clustvar",
+                               "title", "user", "ml_method", "technique", "which", "wtype", "wexp", "depvar",
+                               "properties"],
+                              ["Cns", "ilog", "gradient"]),
                        predict_opts={"xb1": 3, "xb2": 3, "pmarg1": 6, "pmarg2": 6, "p11": 3, "p10": 3, "p01": 3, "p00": 3})
     est.depvar = d1
     est.predict = make_predict(_predict_biprobit, "pmarg1")
     est.pred_label = f"Pr({d1})"
     display_eq(s, est)
+
+
+def _foreign_constraints(s, numlist, eqname):
+    """The constraints in numlist that name an equation other than eqname ([athrho]_cons, [y2]x1),
+    which a single-equation probit cannot apply."""
+    if numlist in (None, True, False):
+        return []
+    import re
+    from .sysmodels import _constraints, _numlist
+    defined = _constraints(s)
+    out = []
+    for num in _numlist(str(numlist)):
+        eqs = re.findall(r"\[\s*([^\]]+?)\s*\]", defined.get(num, ""))
+        if any(e != eqname for e in eqs):
+            out.append(num)
+    return out
 
 
 def _predict_biprobit(what, etas, th, est):

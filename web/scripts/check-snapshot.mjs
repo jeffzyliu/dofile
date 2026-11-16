@@ -1,7 +1,7 @@
 // Correctness check of a built snapshot (`npm run check-snapshot [-- --dir path --shards 4]`): the engine restored from it
 // must give the results the normal engine gives. In Node, with the same restore code the page uses, it runs:
 //   conformance  the corpus (CHECK values against tests/conformance/data/ref.json to 1e-6), the probes, a graph export
-//   compat       the 98 Stata 14 reference cases of tests_opendta/compat, through compare.py's own functions and its
+//   compat       the Stata 14 reference cases of tests_opendta/compat, through compare.py's own functions and its
 //                known differences, as tests/test_stata_compat.py does under CPython
 // Each compat case runs in its own process (a fresh engine), N at a time (--shards N, default 4), and is killed after
 // --timeout seconds (default 300), reported as a failure "timeout". The cases that are slow in Pyodide start first.
@@ -115,7 +115,7 @@ json.dumps({"checks": ok, "probes": probes, "problems": problems})`),
     py.FS.mkdirTree("/od");
     py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests_opendta` }, "/od");
     py.runPython(`
-import importlib.util, sys, json, tempfile, difflib, time, traceback
+import importlib.util, sys, json, tempfile, difflib, time, traceback, shutil
 from pathlib import Path
 spec = importlib.util.spec_from_file_location("compat_compare", "/od/tools/compare.py")
 compare = importlib.util.module_from_spec(spec); sys.modules["compat_compare"] = compare; spec.loader.exec_module(compare)
@@ -125,7 +125,11 @@ KNOWN = compare._known_differences()
 def run_case(case):
     t0 = time.perf_counter()
     try:
-        got = compare.run_opendta(compare.COMPAT / "do" / f"{case}.do", Path(tempfile.mkdtemp()))
+        out = Path(tempfile.mkdtemp())
+        classes = compare.COMPAT / "do" / "classes"   # 1928_classes finds its .class files at do/classes from the run folder
+        if classes.is_dir():
+            shutil.copytree(classes, out / "do" / "classes")
+        got = compare.run_opendta(compare.COMPAT / "do" / f"{case}.do", out)
         a = compare.normalize((EXPECTED / f"{case}.log").read_text(encoding="utf-8", errors="replace"))
         b = compare.normalize(got.read_text(encoding="utf-8", errors="replace"))
         k = KNOWN.get(case)

@@ -7,6 +7,7 @@ compat/known_differences.txt accepts it (the same rule as `compare.py`).
 
 import difflib
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
 
@@ -34,6 +35,10 @@ KNOWN = compare._known_differences() if CASES else {}
 # no reference logs (the sdist leaves them out): an empty list makes pytest report one skipped test
 @pytest.mark.parametrize("case", CASES)
 def test_matches_stata14_reference_log(case, tmp_path):
+    # upstream runs a case in compat/out/; 1928_classes finds its .class files at do/classes or ../do/classes from there
+    classes = compare.COMPAT / "do" / "classes"
+    if classes.is_dir():
+        shutil.copytree(classes, tmp_path / "do" / "classes")
     got = compare.run_opendta(compare.COMPAT / "do" / f"{case}.do", tmp_path)
     a = compare.normalize((EXPECTED / f"{case}.log").read_text(encoding="utf-8", errors="replace"))
     b = compare.normalize(got.read_text(encoding="utf-8", errors="replace"))
