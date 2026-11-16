@@ -16,6 +16,7 @@ declare global {
   interface Window {
     __dofile: Hook;
     __partSeen: { ready: number; lines: [number, string][] }; // the return-visit test's clock (its init script)
+    __runAtReady: Promise<any>; // `display 1`, sent by an init script the moment the page says "ready"
   }
 }
 
@@ -107,11 +108,20 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
   // WebKit drops the Cache API of Playwright's in-memory context on a reload
   if (browserName === "webkit") return;
   lines.length = 0;
+  // sent from the page itself: a poll notices "ready" up to 1 s late, past the part's idle wait (IDLE_MS)
+  await page.addInitScript(() => {
+    window.__runAtReady = new Promise((done) => {
+      new MutationObserver((_, observer) => {
+        if (document.documentElement?.dataset.engine !== "ready") return;
+        observer.disconnect();
+        done(window.__dofile.run("display 1"));
+      }).observe(document, { attributes: true, subtree: true, attributeFilter: ["data-engine"] });
+    });
+  });
   await page.reload();
   await startEngine(page);
-  await ready(page);
   // a run at "ready" ends before the part is unpacked: nothing of it happens before the engine has been idle a while
-  const first = await run(page, "display 1");
+  const first = await page.evaluate(() => window.__runAtReady);
   expect(first.rc, first.log).toBe(0);
   expect(lines.join("\n")).not.toMatch(/written/);
   await expect
