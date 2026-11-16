@@ -14,7 +14,8 @@ marks a name that does not exist yet.
 2. **Documents.** One record per tab. The unsaved dot, `tabs`, `activeTab` and the editor's "shown" are computed from
    the records and stored nowhere (section 2).
 3. **Order.** The unit is a turn: one store call and its follow-up on the documents. An operation that asks the
-   visitor takes a turn per write, so an open dialog holds no Save (section 3).
+   visitor takes a turn per write, so an open dialog holds no Save, and each write's turn checks again what the
+   question rested on: what changed meanwhile is asked again, never written blind (section 3).
 4. **Graphs.** The selected graph is kept by its number, not its index (section 2).
 5. **State.** `state.ts` is split into one state module per owner and deleted; the e2e hook keeps one `state` object,
    assembled from them (sections 4 and 6).
@@ -25,15 +26,16 @@ Found by trying: `editor/cm.ts` does not load under Node as it is; one line in a
 **The maintainer's choices** (the rest is technical):
 
 - a. Decision 1 itself. Recommended.
-- b. Save's turn (section 3). Recommended: keep "issue the write, apply the answer later"; nothing a visitor or a test
-  sees changes. Or Save waits in its turn: simpler to argue, but a slow write then holds a rename, and the first half
-  of the test at `web/e2e/editor.spec.ts:403` changes.
+- b. Save's turn (section 3). Recommended: keep "take the text when pressed, issue the write, apply the answer later";
+  nothing a visitor or a test sees changes. Or Save waits in its turn: simpler to argue, but a slow write then holds a
+  rename, and both halves of the test at `web/e2e/editor.spec.ts:403` change (each renames before the write answers).
 - c. R7r deletes `state.ts` and rewrites `web/CLAUDE.md`'s "State" rule (recommended), or keeps it as re-exports.
 - d. The schedule, which this note changes. S1 is larger than its row: it takes `tabs` and `activeTab` from the file
   code and `files/EditorTabs.tsx`, so "owner functions for `activeTab`" leaves S6's row. A fair cut is three builder
   items: the records with the derived signals; Save and the file code's calls; the scroll snapshot. S2's split of
-  `files/actions.ts` is three ways, not four. `graphIndex` joins S6. C2 and C4 (phase 1) move names cited here
-  (`decodeText`, the import cycles): rule 7's re-check before S1 settles them.
+  `files/actions.ts` is three ways, not four. S1 also edits `web/src/main.tsx`, which lane a's S7 may touch (section 4).
+  `graphIndex` joins S6. C2 and C4 (phase 1) move names cited here (`decodeText`, the import cycles): rule 7's re-check
+  before S1 settles them.
 
 ## 1. Owners (decision 1)
 
@@ -62,15 +64,16 @@ the file code and the documents with the editor.**
 
 ## 2. The open documents (decision 2; S1)
 
-**One record per tab, with identity. The path is a field; nothing else is keyed by path.** Both types are new.
+**One record per tab, with identity. The path is a field; the owner keeps nothing else by path.** Both types are new.
+Banners and the run marks are keyed by path: who follows them is below.
 
 ```ts
-interface Doc {                          // lives as long as its tab; never copied
-  kind: "text" | "dta";
-  path: string;                          // a rename changes it
-  state: EditorState;                    // text tabs only, as the three below; always current, shown or not
-  saved: string | null;                  // the store's text in the editor's form; null: the store's version is not text
-  form: FileForm;                        // line break and BOM, as Save writes them
+interface Doc {                          // lives as long as its tab; never copied. A Signal is what the computeds read
+  kind: Signal<"text" | "dta">;          // retype changes it in place
+  path: Signal<string>;                  // a rename changes it
+  state: Signal<EditorState>;            // text tabs only, as the three below; always current, shown or not
+  saved: Signal<string | null>;          // the store's text in the editor's form; null: the store's version is not text
+  form: FileForm;                        // line break and BOM, as Save writes them; no computed reads it
   scroll: StateEffect<unknown> | null;   // EditorView.scrollSnapshot(), taken when the tab is hidden
 }
 interface EditorSurface {                // what Editor.tsx hands attachView() at mount; a Node test hands none
@@ -80,6 +83,10 @@ interface EditorSurface {                // what Editor.tsx hands attachView() a
   scrollSnapshot(): StateEffect<unknown>;
 }
 ```
+
+The owner keeps the records in a private `Signal<Doc[]>`, in the tabs' order, and the active one in a
+`Signal<Doc | null>`. `tabs`, `activeTab`, `selection` and each `dirty` are computeds over those and the `Signal`
+fields, so a rename is one write to `path`; a field written as a plain value would leave them stale.
 
 The records are private. Readers keep today's names and shapes, read-only:
 
@@ -97,6 +104,12 @@ The records are private. Readers keep today's names and shapes, read-only:
   for every record when the view attaches (as the wrap setting is, `editor/Editor.tsx:473-479`). A file opened before
   the Editor mounts is then complete: the window in which `editorCommands` does nothing (`editor/commands.ts:1-7`)
   closes.
+- **What else follows a rename or a close.** The owner's `moved` moves, and its `close` drops, each record's
+  save-failed and run-changed banners and the selection run's mark (`marked`), as `renamed` and `closed` do today
+  (`editor/Editor.tsx:343-347, 354, 365, 371`). `renameEntry` keeps moving the reset banner's file
+  (`files/actions.ts:84-86`), and `closeUnder` keeps dropping the not-text banner (`:45`). The run and error marks
+  (`followRuns`, `followErrors`, `markErrors`, `editor/Editor.tsx:207-235`) and the wrap effect (`:473-479`) move to
+  the owner: they write every record's state, hidden ones too, and need no view.
 - **Why.** `renamed` and `closed` follow each Map by hand (`editor/Editor.tsx:331-373`). With one record there is one
   thing to move or drop, and the rules of `docs/web-page-flows.md` section 3 become Node tests.
 - **Against.** One signal write per transaction of the shown document. The dot still compares the whole text at each
@@ -118,30 +131,61 @@ S6 builds it.
 1. `fileTurn(fn)` runs `fn` once every earlier turn has ended, whichever way.
 2. Inside a turn: the decision (the tab's path now, whether a name is free, whether the file has unsaved edits), the
    store call, and the follow-up on the documents (rename, close, reload, run-over). A check and the write it guards
-   share a turn, as in `createEntry` (`files/actions.ts:126-135`).
+   share a turn, as in `createEntry` (`files/actions.ts:126-135`). A turn may make several store calls that no
+   question separates: `deleteEntries` keeps one turn for all its paths (`:139-146`).
 3. Never inside a turn: a dialog, a timer, an engine call, or another turn (it would wait for itself).
 4. An operation that asks the visitor takes one turn per write. An upload's every write, and every replace with its
-   reload, is a turn; the clash dialog is awaited between turns. So an open dialog holds no Save.
+   reload, is a turn; the clash dialog is awaited between turns. So an open dialog holds no Save. What was checked
+   before the dialog is checked again in the write's turn (below).
 5. Whole uploads still run one at a time: a second chain from the same factory, `serial()` (new). It may wait for the
    visitor and takes turns; a turn never takes it.
 6. A store read whose answer is applied to a document is a turn: `followOpen` (`files.ts:96-113`), "Reload from the
-   run" (`editor/banners.tsx:49-53`).
+   run" (`editor/banners.tsx:49-53`), and `openFile`'s read with the tab it adds (`files/open.ts:56, 75-77`), so a
+   replace or a rename cannot land between them. No turn calls `openFile`: `retype` takes a text read inside the
+   rename's own turn, where `reopenAs` calls `openFile` today (`files/actions.ts:97, 108`).
 7. One door: in `web/src/app/` the store's `write`, `rename`, `remove` and `mkdir` are called only on the `Writer`
    (new) a turn hands to `fn`. S2 picks what holds it (a type, or N1's path table).
 
-**Save is the one turn that does not wait for its store call.** It reads its record and issues the write in its turn,
-and applies the answer to the record afterwards. `web/e2e/editor.spec.ts:403` pins this: a rename goes through while a
-Save's write is pending. It is safe because the record has identity, and because the store applies and answers
-changes in the order called (`web/src/engine/store.ts:172-176`): a later turn's follow-up waits for its own call, so it
-runs after the Save's answer. S2's test of the store's order holds that. The alternative is choice b.
+**What a write's turn checks again after a question.** An upload decides from a listing taken before any dialog
+(`files/actions.ts:272, 290-295`) and from whether the file is open with unsaved edits (`:303`); a Save, a run or
+`createEntry` can change either before the write's turn. So each upload write checks again in its turn, on a fresh
+listing, and a changed answer is never a write: the turn ends without writing, and the question is asked between turns.
 
-Outside any turn at f947053, and the item that brings each in:
+- A path that was free at the listing and holds a file now (`createEntry` made `untitled.do`, a run wrote it) becomes
+  a clash: asked like the others, or kept with no question after Esc or "Do the same" with Keep mine. A file that holds
+  the uploaded bytes counts as uploaded (`holds`), as today.
+- A clash answered with Replace whose file has changed since its dialog (its `size` or `mtime` differs from
+  `ClashNow.yours`, `:212`) is asked again with what is there now. A file deleted meanwhile is written, as a free path.
+- A file that has unsaved edits now, and was not asked about with them (the dialog did not say so, or "Do the same"
+  with Replace skipped it), is asked again in the unsaved words (`:304`; `files/dialogs.tsx:67`).
+- A folder at the path: the store refuses the write, and it counts as failed, as today.
+
+"Restore the sample" is an upload and follows the same rules. The other writes that ask first: Delete and Delete all ask
+about names (`files/dialogs.tsx:84-148`), and their turn removes what the names hold then, as today; close-tab's Save is
+a Save. A rename onto a name in use asks nothing: the store refuses it inside its own call
+(`web/src/engine/store.ts:237`) and the field says "already exists here" (`files/FilesPane.tsx:170`). A Save over a file
+a run changed asks nothing either: the run-changed banner says Save overwrites the run's version
+(`editor/banners.tsx:74, 79`), a Save during a run wins by design (SPEC section 7, "A page change during a run wins"),
+and Save's turn checks only its record's path.
+
+**Save is the one turn that does not wait for its store call.** It takes its text when pressed, as today
+(`editor/Editor.tsx:248`), so a keystroke typed while it waits is not saved and keeps the dot. In its turn it reads its
+record's path and issues the write, and it applies the answer to the record afterwards. `web/e2e/editor.spec.ts:403`
+pins this: a rename goes through while a Save's write is pending. It is safe because the record has identity, and
+because the store applies and answers changes in the order called (`web/src/engine/store.ts:172-176`): a later turn's
+follow-up waits for its own call, so it runs after the Save's answer. S2's test of the store's order holds that.
+Identity covers a rename or a close while the write is pending, which is what `web/e2e/editor.spec.ts:419-426` holds the
+answer for; against a later reload or run-over of the same record, only the order keeps a late answer from setting
+`saved` over it. The alternative is choice b.
+
+Not in a turn, or not wholly, at f947053, and the item that brings each in:
 
 | Write, or read that is applied | Item |
 |---|---|
 | Save, the only store write in a view (`editor/Editor.tsx:245-280`) | S1 moves it to the owner, in its turn as now |
 | An upload's `put` and `reopen` (`files/actions.ts:275-286, 338, 367-373`); "Restore the sample" is an upload | B1 |
 | `followOpen` (`files.ts:96-113`) | B1 |
+| `openFile`'s read and the tab it adds (`files/open.ts:56-77`); "Restore the sample" ends with one (`sample.ts:73`) | B1; S1 has `retype` read inside the rename's turn |
 | "Reload from the run" (`editor/banners.tsx:49-53`) | S1 moves it to `files.ts`; S2 puts it in a turn |
 | `deleteAll`'s list (`files/actions.ts:149-152`); the first visit's `put` (`sample.ts:27-29`) | S2, first half |
 
@@ -173,6 +217,13 @@ Outside any turn at f947053, and the item that brings each in:
   a rename (`text` null: a `.dta` tab), where `reopenAs` closes and opens again.
 - The owner imports neither `files/actions.ts`, `files/open.ts` nor `run.ts`: each imports it, or will. That is why
   `fileTurn` moves first, and why `reloadFromStore` sits in `files.ts` beside `textInStore`.
+
+**S1's other files.** `files/EditorTabs.tsx` (`activate`); `files/dialogs.tsx`, `editor/RunControls.tsx` and
+`editor/banners.tsx` (they take `save`, `textOf` and `savedIsText` from the owner); `files.ts:97, 111` and `run.ts:76`
+(they read `S.tabs`); `web/src/main.tsx` (the `beforeunload` read of `S.tabs` at line 61, and the hook's `state` at
+line 78, section 6). The other readers of `tabs` and `activeTab` (`App.tsx`, `files/FileBar.tsx`, `files/FilesPane.tsx`,
+`states/banners.tsx`) change only an import line. Lane a's S7 takes the controller's wiring, which `web/src/main.tsx:66`
+calls: if S7 edits that file, the plan's After column orders the two (rule 8).
 
 **The layout R7r applies to `state.ts` (decision 5).** One state module per owner, in `state/` (new); `state.ts` is
 deleted. 37 source files and 4 test files import it at f947053; their import lines change.
@@ -227,8 +278,8 @@ The two run calls stay because an owner that imported `run.ts` would close a cyc
 
 ## 6. The e2e hook
 
-`main.tsx:70-87` hands the specs the whole module as `state`; they name `state.<x>` 179 times in 12 files at f947053
-(`grep -roE 'state\.[A-Za-z]+' web/e2e`; rule 7's re-check at e711ba0 counted 198 with another pattern).
+`web/src/main.tsx:70-87` hands the specs the whole module as `state`; they name `state.<x>` 179 times in 12 files at
+f947053 (`grep -roE 'state\.[A-Za-z]+' web/e2e`; rule 7's re-check at e711ba0 counted 198 with another pattern).
 
 **The hook keeps one `state` object with every name the specs use, built by one function, `hookState()` (new), in a
 `.ts` file** (N3's hook module, if it is one). From S1 on it is the `state.ts` module plus the owner's `tabs` and
@@ -258,8 +309,8 @@ In the same pull request as the move, passing against the new module before the 
 
 | Item | Loses logic | Tests |
 |---|---|---|
-| S1 | `editor/Editor.tsx`: open, reload, run-over, rename, close, Save | On the real owner and the real store over fake-indexeddb, no view. (1) One test per row of "What each event does" (`docs/web-page-flows.md`, section 3) that needs no view, asserting the text, the saved text, the form, the dot, the banners and the stored bytes. (2) Rename against Save, delete against Save, a Save that answers after a rename (what `web/e2e/editor.spec.ts:403` holds in a browser). (3) A run against unsaved edits, through `afterRun`. (4) The dot is derived: a second keystroke leaves `tabs` unchanged; undoing to the saved text clears it. (5) A file opened before `attachView` gets the view's extensions. The tests that record `editorCommands` calls (`web/test/files-ui.test.ts:24-30`) assert the records instead, each replaced assertion named in the pull request. |
-| B1; S2, first half | nothing (order) | Failing first: Save against an upload's replace of the open file (03-F1), `createEntry` against an upload (03-F4), Save against `followOpen` (03-F5). Then: an open clash dialog holds no Save; a turn that rejects does not stop the next (exists, `web/test/files-ui.test.ts:280`); the store applies and answers in the order called (02-F10). |
+| S1 | `editor/Editor.tsx`: open, reload, run-over, rename, close, Save | On the real owner and the real store over fake-indexeddb, no view. (1) One test per row of "What each event does" (`docs/web-page-flows.md`, section 3) that needs no view, asserting the text, the saved text, the form, the dot, the banners and the stored bytes. (2) Rename against Save, delete against Save, a Save that answers after a rename (what `web/e2e/editor.spec.ts:403` holds in a browser). (3) A run against unsaved edits, through `afterRun`. (4) The dot is derived: a second keystroke leaves `tabs` unchanged; undoing to the saved text clears it. (5) A file opened before `attachView` gets the view's extensions. The tests that record `editorCommands` calls (`web/test/files-ui.test.ts:24-30`) assert the records instead, each replaced assertion named in the pull request. Existing tests it rewrites the same way: the writes of `S.tabs.value` and `S.activeTab.value` in `web/test/files-ui.test.ts:40-41, 227, 253, 746`, `web/test/sample.test.ts:57-58, 139-140, 150-151, 161, 207, 229` and `web/test/app.test.ts:295, 1398, 1816`; `S.setDirty` in `web/test/files-ui.test.ts:234, 463, 544, 666, 687, 707, 761`; the test "setDirty sets one tab's dot" (`web/test/app.test.ts:1815`), whose `decodeText` half stays; `web/test/imports.test.ts:434-451`, which counts `tabs` and `activeTab` among the 13 writable signals of `state.ts` (S1 takes those two out; S5 and S6 the ones they make read-only, section 4). |
+| B1; S2, first half | nothing (order) | Failing first: Save against an upload's replace of the open file (03-F1), `createEntry` against an upload (03-F4) and the other way round (the upload held after its listing, say on the `holds` read of an earlier clash; `createEntry` makes `untitled.do`; the upload then asks about it, and the store keeps the empty file unless the answer is Replace), a clash whose file changes while its dialog is open (asked again, not written), Save against `followOpen` (03-F5), an upload's Replace against `openFile`'s read of the same file. Then: a file that gets unsaved edits after "Do the same" with Replace is asked about; an open clash dialog holds no Save; a turn that rejects does not stop the next (exists, `web/test/files-ui.test.ts:280`); the store applies and answers in the order called (02-F10). |
 | S3 | `files/FilesPane.tsx:110-230`: rename and drafts | `files/rename.ts`, the focus read as the values of `focusWanted` and `rovingPath`: Enter with a good name; a name problem keeps the field; "already exists" from the store; Esc; leaving a draft writes the free default and says so; Enter then the blur (the `ending` guard); another field started meanwhile (`renaming.id`). |
 | S5 | `runText` in `log/LogView.tsx`; `toggleWrap`, `setSplit` in `App.tsx` | `runText` as a pure function: the graph links, the unsaved-do notes, the phone hints, the wide-table hint, the jump, the end notes. `setSplit` and `toggleWrap`: the signal, localStorage, `outputTab`. Scroll-follow needs a DOM: its net is e2e, with N6's streamed-run test. |
 | S6 | the roving keys of `files/EditorTabs.tsx` and `ui/Tablist.tsx`; the writers of `dialog`, `phoneTab`, `graphIndex` | The roving rule as a pure function (key, place, count: the next place). `closeDialog` closes only its own dialog. `selectGraph` still shows its graph after the oldest drops. The focus-target registry, if it is a `.ts`. The modal trap needs a DOM: e2e. |
