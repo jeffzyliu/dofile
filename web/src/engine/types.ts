@@ -33,6 +33,9 @@ export interface LifecycleOps {
   boot: { args: BootArgs; result: About };
   startup: { args: void; result: Startup };
   run: { args: { code: string } & RunOptions; result: RunResult };
+  /** A lazy snapshot's graphics part landed, failed or is fetched again in the page (client.ts), in the SharedArrayBuffer
+   *  (without one the worker fetches the part itself and the page sends this never). */
+  graphics: { args: void; result: void };
 }
 /** Ops DECLARED to change nothing: not the data, r(), e(), the macros, the matrices, the graphs, the sort order, the log
  *  or /work. Anyone may send one. The declaration is tested (test/engine.test.ts, the fingerprint), not proved. */
@@ -61,12 +64,27 @@ export type FromWorker =
   | { id: number; result: Ops[Op]["result"] }
   | { id: number; error: string; name: string }
   | { id: number; log: string } // a chunk of a running run's log
-  | { stage: Stage }; // a start-up stage began
+  | { stage: Stage } // a start-up stage began
+  // the lazy graphics part. With a SharedArrayBuffer: it failed (the page fetches it again, a graph waits), or it arrived
+  // damaged (the page drops it from the Cache and fetches it again). Without one the worker fetches it, and tells the page
+  // how it goes, to show: "fetching" (begun), "progress" (bytes received, throttled), "landed", "failed" (why); "damaged"
+  // then means the worker dropped its copy (its next fetch skips the HTTP cache)
+  | { graphics: "again" | "damaged" | "fetching" | "landed" }
+  | { graphics: "progress"; received: number }
+  | { graphics: "failed"; why: string };
 
 /** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
 export type Wheel = string | { name: string; bytes: Uint8Array };
 /** `boot`'s arguments. `interruptBuffer`: an Int32Array on a SharedArrayBuffer (Break), or null. */
-export type BootArgs = { wheel: Wheel; extraWheels?: Wheel[]; interruptBuffer?: Int32Array | null };
+export type BootArgs = {
+  wheel: Wheel;
+  extraWheels?: Wheel[];
+  interruptBuffer?: Int32Array | null;
+  /** A lazy snapshot: its graphics part, handed over by the page (client.ts) in `sab` (Int32 [state 0 pending, 1 landed,
+   *  2 failed; byte count; attempt: the page's fetches of it, counted; 0], then from byte PART_HEADER (16)
+   *  the compressed part or the reason), or null: then the worker fetches it itself. */
+  graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null };
+};
 
 /** `mount`'s arguments. A snapshot start has `snapshot` (the URL of its folder, ending in "/"), `built` (which names the
  *  Cache, `dofile-snapshot-<built>`) and `files` (its two big files): all three from the build's list, start-files.json,
@@ -215,6 +233,13 @@ export interface Progress {
   received: number;
   total: number;
 }
+/** A lazy snapshot's graphics part, as it is fetched after the start files (by the page, or by the worker without a
+ *  SharedArrayBuffer, which tells the page; client.ts, onGraphics): bytes as sent
+ *  (compressed). `state`: "pending" (not asked for yet), "fetching", "landed", "failed" (`error` says why). */
+export interface GraphicsProgress extends Progress {
+  state: "pending" | "fetching" | "landed" | "failed";
+  error?: string;
+}
 /** What download() resolves with. `build`: what `mount` needs of the list download() has just checked (null: the normal
  *  start), so that a start the visitor begins does not fetch the list a second time. */
 export type Downloaded = ({ cached: true; received: number; total: number } | { cached: false; why: string }) & {
@@ -254,6 +279,10 @@ export interface SnapshotFile {
 export interface SnapshotFiles {
   snapshot: SnapshotFile;
   bundle: SnapshotFile;
+  /** A lazy snapshot only (SNAPSHOT_NO_MPL=1, docs/lazy-matplotlib.md): matplotlib and what only it needs, left out of the
+   *  heap and the bundle. Not a start file: the page fetches it (client.ts, #graphics; after the start files, or once started) and keeps it in the
+   *  build's Cache. snapshot.ts, packGraphics, has its layout. */
+  graphics?: SnapshotFile;
 }
 /** public/snapshot/manifest.json: what the snapshot was built from (scripts/build-id.ts, BuildInputs), its time and its two big
  *  files. The build's record, not deployed: scripts/start-files.ts refuses a build whose inputs differ from it, and copies

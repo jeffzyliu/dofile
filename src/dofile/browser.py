@@ -10,12 +10,26 @@ button sets Pyodide's interrupt buffer, which runs our SIGINT handler: the engin
 from __future__ import annotations
 
 import base64
+import importlib
 import json
 import signal
+import sys
+import sysconfig
 import time
 
 from . import linalgshim, pathshim, sandbox
-from .engine import LOG_KEEP, NOMEM, RC_NOMEM, Engine, Result, about, clear_break, matrix_sizes, request_break
+from .engine import (
+    LOG_KEEP,
+    NOMEM,
+    RC_NOMEM,
+    Engine,
+    Result,
+    about,
+    clear_break,
+    flush_output,
+    matrix_sizes,
+    request_break,
+)
 
 DENIED = ("shell", "webuse")  # no programs and no network in a browser; file commands only touch the page's own files
 # The note under the error about a tempfile an earlier run deleted. A draft: step 4d's word list replaces it (OQ-10).
@@ -149,3 +163,102 @@ def browse(vars: str | None = None, offset: int = 0, limit: int = 50) -> str:
 def memory() -> str:
     """{data_bytes}: the dataset's size in memory (the worker adds the WebAssembly heap)."""
     return json.dumps(_eng.memory())
+
+
+# ---- the lazy graphics part (web/src/engine/worker.ts, waitGraphics; experiment E1c) ----
+# In a lazy snapshot, matplotlib and what only it needs are not in the heap: the page downloads them after the start and the
+# worker writes them into site-packages. Only a graph waits for them: the graph store's put (inside the graph command, so a
+# Break while waiting is an ordinary Break, rc 1, and nothing is half stored), and a finder for any other import of
+# matplotlib (graph export of a graph drawn earlier). Every other run never waits: the part's other packages (PIL, dateutil,
+# ...) are simply not found until it is written, as an optional import expects.
+GRAPHICS_WAIT = frozenset({"matplotlib", "mpl_toolkits", "pylab"})
+GRAPHICS_RC = 199  # as ODT-32's "not available" errors
+
+
+class _LazyGraphics:
+    """A sys.meta_path finder that finds nothing: importing matplotlib first waits for the part to be written."""
+
+    def __init__(self, wait) -> None:
+        # wait(ms), a JS function: "" the files are written; "pending" ms passed; "break" the Break was pressed; else why
+        # the files cannot be had
+        self.wait = wait
+        self.ready = False
+
+    def ensure(self) -> None:
+        if self.ready:
+            return
+        from ._vendor.opendta.core import brk
+        from ._vendor.opendta.core.errors import StataError
+
+        said = False
+        while True:
+            brk.check()  # a Break the SIGINT handler took before or between the waits
+            # what the run printed so far reaches the page now, not when the graph is done: one wait may take seconds
+            # (it unpacks, writes, or without a shared buffer downloads the part), and brk.check sends only what is
+            # STREAM_EVERY old
+            flush_output()
+            why = self.wait(100)
+            if why == "pending":
+                if not said and _eng is not None:
+                    _eng.session.output.write("(waiting for the graphics files to download)\n", "text")
+                    said = True
+                continue
+            if why == "break":
+                request_break()
+                brk.check()  # KeyboardInterrupt: the engine's Break (rc 1), data kept
+            if why == "":
+                self.ready = True
+                importlib.invalidate_caches()
+                return
+            raise StataError(GRAPHICS_RC, f"graphs are not available: {why}")
+
+    def find_spec(self, name, path=None, target=None) -> None:
+        """Finds nothing: the ordinary finders find the files (or not, before they are written)."""
+        if not self.ready and name.partition(".")[0] in GRAPHICS_WAIT:
+            self.ensure()
+
+
+_graphics: _LazyGraphics | None = None
+_warm: list[str] | None = None
+
+
+def lazy_graphics(wait) -> None:
+    """A lazy snapshot: graphs wait for the graphics part (`wait`, see _LazyGraphics). Once, after start()."""
+    global _graphics
+    _graphics = _LazyGraphics(wait)
+    sys.meta_path.insert(0, _graphics)
+    store = _eng.session._graphs
+    put = store.put
+
+    def waiting_put(g, *, replace: bool) -> None:
+        _graphics.ensure()  # before the graph is stored: a Break here leaves nothing changed
+        put(g, replace=replace)
+
+    store.put = waiting_put
+
+
+def graphics_written() -> None:
+    """The worker wrote the part's files while no graph waited (the engine was idle)."""
+    if _graphics is not None:
+        _graphics.ready = True
+    importlib.invalidate_caches()
+
+
+def warm_graphics(start: int, count: int = 40) -> int:
+    """Import the modules a first graph needs (the build's list, in its order), `count` at a time from `start`, so the first
+    graph after the part landed costs what it did with matplotlib in the heap. Returns where to go on, or -1 when done."""
+    global _warm
+    if _warm is None:
+        try:
+            with open(f"{sysconfig.get_paths()['purelib']}/_dofile_graphics_warm.txt") as fh:
+                _warm = fh.read().split("\n")
+        except OSError:
+            _warm = []
+        # what the engine's renderer loads first (render.py: matplotlib.figure; the font list), then the rest
+        _warm = ["matplotlib", "matplotlib.figure", "matplotlib.font_manager", *_warm]
+    for name in _warm[start : start + count]:
+        try:
+            importlib.import_module(name)
+        except Exception:  # noqa: BLE001, S112 - a module this page cannot import is imported (and fails) at its first use
+            continue
+    return start + count if start + count < len(_warm) else -1

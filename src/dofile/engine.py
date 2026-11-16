@@ -267,6 +267,14 @@ class _Tee:
 _ticking: _Tee | None = None  # the run that streams now; long computations give it a chance to send
 
 
+def flush_output() -> None:
+    """Send what the streaming run holds now, however recent the last send. For a caller about to block for a long
+    time inside a command (the web demo's graph waiting for its graphics files): without it, text written in the last
+    STREAM_EVERY seconds would wait until the command writes again or the run ends. A no-op outside a streaming run."""
+    if _ticking is not None:
+        _ticking.flush()
+
+
 def _install_tick() -> None:
     """Long computations (ml iterations, bootstrap and Mata loops) call brk.check(); send the pending log there too,
     so the echo of a long command reaches the page before the command ends."""
