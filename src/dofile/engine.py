@@ -317,8 +317,8 @@ def clear_break() -> None:
     brk.clear()
 
 
-def _png(g, theme: str | None = None) -> bytes | None:
-    """The graph as a PNG. theme="dark": every graph whose scheme maps to OpenDTA's color scheme (the default,
+def _png(g, theme: str | None = None) -> bytes:
+    """The graph as a PNG; raises when it cannot be drawn (the caller reports it). theme="dark": every graph whose scheme maps to OpenDTA's color scheme (the default,
     s2color or s1color named, or an unknown name) is drawn in OpenDTA's dark scheme (dark background, light text, axes
     and grid); the mono schemes and the dark one are drawn as they are."""
     import io
@@ -333,11 +333,19 @@ def _png(g, theme: str | None = None) -> bytes | None:
     try:
         fig = render.figure(g)
         fig.savefig(buf, format="png", dpi=100, facecolor=fig.get_facecolor())
-    except Exception:  # noqa: BLE001 - a graph that cannot be drawn is just not shown inline
-        return None
     finally:
         scheme.get = get
     return buf.getvalue()
+
+
+def _draw(g, n: int, theme: str | None) -> tuple[bytes | None, str]:
+    """(PNG, "") or (None, the log line saying why graph `n` of the call could not be drawn). Whatever goes wrong
+    drawing it (matplotlib's mathtext raises ValueError on a bad title) must not fail the run."""
+    try:
+        return _png(g, theme), ""
+    except Exception as e:  # noqa: BLE001 - a graph that cannot be drawn is not shown inline, and the log says so
+        why = (str(e).strip().splitlines() or [""])[0]
+        return None, f"(graph {n} could not be drawn: {type(e).__name__}{': ' + why if why else ''})\n"
 
 
 def _out_of_memory(e: Exception) -> bool:
@@ -533,11 +541,18 @@ class Engine:
             self._tee.stop()
         log = self._capture.text  # built once: it joins up to 2 MB
         failed = _failed_command(log) if rc else None
-        shown = list(zip(store.drawn, store.commands))[-MAX_IMAGES:] if images else []
-        drawn = [(png, cmd) for png, cmd in ((_png(g, plot_theme), cmd) for g, cmd in shown) if png]
+        first = max(len(store.drawn) - MAX_IMAGES, 0)
+        shown = list(zip(store.drawn, store.commands))[first:] if images else []
+        drawn, lost = [], []
+        for n, (g, cmd) in enumerate(shown, first + 1):  # n counts the call's graphs, as the user would
+            png, why = _draw(g, n, plot_theme)
+            if png:
+                drawn.append((png, cmd))
+            if why:
+                lost.append(why)
         d = self.session.data
         result = Result(
-            _annotate_refusals(log),
+            _annotate_refusals(log) + "".join(lost),  # rc stays 0: the run worked, a picture is missing
             rc,
             error,
             self.results(),
