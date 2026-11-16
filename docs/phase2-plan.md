@@ -78,6 +78,9 @@ maintainer decides on the ones that are unsure.
 Width decided 2026-11-13 (review decision 22): the work below plus three cheap checks. Security headers and the `?test` gate
 wait until later. The maintainer's name for it is "the full-web-code audit"; it replaces a `/code-review` of the merged whole.
 
+How it is run: `docs/web-audit-plan.md` (the execution plan; scope decided 2026-11-16), with its reasons in
+`docs/web-audit-proposal.md`.
+
 - **Code**, in the maintainer's words:
   - Preact lifecycle and raw DOM: "rely on render cycle as much as possible", "avoid raw dom operations wherever possible"
     (`querySelector` into rendered components, timers waiting for a render, focus or scroll moved from outside the owner).
