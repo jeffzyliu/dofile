@@ -108,8 +108,8 @@ export function StatusBar() {
   );
 }
 
-/** "Graphs loading" and a ring of its percent while the graphics part downloads after the start. Nothing before the engine
- *  started, once it landed, or after a failed fetch (a graph's own error says why). Not a live region. */
+/** "Graphs loading" and a ring of its percent while the graphics part downloads after the start. Nothing before the
+ *  engine started, once it landed, or after a failed fetch (a graph's own error says why). Not a live region. */
 export function GraphsLoading() {
   const g = graphicsPart.value,
     s = engine.value.s;

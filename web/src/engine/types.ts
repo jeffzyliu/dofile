@@ -33,7 +33,8 @@ export interface LifecycleOps {
   boot: { args: BootArgs; result: About };
   startup: { args: void; result: Startup };
   run: { args: { code: string } & RunOptions; result: RunResult };
-  /** The graphics part in the shared buffer landed, failed or is fetched again. The page never sends it without a buffer. */
+  /** The graphics part in the shared buffer landed, failed or is fetched again. The page never sends it without a
+   *  buffer. */
   graphics: { args: void; result: void };
 }
 /** Ops DECLARED to change nothing: not the data, r(), e(), the macros, the matrices, the graphs, the sort order, the
@@ -287,8 +288,8 @@ export interface SnapshotFile {
 export interface SnapshotFiles {
   snapshot: SnapshotFile;
   bundle: SnapshotFile;
-  /** A lazy snapshot only (docs/lazy-matplotlib.md): matplotlib, left out of the heap and the bundle. Not a start file: the
-   *  page fetches it after them. snapshot.ts, packGraphics, has its layout. */
+  /** A lazy snapshot only (docs/lazy-matplotlib.md): matplotlib and what only it needs, left out of the heap and the
+   *  bundle. Not a start file: the page fetches it after them. snapshot.ts, packGraphics, has its layout. */
   graphics?: SnapshotFile;
 }
 /** public/snapshot/manifest.json: what the snapshot was built from (scripts/build-id.ts, BuildInputs), its time and its

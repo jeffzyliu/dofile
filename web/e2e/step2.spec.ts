@@ -15,7 +15,7 @@ type StartFiles = {
   snapshot: {
     snapshot: { name: string; raw: number; size: number };
     bundle: { name: string; raw: number; size: number };
-    graphics?: { name: string; raw: number; size: number }; // a lazy snapshot's graphics part: in `download`, no start file
+    graphics?: { name: string; raw: number; size: number }; // the graphics part: in `download`, no start file
   };
 };
 type Progress = { received: number; total: number };

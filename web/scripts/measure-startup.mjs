@@ -10,13 +10,14 @@
 //
 // Each return visit then draws a graph (time from submit to the image in the page). With a lazy snapshot the cold visit
 // waits for the graphics part to land before the reload, and the warm graph waits for the warm visit's "warmed" line.
-// --first-run: `display 1` or a scatter submitted the moment the engine is ready, timed to the result and to its image,
-// on the cold visit and on the return visit, which does not wait for "warmed": what a return visitor who runs at once
-// gets.
+// --first-run: `display 1` or a scatter submitted the moment the engine is ready, timed from the page's start to the
+// result and to its image, on the cold visit and on the return visit, which does not wait for "warmed": what a return
+// visitor who runs at once gets.
 // --during-import: a run sent on the return visit while the background import runs (a lazy build only): after the
-// worker's "written" line plus --import-delay-ms. `warmedBeforeSubmit` true means the import was over already, and the
-// row is not the measure. `writtenAtMs` is a rough guide (script clock). A graph here also imports, inside the run,
-// what the background import had not reached.
+// worker's "written" line plus --import-delay-ms. Its times are from that submit, so a run's wait for the idle step in
+// progress is in them. `warmedBeforeSubmit` true means the import was over already, and the row is not the measure.
+// `writtenAtMs` is a rough guide (script clock). A graph here also imports, inside the run, what the background import
+// had not reached.
 //
 // The page is served by a small static server that does what a real host does: brotli (quality 5) for text and wasm, long
 // caching for the hashed assets, the isolation headers, and the snapshot's .bin files as they are (already compressed).
@@ -192,7 +193,8 @@ async function visit(mode, net, job = {}) {
   if (engine === "webkit") {
     const dir = mkdtempSync(join(tmpdir(), "measure-startup-"));
     profiles.push(dir);
-    ctx = await webkit.launchPersistentContext(dir); // Playwright's in-memory WebKit context drops the Cache API on a reload
+    // a profile on disk: Playwright's in-memory WebKit context drops the Cache API on a reload
+    ctx = await webkit.launchPersistentContext(dir);
   } else ctx = await browser.newContext(); // a new context: nothing cached
   await ctx.addInitScript(watchEngine);
   await ctx.addInitScript(`window.__runAndTime = ${runAndTime.toString()};`);

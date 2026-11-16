@@ -483,7 +483,7 @@ const PART_PENDING = 0,
   PART_FAILED = 2,
   IDLE_MS = 1000,
   PROGRESS_MS = 100, // at most one {graphics: "progress"} this often
-  DECODE_STEP = 256 << 10; // input bytes: ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
+  DECODE_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
 let share: {
     file: SnapshotFile;
     hdr: Int32Array | null;
@@ -506,7 +506,7 @@ let share: {
   warmAt = 0, // the next step of browser.warm_graphics; -1: done
   tWarm = 0,
   warmLongest = 0,
-  prefetching: { stop: AbortController; done: Promise<void> } | null = null, // no shared buffer: this worker's own fetch
+  prefetching: { stop: AbortController; done: Promise<void> } | null = null, // no shared buffer: the worker's own fetch
   fetchSaid = false, // waitGraphics said "pending" before this graph's own fetch
   fresh = false, // the part arrived damaged: the next fetch must skip the HTTP cache
   writtenInRun = 0; // performance.now() when a graph of this run wrote the part
@@ -524,8 +524,8 @@ function partNow(): [number, Uint8Array<ArrayBuffer> | string | null] {
   return share.error ? [PART_FAILED, share.error] : [PART_PENDING, null];
 }
 
-// The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the next
-// graph says why, and the idle steps stop until then.
+// The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the graph
+// that finds it (or else the next one) says why, and the idle steps stop until then.
 function damaged(e: unknown): string {
   graphicsError = `the graphics files arrived damaged (${errorForPage(e).message}); they are fetched again for the next graph`;
   decode = decoded = null;
@@ -922,7 +922,7 @@ const lifecycle: Handlers<LifecycleOps> = {
       idleSoon();
     }
   },
-  // the page's graphics part landed, failed, or is fetched again. Answered at once, outside the queue
+  // the page's graphics part landed, failed, or is fetched again
   graphics() {
     nativeSoon();
     idleSoon();

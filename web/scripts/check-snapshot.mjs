@@ -1,8 +1,8 @@
 // Correctness check of a built snapshot (`npm run check-snapshot [-- --dir path --shards 4]`): in Node, with the page's
 // restore code, the engine restored from it must give the results the normal engine gives. It runs
 //   conformance  the corpus (CHECK values against tests/conformance/data/ref.json to 1e-6), the probes, a graph export
-//   compat       the Stata 14 reference cases of tests_opendta/compat, through compare.py's own functions, as
-//                tests/test_stata_compat.py does under CPython
+//   compat       the Stata 14 reference cases of tests_opendta/compat, through compare.py's own functions and its
+//                known differences, as tests/test_stata_compat.py does under CPython
 // Each compat case runs in its own process (a fresh engine), N at a time (--shards N, default 4), and is killed after
 // --timeout seconds (default 300): a failure "timeout". Options: --cases a,b,c (only those compat cases; no
 // conformance), --only conformance|compat, --dir, --normal, --pandas (with --normal: load pandas, which the page does not).

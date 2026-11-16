@@ -280,9 +280,9 @@ export function writeGraphics(py: PyodideAPI, raw: Uint8Array): number {
 }
 
 /**
- * loadPyodide options for a restore.
+ * loadPyodide options for a restore. The second argument is {snapshot, dso, index, blob} as the build script wrote
+ * them.
  * @param create - the patched module's default export.
- * @param saved - as written by the build script.
  * @param lap - called after each step, for timing.
  */
 export function restoreOptions(
