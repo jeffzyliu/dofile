@@ -6,13 +6,14 @@
 //
 //   node scripts/measure-startup.mjs [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
 //                                    [--first-run display,graph] [--during-import display,graph] [--import-delay-ms 100]
-//                                    [--engine chromium|webkit|firefox]
+//                                    [--first-run-delay-ms 0] [--engine chromium|webkit|firefox]
 //
 // Each return visit then draws a graph (time from submit to the image in the page). With a lazy snapshot the cold visit
 // waits for the graphics part to land before the reload, and the warm graph waits for the warm visit's "warmed" line.
 // --first-run: `display 1` or a scatter submitted the moment the engine is ready, timed from the page's start to the
 // result and to its image, on the cold visit and on the return visit, which does not wait for "warmed": what a return
-// visitor who runs at once gets.
+// visitor who runs at once gets. --first-run-delay-ms N submits it N ms after ready instead, to probe the worker's idle
+// wait before the graphics part's background work; `sinceSubmit` holds the same two times counted from the submit.
 // --during-import: a run sent on the return visit while the background import runs (a lazy build only): after the
 // worker's "written" line plus --import-delay-ms. Its times are from that submit, so a run's wait for the idle step in
 // progress is in them. `warmedBeforeSubmit` true means the import was over already, and the row is not the measure.
@@ -52,6 +53,7 @@ const engine = arg("--engine", "chromium");
 const ENGINES = { chromium, webkit, firefox };
 if (!ENGINES[engine]) throw new Error(`--engine ${engine}: chromium, webkit or firefox`);
 const importDelayMs = Number(arg("--import-delay-ms", 100));
+const firstRunDelayMs = Number(arg("--first-run-delay-ms", 0));
 const nets = arg("--nets", "unthrottled,100,30")
   .split(",")
   .map((k) => ({ key: k, ...NETS[k] }));
@@ -174,15 +176,19 @@ const runAndTime = (code) =>
       poll();
     });
   });
-// In the page: run `code` the moment the engine is ready
-const runAtReady = (code) => {
+// In the page: run `code` `delayMs` after the engine is ready (at once for 0)
+const runAtReady = ({ code, delayMs }) => {
   new MutationObserver((_, obs) => {
     if (document.documentElement.dataset.engine !== "ready" || window.__runStarted) return;
     window.__runStarted = true;
     obs.disconnect();
-    window.__runAndTime(code).then((r) => {
-      window.__firstRun = r;
-    });
+    setTimeout(
+      () =>
+        window.__runAndTime(code).then((r) => {
+          window.__firstRun = r;
+        }),
+      delayMs,
+    );
   }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-engine"] });
 };
 const sec = (ms) => Number((ms / 1000).toFixed(2));
@@ -199,7 +205,7 @@ async function visit(mode, net, job = {}) {
   } else ctx = await browser.newContext(); // a new context: nothing cached
   await ctx.addInitScript(watchEngine);
   await ctx.addInitScript(`window.__runAndTime = ${runAndTime.toString()};`);
-  if (firstRun) await ctx.addInitScript(runAtReady, CODES[firstRun]);
+  if (firstRun) await ctx.addInitScript(runAtReady, { code: CODES[firstRun], delayMs: firstRunDelayMs });
   // the graphics part's request: to see that the throttle reaches the worker's fetch
   const partRequests = [];
   ctx.on("requestfinished", async (req) => {
@@ -289,6 +295,7 @@ async function visit(mode, net, job = {}) {
       result: sec(x.resultAt),
       image: x.imageAt ? sec(x.imageAt) : null,
       submittedAt: sec(x.t0),
+      sinceSubmit: { result: sec(x.resultAt - x.t0), image: x.imageAt ? sec(x.imageAt - x.t0) : null },
       rc: x.rc,
       images: x.images,
     });
@@ -405,6 +412,7 @@ writeFileSync(
       measured: new Date().toISOString().slice(0, 10),
       browser: `${{ webkit: "WebKit", firefox: "Firefox" }[engine] ?? "Chromium"} ${browser.version()}`,
       reps,
+      firstRunDelayMs,
       networks: nets.map((n) => ({ key: n.key, label: n.label })),
       snapshot: { built: list.built, compressedMB: Object.values(list.snapshot).reduce((s, f) => s + f.size, 0) / 1e6 },
       results,
