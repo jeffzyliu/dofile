@@ -156,15 +156,13 @@ export function RunControls() {
         onClick={() => editorCommands.save()}
       >
         <Labels
-          at={(text ? 0 : 2) + (dirty ? 0 : 1)}
+          at={text && dirty ? 0 : 1}
           labels={[
             <>
               Save{dot()}
               {keyS()}
             </>,
             <>Save{keyS()}</>,
-            <>Save{dot()}</>,
-            "Save",
           ]}
         />
       </button>
