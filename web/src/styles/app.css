@@ -582,8 +582,13 @@ input.filter::placeholder {
   flex: 1;
   overflow: auto;
 }
+/* a click opens the file or makes the folder current: the pointer, as the Output tabs and VS Code's tree rows */
 .files li {
-  cursor: default;
+  cursor: pointer;
+}
+/* the cursor is inherited: the inline rename field keeps the text cursor */
+.files li input {
+  cursor: text;
 }
 .files li .name {
   min-width: 0;
@@ -667,8 +672,9 @@ input.filter::placeholder {
   overflow-x: auto;
   scrollbar-width: thin;
 }
+/* a <div role="tab"> (it holds the ×): the pointer by hand, as the Output tabs get it from being buttons */
 .file-tabs .tab {
-  cursor: default;
+  cursor: pointer;
 }
 /* the bars over a .csv, .tsv or .log (P/.csv, P/.log) */
 .filebar {
