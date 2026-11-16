@@ -42,6 +42,7 @@ export function tabLock({
   return { take };
 }
 
+const asked = new WeakSet();
 /**
  * Ask the browser, once, to keep the files. The browser may show its own prompt (Firefox does) and answer much later,
  * or never, so `onAnswer` is called twice: at once with what persisted() says now, and again when persist() has been
@@ -49,7 +50,6 @@ export function tabLock({
  * @param onAnswer - true, false, or null when the browser has no such API.
  * @returns the first answer.
  */
-const asked = new WeakSet();
 export async function keepFiles(
   storage: Pick<StorageManager, "persist" | "persisted"> | null | undefined = globalThis.navigator?.storage,
   onAnswer: (kept: boolean | null) => void = () => {},
