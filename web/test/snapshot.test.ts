@@ -12,9 +12,12 @@ import {
   inflateNative,
   isDeadWeight,
   isStorageRefusal,
+  packGraphics,
   type SnapshotPy,
   unpack,
   unpackAsync,
+  unpackSteps,
+  writeGraphics,
   zeroFreeMemory,
   zeroLibraryCopies,
 } from "../src/engine/snapshot.ts";
@@ -33,6 +36,18 @@ test("inflate gives back the original bytes, in steps of any size", () => {
     const out = inflate(brotli, packed, data.length, steps);
     assert.equal(Buffer.compare(Buffer.from(out.buffer, out.byteOffset, out.length), data), 0, JSON.stringify(steps));
   }
+});
+
+test("unpackSteps decodes in steps (the lazy graphics part: a run or a Break between two), to the same bytes", () => {
+  const file = { raw: data.length, size: packed.length };
+  const it = unpackSteps(brotli, packed, file, 64 << 10);
+  let steps = 0,
+    r = it.next();
+  for (; !r.done; r = it.next()) steps++;
+  assert.ok(steps >= Math.floor(packed.length / (64 << 10)) - 1, `${steps} steps`);
+  assert.ok(Buffer.from(r.value).equals(data));
+  assert.equal(unpackSteps(brotli, data, file, 1024).next().value, data); // already decoded: as it is, no step
+  assert.throws(() => unpackSteps(brotli, packed.subarray(1), file, 1024).next(), /the manifest says/);
 });
 
 test("inflate refuses a damaged, truncated or wrongly sized file", () => {
@@ -168,4 +183,30 @@ test("zeroFreeMemory zeroes the free blocks only, frees them all again, and lift
   growing.n = 0;
   assert.throws(() => zeroFreeMemory(fakePy(growing)), /grew the heap/);
   assert.equal(growing.dofileHeapMax, undefined);
+});
+
+test("the graphics part (a lazy snapshot): packGraphics, then writeGraphics puts each file back, and refuses one that does not add up", () => {
+  const written = new Map<string, Uint8Array>(),
+    dirs: string[] = [],
+    ran: string[] = [];
+  const py = {
+    FS: {
+      mkdirTree: (d: string) => dirs.push(d),
+      writeFile: (p: string, b: Uint8Array) => written.set(p, b.slice()),
+    },
+    runPython: (code: string) => ran.push(code),
+  } as unknown as Parameters<typeof writeGraphics>[0];
+  const index = [
+    { path: "/lib/site/a/x.py", size: 3 },
+    { path: "/lib/site/a/b/y.so", size: 0 },
+    { path: "/lib/site/z.pyc", size: 2 },
+  ];
+  const raw = packGraphics(index, new Uint8Array([1, 2, 3, 4, 5]));
+  assert.equal(writeGraphics(py, raw), 3);
+  assert.deepEqual([...written.get("/lib/site/a/x.py")!], [1, 2, 3]);
+  assert.deepEqual([...written.get("/lib/site/a/b/y.so")!], []);
+  assert.deepEqual([...written.get("/lib/site/z.pyc")!], [4, 5]);
+  assert.deepEqual(dirs, ["/lib/site/a", "/lib/site/a/b", "/lib/site"]);
+  assert.match(ran.join(), /invalidate_caches/); // Python must look again for the new files
+  assert.throws(() => writeGraphics(py, raw.subarray(0, raw.length - 1)), { name: "SnapshotError" });
 });

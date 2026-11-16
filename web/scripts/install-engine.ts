@@ -1,7 +1,8 @@
 // Installs the dofile wheel and the extra wheels of web/wheels/ into a Pyodide, as the page's worker does: micropip, then every
 // wheel with its dependencies resolved together. No pandas, as in the page: `export sasxport` is not available there.
 //   await installEngine(py, { dist, pandas })   // dist: folder holding the dofile wheel (default ../dist, `npm run wheel`);
-//   pandas: also load it, which the page does not (only for checking `export sasxport`: check-snapshot.mjs --pandas)
+//   mock: names micropip should treat as installed, so neither they nor their libraries are loaded (SNAPSHOT_NO_MPL: the build then
+//   deletes the stand-in files); pandas: also load it, which the page does not (only for checking `export sasxport`: check-snapshot.mjs --pandas)
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { PyodideAPI } from "pyodide";
@@ -15,7 +16,10 @@ export const newestWheel = (dir: string) =>
     .sort()
     .at(-1);
 
-export async function installEngine(py: PyodideAPI, { dist = `${repo}dist`, pandas = false } = {}): Promise<string> {
+export async function installEngine(
+  py: PyodideAPI,
+  { dist = `${repo}dist`, pandas = false, mock = [] as string[] } = {},
+): Promise<string> {
   await py.loadPackage(pandas ? ["micropip", "pandas"] : "micropip", { messageCallback: () => {} });
   const names: string[] = [];
   const put = (dir: string, name: string) => {
@@ -26,7 +30,9 @@ export async function installEngine(py: PyodideAPI, { dist = `${repo}dist`, pand
   put(dist, wheel);
   for (const f of readdirSync(extraWheelsDir).filter((f) => f.endsWith(".whl"))) put(extraWheelsDir, f);
   await py.runPythonAsync(
-    `import micropip; await micropip.install(${JSON.stringify(names.map((n) => `emfs:/tmp/${n}`))})`,
+    `import micropip
+for n in ${JSON.stringify(mock)}: micropip.add_mock_package(n, "999")
+await micropip.install(${JSON.stringify(names.map((n) => `emfs:/tmp/${n}`))})`,
   );
   return wheel;
 }
