@@ -1099,7 +1099,7 @@ button {
   width: 30%;
 }
 .rs col.act {
-  width: 96px; /* "✓ Copied", "↵ Copy" and a matrix's "Hide Copy" whole, with the cell's padding (e2e/output.spec.ts measures them) */
+  width: 44px; /* one icon button: 24 px, 44 px on touch (e2e/output.spec.ts measures the room) */
 }
 .rs td {
   padding: 4px var(--s3);
@@ -1139,46 +1139,71 @@ button {
 .rs .row td {
   font: var(--log) / 1.5 var(--font-mono);
 }
-.rs .row {
-  cursor: pointer;
-}
 .rs .row td:first-child {
   padding-left: calc(var(--s3) + 17px);
 }
-.rs .row td.act,
-.rs .grp td.act {
-  text-align: right;
-  font: 400 var(--text-sm) / 1.5 var(--font-ui);
+.rs .row td.act {
+  padding: 0;
+  text-align: center;
 }
 .rs .row .muted {
   color: var(--muted);
   font-family: var(--font-ui);
 }
-/* a value is a button, each a Tab stop: a click on its row, Enter or ⌘ C copies all its digits. A hovered row, or one
-   whose value has keyboard focus, is tinted and shows all digits and "↵ Copy" (hover only under hover: hover, SPEC 1);
-   .focusrow and .val.focus are the mockups' still drawing of that row */
-.rs .val {
-  font: inherit;
-  width: 100%;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-radius: var(--radius-sm);
-  padding: 0 2px;
-  margin: 0 -2px;
+/* a matrix row shows or hides its grid on a click anywhere: the pointer. Other rows do nothing on a click, and their value
+   is text a drag or a double-click selects (the text cursor over it). */
+.rs .row.mx {
+  cursor: pointer;
 }
-.rs .val .full,
-.rs .act .hint {
+.rs .val {
+  cursor: text;
+}
+/* the caret before a matrix's name, one step in from the group head's (a nested tree row) */
+.rs .rowfold {
+  font: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+.rs .rowfold .ico {
+  color: var(--muted);
+  font-size: 11px;
+  margin-right: 6px;
+}
+/* a hovered row, or one with keyboard focus in it, is tinted and shows all digits and the copy icon (hover only under
+   hover: hover, SPEC 1); .focusrow is the mockups' still drawing of that row */
+.rs .val .full {
   display: none;
 }
-.rs :is(.row:has(.val:focus-visible), .focusrow) td {
+.rs :is(.row:has(:focus-visible), .focusrow) td {
   background: var(--accent-soft);
 }
-.rs :is(.row:has(.val:focus-visible), .focusrow) .val .short {
+.rs :is(.row:has(:focus-visible), .focusrow) .val .short {
   display: none;
 }
-.rs :is(.row:has(.val:focus-visible), .focusrow) :is(.val .full, .act .hint) {
+.rs :is(.row:has(:focus-visible), .focusrow) .val .full {
   display: inline;
+}
+/* a row's copy icon (24 px square, as the Files tree's ⋯): seen on the hovered row or one with focus in it, always on
+   touch; a check, in the ok color, for 2 s after a copy */
+.rs .copy {
+  color: var(--muted);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+  opacity: 0;
+  cursor: pointer;
+}
+.rs .copy.done {
+  color: var(--ok);
+  opacity: 1;
+}
+.rs :is(.row:has(:focus-visible), .focusrow) .copy {
+  opacity: 1;
 }
 @media (hover: hover) {
   .rs .row:hover td {
@@ -1187,24 +1212,24 @@ button {
   .rs .row:hover .val .short {
     display: none;
   }
-  .rs .row:hover :is(.val .full, .act .hint) {
+  .rs .row:hover .val .full {
     display: inline;
   }
+  .rs .row:hover .copy {
+    opacity: 1;
+  }
+  .rs .copy:hover {
+    background: var(--border);
+    color: var(--ink);
+  }
+  .rs .copy.done:hover {
+    color: var(--ok);
+  }
 }
-.rs .val.focus {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.rs .act .hint {
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-/* after a copy: "✓ Copied" for 2 s, the words and colour of the landing page's Copy (site.css .copy-done) */
-.rs .act .copied {
-  color: var(--ok);
-  font: var(--w-bold-ui) var(--text-xs) / 1.5 var(--font-ui);
-}
-.rs .act .copied .ico {
-  margin-right: 4px;
+@media (hover: none) {
+  .rs .copy {
+    opacity: 1;
+  }
 }
 /* a group's header folds and unfolds (aria-expanded) */
 .rs .fold {
@@ -1718,7 +1743,6 @@ dialog.dialog.sheet {
     background: Mark;
     color: MarkText;
   }
-  .rs .val.focus,
   .focus {
     outline: 2px solid Highlight;
   }

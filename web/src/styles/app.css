@@ -278,8 +278,8 @@ body {
 
 /* no key chips or key hints on a phone (the shortcuts still work with a keyboard): a chip (ui/Icon.tsx Key) is
    aria-hidden, its control's aria-keyshortcuts says the key; a menu's key hint (ui/Menu.tsx key-hint: "Rename F2") is
-   only hidden from sight, so the item's name keeps it; the Results row draws no "↵ Copy" (ResultsTab.tsx: a tap copies,
-   and the row says "✓ Copied"). The desktop's sizes do not change: the phone shows neither the toolbar nor its chips. */
+   only hidden from sight, so the item's name keeps it; a Results row's copy icon is always shown on touch
+   (ResultsTab.tsx). The desktop's sizes do not change: the phone shows neither the toolbar nor its chips. */
 .app[data-layout="phone"] .key {
   display: none;
 }
@@ -346,7 +346,7 @@ body {
   margin: 0;
 } /* Browse is a heading that looks like the sub-head it is */
 
-/* a button that looks like a link: "Show 50 more", a matrix's View, Hide and Copy */
+/* a button that looks like a link: "Show 50 more" */
 .link-btn {
   color: var(--accent);
   text-decoration: underline;
@@ -358,11 +358,6 @@ body {
   color: var(--muted);
   cursor: default;
   text-decoration: none;
-}
-/* a matrix row's View (or Hide) and Copy: a little more than a space apart; the act column (ui.css, 96 px) is sized to
-   hold them with room to spare (e2e/output.spec.ts measures it) */
-.rs .act .link-btn + .link-btn {
-  margin-left: var(--s1);
 }
 
 /* Data: the filter field, text cells, a cut cell */
@@ -548,11 +543,12 @@ input.filter::placeholder {
   .dta-view .t td {
     height: 44px;
   }
-  .rs .val {
-    display: block;
-    padding-block: 11px;
+  .rs .copy {
+    width: 44px;
+    height: 44px;
   }
   .rs .fold,
+  .rs .rowfold,
   .t .var,
   .link-btn {
     padding-block: 11px;
@@ -570,7 +566,7 @@ input.filter::placeholder {
   .grid td.picked {
     border-bottom: 1px solid Highlight;
   }
-  .rs :is(.row:has(.val:focus-visible), .focusrow) td:first-child {
+  .rs :is(.row:has(:focus-visible), .focusrow) td:first-child {
     border-left: var(--bar) solid Highlight;
   }
 }

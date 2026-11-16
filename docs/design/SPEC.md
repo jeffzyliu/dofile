@@ -48,7 +48,7 @@ on Break in `E?r` is a placeholder: do not show or bind it); the Safari "7 days"
   shows none. The phone layout (under 700 px) shows no key chip or key hint (the shortcuts still work with a keyboard,
   app.css): a chip (`Key`) is `aria-hidden` and its control's `aria-keyshortcuts` says the key; a menu's key hint
   ("Rename F2": an item with `hintIsKey`, class `key-hint` in `ui/Menu.tsx`) is only hidden from sight, so the item's
-  name keeps it; a Results row draws no "↵ Copy" (a tap copies, and the row says "✓ Copied"; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/phase2-history.md`, the prototype 1 record, #54); the nested-do note (`S 15`) names
+  name keeps it; a Results row draws no "↵ Copy" (its copy icon is always shown on touch; decided by the maintainer 2026-11-14, `docs/phase2-history.md`, "Step 4: decisions and open questions", B 8; `docs/phase2-history.md`, the prototype 1 record, #54); the nested-do note (`S 15`) names
   the file dropdown's Save instead of the key (on a phone). An icon-only button has an `aria-label`.
 - **Clean room** (`LICENSE-POLICY.md`): no Stata manual or help text, no Stata example datasets, nothing copied from its
   screens. **Naming:** the product is "dofile"; it runs "Stata-syntax" code.
@@ -261,27 +261,29 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   `S_ADO`, `F1` ...); a global the user set, or a preset the user changed, shows, and with none left there is no Globals
   group. e() scalars start open. "changed by the last run" shows when `e_changed` or `r_changed` is true. Functions and the
   r() name: OQ-7.
-- **Values:** 8 significant digits; all digits on a hovered row (under `hover: hover`) or a value with keyboard focus, which
-  also tint the row and show "↵ Copy" (CSS only), and always in the copy and the value's accessible name. A click or tap
-  anywhere on a row (name or value), or Enter or Ctrl/Cmd+C on a focused value, copies it: the toast names it ("Copied
-  e(r2)") and the row's action cell says "✓ Copied" for 2 s, the landing page's Copy words. The action column fits "↵ Copy"
-  and "✓ Copied" whole, and "✓ Copied" only on the run's row it was copied from (a newer run's row of the same name has
-  none). A copy by click leaves no focus ring, also without the clipboard API (plain HTTP). A click that ends a text
-  selection in the row (a drag over a name, a double-click) only selects: a drag copies nothing, and a double-click copies
-  once (its first click) and keeps the word selected.
-- **Matrices:** the row shows the size ("1 x 3", from the engine's "1x3"), "View" and "Copy". View opens the matrix in place
-  as a grid: no command, nothing in the log or the history; "Hide" folds it. A click anywhere on the row (Enter or Space on
-  its value) does what View or Hide does and copies nothing; a click that ends a text selection in the row does nothing.
-  "Copy" (`Copy e(b)`) and Ctrl/Cmd+C on a focused value copy the whole matrix as tab-separated text; the toast says
-  "Copied e(b)", and a copy that had to read the matrix leaves it closed. View, Hide and Copy do not trigger the row's
-  click. A click on a grid cell copies that cell's every digit ("Copied e(b)[y1, age]": row name, column name); a text
-  selection in the grid is not a click; cells are for mouse and touch, with no keyboard navigation (Copy covers it). Every
-  row, and each cell, shows the pointer; a cell tints on hover (`hover: hover`).
+- **Values:** 8 significant digits; all digits on a hovered row (under `hover: hover`) or one with keyboard focus in it,
+  which also tint the row (CSS only), and always in the copy and in the icon's description. Every row's action cell holds
+  one icon button, the clipboard (`Copy e(r2)`, tooltip "Copy"; 24 px square like the Files tree's ⋯, 44 px on touch, the
+  column 44 px): shown on the hovered row or one with keyboard focus in it, always on touch. A click on it (Enter, or
+  Ctrl/Cmd+C on it) copies every digit: the toast names the row ("Copied e(r2)") and the icon is a check for 2 s, only on
+  the run's row it was copied from (a newer run's row of the same name has none). A copy by click leaves no focus ring, also
+  without the clipboard API (plain HTTP). A scalar or macro row has no click of its own: its value is text a drag or a
+  double-click selects, the default cursor on the row and the text cursor over the value.
+- **Matrices:** the row shows a caret (▸ closed, ▾ open, one step in from the group head's caret, all names in the group
+  shifted together), the name and the size ("1 x 3", from the engine's "1x3"). A click anywhere on the row opens the matrix
+  in place as a grid (no command, nothing in the log or the history) or folds it; the caret is a button with
+  `aria-expanded`, named "e(b), 1 x 3", the keyboard's toggle (Enter, Space). A click that ends a text selection in the row
+  does nothing. The row shows the pointer. The copy icon (`Copy e(b)`; the check after a copy, as a scalar's) and Ctrl/Cmd+C
+  on the caret copy the whole matrix as tab-separated text; the toast says "Copied e(b)", and a copy that had to read the
+  matrix leaves it closed; the icon does not toggle the row. A click on a grid cell copies that cell's every digit ("Copied
+  e(b)[y1, age]": row name, column name); a text selection in the grid is not a click; cells are for mouse and touch, with
+  no keyboard navigation (the copy icon covers it). Each cell shows the pointer and tints on hover (`hover: hover`).
 - **Empty** (`S 18`): "No results yet" / "e() and r() appear after an estimation or a command such as `summarize`, with the
   locals and globals your runs set."
-- **Keyboard and ARIA:** values are buttons, each a Tab stop (Tab walks group heads and values in order; no arrow keys);
-  group heads are buttons with `aria-expanded`. **Calls:** `RunResult.results`; `macros` after each run; `matrix {name}` on
-  View.
+- **Keyboard and ARIA:** each row's copy icon is a Tab stop (Tab walks group heads, matrix carets and copy icons in order;
+  no arrow keys), `aria-describedby` the whole value for a scalar or macro; group heads and matrix carets are buttons with
+  `aria-expanded`. **Calls:** `RunResult.results`; `macros` after each run; `matrix {name}` when
+  a matrix row opens.
 
 ### 3.10 Dialogs, banners, toast, menus (P1, step 4d unless noted)
 A dialog is a `<dialog>` centered over the scrim, a bottom sheet on a phone. Focus starts on the safe choice, Esc cancels,

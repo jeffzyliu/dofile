@@ -16,7 +16,7 @@ export const loadingRows = signal(false);
 
 /** The Results tab's groups the visitor folded or unfolded, by group id; a group not here has its own default. */
 export const folds = signal<Readonly<Record<string, boolean>>>({});
-/** The row just copied, by row key, and the results and macros it was copied from: its action cell says "✓ Copied" for a
+/** The row just copied, by row key, and the results and macros it was copied from: its copy icon is a check for a
  *  while (ResultsTab.tsx, COPIED_MS), and not on a newer run's row of the same name. */
 export const copiedRow = signal<{ key: string; for: Results | null; macros: Macros | null } | null>(null);
 

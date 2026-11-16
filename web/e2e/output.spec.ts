@@ -319,102 +319,115 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await expect(page.locator(".rs .row", { hasText: "$mygl" })).toContainText("5");
   await expect(page.locator(".rs .row", { hasText: "$F1" })).toHaveCount(0);
   await globalsHead.click();
-  // a value: 8 digits, every digit copied; the toast names the row
-  const rowOf = (name: string) => page.locator(".rs .row").filter({ has: page.getByRole("button", { name }) });
+  // a value: 8 digits, every digit copied by the row's icon; the toast names the row
+  const rowOf = (name: string) =>
+    page.locator(".rs .row").filter({ has: page.getByRole("button", { name: `Copy ${name}`, exact: true }) });
+  const copyBtn = (name: string) => page.getByRole("button", { name: `Copy ${name}`, exact: true });
   const tint = (name: string) =>
     rowOf(name)
       .locator("td")
       .first()
       .evaluate((td) => getComputedStyle(td).backgroundColor);
-  // The act cell holds its content with room to spare, not just without overflow: another font must not cut it
-  const SLACK = 8;
-  const room = async (name: RegExp) => {
+  // The act cell holds its icon, whole: a 44 px column for a 24 px icon (a 44 px one on touch). Another font must not cut it
+  const room = async (name: string) => {
     const m = await rowOf(name)
       .locator("td.act")
       .evaluate((td) => {
-        const css = getComputedStyle(td);
-        const inner = td.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
-        const boxes = [...td.children].map((c) => c.getBoundingClientRect()); // from the first's left to the last's right:
-        const used = boxes.length ? Math.max(...boxes.map((b) => b.right)) - Math.min(...boxes.map((b) => b.left)) : 0; // gaps count
-        return { spare: inner - used, cut: td.scrollWidth > td.clientWidth };
+        const b = td.querySelector("button")!.getBoundingClientRect();
+        return { spare: td.clientWidth - b.width, cut: td.scrollWidth > td.clientWidth };
       });
-    return m.cut ? -1 : m.spare;
+    return { ...m, spare: m.cut ? -1 : m.spare };
   };
-  const plain = await tint(/^e\(rank\):/); // a row the pointer has not been on
-  const n = page.getByRole("button", { name: "e(N): 160" });
-  await n.click();
+  const plain = await tint("e(rank)"); // a row the pointer has not been on
+  await copyBtn("e(N)").click();
   expect((await copied(page)).at(-1)).toBe("160");
   await expect(page.locator(".toast")).toHaveText("Copied e(N)");
-  const r2 = page.getByRole("button", { name: /^e\(r2\):/ });
-  const whole = (await r2.getAttribute("aria-label"))!.replace("e(r2): ", "");
-  const short = (await r2.locator(".short").textContent())!; // the digits in sight; .full has all
+  const r2 = rowOf("e(r2)").locator(".val");
+  const whole = (await r2.locator(".full").textContent())!; // the digits in sight are .short; .full has all
+  const short = (await r2.locator(".short").textContent())!;
   expect(short.length).toBeLessThanOrEqual(10);
   expect(whole.length).toBeGreaterThan(short.length);
-  // after a click and the pointer gone: no tint, and the short digits are back
-  await r2.click();
-  expect((await copied(page)).at(-1)).toBe(whole);
-  await page.mouse.move(1, 1);
-  await expect(r2).toHaveText(short, { useInnerText: true });
-  expect(await tint(/^e\(r2\):/)).toBe(plain);
-  // a click (a tap on the phone) on the name copies too; the row says "✓ Copied", whole, for about 2 s
-  const r2Name = rowOf(/^e\(r2\):/)
-    .locator("td")
-    .first();
-  const copies = (await copied(page)).length;
-  if (phone(page)) await r2Name.tap();
-  else await r2Name.click();
-  await expect.poll(async () => (await copied(page)).length).toBe(copies + 1);
+  // the icon: named "Copy e(r2)", tooltip "Copy"; a screen reader's description is the whole value
+  await expect(copyBtn("e(r2)")).toHaveAttribute("title", "Copy");
+  await expect(copyBtn("e(r2)")).toHaveAccessibleDescription(whole);
+  // a click on it copies every digit, and the icon is a check for about 2 s
+  await copyBtn("e(r2)").click();
   expect((await copied(page)).at(-1)).toBe(whole);
   await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
-  const done = rowOf(/^e\(r2\):/).locator(".act .copied");
-  await expect(done).toBeVisible();
-  await expect(done).toHaveText("Copied");
-  expect(await room(/^e\(r2\):/), "✓ Copied is not cut").toBeGreaterThanOrEqual(SLACK);
-  await expect(done).toHaveCount(0, { timeout: 4000 });
-  // "↵ Copy" on a hovered row, whole, on the desktop; a phone has none (a tap copies, and the row says so)
-  if (phone(page)) await expect(page.locator(".rs .hint")).toHaveCount(0);
-  else {
-    await rowOf(/^e\(rank\):/).hover();
-    await expect(rowOf(/^e\(rank\):/).locator(".hint")).toBeVisible();
-    expect(await room(/^e\(rank\):/), "↵ Copy is not cut").toBeGreaterThanOrEqual(SLACK);
-    await page.mouse.move(1, 1);
-    // a drag over a name selects it and copies nothing (no toast, no "✓ Copied")
-    const box = (await rowOf(/^e\(rank\):/)
-      .locator("td")
-      .first()
-      .boundingBox())!;
-    const toastBefore = await toastText(page);
-    const before = (await copied(page)).length;
+  await expect(copyBtn("e(r2)").locator(".i-check")).toBeVisible();
+  await expect(copyBtn("e(r2)")).toHaveCSS("opacity", "1");
+  const r2Room = await room("e(r2)");
+  expect(r2Room.spare, "the icon is not cut").toBeGreaterThanOrEqual(0);
+  await page.mouse.move(1, 1);
+  await expect(copyBtn("e(r2)").locator(".i-check")).toHaveCount(0, { timeout: 4000 });
+  await expect(copyBtn("e(r2)").locator(".i-copy")).toHaveCount(1);
+  await expect(r2).toHaveText(short, { useInnerText: true });
+  expect(await tint("e(r2)")).toBe(plain);
+  // the icon is a 24 px square (44 px on touch), seen on a hovered row, always on touch
+  const sizes = await copyBtn("e(rank)").evaluate((b) => [
+    b.getBoundingClientRect().width,
+    b.getBoundingClientRect().height,
+  ]);
+  expect(sizes).toEqual(phone(page) ? [44, 44] : [24, 24]);
+  await expect(copyBtn("e(rank)")).toHaveCSS("cursor", "pointer");
+  // a scalar row has no click of its own: the default cursor on the name, the text cursor over the value
+  await expect(rowOf("e(rank)").locator("td").first()).toHaveCSS("cursor", "auto");
+  await expect(rowOf("e(rank)").locator(".val")).toHaveCSS("cursor", "text");
+  const copiesBefore = (await copied(page)).length;
+  const toastBefore = await toastText(page);
+  if (phone(page)) {
+    await expect(copyBtn("e(rank)")).toHaveCSS("opacity", "1");
+    await rowOf("e(rank)").locator("td").first().tap();
+  } else {
+    await expect(copyBtn("e(rank)")).toHaveCSS("opacity", "0");
+    await rowOf("e(rank)").hover();
+    await expect(copyBtn("e(rank)")).toHaveCSS("opacity", "1");
+    expect(await tint("e(rank)")).not.toBe(plain);
+    await rowOf("e(r2)").hover();
+    await expect(r2.locator(".full")).toBeVisible(); // every digit on the hovered row
+    await expect(r2.locator(".short")).toBeHidden();
+    await rowOf("e(rank)").hover();
+    await rowOf("e(rank)").locator("td").first().click(); // a click on the row does nothing
+    // a drag over a name selects it and copies nothing
+    const box = (await rowOf("e(rank)").locator("td").first().boundingBox())!;
     await page.mouse.move(box.x + 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 5 });
     await page.mouse.up();
     expect(await page.evaluate(() => getSelection()?.toString() ?? "")).toContain("e(rank)");
-    expect((await copied(page)).length, "a drag-select copies nothing").toBe(before);
-    expect(await toastText(page)).toBe(toastBefore);
-    await expect(page.locator(".rs .copied")).toHaveCount(0);
+    await page.evaluate(() => getSelection()?.removeAllRanges());
+    // a double-click on a value selects it (the whole text of a short value)
+    await rowOf("e(N)").locator(".val").dblclick();
+    expect(await page.evaluate(() => getSelection()?.toString() ?? "")).toContain("160");
     await page.evaluate(() => getSelection()?.removeAllRanges());
     await page.mouse.move(1, 1);
+    await expect(copyBtn("e(rank)")).toHaveCSS("opacity", "0");
   }
-  // every value is a Tab stop: Tab from a later group's head reaches its first value, which is tinted with all digits
+  expect((await copied(page)).length, "a click on a scalar row copies nothing").toBe(copiesBefore);
+  expect(await toastText(page)).toBe(toastBefore);
+  // each row's icon is a Tab stop: Tab from a later group's head reaches its first row's icon, the row tinted, all digits
   const tab = browserName === "webkit" ? "Alt+Tab" : "Tab"; // Safari's Tab skips buttons unless Option is held
   await page.getByRole("button", { name: /^Locals/ }).focus();
   await page.keyboard.press(tab);
-  const firstLocal = page
+  const firstLocalRow = page
     .locator(".rs tr.grp")
     .filter({ hasText: /^Locals/ })
-    .locator("xpath=following-sibling::tr[1]")
-    .locator("button.val");
+    .locator("xpath=following-sibling::tr[1]");
+  const firstLocal = firstLocalRow.locator("button.copy");
+  const digitsOf = (row: ReturnType<typeof rowOf>) =>
+    row.evaluate((tr) => (tr.querySelector(".val .full") ?? tr.querySelector(".val"))!.textContent!);
   await expect(firstLocal).toBeFocused();
-  const [local, value] = (await firstLocal.getAttribute("aria-label"))!.split(": ");
-  expect(await tint(`${local}: ${value}`)).not.toBe(plain);
+  await expect(firstLocal).toHaveCSS("opacity", "1");
+  const local = (await firstLocal.getAttribute("aria-label"))!.slice("Copy ".length);
+  const value = await digitsOf(firstLocalRow);
+  await expect(firstLocal).toHaveAccessibleDescription(value);
+  expect(await tint(local)).not.toBe(plain);
   await page.keyboard.press("Enter");
   expect((await copied(page)).at(-1)).toBe(value);
   await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
-  await page.keyboard.press(tab); // the next value
-  const next = page.locator(".rs .row button.val:focus");
-  await expect(next).toHaveCount(1);
-  const nextValue = (await next.getAttribute("aria-label"))!.split(": ")[1];
+  await page.keyboard.press(tab); // the next row's icon
+  await expect(page.locator(".rs .row button.copy:focus")).toHaveCount(1);
+  const nextValue = await digitsOf(page.locator(".rs .row").filter({ has: page.locator("button.copy:focus") }));
   await page.keyboard.press("ControlOrMeta+c");
   expect((await copied(page)).at(-1)).toBe(nextValue);
   // without the clipboard API (plain http, as on a LAN), the old way copies; a click leaves no focus ring, a key the focus
@@ -423,69 +436,81 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
   });
   await page.mouse.move(1, 1);
-  await r2.click();
+  await copyBtn("e(r2)").click();
   await page.mouse.move(1, 1);
   await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
   expect(await page.evaluate(() => document.querySelector(".rs :focus-visible")?.outerHTML ?? null)).toBeNull();
-  expect(await tint(/^e\(r2\):/)).toBe(plain);
+  expect(await tint("e(r2)")).toBe(plain);
   await page.getByRole("button", { name: /^Locals/ }).focus();
   await page.keyboard.press(tab);
   await expect(firstLocal).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
   await expect(firstLocal).toBeFocused();
-  // a double-click on a name copies once (its first click) and leaves the word selected: the old way's select() is over
-  if (!phone(page)) {
-    const word = await r2Name.evaluate((td) => {
-      const range = document.createRange(); // on the name's text: past it, a double-click selects nothing in some browsers
-      range.selectNodeContents(td);
-      const [t, c] = [range.getBoundingClientRect(), td.getBoundingClientRect()];
-      return { x: t.left - c.left + t.width / 2, y: t.top - c.top + t.height / 2 };
-    });
-    await r2Name.dblclick({ position: word });
-    const picked = await r2Name.evaluate((td) => {
-      const s = getSelection();
-      return s && !s.isCollapsed && td.contains(s.anchorNode) ? s.toString() : "";
-    });
-    expect(picked, "the double-clicked word stays selected").not.toBe("");
-    await page.evaluate(() => getSelection()?.removeAllRanges());
-  }
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true }),
   );
-  // a matrix: View opens it in place, Hide folds it; a click on the row does the same and copies nothing; Copy copies it
-  // as tab-separated text without opening it; a click on a cell copies that cell
+  // a matrix: a caret before the name ("e(b), 1 x 3", aria-expanded) and a click anywhere on the row open it in place or
+  // fold it; the copy icon copies it as tab-separated text without opening or toggling it; a click on a cell copies that cell
   const log = await logLength(page);
   await page
     .getByRole("button", { name: /^Matrices/ })
     .first()
     .click();
   await expect(page.locator(".rs .mat")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "e(b): 1 x 3" })).toBeVisible();
+  const caret = page.getByRole("button", { name: "e(b), 1 x 3", exact: true });
+  await expect(caret).toHaveAttribute("aria-expanded", "false");
+  await expect(rowOf("e(b)")).toContainText("1 x 3");
+  await expect(rowOf("e(b)")).toHaveCSS("cursor", "pointer");
+  // the caret sits one step in from the group head's, and every matrix name starts at the same place
+  const lefts = await page.evaluate(() => {
+    const left = (el: Element | null) => el!.getBoundingClientRect().left;
+    const head = [...document.querySelectorAll(".rs tr.grp")].find((g) => /^Matrices/.test(g.textContent!))!;
+    return {
+      head: left(head.querySelector(".ico")),
+      rows: [...document.querySelectorAll(".rs .rowfold .ico")].map(left),
+    };
+  });
+  expect(lefts.rows.length).toBeGreaterThan(1);
+  expect(lefts.rows[0], "the matrix caret is in from the group head's").toBeGreaterThan(lefts.head + 8);
+  expect(new Set(lefts.rows.map((x) => Math.round(x))).size, "all matrix names shift together").toBe(1);
   const beforeView = (await copied(page)).length;
-  await page.getByRole("button", { name: "View e(b)" }).click();
+  await caret.click();
   const grid = page.locator(".rs .mat table.grid");
   await expect(grid.locator("th")).toHaveText(["Row", "age", "educ", "_cons"]);
   await expect(grid.locator("tbody tr")).toHaveCount(1);
+  await expect(caret).toHaveAttribute("aria-expanded", "true");
   expect(await logLength(page)).toBe(log);
-  await page.getByRole("button", { name: "e(b): 1 x 3" }).click(); // the row toggles: it closes
+  await caret.click(); // the caret toggles: it closes
   await expect(page.locator(".rs .mat")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "View e(b)" })).toBeVisible();
-  await page.locator(".rs .row td", { hasText: /^e\(b\)$/ }).click(); // anywhere on the row: it opens
+  await rowOf("e(b)").locator("td").nth(1).click(); // anywhere on the row: it opens
   await expect(grid).toBeVisible();
-  await expect(page.getByRole("button", { name: "Hide e(b)" })).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByRole("button", { name: "e(b): 1 x 3" })).toHaveAttribute("aria-expanded", "true"); // the value too
-  expect(await room(/^e\(b\):/), "Hide and Copy are not cut").toBeGreaterThanOrEqual(SLACK);
-  await page.getByRole("button", { name: "Hide e(b)" }).click(); // Hide closes once, it does not toggle twice
+  await rowOf("e(b)").locator("td").nth(1).click(); // and closes
   await expect(page.locator(".rs .mat")).toHaveCount(0);
-  expect((await copied(page)).length, "View, Hide and the row's clicks copy nothing").toBe(beforeView);
-  await page.getByRole("button", { name: "Copy e(b)" }).click();
-  await expect.poll(async () => (await copied(page)).length, "Copy copies once").toBe(beforeView + 1);
+  await caret.focus(); // Enter and Space on the caret toggle once
+  await page.keyboard.press("Space");
+  await expect(grid).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".rs .mat")).toHaveCount(0);
+  expect((await copied(page)).length, "the caret and the row's clicks copy nothing").toBe(beforeView);
+  const matRoom = await room("e(b)");
+  expect(matRoom.spare, "the icon is not cut").toBeGreaterThanOrEqual(0);
+  await copyBtn("e(b)").click();
+  await expect.poll(async () => (await copied(page)).length, "the icon copies once").toBe(beforeView + 1);
   await expect(page.locator(".toast")).toHaveText("Copied e(b)");
-  await expect(page.locator(".rs .copied")).toHaveCount(0); // a matrix row keeps View and Copy: the toast says it
+  await expect(copyBtn("e(b)").locator(".i-check")).toBeVisible(); // the same check as a scalar's
   expect((await copied(page)).at(-1)).toMatch(/^\tage\teduc\t_cons\n\S+\t[-.\d]+\t[-.\d]+\t[-.\d]+$/);
   await expect(page.locator(".rs .mat"), "a copy that read the matrix leaves it closed").toHaveCount(0);
-  await page.getByRole("button", { name: "View e(b)" }).click();
+  await caret.click();
+  await expect(grid).toBeVisible();
+  await copyBtn("e(b)").click(); // on an open matrix too, the icon does not toggle
+  await expect(page.locator(".toast")).toHaveText("Copied e(b)");
+  await expect(grid).toBeVisible();
+  await caret.focus(); // Ctrl/Cmd+C on the caret copies the whole matrix
+  const afterIcon = (await copied(page)).length;
+  await page.keyboard.press("ControlOrMeta+c");
+  await expect.poll(async () => (await copied(page)).length).toBe(afterIcon + 1);
+  expect((await copied(page)).at(-1)).toMatch(/^\tage\teduc\t_cons\n/);
   await expect(grid).toBeVisible();
   const cell = grid.locator("tbody td.cell").nth(1);
   const full = await cell.getAttribute("title");
@@ -493,15 +518,15 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await expect(page.locator(".toast")).toHaveText(/^Copied e\(b\)\[\S+, educ\]$/);
   expect((await copied(page)).at(-1), "a cell copies its own full value").toBe(full);
   await expect(grid, "a cell's click does not fold the grid").toBeVisible();
-  await page.getByRole("button", { name: "Hide e(b)" }).click();
+  await caret.click();
   await expect(page.locator(".rs .mat")).toHaveCount(0);
   // an open matrix closes when another run replaces the results
-  await page.getByRole("button", { name: "View e(b)" }).click();
+  await caret.click();
   await expect(grid).toBeVisible();
   await run(page, "quietly summarize wage");
   await showTab(page, "results");
   await expect(page.locator(".rs .mat")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "View e(b)" })).toBeVisible();
+  await expect(caret).toHaveAttribute("aria-expanded", "false");
   await expect(sect.filter({ hasText: /^r\(\)/ })).toHaveCount(1);
 
   // ---- a .dta tab, with an engine ----
