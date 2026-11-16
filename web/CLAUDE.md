@@ -50,12 +50,13 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   `src/engine/types.ts`; keep them and SPEC section 6 in step.
 - **Comments are sparse; the code says the rest.** A file header is 1-3 lines on the file's role, only when the name
   does not say it: no inventory of files, callers or signals. JSDoc on a function or type only for what its name and
-  types leave out (units, what null means, an ordering, why). Inline comments only for a non-obvious why (a browser
-  quirk, a race, a workaround) or a unit or meaning on a field (`// ms`). Each fact lives in one place (a type first,
-  then a test name, this file, a doc): point to it ("the plain logic: tree.ts"), never restate it or describe what
-  another file does. No history or provenance (steps, issue IDs, dates, review rounds: git has them) and no links into
-  `docs/archive/`. Keep hard-won knowledge (browser quirks, measured numbers, why a simpler way failed) on the line that
-  handles it, shortened.
+  types leave out (units, what null means, an ordering, why); where it explains parameters or the result, TSDoc tags
+  read better than prose: `@param name - ...`, `@returns ...` (no `{type}`: the signature has it). Inline comments only
+  for a non-obvious why (a browser quirk, a race, a workaround) or a unit or meaning on a field (`// ms`). Each fact
+  lives in one place (a type first, then a test name, this file, a doc): point to it ("the plain logic: tree.ts"), never
+  restate it or describe what another file does. No history or provenance (steps, issue IDs, dates, review rounds: git
+  has them) and no links into `docs/archive/`. Keep hard-won knowledge (browser quirks, measured numbers, why a simpler
+  way failed) on the line that handles it, shortened.
 - **State.** One module of signals, `src/app/state.ts`. A signal with one owner is exported `ReadonlySignal`, so a view
   that assigns it fails `npm run check`. The controllers (`src/app/engine.ts`, `run.ts`, `files.ts`, `start.ts`) are `.ts`
   files that import no `.tsx`, tested in Node (`test/app.test.ts`). Views read signals and call the controllers'
