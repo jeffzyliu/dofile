@@ -57,6 +57,11 @@ CASES = {
         "\n3\n",
     ),
     "putexcel": ("putexcel set {P}/out/p.xlsx, replace\nputexcel A1 = 1", "out/p.xlsx", None),
+    "statsby saving": (
+        "use data/d, clear\nstatsby m=r(mean), by(x) saving({P}/out/sb, replace): summarize y",
+        "out/sb.dta",
+        None,
+    ),
     "log": ("log using {P}/out/l, text replace\ndisplay 1\nlog close", "out/l.log", None),
     "cmdlog": ("cmdlog using {P}/out/c, replace\ncmdlog close", "out/c.txt", None),
     "do": ("do {P}/code/sub", None, "\n42\n"),

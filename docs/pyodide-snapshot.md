@@ -281,7 +281,7 @@ the baseline that tells a snapshot problem from one Pyodide has anyway. It runs:
   probes (with graphs), a graph export, and 13 calls into the native libraries (`NATIVE_CHECKS` in
   `web/scripts/snapshot-node.ts`: scipy's linear algebra including LAPACK `dsytrf`, stats, special, optimize, sparse,
   integrate, interpolate, fft, numpy, and a matplotlib plot with text);
-- **compat** (the other processes): the 98 Stata 14 reference cases of `tests_opendta/compat`, through
+- **compat** (the other processes): the Stata 14 reference cases of `tests_opendta/compat`, through
   `tests_opendta/tools/compare.py` mounted into Pyodide, the same acceptance rule as `tests/test_stata_compat.py`; the
   slowest cases start first.
 

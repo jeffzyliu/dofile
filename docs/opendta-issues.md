@@ -45,7 +45,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`shlex` in POSIX mode) | found 2026-11-06 (path shim tests) | unverified |
 | ODT-27 | `save using name, replace` writes `using name.dta`; Stata presumably refuses it (assumed) | found 2026-11-06 (web demo); not checked against Stata | unverified |
 | ODT-28 | Python errors escaping a command (`OSError` for a missing folder or a directory, `MemoryError`) give uncatchable rc 9999 instead of r(603)/r(909); a failed command leaves the data partly changed | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected codes assumed, not checked against Stata | patched (the partly changed data is not) |
-| ODT-29 | numpy `RuntimeWarning: overflow encountered in exp` in delta-method intervals (`mleq.py:157`, `models2.py:739`); results `inf`, as in Stata's logs. Details under ODT-31, the same issue | `poe slow`: `test_matches_stata14_reference_log[1907_models]` and `[1918_models3]`; `tests_opendta/tests/test_models_block_c.py::test_nb1_nbreg_and_tnbreg` (`mleq.py:157` only); no test of our own | left as is |
+| ODT-29 | numpy `RuntimeWarning: overflow encountered in exp` in delta-method intervals (`mleq.py:157`, `models2.py:759`); results `inf`, as in Stata's logs. Details under ODT-31, the same issue | `poe slow`: `test_matches_stata14_reference_log[1907_models]` and `[1918_models3]`; `tests_opendta/tests/test_models_block_c.py::test_nb1_nbreg_and_tnbreg` (`mleq.py:157` only); no test of our own | left as is |
 | ODT-30 | the ML optimizer's Newton steps from a nearly singular numerical Hessian: `gnbreg` in compat 1907 falsely converges at alpha = 0, and the path depends on rounding | found 2026-11-07 comparing CPython with Pyodide (`web/scripts/compare_numeric.py`); perturbation experiment in `browser-engine.md`, "`gnbreg` in 1907_models"; no test | unverified |
 | ODT-32 | a missing optional package (pyreadstat, pandas) gave rc 610 "file not Stata format" with `pip install` advice | found 2026-11-09 (the web demo ships without pandas); `tests/test_engine.py::test_odt32_*`, `web/e2e/engine.spec.ts` | patched |
 | ODT-33 | the unclosed-block hint names OpenDTA's Command window and Shift+Enter, which dofile does not have | `core/hints/programming.py` `_unclosed_block` (English and Portuguese); found 2026-11-11 (the web demo's command line), no test | left as is |
@@ -132,7 +132,9 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 - Expected in Stata: the list wraps at the line size, continuation lines indented under the first instrument. Source:
   memory of Stata output; the Stata 14 log `0510_painel_iv.log` only has short lists, so to confirm.
 - Patched (`opendta-odt9-footnote-wrap.patch`): the `Instrumented:`/`Instruments:` footnotes of `ivregress`,
-  `ivprobit`/`ivtobit`, `svy: ivregress` and `xtivreg` wrap at the line size with a hanging indent.
+  `ivprobit`/`ivtobit` (maximum likelihood and `twostep`), `ivpoisson`, `svy: ivregress` and `xtivreg` wrap at the line
+  size with a hanging indent. The `twostep` footnote is upstream code new at 29a3b28
+  (`tests/test_engine.py::test_odt9_twostep_footnote_wraps`).
 
 ### ODT-10: `relabel()` ignored in `graph bar`
 `use card, clear`, `graph bar (mean) educ, over(nearc4, relabel(1 "Not near" 2 "Near"))`.
@@ -332,7 +334,9 @@ areg y x [aweight=w], absorb(id)  // 0.47292
 - Workaround (before the patch): `regress y x i.id [aweight=w], vce(cluster id)`.
 - Not checked: `xtivreg`. The Stata 14 reference logs have no weighted `xtreg` or `areg`.
 - Patched (`opendta-odt24-weighted-within-estimators.patch`): `xtreg, fe` and `areg` demean with weighted group means and
-  solve weighted least squares, weights scaled as `regress` does (a- and pweights to the sample size, fweights as they
+  solve weighted least squares (the patch imports `wexp_macros` into `estimation/panel.py` itself: upstream dropped that
+  import at 29a3b28 as unused, and the patch still applied cleanly but failed with a NameError; the vendor script's
+  undefined-name check now catches that), weights scaled as `regress` does (a- and pweights to the sample size, fweights as they
   are, N their sum). `xtreg, fe` stops with rc 101 `weights must be constant within panel` for weights varying within a
   panel; `areg` takes them. `e(wtype)` and `e(wexp)` are set. Against `regress` with the dummies, coefficient, se, N and
   residual df agree to 1e-8 for a- and fweights (the coefficient for pweights, whose variance is robust).
@@ -414,7 +418,11 @@ an escaping `OSError` becomes `StataError(603, "file <name> could not be opened 
 `StataError(909, "op. sys. refuses to provide memory")`; `capture` catches them. A command's own `StataError` is
 untouched. `PermissionError` is left alone for the sandbox (ODT-23: `capture` converts it; `Engine.run` turns an uncaught
 one into 603). The wrapper is in the registry because PATCH-2 edits the dispatcher's `spec.fn` lines. An error outside a
-command (macro expansion, the interpreter) still gives rc 9999.
+command (macro expansion, the interpreter) still gives rc 9999. Class statements (`.obj = .cls.new`, `.obj.prog`;
+`lang/classeval.py`, upstream at 29a3b28) are one such place: the interpreter runs them before the registry lookup, so the
+wrapper does not cover them. Malformed class statements under `capture` all gave a Stata rc (111, 198, 4023, 4026,
+4027), never 9999, `.c.__class__` chains included (probed 2026-11-16, re-vendor review); the commands inside a member
+program are wrapped as usual.
 - Tests: `tests/test_engine.py::test_odt28_*` (13 commands, `capture`, the commands that keep their own codes, and a
   `MemoryError` injected into `replace`, with and without `capture`).
 - Related: ODT-23 is the same family for the sandbox's `PermissionError`; it stays separate because it exists only for
@@ -457,12 +465,12 @@ firststage is unrecognized". It's the standard weak-instrument check, so it's wo
 
 ### ODT-31: overflow warnings in delta-method intervals (left as is)
 The details of ODT-29 (one issue, two IDs). `poe slow` prints three `RuntimeWarning: overflow encountered in exp`:
-`estimation/mleq.py:157` in `1907_models` and `1918_models3`, `estimation/models2.py:739` in `1918_models3`.
+`estimation/mleq.py:157` in `1907_models` and `1918_models3`, `estimation/models2.py:759` in `1918_models3`.
 - Both lines compute `exp(b - c * se)` and `exp(b + c * se)` (`mleq.py`'s `transformed_row`; `models2.py`'s interval
   of `nbreg`/`gnbreg`'s alpha); a large `se` overflows the upper end to `inf`. Neither is wrapped in `np.errstate`,
   unlike `core/ordination.py`, `core/survival.py`, `core/rng.py`.
-- Upstream code, unmodified (`opendta-odt12-nbreg-boundary.patch` edits the branch above `models2.py:739`, not the
-  `exp` line). OpenDTA's own suite prints the `mleq.py:157` warning too, in `test_nb1_nbreg_and_tnbreg`; `models2.py:739`
+- Upstream code, unmodified (`opendta-odt12-nbreg-boundary.patch` edits the branch above `models2.py:759`, not the
+  `exp` line). OpenDTA's own suite prints the `mleq.py:157` warning too, in `test_nb1_nbreg_and_tnbreg`; `models2.py:759`
   was not checked upstream (1918_models3 runs only through `compare.py`). `slogdet` and `normalden` overflow warnings in
   the same run are also not ours.
 - Not patched on purpose: the output is right (both comparison cases pass, `inf` included) and the warning goes only to
@@ -602,6 +610,9 @@ Evidence:
   the data alone or restore it in a `finally` take it at once (`brk.check`): `ml.maximize`'s iterations,
   `bootstrap`/`permute`/`jackknife` replications, Mata `for`/`while`/`do` loops, and `sleep` (now in 50 ms steps).
   A long command with no safe point that hasn't finished within the worker's 5 s grace is killed (rc 9998, data lost).
+  Class statements (`.obj...` lines, upstream at 29a3b28) skip `brk.at_command`: the interpreter runs them before the
+  command lookup. They don't change the data, a loop of them still takes the Break between passes, and the commands of a
+  member program take it as any command does.
 - Not covered: `simulate` (no `finally` restores the data), `statsby`, `rolling`, and optimizers outside
   `ml.maximize` (scipy's): these run to the end or hit the 5 s fallback.
 - Test: `tests/test_break.py` requests the Break at the k-th engine line executed (`sys.settrace`) for many k across
@@ -616,7 +627,7 @@ Evidence:
   default extension (`.dta`, `.csv`, `.do`, ...) is added, so the mapper sees the file that will really be
   opened. Sites: `use`/`save`/`append`/`merge` and other `using` files (`dta_path`), `type`, `erase`, delimited, Excel,
   `infile`/`infix`, `putexcel`, `mkdir`/`rmdir`/`copy`/`dir` (`datautil._path`), `log`/`cmdlog`, `describe using`,
-  `outfile`, a `saving()` file, `do`/`run`, `confirm file`, `graph export`/`save`/`use`, `file open`, the `dir`
+  `outfile`, a `saving()` file (`statsby`'s is in `commands/statsby.py` since 29a3b28), `do`/`run`, `confirm file`, `graph export`/`save`/`use`, `file open`, the `dir`
   macro function, SAS/SPSS import, `irf`, `bcal create`, `view`.
 - Not hooked: `cd` (dofile replaces the command when the shim is on), `adopath`/`sysdir`, `program ..., plugin`,
   console hints.
@@ -635,7 +646,7 @@ is dofile's own, not for upstream.
   `copies = ...astype(np.intp)` instead of `np.int64`; `commands/stdata.py` (`cmd_stsplit`):
   `reps = np.ones(n, dtype=np.intp)`, whose later `reps[rows] = np.bincount(...)` covers both `np.repeat` calls. On
   64-bit `intp` is `int64`, so nothing changes there. Counts above 2^31 cannot exist in a 4 GiB address space.
-- Found running the 98 Stata 14 comparison cases inside Pyodide with `compare.py` and the known-difference rules
+- Found running the 98 Stata 14 comparison cases of 0c3f3a2 inside Pyodide with `compare.py` and the known-difference rules
   (`web/scripts/check-snapshot.mjs`; normal boot and snapshot start gave the same results). Eleven failed at their
   first `expand` or `stsplit`: `expand` in 0304_collapse, 1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology,
   1801_programming, 1902_multilevel, 1908_models2, 1909_other_suites and 1916_multilevel; `stsplit` in 1901_survival.
@@ -645,8 +656,9 @@ is dofile's own, not for upstream.
   `np.insert`, `np.split`, `np.unique(return_inverse=True)`, `np.lexsort`, `np.tile`, `reshape`, `np.arange`,
   `np.full`, `np.unravel_index`, `np.ravel_multi_index`, `np.take_along_axis` and `np.roll`. Of the engine's 96
   `int64` uses, the other `np.repeat` calls with counts (`lang/vexpr.py:68-69`, `commands/egen.py:59`,
-  `commands/{roc,summarize,kappa}.py`) get `intp` counts (`flatnonzero`, `bincount`, `np.diff`, `astype(int)`), and
-  the `reduceat` calls (`core/panelquad.py:48`, `estimation/mlcmd.py:872`) take `intp` indices (`cumsum` of a
+  `commands/{roc,ttest,kappa}.py`, and `commands/mvtest.py:260`, new at 29a3b28) get `intp` counts (`flatnonzero`,
+  `bincount`, `np.diff`, `astype(int)`), and
+  the `reduceat` calls (`core/panelquad.py:48`, `estimation/mlcmd.py:481`) take `intp` indices (`cumsum` of a
   `bincount`). The engine never calls `np.put`, `np.choose` or `sorter=`. Not covered: calls inside scipy and
   statsmodels-style code given an engine int64 array, and numpy functions not probed.
 - **Run in Pyodide, one process per case:** all 11 pass. Five (0304, 1002, 1402, 1801, 1909) with PATCH-4 alone; the

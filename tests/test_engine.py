@@ -273,6 +273,18 @@ def test_odt_fixes(eng):
     assert r.rc == 0 and "/lnalpha" in r.log
 
 
+@pytest.mark.parametrize(("cmd", "opts"), [("ivprobit d", "twostep"), ("ivtobit y", "twostep ll(-1)")])
+def test_odt9_twostep_footnote_wraps(eng, cmd, opts):
+    """ODT-9 at the twostep form of ivprobit and ivtobit (new upstream code): the instrument list wraps too."""
+    names = " ".join(f"z{i}" for i in range(1, 31))
+    r = eng.run(
+        "clear\nset obs 300\nset seed 7\nforvalues i = 1/30 {\n    gen z`i' = rnormal()\n}\n"
+        "gen x = z1 + rnormal()\ngen y = x + rnormal()\ngen d = y > 0\n" + f"{cmd} (x = {names}), {opts}"
+    )
+    foot = r.log[r.log.index("Instruments:") :].splitlines()
+    assert r.rc == 0 and foot[1].startswith(" " * 15 + "z") and max(map(len, foot[:3])) <= 79
+
+
 def test_odt2_xtlogit_bounds_dont_overflow(eng):
     """ODT-2: xtlogit, re at the sigma_u = 0 boundary: the rho and sigma_u intervals no longer overflow exp()."""
     data = Path(__file__).parent / "conformance" / "data" / "panel.dta"

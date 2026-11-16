@@ -75,7 +75,7 @@ page gives the cause (it does not name `?snapshot=0`). How it works and what it 
 | Script          | What it does                                                                                                                                                                             | Time   |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | `check-pytest`  | OpenDTA's unit tests and dofile's `tests/test_engine.py` inside Pyodide, one process per file. `-- --ios` uses an iPhone user agent. Compare with CPython: `scripts/compare-pytest.mjs`. | ~2 min |
-| `check-numeric` | `e()` and `r()` of all 98 Stata 14 programs at full precision inside Pyodide. The CPython side and the diff (`scripts/compare_numeric.py`): that file's header.                          | ~4 min |
+| `check-numeric` | `e()` and `r()` of all the Stata 14 programs at full precision inside Pyodide. The CPython side and the diff (`scripts/compare_numeric.py`): that file's header.                         | ~4 min |
 
 Design checks over the pages in `../docs/design/` (see `../docs/design/system/README.md`): `axe` (accessibility),
 `tabwalk` (visible keyboard focus), `contrast` (every token pair the components use), `fonts` (every face loads; no text

@@ -21,7 +21,7 @@ Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compa
 - **Numbers differ in the last bits** through libm, so simulated data is not bit-identical across platforms.
 - **Speed:** cases take 1.5–5 times as long as on CPython (1908_models2: 139 s against 66 s, the CPython time taken while the
   machine was busy).
-- **Not covered by any check:** Break on a long model fit in the browser; `1920_models4` (no Stata log); the dofile tests that
+- **Not covered by any check:** Break on a long model fit in the browser; the dofile tests that
   need subprocesses or the `mcp` package, which do not apply in a page.
 
 **The Stata 14 cases.** `check-snapshot --normal` (one process per case, four at a time), after PATCH-4, the
