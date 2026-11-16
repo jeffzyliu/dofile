@@ -2,6 +2,9 @@
 
 ## The lazy graphics part (experiment E1c)
 
+The results of the experiments run on the way (phone captures, timing against main, the eager import, the page-side unpack
+that was dropped, compression) are in [archive/lazy-graphics-experiments.md](archive/lazy-graphics-experiments.md).
+
 The second design, built to the maintainer's three requirements: the download widget shows the true size, only a graph
 waits, and a return visit is not slower. The first (E1b) made every run wait for the part.
 
@@ -88,8 +91,9 @@ Status: **done as the lazy graphics part (above)**. Findings and conjectures rec
 **The question.** Matplotlib is about 28% of the site-packages files and about 23 MB of the snapshot's raw heap, and it is
 needed only when a program draws a graph. Should it be loaded on demand in the snapshot flow (left out of the heap and the
 main download), in the regular flow (which already imports it at the first plot), or both? The first plot should not take
-about a second, as it does in the regular flow today. The snapshot's eager import is worth keeping unless lazy loading saves
-**significant** time at a cold and a warm start without bringing that delay back.
+about a second, as it does in the regular flow today. The snapshot's eager import (matplotlib in the heap, as before this
+design) was to be kept unless lazy loading saves **significant** time at a cold and a warm start without bringing that
+delay back.
 
 ### Measured
 
@@ -132,7 +136,7 @@ come with the first graph. Not yet measured in a browser.
 4. `run` waits for those files, because any command can draw. Optionally the worker imports matplotlib right after, so the
    first plot pays no import.
 
-| Estimate, brotli 11 (from the 42.3 MB build, before docstring stripping) | Now (eager) | Lazy: core, before "ready" | Lazy: graphics, after |
+| Estimate, brotli 11 (from the 42.3 MB build, before docstring stripping) | Then (eager, the old design) | Lazy: core, before "ready" | Lazy: graphics, after |
 |---|---|---|---|
 | Heap | 22.2 MB (measured) | about 18.6 MB | |
 | Files | 20.0 MB (measured) | about 13.8 MB | about 6.2 MB, plus about 2 MB of `.pyc` (a guess) |
