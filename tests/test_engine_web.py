@@ -295,10 +295,31 @@ def test_graph_commands_line_up_with_the_last_five_images(eng):
 
 def test_graph_commands_skip_a_graph_that_cannot_be_drawn(eng, monkeypatch):
     real = engine_mod._png
-    monkeypatch.setattr(engine_mod, "_png", lambda g, theme=None: None if "g2" in str(g.opts) else real(g, theme))
+
+    def png(g, theme=None):
+        if "g2" in str(g.opts):
+            raise RuntimeError("no luck\nsecond line")
+        return real(g, theme)
+
+    monkeypatch.setattr(engine_mod, "_png", png)
     r = eng.run("scatter y x, title(g1)\nscatter y x, title(g2)\nscatter y x, title(g3)", images=True)
-    assert len(r.images) == 2
+    assert len(r.images) == 2 and r.rc == 0
     assert r.graph_commands == ["scatter y x, title(g1)", "scatter y x, title(g3)"] and r.graph_lines == [1, 3]
+    assert r.log.endswith("\n(graph 2 could not be drawn: RuntimeError: no luck)\n")  # first line only
+
+
+def test_a_graph_that_cannot_be_drawn_is_named_in_the_log(eng):
+    bad = 'scatter y x, title("$\\frac{a}$")'  # matplotlib's mathtext raises ValueError
+    r = eng.run(f"scatter y x\n{bad}\nscatter y x", images=True)
+    assert r.rc == 0 and r.new_graphs == 3 and len(r.images) == 2
+    lines = [ln for ln in r.log.splitlines() if "could not be drawn" in ln]
+    assert len(lines) == 1 and lines[0].startswith("(graph 2 could not be drawn: ValueError: ")
+    ok = eng.run("scatter y x", images=True)
+    assert len(ok.images) == 1 and "could not be drawn" not in ok.log
+    # graphs beyond the shown set are never drawn, so never reported
+    many = eng.run(f"{bad}\n" + "scatter y x\n" * 5, images=True)
+    assert len(many.images) == 5 and "could not be drawn" not in many.log
+    assert "could not be drawn" not in eng.run(bad).log  # no images asked for
 
 
 def test_graph_lines(eng, tmp_path):
