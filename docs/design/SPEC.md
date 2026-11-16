@@ -678,9 +678,10 @@ As built:
   starts empty, and the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
   it (section 7). The transport also keeps `about` and `startup`, the facts of the last start, for the tests and the hook.
 - **Errors** are `Error`s with `kind`: `"failed"` (`download()` or `build()` could not get the build's list or a file as
-  listed, or the build has no snapshot; also a call cut because its worker's start failed; with `reason`:
-  `"no-wasm" | "download" | "memory" | "unknown"`), `"failed-twice"` (a call cut because its worker failed twice),
-  `"updated"` (from `download()` or `build()`: "dofile was updated: reload the page", then the cause), `"reset"` (a call cut
+  listed, or the build has no snapshot, with `reason` `"download" | "unknown"`; also a call cut because its worker's start
+  failed, with no `reason`: why the start failed is the machine's `FailReason`), `"failed-twice"` (a call cut because its
+  worker failed twice), `"updated"` (from `download()` or `build()`: "dofile was updated: reload the page", then the
+  cause), `"reset"` (a call cut
   by a reset; `reset` holds the kind: `"break" | "crash" | "user"`), `"stopped"` (cut because another tab took the engine),
   `"no-engine"` (`query()` or `run()` with no live worker), `"op"` (the worker answered with an error; `name` is the worker's
   error name). The worker answers `{id, error, name}`. The page decides from these fields and from the worker's error name

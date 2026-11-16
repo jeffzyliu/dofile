@@ -234,7 +234,7 @@ export interface DescribeArgs {
  *  download() rejects with an AbortError instead when its signal aborts. */
 export interface ClientError extends Error {
   kind: "failed" | "failed-twice" | "updated" | "reset" | "stopped" | "no-engine" | "op";
-  reason?: "no-wasm" | "download" | "memory" | "unknown"; // "failed", from download() and build()
+  reason?: "download" | "unknown"; // "failed", from download() and build() only
   reset?: ResetKind; // "reset"
 }
 
