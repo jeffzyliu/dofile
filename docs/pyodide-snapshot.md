@@ -173,7 +173,7 @@ runs of the page's "ready in X s" (a new browser context is cold, a reload in it
   the normal boot. That is also all the browser stores.
 - **Compressed storage costs 0.3–0.7 s per start** (measured on the 46.5 MB build) against keeping 229 MB decompressed,
   and the download is about 12 MB smaller than the brotli 5 a host would send (52.3 MB).
-- The bundle's dead weight (tests, type stubs: 8.2 MB raw, 2.2 MB compressed) is left out since 2026-11-15; the bulk is
+- The bundle's dead weight (tests, type stubs: 8.1 MB raw, 2.2 MB compressed) is left out since 2026-11-15; the bulk is
   scipy (41 MB), matplotlib (17) and numpy (11), and trimming more would not change the picture.
 - Against plain `vite preview` (no compression, nothing cached) the snapshot took 2.8 s cold and 2.4 s warm: not
   comparable, so not in the table or chart.
