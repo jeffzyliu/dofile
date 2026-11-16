@@ -1,31 +1,22 @@
-// Time until the web demo's engine is ready, normal boot vs memory snapshot, by network speed, for a first visit (new browser
-// context: cold caches) and a return visit (a reload in the same context: warm). Chromium (default) or WebKit
-// (--engine webkit: unthrottled only, since the throttle is Chromium's DevTools protocol; its context is a profile on disk,
-// because Playwright's in-memory WebKit context drops the Cache API on a reload and the return visit would not be one). The built editor (web/dist/app: run
-// `npm run build:local` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes docs/img/startup-times.json,
-// which docs/img/make-startup-times.mjs draws.
+// Time until the web demo's engine is ready, normal boot vs memory snapshot, by network speed, for a first visit (new
+// browser context: cold caches) and a return visit (a reload in the same context: warm). Chromium (default) or WebKit
+// (--engine webkit: unthrottled only, the throttle is Chromium's DevTools protocol). The built editor (run
+// `npm run build:local` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes
+// docs/img/startup-times.json, which docs/img/make-startup-times.mjs draws.
 //
 //   node scripts/measure-startup.mjs [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
 //                                    [--first-run display,graph] [--during-import display,graph] [--import-delay-ms 100]
 //                                    [--engine chromium|webkit]
 //
-// Each return visit then draws a graph (time from submit to the image in the page). With a lazy snapshot (a graphics part in
-// start-files.json) the cold visit waits for the worker's "graphics part" line before the reload, and the warm graph waits
-// for the warm visit's line, which says whether the part was read from the Cache. --first-run: `display 1` or a scatter
-// submitted the moment the engine is ready, timed from the page's start to the result and to its image, on the cold visit
-// and again on the return visit (the reload, after the cold visit's part landed), which does not wait for "warmed": what a
-// return visitor who runs at once gets (the background unpack and import must not delay it). The
-// graphics part's request (bytes, timing) is recorded, to see that the throttle reaches the worker's fetch.
-//
-// --during-import display,graph: a run sent WHILE the background import runs, on the return visit (a lazy build only). What
-// it starts and stops on: the cold visit runs nothing and waits for the part's "landed" line; the page reloads; the script
-// waits for the warm worker's "graphics part: written" line (the unpack and the write are done; the idle steps of the
-// matplotlib import follow, one task each), waits --import-delay-ms (default 100) more, and then submits the run through the
-// test hook. Times are the page's, from that submit (t0) to the result (`result`) and to an image showing (`image`), so a
-// run's wait for the step in progress is in them. `warmedBeforeSubmit` says whether the "warmed" line had already come: when
-// true the run was not sent during the import and the row is not the measure. `writtenAtMs` is how far after the warm
-// page's start the "written" line was seen (script clock, a rough guide). `warmPartNotes` carries the longest step. A graph
-// here also imports what the background import had not reached yet (matplotlib's heavy modules), inside the run.
+// Each return visit then draws a graph (time from submit to the image in the page). With a lazy snapshot the cold visit
+// waits for the graphics part to land before the reload, and the warm graph waits for the warm visit's "warmed" line.
+// --first-run: `display 1` or a scatter submitted the moment the engine is ready, timed to the result and to its image,
+// on the cold visit and on the return visit, which does not wait for "warmed": what a return visitor who runs at once
+// gets.
+// --during-import: a run sent on the return visit while the background import runs (a lazy build only): after the
+// worker's "written" line plus --import-delay-ms. `warmedBeforeSubmit` true means the import was over already, and the
+// row is not the measure. `writtenAtMs` is a rough guide (script clock). A graph here also imports, inside the run,
+// what the background import had not reached.
 //
 // The page is served by a small static server that does what a real host does: brotli (quality 5) for text and wasm, long
 // caching for the hashed assets, the isolation headers, and the snapshot's .bin files as they are (already compressed).
@@ -153,15 +144,13 @@ const readyIn = async (page) => {
   return Number((at / 1000).toFixed(2));
 };
 
-// A lazy snapshot's graphics part (the default build; SNAPSHOT_NO_MPL=0 builds none): the page fetches it after the start
-// files. With one, the cold visit waits for the page's "graphics part: landed" line before the reload (a reload at ready would
-// kill that fetch, and the warm visit would download it again), and the warm graph waits for the worker's "graphics part:
-// warmed" line of the warm visit (written and imported in the background: the return visit's first graph).
+// With a lazy snapshot the cold visit waits for the "graphics part: landed" line before the reload (a reload at ready
+// would kill that fetch, and the warm visit would download it again).
 const startList = JSON.parse(readFileSync(join(dist, EDITOR_BASE, "start-files.json"), "utf8"));
 const lazy = Boolean(startList.snapshot?.graphics);
 const GRAPH = "clear\nset obs 10\ngen x = _n\nscatter x x";
 const CODES = { display: "display 1", graph: GRAPH };
-// a run through the test hook; resolves with the moment its result came back and the moment an image of it showed in the page
+// a run through the test hook: resolves with when its result came back and when an image of it showed in the page
 const runAndTime = (code) =>
   new Promise((done) => {
     const shown = () =>
@@ -183,7 +172,7 @@ const runAndTime = (code) =>
       poll();
     });
   });
-// In the page: run `code` the moment the engine is ready (for --first-run)
+// In the page: run `code` the moment the engine is ready
 const runAtReady = (code) => {
   new MutationObserver((_, obs) => {
     if (document.documentElement.dataset.engine !== "ready" || window.__runStarted) return;
@@ -196,19 +185,19 @@ const runAtReady = (code) => {
 };
 const sec = (ms) => Number((ms / 1000).toFixed(2));
 
-// `job`: { firstRun } (a run at ready, cold and return visit) or { during } (a run during the return visit's import), or none
+// `job`: { firstRun } (a run at ready), { during } (a run during the return visit's import), or none
 async function visit(mode, net, job = {}) {
   const { firstRun, during } = job;
   let ctx;
   if (engine === "webkit") {
     const dir = mkdtempSync(join(tmpdir(), "measure-startup-"));
     profiles.push(dir);
-    ctx = await webkit.launchPersistentContext(dir); // a profile on disk: its Cache API survives the reload
+    ctx = await webkit.launchPersistentContext(dir); // Playwright's in-memory WebKit context drops the Cache API on a reload
   } else ctx = await browser.newContext(); // a new context: nothing cached
   await ctx.addInitScript(watchEngine);
   await ctx.addInitScript(`window.__runAndTime = ${runAndTime.toString()};`);
   if (firstRun) await ctx.addInitScript(runAtReady, CODES[firstRun]);
-  // the graphics part's request (the worker's): bytes and timing, to see that the throttle reaches it
+  // the graphics part's request: to see that the throttle reaches the worker's fetch
   const partRequests = [];
   ctx.on("requestfinished", async (req) => {
     if (!req.url().includes("graphics.brotli.bin")) return;
@@ -238,7 +227,7 @@ async function visit(mode, net, job = {}) {
     if (m.text().includes("[dofile] snapshot start")) notes.push(m.text().replace("[dofile] snapshot start: ", ""));
     if (m.text().includes("[dofile] graphics part")) partNotes.push(m.text().replace("[dofile] ", ""));
   });
-  // a "graphics part: <what>" line at or after index `from` of partNotes
+  // waits for a "graphics part: <what>" line at or after index `from` of partNotes
   const partLine = async (what, from = 0, limitMs = 300_000) => {
     const t = Date.now();
     while (!partNotes.slice(from).some((n) => n.startsWith(`graphics part: ${what}`))) {
@@ -250,20 +239,20 @@ async function visit(mode, net, job = {}) {
   served.bytes = 0;
   await page.goto(url);
   const cold = await readyIn(page);
-  const coldBytes = served.bytes; // at ready: a lazy build's part may have started, so its bytes are counted separately below
+  const coldBytes = served.bytes; // at ready: a lazy build's part may not be in yet
   if (during) {
     if (!lazy) throw new Error("--during-import needs a lazy build (a graphics part in start-files.json)");
-    await partLine("landed"); // nothing was run: the part lands, and is in the Cache before the reload
+    await partLine("landed");
     const coldParts = partNotes.length;
     await page.reload();
     const warm = await readyIn(page);
     const t = Date.now();
-    await partLine("written", coldParts); // the unpack and the write are done; the import's idle steps follow
+    await partLine("written", coldParts); // the import's idle steps follow
     const writtenAtMs = Date.now() - t;
     await new Promise((ok) => setTimeout(ok, importDelayMs));
     const warmedBeforeSubmit = partNotes.slice(coldParts).some((n) => n.startsWith("graphics part: warmed"));
     const x = await page.evaluate((code) => window.__runAndTime(code), CODES[during]);
-    await partLine("warmed", coldParts, 30_000).catch(() => {}); // for its notes (the longest step); not needed for the run
+    await partLine("warmed", coldParts, 30_000).catch(() => {}); // only for its notes
     await ctx.close();
     return {
       ready: warm,
@@ -280,17 +269,17 @@ async function visit(mode, net, job = {}) {
     };
   }
   if (firstRun) {
-    // the run submitted at ready (init script); a graph of a lazy build waits for the graphics part, `display` does not
+    // the run submitted at ready (init script)
     await page.waitForFunction(() => window.__firstRun, null, { timeout: 300_000 });
     const r = await page.evaluate(() => window.__firstRun);
     if (lazy) await partLine("landed");
     const coldParts = partNotes.length;
-    // the return visit: the init script submits the same run at its "ready" again
+    // the return visit: the init script submits the same run again
     await page.reload();
     const warm = await readyIn(page);
     await page.waitForFunction(() => window.__firstRun, null, { timeout: 300_000 });
     const w = await page.evaluate(() => window.__firstRun);
-    if (lazy) await partLine("warmed", coldParts); // for its notes (the longest step); the run above did not wait for it
+    if (lazy) await partLine("warmed", coldParts); // only for its notes: the run above did not wait for it
     await ctx.close();
     const timed = (x, ready) => ({
       ready,
@@ -309,11 +298,11 @@ async function visit(mode, net, job = {}) {
       warmPartNotes: partNotes.slice(coldParts),
     };
   }
-  if (lazy) await partLine("landed"); // the part has landed (and is in the Cache: it is put first) before the reload
+  if (lazy) await partLine("landed");
   const coldParts = partNotes.length;
   await page.reload(); // the same context: its HTTP cache and Cache API are kept
   const warm = await readyIn(page);
-  // the first graph of the return visit: after the part was read from the Cache, written and imported (lazy), or at ready (base)
+  // the return visit's first graph: after the part is written and imported (lazy), or at ready
   if (lazy) await partLine("warmed", coldParts);
   const g = await page.evaluate((code) => window.__runAndTime(code), GRAPH);
   await ctx.close();
@@ -335,9 +324,7 @@ async function visit(mode, net, job = {}) {
   };
 }
 
-const firstRuns = arg("--first-run", "") // e.g. display,graph: a run submitted at ready, on the cold and the return visit
-  .split(",")
-  .filter(Boolean);
+const firstRuns = arg("--first-run", "").split(",").filter(Boolean);
 const duringRuns = arg("--during-import", "").split(",").filter(Boolean);
 const jobs = [
   ...firstRuns.map((f) => ({ key: f, firstRun: f })),

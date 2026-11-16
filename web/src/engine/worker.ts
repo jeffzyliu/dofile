@@ -243,11 +243,9 @@ const booted = new Promise<void>((ok, err) => {
 });
 booted.catch(() => {}); // the error reaches the page through boot's own answer
 
-// The files of a snapshot (scripts/make-snapshot.mjs) at `base`, an http(s) or file: URL ending in "/". The patched
-// pyodide.asm.mjs comes from there too: Pyodide's own loader has no hook for linking libraries again.
-// `cache`: the Cache the page's download() filled, read first, or undefined. The worker never writes it: download() is
-// the one writer, and it keeps only a file with the byte count of the build's list (a host that answers a missing file
-// with its index.html and status 200 must not end up in the cache).
+// Reads `url`: a file: URL from disk (Node, the tests); otherwise from `cache` first, then the network. The worker
+// never writes the Cache: download() in client.ts keeps only a file with the byte count of the build's list (a host
+// that answers a missing file with its index.html and status 200 must not end up in it).
 async function fetchBytes(url: string, cache?: Cache, init?: RequestInit): Promise<Uint8Array<ArrayBuffer>> {
   if (url.startsWith("file:")) {
     const fsName = "node:fs/promises"; // a variable so the bundler leaves it alone
@@ -469,28 +467,23 @@ async function loadFromSnapshot(
   }
 }
 
-// ---- a lazy snapshot's graphics part (experiment E1c, docs/lazy-matplotlib.md) --------------------------------------------
-// matplotlib and what only it needs are not in the heap or the bundle but in one more file (files.graphics). With a
-// SharedArrayBuffer the PAGE fetches it (client.ts, #graphics), never this worker: a worker busy in Python cannot advance a
-// fetch of its own. The page hands it over in the SharedArrayBuffer given with boot: Int32 [state, length, tries, 0] (state
-// 0 pending, 1 landed, 2 failed; tries: the page's fetches of it, counted; a graph that finds it failed asks for one more,
-// {graphics: "again"}, and waits), then from byte PART_HEADER the compressed part (landed) or the reason (failed). Without
-// one (no cross-origin isolation) THIS WORKER fetches it, and the page never does: a graph blocked in Python could not be
-// handed the page's bytes, so it would fetch them again (prefetch, fetchPartNow). The page then shows the download from this
-// worker's messages ({graphics: "fetching" | "progress" | "landed" | "failed"}, client.ts): inputs, as "again" and "damaged"
-// are; the page alone writes the progress it shows.
-// Only a graph waits for it (browser.py: the graph store's put and a finder for matplotlib call waitGraphics); no other run
-// touches it. A return visit must not be slower: nothing of it happens before `startup` is answered. Then the browser's
-// own decoder (off this thread) unpacks it as soon as it is here (nativeSoon); what runs on this thread waits until the
-// engine is idle (no run sent or running) and has been for IDLE_MS: a brotli-wasm unpack, the write and the import of what
-// a first graph needs (so it costs what it did with matplotlib in the heap), in steps of one task each (idleStep), so a run
-// sent meanwhile waits for one step at most.
+// ---- a lazy snapshot's graphics part (docs/lazy-matplotlib.md) ----
+// matplotlib is not in the heap but in one more file (files.graphics). With a SharedArrayBuffer the page fetches it
+// (client.ts), because a worker busy in Python cannot advance a fetch of its own, and hands it over in the buffer given
+// with boot: Int32 [state, length, tries, 0], then from PART_HEADER the compressed part (landed) or the reason
+// (failed). A graph that finds it failed posts {graphics: "again"} and waits for the page's next fetch.
+// Without one (no cross-origin isolation) this worker fetches it (prefetch, fetchPartNow): a graph blocked in Python
+// could not be handed the page's bytes. Its {graphics: ...} messages let the page show the download.
+// Only a graph waits for the part (waitGraphics). Nothing happens before `startup` is answered, so a return visit is no
+// slower. Then the browser's own decoder unpacks it off this thread (nativeSoon); the brotli-wasm unpack, the write and
+// the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (idleStep), so a
+// run sent meanwhile waits for one step at most.
 const PART_PENDING = 0,
   PART_LANDED = 1,
   PART_FAILED = 2,
   IDLE_MS = 1000,
   PROGRESS_MS = 100, // at most one {graphics: "progress"} this often
-  DECODE_STEP = 256 << 10; // input bytes per decode step: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
+  DECODE_STEP = 256 << 10; // input bytes: ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
 let share: {
     file: SnapshotFile;
     hdr: Int32Array | null;
@@ -501,24 +494,24 @@ let share: {
   brotliWasm: BrotliWasmType | null = null,
   snapshotBase = "", // mount's `snapshot`: where the part is, for fetchPartNow
   started = false, // `startup` was answered
-  runs = 0, // runs sent and not ended (counted as they arrive, before the queue)
+  runs = 0, // runs sent and not ended (counted before the queue)
   idleSince = 0,
   idleTimer: ReturnType<typeof setTimeout> | 0 = 0,
   decode: { steps: Generator<number, Uint8Array, void>; t0: number; how: string; longest: number } | null = null,
   native = false, // the browser's decoder is unpacking it (idle only)
   decoded: { raw: Uint8Array; t0: number; how: string; longest: number } | null = null, // unpacked, not yet written
   graphicsWritten = false,
-  askedAt: number | null = null, // this run asked the page to fetch a failed part again, at that tries
-  graphicsError = "", // the part arrived but could not be unpacked or written (damaged): final for this worker
+  askedAt: number | null = null, // the tries when this run asked the page to fetch a failed part again
+  graphicsError = "", // the part arrived damaged; said once, by the next graph
   warmAt = 0, // the next step of browser.warm_graphics; -1: done
   tWarm = 0,
   warmLongest = 0,
-  prefetching: { stop: AbortController; done: Promise<void> } | null = null, // this worker's own fetch (no shared buffer)
-  fetchSaid = false, // waitGraphics said "pending" for this graph's own fetch, so that the log says it is waiting
-  fresh = false, // no shared buffer: the part arrived damaged, so the next fetch of it must not come from the HTTP cache
-  writtenInRun = 0; // when a graph of the run in progress wrote the part (performance.now()), for the run's end line
+  prefetching: { stop: AbortController; done: Promise<void> } | null = null, // no shared buffer: this worker's own fetch
+  fetchSaid = false, // waitGraphics said "pending" before this graph's own fetch
+  fresh = false, // the part arrived damaged: the next fetch must skip the HTTP cache
+  writtenInRun = 0; // performance.now() when a graph of this run wrote the part
 
-// The part as the page left it: [state, the compressed bytes (a copy, never a view of the shared buffer) or the reason]
+// The part as the page left it: its state, and a copy of the bytes (landed) or the reason (failed)
 function partNow(): [number, Uint8Array<ArrayBuffer> | string | null] {
   if (!share) return [PART_FAILED, "this build has no graphics part"];
   if (share.sab && share.hdr) {
@@ -531,8 +524,8 @@ function partNow(): [number, Uint8Array<ArrayBuffer> | string | null] {
   return share.error ? [PART_FAILED, share.error] : [PART_PENDING, null];
 }
 
-// The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the graph that
-// finds this says why, and the idle steps stop until then (graphicsError; the next graph clears it).
+// The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the next
+// graph says why, and the idle steps stop until then.
 function damaged(e: unknown): string {
   graphicsError = `the graphics files arrived damaged (${errorForPage(e).message}); they are fetched again for the next graph`;
   decode = decoded = null;
@@ -545,8 +538,8 @@ function damaged(e: unknown): string {
   return graphicsError;
 }
 
-// One step of the brotli-wasm decode (DECODE_STEP of input), started on the first call: the decoded part when done, else
-// null. One decode for this worker: a graph that waits and the idle steps go on with it, neither starts over.
+// One step of the brotli-wasm decode (DECODE_STEP of input): the decoded part when done, else null. A waiting graph
+// and the idle steps share one decode.
 function decodeStep(part?: Uint8Array): Uint8Array | null {
   decode ??= {
     steps: unpackSteps(brotliWasm!, part!, share!.file, DECODE_STEP),
@@ -563,7 +556,6 @@ function decodeStep(part?: Uint8Array): Uint8Array | null {
   return r.value;
 }
 
-// Write the unpacked part into site-packages (one step)
 function writePart(where: string) {
   const d = decoded!,
     tWrite = performance.now(),
@@ -575,10 +567,12 @@ function writePart(where: string) {
   );
 }
 
-// Called by Python (browser.py, _LazyGraphics.ensure) while a graph waits, so synchronous: "" once the files are written
-// (unpacked here, in steps, if the part landed and the idle steps have not done it), "break" for a Break (the buffer is
-// cleared: Python takes it as the engine's Break; the unpack goes on from there later), "pending" after waiting up to `ms`,
-// or why the graphs cannot be had (the page's next fetch failed too, or the part is damaged).
+/**
+ * Called by Python (browser.py, _LazyGraphics.ensure) while a graph waits, so synchronous.
+ * @param ms - the longest wait before answering "pending"
+ * @returns "" once the files are written (unpacked here if the idle steps have not done it); "break" for a Break
+ * (Python takes it as the engine's Break; the unpack goes on later); "pending"; or why the graphs cannot be had
+ */
 function waitGraphics(ms: number): string {
   if (graphicsWritten) return "";
   if (graphicsError) {
@@ -601,8 +595,8 @@ function waitGraphics(ms: number): string {
         decodeStep();
         continue;
       }
-      // tries before the state: a retry the page starts between the two loads then shows as a change of tries, not as a
-      // failure that is already the new try's (which would leave this graph waiting until a Break)
+      // tries before the state: a retry started between the two loads must show as new tries, not as a failure
+      // already the new try's (the graph would wait until a Break)
       const tries = share!.hdr ? Atomics.load(share!.hdr, 2) : 0;
       const [state, part] = partNow();
       if (state === PART_LANDED) {
@@ -610,8 +604,8 @@ function waitGraphics(ms: number): string {
         continue;
       }
       if (!share!.hdr) {
-        // no shared buffer: the page cannot hand the part over while this graph runs, so fetch it here. "pending" first:
-        // browser.py then prints its waiting line and sends the log so far before this call blocks for the download
+        // the page cannot hand the part over while this graph runs. "pending" first, so that browser.py prints its
+        // waiting line and sends the log before this call blocks for the download
         if (!fetchSaid) {
           fetchSaid = true;
           self.postMessage({ graphics: "fetching" });
@@ -622,7 +616,7 @@ function waitGraphics(ms: number): string {
         continue;
       }
       if (state === PART_FAILED) {
-        // a failed fetch: once per run, ask the page for another and wait for it (Break still works); its failure is final
+        // once per run, ask the page for another fetch and wait for it (Break still works); its failure is final
         if (askedAt === null) {
           askedAt = tries;
           self.postMessage({ graphics: "again" });
@@ -640,20 +634,18 @@ function waitGraphics(ms: number): string {
   }
 }
 
-// Without a SharedArrayBuffer (a page that is not cross-origin isolated: plain http on a LAN address, say) a message from
-// the page cannot reach a graph blocked in Python, so the graph fetches the part itself, with a synchronous request (allowed
-// in a worker; there is no Break without a shared buffer either: the machine resets instead). The page's own fetch may
-// have filled the HTTP cache. "" when it is here (share.bytes), else why not. The page is told, so that it shows the
-// download ({graphics: "fetching"} was posted by waitGraphics; a synchronous request has no progress to tell).
+// Without a SharedArrayBuffer a message from the page cannot reach a graph blocked in Python, so the graph fetches the
+// part with a synchronous request (allowed in a worker; with no shared buffer there is no Break either: the machine
+// resets). Returns "" when it is here (share.bytes), else why not.
 function fetchPartNow(): string {
   const at = new URL(`${snapshotBase}${share!.file.name}`, self.location.href),
     t0 = performance.now();
-  // a damaged part may be in the HTTP cache with the right length: an address of its own is never in it (a request cannot
-  // ask a synchronous XHR to reload; the address is ignored by the server)
+  // a damaged part may sit in the HTTP cache with the right length; a synchronous XHR cannot reload, so use a new
+  // address
   if (fresh) at.searchParams.set("fresh", String(Date.now()));
   const url = at.href;
   if (prefetching) {
-    // its bytes could only arrive once this graph is over: stopped, so the part comes whole once (what it had is lost)
+    // its bytes could only arrive after this graph: stop it, so the part comes whole once
     prefetching.stop.abort();
     prefetching = null;
     console.info("[dofile] graphics part: the worker's own fetch was still on its way; a graph fetches it now");
@@ -683,8 +675,8 @@ function fetchPartNow(): string {
   }
 }
 
-// Without a shared buffer, this worker's own fetch of the part, once started (not before `startup` is answered): it runs
-// while the engine is idle or busy, and lands in share.bytes. A graph that comes first stops it and fetches it itself.
+// Without a shared buffer: this worker's own fetch of the part, started after `startup` is answered. A graph that comes
+// first stops it and fetches the part itself.
 function prefetch(): Promise<void> {
   if (!share || share.sab || share.bytes) return Promise.resolve();
   if (prefetching) return prefetching.done;
@@ -742,16 +734,14 @@ function prefetch(): Promise<void> {
   return done;
 }
 
-// the fetch `stop` belongs to has ended: it is no longer this worker's fetch on its way (unless another one is)
+// the fetch `stop` belongs to has ended
 function prefetched(stop: AbortController) {
   if (prefetching?.stop === stop) prefetching = null;
 }
 
-// The browser's own decoder (off this thread) unpacks the part as soon as it is here, run or no run: what is left for
-// this thread is the write and the import (idleStep). A graph that comes meanwhile cannot use its result: it is blocked in
-// Python, and the result comes through a promise on this thread's own event loop, which then never runs. So that graph
-// unpacks with brotli-wasm itself and this result is dropped (the .then). Called by `startup`, the op `graphics` and a run's
-// end; it does nothing where there is no native decoder (Chromium) or once it ran.
+// The browser's own decoder (off this thread) unpacks the part as soon as it is here. A graph that comes meanwhile
+// cannot use the result: it is blocked in Python, so this thread's event loop never delivers the promise. That graph
+// unpacks with brotli-wasm itself and the result is dropped. Does nothing where there is no native decoder (Chromium).
 function nativeSoon() {
   if (!started || !share || native || decode || decoded || graphicsWritten || graphicsError) return;
   if (!hasNativeBrotli() || brotliPick === "wasm") return;
@@ -770,8 +760,7 @@ function startNative() {
   inflateNative(bytes, file.raw)
     .then(
       (raw) => {
-        // a graph that came meanwhile could not wait for this (see nativeSoon): it decoded and wrote the part itself, or
-        // its decode is in progress; this result is then spare
+        // a graph that came meanwhile unpacked the part itself (see nativeSoon): this result is spare
         if (!graphicsWritten && !decode && !decoded) decoded = { raw, t0, how: "native", longest: 0 };
       },
       (e) => {
@@ -785,14 +774,13 @@ function startNative() {
     });
 }
 
-// The one door to the part's work while idle: after `startup`, with no run sent or running, IDLE_MS after the last of them.
-// Called by `startup`, the op `graphics` (the part landed), the end of each run and each step.
+// The one door to the part's work while idle: after `startup`, IDLE_MS after the last run.
 function idleSoon(delay = Math.max(0, idleSince + IDLE_MS - performance.now())) {
   if (!started || !share || idleTimer || native || graphicsError || (graphicsWritten && warmAt < 0)) return;
   idleTimer = setTimeout(idleStep, delay);
 }
 
-// One step: a decode step (or the browser's decoder, all at once but off this thread), the write, or one import step
+// One step: a decode step (or the browser's decoder, off this thread), the write, or one import step
 function idleStep() {
   idleTimer = 0;
   if (runs > 0) return; // the run's end calls idleSoon
@@ -812,7 +800,7 @@ function idleStep() {
         return startNative(); // normally under way already (nativeSoon); its end calls idleSoon
       decodeStep(bytes);
     } else {
-      // the import of what a first graph needs, after the write: the three heavy modules one at a time, then 20 a step
+      // after the write, the import of what a first graph needs: the three heavy modules one at a time, then 20 a step
       if (!tWarm) tWarm = performance.now();
       warmAt = browser.warm_graphics(warmAt, warmAt < 3 ? 1 : 20);
       warmLongest = Math.max(warmLongest, since(t));
@@ -828,10 +816,8 @@ function idleStep() {
   idleSoon(0);
 }
 
-// Where the start's time went, in seconds, for the page's status line (the "startup" op). From a snapshot: fetched (the
-// name of the first step: download, or read from cache), fetchS, unpackS, restoreS, filesS, engineS, notCached. A normal
-// boot: runtimeS (Pyodide itself), filesS, packagesS (micropip and the wheel with numpy, scipy, matplotlib), engineS.
-// storeError, when the files could not be copied from the store: the engine runs, and nothing it writes is kept.
+// Where the start's time went, in seconds, for the page's status line (the "startup" op). storeError: the files could
+// not be copied from the store, so the engine runs and nothing it writes is kept.
 const startup: Partial<Startup> = {};
 const since = (t: number) => (performance.now() - t) / 1000;
 
@@ -876,15 +862,14 @@ const lifecycle: Handlers<LifecycleOps> = {
     if (storeError) startup.storeError = storeError;
   },
   startup: async () => {
-    started = true; // the part's work may begin: the native unpack at once (after this answer), the rest IDLE_MS from now
+    started = true; // the part's work may begin (nativeSoon, idleSoon)
     idleSince = performance.now();
     if (share && !share.sab) setTimeout(() => void prefetch(), 0); // after this answer, as nativeSoon
     nativeSoon();
     idleSoon();
     return startup;
   },
-  // wheel: the dofile wheel's URL, or {name, bytes}; extraWheels: more of the same, installed with it; interruptBuffer: an
-  // Int32Array on a SharedArrayBuffer, or null
+  // wheel: URL or {name, bytes}; extraWheels: the same, installed with it; interruptBuffer: Int32Array or null
   async boot({ wheel, extraWheels = [], interruptBuffer, graphics }: BootArgs) {
     const tPackages = performance.now();
     if (!fromSnapshot) {
@@ -911,7 +896,7 @@ const lifecycle: Handlers<LifecycleOps> = {
     browser = py.pyimport("dofile.browser");
     const about = JSON.parse(browser.start(ROOT));
     if (graphics) {
-      // a lazy snapshot: graphs wait for the part (browser.py). Nothing else of it before `startup` (idleSoon)
+      // a lazy snapshot: graphs wait for the part (browser.py); nothing else of it before `startup`
       share = { ...graphics, hdr: graphics.sab ? new Int32Array(graphics.sab, 0, 4) : null };
       browser.lazy_graphics(waitGraphics);
     }
@@ -937,8 +922,7 @@ const lifecycle: Handlers<LifecycleOps> = {
       idleSoon();
     }
   },
-  // the page's graphics part (in the shared buffer) landed, failed, or is fetched again (client.ts). Answered at once,
-  // outside the queue; the native unpack starts now, the rest waits for an idle engine (idleSoon)
+  // the page's graphics part landed, failed, or is fetched again. Answered at once, outside the queue
   graphics() {
     nativeSoon();
     idleSoon();

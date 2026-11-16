@@ -74,7 +74,7 @@ function ProgressDialog() {
   const done = st.s === "starting-list" || st.s === "starting-worker" ? st.done : {};
   const elapsed = busy ? Math.max(0, (now - (st as { t0: number }).t0) / 1000) : 0;
   const stepNo = current ? stages.indexOf(current) + 1 : 0;
-  // a lazy snapshot's graphics part: not in the bar (download() counts what comes before the start), said under it
+  // the graphics part is not in the bar (it follows the start): said under it
   const part = graphicsPart.value,
     later = part && part.state !== "landed" ? `${(part.total / 1e6).toFixed(1)} MB` : null;
   return (
@@ -133,7 +133,7 @@ function ProgressDialog() {
               s === "download" && st.s === "downloading" && st.total
                 ? ofTotal(st.received, st.total)
                 : finished
-                  ? s === "download" && size && !part // a lazy part still to come: not the whole size
+                  ? s === "download" && size && !part // not the whole size when a part is still to come
                     ? `${size} · ${secs(done[s] ?? 0)}`
                     : secs(done[s] ?? 0)
                   : null;

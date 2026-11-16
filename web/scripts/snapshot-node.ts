@@ -24,7 +24,7 @@ export async function bootFromSnapshot(dir = defaultDir, io = { stdout: () => {}
     blob,
   });
   const py = await loadPyodide({ ...options, ...io });
-  // a lazy snapshot (SNAPSHOT_NO_MPL=1): its graphics part written into site-packages, as the page's worker does after "ready"
+  // a lazy snapshot: the graphics part written as the page's worker does after "ready"
   const graphics = manifest.files.graphics;
   if (graphics) writeGraphics(py, unpack(brotli, new Uint8Array(read(graphics.name)), graphics));
   return { py, manifest };
@@ -73,6 +73,6 @@ export const NATIVE_CHECKS: [string, string, number | null][] = [
   [
     "matplotlib: a plot with text (the font code)",
     "(lambda r: r.rc * 100 + len(r.images))(__import__('dofile.engine', fromlist=['x']).Engine('/tmp').run('clear\\nset obs 5\\ngen x = _n\\nscatter x x, title(t)', images=True))",
-    1, // rc 0 and one image: a graph that could not be drawn is rc 0 with no image (engine.py, _png)
+    1, // rc 0 and one image: a graph that could not be drawn is rc 0 with no image
   ],
 ];

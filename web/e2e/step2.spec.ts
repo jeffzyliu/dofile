@@ -15,7 +15,7 @@ type StartFiles = {
   snapshot: {
     snapshot: { name: string; raw: number; size: number };
     bundle: { name: string; raw: number; size: number };
-    graphics?: { name: string; raw: number; size: number }; // a lazy snapshot's graphics part (counted in `download`, not a start file)
+    graphics?: { name: string; raw: number; size: number }; // a lazy snapshot's graphics part: in `download`, no start file
   };
 };
 type Progress = { received: number; total: number };
@@ -140,7 +140,7 @@ test.describe(() => {
 
     // the download size is written into the page by the build: the list's download size, with no request for it
     expect(list.download).toBeGreaterThan(30e6);
-    // the page's own files are not downloaded; the graphics part is (it is in `download`, and not in the list's files)
+    // the page's own files are not downloaded; the graphics part is
     expect(list.download - (list.snapshot.graphics?.size ?? 0)).toBeLessThan(list.compressed);
     expect(await page.evaluate(() => window.__dofile.engineBytes)).toBe(list.download);
     expect(await page.locator('meta[name="dofile-engine-bytes"]').getAttribute("content")).toBe(String(list.download));
@@ -242,7 +242,7 @@ test("download: the counts reach the total, abort keeps the finished files, and 
     };
   });
   // with what `mount` needs of the list it has just checked, so that the start which follows fetches no list
-  // the total is what comes before the start: a lazy graphics part follows it (the dialog says how much, the status bar shows it)
+  // the total is what comes before the start: a lazy graphics part follows it
   const part = list.snapshot.graphics?.size ?? 0;
   expect(second.done).toEqual({
     cached: true,

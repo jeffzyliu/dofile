@@ -108,9 +108,8 @@ export function StatusBar() {
   );
 }
 
-/** A lazy snapshot's graphics part while it downloads after the start: "Graphs loading" and a ring of its percent (the
- *  status bar; the phone's strip, log/CommandLine.tsx PhoneStrip). Nothing before the engine started, once it landed, or
- *  after a failed fetch (it is fetched again; a graph's own error says why). Not a live region (the status bar's rule). */
+/** "Graphs loading" and a ring of its percent while the graphics part downloads after the start. Nothing before the engine
+ *  started, once it landed, or after a failed fetch (a graph's own error says why). Not a live region. */
 export function GraphsLoading() {
   const g = graphicsPart.value,
     s = engine.value.s;

@@ -246,13 +246,13 @@ export function bundle(
   return { dso: py._module.__dsoLog, index, blob };
 }
 
-// The shared buffer the page hands a lazy snapshot's graphics part over in (client.ts writes it, worker.ts reads it): Int32
-// [state, length, attempt, 0], then the part (or the reason it failed) from this byte.
+// Where the part (or the reason it failed) starts in the shared buffer the page hands the graphics part over in; the
+// header is Int32 [state, length, tries, 0] (worker.ts).
 export const PART_HEADER = 16;
 
-// The graphics part of a lazy snapshot (SNAPSHOT_NO_MPL=1, docs/lazy-matplotlib.md), decompressed: one file holding its index
-// and its files, so one fetch and one Cache entry: the index's length (4 bytes, little-endian), the index (JSON, a BundleIndex
-// of absolute paths under site-packages), then the files in the index's order.
+// The graphics part of a lazy snapshot (docs/lazy-matplotlib.md), decompressed, as one file: the index's length (4
+// bytes, little-endian), the index (JSON, a BundleIndex of absolute paths under site-packages), then the files in its
+// order.
 export function packGraphics(index: BundleIndex, blob: Uint8Array): Uint8Array {
   const head = new TextEncoder().encode(JSON.stringify(index)),
     out = new Uint8Array(4 + head.length + blob.length);
@@ -262,8 +262,8 @@ export function packGraphics(index: BundleIndex, blob: Uint8Array): Uint8Array {
   return out;
 }
 
-// The files of a decompressed graphics part (packGraphics) into Pyodide's file system. Python finds them at the next import
-// (importlib's directory caches are dropped). Returns the number of files written. Throws on a part that does not add up.
+// Writes the files of a graphics part (packGraphics) into Pyodide's file system; Python finds them at the next import.
+// Returns the number of files written. Throws on a part that does not add up.
 export function writeGraphics(py: PyodideAPI, raw: Uint8Array): number {
   const n = new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getUint32(0, true);
   const index: BundleIndex = JSON.parse(new TextDecoder().decode(raw.subarray(4, 4 + n)));
@@ -279,8 +279,12 @@ export function writeGraphics(py: PyodideAPI, raw: Uint8Array): number {
   return index.length;
 }
 
-// loadPyodide options for a restore. `create` is the patched module's default export; `saved` is {snapshot, dso, index,
-// blob} as written by the build script. `lap(name)` is called after each step, for timing.
+/**
+ * loadPyodide options for a restore.
+ * @param create - the patched module's default export.
+ * @param saved - as written by the build script.
+ * @param lap - called after each step, for timing.
+ */
 export function restoreOptions(
   create: CreateModule,
   { snapshot, dso, index, blob }: { snapshot: Uint8Array; dso: DsoRecord[]; index: BundleIndex; blob: Uint8Array },
@@ -345,9 +349,8 @@ export function inflate(
   }
 }
 
-// `inflate`, resumable: each next() decodes `inStep` bytes of input (yielding the output's length so far), and the last
-// returns the output. The lazy graphics part is decoded so (worker.ts, PartDecode): between two steps a run can start or a
-// Break be taken, and the decode goes on from where it stopped.
+// `inflate`, resumable: each next() decodes `inStep` bytes of input and yields the output's length so far; the last
+// returns the output. The graphics part is decoded so: between two steps a run can start or a Break be taken.
 export function* inflateSteps(
   brotli: BrotliWasmType,
   input: Uint8Array,
@@ -427,7 +430,7 @@ export function unpack(
   return inflate(brotli, bytes, file.raw);
 }
 
-// `unpack` in steps of `inStep` input bytes (inflateSteps): the same checks first, then one step per next().
+// `unpack` in steps of `inStep` input bytes (inflateSteps).
 export function* unpackSteps(
   brotli: BrotliWasmType,
   bytes: Uint8Array,
@@ -442,8 +445,8 @@ export function* unpackSteps(
   return yield* inflateSteps(brotli, bytes, file.raw, { inStep });
 }
 
-// `unpack`, with the native decoder when `native` is set and it works; any failure of it falls back to brotli-wasm, which
-// then gives the error if the file really is damaged. Returns [bytes, "native" | "wasm" | "none" (already decoded)].
+/** `unpack` with the native decoder when `native` is set; a failure of it falls back to brotli-wasm, which then reports
+ *  a damaged file. Returns the bytes and the decoder used ("none": already decoded). */
 export async function unpackAsync(
   brotli: BrotliWasmType,
   bytes: Uint8Array<ArrayBuffer>,

@@ -1,10 +1,10 @@
-// Builds the Pyodide memory snapshot the page starts from by default, unless ?snapshot=0 (`npm run snapshot`): Python started, the dofile wheel
-// installed, numpy, scipy, matplotlib, openpyxl and the engine's modules imported and one program run, so the page doesn't
-// repeat that. Writes public/snapshot/ (gitignored): the heap image and the site-packages bundle, brotli-compressed
-// (about 27 MB at brotli 11 with docstrings stripped; 229 MB uncompressed, matplotlib's part included), plus the lazy graphics part in a third file (7.7 MB), small JSON files and a manifest, the snapshot's build record (what it was built from:
-// scripts/build-id.ts, inputs()). Rebuild after changing the dofile wheel, a wheel in web/wheels/ or the pyodide version: a build
-// refuses a stale snapshot, and in development the page says "updated" (scripts/build-id.ts, staleness). Needs the network once
-// (micropip fetches openpyxl from PyPI); numpy and the rest come from node_modules/pyodide.
+// Builds the Pyodide memory snapshot the page starts from by default (`npm run snapshot`): Python started, the dofile
+// wheel installed, numpy, scipy, openpyxl and the engine's modules imported and one program run. Writes
+// public/snapshot/ (gitignored): the heap image and the site-packages bundle, brotli-compressed (about 27 MB at brotli
+// 11 with docstrings stripped), the graphics part (matplotlib, 7.7 MB; below), small JSON files and a manifest
+// recording what it was built from (build-id.ts). Rebuild after changing the dofile wheel, a wheel in web/wheels/ or
+// the pyodide version. Needs the network once (micropip fetches openpyxl from PyPI); numpy and the rest come from
+// node_modules/pyodide.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -33,10 +33,9 @@ const OUT = process.env.SNAPSHOT_OUT
 const stripDocs = process.env.SNAPSHOT_STRIP_DOCS !== "0";
 // what the snapshot is built from, with their hashes: the manifest records it
 const record = inputs();
-// The lazy graphics part (experiment E1c, docs/lazy-matplotlib.md; the default, SNAPSHOT_NO_MPL=0 builds the old single snapshot):
-// leave matplotlib and what only it needs out of the snapshot: not imported before the heap is taken, its files not in the
-// bundle, but in a third file, graphics.brotli.bin, that the page fetches after the start files (client.ts, graphics) and
-// hands to the worker, whose first graph waits for it (worker.ts, waitGraphics).
+// The lazy graphics part (docs/lazy-matplotlib.md): matplotlib and what only it needs stay out of the heap and the
+// bundle, in a third file that the page fetches after the start files. SNAPSHOT_NO_MPL=0 builds the old single
+// snapshot.
 const noMpl = process.env.SNAPSHOT_NO_MPL !== "0";
 const pyodideDir = new URL("node_modules/pyodide/", here);
 
@@ -74,7 +73,8 @@ await installEngine(py, { mock: noMpl ? mplParts : [] }); // the dofile wheel an
 lap("dofile and its dependencies installed");
 
 if (noMpl) {
-  // removed before the imports (openpyxl imports pillow when it finds it): distributions that only matplotlib needs (checked against the others' Requires-Dist below); the build stops if one was imported
+  // removed before the imports, because openpyxl imports pillow when it finds it: the distributions only matplotlib
+  // needs (checked against the others' Requires-Dist below)
   const dropped = py.runPython(`
 import sys, os, shutil, json, importlib.metadata as md, re
 drop = ${JSON.stringify(mplParts)}
@@ -144,7 +144,7 @@ gc.collect()
 `);
 lap("imports done, program run");
 if (noMpl) {
-  // libraries opened before the removal (loadPackage may link some at once) are in the log, and their files are gone
+  // loadPackage may have linked libraries before the removal: their log entries point at files that are gone
   const log = py._module.__dsoLog;
   const gone = log.filter((r) => !py._module.FS.analyzePath(r.libName).exists);
   console.log(
@@ -209,10 +209,10 @@ for (const [name, packed, original] of [
 }
 lap("decoded again with brotli-wasm: identical");
 
-// The graphics part of a lazy snapshot: matplotlib and the packages only it needs, installed in a second, fresh Pyodide (with
-// the same PYTHONOPTIMIZE) from the wheels in node_modules/pyodide, with an unchecked-hash .pyc next to each module that a few
-// graphs import (opt-2 names when docstrings are stripped, the ones the page's Python looks for: compiling matplotlib was 2/3
-// of a first plot, docs/lazy-matplotlib.md); a module only a rarer graph imports is compiled when it is first imported. One file (packGraphics), brotli at the build's quality; the worker fetches it after "ready".
+// The graphics part: matplotlib and the packages only it needs, installed in a second, fresh Pyodide (same
+// PYTHONOPTIMIZE), with an unchecked-hash .pyc next to each module that a few graphs import (opt-2 names when
+// docstrings are stripped, the ones the page's Python looks for): compiling matplotlib was 2/3 of a first plot
+// (docs/lazy-matplotlib.md). A module only a rarer graph imports is compiled when it is first imported.
 let graphics = null;
 if (noMpl) {
   const py2 = await loadPyodide({ ...(stripDocs ? { env: { PYTHONOPTIMIZE: "2" } } : {}) });

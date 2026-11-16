@@ -65,8 +65,7 @@ export function listStartFiles(
     }
   }
   const sum = (key: "size" | "compressed") => files.reduce((n, f) => n + f[key], 0);
-  // a lazy snapshot's graphics part (manifest files.graphics) is not a start file, but download() fetches it right after
-  // them (client.ts): it counts in the size the visitor is told
+  // the graphics part of a lazy snapshot is no start file, but it counts in the size the visitor is told
   const download =
     files.reduce((n, f) => n + (f.download ? f.compressed : 0), 0) + (manifest?.files?.graphics?.size ?? 0);
   return { built, buildId: id, snapshot, files, size: sum("size"), compressed: sum("compressed"), download };

@@ -1077,7 +1077,7 @@ input.filter::placeholder {
   }
 }
 
-/* "Graphs loading" and its ring (editor/StatusBar.tsx GraphsLoading): the status bar and the phone's strip; never cut */
+/* "Graphs loading" and its ring (GraphsLoading); never cut */
 .graphs-loading {
   display: inline-flex;
   align-items: center;

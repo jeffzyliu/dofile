@@ -128,7 +128,7 @@ export function connectEngine({
   canInterrupt?: boolean;
 }) {
   client.onGraphics?.((p) => {
-    graphicsWriter.part.value = p; // only progress for the status bar: no state is decided by it
+    graphicsWriter.part.value = p;
   });
   clearTimeout(breakTimer);
   download?.stop.abort();

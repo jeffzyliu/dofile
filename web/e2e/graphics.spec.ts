@@ -1,15 +1,10 @@
-// A lazy snapshot's graphics part (experiment E1c, docs/lazy-matplotlib.md): matplotlib is not in the snapshot but in
-// graphics.brotli.bin, which the page fetches after the start files and hands to the worker. Only a graph waits for it: a
-// run at "ready" that draws nothing does not, a Break while a graph waits is an ordinary Break (rc 1, data kept, the part
-// not fetched again), a graph after it lands draws, and without it (offline on a first visit) a graph fails with a clear
-// error, and the part is fetched again for the next graph. A return visit's run at "ready" does not wait for the part's
-// unpack or import (they start after the engine has been idle a while). Without a SharedArrayBuffer (no cross-origin
-// isolation) graphs still draw: the worker alone fetches the part, the page never does, yet the page shows the download
-// (the worker tells it) and a graph that fetches it in a run says it is waiting; a damaged part is not taken from the HTTP
-// cache again. While the part downloads
-// after the start, "Graphs loading" and a ring show (the status bar; the phone's strip). A return visit reads the part from
-// the Cache while the engine starts, not once it has started. The part's request is held or refused with page.route (the route sees the
-// page's requests and its worker's).
+// A lazy snapshot's graphics part (docs/lazy-matplotlib.md): matplotlib is in a file the page fetches after the start
+// files. Only a graph waits for it: a run at "ready" that draws nothing does not, a Break while a graph waits is an
+// ordinary Break (rc 1, data kept), and without the part (offline on a first visit) a graph fails with a clear error
+// and the part is fetched again for the next graph. A return visit reads it from the Cache while the engine starts, and
+// a run at "ready" does not wait for its unpack or import. Without a SharedArrayBuffer (no cross-origin isolation)
+// graphs still draw: the worker alone fetches the part, and the page shows the download from its messages. The part's
+// request is held or refused with page.route (it sees the page's requests and its worker's).
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -109,7 +104,7 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
   expect(drawn.images).toHaveLength(1);
   expect(seen.hits, "the part is fetched once, the Break did not reset the engine").toBe(1);
 
-  // WebKit drops the Cache API of Playwright's in-memory context on a reload (engine.spec.ts uses a profile on disk for that)
+  // WebKit drops the Cache API of Playwright's in-memory context on a reload
   if (browserName === "webkit") return;
   lines.length = 0;
   await page.reload();
@@ -127,9 +122,9 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
   expect(seen.hits, "read from the Cache, not fetched again").toBe(1);
 });
 
-// A persistent profile on disk (engine.spec.ts, the default start): WebKit drops the Cache API of Playwright's in-memory
-// context on a reload, so this is a real return visit on every project. The order is read off the page's own clock (an init
-// script: the page's "[dofile] graphics part" lines and the first "ready"), not the order console events arrive in.
+// A persistent profile on disk, so that the reload is a real return visit on every project (WebKit's in-memory context
+// drops the Cache API). The order is read off the page's own clock (an init script), not the order console events
+// arrive in.
 test("a return visit reads the part from the Cache before ready; a graph sent at ready draws", async ({
   playwright,
   browserName,
@@ -271,8 +266,7 @@ test("without a SharedArrayBuffer (no cross-origin isolation): the worker alone 
   await startEngine(page);
   await ready(page);
   await expect.poll(() => types.length, { message: "the worker's own fetch began" }).toBeGreaterThan(0);
-  // the download is shown although the page does not fetch it: the worker says it began (the maintainer's rule: a download
-  // is never hidden from the user)
+  // the download is shown although the page does not fetch it: the worker says it began (a download is never hidden)
   await expect(page.getByRole("progressbar", { name: /^Graphs loading, \d+\.\d of \d+\.\d MB$/ })).toBeVisible();
   const t0 = Date.now();
   const r = await run(page, "clear\nset obs 5\ngen x = _n\nscatter x x");
