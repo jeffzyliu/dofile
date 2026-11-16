@@ -53,8 +53,8 @@ export const Labels = ({ labels, at }: { labels: ComponentChildren[]; at: number
   </span>
 );
 
-/** A marked place in the layout that a step 4 part fills. It shows what goes there, so the shell can be seen and tested
- *  before the part is built. Remove it with the part's first commit. */
+/** A marked place in the layout that a part fills. It shows what goes there, so the shell can be seen and tested before
+ *  the part is built. */
 export const Placeholder = ({ step, children }: { step: string; children: ComponentChildren }) => (
   <div class="placeholder" data-placeholder={step}>
     <b>Step {step}</b>

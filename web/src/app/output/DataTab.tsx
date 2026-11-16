@@ -1,11 +1,6 @@
-// The Data tab (docs/design/SPEC.md, section 3.8; P/Data, S 17): the facts of the data in memory, the "Filter variables"
-// field, the variables table, and Browse, the first rows read only. It reads `data`, `rows` and `memory`, which run.ts
-// fills after each run. It never calls `browse`: "Show 50 more" is run.ts moreRows(), which appends to `rows`.
-//
-// A click on a name picks it (`pickedVar`): Browse scrolls to its column and marks it, and nothing else happens: no
-// command, nothing in the log, the editor or the command line. Names are buttons, one in the tab order; ↑ ↓ Home End
-// move the focus, Enter or Space picks; the picked one has aria-current. The filter text, the focused name and the cells
-// shown whole are signals of view.ts, so the tab comes back as it was after a layout change.
+// The Data tab (docs/design/SPEC.md, section 3.8): the facts of the data in memory, "Filter variables", the variables
+// table, and Browse (the first rows only). It never calls `browse`: "Show 50 more" is run.ts moreRows(). Picking a
+// variable name (`pickedVar`) only scrolls Browse to its column and marks it: no command, nothing in the log.
 
 import { useEffect, useRef } from "preact/hooks";
 import { moreRows } from "../run.ts";

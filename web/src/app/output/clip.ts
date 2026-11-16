@@ -1,5 +1,5 @@
-// What the Output tabs do with the clipboard and with a graph's PNG: copy text, copy an image, hand the PNG to the
-// browser's download (or, on a phone, to the share sheet). Each says so with a toast. The graph's PNG is base64 text.
+// What the Output tabs do with the clipboard and with a graph's PNG (base64 text): copy text or an image, download the
+// PNG (on a phone, the share sheet). Each says so with a toast.
 
 import { saveAs } from "../files.ts";
 import { isPhone, showToast } from "../state.ts";

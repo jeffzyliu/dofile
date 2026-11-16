@@ -1,8 +1,7 @@
-// Straight quotes for typed text. A phone's "Smart Punctuation" turns a typed ' or " into a curly quote (U+2018, U+2019,
-// U+201C, U+201D) and two hyphens into an em dash (U+2014), and Stata-syntax code has no use for them: a local macro is
-// closed by a straight apostrophe and a string by straight double quotes. These functions map such characters back to what
-// was typed. They are for TYPED text only (the command line's input handling and the editor's input handler call them for
-// `insertText` and `insertReplacementText`); a paste, a drop and text already there stay as they are. Pure: no DOM.
+// Straight quotes for typed text. A phone's "Smart Punctuation" turns a typed ' or " into a curly quote and two hyphens
+// into an em dash; Stata-syntax code has no use for them (a local macro is closed by a straight apostrophe, a string by
+// straight double quotes). These map such characters back. For TYPED text only (`insertText`, `insertReplacementText`):
+// a paste, a drop and text already there stay as they are. Pure: no DOM.
 
 /** The characters Smart Punctuation makes, and the text they stand for. The en dash (U+2013) is left alone. */
 const STRAIGHT: Record<string, string> = {

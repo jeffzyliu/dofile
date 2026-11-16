@@ -1,24 +1,7 @@
-// STEP 4d: the banners of the engine's states and of the reset (docs/design/SPEC.md, sections 3.10 and 5), drawn with
-// ui/Live.tsx's <Banner>.
-//  - EditorStateBanners: above the editor, from `engine` alone (not in `banners`): no engine (`declined`, S 5; its
-//    button is "Start engine", as the toolbar's, and opens the download prompt), did not
-//    start (`failed`, S 6), failed twice (S 7); neither has role="alert": the machine's `say` says each once in the live
-//    region (a banner in the editor slot is display:none on a phone's other views, where an alert is never announced). The action follows the `reason` (words.ts
-//    failedActions), never the text: no-wasm "Browsers that work"; download "Try again"; updated "Reload the
-//    page"; unknown both. "Download all (.zip)" is off while the store has no file (`hasFiles`).
-//  - LogStateBanners: above the log, from `engine` and `isolated`: running (E?r; with no cross-origin isolation S 11 says
-//    what Break does instead), stopping (S 9, from the Break press until the engine confirms; once the Break has been pending
-//    1 s it has "Don't reset: wait for it" and takes the focus on it; at 0 s left it says the reset is under way), waiting (S 9b, takes the focus). With no cross-origin isolation the
-//    running banner is a warning, as S 11 draws it.
-//  - ResetBanner { b: "reset", reason, kind, run } above the log (P/Notices): "Run the file again" only when the reset cut
-//    a run of a file and the visitor did not ask for it (words.ts rerunPath); it runs that file (editorCommands.runFile(path),
-//    on while the engine is ready and the file is open as text). "Dismiss". engine.ts adds it on a reset.
-//  - StorageBanner { b: "storage" } above the editor (S 19).
-//  - DownloadFailedBanner { b: "download-failed" } above the editor (on a phone on every view; no role="alert": files.ts
-//    says it once in the live region).
-// Focus: a banner with controls hands it on as it goes (focus.ts useFocusOnLeave); one that takes it does so on mount
-// (useFocusOnMount). docs/web-page-flows.md, section 1.
-// The words the spec does not give are drafts (words.ts; SPEC section 8, "Step 4d: draft words").
+// The banners of the engine's states and of the reset (docs/design/SPEC.md, sections 3.10 and 5), drawn with
+// ui/Live.tsx's <Banner>. The engine-state banners above the editor have no role="alert": the machine's `say` says each
+// once, since a banner in the editor slot is display:none on a phone's other views, where an alert is never announced.
+// The words the spec does not give are drafts (words.ts). Focus: docs/web-page-flows.md, section 1.
 import { useRef } from "preact/hooks";
 import type { BannerOf } from "../banners";
 import { breakPending, resetsIn, since } from "../editor/clock.ts";
@@ -45,7 +28,7 @@ import {
   twiceWords,
 } from "./words.ts";
 
-/** Where "Browsers that work" (S 6) goes (OQ-18, a proposal): the landing page's section of that name (`/#browsers`). */
+/** Where "Browsers that work" (S 6) goes: the landing page's section of that name (`/#browsers`). */
 export const BROWSERS_URL = `${LANDING_URL}#browsers`;
 
 const aboutMB = engineBytes ? `about ${Math.round(engineBytes / 1e6)} MB` : null;
@@ -204,7 +187,7 @@ function KeepWaitingButton() {
 }
 
 /** `breaking`, from the press until the engine confirms (the run ends, or a reset). Its button and the focus come after
- *  STOPPING_AFTER_S, so a Break that lands at once flashes no button (SPEC OQ-21). */
+ *  STOPPING_AFTER_S, so a Break that lands at once flashes no button. */
 function StoppingBanner({ st }: { st: Extract<EngineState, { s: "breaking" }> }) {
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (

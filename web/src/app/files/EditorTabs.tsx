@@ -1,14 +1,5 @@
-// The editor's tabs (docs/design/SPEC.md, section 3.2), in the Editor pane's head, and the phone's file switcher.
-//  - EditorTabs: role="tablist" aria-label="Open files"; one tab per open file (`tabs`, `activeTab`) with its name (and
-//    its folder when two open files share a name), the unsaved dot (role img, "unsaved changes") and the × (mouse only,
-//    aria-hidden). Roving focus: the active tab is in the tab order; Left/Right, Home/End move and select; Delete closes
-//    the selected tab (aria-keyshortcuts="Delete"). Closing a tab with unsaved edits asks first (dialog close-tab:
-//    actions.ts askCloseTab). Ctrl/Cmd+W is the browser's: not bound. After a tab closes from the keyboard or the
-//    close-tab dialog, the focus goes to the tab now selected; with none left, to the file tree's row in the tab order
-//    (when the list is shown), else to the editor (focusAfterClose).
-//  - FileSwitcher: the phone's top bar title on the Editor view (WP 1): the open file's name and ▾, a menu: Save (off unless
-//    the open file is a text file), the open files (a list that scrolls), "Close <name>" (the phone has no ×) and "Show all files"; with no open file it says "Editor".
-// `dirty` is the editor's (state.ts setDirty); this file never sets it.
+// The editor's tabs (docs/design/SPEC.md, section 3.2) in the Editor pane's head, and the phone's file switcher
+// (FileSwitcher). Ctrl/Cmd+W is the browser's: not bound. `dirty` is the editor's (state.ts setDirty).
 import { signal } from "@preact/signals";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { editorCommands } from "../editor/commands.ts";
@@ -183,8 +174,7 @@ const switcherItems = (): MenuItem[] => {
 };
 
 /** The phone's top bar title on the Editor view: the open file's name (or "Editor" with none) and ▾; a tap opens the
- *  menu: Save, the open files, "Close <name>" and "Show all files" (the Files view); a second tap closes it. One button in every case, as wide as the
- *  title, so the top bar's boxes never move (e2e/shell.spec.ts). */
+ *  menu. One button in every case, as wide as the title, so the top bar's boxes never move (e2e/shell.spec.ts). */
 export function FileSwitcher() {
   const active = tabs.value.find((t) => t.path === activeTab.value);
   const label = active ? tabLabels(tabs.value.map((t) => t.path))[tabs.value.indexOf(active)] : "Editor";

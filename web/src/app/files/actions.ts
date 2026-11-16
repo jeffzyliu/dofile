@@ -1,20 +1,7 @@
 // What the file panel and the editor's tabs do to files and tabs (docs/design/SPEC.md, sections 3.1, 3.2 and 3.10), in
-// plain TypeScript so the Node tests run it; FilesPane.tsx, EditorTabs.tsx and dialogs.tsx call these.
-//  - Files change through the store (app/store.ts); a change lists the store again by itself (files.ts).
-//  - Tabs: this file and open.ts write `tabs` and `activeTab` (never `dirty`: the editor's, state.ts setDirty), always
-//    before they call the editor (editorCommands.closed, renamed, reload), through the object.
-//  - Upload: the files that clash with none are written first, then each clash is asked in its own dialog
-//    ({ d: "clash", path, index, total }); what the dialog shows beyond those is `clashNow()`. The dialog answers with
-//    answerClash(). Esc, or another dialog put in the clash's place with no answer, keeps yours for every clash left. Uploads run one at a
-//    time (a second waits for the first to end), and a clash waits while another dialog is open: it never replaces one.
-//    A clash over an open file with unsaved edits is asked even after "Do the same" with Replace (never after Esc or
-//    Keep mine for the rest: keeping it loses nothing). A clash whose stored bytes are the uploaded bytes is neither
-//    asked nor written, unless the file is open with unsaved edits (replacing that discards them). The file menu's
-//    "Restore the sample" (sample.ts) is an upload of the sample's files with the sample's words (`WORDS`).
-//  - The changes that tabs follow (a rename, a delete) and the editor's Save take turns (fileTurn): a rename or a delete
-//    keeps its turn until the tabs have followed it, so a Save pressed meanwhile writes under the tab's path as it is
-//    then (renamed, or closed: no write). A Save's turn only issues its write: the store applies changes in the order
-//    they are called (engine/store.ts `change`), so a rename that comes after it moves the bytes it wrote.
+// plain TypeScript so the Node tests run it. Files change through the store (app/store.ts), which lists itself again
+// (files.ts). This file and open.ts write `tabs` and `activeTab`, always before they call the editor (editorCommands);
+// `dirty` is the editor's (state.ts setDirty).
 import { effect } from "@preact/signals-core";
 import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
@@ -62,7 +49,10 @@ function closeUnder(top: string) {
 
 let turns: Promise<unknown> = Promise.resolve(); // the changes that tabs follow, one after the other
 
-/** Run `fn` once the changes started before it have ended (a rejection ends one too). Resolves or rejects as `fn`. */
+/** Run `fn` once the changes started before it have ended (a rejection ends one too). Resolves or rejects as `fn`.
+ *  A rename or a delete keeps its turn until the tabs have followed it, so a Save pressed meanwhile writes under the
+ *  tab's path as it is then (renamed, or closed: no write). A Save's turn only issues its write: the store applies
+ *  changes in call order (engine/store.ts `change`), so a later rename moves the bytes it wrote. */
 export function fileTurn<T>(fn: () => Promise<T>): Promise<T> {
   const run = turns.then(fn);
   turns = run.catch(() => {});
@@ -195,8 +185,7 @@ export interface Incoming {
   data: Uint8Array;
 }
 
-/** The words of an upload's clash dialog and toast: an upload's own, or the sample's (a restore, sample.ts). The
- *  sample's are drafts (SPEC 8, step 5). */
+/** The words of an upload's clash dialog and toast: an upload's own, or the sample's (a restore, sample.ts). */
 export const WORDS = {
   upload: {
     title: (path: string) => `${path} is already here`,
@@ -261,14 +250,17 @@ const noDialog = () =>
 
 let uploads: Promise<unknown> = Promise.resolve(); // the uploads in progress, one after the other
 
-/** Upload `items` into the store. The files that clash with no file in the store are written first (one that clashes
- *  with a file of the same bytes, not open with unsaved edits, is not: it counts as uploaded); then each other clash is
- *  asked (Keep mine is the default). Replacing an open file reloads it in the editor (F 3.3); one that is no longer
- *  UTF-8 text closes its tab. Ends with the toast "3 files uploaded". A file the store refuses (a path where a folder
- *  is, the browser's quota) or whose name holds a control character (a line break) is counted, and its reason goes to
- *  the console. Uploads run one at a time: a second one starts when the first has ended. Resolves with the paths
- *  written. `words: "sample"` (a restore of the sample, sample.ts) has the dialog and the toast say the sample's words:
- *  "Sample restored", "The sample is already here" (nothing to write and nothing asked), "Couldn't restore the sample". */
+/** Upload `items` into the store. Files that clash with none are written first; then each clash is asked in its own
+ *  dialog (Keep mine is the default). A clash whose stored bytes are the uploaded ones is neither asked nor written
+ *  (it counts as uploaded), unless the file is open with unsaved edits. A clash over an open file with unsaved edits is
+ *  asked even after "Do the same" with Replace; keeping it loses nothing, so Esc or Keep mine for the rest need no
+ *  question. A clash waits while another dialog is open: it never replaces one. Replacing an open file reloads it in
+ *  the editor; one that is no longer UTF-8 text closes its tab. Ends with the toast "3 files uploaded". A file the
+ *  store refuses (a path where a folder is, the quota) or whose name holds a control character is counted, and its
+ *  reason goes to the console. Uploads run one at a time.
+ *  @param words - "sample" (a restore, sample.ts) has the dialog and the toast say "Sample restored", "The sample is
+ *  already here" (nothing to write, nothing asked), "Couldn't restore the sample".
+ *  @returns the paths written */
 export function upload(items: Incoming[], words: WordsOf = "upload"): Promise<string[]> {
   const run = uploads.then(() => uploadNow(items, words));
   uploads = run.catch(() => {});

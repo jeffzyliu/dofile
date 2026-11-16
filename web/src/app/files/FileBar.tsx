@@ -1,16 +1,5 @@
-// The bars over an open .csv, .tsv or .log in the editor (docs/design/SPEC.md, section 3.11; P/.csv, P/.log). App.tsx
-// places <FileBar /> above the editor in the Editor pane; it reads `tabs` and `activeTab` and draws nothing for other
+// The bars over an open .csv, .tsv or .log in the editor (docs/design/SPEC.md, section 3.11). Draws nothing for other
 // files (a .dta tab's bars are output/DtaView.tsx's).
-//  - .csv, .tsv: bar 1 "data/raw/survey.csv · 1,204 rows" (the lines that are not empty, of the file as the store has
-//    it, which is what Import reads); bar 2 `import delimited "data/raw/survey.csv", clear`, "Import" (run.ts
-//    runCommand; disabled unless the engine is `ready`; with no engine, start.ts, it is off, aria-disabled and `.off`,
-//    still focusable, and a press only says why in a toast, "Start the engine to import survey.csv"), "Copy"
-//    (aria-label "Copy the import command"; output/clip.ts copyText, toast "Copied"). The command comes from
-//    stata/quote.ts fileCommand (`$` escaped); for a name a command cannot hold (a backquote, a line break, `"'`) bar 2
-//    says why in place of the command, and Import and Copy are off.
-//  - .log: "output/analysis.log · written by the last run" (the second part when `fresh` has it), "Download" (the file
-//    as the store has it).
-// The column colors of a .csv and the .log tokenizer are the editor's (step 4b).
 import { useEffect, useState } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
 import { copyText } from "../output/clip.ts";
@@ -76,7 +65,7 @@ export function FileBar() {
   const made = fileCommand("import delimited", path);
   const command = "command" in made ? made.command : null;
   const offer = startOffer(engine.value),
-    off = offer !== null; // Import is off, and says why when pressed
+    off = offer !== null; // Import is off (aria-disabled, still focusable) and says why in a toast when pressed
   return (
     <>
       <div class="filebar">

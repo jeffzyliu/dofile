@@ -1,7 +1,6 @@
-// The Graph tab (docs/design/SPEC.md, section 3.7; E, S 16): the shown graph on its card, and under it a foot with a
-// thumbnail for each of the session's graphs, "graph 1 of 1 · scatter wage educ", "Open full size" and "Export PNG".
-// The graph shown is `graphs[graphIndex]`; `graphIndex` is kept in range here, so a "Clear log" or a drop of the oldest
-// graph never leaves the tab on nothing. Its state is all in signals (state.ts: graphs, graphIndex, graphFull).
+// The Graph tab (docs/design/SPEC.md, section 3.7): the shown graph on its card, and a foot with a thumbnail for each
+// graph and the actions. `graphIndex` is kept in range here, so a "Clear log" or a drop of the oldest graph never leaves
+// the tab on nothing.
 
 import type { ComponentChildren } from "preact";
 import { graphFull, graphIndex, graphs } from "../state.ts";
@@ -51,8 +50,8 @@ export function Thumbs({ list, current, label }: { list: Graph[]; current: numbe
   );
 }
 
-/** The card the graph is drawn on: its own background when the run drew the plot dark (OQ-21: the card follows the
- *  run's theme). A .png from the files has its own colors, which are not known: it is always on the light card. */
+/** The card the graph is drawn on: its own background when the run drew the plot dark (the card follows the run's
+ *  theme). A .png from the files has its own colors, which are not known: it is always on the light card. */
 export const cardTheme = (g: Graph) => (g.from === "run" ? g.theme : "light");
 
 export const GraphCard = ({ g, list, children }: { g: Graph; list: Graph[]; children?: ComponentChildren }) => (

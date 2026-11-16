@@ -1,14 +1,13 @@
-// STEP 4d: the logic and the words of the dialogs and banners that are plain text, with no view and no signal of their own
-// (so Node tests them: test/states.test.ts). The words the spec draws are in the views, as drawn; the words it does not
-// give are drafts, marked DRAFT here and listed in SPEC section 8 ("Step 4d: draft words") for the maintainer to approve.
+// The logic and the words of the dialogs and banners that are plain text, with no view and no signal of their own (so
+// Node tests them: test/states.test.ts). The words the spec does not give are drafts (SPEC section 8).
 
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
 import type { EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../types.ts";
 
-/** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by default). The page's words
- *  count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
+/** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by
+ *  default). The page's words count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
 export const GRACE_S = BREAK_GRACE_MS / 1000;
-/** The stopping banner's "Don't reset: wait for it" (S 9) and its focus come once the Break has been pending this long (SPEC OQ-21). */
+/** The stopping banner's "Don't reset: wait for it" (S 9) and its focus come once the Break has been pending this long. */
 export const STOPPING_AFTER_S = 1;
 
 /** A time as the drawings write it: "6 s", "7.1 s" (under 10 s one decimal, else whole seconds). */
@@ -33,12 +32,12 @@ export const stageNow: Record<Stage, string> = {
  *  question put to the engine. A run in progress asks: what it holds is known only when it ends. */
 export const resetAsks = (state: EngineStateName, engineRuns: number): boolean => state !== "ready" || engineRuns > 0;
 
-/** The bold part of the stopping banner's countdown (S 9). At 0 the reset is under way: no "In 0 s". DRAFT (the 0 case). */
+/** The bold part of the stopping banner's countdown (S 9). At 0 the reset is under way: no "In 0 s". */
 export const resetIn = (left: number): string =>
   left > 0 ? `In ${left} s the engine is reset:` : "The engine is being reset now:";
 
-/** The reset banner (P/Notices, OQ-9): `head` in bold, then `rest`. `reason` is the machine's, the developer's words for what
- *  happened ("the engine crashed (<cause>)"); the visitor sees it with a cause in parentheses cut off. DRAFT (OQ-9, OQ-19c). */
+/** The reset banner: `head` in bold, then `rest`. `reason` is the machine's, the developer's words for what happened
+ *  ("the engine crashed (<cause>)"); the visitor sees it with a cause in parentheses cut off. */
 export function resetWords(kind: ResetKind, reason: string, isolated: boolean): { head: string; rest: string } {
   const kept = "The data in memory is lost; your files are kept.";
   if (kind === "user") return { head: "You reset the engine.", rest: kept };
@@ -64,7 +63,7 @@ export function resetWords(kind: ResetKind, reason: string, isolated: boolean): 
 export const rerunPath = (kind: ResetKind, run: RunHead | null): string | null =>
   kind !== "user" && run?.kind === "file" && run.path ? run.path : null;
 
-/** What the running banner (E?r) calls the run: "lines 14–15", "analysis.do", "a command". DRAFT (E?r draws lines only). */
+/** What the running banner (E?r) calls the run: "lines 14–15", "analysis.do", "a command". */
 export function runningWhat(run: RunHead): string {
   if (run.kind === "selection" && run.lines) {
     const [a, b] = run.lines;
@@ -103,14 +102,14 @@ export const twiceWords = (reason: FailReason): { head: string; rest: string } =
   rest: "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe: you can still edit and download them.",
 });
 
-// ---- OQ-10: the two notes in the page's own words (DRAFT; log/LogView.tsx shows them: see SPEC 8, "Step 4d") ----
+// ---- the two notes in the page's own words (log/LogView.tsx shows them) ----
 
 /** Community commands the engine does not have (F 3.5). */
 export const COMMUNITY = ["reghdfe", "esttab", "estout", "outreg2", "ivreg2", "xtivreg2", "ftools", "winsor2"];
 
 /** A note to put under a run's error, in the page's words, or null (log/LogView.tsx shows it). `rc` and `error` are the
- *  run's. DRAFT (OQ-10): 1. `restore` with nothing preserved (r(622)); 2. a community command (r(199)). A temporary name
- *  from an earlier run (r(601) naming the engine's temporary file) has no note: the engine's own line says it
+ *  run's. Two cases: `restore` with nothing preserved (r(622)); a community command (r(199)). A temporary name from an
+ *  earlier run (r(601) naming the engine's temporary file) has no note: the engine's own line says it
  *  (src/dofile/browser.py TEMPFILE_HINT, "a tempfile lasts one run: save it under a name to use it in a later run"). */
 export function noteFor(rc: number, error: string | null): string | null {
   if (!error) return null;

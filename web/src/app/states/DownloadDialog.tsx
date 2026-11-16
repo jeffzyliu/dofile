@@ -1,14 +1,8 @@
 // The engine's dialogs: the download prompt and its progress (S 1, S 2, S 3; phone S 8), and "dofile is open in another
-// tab" (WS 6). Step 3 built them as far as the start and the tab lock need (the words of the drawings, the actions).
-// STEP 4d finished them: S 2's stage list with each stage's time and S 3, the progress bar's aria-valuetext as the
-// stages, the times ("14.2 of 48 MB · 6 s"); the take-over button is aria-disabled (and `.off`, ui.css's disabled look,
-// as RunControls does) while `other-tab-taking`, and a press then does nothing.
-// "dofile is open in another tab" (WS 6): "Close editor" (the first focus: taking over ends the other tab's engine and
-// the data in its memory, so a stray Enter must not do it) and "Use dofile in this tab". WS 6 draws "Close this tab",
-// but a page may close only a tab a script opened, so the button leaves the editor for the landing page instead.
-// LANDING_URL is the landing page, the site's root (e2e/landing.spec.ts checks this button).
-// While a take-over is in progress the engine is `other-tab-taking` (a few milliseconds): the machine ignores a second
-// press of "Use dofile in this tab". 4d may mark the button aria-disabled then, with the same label.
+// tab" (WS 6). The latter's first focus is "Close editor": taking over ends the other tab's engine and the data in its
+// memory, so a stray Enter must not do it. WS 6 draws "Close this tab", but a page may close only a tab a script opened,
+// so the button leaves the editor for the landing page instead (LANDING_URL; e2e/landing.spec.ts checks it). The
+// take-over button is aria-disabled (and `.off`) while `other-tab-taking` (a few ms): the machine ignores a second press.
 
 import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";

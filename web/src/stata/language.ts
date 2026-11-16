@@ -1,7 +1,6 @@
 // Stata highlighting for CodeMirror 6, a line tokenizer (StreamLanguage). Commands come from the engine's own registry
-// (commands.json, `npm run commands`), so a highlighted command is one dofile runs; abbreviations follow the
-// registry's minimum length (`reg`, `gen`). Handles: `*` comments at line start, `//` and `///`, nested `/* */`,
-// strings and compound quotes, local macros (nested), globals, numbers, and the command word after prefixes and `:`.
+// (commands.json, `npm run commands`), so a highlighted command is one dofile runs; abbreviations follow the registry's
+// minimum length (`reg`, `gen`).
 import { StreamLanguage, type StringStream } from "@codemirror/language";
 import data from "./commands.json";
 

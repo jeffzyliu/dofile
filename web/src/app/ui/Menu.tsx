@@ -1,22 +1,13 @@
 // Menus: one open at a time, drawn by <MenuHost /> (once, in App.tsx) in the top layer (the popover API where the
-// browser has it) at the trigger's place. docs/design/SPEC.md, section 3.10:
-//  - Items are buttons with role="menuitem"; arrows, Home and End move; Enter or Space picks; Esc closes and gives the
-//    focus back to the trigger; Tab closes and moves on from the trigger; a click outside closes. A key hint at the right (`hint`); a destructive item
-//    `danger`, with "…" in its label when it asks first.
-//  - The trigger has aria-haspopup="menu" and aria-expanded.
-// Two ways to open one:
-// A `{ scroll: [...] }` entry holds items in a scrolling box (`.menu-scroll`, at most 60% of the window's height and always room left for the items around it): the phone's
-// open files. The arrow keys and Home/End still walk every item, the scrolled ones too.
-// The menu owns which item is the active one (`nav`, an index among the items that are not disabled, in the order they are
-// drawn, scroll groups included): the arrow keys and Home/End change it, and the active item takes the focus from its own
-// render (MenuEntry), once the menu is shown and in its place. The focus on an item (a click, a tap) makes it the active one.
-//   <MenuButton label="More actions" class="btn quiet icon" items={[...]}><Icon name="more" /></MenuButton>
-//   openMenu({ label: "Actions for clean.do", items, anchor: rowElement })            // Shift+F10, the menu key
-//   openMenu({ label: "Actions for clean.do", items, at: { x, y }, restore: rowEl })  // a right click
-// A picked item closes the menu (focus back to the trigger) before its onSelect runs, so a dialog it opens returns the
-// focus there too. An item with `keepOpen` (the phone's Theme) runs and leaves the menu open, the focus on it.
-// `items` may be a function: the open menu calls it at each render, so the signals it reads keep the items current
-// (Theme's label after a tap).
+// browser has it) at the trigger's place. docs/design/SPEC.md, section 3.10.
+// The menu owns which item is the active one (`nav`: an index among the items that are not disabled, in drawn order,
+// scroll groups included); the active item takes the focus from its own render (MenuEntry), once the menu is shown and
+// in its place. A picked item closes the menu (focus back to the trigger) before its onSelect runs, so a dialog it opens
+// returns the focus there too. A `{ scroll: [...] }` entry holds items in a scrolling box (`.menu-scroll`: at most 60% of
+// the window's height, always room left for the items around it); the arrow keys still walk the scrolled ones.
+// `items` may be a function: the open menu calls it at each render, so the signals it reads keep the items current.
+// Two ways to open one: <MenuButton label items>...</MenuButton>, or openMenu({ label, items, anchor | at, restore })
+// (Shift+F10, the menu key; a right click).
 
 import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";

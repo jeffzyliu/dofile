@@ -1,16 +1,5 @@
-// Opening a file (docs/design/SPEC.md, section 3.11): the file tree's Enter and click, the phone's file switcher, and
-// 4b's "Go to line" for a file that is not open (editor/commands.ts goToLine) all go through openFile(path), so the rules
-// of 3.11 live in one place:
-//  - an open file (a tab in `tabs`): only made active;
-//  - .dta: a tab { path, kind: "dta" }, made active; App.tsx shows output/DtaView.tsx (4c) in the editor's place;
-//  - .png: run.ts addFileGraph(path, base64), then the Graph tab (desktop: outputTab "graph"; phone: state.ts graphFull);
-//  - text (decodeText is not null): a tab { path, kind: "text" } in `tabs`, made active, then editorCommands.open(path,
-//    text) (`tabs` first, then the editor: SPEC 8);
-//  - for a text or .dta tab on a phone (state.ts layout "phone"): phoneTab = "editor", so the tab shows (the Files view
-//    opened it);
-//  - anything else: no tab; the banner { b: "not-text", path } in the Files pane (state.ts addBanner), one at a time:
-//    an earlier file's goes; the live region says it.
-// Plain TypeScript (no JSX), so the Node tests can run it.
+// Opening a file (docs/design/SPEC.md, section 3.11): every way to open one (the tree, the phone's file switcher, "Go to
+// line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
 import { editorCommands } from "../editor/commands.ts";
 import { addFileGraph } from "../run.ts";
 import {
@@ -28,9 +17,9 @@ import {
 import { store } from "../store.ts";
 import { baseName, extOf } from "./tree.ts";
 
-/** A file's text when its bytes are strict UTF-8 (the test the proof-of-concept page used), else null: the editor would
- *  change such a file, so it is not opened as text. A leading BOM is dropped, or with `keepBom` kept as "\uFEFF": the
- *  editor's text is decoded so (editor/ranover.ts formOf notes the BOM, which Save writes back). */
+/** A file's text when its bytes are strict UTF-8, else null: the editor would change such a file, so it is not opened
+ *  as text. A leading BOM is dropped, or with `keepBom` kept as "\uFEFF": the editor's text is decoded so
+ *  (editor/ranover.ts formOf notes the BOM, which Save writes back). */
 export function decodeText(bytes: Uint8Array, keepBom = false): string | null {
   try {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: keepBom }).decode(bytes);
@@ -52,8 +41,9 @@ function show(path: string) {
   if (isPhone.value) phoneTab.value = "editor";
 }
 
-/** Open `path` from the store as section 3.11 says (see above). Resolves once it is shown; a file the store cannot read
- *  (it was deleted meanwhile) opens nothing, and the reason goes to the console. */
+/** Open `path` from the store as section 3.11 says: `tabs` first, then the editor. Resolves once it is shown; a file the
+ *  store cannot read (deleted meanwhile) opens nothing, and the reason goes to the console. A file that is not text,
+ *  .dta or .png gets no tab but the not-text banner (one at a time: an earlier file's goes). */
 export async function openFile(path: string): Promise<void> {
   if (tabs.value.some((t) => t.path === path)) return show(path);
   const ext = extOf(path);

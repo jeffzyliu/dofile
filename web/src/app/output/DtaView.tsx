@@ -1,16 +1,7 @@
-// A .dta file's tab (docs/design/SPEC.md, section 3.11; P/.dta): not an editor. App.tsx shows <DtaView path> in the
-// editor's place while the active tab is { kind: "dta" } (4a's files/open.ts adds it); the editor stays mounted, hidden.
-//  - Bar 1: "data/wages.dta · 500 obs · 3 vars · 8 KB". Bar 2: `use "data/wages.dta", clear`, "Load" (primary: it runs
-//    the command as the command line does, run.ts runCommand; disabled unless the engine is ready; with no engine,
-//    start.ts, it is off, aria-disabled and `.off`, still focusable, and a press only says why in a toast, "Start the
-//    engine to load wages.dta") and "Copy" (the command goes to the clipboard, to paste into a do-file). The command comes from
-//    stata/quote.ts fileCommand (`$` escaped); for a name a command cannot hold (a backquote, a line break, `"'`) bar 2
-//    says why in place of the command, and Load and Copy are off. The size is the tree's (files/tree.ts formatSize).
-//    When Load ends a toast says "Loaded wages.dta" or "Couldn't load wages.dta: r(601)" (the file's name, SPEC 8).
-//  - The variables table comes from engine.ts call("describe_file", { path }) (OQ-5): the file is read apart, so the data
-//    in memory, r() and the log are untouched until Load. It is asked again when the file changes (its size or time in
-//    `files`) and when an engine becomes available; what was read stays in view.ts `dtaInfo`, since this view is
-//    unmounted when another tab is made active. With no engine: the two bars and no table.
+// A .dta file's tab (docs/design/SPEC.md, section 3.11): two bars (the file's facts; the `use` command with Load and
+// Copy) and the variables table. The table comes from call("describe_file", { path }): the file is read apart, so the
+// data in memory, r() and the log stay untouched until Load. What was read stays in view.ts `dtaInfo`, since this view
+// is unmounted when another tab is made active.
 
 import { useEffect } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
@@ -47,7 +38,7 @@ export function DtaView({ path }: { path: string }) {
   const made = fileCommand("use", path);
   const command = "command" in made ? made.command : null;
   const offer = startOffer(engine.value),
-    off = offer !== null; // Load is off, and says why when pressed
+    off = offer !== null; // Load is off (aria-disabled, still focusable) and says why in a toast when pressed
   const load = async () => {
     if (command === null) return;
     const name = baseName(path);

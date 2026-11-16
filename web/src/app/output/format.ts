@@ -1,6 +1,5 @@
-// The Output tabs' logic, with no DOM and no component (step 4c; docs/design/SPEC.md, sections 3.7 to 3.9, 3.11): how a
-// number is shown, a matrix as text, the Results tab's sections, a long Browse cell cut short, a graph's label and alt
-// text, sizes. Plain TypeScript so Node tests it (test/output.test.ts).
+// The Output tabs' logic, with no DOM (docs/design/SPEC.md, sections 3.7 to 3.9, 3.11), so Node tests it
+// (test/output.test.ts).
 
 import type { Macros, Matrix, Results, Value } from "../../engine/types.ts";
 import type { Graph } from "../types.ts";
@@ -146,7 +145,7 @@ export interface ResultSection {
 /** The Results tab's sections from `results` and `macros`, empty groups left out, and no section at all when nothing is
  *  there (the empty state). Only the e() scalars start open (and the r() scalars when e() has none, so `summarize` alone
  *  shows its numbers); Locals start open, Globals folded. A matrix row's value is its size; its name is `e(b)`.
- *  OQ-7: no Functions group, and the r() section is just "r()". Globals the engine presets that still hold their preset
+ *  No Functions group, and the r() section is just "r()". Globals the engine presets that still hold their preset
  *  value (`system_globals`: S_ADO, F1 ...) are left out; one the user set or changed shows. */
 export function sections(results: Results | null, macros: Macros | null): ResultSection[] {
   const out: ResultSection[] = [];

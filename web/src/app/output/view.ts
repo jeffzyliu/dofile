@@ -1,6 +1,5 @@
-// The Output tabs' own state: signals that live as long as the page, so a tab that is unmounted and mounted again when
-// the layout changes (a phone turned, a window resized) comes back as it was. The shared signals (graphs, rows,
-// pickedVar ...) are in state.ts; these are only the 4c views'. No other part reads or writes them.
+// The Output tabs' own state: signals that live as long as the page, so a tab unmounted and mounted again when the
+// layout changes (a phone turned, a window resized) comes back as it was. The shared signals are in state.ts.
 
 import { signal } from "@preact/signals-core";
 import type { Macros, Matrix, Results } from "../../engine/types.ts";

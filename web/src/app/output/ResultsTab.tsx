@@ -1,23 +1,7 @@
-// The Results tab (docs/design/SPEC.md, section 3.9; P/Results, S 18): one table of three fixed columns (name, value,
-// action). Sections "e() · regress", "r()" and "Locals and globals" hold groups that fold (Scalars, Macros, Matrices,
-// Locals, Globals), each with its count. Values show 8 significant digits, and every digit on a hovered row or a row with
-// keyboard focus in it (CSS only: ui.css, "results").
-// Every row's action cell holds one icon button, the clipboard ("Copy e(r2)", tooltip "Copy"): it shows on the hovered
-// row or one with keyboard focus in it, always on touch, and becomes a check for COPIED_MS after a copy (the toast names
-// the row: "Copied e(r2)"). It is the row's Tab stop for a scalar or a macro; Enter on it, or Ctrl/Cmd+C, copies every
-// digit. A scalar or macro row has no click of its own: its value is plain text a drag or a double-click selects (the
-// button's description is the whole value, for a screen reader).
-// A matrix row has a caret before its name (a button, "e(b), 1 x 3", aria-expanded) and its size ("1 x 3"). A click
-// anywhere on the row, or Enter or Space on the caret, opens the matrix in place as a grid (engine.ts call("matrix"): no
-// command, nothing in the log or the history) or folds it; a click that ends a text selection in the row does nothing.
-// Its copy icon, or Ctrl/Cmd+C on the caret, copies the whole matrix as tab-separated text and does not toggle; a copy
-// that had to read the matrix leaves it closed. A click on a grid cell copies that cell's every digit ("Copied
-// e(b)[y1, age]"); a click that ends a text selection in the grid does not. Cells are for the mouse and touch; the
-// keyboard has the row's copy icon.
-//
-// Group heads are buttons with aria-expanded. The folds, the row just copied and the open matrices are signals of
-// view.ts. An open matrix and the copied check belong to the `results` they were read for: after another run they are
-// gone, since the values could be another model's.
+// The Results tab (docs/design/SPEC.md, section 3.9): one table of name, value and action columns, in groups that fold.
+// Hover and keyboard-focus reveals (every digit, the copy icon) are CSS only (ui.css, "results"). An open matrix and the
+// copied check belong to the `results` they were read for: after another run they are gone (the values could be
+// another model's).
 
 import { useId } from "preact/hooks";
 import { call } from "../engine.ts";

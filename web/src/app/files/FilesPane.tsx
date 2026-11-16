@@ -1,35 +1,5 @@
-// The file panel (docs/design/SPEC.md, section 3.1). App.tsx draws the pane, its head ("Files") and its banners; this
-// file fills the head's right side and the body.
-//  - FilesHead: the head menu "File actions" (fileMenuItems): New .do file, New folder, Upload a folder, Download all
-//    (.zip) (files.ts downloadAll; disabled while `hasFiles` is false), Restore the sample (OQ-13, step 5: sample.ts
-//    restoreSample, an upload of the sample's files: a clash dialog with the sample's words asks about a file that differs), Delete all files… (dialog
-//    delete-all).
-//  - FilesBody: the tree, the dropzone ("Drop files or folders", Upload, New .do file) and "Download all (.zip)".
-//    The tree (role="tree", flat rows with aria-level; tree.ts treeRows): folders first, then files, each by name;
-//    folders fold (aria-expanded); sizes; the open file's mark (aria-selected); the unsaved dot; the "new" badge from
-//    `fresh`. Roving focus: one row in the tab order (the one last focused, else the open file, else the first);
-//    Up/Down, Home/End move; Right unfolds or goes in, Left folds or goes up; Enter (or Space, or a click) opens a file
-//    through open.ts openFile, or on a folder makes it the current folder and unfolds it (a second tap on the current one makes the top current; never folds: the caret, a span
-//    like the ⋯, and Left fold, and select nothing; a folded current folder or one above it hands "current" to the folded folder's
-//    parent); the current folder (aria-current, the highlight; a file's tap makes its folder current, a tap on the empty space the
-//    top) is where the "+", New .do file and New folder make their file; F2 renames in place; Shift+F10, the menu key, a right click or the
-//    row's ⋯ (aria-hidden: a control inside a treeitem would be nested) open the row menu: Open, Rename (F2), Download,
-//    Delete… for a file; New file here, New folder, Rename, Download (.zip), Delete… for a folder (OQ-21). There is no
-//    long-press: a phone opens it by the ⋯. The head's "+" (NewFileButton) is "New .do file" in the current folder, which its label names.
-//  - Inline rename (DS-7): the name becomes a field; Enter renames, Esc cancels (preventDefault, so App.tsx's Esc that
-//    folds the list at 700 to 1199 px leaves it), leaving the field renames when the name can be used. A name in use
-//    ("clean.do already exists here.") or one that cannot be used keeps the field open, marked aria-invalid, with the
-//    reason under it. "New .do file" and "New folder" draw the name field at once, filled in `untitled.do` (`folder`; the first
-//    free name), with nothing written (a draft: `renaming.draft`; OQ-21). A draft's name may be a path ("sub/x.do"). Esc writes nothing; Enter, or leaving the field,
-//    writes it under the typed name, or under the free default when the name is empty or unchanged (a name that cannot be
-//    used keeps the field open on Enter, and makes the default on leaving), reads the list again and, after Enter only, opens a new file.
-//  - Upload: the Upload link (files), "Upload a folder" (its folders kept), or a drop anywhere on the page (SPEC 3.1; the
-//    Files pane gets the accent outline while a drag with files is over the page: data-drop, OQ-16; with the list
-//    folded away the files are uploaded all the same, and the toast says so). actions.ts upload() asks each clash. The
-//    page's listeners take a drag with files in the capture phase and stop it there, so nothing under them (4b's
-//    CodeMirror, which would paste a dropped file's text) sees it; a drop while a dialog is open, or while another tab
-//    has the files (the store is blocked), uploads nothing. A drag that began in the page (a graph image) is no upload.
-// Files change through the store (actions.ts), never through the worker; a change lists the store again (files.ts).
+// The file panel (docs/design/SPEC.md, section 3.1): the head menu and the body (tree, dropzone). The rows, keys, rename
+// and drafts follow SPEC 3.1 and docs/web-page-flows.md. Files change through the store (actions.ts), never the worker.
 import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { downloadAll, refresh } from "../files.ts";
@@ -67,15 +37,12 @@ import {
   within,
 } from "./tree.ts";
 
-// ---- the panel's own state (not shared: state.ts holds what other parts read) ----
-
-const folded = signal<ReadonlySet<string>>(new Set()); // the folded folders
+const folded = signal<ReadonlySet<string>>(new Set());
 const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
-// the current folder ("" is the top): where the "+", New .do file and New folder make their file; set by a tap on a folder's
-// name or on a file (its folder), cleared by a tap on the empty space; apart from the focus (docs/web-page-flows.md, section 1)
+// the current folder ("" is the top): where the "+", New .do file and New folder make their file
 const currentDir = signal("");
-// the focus request (docs/web-page-flows.md, section 1): the row of `path` takes it when it is drawn (TreeRow), or with
-// no path the row in the tab order (with no rows, the head's File actions); `anywhere`: also from outside the tree
+// the focus request (docs/web-page-flows.md, section 1): the row of `path` takes it once drawn; with no path, the row in
+// the tab order. `anywhere`: also from outside the tree
 export const focusWanted = signal<{ path: string | null; anywhere?: boolean } | null>(null); // the test hook reads it
 interface Renaming {
   id: number; // which field: a commit that ends after another one began leaves it alone
@@ -97,15 +64,14 @@ const setTree = (el: HTMLUListElement | null) => {
 /** Whether the tree is on screen with its rows (not folded away, not on another phone view, not empty). */
 export const treeShown = () => (treeList?.getClientRects().length ?? 0) > 0;
 
-/** Make `path` the row in the tab order and have it take the focus when it is drawn (at once for a row on screen; after
- *  a rename, once the store has been listed again), unless the focus has gone out of the tree by then (TreeRow). */
+/** Make `path` the row in the tab order and have it take the focus when it is drawn (after a rename, once the store has
+ *  been listed again), unless the focus has gone out of the tree by then (TreeRow). */
 function focusRow(path: string) {
   rovingPath.value = path;
   focusWanted.value = { path };
 }
 
-/** Have the tree's row in the tab order take the focus when it is drawn (App's Files button with `anywhere`, a closed
- *  tab, a delete once the list was read again). */
+/** Have the tree's row in the tab order take the focus when it is drawn. */
 export function focusTree(anywhere = false) {
   focusWanted.value = { path: null, anywhere };
 }
@@ -146,9 +112,9 @@ function startRename(path: string, draft?: Renaming["draft"]) {
   focusWanted.value = null; // the field takes the focus: a waiting request ends
 }
 
-/** "New .do file" and "New folder", and the "+": the name field is drawn at once, in the folder `dir` (unfolded, so the
- *  row is drawn inside it, and made the current folder), with nothing written (docs/web-page-flows.md, section 1, rule 8: on iOS the focus that raises
- *  the keyboard has to be made in the tap). endRename writes it. */
+/** "New .do file", "New folder" and the "+": draw the name field at once in `dir` (unfolded, made current), writing
+ *  nothing yet: on iOS the focus that raises the keyboard has to be made in the tap (docs/web-page-flows.md, section 1,
+ *  rule 8). endRename writes it. */
 function startDraft(kind: keyof typeof NEW_NAMES, dir: string) {
   const what = kind === "file" ? "file" : "folder";
   if (store.blocked)
@@ -212,11 +178,9 @@ async function endRename(name: string | null, leaving = false) {
   focusRow(to);
 }
 
-/** The end of a draft's field. Esc writes nothing. Enter writes the typed name, or the free default (`untitled.do`,
- *  `folder`) when it is empty or unchanged; a name in use keeps the field open. Leaving the field always writes: a name
- *  that cannot be used makes the free default, and a toast says so, but nothing opens and the focus stays where
- *  the visitor tapped (docs/web-page-flows.md, rule 8). Then the list is read again, so the row replaces the draft, and
- *  after Enter a file opens and its row takes the focus. */
+/** The end of a draft's field. Esc writes nothing. Enter writes the typed name, or the free default when it is empty or
+ *  unchanged; a name in use keeps the field open. Leaving the field always writes: a name that cannot be used makes the
+ *  free default (a toast says so), and nothing opens, so the focus stays where the visitor tapped. */
 async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
   const kind = r.draft!;
   const what = kind === "file" ? "file" : "folder";
@@ -270,8 +234,7 @@ const askDelete = (path: string) => {
   dialog.value = { d: "delete", paths: [path] };
 };
 
-/** The head menu "File actions" (S 13's caption). On a phone the Files head is hidden and App.tsx gives these to the "Files ⋯"
- *  button at the right of the phone strip while the Files view is shown. */
+/** The head menu "File actions". */
 export const fileMenuItems = (): MenuItem[] => [
   { label: "New .do file", onSelect: () => startDraft("file", newFileDir()) },
   { label: "New folder", onSelect: () => startDraft("folder", newFileDir()) },
@@ -322,7 +285,7 @@ export function FilesHead() {
   );
 }
 
-/** The "+": a new file in the current folder (newFileDir), which its label names. Drawn in the Files head, and in the phone's strip. */
+/** The "+": a new file in the current folder (newFileDir). */
 export function NewFileButton({ class: cls }: { class: string }) {
   const dir = newFileDir();
   const label = dir ? `New file in ${dir}/` : "New file";
@@ -333,7 +296,6 @@ export function NewFileButton({ class: cls }: { class: string }) {
   );
 }
 
-/** A row's menu (S 13; a folder's, OQ-21). */
 function rowItems(row: Row): MenuItem[] {
   const rename = { label: "Rename", hint: "F2", hintIsKey: true, onSelect: () => startRename(row.path) };
   const remove: MenuItem = { label: "Delete…", danger: true, onSelect: () => askDelete(row.path) };
@@ -427,8 +389,7 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
 }
 
 /** A row asked for (by its path, or as the row in the tab order) takes the focus once it is drawn, if the focus is free
- *  (on the page body, where the removed rename field leaves it, or in the tree) or the request says `anywhere`;
- *  docs/web-page-flows.md, section 1. */
+ *  (on the page body, where the removed rename field leaves it, or in the tree) or the request says `anywhere`. */
 function useRovingFocus(path: string, li: { current: HTMLElement | null }, renaming: boolean, tabbable: boolean) {
   const w = focusWanted.value;
   useFocusRequest(
@@ -542,7 +503,7 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
       onKeyDown={onKeyDown}
     >
       {row.dir && (
-        // the caret folds or unfolds, and selects nothing (a click on the name does, and never folds); aria-hidden as the ⋯: the keys do it
+        // aria-hidden like the ⋯ (a control inside a treeitem would be nested); the keys do its job
         <span
           class="caret"
           aria-hidden="true"
@@ -583,19 +544,17 @@ function TreeRow({ row, tabbable, current, rows }: { row: Row; tabbable: boolean
   );
 }
 
-/** A drop of files anywhere on the page uploads them (SPEC 3.1). The Files pane (the closest .files-pane) is outlined
- *  while a drag with files is over the page (OQ-16); with the list folded away or on another phone view the upload still
- *  happens, and the toast says so. The listeners are the window's, in the capture phase: a drag with files stops there,
- *  so no element under them handles it too (CodeMirror pastes a dropped file's text). While a dialog is open or the store
- *  is blocked a drop uploads nothing (the browser still does not open the file). A drag that began in the page (a graph
- *  image, which Chromium and WebKit mark as carrying a file) is not an upload. */
+/** A drop of files anywhere on the page uploads them. The listeners are the window's, in the capture phase: a drag with
+ *  files stops there, so nothing under them sees it (CodeMirror would paste a dropped file's text). A drop uploads
+ *  nothing while a dialog is open or the store is blocked (the browser still does not open the file). With the list
+ *  folded away or on another phone view the upload still happens, and the toast says so. */
 function useDrop(ref: { current: HTMLElement | null }) {
   useEffect(() => {
     const pane = ref.current?.closest<HTMLElement>(".files-pane");
     if (!pane) return;
     // A drag that began in the page is never an upload: Chromium and WebKit list "Files" for an image dragged from it (a
-    // graph on its card or full size). dragend ends it; a drop, or the mouse moving again (no mouse events fire during a drag), also
-    // does, in case the dragged element was removed before its dragend.
+    // graph). dragend ends it; so does a drop, or the mouse moving again (no mouse events fire during a drag), in case
+    // the dragged element was removed before its dragend.
     let inPage = false;
     const started = () => {
       inPage = true;

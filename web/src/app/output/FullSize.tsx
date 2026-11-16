@@ -1,15 +1,6 @@
-// The full-size graph view (docs/design/SPEC.md, section 3.7; P/Full size, WP 6), over the whole page. App.tsx places
-// <FullSize /> once, for every width. It is open while state.ts `graphFull` is true and shows graphs[graphIndex].
-// Who opens it: the Graph tab's "Open full size", a tap on an inline graph in the phone's log (4b), a .png opened on a
-// phone (4a). Esc or Close sets `graphFull` false and gives the focus back to what opened it; ← and → move between the
-// session's graphs; the strip at the right (under the graph on a phone) shows them all.
-//
-// It is a fixed overlay, not a native modal <dialog>: the browser's top layer would cover the toast ("Copied" after Copy
-// image). So it keeps the dialog's promises itself: role="dialog" aria-modal, the focus moves in and Tab stays inside,
-// and the opener gets the focus back. Its keys are taken only while no native dialog is open over it (the other-tab
-// dialog, a drop's name clash): that dialog keeps its own Tab and Esc. A move to another graph is said in the live
-// region (state.ts say: the graph's alt text). On a phone (CSS only) it is the full-screen graph of the wireframe: Close,
-// the title, Export PNG at the top and Previous and Next at the foot.
+// The full-size graph view (docs/design/SPEC.md, section 3.7), over the whole page; open while state.ts `graphFull` is
+// true. A fixed overlay, not a native modal <dialog>: the browser's top layer would cover the toast ("Copied" after
+// Copy image). So it keeps the dialog's promises itself: role="dialog" aria-modal, focus in, Tab kept inside, focus back.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { say as announce, graphFull, graphIndex, graphs } from "../state.ts";

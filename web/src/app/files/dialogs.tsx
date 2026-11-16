@@ -1,18 +1,6 @@
 // The dialogs of the file panel (docs/design/SPEC.md, section 3.10), each drawn with ui/Dialog.tsx while `dialog` holds
-// its kind. dialogs.tsx (in app/) maps each kind to its view.
-//  - ClashDialog { d: "clash", path, index, total }: "data/wages.dta is already here" (role alertdialog; "Keep mine"
-//    focused, so Enter keeps this one). Its other facts, and its words (an upload's, or the sample's when "Restore the
-//    sample" asked), come from actions.ts clashNow(); the answer goes to answerClash(), and upload() then writes and asks
-//    the next clash. Esc keeps yours for every clash left.
-//  - DeleteDialog { d: "delete", paths }: "Delete clean.do?" (Cancel focused; Delete is .btn.stop.live).
-//  - DeleteAllDialog { d: "delete-all", count }: "Delete all 12 files?" / Cancel (focused), "Delete all".
-//  - CloseTabDialog { d: "close-tab", path }: "Save changes to clean.do?" / Save (focused), "Don't save", Cancel; Esc is
-//    Cancel. Save: editorCommands.save(path), the dialog open until it answers, then the tab closes (it stays open when
-//    save resolves false: no editor, or the store refused); Don't save: the tab closes and editorCommands.closed(path)
-//    drops the edits. Once the tab has closed the focus goes to the tab now selected (EditorTabs.tsx focusAfterClose),
-//    not to the page.
-// The host draws a new dialog for each new value (clash 2 after clash 1); a view unmounted with no answer (another dialog
-// replaced it) answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
+// its kind. The host draws a new dialog for each new value (clash 2 after clash 1); a view unmounted with no answer
+// answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import { editorCommands } from "../editor/commands.ts";

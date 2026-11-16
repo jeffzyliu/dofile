@@ -1,24 +1,9 @@
 // The dialog: a native <dialog> opened modal (the browser makes the rest of the page inert and draws ::backdrop as the
-// scrim), centered on a desktop and a bottom sheet under 700 px (app.css). docs/design/SPEC.md, section 3.10:
-//  - Focus starts on the safe choice: mark that button `data-autofocus` (Cancel for Delete and Reset; the default
-//    otherwise; "Download" for the prompt, UX-037). Without one, the first button.
-//  - Esc cancels: it calls `onCancel`. Without `onCancel` the dialog is blocking: Esc does nothing (the download prompt
-//    and "dofile is open in another tab").
-//  - When it closes (the component unmounts), focus returns to what had it when the dialog opened; if that has left the
-//    page, to the editor or More actions (states/focus.ts focusStable). Both after the render that closes it (a microtask),
-//    and only for a focus left on nothing, so a focus an answer places itself (the close-tab dialog's) moves once. The same when
-//    the opener cannot take the focus (the answer disabled it: the Log head's "Clear…" after Clear log). A dialog that
-//    opens while the one before it is handing the focus back (the next clash, other-tab over a dialog) takes that one's
-//    opener as its own; <body> is never an opener (a dialog opened with the focus on nothing gives it to focusStable).
-//  - Unmounted with no answer (another dialog replaced it in the `dialog` signal): its owner treats that as Cancel.
-//  - A destructive button is `.btn.stop.live` and never the default.
-//  - A held Enter (its repeats) presses no button: the key that opened a dialog does not also answer it.
-// Render it while it should be open; the `dialog` signal decides that (app/dialogs.tsx maps each kind to its view):
-//   <Dialog title="Reset the engine?" role="alertdialog" onCancel={close}
-//     actions={<><button class="btn" data-autofocus onClick={close}>Cancel</button>
-//               <button class="btn stop live" onClick={doReset}>Reset</button></>}>
-//     <p>The data in memory…</p>
-//   </Dialog>
+// scrim), centered on a desktop and a bottom sheet under 700 px (app.css). docs/design/SPEC.md, section 3.10.
+// Mark the safe button `data-autofocus` (Cancel for Delete and Reset); without one, the first button. A destructive
+// button is `.btn.stop.live` and never the default. Esc calls `onCancel`; without it the dialog is blocking. A dialog
+// unmounted with no answer (another replaced it in the `dialog` signal): its owner treats that as Cancel. Render it
+// while it should be open; the `dialog` signal decides that (app/dialogs.tsx maps each kind to its view).
 import type { ComponentChildren } from "preact";
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { focusStable } from "../states/focus.ts";
@@ -41,7 +26,8 @@ const heldEnter = (e: KeyboardEvent) => {
 };
 
 // the opener of a dialog that has closed and not yet given the focus back (its microtask below), for a dialog opened
-// meanwhile
+// meanwhile (the next clash, other-tab over a dialog) to take as its own; <body> is never an opener (a dialog opened with
+// the focus on nothing gives it to focusStable)
 let leaving: HTMLElement | null = null;
 
 export function Dialog({

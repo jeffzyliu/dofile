@@ -1,10 +1,6 @@
-// STEP 4d: Reset (docs/design/SPEC.md, section 3.10, S 14). The ⋯ menu's "Reset the engine…" calls askReset().
-//  - askReset(): not asked while the engine is ready and nothing has run on it since it started (then engine.ts reset() at
-//    once); else the dialog (words.ts resetAsks: a run in progress always asks, and after any run the engine may hold
-//    data, results, macros, scalars, matrices or graphs).
-//  - ResetDialog { d: "reset" }: role alertdialog, "Reset the engine?" / "The data in memory, e() and r() results, macros
-//    and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset (.btn.stop.live).
-//    If the engine can no longer be reset while it is open (it failed, another tab took it), the dialog closes itself.
+// Reset (docs/design/SPEC.md, section 3.10, S 14). askReset() resets at once only when the engine is ready and nothing
+// has run on it since it started; otherwise it opens the dialog (words.ts resetAsks). If the engine can no longer be
+// reset while the dialog is open (it failed, another tab took it), the dialog closes itself.
 import { useEffect } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";

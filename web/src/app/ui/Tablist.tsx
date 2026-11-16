@@ -1,7 +1,6 @@
 // A tablist with roving focus: one tab in the tab order (the selected one); Left/Right (Up/Down too) move and select,
-// Home and End go to the ends. Used by the Output tabs, the unsplit Log pane and the phone's Views bar. Each tab is
-// `${idPrefix}-tab-${id}`; the selected one controls `${idPrefix}-panel-${id}` (only the selected panel need exist): give
-// the panel that id, role="tabpanel" and aria-labelledby the tab (tabpanelProps does it).
+// Home and End go to the ends. Each tab is `${idPrefix}-tab-${id}`; the selected one controls `${idPrefix}-panel-${id}`:
+// give the panel that id, role="tabpanel" and aria-labelledby the tab (tabpanelProps does it).
 import { type Signal, useSignal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
