@@ -572,11 +572,14 @@ function scripted(
 }
 
 test("a start that fails at mount or boot says start-failed with the reason; the worker is ended by end(), which detaches the store and fails the calls made meanwhile", async () => {
-  for (const [op, name, message, reason] of [
+  for (const [op, name, message, reason, type] of [
     ["mount", "DownloadError", "https://dofile.test/pyodide/pyodide.asm.wasm: 503", "download"],
     ["mount", "RangeError", "WebAssembly.Memory(): could not allocate memory", "memory"],
-    ["boot", "PythonError", "MemoryError", "memory"],
-    ["boot", "PythonError", "ModuleNotFoundError: No module named 'dofile'", "unknown"],
+    // a PythonError is memory by the Python exception's class (the worker's `type`), never by its message
+    ["boot", "PythonError", "Traceback ...", "memory", "MemoryError"],
+    ["boot", "PythonError", "MemoryError", "unknown", "RuntimeError"],
+    ["boot", "PythonError", "ModuleNotFoundError: No module named 'dofile'", "unknown", "ModuleNotFoundError"],
+    ["mount", "Error", "out of memory", "unknown"],
     [
       "mount",
       "SomeOtherError",
@@ -587,7 +590,7 @@ test("a start that fails at mount or boot says start-failed with the reason; the
     const store = fakeStore();
     const { eng, workers } = scripted(
       (m, post) => {
-        if (m.op === op) post({ id: m.id, error: message, name });
+        if (m.op === op) post({ id: m.id, error: message, name, type });
         else starts(m, post);
       },
       { store },
@@ -718,6 +721,17 @@ test("a worker's error is said as `crashed`, with the reason; the transport neit
   });
   assert.equal(made, 1, "no restart: that is the machine's to say (RESET, then TWICE)");
   assert.notEqual(eng.worker, null, "and it is not ended until the machine says so");
+  // the page gets an ErrorEvent: the thrown value is in `error`, and the event itself has no name
+  const { eng: event, workers: ws } = scripted(starts);
+  const heard: Said = [];
+  await startWorker(event, null, heard);
+  ws[0].onerror!({ message: "Uncaught RangeError: Out of memory", error: new RangeError("Out of memory") } as any);
+  assert.deepEqual(heard.at(-1), {
+    type: "crashed",
+    cause: "error",
+    reason: "memory",
+    detail: "Uncaught RangeError: Out of memory",
+  });
   // a crash of a worker that is up, with another error
   const { eng: other, workers } = scripted(starts);
   const said: Said = [];

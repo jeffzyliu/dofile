@@ -7,7 +7,7 @@
 // result the machine made itself (rc 9998: a reset, or a run whose op failed in the worker) has no log of its own, so
 // what streamed in stays, with the reason as a note.
 
-import type { BrowseRows, RunResult } from "../engine/types.ts";
+import type { BrowseRows, ClientError, RunResult } from "../engine/types.ts";
 import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
 import * as S from "./state.ts";
@@ -140,8 +140,15 @@ function engineReady() {
     (m) => {
       W.memory.value = m;
     },
-    () => {},
+    (e) => unlessGone(e),
   );
+}
+
+/** A read that failed. The engine being gone (no engine, or a reset meanwhile) is no news: engineGone clears what it
+ *  held. Any other failure is a bug or a broken worker: it goes to the console. */
+function unlessGone(e: ClientError | undefined) {
+  if (e?.kind !== "no-engine" && e?.kind !== "reset")
+    console.warn(`[dofile] a read of the engine failed: ${e?.message ?? e}`);
 }
 
 /** The engine is gone (a reset, or another tab has it): nothing of it is in memory. */
@@ -210,8 +217,8 @@ export async function refreshData() {
     W.rows.value = rows;
     W.macros.value = macros;
     W.memory.value = memory;
-  } catch {
-    // no engine, or it was reset meanwhile
+  } catch (e: any) {
+    unlessGone(e); // no engine, or it was reset meanwhile
   }
 }
 
@@ -223,8 +230,9 @@ export async function moreRows(count = 50): Promise<boolean> {
   let next: BrowseRows;
   try {
     next = await engine.call("browse", { offset: from.offset + from.rows.length, limit: count });
-  } catch {
-    return false; // no engine, or it was reset meanwhile
+  } catch (e: any) {
+    unlessGone(e); // no engine, or it was reset meanwhile
+    return false;
   }
   if (W.rows.value !== from || "error" in next || !next.rows.length) return false;
   // rows of other data (a run ended, and its refreshData() has not answered yet) do not continue these

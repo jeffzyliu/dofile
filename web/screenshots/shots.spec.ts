@@ -219,7 +219,7 @@ test("a log with an error", async ({ page }) => {
 });
 
 const BANNERS: [string, Parameters<typeof addBanner>[1]][] = [
-  ["banner-reset", { b: "reset", reason: "reset by you", kind: "user", run: null }],
+  ["banner-reset", { b: "reset", reason: "reset by you", kind: "user", cause: null, run: null }],
   ["banner-storage", { b: "storage" }],
   ["banner-download-failed", { b: "download-failed" }],
   ["banner-not-text", { b: "not-text", path: "data/wages.dta" }],

@@ -27,7 +27,16 @@ import type {
   TicketedEffect,
 } from "../src/engine/machine.ts";
 import { cutResult, initial, lost, RC_RESET, ticketOf, transition } from "../src/engine/machine.ts";
-import type { Build, CutKind, FailReason, ResetKind, RunHead, RunResult, Stage } from "../src/engine/types.ts";
+import type {
+  Build,
+  CrashCause,
+  CutKind,
+  FailReason,
+  ResetKind,
+  RunHead,
+  RunResult,
+  Stage,
+} from "../src/engine/types.ts";
 
 type EventType = Event["type"];
 /** What a test feeds: a visitor's event or `lock-lost`, or an answer without its ticket. */
@@ -304,7 +313,7 @@ const RESET_DOES: Record<"starting-worker" | "ready" | "running" | "breaking" | 
   waiting: ["end-worker", "fetch-list", "add-reset-banner", "say", "engine-gone", "end-run"],
 };
 const wantReset =
-  (kind: ResetKind, reason: string) =>
+  (kind: ResetKind, reason: string, cause: CrashCause | null = null) =>
   ({ old, at, next }: Ctx): Want => {
     const was = inRow(old, "starting-worker", "ready", "running", "breaking", "waiting");
     const all: Partial<Record<Effect["do"], Effect>> = {
@@ -315,7 +324,7 @@ const wantReset =
         ending: { kind: "reset", reset: kind, reason: SENTENCE(reason) },
       },
       "fetch-list": { do: "fetch-list", n: next },
-      "add-reset-banner": { do: "add-reset-banner", reason, kind, run: "run" in was ? was.run : null },
+      "add-reset-banner": { do: "add-reset-banner", reason, kind, cause, run: "run" in was ? was.run : null },
       say: { do: "say", line: "reset" },
       "engine-gone": { do: "engine-gone" },
       "end-run": { do: "end-run", result: CUT(SENTENCE(reason), kind) },
@@ -587,10 +596,11 @@ const CELLS = {
       [
         { reason: "download", o: {} },
         { reason: "updated", o: {} },
+        { reason: "unknown", o: {} },
         { reason: "download", o: { crashed: true } },
         { reason: "updated", o: { crashed: true } },
       ] as const
-    ).map(({ reason, o }: { reason: "download" | "updated"; o: Options }) => ({
+    ).map(({ reason, o }: { reason: "download" | "updated" | "unknown"; o: Options }) => ({
       name: `${reason}${o.crashed ? `; ${KEPT}` : ""}`,
       from: row(r, o),
       feed: { type: "download-failed", reason, detail: "the list is of another build" } as const,
@@ -717,18 +727,23 @@ const CELLS = {
       };
     };
     return [
-      { name: "the first crash", from: row(r), feed: CRASH, want: wantReset("crash", "the engine crashed (boom)") },
+      {
+        name: "the first crash",
+        from: row(r),
+        feed: CRASH,
+        want: wantReset("crash", "the engine crashed (boom)", "error"),
+      },
       {
         name: "the first crash: the file storage",
         from: row(r),
         feed: { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" },
-        want: wantReset("crash", "the browser closed the file storage"),
+        want: wantReset("crash", "the browser closed the file storage", "storage"),
       },
       {
         name: "the first crash: the engine's folder",
         from: row(r),
         feed: { type: "crashed", cause: "folder", reason: "unknown", detail: "ENOTDIR" },
-        want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)"),
+        want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)", "folder"),
       },
       twice("memory", "error"),
       twice("unknown", "error"),
@@ -742,19 +757,19 @@ const CELLS = {
       name: "the worker's error",
       from: row(r),
       feed: { type: "crashed", cause: "error", reason: "memory", detail: "out of memory" },
-      want: wantReset("crash", "the engine crashed (out of memory)"),
+      want: wantReset("crash", "the engine crashed (out of memory)", "error"),
     },
     {
       name: "the file storage",
       from: row(r),
       feed: { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" },
-      want: wantReset("crash", "the browser closed the file storage"),
+      want: wantReset("crash", "the browser closed the file storage", "storage"),
     },
     {
       name: "the engine's folder",
       from: row(r),
       feed: { type: "crashed", cause: "folder", reason: "unknown", detail: "ENOTDIR" },
-      want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)"),
+      want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)", "folder"),
     },
   ],
   RUN: (r) => [
@@ -1363,7 +1378,7 @@ const endReset = (n: number, kind: ResetKind, reason: string): Plain<Effect> => 
   ending: { kind: "reset", reset: kind, reason: SENTENCE(reason) },
 });
 const banner = (kind: ResetKind, reason: string, run: RunHead | null = null): Plain<Effect>[] => [
-  { do: "add-reset-banner", reason, kind, run },
+  { do: "add-reset-banner", reason, kind, cause: kind === "crash" ? "error" : null, run },
   { do: "say", line: "reset" },
   { do: "engine-gone" },
 ];

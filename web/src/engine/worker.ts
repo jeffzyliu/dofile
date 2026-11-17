@@ -89,13 +89,14 @@ const stage = (id: Stage) => self.postMessage({ stage: id });
 const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);
 
 // Emscripten's file system errors carry only a number.
-function errorForPage(e: any): { message: string; name: string } {
+function errorForPage(e: any): { message: string; name: string; type?: string } {
   if (e?.errno != null) {
     const code = Object.keys(py?.ERRNO_CODES ?? {}).find((k) => py.ERRNO_CODES[k] === e.errno);
     return { message: `file system error ${code ?? e.errno}`, name: "ErrnoError" };
   }
   const message = e?.message ?? (typeof e === "object" ? JSON.stringify(e) : e);
-  return { message: String(message), name: e?.name ?? "Error" };
+  const name = e?.name ?? "Error";
+  return { message: String(message), name, ...(name === "PythonError" && { type: e?.type }) };
 }
 const failedDownload = (message: string) => Object.assign(new Error(message), { name: "DownloadError" });
 
@@ -1051,8 +1052,8 @@ const answer = async ({ id, op, args }: ToWorker) => {
       outOfStep = null;
     }
   } catch (e) {
-    const { message, name } = errorForPage(e);
-    self.postMessage({ id, error: message, name });
+    const { message, name, type } = errorForPage(e);
+    self.postMessage({ id, error: message, name, type });
   }
 };
 
@@ -1071,8 +1072,8 @@ self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
       },
       (e) => {
         bootDone.err(e);
-        const { message, name } = errorForPage(e);
-        self.postMessage({ id, error: message, name });
+        const { message, name, type } = errorForPage(e);
+        self.postMessage({ id, error: message, name, type });
       },
     );
     return;

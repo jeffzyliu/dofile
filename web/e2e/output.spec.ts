@@ -62,7 +62,7 @@ test("the empty states, and the reset wording of the Data tab", async ({ page })
   await showTab(page, "data");
   await expect(page.getByText("No data in memory")).toBeVisible();
   await expect(page.getByText("Load a .dta from the file list, or run", { exact: false })).toBeVisible();
-  await addBanner(page, { b: "reset", reason: "test", kind: "user", run: null });
+  await addBanner(page, { b: "reset", reason: "test", kind: "user", cause: null, run: null });
   await expect(page.getByText("The engine was reset, so no data is in memory")).toBeVisible();
   await showTab(page, "results");
   await expect(page.getByText("No results yet")).toBeVisible();

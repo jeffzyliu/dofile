@@ -1,7 +1,17 @@
 // The engine's state machine: transition(machine, event) gives the machine after the event and the effects the caller
 // must perform. Pure; its tables mirror SPEC section 5 (web/CLAUDE.md has the rules).
 
-import type { Build, CutKind, FailReason, ResetKind, RunHead, RunResult, Stage, StoreCause } from "./types.ts";
+import type {
+  Build,
+  CrashCause,
+  CutKind,
+  FailReason,
+  ResetKind,
+  RunHead,
+  RunResult,
+  Stage,
+  StoreCause,
+} from "./types.ts";
 
 /** The rc of a run the machine cut (the session was reset: the data in memory is gone), or whose op failed. */
 export const RC_RESET = 9998;
@@ -78,7 +88,7 @@ type Happening =
   // the download and the build's list
   | { type: "download-progress"; n: Ticket; received: number; total: number }
   | { type: "download-done"; n: Ticket; build: Build | null }
-  | { type: "download-failed"; n: Ticket; reason: "download" | "updated"; detail: string }
+  | { type: "download-failed"; n: Ticket; reason: "download" | "updated" | "unknown"; detail: string }
   | { type: "list-checked"; n: Ticket; build: Build | null }
   | { type: "list-failed"; n: Ticket; reason: "download" | "updated" | "unknown"; detail: string }
   // the worker
@@ -93,7 +103,7 @@ type Happening =
   | {
       type: "crashed";
       n: Ticket;
-      cause: "error" | "storage" | "folder"; // the worker's error; the browser closed the store; /work out of step
+      cause: CrashCause;
       reason: "download" | "memory" | "unknown";
       detail: string;
     }
@@ -136,7 +146,7 @@ export type Effect =
   | { do: "engine-gone" }
   | { do: "show-dialog"; dialog: "download" | "other-tab" }
   | { do: "close-dialog"; dialog: "download" | "other-tab"; focusEditor: boolean }
-  | { do: "add-reset-banner"; reason: string; kind: ResetKind; run: RunHead | null } // run: the run this reset cut
+  | { do: "add-reset-banner"; reason: string; kind: ResetKind; cause: CrashCause | null; run: RunHead | null } // run: the run this reset cut
   | { do: "add-store-banner"; cause: StoreCause }
   | { do: "say"; line: Line }
   | { do: "warn"; text: string };
@@ -307,6 +317,7 @@ function BREAK(m: In<"running">, at: number): Step {
       "break",
       "Break reset the engine, because this page is not cross-origin isolated and cannot ask a run to stop",
       at,
+      null,
     );
   }
   const { worker, run, t0 } = m.state;
@@ -358,6 +369,7 @@ function RESET(
   kind: ResetKind,
   reason: string,
   at: number,
+  cause: CrashCause | null,
 ): Step {
   const old = m.state,
     next = issue(m),
@@ -369,7 +381,7 @@ function RESET(
   );
   if (old.s !== "starting-worker")
     effects.push(
-      { do: "add-reset-banner", reason, kind, run: old.s === "ready" ? null : old.run },
+      { do: "add-reset-banner", reason, kind, cause, run: old.s === "ready" ? null : old.run },
       { do: "say", line: "reset" },
       { do: "engine-gone" },
     );
@@ -520,41 +532,42 @@ const TABLE: { [R in RowName]: Row<R> } = {
       return step({ ...m, crashes: 0, state: { s: "ready", worker: m.state.worker } }, effects);
     },
     "start-failed": (m, e) => FAIL(m, e.reason, e.detail),
-    crashed: (m, e) => (m.crashes === 0 ? RESET(m, "crash", crashReason(e), e.at) : TWICE(m, e.reason, e.detail)),
+    crashed: (m, e) =>
+      m.crashes === 0 ? RESET(m, "crash", crashReason(e), e.at, e.cause) : TWICE(m, e.reason, e.detail),
   },
   ready: {
-    reset: (m, e) => RESET(m, "user", "reset by you", e.at),
+    reset: (m, e) => RESET(m, "user", "reset by you", e.at, null),
     "lock-lost": LOST,
-    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at),
+    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at, e.cause),
     run: (m, e) =>
       step({ ...m, state: { s: "running", worker: m.state.worker, run: e.head, t0: e.at } }, [
         { do: "send-run", n: m.state.worker, code: e.code, head: e.head },
       ]),
   },
   running: {
-    reset: (m, e) => RESET(m, "user", "reset by you", e.at),
+    reset: (m, e) => RESET(m, "user", "reset by you", e.at, null),
     "lock-lost": LOST,
-    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at),
+    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at, e.cause),
     break: (m, e) => BREAK(m, e.at),
     "run-ended": (m, e) => END(m, e.result),
     "run-failed": (m, e) => END(m, cutResult(e.message, "run-failed")),
   },
   breaking: {
-    reset: (m, e) => RESET(m, "user", "reset by you", e.at),
+    reset: (m, e) => RESET(m, "user", "reset by you", e.at, null),
     "lock-lost": LOST,
-    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at),
+    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at, e.cause),
     "keep-waiting": (m) =>
       step({ ...m, state: { s: "waiting", worker: m.state.worker, run: m.state.run, t0: m.state.t0 } }, [
         { do: "cancel-break-timer" },
       ]),
     "run-ended": (m, e) => END(m, e.result),
     "run-failed": (m, e) => END(m, cutResult(e.message, "run-failed")),
-    "break-timeout": (m, e) => RESET(m, "break", "the code did not stop at Break", e.at),
+    "break-timeout": (m, e) => RESET(m, "break", "the code did not stop at Break", e.at, null),
   },
   waiting: {
-    reset: (m, e) => RESET(m, "user", "reset by you", e.at),
+    reset: (m, e) => RESET(m, "user", "reset by you", e.at, null),
     "lock-lost": LOST,
-    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at),
+    crashed: (m, e) => RESET(m, "crash", crashReason(e), e.at, e.cause),
     "run-ended": (m, e) => END(m, e.result),
     "run-failed": (m, e) => END(m, cutResult(e.message, "run-failed")),
   },

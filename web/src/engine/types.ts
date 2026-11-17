@@ -62,7 +62,7 @@ export type ViewOp = Exclude<keyof ReadOps, "files" | "read">;
 export type ToWorker = { [K in Op]: { id: number; op: K; args: Ops[K]["args"] } }[Op];
 export type FromWorker =
   | { id: number; result: Ops[Op]["result"] }
-  | { id: number; error: string; name: string }
+  | { id: number; error: string; name: string; type?: string }
   | { id: number; log: string } // a chunk of a running run's log
   | { stage: Stage } // a start-up stage began
   // /work could not take the page's version after a run (the store has the run's files): it is out of step with the
@@ -162,6 +162,8 @@ export interface FileChange {
 }
 
 export type ResetKind = "break" | "crash" | "user";
+/** What crashed the engine: the worker's error; the browser closed the file store; /work out of step with the store. */
+export type CrashCause = "error" | "storage" | "folder";
 /** The `kind` of an rc 9998 run result (machine.ts, cutResult): a reset, another tab took the engine ("stopped"), or
  *  the run's op failed in the worker ("run-failed": that worker stays). */
 export type CutKind = ResetKind | "stopped" | "run-failed";
@@ -241,6 +243,7 @@ export interface ClientError extends Error {
   kind: "failed" | "failed-twice" | "updated" | "reset" | "stopped" | "no-engine" | "op";
   reason?: "download" | "unknown"; // "failed", from download() and build() only
   reset?: ResetKind; // "reset"
+  type?: string; // "op": the Python exception class, when the worker's error is a PythonError
 }
 
 export interface Progress {

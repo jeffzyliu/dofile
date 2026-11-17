@@ -366,8 +366,8 @@ test("showToast, holdToast; addBanner replaces one of a kind and path, dismiss r
   }
   S.addBanner({ b: "not-text", path: "a.xlsx" });
   S.addBanner({ b: "not-text", path: "b.xlsx" });
-  S.addBanner({ b: "reset", reason: "one", kind: "crash", run: null });
-  S.addBanner({ b: "reset", reason: "two", kind: "user", run: null });
+  S.addBanner({ b: "reset", reason: "one", kind: "crash", cause: "error", run: null });
+  S.addBanner({ b: "reset", reason: "two", kind: "user", cause: null, run: null });
   assert.deepEqual(
     banners().map((b) => b.path ?? b.reason),
     ["a.xlsx", "b.xlsx", "two"],
@@ -400,4 +400,22 @@ test("J5: a run's promise settles even when the after-run work throws (an open t
     Object.assign(editorCommands, kept);
     writable(S.tabs).value = [];
   }
+});
+
+test("a read after a run swallows only no-engine and reset; any other failure is reported to the console", async () => {
+  await readyEngine();
+  const warn = mock.method(console, "warn", () => {});
+  const { refreshData } = await import("../src/app/run.ts");
+  const refuse = (kind: string) =>
+    (client.query = (() => Promise.reject(failure("it said no", { kind }))) as typeof client.query);
+  for (const kind of ["no-engine", "reset"]) {
+    refuse(kind);
+    await refreshData();
+  }
+  assert.equal(warn.mock.callCount(), 0, "the engine is gone: nothing to say");
+  refuse("op");
+  await refreshData();
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /it said no/);
+  warn.mock.restore();
 });
