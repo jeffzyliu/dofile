@@ -3,7 +3,7 @@
 // align.ts; the notes at a run's end follow its last line. The head, run-heads and the page's notes are shown only:
 // Download log has the runs' text alone. The pane follows the end of the log unless the visitor has scrolled up.
 import { signal } from "@preact/signals";
-import { type ComponentChildren, Fragment } from "preact";
+import { type ComponentChildren, Fragment, type RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { codeOf, editorCommands } from "../editor/commands.ts";
 import { jumpLine, refusedRunWords, runheadWords } from "../editor/words.ts";
@@ -304,7 +304,7 @@ function logHead(m: Marker) {
 }
 
 /** Find's field, over the log. */
-function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) {
+function FindBar({ total, pre }: { total: number; pre: RefObject<HTMLPreElement | null> }) {
   const field = useRef<HTMLInputElement>(null);
   // once per openFind: a LogView drawn again with Find open (another Output tab and back) takes no focus
   useFocusRequest(
@@ -321,7 +321,7 @@ function FindBar({ total, pre }: { total: number; pre: HTMLPreElement | null }) 
     findOpen.value = false;
     findText.value = "";
     // back to what opened Find (the Log head's button, or the phone's ⋯); else the log itself, never the page
-    (findReturn?.isConnected && findReturn.getClientRects().length ? findReturn : pre)?.focus();
+    (findReturn?.isConnected && findReturn.getClientRects().length ? findReturn : pre.current)?.focus();
   };
   return (
     <div class="findbar">
@@ -482,7 +482,7 @@ export function LogView() {
 
   return (
     <>
-      <FindBar total={total} pre={pre.current} />
+      <FindBar total={total} pre={pre} />
       <pre class={wrap.value ? "log wrap" : "log"} role="log" aria-label="Log" ref={pre} tabIndex={-1}>
         {body}
       </pre>
