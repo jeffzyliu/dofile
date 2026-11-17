@@ -5,42 +5,11 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, keepFiles, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { engineState, expect, keepFiles, ready, retryFirstGoto, SAMPLE, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 const data = new URL("../../tests/conformance/data/", import.meta.url);
 const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
-const SAMPLE =
-  "clear\nset obs 200\nset seed 1\ngenerate x = rnormal()\ngenerate y = 1 + 2*x + rnormal()\nregress y x, robust\nscatter y x\n";
 
-type RunResult = {
-  rc: number;
-  log: string;
-  error: string | null;
-  nobs: number;
-  images: string[];
-  timing?: Record<string, number>;
-};
-type Hook = {
-  engine: { startup: { mode: string; fetched?: string } | null; query(op: "memory"): Promise<{ heap_bytes: number }> };
-  store: {
-    blocked: boolean;
-    list(): Promise<{ path: string }[]>;
-    write(path: string, data: Uint8Array): Promise<unknown>;
-  };
-  run(code: string): Promise<RunResult | null>;
-  breakRun(): void;
-  reset(): void; // the engine controller's Break and Reset
-  state: { engine: { value: { s: string } }; banners: { value: { b: string; kind?: string }[] } };
-};
-declare global {
-  interface Window {
-    __dofile: Hook;
-  }
-}
-
-const engineState = (page: Page) => page.evaluate(() => document.documentElement.dataset.engine ?? "");
-const ready = (page: Page) =>
-  expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine), { timeout: 300_000 }).toBe("ready");
 async function upload(page: Page, name: string) {
   const b64 = readFileSync(new URL(name, data)).toString("base64");
   await page.evaluate(

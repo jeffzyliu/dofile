@@ -6,7 +6,7 @@
 // A context the test makes itself (launchPersistentContext, browser.newContext) is not covered: call keepFiles(context).
 // Every page goto is retried once when a fresh page's first navigation stalls (retryFirstGoto, below). A page the test
 // makes itself (context.newPage()) is not covered: call retryFirstGoto(page).
-import { type BrowserContext, test as base, errors, expect, type Page } from "@playwright/test";
+import { type BrowserContext, test as base, errors, expect, type Locator, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -26,7 +26,7 @@ export async function startEngine(page: Page) {
     )
     .toBe(true);
   await page.evaluate(() => {
-    if (document.documentElement.dataset.engine === "asking") (window as any).__dofile.start();
+    if (document.documentElement.dataset.engine === "asking") window.__dofile.start();
   });
 }
 
@@ -54,6 +54,48 @@ export function retryFirstGoto(page: Page) {
     }
   };
 }
+
+/** The toast and the banner (by its words) have no role; the status bar is the page's footer. */
+export const toastOf = (page: Page) => page.locator(".toast");
+export const bannerOf = (scope: Page | Locator, hasText?: string | RegExp) =>
+  scope.locator(".banner", hasText === undefined ? undefined : { hasText });
+export const statusBar = (page: Page) => page.getByRole("contentinfo");
+
+/** The viewport is under the phone breakpoint (700 px). */
+export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
+
+/** The engine's state name, from `<html data-engine>`. */
+export const engineState = (page: Page) => page.evaluate(() => document.documentElement.dataset.engine ?? "");
+
+/** Wait for the engine to be ready (a start can take minutes without a snapshot in the Cache). */
+export const ready = (page: Page) => expect.poll(() => engineState(page), { timeout: 300_000 }).toBe("ready");
+
+/** Two animation frames: what a signal change renders has been laid out. */
+export const settled = (page: Page) =>
+  page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+/** Wait until the tab lock has answered, so the store takes writes. */
+export const unblocked = (page: Page) => page.waitForFunction(() => window.__dofile?.store.blocked === false);
+
+/** Write files into the store: text, or bytes as an array of numbers. */
+export async function putFiles(page: Page, files: Record<string, string | number[]>) {
+  await unblocked(page);
+  await page.evaluate(async (files) => {
+    for (const [path, data] of Object.entries(files))
+      await window.__dofile.store.write(
+        path,
+        typeof data === "string" ? new TextEncoder().encode(data) : Uint8Array.from(data),
+      );
+  }, files);
+}
+
+/** A file's text in the store. */
+export const storedText = (page: Page, path: string) =>
+  page.evaluate(async (p) => new TextDecoder().decode(await window.__dofile.store.read(p)), path);
+
+/** A do-file that fits a model and draws one graph. */
+export const SAMPLE =
+  "clear\nset obs 200\nset seed 1\ngenerate x = rnormal()\ngenerate y = 1 + 2*x + rnormal()\nregress y x, robust\nscatter y x\n";
 
 export const test = base.extend<{ persisted: boolean }>({
   persisted: [true, { option: true }],

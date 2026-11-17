@@ -67,24 +67,23 @@ connectEngine({ client, lock: tabLock({ onLost: lost }), snapshot: snapshotStart
 
 // The test hook, only with ?test in the URL. With ?test=manual the page starts no engine until the test calls start().
 // The store is blocked until the tab lock answers: wait for `!store.blocked` before writing.
-if (testMode !== null) {
-  Object.assign(window, {
-    __dofile: {
-      engine: client,
-      store,
-      start,
-      persisted: () => S.persisted.value,
-      engineBytes: S.engineBytes,
-      state: S,
-      run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
-      breakRun,
-      reset,
-      selection,
-      drops,
-      focusWanted,
-    },
-  });
-}
+const testHook = {
+  engine: client,
+  store,
+  start,
+  persisted: () => S.persisted.value,
+  engineBytes: S.engineBytes,
+  state: S,
+  run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
+  breakRun,
+  reset,
+  selection,
+  drops,
+  focusWanted,
+};
+/** The type of `window.__dofile`, for e2e/hook.ts. */
+export type DofileHook = typeof testHook;
+if (testMode !== null) Object.assign(window, { __dofile: testHook });
 
 render(<App />, document.getElementById("app")!);
 open();

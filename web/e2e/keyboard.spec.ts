@@ -3,11 +3,10 @@
 // with viewport.ts's attributes set by script, the editor's caret with a stand-in visualViewport, and the overlay; what
 // Safari does is for the real iPhone. Every profile runs them at a phone's size (the phone layout is under 700 px).
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, settled, test, unblocked } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { seedGraphs, showPhoneTab } from "./seed";
 
 const PHONE = { width: 390, height: 844 };
-const settled = (page: Page) =>
-  page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 /** The editor page at a phone's size with the test hook and no engine, `query` added to the URL. */
 async function open(page: Page, query = "") {
   await page.setViewportSize(PHONE);
@@ -33,11 +32,7 @@ test("the keyboard's layout: with the keyboard open, .app is the visible area fr
 }) => {
   await open(page);
   await expect(page.locator("#kblog")).toHaveCount(0);
-  await page.evaluate(() => {
-    const s = (window as any).__dofile.state;
-    s.phoneTab.value = "log";
-    s.showToast("Saved analysis.do");
-  });
+  await showPhoneTab(page, "log", { toast: "Saved analysis.do" });
   await keyboard(page, 400);
   await settled(page);
   expect(await rect(page, ".app")).toEqual({ top: 0, bottom: 400, height: 400 });
@@ -62,11 +57,9 @@ test("the keyboard's layout: the full-size graph view covers the visible area wi
 }) => {
   const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
   await open(page);
-  await page.evaluate((png) => {
-    const s = (window as any).__dofile.state;
-    s.runWriter.graphs.value = [{ n: 1, png, theme: "light", from: "run", run: 1, command: "scatter y x", line: 1 }];
-    s.graphFull.value = true;
-  }, PNG);
+  await seedGraphs(page, [{ n: 1, png: PNG, theme: "light", from: "run", run: 1, command: "scatter y x", line: 1 }], {
+    full: true,
+  });
   await expect(page.getByRole("dialog", { name: "Full-size graph" })).toBeVisible();
   await settled(page); // the view takes the focus, and viewport.ts looks again (no keyboard here) before the next line
   await keyboard(page, 400);
@@ -84,12 +77,8 @@ test("a tap on the phone's command line focuses it without scrolling the page, t
 }) => {
   test.skip(!hasTouch, "taps need a touch profile");
   await open(page);
-  await page.evaluate(() => {
-    const s = (window as any).__dofile.state;
-    s.phoneTab.value = "log";
-    s.engine.value = { s: "ready" }; // with no engine the field is read-only
-  });
-  const field = page.locator(".cmdline input");
+  await showPhoneTab(page, "log", { engine: { s: "ready" } }); // with no engine the field is read-only
+  const field = page.getByRole("textbox", { name: "Command" });
   await field.fill("display 1");
   await field.evaluate((el) => (el as HTMLInputElement).blur());
   await field.tap();
@@ -112,10 +101,8 @@ test("?kblog: the overlay lists the events, takes no taps, and is not there with
   expect(through.pointer).toBe("none");
   expect(through.under).not.toBe("kblog");
   // a focus is listed
-  await page.evaluate(() => {
-    (window as any).__dofile.state.phoneTab.value = "log";
-  });
-  await page.locator(".cmdline input").focus();
+  await showPhoneTab(page, "log");
+  await page.getByRole("textbox", { name: "Command" }).focus();
   await expect(log).toContainText("focusin");
   expect(await page.evaluate(() => document.activeElement?.id)).not.toBe("kblog");
 });
@@ -187,9 +174,9 @@ test("a new file's name field and its reason line are inside the list's visible 
     (window as any).__vv = vv;
   }, PHONE.height);
   await open(page);
-  await page.waitForFunction(() => (window as any).__dofile.store.blocked === false);
+  await unblocked(page);
   await page.evaluate(async () => {
-    const { store } = (window as any).__dofile;
+    const { store } = window.__dofile;
     for (let i = 0; i < 40; i++)
       await store.write(`a${String(i).padStart(2, "0")}.do`, new TextEncoder().encode("1\n"));
   });

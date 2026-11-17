@@ -393,7 +393,7 @@ desktop. What was found:
 - e2e: the snapshot is the default start (`npm run e2e` builds it; a missing one fails the tests). The cached start, a
   reload that reads from the cache, and **everything in the browser's caches between 10 and 80 MB** (about 40 MB; the
   check that found the `.br` problem) are in `web/e2e/engine.spec.ts`; the stale manifest and `?snapshot=0` in
-  `web/e2e/shell.spec.ts`. `web/e2e/poc.spec.ts`, where they started, is all fixme.
+  `web/e2e/shell.spec.ts`.
 
 ## Not done, and risks
 

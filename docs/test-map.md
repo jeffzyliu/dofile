@@ -213,7 +213,6 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
 Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases:
-- `poc.spec.ts` in every profile (fixme until step 6).
 - The capped normal boot outside Chromium; the `?snapshot=0` normal boot in the two WebKit projects (its package load
   stalls now and then on Linux).
 - The folder upload outside Chromium (Playwright cannot give a folder to an input).
@@ -242,7 +241,9 @@ Specs:
   - Each banner (running, stopping, waiting, storage, reset, failed, download-failed) and where the focus goes.
   - Download all; Reset during a run; Reset's dialog and "Run the file again".
   - One clock (`page.clock`): the Break pill or status bar equals the banner's time.
-- `editor.spec.ts` (step 4b): the editor, the log and the command line, in the page.
+- `editor.spec.ts` (step 4b): the editor, the log and the command line, in the page. Includes the save flows with real
+  typing: Run doesn't save, Save writes and a reload brings the text back; a tab with edits asks before it closes (Cancel,
+  Don't save, Save); the `beforeunload` prompt for an unsaved tab, none once saved.
   - Ctrl/Cmd+Enter: runs once, which focused elements keep it, an open menu blocks it, held repeats run nothing.
   - Typing and the unsaved dot, Ctrl/Cmd+S, a failed save's banner, Save during a rename's or a delete's write.
   - Save keeps a file's form: `\r\n`, `\n` and BOM (written back for a .csv, dropped for a .do).
@@ -282,14 +283,15 @@ Specs:
   - Restore the sample as an upload: toast, "already here", the clash dialog (Keep mine, Replace with the sample).
   - The sample runs in the real engine at the editor's base to a table and a graph.
   - Where the browser keeps no storage, the sample's write brings no banner and the visitor's own change does.
-- `step2.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
+- `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
   URL flag.
+- `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
+  put the page's state in a shape (an engine state, a banner, log items, ...); `fixtures.ts` holds the helpers shared by
+  several specs (`isPhone`, `ready`, `settled`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`).
 - `fixtures.spec.ts` (no browser page): `retryFirstGoto` in `fixtures.ts`, which the `page` fixture applies to every
-  test's page (and `engine.spec.ts`, `step2.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on
+  test's page (and `engine.spec.ts`, `start-and-lock.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on
   a page still at `about:blank` is retried once and logs "timed out on a fresh page" (WebKit bug 325840); a second
   timeout, another error, or a page that has left `about:blank` is not retried.
-- `poc.spec.ts` (all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept
-  page.
 - `engine.spec.ts`: runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start;
   the memory cap (`?memcap=400`: a 10-million-row `generate` is r(909), the engine stays `ready`, the data is kept),
   also

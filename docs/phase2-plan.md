@@ -103,7 +103,6 @@ How it is run: `docs/web-audit-plan.md` (the execution plan; scope decided 2026-
   off-screen bottom edge). The #26 and #30 review nice-to-haves were dropped (their reports were deleted): the audit reads that
   code.
 - **Tests:** what the tests do not cover (the views are tried only by e2e; `check-pytest` and `check-numeric` run by hand);
-  `web/e2e/poc.spec.ts` is bound to the proof-of-concept page's ids and is rewritten with the page (its four tests are fixme);
   one Playwright test of a streamed run in a real browser (step 1 checked streaming in Node only); Tab out of the open ⋯ menu
   at phone width (`e2e/shell.spec.ts` checks the desktop only). New specs import `test` from `e2e/fixtures.ts`.
 - **The first real deploy's checks** (Open, critical).
