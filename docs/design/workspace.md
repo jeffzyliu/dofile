@@ -2,8 +2,9 @@
 
 Design note S0 of the web audit (`docs/web-audit-plan.md`, section 6): who owns the file list, the tabs, each open
 document and its saved text, and in what order the page writes files. S1, S2, S3, S5, S6 and R7r are built from it; it
-changes no code. **Status: proposed 2026-11-16, not approved. None of those items starts before the maintainer approves
-it.** Read from the code at f947053. Paths are under `web/src/app/` unless they start with `web/` or `docs/`; "(new)"
+changes no code. **Status: proposed 2026-11-16. Approved by the maintainer 2026-11-16: choices a, b, c (R7r deletes `state.ts`;
+`hookState()` gathers the signals for the e2e hook), d, and decision 4. Decision 2 (the open documents) is open, so S1
+does not start until it is settled; the other items do not wait for it.** Read from the code at f947053. Paths are under `web/src/app/` unless they start with `web/` or `docs/`; "(new)"
 marks a name that does not exist yet.
 
 ## In short: what is to be approved
@@ -85,6 +86,12 @@ interface EditorSurface {                // what Editor.tsx hands attachView() a
 }
 ```
 
+**Open choice: the Doc's shape.** Either a union, `TextDoc | DtaDoc`, where a retype replaces the record in the
+`Doc[]` signal and `kind` is then a plain `readonly` field (the signal carries the retype; `path`, `state` and `saved` stay
+signals, so identity survives a rename and the computeds work); or `kind` as a `Signal`, as sketched above. S1 decides,
+unless the maintainer does first. Either way, S1's reviewer lists every place that holds a `Doc` across an await and
+checks that each handles a close, and S1 tests a pending Save while a rename retypes the same tab.
+
 The owner keeps the records in a private `Signal<Doc[]>`, in the tabs' order, and the active one in a
 `Signal<Doc | null>`. `tabs`, `activeTab`, `selection` and each `dirty` are computeds over those and the `Signal`
 fields, so a rename is one write to `path`; a field written as a plain value would leave them stale.
@@ -126,6 +133,10 @@ to keep an index. Against: nothing found; every flow picks the newest graph when
 S6 builds it.
 
 ## 3. The order of writes (decision 3; S2 and B1)
+
+**Update 2026-11-16.** S2 builds turn bodies as generators, run by `fileTurn`, with an async thunk as the fallback; the
+plan's S2 row (`docs/web-audit-plan.md`, phase 2) has the design. The rules below stand; only how a body is written
+changes.
 
 **The unit of order is a turn: the store calls that no question separates, and what must stay next to them. Never a
 whole operation.**

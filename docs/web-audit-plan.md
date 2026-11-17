@@ -5,7 +5,7 @@ what is planned after it. The reasons are in `docs/web-audit-proposal.md` (the p
 `docs/archive/web-audit-surveys/` (the reports). This file does not repeat an item's content: an id such as `S2` is
 defined in the proposal's section 3.
 
-**Status (2026-11-16).** Not started. Scope decided by the maintainer: proposal B, plus four redesigns moved in from C
+**Status (2026-11-16).** Phase 0 is merged into `audit/0-nets` and its end gate is green (`docs/web-audit-log.md`). Scope decided by the maintainer: proposal B, plus four redesigns moved in from C
 (R7 through the design note, R5, the focus-target registry of R3, R1) and screenshots as a net for the view moves.
 Section 2 lists the decisions; all are made.
 
@@ -78,7 +78,7 @@ Models, by risk. "S/h + O" is a Sonnet builder at high effort with an Opus revie
 | Fable, high | S0 (authorized; Opus, high if the session's yes is not given) |
 | Opus, high | B1, B2, B3, S1, S2, S7, S8, the R1 note (a candidate for Fable: ask), R1 |
 | S/h + O | N1, S3, S5, S6 with R3r, R7r, R5 |
-| Sonnet, medium | N2 to N7, B4, B5, C1 to C5, S4, S9, W1 to W7, the R5 note |
+| Sonnet, medium | N2 to N7, B4, B5, C1 to C5, S4, S9, W1 to W7, the R5 note, the Run gate, the N7 tightening |
 | Haiku | doc sync, renames, `docs/test-map.md` edits |
 
 N1's Opus reviewer has one job: to match each removed assertion to its replacement (the proposal's risk 3).
@@ -144,24 +144,26 @@ audit's log, for R2: whether the three small edits close the gap, and the tests 
 
 ### Phase 2: moves (sessions 3 and 4)
 
-**Start gate.** S0 approved. N7's list of states checked against phase 1's changes, then its
-baseline taken from `main`.
+**Start gate.** S0 approved (decision 2 settled before S1). N7 tightened (the row below). N7's list of states checked
+against phase 1's changes, then its baseline taken from `main`.
 
 | Lane | Item | After | Pull request |
 |---|---|---|---|
+| e | N7 tightening: deterministic Chromium flags for the screenshots; if two baselines still differ, a per-state allowance in place of one global 30 pixels; a report of near-misses (states with 1 to the allowance pixels changed). Done before the baseline is taken | phase 1 | 2.0 |
 | a, engine | C3: the shared-buffer protocol in `lazy-part.ts` | start | 2.1 |
-| a | S7, without graphics: per-start facts, the controller's wiring | C3 | 2.1 |
+| a | S7, without graphics: per-start facts, the controller's wiring. It leaves `web/src/main.tsx` alone, or waits for S1, which edits it | C3, and S1 merged if it needs `main.tsx` | 2.1 |
 | a | S8, without graphics: `/work` mirror, boot and loader, typed dispatch (three items in a chain; the boundary is below) | S7 | 2.2 |
 | a | The R1 note | S8, and the condition below | 2.3 |
 | a | R1: the lazy graphics part as one machine, with its Node harness (three items). It leaves `state.ts` and `app/engine.ts` alone: a change it needs there follows R7r | the note approved | 2.3, 2.4 |
-| b, files | S1: editor documents in a DOM-free controller that owns Save (two items) | start | 2.5 |
-| b | S2, first half: one turn factory, one door for page writes, the order tests | S1 | 2.6 |
-| b | B1: uploads and "Restore the sample" take a turn (failing test first) | S2's first half | 2.7 |
-| b | S2, second half: `files/actions.ts` split | B1 | 2.8 |
+| b, files | S1: editor documents in a DOM-free controller that owns Save, and `tabs` and `activeTab` (three items: the records with the derived signals; Save and the file code's calls; the scroll snapshot). Edits `web/src/main.tsx`. The Doc's shape is chosen first (below) | start, and S0's decision 2 settled | 2.5 |
+| b | S2, first half: the generator turn design (below), one door for page writes, the order tests | S1 | 2.6 |
+| b | B1: uploads and "Restore the sample" take a turn (failing test first). `store.write` takes an expectation (one transaction); `createEntry` passes "absent"; the re-ask words go into SPEC's "Name clash" row. An engine change: snapshot first | S2's first half | 2.7 |
+| b | S2, second half: `files/actions.ts` split three ways | B1 | 2.8 |
 | b | S3: `FilesPane.tsx` split, `rename.ts` with Node tests | S2 | 2.9 |
+| b | Run gate: Run, Run selection and the banner's Run are offered only for `.do` and `.ado` tabs, by a computed from the path. A typed `do x.txt` keeps Stata's behaviour | S1, and S5 merged (rule 8: both edit the run controls) | 2.17 |
 | c, views | S4: output readers into `.ts`, one command bar, one variables table | start | 2.10 |
 | c | S5: `runText`, scroll-follow, `CommandLine.tsx`, state logic out of `App.tsx` | S1 (both edit `state.ts`) and S4 (its one command bar is also in `CommandLine.tsx`) | 2.11 |
-| c | S6 with R3r: one roving-key hook, one modal trap, the focus-target registry, owner functions for the shared signals | S3, S5, and S7 merged (both edit `app/engine.ts`) | 2.12 |
+| c | S6 with R3r: one roving-key hook, one modal trap, the focus-target registry, owner functions for the shared signals (not `activeTab`: S1 owns it), and `graphIndex` as a computed with `selectGraph(n)` | S3, S5, and S7 merged (both edit `app/engine.ts`) | 2.12 |
 | c | R7r: `state.ts` split by owner, as S0 lays out; the e2e hook's `state` object unchanged | S6 | 2.13 |
 | c | C5: phone toast placement. When it is merged into the session's branch and the preview is up, the orchestrator tells the maintainer, with the four cases to try on a real phone; the session's merge to `main` waits for that check | R7r | 2.16 |
 | d, build | S9, without staging (its clauses are below) | start | 2.14 |
@@ -172,6 +174,15 @@ the manifest; `npm run commands` through a temp file; `wheel` stops deleting the
 denied-commands list generated; `measure-startup` and `compare-pytest` moved, not folded away; and the
 `DOFILE_EDITOR_BASE` mode deleted. R5: file staging out of the config into one script; `wheel` once per `e2e`; the two
 CI file lists generated from one table (R5 changes those workflows anyway).
+
+**S2's turn design** (the maintainer's, 2026-11-16). Turn bodies are plain generators (`function*`) over an `Io` of store
+operations; `fileTurn` runs them, one `yield` per operation, with a timeout per operation. A body cannot await a dialog,
+a timer or another turn: it has nothing to await. Save's turn returns its pending write wrapped, and the answer is applied
+after the turn (S0, choice b). Fallback, if generators prove awkward on real code: an async thunk given a `Writer` token
+(branded, expiring when the turn ends), a lint rule that no holder of a `Writer` calls `fileTurn`, and a timeout.
+`files/turns.ts` carries an extended comment on the generator pattern. This is the maintainer's explicit exception to
+`web/CLAUDE.md`'s rule of sparse comments: reviewers keep it. S2's first half builds this; its second half splits
+`files/actions.ts` three ways.
 
 **Where S8 ends and R1 begins.** The 22 variables of `worker.ts`'s graphics section include some that boot and the
 dispatch use (`started`, `runs`, `snapshotBase`, `brotliWasm`). S8's brief lists which of the 22 its modules may take;
@@ -302,6 +313,9 @@ them.
 
 ## 7. Checks
 
+- **Engine items** (B1 to B3, C3, S7, S8 and any item that edits `src/engine/`) run `npm run snapshot` first and then
+  `npm test`, which expects 383 tests with a snapshot present (363 pass and 5 skip without one). CI's `unit` job has
+  no snapshot; its `memory snapshot` job runs only when engine paths change.
 - **Per item:** `npm run check`, `npm test`, the item's e2e specs on Chromium and the iPhone project with
   `SNAPSHOT_QUALITY=5` and its own `E2E_PORT`; from phase 2, N7.
 - **Per phase:** the end gates above.
