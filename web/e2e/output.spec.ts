@@ -9,7 +9,7 @@
 //    show in the log), so only the full-size view is checked there, opened through `graphFull`.
 import type { Page } from "@playwright/test";
 import { expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
-import { addBanner, type PhoneTab, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
+import { addBanner, type PhoneTab, seedGraphs, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
 
 declare global {
   interface Window {
@@ -67,6 +67,26 @@ test("the empty states, and the reset wording of the Data tab", async ({ page })
   await showTab(page, "results");
   await expect(page.getByText("No results yet")).toBeVisible();
   await expect(page.getByText("e() and r() appear after an estimation", { exact: false })).toBeVisible();
+});
+
+test("Copy image twice in the full-size view: the first 'Copied' timer does not clear the second", async ({ page }) => {
+  await page.clock.install({ time: 1_900_000_000_000 });
+  await page.goto("?test=manual");
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  await seedGraphs(page, [{ n: 1, png, theme: "light", from: "run", command: "scatter y x" }], { full: true });
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  const copy = viewer.getByRole("button", { name: "Copy image" });
+  test.skip(!(await copy.isEnabled()), "this browser cannot put an image on the clipboard");
+  await copy.click();
+  await expect(viewer.locator(".vsaid")).toHaveText("Copied");
+  await page.clock.fastForward(2000);
+  await copy.click();
+  await page.clock.fastForward(1000); // 3 s after the first copy: its timer (2.5 s) has fired, the second's (4.5 s) has not
+  await expect(viewer.locator(".vsaid")).toHaveText("Copied");
+  await page.clock.fastForward(2000);
+  await expect(viewer.locator(".vsaid")).toHaveText("");
 });
 
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
