@@ -362,7 +362,8 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "end-run":
         return runs.ended(effect.result);
       case "engine-ready":
-        S.dismiss({ b: "store-failed" }); // this start opened the store; a start that did not adds it again after this
+        // this start has its store (banners match by kind, whatever the cause); a start that has none adds it again next
+        S.dismiss({ b: "store-failed", cause: "open" });
         return runs.engineReady();
       case "engine-gone":
         return runs.engineGone();
@@ -378,7 +379,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "add-reset-banner":
         return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind, run: effect.run });
       case "add-store-banner":
-        return S.addBanner({ b: "store-failed" });
+        return S.addBanner({ b: "store-failed", cause: effect.cause });
       case "say":
         return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageWords[effect.line.stage]);
       case "warn":

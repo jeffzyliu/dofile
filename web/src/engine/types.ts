@@ -75,6 +75,10 @@ export type FromWorker =
   | { graphics: "progress"; received: number }
   | { graphics: "failed"; why: string };
 
+/** Where the worker's copy of the file store failed: "open" (the storage did not open, or could not be read), "copy"
+ *  (it was read, but the files could not be written into /work). */
+export type StoreCause = "open" | "copy";
+
 /** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
 export type Wheel = string | { name: string; bytes: Uint8Array };
 /** `boot`'s arguments. `interruptBuffer`: an Int32Array on a SharedArrayBuffer (Break), or null. */
@@ -123,7 +127,7 @@ export interface Startup {
   notCached?: string[]; // snapshot
   runtimeS?: number;
   packagesS?: number; // normal
-  storeError?: { name: string; message: string }; // the worker could not open the store; /work started empty
+  storeError?: { name: string; message: string; cause: StoreCause }; // the worker has no store; /work started empty
 }
 
 export interface FileInfo {

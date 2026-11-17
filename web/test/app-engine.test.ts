@@ -1152,9 +1152,9 @@ test('C2: "Not now" during the download aborts it: no start follows, also when t
 test("a worker that could not open the file store: ready, and the store-failed banner; a start that finds a newer database fails with reason updated", async () => {
   await load({ cached: true });
   await begin();
-  client.worker.reply({ type: "started", storeFailed: true });
+  client.worker.reply({ type: "started", storeFailed: "copy" });
   state("ready");
-  assert.deepEqual(banners(), [{ b: "store-failed" }]);
+  assert.deepEqual(banners(), [{ b: "store-failed", cause: "copy" }]);
 
   await load({ cached: true });
   await begin();
@@ -1170,7 +1170,7 @@ test("a worker that could not open the file store: ready, and the store-failed b
 test("the store-failed banner goes when a later start opens the store (a reset after a store error that passed)", async () => {
   await load({ cached: true });
   await begin();
-  client.worker.reply({ type: "started", storeFailed: true });
+  client.worker.reply({ type: "started", storeFailed: "open" });
   assert.deepEqual(
     banners().map((b) => b.b),
     ["store-failed"],

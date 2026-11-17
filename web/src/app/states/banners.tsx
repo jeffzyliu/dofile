@@ -290,7 +290,14 @@ export function StoreFailedBanner({ banner }: { banner: BannerOf<"store-failed">
         </>
       }
     >
-      <b>Your files couldn't be opened:</b> the browser refused to store them. Reload the page to try again.
+      {banner.cause === "open" ? (
+        <>
+          <b>Your files couldn't be opened:</b> the browser refused to store them.
+        </>
+      ) : (
+        <b>Your files couldn't be loaded into the engine.</b>
+      )}{" "}
+      Reload the page to try again.
     </Banner>
   );
 }

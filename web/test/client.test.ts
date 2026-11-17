@@ -1031,7 +1031,10 @@ test("a start whose step is answered in the same tick as end(): nothing more is 
     workers[0].onmessage!({
       data: {
         id: held[0].id,
-        result: at === "startup" ? { mode: "normal", storeError: { name: "Error", message: "no storage" } } : undefined,
+        result:
+          at === "startup"
+            ? { mode: "normal", storeError: { name: "Error", message: "no storage", cause: "open" } }
+            : undefined,
       },
     });
     eng.end(1, { kind: "stopped", reason: "another tab took over" });
@@ -1243,13 +1246,18 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
 test("a worker that could not open the file store: `started` says so, the store is detached, and storeError keeps the error's name; a VersionError is start-failed, reason updated", async () => {
   const newer = "The requested version (1) is less than the existing version (2).";
   for (const [name, message, wanted] of [
-    ["QuotaExceededError", "the quota is full", { type: "started", storeFailed: true }],
+    ["QuotaExceededError", "the quota is full", { type: "started", storeFailed: "open" }],
+    ["ErrnoError", "file system error EISDIR", { type: "started", storeFailed: "copy" }],
     ["VersionError", newer, { type: "start-failed", reason: "updated", detail: newer }],
   ] as const) {
     const store = fakeStore();
     const { eng } = scripted(
       (m, post) => {
-        if (m.op === "startup") post({ id: m.id, result: { mode: "normal", storeError: { name, message } } });
+        if (m.op === "startup")
+          post({
+            id: m.id,
+            result: { mode: "normal", storeError: { name, message, cause: name === "ErrnoError" ? "copy" : "open" } },
+          });
         else starts(m, post);
       },
       { store },
@@ -1258,7 +1266,8 @@ test("a worker that could not open the file store: `started` says so, the store 
     await startWorker(eng, null, said).catch(() => {});
     assert.deepEqual(said.at(-1), wanted, name);
     assert.equal(store.sync, null, `${name}: the store is detached`);
-    if (name !== "VersionError") assert.deepEqual(eng.storeError, { name, message });
+    if (name !== "VersionError")
+      assert.deepEqual(eng.storeError, { name, message, cause: name === "ErrnoError" ? "copy" : "open" });
   }
 });
 

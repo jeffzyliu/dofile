@@ -555,7 +555,7 @@ What the cells mean as a visitor meets them:
 | `checking-cache` | this build's start files are not all in the Cache (`client.cached()`: every file `start-files.json` marks `download` is in `dofile-snapshot-<built>`; false offline, with no Cache API, storage refused or `?snapshot=0`) | `asking`. Otherwise `downloading` then `starting-worker`, with no dialog (`S 4`). There is no "downloaded" flag: evicted or cleared files, a partial download, or a new build ask again. |
 | `asking` | "Download 48 MB"; "Not now" | `downloading`; `declined`. From `declined` (and `none`), "Start engine" (the toolbar's, the command line's, the banner's, Ctrl/Cmd+Enter: the event `ask`) leads back to `asking`; a `run` is not valid with no engine, so nothing is run or kept. |
 | `downloading` | all bytes in; "Stop download" or "Not now"; a failed fetch | `starting-worker`; the fetches are aborted, `declined`; `failed`. "Edit files while it loads" only closes the dialog. Stage list (`S 2`): "Downloading the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine" (the snapshot start differs: OQ-11; the words are one list, `stageNow` in `states/words.ts`, decided 2026-11-12). A download that fails is `failed`: no worker is made and there is no offline start. |
-| `starting-worker` | the last stage ends; the start is rejected | `ready` (nothing runs by itself: with no engine only "Start engine" is offered): the dialog closes by itself, focus goes to the editor, the live region says "Engine ready". A worker that could not open the file store is `ready` too, with an empty `/work`, and an error banner above the editor (on a phone on every view): "**Your files couldn't be opened:** the browser refused to store them. Reload the page to try again." (the maintainer's words, 2026-11-16) / "Reload the page", "Dismiss" (`store-failed`; a later start that opens the store removes it). `failed`, or `failed-twice` when the worker failed twice; a file store of a newer version (another page of a newer build upgraded it: `VersionError`) is `failed` with reason `updated`. |
+| `starting-worker` | the last stage ends; the start is rejected | `ready` (nothing runs by itself: with no engine only "Start engine" is offered): the dialog closes by itself, focus goes to the editor, the live region says "Engine ready". A worker that has no file store is `ready` too, with an empty `/work`, and an error banner above the editor (on a phone on every view), by where its copy failed (`storeError.cause`): the storage did not open or could not be read (`open`), "**Your files couldn't be opened:** the browser refused to store them. Reload the page to try again."; it was read but the files could not be written into `/work` (`copy`), "**Your files couldn't be loaded into the engine.** Reload the page to try again." (the maintainer's words, 2026-11-16) / "Reload the page", "Dismiss" (`store-failed`; a later start that opens the store removes it). `failed`, or `failed-twice` when the worker failed twice; a file store of a newer version (another page of a newer build upgraded it: `VersionError`) is `failed` with reason `updated`. |
 | `ready`, `running` | a run starts; its result arrives; Break | `running`; `ready`; `breaking`. |
 | `breaking` | the run ends with rc 1; 5 s pass; "Don't reset: wait for it" | `ready` (the log has "--Break--", "r(1);" and the note of `S 10`, OQ-9; a run that had ended before a safe point keeps its own rc); reset; `waiting`. |
 | `waiting` | the run ends; "Reset now" | `ready`; reset. |
@@ -658,7 +658,7 @@ As built:
   logging any error; the machine's effect `forget-download` calls it after `failed-twice` whose reason is not `memory` or
   `no-wasm`.
 - `start(n, build, reply)` makes worker `n` and sends `mount`, `boot` and `startup` to it in order. It says what happens
-  through `reply`: `stage` as each stage begins, then `started` (with `storeFailed` when `startup.storeError` is set);
+  through `reply`: `stage` as each stage begins, then `started` (with `storeFailed`, `storeError.cause`, when it is set);
   `start-failed` when there is no WebAssembly, the worker cannot be made, `mount`, `boot` or `startup` fails in the worker,
   or the store is of a newer version (`storeError.name` `VersionError`: reason `updated`); `crashed` when the worker errors
   (cause `error`), the browser closes the file storage (cause `storage`), or `/work` cannot take a change of the page's
@@ -677,7 +677,7 @@ As built:
   deadline `resetAt` and "keep waiting" are the machine's and the controller's (section 5), not the transport's.
 - `query(op, args)` rejects with kind `no-engine` with no live worker. While the worker starts or runs, the call waits in the
   worker's queue; if its worker is ended first it rejects with the ending's kind.
-- `storeError` holds the error (`{name, message}`) with which the worker could not open the store at `mount` (also `startup.storeError`); `/work` then
+- `storeError` holds the error (`{name, message, cause}`; `cause` `open` when the store did not open or could not be read, `copy` when its files could not be written into `/work`) with which the worker has no store at `mount` (also `startup.storeError`); `/work` then
   starts empty, and the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
   it (section 7). The transport also keeps `about` and `startup`, the facts of the last start, for the tests and the hook.
 - **Errors** are `Error`s with `kind`: `"failed"` (`download()` or `build()` could not get the build's list or a file as
@@ -750,7 +750,7 @@ interface Startup {                              // seconds; the fields depend o
   fetched?: "download" | "read from cache"; fetchS?: number; unpackS?: number; heapS?: number; sitePackagesS?: number;
   decoder?: "native" | "wasm" | "none"; restoreS?: number; notCached?: string[];        // snapshot
   runtimeS?: number; packagesS?: number;                                                  // normal
-  storeError?: { name: string; message: string }; // the worker could not open the store; `/work` started empty
+  storeError?: { name: string; message: string; cause: "open" | "copy" }; // no store; `/work` started empty
 }
 interface FileInfo { path: string; dir: boolean; size: number; mtime: number }           // path inside the working folder
 
@@ -929,7 +929,7 @@ type Dialog = null | { d: "download" } | { d: "clash"; path: string; index: numb
             | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "clear-log" } | { d: "reset" }
             | { d: "close-tab"; path: string } | { d: "other-tab" };
 type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user"; run: RunHead | null } | { b: "storage" }
-            | { b: "store-failed" } | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
+            | { b: "store-failed"; cause: "open" | "copy" } | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
             | { b: "run-changed"; path: string };
 
 // A signal with one owner is a ReadonlySignal (step 3.5 C): a view that assigns one fails `npm run check`.

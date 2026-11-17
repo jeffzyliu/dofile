@@ -117,7 +117,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   declare wasm: object | null | undefined;
   declare nextId: number;
   // facts of the last start, for the tests and the test hook; nothing decides by them
-  declare storeError: { name: string; message: string } | null;
+  declare storeError: Startup["storeError"] | null;
   declare about: About | null;
   declare startup: Startup | null;
   #live: Live | null = null;
@@ -640,7 +640,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         this.about = about;
         this.startup = startup;
         this.storeError = storeError;
-        reply(storeError ? { type: "started", storeFailed: true } : { type: "started" });
+        reply(storeError ? { type: "started", storeFailed: storeError.cause } : { type: "started" });
         this.#wantGraphics(build);
       },
       (e: ClientError) => {

@@ -501,7 +501,7 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
 });
 
 test("the storage, store-failed, reset and download-failed banners", async ({ page }) => {
-  await addBanner(page, { b: "store-failed" });
+  await addBanner(page, { b: "store-failed", cause: "open" });
   // on a phone every view draws it; the hidden views' copies are display: none
   const store = page.locator(".banner:visible", { hasText: "Your files couldn't be opened:" });
   await expect(store).toContainText(
@@ -510,6 +510,13 @@ test("the storage, store-failed, reset and download-failed banners", async ({ pa
   await expect(store.getByRole("button", { name: "Reload the page" })).toBeVisible();
   await store.getByRole("button", { name: "Dismiss" }).click();
   await expect(store).toHaveCount(0);
+  await addBanner(page, { b: "store-failed", cause: "copy" });
+  const copy = page.locator(".banner:visible", { hasText: "Your files couldn't be loaded into the engine." });
+  await expect(copy).toContainText("Your files couldn't be loaded into the engine. Reload the page to try again.");
+  await expect(copy).not.toContainText("refused");
+  await expect(copy.getByRole("button", { name: "Reload the page" })).toBeVisible();
+  await copy.getByRole("button", { name: "Dismiss" }).click();
+  await expect(copy).toHaveCount(0);
 
   await addBanner(page, { b: "storage" });
   await addBanner(page, { b: "download-failed" });

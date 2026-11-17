@@ -36,6 +36,7 @@ import type {
   SnapshotFiles,
   Stage,
   Startup,
+  StoreCause,
   ToWorker,
 } from "./types.ts";
 
@@ -78,7 +79,7 @@ let py: SnapshotPy,
   brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
 let queue = Promise.resolve();
 let store: WorkerStore | null = null,
-  storeError: { name: string; message: string } | null = null, // the file store, or why there is none
+  storeError: { name: string; message: string; cause: StoreCause } | null = null, // the file store, or why there is none
   outOfStep: string | null = null; // why /work could not take the page's version after a run; said after its answer
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
 let unsaved = new Map<string, { status: FileChange["status"]; dir: boolean }>();
@@ -141,12 +142,15 @@ function putRecords({ infos, data }: { infos: FileInfo[]; data: [IDBValidKey, Ar
 // With no store (the browser refused, or there is no IndexedDB) /work starts empty; startup.storeError says why, and so
 // does the store_error of every run that writes a file.
 async function copyStore() {
+  let cause: StoreCause = "open";
   try {
     store = self.dofileStore ?? openStore();
-    putRecords(await store.takeAll());
+    const copy = await store.takeAll();
+    cause = "copy";
+    putRecords(copy);
   } catch (e) {
     store = null;
-    storeError = errorForPage(e);
+    storeError = { ...errorForPage(e), cause };
     console.warn(`[dofile] the files are not saved: ${storeError.message}`);
   }
 }

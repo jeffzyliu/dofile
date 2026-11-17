@@ -673,8 +673,14 @@ const CELLS = {
       {
         name: "the worker could not open the file store: ready, with the store-failed banner",
         from: row(r),
-        feed: { type: "started", storeFailed: true },
-        want: (c) => ({ ...ready(c), effects: [...up, { do: "add-store-banner" }] }),
+        feed: { type: "started", storeFailed: "open" },
+        want: (c) => ({ ...ready(c), effects: [...up, { do: "add-store-banner", cause: "open" }] }),
+      },
+      {
+        name: "the worker could not copy the files into its folder: ready, with the store-failed banner of that cause",
+        from: row(r),
+        feed: { type: "started", storeFailed: "copy" },
+        want: (c) => ({ ...ready(c), effects: [...up, { do: "add-store-banner", cause: "copy" }] }),
       },
     ];
   },

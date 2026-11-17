@@ -352,7 +352,7 @@ After every run (`applyRun(changes)`) it writes the run's changes and takes the 
 - A `sync` the worker fails, or a `/work` that cannot take a run's `resync`, leaves `/work` out of step with the store:
   `crashed` with cause `folder`, and the same reset.
 - If the worker cannot open the store, it still mounts, with an empty `/work` and `startup.storeError` (the error's name and
-  message); the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
+  message, and `cause`: `open` or `copy`, where it failed); the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
   `/work`, and says `started` with `storeFailed`: the machine adds the `store-failed` banner. A `VersionError` (another
   page of a newer build upgraded the database) is `start-failed` with reason `updated` instead: only a reload helps.
 

@@ -722,6 +722,7 @@ test("a worker that cannot open the file store still starts, and says the files 
   await startWorker(eng);
   assert.match(eng.storeError!.message, /^this browser has no storage for files/);
   assert.equal(eng.storeError!.name, "Error");
+  assert.equal(eng.storeError!.cause, "open", "the store did not open");
   assert.deepEqual(eng.startup!.storeError, eng.storeError);
   const r = await runOn(eng, writes("lost.txt", "x"));
   assert.equal(r.rc, 0, r.log);
@@ -751,6 +752,28 @@ test("the page's store with a worker that has none: the store is detached, so th
   assert.equal(text(await store.read("page.txt")), "from the page");
   assert.deepEqual(await eng.query("files"), [], "/work does not get it");
   assert.deepEqual(await pendingRows(store), [], "no row that no worker would ever clear");
+  eng.worker!.terminate();
+});
+
+test("a store that opens but whose files cannot be copied into /work: storeError's cause is copy, with the file system's error name", {
+  timeout: 120_000,
+}, async () => {
+  const worker = () =>
+    nodeWorker({
+      store: {
+        // a folder and a file at one path: writing the file onto the folder fails (EISDIR)
+        takeAll: async () => ({
+          infos: [{ path: "a", dir: true, size: 0, mtime: 1 }],
+          data: [["a", new Uint8Array([1]).buffer]],
+        }),
+      } as unknown as FileStore,
+    });
+  const eng = new EngineClient({ createWorker: worker, wheel, extraWheels });
+  const said: Answer<"start-worker">[] = [];
+  await startWorker(eng, null, said);
+  assert.deepEqual(said.at(-1), { type: "started", storeFailed: "copy" });
+  assert.equal(eng.storeError!.cause, "copy");
+  assert.equal(eng.storeError!.name, "ErrnoError");
   eng.worker!.terminate();
 });
 
