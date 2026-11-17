@@ -364,6 +364,8 @@ seconds; the deadline is `resetAt` in the state). Pyodide checks the buffer and 
 calls `request_break()` only while a run is on; the interpreter stops at the next safe point between commands with rc 1,
 data kept. The Break belongs to the run sent last: the transport clears the buffer as it posts a run, the worker lets
 Pyodide read it only during `browser.run`, and a Break read before the run is busy is put back for the run to read again.
+The transport writes SIGINT again every 100 ms until the run answers, since Pyodide's read and clear of the buffer are two
+steps and a store between them is lost.
 
 | State | Meaning | Leaves by |
 |---|---|---|

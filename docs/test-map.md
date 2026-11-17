@@ -141,7 +141,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
-  mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts); store failures (`started` with `storeFailed`,
+  mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost SIGINT is written again while the run is on, never into the
+  next run); store failures (`started` with `storeFailed`,
   `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`).
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the

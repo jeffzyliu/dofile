@@ -48,6 +48,7 @@ type Live = {
   worker: Worker;
   pending: Map<number, Pending>;
   interrupt: Int32Array<SharedArrayBuffer> | null;
+  run: object | null; // the run sent last, until it answers
   ended: ClientError | null;
 };
 
@@ -567,6 +568,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       pending: new Map(),
       ended: null,
       interrupt: typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4)),
+      run: null,
     };
     this.#live = live;
     // A stage or an error of an ended worker is still said: its reply carries that worker's ticket, and the machine
@@ -676,14 +678,33 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // a Break from before this run was the run before's; one from now on is this run's, however long it waits in the
     // worker's queue (the worker lets Python read the buffer only during a run)
     if (live.interrupt) Atomics.store(live.interrupt, 0, 0);
-    return this.#send(live, "run", args, onLog);
+    const run = {};
+    live.run = run;
+    const sent = this.#send(live, "run", args, onLog);
+    const done = () => {
+      if (live.run === run) live.run = null;
+    };
+    sent.then(done, done);
+    return sent;
   }
 
   /** Break: SIGINT in the shared buffer stops the run sent last at its next safe point (`run()` clears it).
    *  Without a SharedArrayBuffer it does nothing: the machine resets instead. */
   interrupt(n: number): void {
     const live = this.#live;
-    if (live?.n === n && live.interrupt) Atomics.store(live.interrupt, 0, 2); // SIGINT
+    if (live?.n !== n || !live.interrupt) return;
+    const buffer = live.interrupt,
+      run = live.run;
+    Atomics.store(buffer, 0, 2); // SIGINT
+    if (!run) return;
+    // Pyodide reads the buffer, then writes 0, in two steps: a store between them is lost (in Node, 8 of 2350; WebKit's
+    // Break test lost about 1 in 100). So it is written again until the run answers; then run()'s clear decides for the
+    // next run. A repeat after Python took the Break only sets the engine's flag again (cleared when a run starts), or
+    // is put back and cleared with the buffer (browser.py).
+    const again = setInterval(() => {
+      if (this.#live !== live || live.run !== run) clearInterval(again);
+      else Atomics.store(buffer, 0, 2);
+    }, 100);
   }
 
   // ---- Reader ----
