@@ -5,6 +5,7 @@
 // The take-over button is aria-disabled (and `.off`) while `other-tab-taking` (a few ms): the machine ignores a second
 // press.
 
+import { megabytes } from "../bytes.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL, snapshotStart } from "../env";
 import { dialog, engine, engineBytes, graphicsPart } from "../state.ts";
@@ -12,11 +13,10 @@ import type { DialogOf, Stage } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { useNow } from "./clock.ts";
 import { engineLoading, engineStarting } from "./predicates.ts";
-import { ofTotal, secs, stageNow } from "./words.ts";
+import { ofTotal, secs, stageNow, stagesOf } from "./words.ts";
 
 /** "48 MB": the download size from the build (start-files.json's compressed total, in the page's meta tag). */
-export const mb = (bytes: number) => `${Math.round(bytes / 1e6)} MB`;
-const size = engineBytes ? mb(engineBytes) : null;
+const size = engineBytes ? `${megabytes(engineBytes, 0)} MB` : null;
 
 export function DownloadDialog(_: { dialog: DialogOf<"download"> }) {
   const st = engine.value;
@@ -68,7 +68,7 @@ function ProgressDialog() {
   const close = () => {
     dialog.value = null;
   };
-  const stages = eng.stagesOf(snapshotStart);
+  const stages = stagesOf(snapshotStart);
   const pct = st.s === "downloading" && st.total ? Math.min(100, (100 * st.received) / st.total) : null;
   const current: Stage | null = st.s === "downloading" ? "download" : busy ? (st as { stage: Stage }).stage : null;
   const done = engineLoading(st) ? st.done : {};
@@ -76,7 +76,7 @@ function ProgressDialog() {
   const stepNo = current ? stages.indexOf(current) + 1 : 0;
   // the graphics part is not in the bar (it follows the start): said under it
   const part = graphicsPart.value,
-    later = part && part.state !== "landed" ? `${(part.total / 1e6).toFixed(1)} MB` : null;
+    later = part && part.state !== "landed" ? `${megabytes(part.total, 1)} MB` : null;
   return (
     <Dialog
       key="progress"
@@ -140,7 +140,7 @@ function ProgressDialog() {
             return (
               <li class={finished ? "done" : s === current ? "now" : "todo"}>
                 {finished ? <span class="ico i-check" aria-hidden="true" /> : <span class="spin" aria-hidden="true" />}
-                {eng.stageWords[s]}
+                {stageNow[s]}
                 {when && <span class="when">{when}</span>}
               </li>
             );

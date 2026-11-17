@@ -5,7 +5,8 @@
 
 import { useEffect } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
-import { baseName, formatSize } from "../files/tree.ts";
+import { formatSize } from "../bytes.ts";
+import { baseName } from "../files/tree.ts";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
 import { engine, files, showToast } from "../state.ts";

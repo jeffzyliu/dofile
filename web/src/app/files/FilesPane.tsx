@@ -3,6 +3,7 @@
 // worker.
 import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { formatSize } from "../bytes.ts";
 import { downloadAll, refresh } from "../files.ts";
 import { restoreSample } from "../sample.ts";
 import { activeTab, dialog, files, fresh, hasFiles, say, showToast, tabs } from "../state.ts";
@@ -25,7 +26,6 @@ import { openFile } from "./open.ts";
 import {
   baseName,
   folderOrAbove,
-  formatSize,
   freeName,
   joinPath,
   movedPath,

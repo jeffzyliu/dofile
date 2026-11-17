@@ -363,13 +363,17 @@ async function holds({ path, data }: Incoming): Promise<boolean> {
   }
 }
 
+/** The editor of the text tab `path` shows `bytes` (a leading BOM kept: the editor notes it). Bytes that are not text
+ *  close the tab, or with `notText` "keep" leave it as it is. */
+export function reloadTab(path: string, bytes: Uint8Array, notText: "close" | "keep"): void {
+  const text = decodeText(bytes, true);
+  if (text !== null) editorCommands.reload(path, text);
+  else if (notText === "close") closeTab(path);
+}
+
 // an upload replaced an open file: the editor shows the new text, or the tab closes if it is not text any more
 function reopen({ path, data }: Incoming) {
-  const tab = tabs.value.find((t) => t.path === path);
-  if (tab?.kind !== "text") return;
-  const text = decodeText(data, true);
-  if (text === null) closeTab(path);
-  else editorCommands.reload(path, text);
+  if (tabs.value.find((t) => t.path === path)?.kind === "text") reloadTab(path, data, "close");
 }
 
 /** The files of a file input (`webkitRelativePath` keeps a folder upload's folders) put under the folder `dir`. */

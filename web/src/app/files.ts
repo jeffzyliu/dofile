@@ -5,6 +5,8 @@
 import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
 import { editorCommands } from "./editor/commands.ts";
+import { reloadTab } from "./files/actions.ts";
+import { decodeText } from "./files/open.ts";
 import { saveAs } from "./files/save.ts";
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
 import * as S from "./state.ts";
@@ -103,24 +105,18 @@ async function followOpen(c: FileChange) {
   } catch {
     return; // the store cannot give it now: nothing is known of the run's version
   }
-  let text: string | null;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); // a BOM kept: the editor notes it
-  } catch {
-    text = null; // not text
-  }
+  const text = decodeText(bytes, true);
   if (!S.tabs.value.some((t) => t.path === c.name && t.kind === "text")) return; // closed meanwhile
   if (editorCommands.ranOver(c.name, text) === "kept") S.addBanner({ b: "run-changed", path: c.name });
 }
 
-/** A file's text as the store has it (strict UTF-8, a leading BOM kept as "\uFEFF": the editor's reload notes it), or
- *  null when it cannot be read or is not text. */
-export async function textInStore(path: string): Promise<string | null> {
-  if (!store) return null;
+/** The text tab `path` shows the store's copy of the file. A copy that cannot be read or is not text changes nothing. */
+export async function reloadFromStore(path: string): Promise<void> {
+  if (!store) return;
   try {
-    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await store.read(path));
+    reloadTab(path, await store.read(path), "keep");
   } catch {
-    return null;
+    // the store cannot give it now
   }
 }
 

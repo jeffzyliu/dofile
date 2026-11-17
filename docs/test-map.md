@@ -174,7 +174,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A file's form that Save keeps (`formOf`, `lineBreakOf`, `dropsBom`, `savedForm`); a run's version of an open file.
 - `straighten.test.ts`: straight quotes for typed text (`src/stata/straighten.ts`): which `inputType`s count, the caret
   kept.
-- `output.test.ts`: the Output tabs' logic (`app/output/format.ts`): number formats, missing values, a matrix as text,
+- `output.test.ts`: the Output tabs' logic (`app/output/format.ts`, and sizes: `app/bytes.ts`): number formats, missing values, a matrix as text,
   the
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
 - `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the

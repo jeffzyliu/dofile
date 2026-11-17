@@ -118,7 +118,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   or `--ip 0.0.0.0`; give any new one the same.
 - **The snapshot is the page's only start; there is no fallback.** `?snapshot=0` is the normal boot, a developer's
   diagnostic, and nothing the page shows names it. A missing or stale snapshot makes the engine `failed` (stale: reason
-  "updated"), with a plain `message` for the visitor (`FAILED` in `app/engine.ts`) and the cause in `detail` (console).
+  "updated"), with a plain `message` for the visitor (`FAILED` in `app/states/words.ts`) and the cause in `detail` (console).
   Rebuild it (`npm run snapshot`) after a change to the dofile code, a wheel or the Pyodide version: `vite build` fails on
   a stale one. Its loader is a patched copy of Pyodide's that throws if Pyodide's text changes, so a Pyodide upgrade needs
   the patch updated (`docs/pyodide-snapshot.md`). `download()` in the transport is the only writer of the start files'

@@ -15,6 +15,7 @@ const { editorCommands } = await import("../src/app/editor/commands.ts");
 const { openFile, toBase64 } = await import("../src/app/files/open.ts");
 const A = await import("../src/app/files/actions.ts");
 const T = await import("../src/app/files/tree.ts");
+const { formatSize } = await import("../src/app/bytes.ts");
 const { fileCommand } = await import("../src/stata/quote.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -85,7 +86,7 @@ test("treeRows: folders first, then files, by name (numbers in order, case ignor
 });
 
 test("names and paths: sizes, a free name, what is wrong with a new name (a control character too), tab labels, row counts", () => {
-  assert.deepEqual([0, 999, 1000, 41_200, 999_499, 999_500, 1_234_567, 48_600_000, 2_500_000_000].map(T.formatSize), [
+  assert.deepEqual([0, 999, 1000, 41_200, 999_499, 999_500, 1_234_567, 48_600_000, 2_500_000_000].map(formatSize), [
     "0 B",
     "999 B",
     "1 KB",

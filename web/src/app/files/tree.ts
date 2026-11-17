@@ -71,14 +71,6 @@ export function treeRows(files: FileInfo[], folded: ReadonlySet<string> = new Se
   return rows;
 }
 
-/** A file's size as the tree shows it, in decimal units: "512 B", "41 KB", "1.2 MB", "3.4 GB". */
-export function formatSize(bytes: number): string {
-  if (bytes < 1000) return `${bytes} B`;
-  if (bytes < 999_500) return `${Math.round(bytes / 1000)} KB`;
-  if (bytes < 999_500_000) return `${(bytes / 1e6).toFixed(bytes < 9_950_000 ? 1 : 0)} MB`;
-  return `${(bytes / 1e9).toFixed(1)} GB`;
-}
-
 /** A name in folder `dir` that no path in `taken` has: `name`, else "untitled-2.do", "untitled-3.do", ... (the number
  *  before the extension). */
 export function freeName(dir: string, name: string, taken: Iterable<string>): string {

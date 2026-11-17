@@ -1,7 +1,9 @@
 // The logic and the words of the dialogs and banners that are plain text, with no view and no signal of their own (so
 // Node tests them: test/states.test.ts).
 
+import type { Line } from "../../engine/machine.ts";
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
+import { megabytes } from "../bytes.ts";
 import type { CrashCause, EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../types.ts";
 
 /** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by
@@ -15,7 +17,7 @@ export const STOPPING_AFTER_S = 1;
 export const secs = (s: number): string => (s < 10 ? `${s.toFixed(1)} s` : `${Math.round(s)} s`);
 /** "14.2 of 48 MB": what arrived, of the total, both in MB (one decimal for what arrived). */
 export const ofTotal = (received: number, total: number): string =>
-  `${(received / 1e6).toFixed(1)} of ${Math.round(total / 1e6)} MB`;
+  `${megabytes(received, 1)} of ${megabytes(total, 0)} MB`;
 
 /** What S 3's first line says at each stage of a start (the `Stage` ids are the state machine's). */
 export const stageNow: Record<Stage, string> = {
@@ -25,6 +27,42 @@ export const stageNow: Record<Stage, string> = {
   files: "Loading your files",
   packages: "Loading packages",
   engine: "Starting the engine",
+};
+
+/** The stages a start goes through, in order: the snapshot start, or ?snapshot=0. */
+export const stagesOf = (snapshot: boolean): Stage[] =>
+  snapshot
+    ? ["download", "unpack", "python", "files", "engine"]
+    : ["download", "python", "files", "packages", "engine"];
+
+/** The stage words with a small first letter: the status bar says them after its "Starting · ". */
+export const stageStatus = Object.fromEntries(
+  Object.entries(stageNow).map(([k, v]) => [k, v[0].toLowerCase() + v.slice(1)]),
+) as Record<Stage, string>;
+
+/** The message of a start that failed with reason "updated". Views key on the reason, not on these words. */
+export const UPDATED = "dofile has a newer version on this site. Reload the page to use it.";
+
+/** What a failed start tells the visitor (`message`), by reason: what happened and what they can do, in plain words.
+ *  The developer's cause is `detail`, and goes to the console. */
+export const FAILED: Record<FailReason, string> = {
+  "no-wasm": "This browser can't run the engine: it has no WebAssembly support. Try another browser.",
+  download: "The engine didn't download completely. Check your connection, then try again.",
+  memory: "There wasn't enough memory to start the engine. Close other tabs, then try again.",
+  updated: UPDATED,
+  unknown: "Something went wrong while starting the engine. Try again, or reload the page.",
+};
+/** The message of `failed-twice`, whatever the reason: it is not started again, so only a reload helps. */
+export const FAILED_TWICE =
+  "The engine failed twice while starting, so it won't try again by itself. Reload the page to try again.";
+
+/** The fixed lines of the live region. A stage's line is stageWords. */
+export const SAY: Record<Exclude<Line, { stage: Stage }>, string> = {
+  ready: "Engine ready",
+  reset: "Engine reset",
+  "download-stopped": "Download stopped",
+  failed: "The engine didn't start",
+  "failed-twice": "The engine stopped after failing twice",
 };
 
 /** Whether Reset asks first (S 14): it may reset at once only while the engine is `ready` and nothing has run on it
