@@ -9,12 +9,16 @@ const asking = new Map<string, string>(); // path -> key of the describe_file in
  *  already on its way: the tab is unmounted and mounted again while the first answer is awaited. A failed call (no
  *  engine, a reset) is forgotten, so the next ask goes through. */
 export function readDta(path: string, key: string) {
-  if (dtaInfo.peek()[path]?.key === key) return;
+  if (dtaInfo.peek()[path]?.key === key || asking.get(path) === key) return;
+  asking.set(path, key);
   call("describe_file", { path })
     .then(
       (result) => {
         dtaInfo.value = { ...dtaInfo.value, [path]: { key, result } };
       },
       () => {},
-    );
+    )
+    .finally(() => {
+      if (asking.get(path) === key) asking.delete(path);
+    });
 }

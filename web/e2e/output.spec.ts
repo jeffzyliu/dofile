@@ -73,8 +73,7 @@ test("Copy image twice in the full-size view: the first 'Copied' timer does not 
   await page.clock.install({ time: 1_900_000_000_000 });
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-  const png =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
   await seedGraphs(page, [{ n: 1, png, theme: "light", from: "run", command: "scatter y x" }], { full: true });
   const viewer = page.getByRole("dialog", { name: "Full-size graph" });
   const copy = viewer.getByRole("button", { name: "Copy image" });
