@@ -16,6 +16,7 @@ import {
   DONE,
   engine,
   expectDrops,
+  FakeTransport,
   FILE,
   failure,
   handlers,
@@ -221,7 +222,7 @@ test("the controller on the real transport, with a scripted worker: ready, a run
   // the real build() (no list: null), then start(): it would throw if the old worker were still live
   await until("ready");
   assert.deepEqual([workers.length, workers[0].terminated, transport.worker === workers[1]], [2, true, true]);
-  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (boom)", kind: "crash", run: FILE }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (boom)", kind: "crash", cause: "error", run: FILE }]);
   // what the ended worker still says goes through its own reply, with its own ticket: the machine drops it
   workers[0].onmessage!({ data: { stage: "engine" } });
   state("ready");
@@ -332,11 +333,12 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
     "plain words for the visitor, and the cause for a developer",
   );
   assert.equal(client.workers.length, 0, "no worker is made");
-  // whatever reason download() gives (a Cache that breaks, a build with no snapshot), the download failed
+  // the reason is the error's own, as for the list: a Cache that breaks is "unknown", not a failed download
   engine.start();
   client.dl.done.no(failure("the cache is broken", { kind: "failed", reason: "unknown" }));
   await tick();
-  assert.deepEqual([state("failed").reason, client.workers.length], ["download", 0]);
+  assert.deepEqual([state("failed").reason, client.workers.length], ["unknown", 0]);
+  assert.equal(state("failed").message, engine.FAILED.unknown);
 
   engine.start();
   await begin();
@@ -525,7 +527,7 @@ test("a crash cuts a run: the new state first, then engine-gone, then the cut ru
     "run.ts gets the cut result after the `engine` signal has the new state, and after the engine is gone",
   );
   assert.deepEqual(old.ended, { kind: "reset", reset: "crash", reason: SENTENCE("the engine crashed (x)") });
-  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (x)", kind: "crash", run: FILE }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (x)", kind: "crash", cause: "error", run: FILE }]);
   const cut = (await done)!;
   assert.deepEqual([cut.rc, cut.kind, cut.results], [9998, "crash", null], "the machine's own result");
   assert.equal(cut.error, SENTENCE("the engine crashed (x)"));
@@ -1185,4 +1187,42 @@ test("the store-failed banner goes when a later start opens the store (a reset a
     ["reset"],
     "the new worker copied the files: no store-failed banner",
   );
+});
+
+test("the reset banner carries the crash's cause (storage, folder, error), and none for a reset the visitor or Break made", async () => {
+  for (const cause of ["error", "storage", "folder"] as const) {
+    await readyEngine();
+    client.worker.reply({ type: "crashed", cause, reason: "unknown", detail: "x" });
+    await tick();
+    assert.equal(banners().at(-1)!.cause, cause);
+  }
+  await readyEngine();
+  engine.reset();
+  await tick();
+  assert.equal(banners().at(-1)!.cause, null);
+});
+
+test("a run that rejects with a kind other than op is not swallowed: no-engine ends the run (run-failed); an ending's kind says nothing, the machine cut the run", async () => {
+  await readyEngine();
+  const run = runCode("x", FILE);
+  client.run1.done.no(failure("the engine is not running", { kind: "no-engine" }));
+  await tick();
+  state("ready"); // not left in `running` for ever
+  const r = (await run)!;
+  assert.deepEqual([r.rc, r.kind, r.error], [9998, "run-failed", "the engine is not running"]);
+});
+
+test("connectEngine called again lets go of the earlier client's graphics subscription", async () => {
+  let subscribed = 0;
+  const transport = Object.assign(new FakeTransport(), {
+    onGraphics() {
+      subscribed++;
+      return () => {
+        subscribed--;
+      };
+    },
+  });
+  setUp({ transport });
+  setUp({ transport });
+  assert.equal(subscribed, 1);
 });

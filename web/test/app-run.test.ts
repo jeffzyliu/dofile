@@ -401,3 +401,21 @@ test("J5: a run's promise settles even when the after-run work throws (an open t
     writable(S.tabs).value = [];
   }
 });
+
+test("a read after a run swallows only no-engine and reset; any other failure is reported to the console", async () => {
+  await readyEngine();
+  const warn = mock.method(console, "warn", () => {});
+  const { refreshData } = await import("../src/app/run.ts");
+  const refuse = (kind: string) =>
+    (client.query = (() => Promise.reject(failure("it said no", { kind }))) as typeof client.query);
+  for (const kind of ["no-engine", "reset"]) {
+    refuse(kind);
+    await refreshData();
+  }
+  assert.equal(warn.mock.callCount(), 0, "the engine is gone: nothing to say");
+  refuse("op");
+  await refreshData();
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /it said no/);
+  warn.mock.restore();
+});

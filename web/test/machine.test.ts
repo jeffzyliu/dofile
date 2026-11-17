@@ -587,10 +587,11 @@ const CELLS = {
       [
         { reason: "download", o: {} },
         { reason: "updated", o: {} },
+        { reason: "unknown", o: {} },
         { reason: "download", o: { crashed: true } },
         { reason: "updated", o: { crashed: true } },
       ] as const
-    ).map(({ reason, o }: { reason: "download" | "updated"; o: Options }) => ({
+    ).map(({ reason, o }: { reason: "download" | "updated" | "unknown"; o: Options }) => ({
       name: `${reason}${o.crashed ? `; ${KEPT}` : ""}`,
       from: row(r, o),
       feed: { type: "download-failed", reason, detail: "the list is of another build" } as const,

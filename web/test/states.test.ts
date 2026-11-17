@@ -61,22 +61,31 @@ test("the times and sizes are written as the drawings write them", () => {
 });
 
 test("the reset banner's words follow the kind, and cut a cause in parentheses off", () => {
-  assert.deepEqual(resetWords("user", "reset by you", true), {
+  assert.deepEqual(resetWords("user", null, "reset by you", true), {
     head: "You reset the engine.",
     rest: "The data in memory is lost; your files are kept.",
   });
   assert.equal(
-    resetWords("break", "the code did not stop at Break", true).head,
+    resetWords("break", null, "the code did not stop at Break", true).head,
     "The engine was reset: the code did not stop at Break.",
   );
   assert.equal(
-    resetWords("crash", "the engine crashed (out of memory: x)", true).head,
+    resetWords("crash", "error", "the engine crashed (out of memory: x)", true).head,
     "The engine crashed and was reset.",
   );
-  assert.equal(resetWords("break", "Break reset the engine, because ...", false).head, "Break reset the engine.");
+  assert.equal(resetWords("break", null, "Break reset the engine, because ...", false).head, "Break reset the engine.");
   assert.equal(
-    resetWords("crash", "the engine's version of your files was out of date (ENOTDIR)", true).head,
+    resetWords("crash", "folder", "any words at all", true).head,
     "The engine's version of your files was out of date, so the engine was reset.",
+  );
+  // the head comes from the cause, never from the reason's text
+  assert.equal(
+    resetWords("crash", "storage", "the engine crashed (x)", true).head,
+    "The browser closed the file storage, and the engine was reset.",
+  );
+  assert.equal(
+    resetWords("crash", "error", "the browser closed the file storage; out of date", true).head,
+    "The engine crashed and was reset.",
   );
 });
 
