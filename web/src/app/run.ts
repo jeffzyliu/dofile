@@ -228,6 +228,5 @@ export function canClearLog(): boolean {
  *  text item, so its log still arrives. */
 export function clearLog() {
   W.log.value = W.log.value.filter((i) => i.t === "head" || (i.t === "text" && i.streaming));
-  S.graphIndex.value = 0;
   clearGraphs();
 }

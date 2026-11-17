@@ -113,11 +113,13 @@ async function followOpen(c: FileChange) {
 /** The text tab `path` shows the store's copy of the file. A copy that cannot be read or is not text changes nothing. */
 export async function reloadFromStore(path: string): Promise<void> {
   if (!store) return;
+  let bytes: Uint8Array;
   try {
-    reloadTab(path, await store.read(path), "keep");
+    bytes = await store.read(path);
   } catch {
-    // the store cannot give it now
+    return; // the store cannot give it now
   }
+  reloadTab(path, bytes, "keep");
 }
 
 /** "Download all (.zip)": made in the page from the store, with or without an engine. Never rejects.

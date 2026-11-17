@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+import { FAILED, FAILED_TWICE, UPDATED } from "../src/app/states/words.ts";
 import type { EngineStateName, RunHead } from "../src/app/types.ts";
 import { EngineClient } from "../src/engine/client.ts";
 import type { FileInfo, Results, RunResult } from "../src/engine/types.ts";
@@ -121,7 +122,7 @@ test("an answer given while its effect is being performed waits for the step's o
   assert.deepEqual(S.engine.value, {
     s: "failed",
     reason: "no-wasm",
-    message: engine.FAILED["no-wasm"],
+    message: FAILED["no-wasm"],
     detail: "this browser has no WebAssembly support",
   });
   assert.deepEqual(client.worker.ended, { kind: "failed", reason: "this browser has no WebAssembly support" });
@@ -238,7 +239,7 @@ test("the controller on the real transport, with a scripted worker: ready, a run
   assert.deepEqual(S.engine.value, {
     s: "failed-twice",
     reason: "memory",
-    message: engine.FAILED_TWICE,
+    message: FAILED_TWICE,
     detail: "the engine's worker failed twice (out of memory); reload the page",
   });
   assert.deepEqual(
@@ -331,7 +332,7 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
   const failed = state("failed"); // no offline start: a failed download ends there
   assert.deepEqual(
     [failed.reason, failed.message, failed.detail],
-    ["download", engine.FAILED.download, "https://dofile.test/snapshot/heap.bin: 503"],
+    ["download", FAILED.download, "https://dofile.test/snapshot/heap.bin: 503"],
     "plain words for the visitor, and the cause for a developer",
   );
   assert.equal(client.workers.length, 0, "no worker is made");
@@ -340,7 +341,7 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
   client.dl.done.no(failure("the cache is broken", { kind: "failed", reason: "unknown" }));
   await tick();
   assert.deepEqual([state("failed").reason, client.workers.length], ["unknown", 0]);
-  assert.equal(state("failed").message, engine.FAILED.unknown);
+  assert.equal(state("failed").message, FAILED.unknown);
 
   engine.start();
   await begin();
@@ -348,7 +349,7 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
   assert.deepEqual(S.engine.value, {
     s: "failed",
     reason: "download",
-    message: engine.FAILED.download,
+    message: FAILED.download,
     detail: "no snapshot at /snapshot/",
   });
   assert.deepEqual(
@@ -368,7 +369,7 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
   assert.deepEqual(S.engine.value, {
     s: "failed-twice",
     reason: "memory",
-    message: engine.FAILED_TWICE,
+    message: FAILED_TWICE,
     detail: "the engine's worker failed twice (out of memory); reload the page",
   });
   assert.deepEqual(
@@ -736,10 +737,10 @@ test('an updated site fails with reason "updated", from download() at once or fr
   await tick();
   assert.deepEqual(
     [state("failed").reason, state("failed").message],
-    ["updated", engine.UPDATED],
+    ["updated", UPDATED],
     "plain words: a newer version, reload",
   );
-  assert.match(engine.UPDATED, /newer version.*Reload the page/);
+  assert.match(UPDATED, /newer version.*Reload the page/);
   assert.equal(client.workers.length, 0, "no worker after an updated download");
 
   // a page that was open when the site was deployed again: its next restart finds the list of another build
@@ -750,7 +751,7 @@ test('an updated site fails with reason "updated", from download() at once or fr
   engine.reset();
   client.list.no(failure(stale, { kind: "updated" }));
   await tick();
-  assert.deepEqual(S.engine.value, { s: "failed", reason: "updated", message: engine.UPDATED, detail: stale });
+  assert.deepEqual(S.engine.value, { s: "failed", reason: "updated", message: UPDATED, detail: stale });
   assert.deepEqual([client.workers.length, client.live], [1, null], "the old worker is ended, and no new one is made");
   assert.equal((await cut)!.kind, "user");
   // "Try again" after a reset whose new start failed: the cut run is still the last run
@@ -778,7 +779,7 @@ test('an updated site fails with reason "updated", from download() at once or fr
     assert.deepEqual(S.engine.value, {
       s: "failed",
       reason,
-      message: engine.FAILED[reason],
+      message: FAILED[reason],
       detail: "dofile was updated (not from the text)",
     });
   }
@@ -792,7 +793,7 @@ test('an updated site fails with reason "updated", from download() at once or fr
 
 test("a failed start's message is plain words for every reason, with no developer terms; the cause is `detail` and goes to the console", async () => {
   const dev = /npm|snapshot|manifest|bytes|worker|wheel|\.js|\.json|\?|`/i;
-  for (const m of [...Object.values(engine.FAILED), engine.FAILED_TWICE]) assert.doesNotMatch(m, dev, m);
+  for (const m of [...Object.values(FAILED), FAILED_TWICE]) assert.doesNotMatch(m, dev, m);
   const warn = mock.method(console, "warn", () => {});
   const cause = "snapshot: a file is 10 bytes, the manifest says 99; run `npm run snapshot` again";
   try {
@@ -1170,7 +1171,7 @@ test("a worker that could not open the file store: ready, and the store-failed b
   assert.deepEqual(S.engine.value, {
     s: "failed",
     reason: "updated",
-    message: engine.UPDATED,
+    message: UPDATED,
     detail: "VersionError: the database is newer",
   });
 });

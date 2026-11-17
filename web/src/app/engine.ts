@@ -31,8 +31,6 @@ import { engineWriter, graphicsWriter } from "./state.ts";
 import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
 import type { EngineState, RunHead } from "./types.ts";
 
-export { FAILED, FAILED_TWICE, UPDATED } from "./states/words.ts";
-
 // ---- the wiring ----
 
 /** What run.ts does for the engine (connectRun). `ended` comes after the `engine` signal has the new state, and when

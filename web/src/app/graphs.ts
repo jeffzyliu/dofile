@@ -11,9 +11,10 @@ let graphCount = 0; // graphs drawn since the log was cleared: their numbers
 /** The number of the next graph. */
 export const nextGraphNumber = () => ++graphCount;
 
-/** No graphs, and the numbers start again from 1. */
+/** No graphs, the first one selected, and the numbers start again from 1. */
 export function clearGraphs() {
   W.graphs.value = [];
+  S.graphIndex.value = 0;
   graphCount = 0;
 }
 

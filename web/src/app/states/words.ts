@@ -56,7 +56,7 @@ export const FAILED: Record<FailReason, string> = {
 export const FAILED_TWICE =
   "The engine failed twice while starting, so it won't try again by itself. Reload the page to try again.";
 
-/** The fixed lines of the live region. A stage's line is stageWords. */
+/** The fixed lines of the live region. A stage's line is stageNow. */
 export const SAY: Record<Exclude<Line, { stage: Stage }>, string> = {
   ready: "Engine ready",
   reset: "Engine reset",
