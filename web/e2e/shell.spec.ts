@@ -1,6 +1,7 @@
 // The app shell in real browsers: the layouts, the theme button, the ⋯ menu (Esc and Tab), the download prompt's "Not
 // now", "Start engine" as the way back to it and a run that does nothing with no engine; a stale snapshot refused with
-// reason "updated" (plain words in its message, the cause in its detail); ?snapshot=0 still starts. Also the phone
+// reason "updated" (plain words in its message, the cause in its detail), and so is a file store of a newer version;
+// ?snapshot=0 still starts. Also the phone
 // toast's place and the failed "Download all" banner.
 import {
   engineState,
@@ -194,6 +195,35 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
   });
   expect(st?.reason).toBe("updated");
   expect(st?.message).toBe("dofile has a newer version on this site. Reload the page to use it.");
+});
+
+test("a file store of a newer version (another page upgraded it): the start fails with reason updated, and the banner offers a reload", async ({
+  page,
+}) => {
+  await page.goto("?test");
+  await page.evaluate(
+    () =>
+      new Promise((ok, no) => {
+        const r = indexedDB.open("dofile", 2);
+        r.onsuccess = () => {
+          r.result.close();
+          ok(null);
+        };
+        r.onerror = () => no(r.error);
+        r.onblocked = () => no(new Error("blocked"));
+      }),
+  );
+  await startEngine(page);
+  await expect.poll(() => engineState(page), { timeout: 120_000 }).toBe("failed");
+  const st = await page.evaluate(() => {
+    const state = window.__dofile.state.engine.value;
+    return "reason" in state ? state : null;
+  });
+  expect(st?.reason).toBe("updated");
+  expect(st?.detail).toMatch(/version/i);
+  const banner = page.locator(".banner", { hasText: "The engine didn't start." });
+  await expect(banner).toContainText("newer version");
+  await expect(banner.getByRole("button", { name: "Reload the page" })).toBeVisible();
 });
 
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN).

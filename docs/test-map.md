@@ -128,7 +128,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `wakelock.test.ts`: the screen wake lock (`app/wakelock.ts`) with fakes: the policy per state, taken for a run,
   refused, late and pending requests, no API.
 - `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
-  store.
+  store (the error's name kept; a newer database is reason `updated`), a `/work` that cannot take the page's version
+  after a run (`crashed`, cause `folder`).
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
@@ -138,7 +139,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
-  mismatch, stale entries), start and end rules, error kinds, interrupt.
+  mismatch, stale entries), start and end rules, error kinds, interrupt; store failures (`started` with `storeFailed`,
+  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`).
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
@@ -226,6 +228,7 @@ Specs:
   - Desktop and phone layout; the first visit; the toolbar stays put from 1440 to 390 px in all sixteen engine states.
   - Panes never remounted; banners; toast position; no key names on a phone.
   - The status bar's "Not affiliated with StataCorp" (at 1440 px, not at 1199 px, not on the iPhone).
+  - A stale snapshot, and a file store of a newer version, fail with reason `updated` (a real start).
 - `keyboard.spec.ts`: the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, at 390 by 844 px:
   layout while it is open and after, a tap on the command line (touch profiles only), a new file's name field, the
   drag guard.
@@ -238,7 +241,7 @@ Specs:
   - The prompt, Not now, the progress dialog, the take-over button and a real second tab.
   - The off command line where nothing can start the engine (`aria-disabled`, the hint, toasts, nothing dropped).
   - A held Enter on Run or Start engine clicks once; the 320 px phone layout.
-  - Each banner (running, stopping, waiting, storage, reset, failed, download-failed) and where the focus goes.
+  - Each banner (running, stopping, waiting, storage, store-failed, reset, failed, download-failed) and where the focus goes.
   - Download all; Reset during a run; Reset's dialog and "Run the file again".
   - One clock (`page.clock`): the Break pill or status bar equals the banner's time.
 - `editor.spec.ts` (step 4b): the editor, the log and the command line, in the page. Includes the save flows with real

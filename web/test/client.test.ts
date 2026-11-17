@@ -745,7 +745,7 @@ test("interrupt(n) puts SIGINT into the buffer the live worker was given at boot
   assert.equal(buffer[0], 0, "the worker was ended");
 });
 
-test("the store's sync posts `sync`, with nothing in it, to the live worker; a sync that fails or that end() cuts is not an error of the page's; a closed database is `crashed`, cause storage", async () => {
+test("the store's sync posts `sync`, with nothing in it, to the live worker; a sync that fails is `crashed`, cause folder, and one that end() cuts says nothing; a closed database is `crashed`, cause storage", async () => {
   const store = {
     sync: null as FileStore["sync"],
     onClosed: null as null | (() => void),
@@ -773,16 +773,20 @@ test("the store's sync posts `sync`, with nothing in it, to the live worker; a s
     warned.push(a.join(" "));
   };
   try {
-    store.sync!(); // the worker answers it with an error: said on the console, and nothing else happens
+    store.sync!(); // the worker answers it with an error: /work may be out of step with the store
     await sleep(20);
     assert.deepEqual(
       syncs.map((m) => [m.op, m.args]),
       [["sync", undefined]],
       "one op, with no arguments",
     );
-    assert.deepEqual(warned, [
-      "[dofile] the engine's folder could not take a change to your files: file system error ENOTDIR",
-    ]);
+    assert.deepEqual(said.at(-1), {
+      type: "crashed",
+      cause: "folder",
+      reason: "unknown",
+      detail: "file system error ENOTDIR",
+    });
+    assert.deepEqual(warned, []);
     store.onClosed!(); // the browser closed the database under the page
     assert.deepEqual(said.at(-1), {
       type: "crashed",
@@ -795,7 +799,9 @@ test("the store's sync posts `sync`, with nothing in it, to the live worker; a s
     eng.end(1, { kind: "reset", reset: "crash", reason: "x" });
     await sleep(10);
     assert.equal(syncs.length, 2);
-    assert.equal(warned.length, 1, "a sync cut by end() says nothing");
+    assert.equal(said.at(-1)!.type, "crashed");
+    assert.equal(said.filter((a) => a.type === "crashed").length, 2, "a sync cut by end() says nothing");
+    assert.deepEqual(warned, []);
   } finally {
     console.warn = warn;
   }
@@ -1025,7 +1031,10 @@ test("a start whose step is answered in the same tick as end(): nothing more is 
     workers[0].onmessage!({
       data: {
         id: held[0].id,
-        result: at === "startup" ? { mode: "normal", storeError: "the files are not saved" } : undefined,
+        result:
+          at === "startup"
+            ? { mode: "normal", storeError: { name: "Error", message: "no storage", cause: "open" } }
+            : undefined,
       },
     });
     eng.end(1, { kind: "stopped", reason: "another tab took over" });
@@ -1232,4 +1241,45 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
   assert.deepEqual(page.header(), [1, PART.size, 2]);
   assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 3));
   assert.deepEqual(f.modes, ["no-cache", "no-cache", "no-cache"], "a failed fetch is not a damaged copy");
+});
+
+test("a worker that could not open the file store: `started` says so, the store is detached, and storeError keeps the error's name; a VersionError is start-failed, reason updated", async () => {
+  const newer = "The requested version (1) is less than the existing version (2).";
+  for (const [name, message, wanted] of [
+    ["QuotaExceededError", "the quota is full", { type: "started", storeFailed: "open" }],
+    ["ErrnoError", "file system error EISDIR", { type: "started", storeFailed: "copy" }],
+    ["VersionError", newer, { type: "start-failed", reason: "updated", detail: newer }],
+  ] as const) {
+    const store = fakeStore();
+    const { eng } = scripted(
+      (m, post) => {
+        if (m.op === "startup")
+          post({
+            id: m.id,
+            result: { mode: "normal", storeError: { name, message, cause: name === "ErrnoError" ? "copy" : "open" } },
+          });
+        else starts(m, post);
+      },
+      { store },
+    );
+    const said: Said = [];
+    await startWorker(eng, null, said).catch(() => {});
+    assert.deepEqual(said.at(-1), wanted, name);
+    assert.equal(store.sync, null, `${name}: the store is detached`);
+    if (name !== "VersionError")
+      assert.deepEqual(eng.storeError, { name, message, cause: name === "ErrnoError" ? "copy" : "open" });
+  }
+});
+
+test("the worker says its folder fell out of step after a run: `crashed`, cause folder", async () => {
+  const { eng, workers } = scripted(starts);
+  const said: Said = [];
+  await startWorker(eng, null, said);
+  workers[0].onmessage!({ data: { folderError: "file system error EISDIR" } });
+  assert.deepEqual(said.at(-1), {
+    type: "crashed",
+    cause: "folder",
+    reason: "unknown",
+    detail: "file system error EISDIR",
+  });
 });

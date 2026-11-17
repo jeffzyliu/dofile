@@ -53,7 +53,9 @@ export function resetWords(kind: ResetKind, reason: string, isolated: boolean): 
     return {
       head: /file storage/.test(why)
         ? "The browser closed the file storage, and the engine was reset."
-        : "The engine crashed and was reset.",
+        : /out of date/.test(why)
+          ? "The engine's version of your files was out of date, so the engine was reset."
+          : "The engine crashed and was reset.",
       rest: kept,
     };
   return { head: `The engine was reset: ${why}.`, rest: kept };

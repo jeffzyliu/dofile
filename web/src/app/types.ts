@@ -13,6 +13,7 @@ import type {
   Results,
   RunHead,
   Stage,
+  StoreCause,
 } from "../engine/types.ts";
 
 // Defined in engine/types.ts: the state machine uses them, and engine/ never imports app/.
@@ -128,11 +129,13 @@ export type DialogName = NonNullable<Dialog>["d"];
 
 /** The banners in `banners`. `reset`: `kind` is why (Break ran out of time or the page cannot ask a run to stop, the
  *  worker crashed, or Reset / "Reset now"); `run` is the run it cut, null when none was in progress. `storage`: shown
- *  once per visit, when persisted() is false and the files change. `run-changed`: a run rewrote an open file that has
+ *  once per visit, when persisted() is false and the files change. `store-failed`: the engine's worker has no file
+ *  store, so it started with an empty folder; `cause` says where its copy failed (StoreCause). `run-changed`: a run rewrote an open file that has
  *  unsaved edits (a save or a reload of that file removes it). */
 export type Banner =
   | { b: "reset"; reason: string; kind: ResetKind; run: RunHead | null }
   | { b: "storage" }
+  | { b: "store-failed"; cause: StoreCause }
   | { b: "download-failed" }
   | { b: "not-text"; path: string }
   | { b: "save-failed"; path: string; message: string }

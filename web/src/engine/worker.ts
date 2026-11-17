@@ -36,6 +36,7 @@ import type {
   SnapshotFiles,
   Stage,
   Startup,
+  StoreCause,
   ToWorker,
 } from "./types.ts";
 
@@ -78,7 +79,8 @@ let py: SnapshotPy,
   brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
 let queue = Promise.resolve();
 let store: WorkerStore | null = null,
-  storeError = ""; // the file store, or why there is none
+  storeError: { name: string; message: string; cause: StoreCause } | null = null, // the file store, or why there is none
+  outOfStep: string | null = null; // why /work could not take the page's version after a run; said after its answer
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
 let unsaved = new Map<string, { status: FileChange["status"]; dir: boolean }>();
 
@@ -140,13 +142,16 @@ function putRecords({ infos, data }: { infos: FileInfo[]; data: [IDBValidKey, Ar
 // With no store (the browser refused, or there is no IndexedDB) /work starts empty; startup.storeError says why, and so
 // does the store_error of every run that writes a file.
 async function copyStore() {
+  let cause: StoreCause = "open";
   try {
     store = self.dofileStore ?? openStore();
-    putRecords(await store.takeAll());
+    const copy = await store.takeAll();
+    cause = "copy";
+    putRecords(copy);
   } catch (e) {
     store = null;
-    storeError = `the files are not saved: ${errorForPage(e).message}`;
-    console.warn(`[dofile] ${storeError}`);
+    storeError = { ...errorForPage(e), cause };
+    console.warn(`[dofile] the files are not saved: ${storeError.message}`);
   }
 }
 
@@ -186,7 +191,8 @@ function foldersAt(path: string, self: boolean) {
  * truncation is not stamped by MEMFS (its setattr takes no time with a size, and a write of 0 bytes sets none), so a
  * run that empties a file changes only its size.
  * @param before - walk() from before the run.
- * @returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again).
+ * @returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again). If
+ * /work then cannot take the page's version, `outOfStep` says why.
  */
 async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipped: string[]; store_error?: string }> {
   const was = new Map(before.map((f) => [f.path, f])),
@@ -214,7 +220,7 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
       changes.push({ path, dir: failed.dir, size: 0, mtime: 0, status: "removed" });
   }
   if (!changes.length) return { files: [], skipped: [] };
-  if (!store) return { files: [], skipped: [], store_error: storeError };
+  if (!store) return { files: [], skipped: [], store_error: storeError!.message };
   let saved: AppliedRun;
   try {
     saved = await store.applyRun(changes);
@@ -226,11 +232,7 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
   try {
     takePageVersion(saved);
   } catch (e) {
-    return {
-      files: saved.files,
-      skipped: saved.skipped,
-      store_error: `the engine's folder could not take your changes: ${errorForPage(e).message}`,
-    };
+    outOfStep = errorForPage(e).message; // the run's files are kept; the page replaces this worker
   }
   return { files: saved.files, skipped: saved.skipped };
 }
@@ -1031,6 +1033,10 @@ const answer = async ({ id, op, args }: ToWorker) => {
     if (!ops[op]) throw new Error(`unknown op ${op}`);
     const result = await (ops[op] as (args: unknown, id: number) => unknown)(args ?? {}, id);
     self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []); // a file: moved, not copied
+    if (outOfStep) {
+      self.postMessage({ folderError: outOfStep }); // after the run's answer, so the page keeps its result
+      outOfStep = null;
+    }
   } catch (e) {
     const { message, name } = errorForPage(e);
     self.postMessage({ id, error: message, name });

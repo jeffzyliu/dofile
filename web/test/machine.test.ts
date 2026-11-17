@@ -670,18 +670,30 @@ const CELLS = {
         feed: { type: "started" },
         want: ready,
       },
+      {
+        name: "the worker could not open the file store: ready, with the store-failed banner",
+        from: row(r),
+        feed: { type: "started", storeFailed: "open" },
+        want: (c) => ({ ...ready(c), effects: [...up, { do: "add-store-banner", cause: "open" }] }),
+      },
+      {
+        name: "the worker could not copy the files into its folder: ready, with the store-failed banner of that cause",
+        from: row(r),
+        feed: { type: "started", storeFailed: "copy" },
+        want: (c) => ({ ...ready(c), effects: [...up, { do: "add-store-banner", cause: "copy" }] }),
+      },
     ];
   },
   "FAIL(start)": (r) =>
-    (["no-wasm", "download", "memory", "unknown"] as const).map((reason) => ({
+    (["no-wasm", "download", "memory", "updated", "unknown"] as const).map((reason) => ({
       name: reason === "unknown" ? "unknown, after a crash: the count stays 1" : reason,
       from: row(r, { crashed: reason === "unknown" }),
       feed: { type: "start-failed", reason, detail: "mount failed" } as const,
       want: (c: Ctx): Want => ({ ...wantFail(reason, "mount failed")(c), crashes: reason === "unknown" ? 1 : 0 }),
     })),
   "CRASHED(starting)": (r) => {
-    const twice = (reason: "download" | "memory" | "unknown", cause: "error" | "storage"): Variant => {
-      const what = cause === "storage" ? "the browser closed the file storage" : "boom";
+    const twice = (reason: "download" | "memory" | "unknown", cause: "error" | "storage" | "folder"): Variant => {
+      const what = { error: "boom", storage: "the browser closed the file storage", folder: "ENOTDIR" }[cause];
       const detail = `the engine's worker failed twice (${what}); reload the page`;
       return {
         name: `the second crash, ${reason}, ${cause}`,
@@ -712,10 +724,17 @@ const CELLS = {
         feed: { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" },
         want: wantReset("crash", "the browser closed the file storage"),
       },
+      {
+        name: "the first crash: the engine's folder",
+        from: row(r),
+        feed: { type: "crashed", cause: "folder", reason: "unknown", detail: "ENOTDIR" },
+        want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)"),
+      },
       twice("memory", "error"),
       twice("unknown", "error"),
       twice("download", "error"),
       twice("unknown", "storage"),
+      twice("unknown", "folder"),
     ];
   },
   "RESET(crash)": (r) => [
@@ -730,6 +749,12 @@ const CELLS = {
       from: row(r),
       feed: { type: "crashed", cause: "storage", reason: "unknown", detail: "the browser closed the file storage" },
       want: wantReset("crash", "the browser closed the file storage"),
+    },
+    {
+      name: "the engine's folder",
+      from: row(r),
+      feed: { type: "crashed", cause: "folder", reason: "unknown", detail: "ENOTDIR" },
+      want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)"),
     },
   ],
   RUN: (r) => [

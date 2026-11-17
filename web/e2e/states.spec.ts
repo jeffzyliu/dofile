@@ -500,7 +500,24 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
   await expect(breakBtn).toHaveCount(0);
 });
 
-test("the storage, reset and download-failed banners", async ({ page }) => {
+test("the storage, store-failed, reset and download-failed banners", async ({ page }) => {
+  await addBanner(page, { b: "store-failed", cause: "open" });
+  // on a phone every view draws it; the hidden views' copies are display: none
+  const store = page.locator(".banner:visible", { hasText: "Your files couldn't be opened:" });
+  await expect(store).toContainText(
+    "Your files couldn't be opened: the browser refused to store them. Reload the page to try again.",
+  );
+  await expect(store.getByRole("button", { name: "Reload the page" })).toBeVisible();
+  await store.getByRole("button", { name: "Dismiss" }).click();
+  await expect(store).toHaveCount(0);
+  await addBanner(page, { b: "store-failed", cause: "copy" });
+  const copy = page.locator(".banner:visible", { hasText: "Your files couldn't be loaded into the engine." });
+  await expect(copy).toContainText("Your files couldn't be loaded into the engine. Reload the page to try again.");
+  await expect(copy).not.toContainText("refused");
+  await expect(copy.getByRole("button", { name: "Reload the page" })).toBeVisible();
+  await copy.getByRole("button", { name: "Dismiss" }).click();
+  await expect(copy).toHaveCount(0);
+
   await addBanner(page, { b: "storage" });
   await addBanner(page, { b: "download-failed" });
   const storage = bannerOf(page, "This browser may clear your files");

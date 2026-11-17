@@ -74,6 +74,10 @@ test("the reset banner's words follow the kind, and cut a cause in parentheses o
     "The engine crashed and was reset.",
   );
   assert.equal(resetWords("break", "Break reset the engine, because ...", false).head, "Break reset the engine.");
+  assert.equal(
+    resetWords("crash", "the engine's version of your files was out of date (ENOTDIR)", true).head,
+    "The engine's version of your files was out of date, so the engine was reset.",
+  );
 });
 
 test("the running banner names the run", () => {
