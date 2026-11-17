@@ -324,6 +324,17 @@ Specs:
     Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).
   - The clipboard is a recorder in every page.
 
+### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)
+
+Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own and takes one screenshot
+of each state of a fixed list into `web/.shots/baseline/` (git ignores `.shots/`); `npm run shots` builds this tree
+and compares each state with it (plan rule 10: a view move changes no pixel). Its own config (`screenshots.config.ts`:
+Chromium and the iPhone profile only, one worker, no retry), its own folder, no CI job. `shots.spec.ts` holds the
+list: the engine walk (ready with the sample, the log after a run, a results table, the graph and its full-size view,
+a .dta view; the status bar's run time and memory are put back to fixed values), several tabs with one unsaved, each dialog,
+each menu open, the tree with a rename field and with a draft row, a log with an error, each banner, the phone's three
+views. The states are seeded through `e2e/seed.ts`.
+
 ## Conformance corpus: value and limits
 
 **Why it is worth keeping**
@@ -403,5 +414,5 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
 See `CLAUDE.md` (Commands) for the full list. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
 `uv run poe slow` (Stata 14 logs), `uv run poe opendta` (vendored suite), `cd web && npm test` and `npm run check`
 (Biome,
-then `tsc`), `npm run e2e` (Playwright). The format and lint gates are `uv run poe lint` and
+then `tsc`), `npm run e2e` (Playwright), `npm run shots` (the screenshot run, kept out of CI). The format and lint gates are `uv run poe lint` and
 `cd web && npm run lint:strict`; `docs/archive/formatting-proposal.md` has the rest.
