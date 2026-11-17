@@ -517,7 +517,10 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await expect(view.locator("tbody tr").nth(2)).toContainText("Hourly wage");
   await expect(view.getByText("the data in memory is untouched until you press Load.", { exact: false })).toBeVisible();
   expect(
-    await page.evaluate(() => window.__dofile.state.data.value.nvars),
+    await page.evaluate(() => {
+      const data = window.__dofile.state.data.value;
+      return data && "nvars" in data ? data.nvars : undefined;
+    }),
     "describe_file leaves the data in memory",
   ).toBe(0);
   await view.getByRole("button", { name: "Copy the use command" }).click();

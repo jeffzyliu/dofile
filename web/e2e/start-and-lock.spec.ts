@@ -100,7 +100,7 @@ test.describe(() => {
     const kept = await page.evaluate(async () => ({
       answer: window.__dofile.persisted(),
       calls: window.__persistCalls ?? null,
-      now: navigator.storage?.persist ? await navigator.storage.persisted() : null,
+      now: typeof navigator.storage?.persist === "function" ? await navigator.storage.persisted() : null,
     }));
     expect(kept.answer).toBe(kept.now);
     expect(kept.calls).toBe(kept.now === null ? null : 1);
@@ -296,9 +296,12 @@ test("a damaged file in the cache fails the start once and is fetched again by t
       { timeout: 120_000 },
     )
     .toMatch(/snapshot: a file is 10 bytes, the manifest says \d+/);
-  expect(await page.evaluate(() => window.__dofile.state.engine.value.message)).toBe(
-    "Something went wrong while starting the engine. Try again, or reload the page.",
-  );
+  expect(
+    await page.evaluate(() => {
+      const state = window.__dofile.state.engine.value;
+      return "message" in state ? state.message : undefined;
+    }),
+  ).toBe("Something went wrong while starting the engine. Try again, or reload the page.");
   expect(await cached()).toBe(false);
   expect(
     await page.evaluate(() => window.__dofile.engine.worker),

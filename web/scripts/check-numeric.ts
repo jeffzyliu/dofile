@@ -1,5 +1,5 @@
 // Runs each Stata 14 comparison program in Pyodide with numeric_probe.py, one process per case, and writes
-// DIR/<case>.json: `node scripts/check-numeric.mjs [--cases a,b] [--shards 4] [--timeout 600] [--out DIR] [--no-shim]`.
+// DIR/<case>.json: `node scripts/check-numeric.ts [--cases a,b] [--shards 4] [--timeout 600] [--out DIR] [--no-shim]`.
 // The CPython side is `uv run python web/scripts/numeric_probe.py CASE tests_opendta/tools OUT.json`;
 // `uv run python web/scripts/compare_numeric.py CPY_DIR WASM_DIR` diffs the two number by number.
 
@@ -11,12 +11,13 @@ import { loadPyodide } from "pyodide";
 import { installEngine } from "./install-engine.ts";
 
 const args = process.argv.slice(2);
-const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
+const arg = <T>(name: string, fallback: T): string | T =>
+  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const repo = fileURLToPath(new URL("../..", import.meta.url));
 const out = resolve(arg("--out", `${repo}/.dofile/numeric-wasm`));
 
 if (args.includes("--child")) {
-  const caseName = arg("--child");
+  const caseName = arg("--child", "");
   const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });
   await py.loadPackage(["numpy", "scipy", "matplotlib"], { messageCallback: () => {} });
   await installEngine(py);
@@ -47,11 +48,11 @@ for (const c of cases)
   }
 mkdirSync(out, { recursive: true });
 const t0 = performance.now(),
-  timeouts = [],
-  missing = [],
+  timeouts: string[] = [],
+  missing: string[] = [],
   queue = [...cases];
-const runOne = (c) =>
-  new Promise((done) => {
+const runOne = (c: string) =>
+  new Promise<void>((done) => {
     const started = performance.now();
     rmSync(`${out}/${c}.json`, { force: true }); // a result left by an earlier run would hide a crash
     const child = spawn(

@@ -4,7 +4,7 @@
 // `npm run build:local` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes
 // docs/img/startup-times.json, which docs/img/make-startup-times.mjs draws.
 //
-//   node scripts/measure-startup.mjs [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
+//   node scripts/measure-startup.ts [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
 //                                    [--first-run display,graph] [--during-import display,graph] [--import-delay-ms 100]
 //                                    [--first-run-delay-ms 0] [--engine chromium|webkit|firefox]
 //
@@ -30,27 +30,31 @@
 
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
-import { chromium, firefox, webkit } from "@playwright/test";
+import { type BrowserContext, type BrowserType, chromium, firefox, type Page, webkit } from "@playwright/test";
 import { EDITOR_BASE, EDITOR_OUT } from "./urls.ts";
 
 const args = process.argv.slice(2);
-const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
+const arg = <T>(name: string, fallback: T): string | T =>
+  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const here = fileURLToPath(new URL(".", import.meta.url));
 const dist = join(here, "..", EDITOR_OUT); // the editor's folder, served at the root of its own origin (EDITOR_BASE)
 const out = arg("--out", join(here, "../../docs/img/startup-times.json"));
 const reps = Number(arg("--reps", 3));
 const modes = arg("--modes", "normal,snapshot").split(",");
-const NETS = {
+type Net = { label: string; latency: number; mbps: number };
+const NETS: Record<string, Net> = {
   unthrottled: { label: "Unthrottled", latency: 0, mbps: 0 },
   100: { label: "100 Mbps, 20 ms", latency: 20, mbps: 100 },
   30: { label: "30 Mbps, 50 ms", latency: 50, mbps: 30 },
 };
 const engine = arg("--engine", "chromium");
-const ENGINES = { chromium, webkit, firefox };
+const ENGINES: Record<string, BrowserType> = { chromium, webkit, firefox };
+const BROWSER_NAMES: Record<string, string> = { webkit: "WebKit", firefox: "Firefox" };
 if (!ENGINES[engine]) throw new Error(`--engine ${engine}: chromium, webkit or firefox`);
 const importDelayMs = Number(arg("--import-delay-ms", 100));
 const firstRunDelayMs = Number(arg("--first-run-delay-ms", 0));
@@ -63,7 +67,7 @@ if (!existsSync(join(dist, EDITOR_BASE, "index.html")))
   throw new Error(`no web/${EDITOR_OUT}: run \`npm run build:local\` (after \`npm run snapshot\`)`);
 
 // ---- the host ----------------------------------------------------------------------------------------------------------
-const TYPES = {
+const TYPES: Record<string, string> = {
   ".html": "text/html",
   ".js": "text/javascript",
   ".mjs": "text/javascript",
@@ -75,8 +79,8 @@ const TYPES = {
   ".css": "text/css",
 };
 const COMPRESS = new Set([".html", ".js", ".mjs", ".json", ".wasm", ".svg", ".css"]); // a host does not recompress .bin or .whl
-const memo = new Map(); // path -> { raw, br }
-const body = (path) => {
+const memo = new Map<string, { raw: Buffer; br: Buffer | null }>(); // path -> { raw, br }
+const body = (path: string) => {
   if (!memo.has(path)) {
     const raw = readFileSync(path);
     memo.set(path, {
@@ -86,11 +90,11 @@ const body = (path) => {
         : null,
     });
   }
-  return memo.get(path);
+  return memo.get(path)!;
 };
 const served = { bytes: 0 };
 const server = createServer((req, res) => {
-  const url = new URL(req.url, "http://x");
+  const url = new URL(req.url!, "http://x");
   let path = normalize(join(dist, decodeURIComponent(url.pathname)));
   if (!path.startsWith(dist)) {
     res.writeHead(403).end();
@@ -122,14 +126,24 @@ const server = createServer((req, res) => {
   served.bytes += payload.length;
   res.end(payload);
 });
-await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
-const base = `http://127.0.0.1:${server.address().port}`;
+await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+// listening on a port: an address object, not a pipe name
+const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
 // ---- the measurements --------------------------------------------------------------------------------------------------------
 const browser = await ENGINES[engine].launch();
-const profiles = []; // WebKit: a profile folder per visit, removed at the end
+const profiles: string[] = []; // WebKit: a profile folder per visit, removed at the end
 // In the page, before its own scripts: the moment <html data-engine> becomes ready, failed or failed-twice; Download pressed
 // at once when the page asks
+type Timed = { t0: number; resultAt: number; rc?: number; images: number; newGraphs: number; imageAt?: number };
+declare global {
+  interface Window {
+    __engineAt?: { s: string; at: number };
+    __runStarted?: boolean;
+    __runAndTime: (code: string) => Promise<Timed>;
+    __firstRun?: Timed;
+  }
+}
 const watchEngine = () => {
   new MutationObserver(() => {
     const s = document.documentElement.dataset.engine;
@@ -138,11 +152,14 @@ const watchEngine = () => {
       window.__engineAt = { s, at: performance.now() };
   }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-engine"] }); // <html> may not exist yet
 };
-const readyIn = async (page) => {
+const readyIn = async (page: Page) => {
   await page.waitForFunction(() => window.__engineAt, null, { timeout: 300_000 });
-  const { s, at } = await page.evaluate(() => window.__engineAt);
+  const { s, at } = (await page.evaluate(() => window.__engineAt))!;
   if (s !== "ready") {
-    const why = await page.evaluate(() => window.__dofile?.state.engine.value.message ?? "");
+    const why = await page.evaluate(() => {
+      const state = window.__dofile?.state.engine.value;
+      return state && "message" in state ? (state.message ?? "") : "";
+    });
     throw new Error(`the engine did not start (${s}): ${why}`);
   }
   return Number((at / 1000).toFixed(2));
@@ -150,13 +167,14 @@ const readyIn = async (page) => {
 
 // With a lazy snapshot the cold visit waits for the "graphics part: landed" line before the reload (a reload at ready
 // would kill that fetch, and the warm visit would download it again).
-const startList = JSON.parse(readFileSync(join(dist, EDITOR_BASE, "start-files.json"), "utf8"));
+type StartList = { built: string; snapshot?: Record<string, { size: number }> };
+const startList: StartList = JSON.parse(readFileSync(join(dist, EDITOR_BASE, "start-files.json"), "utf8"));
 const lazy = Boolean(startList.snapshot?.graphics);
 const GRAPH = "clear\nset obs 10\ngen x = _n\nscatter x x";
-const CODES = { display: "display 1", graph: GRAPH };
+const CODES: Record<string, string> = { display: "display 1", graph: GRAPH };
 // a run through the test hook: resolves with when its result came back and when an image of it showed in the page
-const runAndTime = (code) =>
-  new Promise((done) => {
+const runAndTime = (code: string) =>
+  new Promise<Timed>((done) => {
     const shown = () =>
       [...document.querySelectorAll("img")].filter(
         (i) => /^(data:image\/png|blob:)/.test(i.src) && i.complete && i.naturalWidth > 0,
@@ -177,7 +195,7 @@ const runAndTime = (code) =>
     });
   });
 // In the page: run `code` `delayMs` after the engine is ready (at once for 0)
-const runAtReady = ({ code, delayMs }) => {
+const runAtReady = ({ code, delayMs }: { code: string; delayMs: number }) => {
   new MutationObserver((_, obs) => {
     if (document.documentElement.dataset.engine !== "ready" || window.__runStarted) return;
     window.__runStarted = true;
@@ -190,12 +208,65 @@ const runAtReady = ({ code, delayMs }) => {
     else submit(); // in the observer itself, as before --first-run-delay-ms
   }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-engine"] });
 };
-const sec = (ms) => Number((ms / 1000).toFixed(2));
+const sec = (ms: number) => Number((ms / 1000).toFixed(2));
 
 // `job`: { firstRun } (a run at ready), { during } (a run during the return visit's import), or none
-async function visit(mode, net, job = {}) {
+type PartRequest = {
+  bytes: number | null;
+  requestToEndMs: number | null;
+  firstByteMs: number | null;
+  fromServiceWorkerOrCache: boolean | null;
+};
+type DuringVisit = {
+  ready: number;
+  writtenAtMs: number;
+  importDelayMs: number;
+  warmedBeforeSubmit: boolean;
+  result: number;
+  image: number | null;
+  rc?: number;
+  images: number;
+  coldPartNotes: string[];
+  warmPartNotes: string[];
+  partRequests: PartRequest[];
+};
+type FirstRunTimes = {
+  ready: number;
+  result: number;
+  image: number | null;
+  submittedAt: number;
+  sinceSubmit: { result: number; image: number | null };
+  rc?: number;
+  images: number;
+};
+type FirstRunVisit = FirstRunTimes & {
+  partNote?: string;
+  coldPartNotes: string[];
+  partRequests: PartRequest[];
+  warm: FirstRunTimes;
+  warmPartNotes: string[];
+};
+type PlainVisit = {
+  cold: number;
+  warm: number;
+  coldBytesFromHost: number;
+  coldNote?: string;
+  warmNote?: string;
+  coldPartNotes: string[];
+  warmPartNotes: string[];
+  partRequests: PartRequest[];
+  warmGraph: { rc?: number; images: number; result: number; image: number | null };
+};
+function visit(mode: string, net: Net, job: { during: string }): Promise<DuringVisit>;
+function visit(mode: string, net: Net, job: { firstRun: string }): Promise<FirstRunVisit>;
+function visit(mode: string, net: Net): Promise<PlainVisit>;
+async function visit(
+  mode: string,
+  net: Net,
+  job: { firstRun?: string; during?: string } = {},
+): Promise<DuringVisit | FirstRunVisit | PlainVisit> {
   const { firstRun, during } = job;
-  let ctx;
+  let ctx: BrowserContext;
   if (engine === "webkit") {
     const dir = mkdtempSync(join(tmpdir(), "measure-startup-"));
     profiles.push(dir);
@@ -206,7 +277,7 @@ async function visit(mode, net, job = {}) {
   await ctx.addInitScript(`window.__runAndTime = ${runAndTime.toString()};`);
   if (firstRun) await ctx.addInitScript(runAtReady, { code: CODES[firstRun], delayMs: firstRunDelayMs });
   // the graphics part's request: to see that the throttle reaches the worker's fetch
-  const partRequests = [];
+  const partRequests: PartRequest[] = [];
   ctx.on("requestfinished", async (req) => {
     if (!req.url().includes("graphics.brotli.bin")) return;
     const sizes = await req.sizes().catch(() => null);
@@ -229,14 +300,14 @@ async function visit(mode, net, job = {}) {
       uploadThroughput: net.mbps * 125_000,
     });
   }
-  const notes = []; // the snapshot start's own breakdown ("download 12.0s, decompress 0.6s, ..."), from the worker's console
-  const partNotes = []; // a lazy build's "[dofile] graphics part: landed|written|warmed ..." lines
+  const notes: string[] = []; // the snapshot start's own breakdown ("download 12.0s, decompress 0.6s, ..."), from the worker's console
+  const partNotes: string[] = []; // a lazy build's "[dofile] graphics part: landed|written|warmed ..." lines
   page.on("console", (m) => {
     if (m.text().includes("[dofile] snapshot start")) notes.push(m.text().replace("[dofile] snapshot start: ", ""));
     if (m.text().includes("[dofile] graphics part")) partNotes.push(m.text().replace("[dofile] ", ""));
   });
   // waits for a "graphics part: <what>" line at or after index `from` of partNotes
-  const partLine = async (what, from = 0, limitMs = 300_000) => {
+  const partLine = async (what: string, from = 0, limitMs = 300_000) => {
     const t = Date.now();
     while (!partNotes.slice(from).some((n) => n.startsWith(`graphics part: ${what}`))) {
       if (Date.now() - t > limitMs) throw new Error(`no "graphics part: ${what}" line in ${limitMs / 1000} s`);
@@ -279,17 +350,17 @@ async function visit(mode, net, job = {}) {
   if (firstRun) {
     // the run submitted at ready (init script)
     await page.waitForFunction(() => window.__firstRun, null, { timeout: 300_000 });
-    const r = await page.evaluate(() => window.__firstRun);
+    const r = (await page.evaluate(() => window.__firstRun))!;
     if (lazy) await partLine("landed");
     const coldParts = partNotes.length;
     // the return visit: the init script submits the same run again
     await page.reload();
     const warm = await readyIn(page);
     await page.waitForFunction(() => window.__firstRun, null, { timeout: 300_000 });
-    const w = await page.evaluate(() => window.__firstRun);
+    const w = (await page.evaluate(() => window.__firstRun))!;
     if (lazy) await partLine("warmed", coldParts); // only for its notes: the run above did not wait for it
     await ctx.close();
-    const timed = (x, ready) => ({
+    const timed = (x: Timed, ready: number): FirstRunTimes => ({
       ready,
       result: sec(x.resultAt),
       image: x.imageAt ? sec(x.imageAt) : null,
@@ -335,36 +406,42 @@ async function visit(mode, net, job = {}) {
 
 const firstRuns = arg("--first-run", "").split(",").filter(Boolean);
 const duringRuns = arg("--during-import", "").split(",").filter(Boolean);
-const jobs = [
+const jobs: ({ key: string; firstRun: string } | { key: string; during: string })[] = [
   ...firstRuns.map((f) => ({ key: f, firstRun: f })),
   ...duringRuns.map((f) => ({ key: `import-${f}`, during: f })),
 ];
-const results = Object.fromEntries(
-  modes.map((m) => [
-    m,
-    Object.fromEntries(
-      nets.map((n) => [
-        n.key,
-        jobs.length
-          ? Object.fromEntries(jobs.map((j) => [j.key, []]))
-          : { cold: [], warm: [], coldBytesFromHost: 0, coldNotes: [], warmNotes: [], visits: [] },
-      ]),
-    ),
-  ]),
+type Cell = {
+  cold: number[];
+  warm: number[];
+  coldBytesFromHost: number;
+  coldNotes: string[];
+  warmNotes: (string | undefined)[];
+  visits: Pick<PlainVisit, "coldPartNotes" | "warmPartNotes" | "partRequests" | "warmGraph">[];
+  medianCold?: number;
+  medianWarm?: number;
+};
+const grid = <C>(cell: () => C): Record<string, Record<string, C>> =>
+  Object.fromEntries(modes.map((m) => [m, Object.fromEntries(nets.map((n) => [n.key, cell()]))]));
+const jobResults = grid(() => Object.fromEntries(jobs.map((j) => [j.key, [] as (DuringVisit | FirstRunVisit)[]])));
+const cells = grid(
+  (): Cell => ({ cold: [], warm: [], coldBytesFromHost: 0, coldNotes: [], warmNotes: [], visits: [] }),
 );
+const results = jobs.length ? jobResults : cells;
 for (let rep = 1; rep <= reps; rep++) {
   for (const net of nets) {
     for (const mode of modes) {
       if (jobs.length) {
         for (const job of jobs) {
-          const r = await visit(mode, net, job);
-          results[mode][net.key][job.key].push(r);
-          if (job.during) {
+          if ("during" in job) {
+            const r = await visit(mode, net, job);
+            jobResults[mode][net.key][job.key].push(r);
             console.log(
               `rep ${rep}  ${net.label.padEnd(16)} ${mode.padEnd(8)} ${job.key.padEnd(14)} ready ${r.ready.toFixed(2)} s  sent ${r.importDelayMs} ms after "written" (warmed already: ${r.warmedBeforeSubmit})  result ${r.result.toFixed(2)} s  image ${r.image ?? "-"}  rc ${r.rc} images ${r.images} | ${r.warmPartNotes.join("; ")}`,
             );
             continue;
           }
+          const r = await visit(mode, net, job);
+          jobResults[mode][net.key][job.key].push(r);
           console.log(
             `rep ${rep}  ${net.label.padEnd(16)} ${mode.padEnd(8)} ${job.key.padEnd(7)} cold: ready ${r.ready.toFixed(2)} s  result ${r.result.toFixed(2)} s  image ${r.image ?? "-"}  rc ${r.rc} images ${r.images} | warm: ready ${r.warm.ready.toFixed(2)} s  result ${r.warm.result.toFixed(2)} s  image ${r.warm.image ?? "-"}  rc ${r.warm.rc} images ${r.warm.images}  part ${(r.coldPartNotes ?? []).join("; ")} | ${(r.warmPartNotes ?? []).join("; ")}  req ${JSON.stringify(r.partRequests)}`,
           );
@@ -372,7 +449,7 @@ for (let rep = 1; rep <= reps; rep++) {
         continue;
       }
       const r = await visit(mode, net);
-      const cell = results[mode][net.key];
+      const cell = cells[mode][net.key];
       cell.cold.push(r.cold);
       cell.warm.push(r.warm);
       cell.coldBytesFromHost = r.coldBytesFromHost;
@@ -392,13 +469,13 @@ for (let rep = 1; rep <= reps; rep++) {
     }
   }
 }
-const median = (a) => {
+const median = (a: number[]) => {
   const s = [...a].sort((x, y) => x - y);
   return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 };
 for (const m of modes)
   for (const n of nets) {
-    const c = results[m][n.key];
+    const c = cells[m][n.key];
     if (jobs.length) continue;
     c.medianCold = median(c.cold);
     c.medianWarm = median(c.warm);
@@ -409,11 +486,14 @@ writeFileSync(
   JSON.stringify(
     {
       measured: new Date().toISOString().slice(0, 10),
-      browser: `${{ webkit: "WebKit", firefox: "Firefox" }[engine] ?? "Chromium"} ${browser.version()}`,
+      browser: `${BROWSER_NAMES[engine] ?? "Chromium"} ${browser.version()}`,
       reps,
       firstRunDelayMs,
       networks: nets.map((n) => ({ key: n.key, label: n.label })),
-      snapshot: { built: list.built, compressedMB: Object.values(list.snapshot).reduce((s, f) => s + f.size, 0) / 1e6 },
+      snapshot: {
+        built: list.built,
+        compressedMB: Object.values(list.snapshot!).reduce((s, f) => s + f.size, 0) / 1e6,
+      },
       results,
     },
     null,

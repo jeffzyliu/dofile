@@ -1,5 +1,5 @@
 """Run pytest and write one outcome per test to a JSON file. The same file runs on CPython (the baseline) and inside
-Pyodide (web/scripts/check-pytest.mjs), so the two can be compared test by test.
+Pyodide (web/scripts/check-pytest.ts), so the two can be compared test by test.
 
     python pytest_report.py OUT.json [pytest args ...]
 

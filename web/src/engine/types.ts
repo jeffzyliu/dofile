@@ -276,7 +276,7 @@ export interface PendingRow {
   to?: string;
 }
 
-// ---- the snapshot (snapshot.ts, scripts/make-snapshot.mjs) ----
+// ---- the snapshot (snapshot.ts, scripts/make-snapshot.ts) ----
 
 /** One big file of the snapshot: its name, its size decompressed (`raw`) and as stored (`size`, brotli). */
 export interface SnapshotFile {

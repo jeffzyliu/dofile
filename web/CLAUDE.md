@@ -44,8 +44,8 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   `npm run format` at the end of a task or before a commit, not after every edit. A `// @ts-expect-error` covers one
   line: if Biome would split the statement under it, put a `// biome-ignore format:` line above.
   `src/stata/commands.json` is generated (`npm run commands`, which CI checks) and not formatted.
-- **TypeScript that Node can run as is.** `src/engine/`, the controllers and `test/` have real annotations (no JSDoc
-  types); Node strips the types, so imports spell the `.ts` extension and only erasable syntax is allowed (no `enum`,
+- **TypeScript that Node can run as is.** `src/engine/`, the controllers, `test/`, `e2e/`, `scripts/` and the two configs have real annotations (no JSDoc
+  types; one `tsconfig.json` covers them all); Node strips the types, so imports spell the `.ts` extension and only erasable syntax is allowed (no `enum`,
   `namespace` or constructor parameter properties; `npm run check` enforces it). The engine's types are
   `src/engine/types.ts`; keep them and SPEC section 6 in step.
 - **Comments are sparse; the code says the rest.** A file header is 1-3 lines on the file's role, only when the name
@@ -132,7 +132,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
   entry made iOS Safari run it twice.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`
-  in `scripts/check-snapshot.mjs`, a strict xfail.
+  in `scripts/check-snapshot.ts`, a strict xfail.
 - **`wheels/`** holds wheels installed after the dofile wheel: `pyreadstat` built for Pyodide, committed so CI needs no
   Emscripten build (rebuild: `sh web/wheels/pyreadstat/build.sh`).
 - **Two origins, two Workers:** the landing and commands pages at `https://dofile.dev/` (`dist/site/`, `wrangler.jsonc`,

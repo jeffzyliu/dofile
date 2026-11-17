@@ -1,7 +1,7 @@
 // Installs the dofile wheel and the extra wheels of web/wheels/ into a Pyodide, as the page's worker does. No pandas,
 // as in the page: `export sasxport` is not available there.
 //   await installEngine(py, { dist, pandas, mock })   // dist: folder holding the dofile wheel (default ../dist);
-//   pandas: also load it (only for checking `export sasxport`: check-snapshot.mjs --pandas);
+//   pandas: also load it (only for checking `export sasxport`: check-snapshot.ts --pandas);
 //   mock: names micropip treats as installed, so neither they nor their libraries are loaded (a lazy snapshot's build)
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

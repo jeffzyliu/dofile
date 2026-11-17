@@ -177,9 +177,12 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
     );
   expect(await page.evaluate(() => window.__dofile.engine.worker), "no worker").toBeNull();
   // the visitor's case is a site updated since the page loaded: the reason says so, for "Reload the page"
-  const st = await page.evaluate(() => window.__dofile.state.engine.value);
-  expect(st.reason).toBe("updated");
-  expect(st.message).toBe("dofile has a newer version on this site. Reload the page to use it.");
+  const st = await page.evaluate(() => {
+    const state = window.__dofile.state.engine.value;
+    return "reason" in state ? state : null;
+  });
+  expect(st?.reason).toBe("updated");
+  expect(st?.message).toBe("dofile has a newer version on this site. Reload the page to use it.");
 });
 
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN).
@@ -200,8 +203,9 @@ test("?snapshot=0: the normal boot still starts and runs the sample", async ({ p
   });
   const engineNow = () =>
     page.evaluate(() => {
-      const { s, reason, detail, message } = window.__dofile.state.engine.value;
-      return { s, reason, detail, message };
+      const state = window.__dofile.state.engine.value;
+      const failed = "reason" in state ? state : undefined;
+      return { s: state.s, reason: failed?.reason, detail: failed?.detail, message: failed?.message };
     });
   const output = () => `the page's console (${logged.length} messages):\n${logged.join("\n")}`;
   await page.goto("?snapshot=0&test");

@@ -4,7 +4,7 @@ What the engine's checks inside Pyodide found, what was fixed and what is still 
 
 ## Known gaps in the browser engine
 
-Found 2026-11-07 by running the engine's checks inside Pyodide (`web/scripts/check-snapshot.mjs`, `npm run
+Found 2026-11-07 by running the engine's checks inside Pyodide (`web/scripts/check-snapshot.ts`, `npm run
 check-snapshot`; details in [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)): the conformance corpus
 (63 value checks against `ref.json`, 12 probes including graphs), 13 calls into the native libraries, and the 98
 Stata 14 reference cases of `tests_opendta/compat` through the repo's own `compare.py` and its known-difference rules.
@@ -32,7 +32,7 @@ snapshot start gives the same result (95 of 97 in about 150 s;
 [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)).
 
 **The unit tests in Pyodide** (`npm run check-pytest`; one process per file, 72 files, 128 s; compared with CPython test by
-test by `compare-pytest.mjs`): OpenDTA's suite and `tests/test_engine.py`, 1080 tests. CPython: 1067 passed, 13 skipped.
+test by `compare-pytest.ts`): OpenDTA's suite and `tests/test_engine.py`, 1080 tests. CPython: 1067 passed, 13 skipped.
 Pyodide with the packages and no pandas: 1060 passed, 24 skipped (11 for pandas), 1 failed (`shell` cannot start a process
 in the browser); with pandas, 1067 / 13 / 1, the same as CPython. No difference is an engine problem.
 Not run in Pyodide because they need subprocesses, the `mcp` package or the source tree: `test_mcp`, `test_worker`,
@@ -86,16 +86,16 @@ its stripped docstrings): 16 of the 91 cases then run failed.
 | Numeric known differences | 3: 0408_mata_moptimize, 1907_models, 1918_models3 | in Pyodide they left a difference beyond their known-difference rule, with more log lines than Stata's (the extra line in 0408 was `convergence not achieved`), and ran 20–500 times slower than on CPython: one shared cause | **fixed 2026-11-07** by the `numpy.linalg` shim ([Open investigation](#open-investigation-model-fits-take-far-longer-in-pyodide)): all three pass, in 2.1 s (0408, was 204–220 s), 7.5 s (1907, was 25 s) and 4.2 s (1918, was 17 s), under the same rules as CPython |
 
 **The two package-gap cases (1701_datamgmt_options, 1911_datamgmt), 2026-11-09.** With pandas loaded both match their Stata 14 logs
-line for line (`node scripts/check-snapshot.mjs --normal --pandas --cases 1701_datamgmt_options,1911_datamgmt`). The page does
+line for line (`node scripts/check-snapshot.ts --normal --pandas --cases 1701_datamgmt_options,1911_datamgmt`). The page does
 not load pandas, so `export sasxport` stops with rc 199 (ODT-32) and what follows in these two cases differs; they are in
-`EXPECTED_DIFFER` in `web/scripts/check-snapshot.mjs`, a strict xfail (it fails if one starts to pass), with `--pandas` as the
+`EXPECTED_DIFFER` in `web/scripts/check-snapshot.ts`, a strict xfail (it fails if one starts to pass), with `--pandas` as the
 exact check. The rest of what they cover, `.xls` and the ReadStat reads, is checked by the unit tests and the e2e test. What was done:
 1. **`xlwt` and `xlrd`:** pure Python wheels on PyPI; they install in Pyodide through micropip in about 0.1 s. They became core
    dependencies of dofile (`pyproject.toml`), so the CLI and the MCP server get `.xls` too, and the page needs no code for them.
 2. **`pyreadstat`:** no Pyodide build exists, so `web/wheels/pyreadstat/build.sh` (the recipe,
    `web/wheels/pyreadstat/`) compiles one with `pyodide-build` (a 614 KB wheel; Cython plus ReadStat C, zlib from
    Emscripten's port, a two-line `setup.py` patch for the link flags), committed as `web/wheels/pyreadstat-*.whl`. The
-   page, `make-snapshot.mjs` and the Node checks install it after the dofile wheel through
+   page, `make-snapshot.ts` and the Node checks install it after the dofile wheel through
    `web/scripts/install-engine.ts`. The version is 1.3.6, the cap in the dev group: 1.3.7 gives empty values for long
    strings (strL) in `read_dta`, on CPython as well (`test_readstat_reads_ours[119]`).
 3. **No pandas, on purpose.** `pyreadstat` reads SAS transport and SPSS without it; only `export sasxport` needs

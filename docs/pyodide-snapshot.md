@@ -76,7 +76,7 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
 
 | File | Role |
 |---|---|
-| `web/scripts/make-snapshot.mjs` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes at brotli 11, seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
+| `web/scripts/make-snapshot.ts` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes at brotli 11, seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
 | `web/src/engine/snapshot.ts` | the loader patch, the library log, the restore options, and brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's decoder, brotli-wasm as the fallback); used by the script and the worker |
 | `web/src/engine/worker.ts` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went. It reads everything through one Cache: "The start since prototype 1" below |
 | `web/src/engine/client.ts`, `main.tsx` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`. Where the start's time went: the client's `startup` and the worker's console line `[dofile] snapshot start: …` |
@@ -151,7 +151,7 @@ Node, local files (one run of each, same machine):
 The demo's 1.31 s: read 0.02 s, **decompress 0.70 s**, start the wasm module 0.05 s, write site-packages 0.08 s,
 **re-link 136 libraries 0.42 s**, copy the heap 0.04 s. After a restore the first program runs in 0.04–0.18 s.
 
-In the browser (2026-11-07, `web/scripts/measure-startup.mjs`, the 39.9 MB build, Chromium 158, the built page, the
+In the browser (2026-11-07, `web/scripts/measure-startup.ts`, the 39.9 MB build, Chromium 158, the built page, the
 network throttled through the DevTools protocol): the harness writes `docs/img/startup-times.json` and
 `docs/img/make-startup-times.mjs` draws the chart. It serves the page like a real host (brotli 5 for text and wasm, long
 caching for hashed assets, the isolation headers, the `.bin` files as they are); Pyodide's runtime and packages come
@@ -188,7 +188,7 @@ For legacy `.xls` and for SAS transport, SPSS and Stata 7 and older `.dta` files
 holds one we compiled (`web/wheels/README.md`). The snapshot holds all of them. Pandas is **not** installed: only
 `export sasxport` needs it.
 
-Four builds, measured the same day on one machine (`measure-startup.mjs`, 2 reps, Chromium; the 11-07 column is the
+Four builds, measured the same day on one machine (`measure-startup.ts`, 2 reps, Chromium; the 11-07 column is the
 table above, 3 reps). Times are cold / warm. The unthrottled normal-boot times swing by seconds (the CDN), so compare the
 30 Mbps rows.
 
@@ -209,15 +209,15 @@ ODT-32; checked in Pyodide under Node and in all four e2e browsers). A and D wer
 the numbers are not in CI.
 
 C is committed: 41.6 MB. A snapshot start passes 95 of 97 Stata cases directly, the 63 corpus checks, the 12 probes and
-the 13 native-library calls; 1701 and 1911 differ only by `export sasxport` and match with `check-snapshot.mjs --normal
+the 13 native-library calls; 1701 and 1911 differ only by `export sasxport` and match with `check-snapshot.ts --normal
 --pandas`. `npm run e2e` passes in all four profiles, including a test that writes and reads `.xls`, reads a `.xpt` and
 a `.sav`, and checks the `export sasxport` refusal. To add pandas later (D): load it in `worker.ts` and
-`install-engine.ts`, import it in `make-snapshot.mjs`, and empty `EXPECTED_DIFFER`.
+`install-engine.ts`, import it in `make-snapshot.ts`, and empty `EXPECTED_DIFFER`.
 
 ## File size: what is done and what is not
 
 The two files and their sizes: "What is in the demo". Sizes below are compressed MB, measured unless marked; the code
-is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.mjs` and `web/src/engine/worker.ts`.
+is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.ts` and `web/src/engine/worker.ts`.
 
 **Download size**
 
@@ -274,7 +274,7 @@ and its files cost 7.4 in the bundle); openpyxl and one engine run 34.3.
 
 ## Correctness checks
 
-`cd web && npm run check-snapshot` (`web/scripts/check-snapshot.mjs`) checks, in Node with the page's restore code, that
+`cd web && npm run check-snapshot` (`web/scripts/check-snapshot.ts`) checks, in Node with the page's restore code, that
 an engine restored from the snapshot gives the normal engine's results. Options: `-- --dir path` (another snapshot
 folder), `--shards N` (default 4), `--timeout` (default 300 s), and `--normal` to run the same checks on a normal boot,
 the baseline that tells a snapshot problem from one Pyodide has anyway. It runs:
@@ -431,7 +431,7 @@ source).
 first call through it fails (`Module._init_pyodide_proxy()`). Only the user agent matters (checked in WebKit with the
 profiles mixed). A real iOS device was not tried.
 
-**The fix.** `make-snapshot.mjs` patches the loader to behave as on iOS everywhere (`noTrampoline` in `snapshot.ts`),
+**The fix.** `make-snapshot.ts` patches the loader to behave as on iOS everywhere (`noTrampoline` in `snapshot.ts`),
 for the build and the restore, so the pointer is always 0 and one snapshot starts in every browser.
 `SNAPSHOT_TRAMPOLINE=1` keeps Pyodide's own choice.
 

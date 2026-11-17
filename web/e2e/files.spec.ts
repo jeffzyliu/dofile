@@ -244,7 +244,7 @@ test("a renamed row drawn after the visitor clicked into the editor leaves the f
       s.list = real;
       answer();
     };
-    s.list = (...a: unknown[]) => gate.then(() => real.apply(s, a));
+    s.list = () => gate.then(() => real.call(s));
   });
   await row(page, /^a\.do/).focus();
   await page.keyboard.press("F2");
@@ -280,7 +280,7 @@ test("a renamed row drawn after the visitor clicked another row leaves the focus
       s.list = real;
       answer();
     };
-    s.list = (...a: unknown[]) => gate.then(() => real.apply(s, a));
+    s.list = () => gate.then(() => real.call(s));
   });
   await row(page, /^a\.do/).focus();
   await page.keyboard.press("F2");
