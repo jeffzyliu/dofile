@@ -105,8 +105,9 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not `@playwright/test`. Its fixture answers
   `persisted()` true (`test.use({ persisted: false })` for the browser's own) and retries a stalled first `goto`; a context
   or page a test makes itself needs `keepFiles(context)` or `retryFirstGoto(page)`. The helpers several specs share
-  (`isPhone`, `ready`, `settled`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`,
-  `statusBar`) are in `fixtures.ts` too.
+  (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`,
+  `statusBar`, `toolbarOf`) are in `fixtures.ts` too. **No fixed sleep to assert that nothing happened** (a late focus or
+  write): wait for the event the move would follow, then `settle(page)`.
 - **Dev servers listen on all interfaces** (LAN phones): every dev HTTP server (`dev`, `preview`, `cf:dev`) keeps `--host`
   or `--ip 0.0.0.0`; give any new one the same.
 - **The snapshot is the page's only start; there is no fallback.** `?snapshot=0` is the normal boot, a developer's

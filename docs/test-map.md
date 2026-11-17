@@ -287,7 +287,13 @@ Specs:
   URL flag.
 - `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
   put the page's state in a shape (an engine state, a banner, log items, ...); `fixtures.ts` holds the helpers shared by
-  several specs (`isPhone`, `ready`, `settled`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`).
+  several specs (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`, `toolbarOf`).
+  `settle(page)` replaces a fixed sleep that asserts "nothing moved after this" (a late focus, a late write, a key's late
+  effect): three frames, each followed by a task, and with `{ store: true }` a read of the store between them. Use it after
+  the expected event, so the test still fails when the late move exists; a move from a timer longer than a few frames is
+  not covered. The sleeps that remain guard something else: a loop that must be running before Break (`engine.spec.ts`,
+  `graphics.spec.ts`, `editor.spec.ts` Break), a sample seed that must not write (`sample.spec.ts`), and a run, dialog or
+  download that must not start (`editor.spec.ts`).
 - `fixtures.spec.ts` (no browser page): `retryFirstGoto` in `fixtures.ts`, which the `page` fixture applies to every
   test's page (and `engine.spec.ts`, `start-and-lock.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on
   a page still at `about:blank` is retried once and logs "timed out on a fresh page" (WebKit bug 325840); a second
@@ -295,7 +301,10 @@ Specs:
 - `engine.spec.ts`: runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start;
   the memory cap (`?memcap=400`: a 10-million-row `generate` is r(909), the engine stays `ready`, the data is kept),
   also
-  on the normal boot (`?snapshot=0&memcap=400`, Chromium only).
+  on the normal boot (`?snapshot=0&memcap=400`, Chromium only); a streamed run (six lines, 200 ms apart: the log shows
+  them in order while the run goes, in steps that each extend the last, and complete at the end) and, with
+  `DOFILE_STREAM_BENCH=1`, a measurement of the log's cost per chunk over 50 and 500 lines (no assertion beyond the run
+  completing).
 - `graphics.spec.ts` (experiment E1c, a lazy snapshot only; skipped without a graphics part): the part's request held or
   refused with `page.route`. A run at ready that draws nothing does not wait for it; a Break while a graph waits is rc 1
   with the data kept and the part fetched once; "Graphs loading" and its ring while it downloads (every project, the
@@ -369,6 +378,9 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   caps the cost. The `page` fixture's one retry (`web/e2e/fixtures.ts`) fired twice in the 42 WebKit and iPhone jobs
   since it landed (runs 43497316688 `[webkit]` and 43503620201 `[iphone]`, 2026-11-13), and the test passed both times.
   Causes: `docs/phase2-history.md`, "Prototype 1: the record from 'Where things stand'".
+- **`graphics.spec.ts` "a return visit reads the part from the Cache before ready…" writes the part twice** (`[iphone]`, local,
+  1 of 10 repeats of the spec on the N6 branch: `expect.poll(() => worker.length).toBe(1)` at line 220 received 2 after
+  its 5 s; the other 9 passed). The test holds none of N6's sleeps and no app code changed; not investigated further.
 - **`?snapshot=0` normal boot stalls at "Loading packages" in WebKit on Linux.** 2 sightings: runs 43295867614
   (`[iphone]`)
   and 43350296329 attempt 1 (`[webkit]`). Now skipped in the two WebKit projects (#34).

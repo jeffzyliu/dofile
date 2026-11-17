@@ -10,11 +10,13 @@ import {
   isPhone,
   putFiles,
   ready,
+  settle,
   startEngine,
   statusBar,
   storedText,
   test,
   toastOf,
+  toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
   addBanner,
@@ -587,7 +589,7 @@ test("a Save pressed while a delete is being written does not bring the file bac
   await page.keyboard.press("ControlOrMeta+s");
   await page.evaluate(() => (window as any).__answer());
   await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value.length)).toBe(0);
-  await page.waitForTimeout(300); // a write that was issued would have landed by now
+  await settle(page, { store: true }); // the write the save issued has landed (a read of the store comes after it) and the frames after it have run
   expect(await page.evaluate(async () => (await window.__dofile.store.list()).map((f: any) => f.path))).toEqual([
     "b.do",
   ]);
@@ -1293,7 +1295,7 @@ test("a .dta tab: Save is off, and when the engine's dialog closes by itself the
   );
   await setUp(page, { "d.dta": "not read here", "a.do": "display 1\n" });
   await open(page, "a.do");
-  const save = page.locator(".toolbar .run-ctl").nth(3);
+  const save = toolbarOf(page).locator(".run-ctl").nth(3);
   await expect(save).toBeEnabled();
   await page
     .getByRole("tree", { name: "Files" })
@@ -1305,7 +1307,7 @@ test("a .dta tab: Save is off, and when the engine's dialog closes by itself the
   // no engine: the command line is off, and Start engine opens the prompt; the engine starts, the prompt closes by
   // itself and gives the focus to the editor's place, here the .dta tab (no editor is shown), and nothing runs by itself
   await expect(page.getByRole("textbox", { name: "Command" })).toBeDisabled();
-  await page.locator(".toolbar").getByRole("button", { name: "Start engine" }).click();
+  await toolbarOf(page).getByRole("button", { name: "Start engine" }).click();
   await expect(page.getByRole("dialog", { name: "Download the engine?" })).toBeVisible();
   await page.evaluate(() => window.__dofile.start());
   await ready(page);
@@ -1424,14 +1426,14 @@ test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open 
   await forget();
   await page.getByRole("textbox", { name: "Command" }).focus();
   await page.keyboard.press("ControlOrMeta+Enter");
-  await page.waitForTimeout(300);
+  await settle(page); // the key is handled in its own task: the frames after it have run, so has a run it would have started
   expect(await lastKind()).toBeNull();
 
   // a dialog open: nothing runs
   await openDialog(page, { d: "close-tab", path: "a.do" });
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+Enter");
-  await page.waitForTimeout(300);
+  await settle(page); // the key is handled in its own task: the frames after it have run, so has a run it would have started
   expect(await lastKind()).toBeNull();
 });
 
@@ -1443,9 +1445,7 @@ test("Ctrl/Cmd+Enter with the focus on a toolbar button runs the file once and d
   await ready(page);
   await open(page, "a.do");
   // Save (on while a text file is open); the phone's toolbar has no Save, so its ⋯ button, whose press would open a menu
-  const button = page
-    .locator(".toolbar")
-    .getByRole("button", isPhone(page) ? { name: "More actions" } : { name: /^Save/ });
+  const button = toolbarOf(page).getByRole("button", isPhone(page) ? { name: "More actions" } : { name: /^Save/ });
   await expect(button).toBeEnabled();
   await button.evaluate((b) => {
     (window as any).__pressed = 0;
@@ -1496,7 +1496,7 @@ test("Ctrl/Cmd+Enter: a checkbox, a button or a contenteditable=false area does 
       await expect.poll(lastKind, { message: id }).toBe("file");
       await ready(page);
     } else {
-      await page.waitForTimeout(200);
+      await settle(page); // the key is handled in its own task: the frames after it have run, so has a run it would have started
       expect(await lastKind(), id).toBeNull();
     }
   }
@@ -1507,7 +1507,7 @@ test("Ctrl/Cmd+Enter: a checkbox, a button or a contenteditable=false area does 
   await page.getByRole("button", { name: "More actions" }).click();
   await expect(page.getByRole("menu")).toBeVisible();
   await page.keyboard.press("ControlOrMeta+Enter");
-  await page.waitForTimeout(300);
+  await settle(page); // the key is handled in its own task: the frames after it have run, so has a run it would have started
   expect(await lastKind()).toBeNull();
 });
 
@@ -1593,7 +1593,7 @@ test("the log follows the end through runs that print wide lines (the running ba
     pre.parentElement!.dispatchEvent(new WheelEvent("wheel", { deltaY: -500, bubbles: true }));
     pre.parentElement!.scrollTop = 0;
   });
-  await page.waitForTimeout(300); // a scroll event is delivered with the next frame
+  await settle(page); // a scroll event is delivered with the next frame: three frames have run, and the log has taken it
   await run(6);
   expect(await log.evaluate((pre) => pre.parentElement!.scrollTop)).toBe(0);
   expect(await fromEnd()).toBeGreaterThan(100);
@@ -1601,7 +1601,7 @@ test("the log follows the end through runs that print wide lines (the running ba
   await log.evaluate((pre) => {
     pre.parentElement!.scrollTop = pre.parentElement!.scrollHeight;
   });
-  await page.waitForTimeout(300);
+  await settle(page); // a scroll event is delivered with the next frame: three frames have run, and the log has taken it
   await run(7);
   await expect.poll(fromEnd, { message: "at the end after run 7, scrolled back down" }).toBeLessThanOrEqual(1);
 });
@@ -1645,7 +1645,7 @@ test("the log follows the end while pasted lines run one after another (the runn
     pre.parentElement!.dispatchEvent(new WheelEvent("wheel", { deltaY: -500, bubbles: true }));
     pre.parentElement!.scrollTop = 0;
   });
-  await page.waitForTimeout(300);
+  await settle(page); // a scroll event is delivered with the next frame: three frames have run, and the log has taken it
   await paste(block(4));
   await stopped();
   await ready(page);
@@ -1860,7 +1860,7 @@ test("with no engine nothing offers to run: Run is Start engine and Ctrl/Cmd+Ent
   await setUp(page, { "a.do": "display 1\ndisplay 2\n" });
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
   await open(page, "a.do");
-  const bar = page.locator(".toolbar");
+  const bar = toolbarOf(page);
   const content = page.locator(".cm-content");
   const start = bar.getByRole("button", { name: "Start engine" });
   await expect(start).toBeEnabled();
@@ -2010,7 +2010,7 @@ test("while the engine starts, a command is refused with words and the draft sta
   await fail();
 
   // the toolbar's Start engine, by keyboard: "Starting…" keeps the focus, and a second press says why
-  const top = page.locator(".toolbar .run-ctl").first();
+  const top = toolbarOf(page).locator(".run-ctl").first();
   const label = top.locator(".label:not([aria-hidden])"); // the one label shown, of those the button holds
   await expect(label).toHaveText("Start engine");
   await top.focus();

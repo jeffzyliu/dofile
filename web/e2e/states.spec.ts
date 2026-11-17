@@ -17,6 +17,7 @@ import {
   statusBar,
   test,
   toastOf,
+  toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
   addBanner,
@@ -715,7 +716,7 @@ test("a held Enter on a Run button presses it once: the repeats of the key click
   await showEngine(page, { s: "downloading", received: 1e6, total: 48e6, t0: Date.now() });
   if (isPhone(page)) await views.getByRole("tab", { name: "Editor" }).click();
   await held(
-    page.locator(".toolbar .btn.primary.run-ctl"),
+    toolbarOf(page).locator(".btn.primary.run-ctl"),
     "The engine is starting. Try again when it is ready.",
     "the toolbar's Run",
   );
