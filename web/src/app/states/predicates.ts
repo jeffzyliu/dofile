@@ -1,5 +1,5 @@
 // Which engine states mean what, stated once for the views (the machine decides the state: engine/machine.ts). Each
-// table names all sixteen states, so a new state does not compile until it is placed.
+// table starts from all sixteen states, so a new state does not compile until it is placed (its membership is not forced).
 
 import type { EngineState, EngineStateName } from "../types.ts";
 

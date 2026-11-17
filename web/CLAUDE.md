@@ -72,7 +72,8 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   imports only, no clock, timer, console or top-level variable; the time comes in the event) and returns the next state
   and the effects. Its state names are the `engine` signal's, `<html data-engine>`'s and SPEC section 5's. **Nothing
   outside it decides a state**: no counter, flag or comparison of state names in the transport or the controllers, and
-  a view asks `src/app/states/predicates.ts` (`engineUp`, `runOn`, ...) rather than spell a set of names. To add a state, event or effect, change its tables; the compiler and
+  a view asks `src/app/states/predicates.ts` (`engineUp`, `runOn`, ...) rather than spell a set of names. To add a
+  state, event or effect, change its tables; the compiler and
   `test/machine.test.ts` then say what else must follow. After a change to a cell, run
   `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` and paste the tables into SPEC section 5 (a test compares them).
 - **Who constructs, who connects, who decides.** Only `src/main.tsx` makes the transport (`EngineClient`,
@@ -96,8 +97,8 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
   the writable signals `state.ts` exports are the views' own. `test/imports.test.ts` holds the rest: no view reaches the
   transport through value imports (transitive); `machine.ts` has two casts and no top-level variable, and the cast to
-  `Ticket` occurs once in `web/`; the transport names no state, `run.ts` subscribes to nothing, and no CSS reads `data-engine` and no `.tsx` spells a set of state names; the pages' HTML and
-  CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not
+  `Ticket` occurs once in `web/`; the transport names no state, `run.ts` subscribes to nothing, no CSS reads `data-engine` and no `.tsx` spells a set
+  of state names; the pages' HTML and CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not
   depend on how a line is wrapped.
 - **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
   `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is

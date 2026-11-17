@@ -257,7 +257,8 @@ test("the transport knows no state name, and run.ts does not read the engine's s
 test("no CSS reads data-engine, and no view spells a set of engine state names", () => {
   for (const f of files("src", /\.css$/))
     assert.equal(count(readFileSync(join(web, f), "utf8"), /data-engine/), 0, `${f} reads data-engine`);
-  const names = "(?:ready|running|breaking|waiting|starting-list|starting-worker|downloading|other-tab-idle)";
+  const names =
+    "(?:ready|running|breaking|waiting|starting-list|starting-worker|downloading|other-tab-idle|other-tab-taking)";
   const set = new RegExp(`"${names}"\\s*(?:\\|\\||&&|,)\\s*(?:[\\w.]+\\s*===?\\s*)?"${names}"`);
   for (const f of SRC.filter((f) => f.endsWith(".tsx")))
     assert.equal(count(source(f), set), 0, `${f} spells a set of state names: src/app/states/predicates.ts has them`);

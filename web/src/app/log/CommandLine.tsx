@@ -11,7 +11,6 @@
 //    hides the Log head, so the same logMenuItems() are the "Log ⋯" button in its strip.
 //  - PhoneStrip: under the phone's top bar, on every view (the phone has no status bar): the last run, or the state's
 //    words. Its children go at its right end.
-
 import { signal } from "@preact/signals-core";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
