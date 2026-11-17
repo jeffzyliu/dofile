@@ -1459,9 +1459,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   open, the editor and log never mounted again, the folded file list by keyboard, a phone page that cannot scroll, the
   phone toast's place with the keyboard closed and open, the failed "Download all" banner on every phone view),
   `web/e2e/engine.spec.ts` (the proof of concept's engine cases through the hook, Break and Reset through the
-  controller); `web/e2e/step2.spec.ts` goes through the hook and the shell's dialogs. The Node tests of the engine code: `web/test/machine.test.ts` (the transition table cell by cell, the properties, the race scenarios, and SPEC section 5's matrix), `web/test/imports.test.ts` (the contracts no type can hold: the import graph, single instances, one writer for each signal), `web/test/client.test.ts`, `web/test/engine.test.ts`, `web/test/files.test.ts` and `web/test/store.test.ts`. The specs import `test` from
-  `web/e2e/fixtures.ts`, which makes `persisted()` true (no storage banner) unless a test sets `persisted: false`. The four editor tests left in
-  `web/e2e/poc.spec.ts` are fixme until step 6.
+  controller); `web/e2e/start-and-lock.spec.ts` goes through the hook and the shell's dialogs. The Node tests of the engine code: `web/test/machine.test.ts` (the transition table cell by cell, the properties, the race scenarios, and SPEC section 5's matrix), `web/test/imports.test.ts` (the contracts no type can hold: the import graph, single instances, one writer for each signal), `web/test/client.test.ts`, `web/test/engine.test.ts`, `web/test/files.test.ts` and `web/test/store.test.ts`. The specs import `test` from
+  `web/e2e/fixtures.ts`, which makes `persisted()` true (no storage banner) unless a test sets `persisted: false`.
 - **Design-system items done here:** DS-5 (text sizes in rem; at a 20 px default the log's 80 columns scroll sideways),
   DS-8 (`--dur-fast`, `--dur`, `--z-menu` < `--z-toast` < `--z-dialog`), DS-7's bottom sheet and tab bar (drawn in
   `system/index.html`).
@@ -1693,8 +1692,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
 
 ## 9. Tests (step 6)
 
-One Playwright file per flow in `web/e2e/`, in Chromium, Firefox, WebKit and the iPhone profile. `web/e2e/poc.spec.ts` is tied
-to the proof-of-concept page's element ids and is rewritten; its cases move as listed. `npm run axe`, `tabwalk`, `contrast`
+One Playwright file per flow in `web/e2e/`, in Chromium, Firefox, WebKit and the iPhone profile. The proof-of-concept page's tests (`poc.spec.ts`) are gone; its cases moved as listed. `npm run axe`, `tabwalk`, `contrast`
 and `fonts` also run over the real editor, landing and commands pages, light and dark, 1440 and 390 wide.
 
 | Flow | The e2e test that must exist | Covered in part today by |

@@ -4,7 +4,7 @@
 // starts no engine until start() is called), and click the shell's own dialogs (the download prompt, the take-over).
 import type { BrowserContext, Page } from "@playwright/test";
 import { LOCAL_SITE_URL } from "../scripts/urls.ts";
-import { expect, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, retryFirstGoto, SAMPLE, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type StartFiles = {
   built: number;
@@ -19,44 +19,11 @@ type StartFiles = {
   };
 };
 type Progress = { received: number; total: number };
-type RunResult = { rc: number; log: string; images: string[] };
-type Handle = {
-  engine: {
-    worker: unknown;
-    cached(): Promise<boolean>;
-    startup: { mode: string; fetched?: string } | null;
-    download(o?: {
-      onProgress?: (p: Progress) => void;
-      signal?: AbortSignal;
-    }): Promise<{ cached: boolean; received: number; total: number; why?: string; build: unknown }>;
-  };
-  store: {
-    blocked: boolean;
-    list(): Promise<{ path: string }[]>;
-    write(path: string, data: Uint8Array): Promise<unknown>;
-    zip(): Promise<File>;
-  };
-  start(): void;
-  reset(): void;
-  persisted(): boolean | null | undefined;
-  engineBytes: number | null;
-  run(code: string): Promise<RunResult | null>;
-  drops(): { type: string; n?: number; row: string; why: string }[];
-  state: {
-    engine: { value: { s: string; message?: string; detail?: string } };
-    files: { value: { path: string }[] };
-    graphs: { value: unknown[] };
-  };
-};
 declare global {
   interface Window {
-    __dofile: Handle;
     __persistCalls?: number;
   }
 }
-
-const SAMPLE =
-  "clear\nset obs 200\nset seed 1\ngenerate x = rnormal()\ngenerate y = 1 + 2*x + rnormal()\nregress y x, robust\nscatter y x\n";
 
 const state = (page: Page) => page.evaluate(() => document.documentElement.dataset.engine);
 const ready = (page: Page) => expect.poll(() => state(page), { timeout: 300_000 }).toBe("ready");

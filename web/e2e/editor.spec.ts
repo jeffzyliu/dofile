@@ -2405,3 +2405,108 @@ test("Ctrl/Cmd+Enter that the engine does not take says why in a toast and start
   expect([1, 9998]).toContain((await loop)?.rc);
   await ready(page);
 });
+
+test("Run doesn't save: an edit typed in the editor runs, the tab stays unsaved and the file is as it was; Save writes it, and after a reload the saved text opens in the editor", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": 'display "BEFORE"\n' }, "?test");
+  await startEngine(page);
+  await ready(page);
+  await open(page, "a.do");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText('display "EDITED"');
+  const dirty = () => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty);
+  await expect.poll(dirty).toBe(true);
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await ready(page);
+  // Run used the edit, and wrote nothing: the tab is still unsaved and the stored file is as it was
+  await expect(page.getByRole("log", { name: "Log" })).toContainText("EDITED");
+  expect(await dirty()).toBe(true);
+  expect(await storedText(page, "a.do")).toBe('display "BEFORE"\n');
+  if (isPhone(page)) await view(page, "Editor");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect(toastOf(page)).toHaveText("Saved a.do");
+  await expect.poll(dirty).toBe(false);
+  expect(await storedText(page, "a.do")).toBe('display "BEFORE"\ndisplay "EDITED"');
+  await page.reload();
+  await startEngine(page);
+  await ready(page);
+  await open(page, "a.do");
+  await expect(page.locator(".cm-content")).toContainText('display "EDITED"');
+  expect(await page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
+});
+
+test("a tab with typed edits asks before it closes, while another file opens beside it without asking: Cancel keeps the edits, Don't save drops them, Save writes them", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "display 1\n", "b.do": "display 2\n" });
+  await open(page, "a.do");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display EDIT");
+  const openTabs = () => page.evaluate(() => window.__dofile.state.tabs.value.map((t) => t.path));
+  const ask = page.getByRole("dialog", { name: "Save changes to a.do?" });
+  // another file: opens as a second tab, no question, and a.do keeps its edit
+  await open(page, "b.do");
+  await expect(ask).toHaveCount(0);
+  expect(await openTabs()).toEqual(["a.do", "b.do"]);
+  const close = async () => {
+    await open(page, "a.do");
+    if (isPhone(page)) {
+      await page.getByRole("button", { name: /^a\.do.*Open files/ }).click();
+      await page.getByRole("menuitem", { name: "Close a.do" }).click();
+    } else {
+      await page
+        .getByRole("tablist", { name: "Open files" })
+        .getByRole("tab", { name: /^a\.do/ })
+        .press("Delete");
+    }
+    await expect(ask).toBeVisible();
+  };
+  await close();
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(ask).toBeHidden();
+  expect(await openTabs()).toEqual(["a.do", "b.do"]);
+  await expect(page.locator(".cm-content")).toContainText("display EDIT");
+  expect(await storedText(page, "a.do")).toBe("display 1\n");
+  await close();
+  await ask.getByRole("button", { name: "Don't save" }).click();
+  await expect.poll(openTabs).toEqual(["b.do"]);
+  expect(await storedText(page, "a.do")).toBe("display 1\n");
+  // opened again, the file is as it was; an edit and Save write it
+  await open(page, "a.do");
+  await expect(page.locator(".cm-content")).toHaveText("display 1");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display SAVED");
+  await close();
+  await ask.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(openTabs).toEqual(["b.do"]);
+  expect(await storedText(page, "a.do")).toBe("display 1\ndisplay SAVED");
+});
+
+test("closing the page with unsaved edits asks (the browser's beforeunload prompt); once saved it closes without asking", async ({
+  page,
+}) => {
+  const dialogs: string[] = [];
+  page.on("dialog", (d) => {
+    dialogs.push(d.type());
+    void d.dismiss(); // stay on the page
+  });
+  await setUp(page, { "a.do": "display 1\n" });
+  await open(page, "a.do");
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.insertText("display 2");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(true);
+  await page.close({ runBeforeUnload: true }); // doesn't wait for the page: the dialog arrives afterwards
+  await expect.poll(() => dialogs).toEqual(["beforeunload"]);
+  expect(page.isClosed()).toBe(false);
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect.poll(() => page.evaluate(() => window.__dofile.state.tabs.value[0].dirty)).toBe(false);
+  await page.close({ runBeforeUnload: true });
+  await page.waitForEvent("close");
+  expect(dialogs).toEqual(["beforeunload"]);
+});
