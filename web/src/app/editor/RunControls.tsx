@@ -11,11 +11,15 @@
 import * as eng from "../engine.ts";
 import { startEngine, startOffer } from "../start.ts";
 import { activeTab, engine, isolated, phoneTab, showToast, tabs } from "../state.ts";
+import { engineStarting, otherTab, runOn } from "../states/predicates.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { since } from "./clock.ts";
 import { editorCommands, selection } from "./commands.ts";
 import { PILL_WIDEST, pillTime, refusedRunWords } from "./words.ts";
+
+/** The run controls' class: in the other-tab states they keep their place and are unseen (app.css). */
+const ctl = () => (otherTab(engine.value) ? "run-ctl unseen" : "run-ctl");
 
 // The play and stop icons say Run and Break, so the labels are short; NAME is what a screen reader hears.
 const RUN = ["Run", "Start engine", "Starting…", "Not started"] as const;
@@ -40,10 +44,8 @@ function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boo
     return { label: "Start engine", disabled: offer === "off", busy: false, start: true };
   }
   if (s === "ready") return { label: "Run", disabled: false, busy: false, start: false };
-  if (s === "running" || s === "breaking" || s === "waiting")
-    return { label: "Run", disabled: s !== "running", busy: true, start: false };
-  if (s === "downloading" || s === "starting-list" || s === "starting-worker")
-    return { label: "Starting…", disabled: true, busy: false, start: false };
+  if (runOn(st)) return { label: "Run", disabled: s !== "running", busy: true, start: false };
+  if (engineStarting(st)) return { label: "Starting…", disabled: true, busy: false, start: false };
   return { label: "Run", disabled: true, busy: false, start: false }; // the page load (checking-lock, checking-cache)
 }
 
@@ -92,7 +94,7 @@ export function RunControls() {
       {/* Off, Run is aria-disabled, never disabled: a focused Run keeps the focus, so a second Enter can't reach Break. */}
       <button
         type="button"
-        class={`btn primary run-ctl${run.busy || run.disabled ? " off" : ""}`}
+        class={`btn primary ${ctl()}${run.busy || run.disabled ? " off" : ""}`}
         aria-label={NAME[run.label]}
         aria-disabled={run.busy || run.disabled || undefined}
         aria-keyshortcuts={(usable && !sel) || (run.start && !run.disabled) ? modShortcut("Enter") : undefined}
@@ -116,7 +118,7 @@ export function RunControls() {
       </button>
       <button
         type="button"
-        class="btn run-ctl"
+        class={`btn ${ctl()}`}
         disabled={!usable || !sel}
         aria-keyshortcuts={usable && sel ? modShortcut("Enter") : undefined}
         onClick={() => editorCommands.runSelection()}
@@ -125,7 +127,7 @@ export function RunControls() {
       </button>
       <button
         type="button"
-        class={`btn stop run-ctl${brk.live ? " live" : ""}`}
+        class={`btn stop ${ctl()}${brk.live ? " live" : ""}`}
         disabled={brk.disabled}
         aria-label={NAME[brk.label]}
         onClick={pressBreak}
@@ -142,7 +144,7 @@ export function RunControls() {
       </button>
       <button
         type="button"
-        class="btn run-ctl"
+        class={`btn ${ctl()}`}
         disabled={!text}
         aria-keyshortcuts={text ? modShortcut("S") : undefined}
         onClick={() => editorCommands.save()}
@@ -168,7 +170,7 @@ export function RunControls() {
  *  can show, so the ⋯ beside them never moves. */
 export function PhoneRun() {
   const st = engine.value;
-  const running = st.s === "running" || st.s === "breaking" || st.s === "waiting";
+  const running = runOn(st);
   const run = runState(),
     brk = breakState(),
     sel = running ? null : selection.value;
@@ -205,7 +207,7 @@ export function PhoneRun() {
     return (
       <button
         type="button"
-        class={`btn stop${brk.live ? " live" : ""} pill run-ctl`}
+        class={`btn stop${brk.live ? " live" : ""} pill ${ctl()}`}
         disabled={brk.disabled}
         aria-label={NAME[brk.label] ?? brk.label}
         onKeyDown={ignoreHeldEnter} // the Run button's node: a held Enter that ran the file must not press Break
@@ -223,7 +225,7 @@ export function PhoneRun() {
   return (
     <button
       type="button"
-      class={`btn primary run-ctl${run.disabled ? " off" : ""}`}
+      class={`btn primary ${ctl()}${run.disabled ? " off" : ""}`}
       aria-label={name}
       aria-disabled={run.disabled || undefined}
       onKeyDown={ignoreHeldEnter}

@@ -10,19 +10,18 @@ import { baseName, formatSize } from "../files/tree.ts";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
 import { engine, files, showToast } from "../state.ts";
+import { workerReachable } from "../states/predicates.ts";
 import { Icon } from "../ui/Icon";
 import { copyText } from "./clip.ts";
 import { count } from "./format.ts";
 import { dtaInfo } from "./view.ts";
 
 const NOTE = " the data in memory is untouched until you press Load.";
-// engine states in which a worker is there, or on its way, to answer a read
-const UP = new Set(["starting-worker", "ready", "running", "breaking", "waiting"]);
 
 export function DtaView({ path }: { path: string }) {
   const file = files.value.find((f) => f.path === path);
   const key = file ? `${file.size}:${file.mtime}` : "none";
-  const up = UP.has(engine.value.s);
+  const up = workerReachable(engine.value);
   useEffect(() => {
     if (!up || dtaInfo.value[path]?.key === key) return;
     call("describe_file", { path }).then(

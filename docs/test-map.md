@@ -169,7 +169,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `output.test.ts`: the Output tabs' logic (`app/output/format.ts`): number formats, missing values, a matrix as text,
   the
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
-- `states.test.ts`: step 4d's plain logic (`app/states/words.ts`): `resetAsks`, `rerunPath`, the stopping countdown, the
+- `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
 - `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
@@ -203,7 +203,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - `machine.ts`: two casts, no top-level variable; the cast to `Ticket` occurs once in `web/`.
   - The transport names no state; `run.ts` subscribes to nothing.
   - The pages' HTML and CSS: `src/site/` apart from the editor's.
-  - The `data-engine` CSS rule; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
+  - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
@@ -222,7 +222,7 @@ Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases
   tabs by keyboard), the folded file list's rename, the .dta tab's focus, the banner's hand-off to a .dta tab.
 
 Specs:
-- `shell.spec.ts`: layout and toolbar.
+- `shell.spec.ts`: layout and toolbar (its size in every state; the run controls unseen in the other-tab states, seen in the rest).
   - Desktop and phone layout; the first visit; the toolbar stays put from 1440 to 390 px in all sixteen engine states.
   - Panes never remounted; banners; toast position; no key names on a phone.
   - The status bar's "Not affiliated with StataCorp" (at 1440 px, not at 1199 px, not on the iPhone).

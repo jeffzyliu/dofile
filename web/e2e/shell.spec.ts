@@ -311,6 +311,20 @@ test("the toolbar does not move: its box and every button's box are the same in 
           return bar.scrollWidth - bar.clientWidth;
         });
         if (over > 0) cut.push(`${st.s}${sel ? " with a selection" : ""}: ${over} px`);
+        if (tab && !sel) {
+          // header.toolbar is the desktop toolbar, or the phone's top bar with PhoneRun's Run or Break pill
+          const seen = await page.evaluate(() =>
+            [...document.querySelectorAll("header.toolbar .run-ctl")].map((e) => getComputedStyle(e).visibility),
+          );
+          if (width === 390)
+            expect(
+              await page.locator("header.toolbar.topbar .run-ctl").count(),
+              "the phone's top bar holds PhoneRun's button",
+            ).toBeGreaterThan(0);
+          const want = st.s.startsWith("other-tab") ? "hidden" : "visible";
+          expect(seen.length, "the toolbar's run controls").toBeGreaterThan(0);
+          expect(seen, `the toolbar's run controls in ${st.s} at ${width} px`).toEqual(seen.map(() => want));
+        }
         if (tab && !sel)
           labels[st.s] = await page.evaluate(
             () =>
