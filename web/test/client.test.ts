@@ -745,6 +745,22 @@ test("interrupt(n) puts SIGINT into the buffer the live worker was given at boot
   assert.equal(buffer[0], 0, "the worker was ended");
 });
 
+test("run() clears the buffer as it posts the run: a Break from before belongs to the run before; one after it is this run's, however long the run waits in the worker's queue", async () => {
+  let buffer!: Int32Array;
+  const { eng } = scripted((m, post) => {
+    if (m.op === "boot") buffer = m.args.interruptBuffer;
+    starts(m, post);
+  });
+  await startWorker(eng);
+  eng.interrupt(1); // pressed while the run before was ending
+  const running = eng.run(1, { code: "display 1" }, () => {});
+  assert.equal(Atomics.load(buffer, 0), 0, "cleared when the run was posted");
+  eng.interrupt(1);
+  assert.equal(Atomics.load(buffer, 0), 2, "nothing on the page clears it again before the worker takes the run");
+  eng.end(1, { kind: "stopped", reason: "x" });
+  await assert.rejects(running);
+});
+
 test("the store's sync posts `sync`, with nothing in it, to the live worker; a sync that fails is `crashed`, cause folder, and one that end() cuts says nothing; a closed database is `crashed`, cause storage", async () => {
   const store = {
     sync: null as FileStore["sync"],

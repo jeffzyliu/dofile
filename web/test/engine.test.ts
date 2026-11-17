@@ -260,6 +260,29 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     assert.equal(after.nobs, 100);
   });
 
+  await t.test("a Break pressed while the run waits behind a describe stops that run", async () => {
+    await runOn(eng, "clear\nset obs 100\ngen x = 0");
+    const described = eng.query("describe");
+    const running = runOn(eng, "while 1 {\n quietly replace x = x + 1\n}");
+    eng.interrupt(live(eng)); // the worker has not taken the run yet: the describe is ahead of it
+    let lost = false;
+    const late = setTimeout(() => {
+      lost = true;
+      eng.interrupt(live(eng)); // so that the run ends either way
+    }, 4000);
+    const r = await running;
+    clearTimeout(late);
+    await described;
+    assert.equal(lost, false, "the Break was lost: the run went on until a second one");
+    assert.equal(r.rc, 1, r.log);
+  });
+
+  await t.test("a Break that comes after its run ended does not stop the next run", async () => {
+    eng.interrupt(live(eng));
+    const r = await runOn(eng, "display 1");
+    assert.equal(r.rc, 0, r.log);
+  });
+
   // the machine's RESET: end-worker, then start-worker (the run's rc 9998 result is the machine's own: machine.test.ts)
   await t.test(
     "end() during a run: the run's call fails with the ending's kind, and a new worker answers",
