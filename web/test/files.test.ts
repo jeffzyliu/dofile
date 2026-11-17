@@ -812,7 +812,7 @@ test("the engine with its own database: the old /work database is left alone; Br
   });
 
   // The Break timer, its deadline and "Don't reset" are the machine's and the controller's (machine.test.ts,
-  // app.test.ts). Here: what the engine does with the request (the `interrupt` effect) while no timer cuts it.
+  // app-engine.test.ts). Here: what the engine does with the request (the `interrupt` effect) while no timer cuts it.
   await t.test(
     "interrupt() during a long command: it is not cut; it ends by itself, then the run stops with rc 1 and the data",
     async () => {

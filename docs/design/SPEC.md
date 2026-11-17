@@ -968,7 +968,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 - **Files.** The signals: `web/src/app/state.ts` (TypeScript on `@preact/signals-core`, so the Node tests import it as it is;
   components read the same signals through `@preact/signals`). The types above: `web/src/app/types.ts`; section 6's:
   `web/src/engine/types.ts`. Everything in `web/src/engine/`, the controllers and `web/test/` is TypeScript, which Node runs by
-  removing the types. The controllers are `.ts` files that import no `.tsx`, tested in `web/test/app.test.ts`.
+  removing the types. The controllers are `.ts` files that import no `.tsx`, tested in `web/test/app-*.test.ts`.
 - **The wiring.** `web/src/main.tsx` is the only module that constructs or connects anything (a source-text test checks it):
   the transport (`EngineClient`, with its worker factory), the tab lock, and `connectFiles(store)`, `connectRun(handlers)` and
   `connectEngine({client, lock, snapshot, manual})`, each once, in that order, then `open()`. Views never reach the
@@ -1122,8 +1122,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     run's head, `editor/commands.ts` `codeOf`), `log/paste.ts` (the command line's pasted lines),
     `log/find.ts`, `editor/csv.ts` (a .csv's columns), `editor/words.ts` (the run-head, last-run, time and memory words).
     `editor/cm.ts` has the CodeMirror pieces (the languages by extension, the line marks as a state field mapped through
-    edits, the drop guard) and `editor/clock.ts` the 100 ms clock of the timers (it reads `breaking`'s `resetAt`; `test/imports.test.ts`
-    allows two view files to, this one and 4d's `states/banners.tsx`, for the Break countdown). The editor is one `EditorView`, mounted once, with one `EditorState` per
+    edits, the drop guard) and `editor/clock.ts` the 100 ms clock of the timers (it reads `breaking`'s `resetAt`, as does 4d's `states/banners.tsx`, for
+    the Break countdown). The editor is one `EditorView`, mounted once, with one `EditorState` per
     open text tab; `data-editor` is on CodeMirror's content with a file shown and on the empty view without one. The unsaved
     dot is "the text differs from the saved text", so an undo back clears it. Ctrl/Cmd+S saves anywhere on the page, the
     editor too, and Ctrl/Cmd+Enter runs from anywhere on the page too (not with a dialog open, not in another text field), each with Ctrl or Cmd on every platform; S is the key that types "s" or, on a
@@ -1453,13 +1453,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   request that is refused is ignored, with no message; at most one lock is held, and one that arrives after it is no
   longer wanted is let go. A browser without the API gets nothing. No setting, no toast. The module only reads the
   `engine` signal; `main.tsx` starts it once.
-- **Tests.** `web/test/app.test.ts` (the controllers on a stand-in transport, and `viewport.ts` on a stand-in
+- **Tests.** `web/test/app-*.test.ts` (the controllers on a stand-in transport, and `viewport.ts` on a stand-in
   `visualViewport`), `web/e2e/shell.spec.ts` (the shell: the toolbar's boxes in every engine state at three widths, one
   height for the desktop toolbar's buttons and for the pane heads' controls, the phone ⋯'s Theme that keeps the menu
   open, the editor and log never mounted again, the folded file list by keyboard, a phone page that cannot scroll, the
   phone toast's place with the keyboard closed and open, the failed "Download all" banner on every phone view),
   `web/e2e/engine.spec.ts` (the proof of concept's engine cases through the hook, Break and Reset through the
-  controller); `web/e2e/start-and-lock.spec.ts` goes through the hook and the shell's dialogs. The Node tests of the engine code: `web/test/machine.test.ts` (the transition table cell by cell, the properties, the race scenarios, and SPEC section 5's matrix), `web/test/imports.test.ts` (the contracts no type can hold: the import graph, single instances, one writer for each signal), `web/test/client.test.ts`, `web/test/engine.test.ts`, `web/test/files.test.ts` and `web/test/store.test.ts`. The specs import `test` from
+  controller); `web/e2e/start-and-lock.spec.ts` goes through the hook and the shell's dialogs. The Node tests of the engine code: `web/test/machine.test.ts` (the transition table cell by cell, the properties, the race scenarios, and SPEC section 5's matrix), `web/test/imports.test.ts` (the contracts no type can hold; the import and call rules are in `web/biome.json` and `web/biome/architecture.grit`), `web/test/client.test.ts`, `web/test/engine.test.ts`, `web/test/files.test.ts` and `web/test/store.test.ts`. The specs import `test` from
   `web/e2e/fixtures.ts`, which makes `persisted()` true (no storage banner) unless a test sets `persisted: false`.
 - **Design-system items done here:** DS-5 (text sizes in rem; at a 20 px default the log's 80 columns scroll sideways),
   DS-8 (`--dur-fast`, `--dur`, `--z-menu` < `--z-toast` < `--z-dialog`), DS-7's bottom sheet and tab bar (drawn in
@@ -1592,7 +1592,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
 - **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
   the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `theme.ts`, the theme button's words,
   the editor's (a test compares them); `landing.ts`; `commands.ts` and `filter.ts`, the filter). These import nothing but
-  `src/site/` and the stylesheets (CSS `@import`s too), and nothing imports them, the editor's `index.html` and CSS included (`test/imports.test.ts`): no signals, no store, no tab lock, so
+  `src/site/` and the stylesheets (CSS `@import`s too), and nothing imports them, the editor's `index.html` and CSS included (`biome.json` for the imports; `test/imports.test.ts` for the HTML and CSS): no signals, no store, no tab lock, so
   reading the landing page never touches the editor's files. `web/scripts/site-pages.ts` fills the pages at build time (a
   plugin in `vite.config.ts`): `{{version}}` (the package's version, `0.1.0.dev1`, OQ-20), `{{engine-mb}}` (`Math.round` of
   the download size in MB, the editor prompt's number: in dev from `public/`, in a build from the editor's

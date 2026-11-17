@@ -107,14 +107,24 @@ These test the Stata-language engine itself. Grouping is by file name.
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. Several files make their tests in a
 loop, so a file has more tests than `test(` lines; `npm run test-counts` counts what the runner reports.
 
-- `app.test.ts`: the app controllers.
-  - Start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, toasts, banners,
-    theme.
-  - "Clear log" and `canClearLog`; a run that rewrites an open file (`ranOver`, the run-changed banner).
-  - The phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
-  - No engine: a run or command is refused and stays out of `history`.
-  - "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the real controllers.
-  - Pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the engine.
+- `wiring.ts`: not a test file: the stand-in transport, store and tab lock, the wiring of the controllers, and
+  `resetState()`, which every `app-*.test.ts` runs before each test (through `useWiring()`): every writable signal of
+  `state.ts` back to its value at load (found by shape, so a new signal is reset too), the controllers' own state, a new
+  wiring, and the drop record checked at the end of each test. It makes the localStorage stand-in before it imports the
+  controllers.
+- `app-engine.test.ts`: the engine controller (`app/engine.ts`).
+  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios.
+  - No engine: a run or command is refused.
+- `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners.
+  - "Clear log" and `canClearLog`; no engine: a command is refused and stays out of `history`; a run's promise settles when
+    the after-run work throws.
+- `app-files.test.ts`: the files controller (`app/files.ts`): the storage banner, a run that rewrites an open file
+  (`ranOver`, the run-changed banner), Download all, `persisted`.
+- `app-theme-tabs.test.ts`: the theme button and `applyTheme`; `setDirty`; strict UTF-8 (`decodeText`).
+- `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
+- `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
+  real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
+  engine.
 - `wakelock.test.ts`: the screen wake lock (`app/wakelock.ts`) with fakes: the policy per state, taken for a run,
   refused, late and pending requests, no API.
 - `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
@@ -165,6 +175,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
+  - The editor's "Browsers that work" link (`BROWSERS_URL`, JSX, so not importable here) is held by the e2e test in
+    `e2e/landing.spec.ts`: "the failed-start banner's Browsers that work opens the landing page's section in a new tab".
   - The icons: the editor, landing and commands pages link the same three (`src/icons/`), each by a relative path the
     build hashes, and the files exist.
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
@@ -185,10 +197,14 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A failed seed write is tried again; where storage is not kept, the seed brings no storage banner.
 - `sample-run.test.ts`: the sample's do-files in the page's engine: rc 0, one graph, every output line of the landing
   page's "What a run looks like" in the log.
-- `imports.test.ts`: architecture rules enforced by scanning source.
-  - Every `:hover` rule is inside `@media (hover: hover)` (SPEC).
-  - Import layering, single writers, one `postMessage` site; no old state flag outside the machine.
-  - The site pages use only `src/site/` and `src/styles/`; `ignoreHeldEnter` is the `onKeyDown` of every Run button.
+- `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
+  checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
+  - No view reaches the transport through value imports (transitive).
+  - `machine.ts`: two casts, no top-level variable; the cast to `Ticket` occurs once in `web/`.
+  - The transport names no state; `run.ts` subscribes to nothing.
+  - The pages' HTML and CSS: `src/site/` apart from the editor's.
+  - The `data-engine` CSS rule; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
+- `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.

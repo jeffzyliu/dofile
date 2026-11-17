@@ -270,5 +270,5 @@ cancelled (an input is no `overflow` scroller; it is, with nothing lost, if iOS 
 27 honours `preventDefault()` on a `touchmove` that comes after the page has already started to scroll (React Aria
 relies on it); whether a cancelled first `touchmove` ends native scrolling for the whole gesture. To check on the
 iPhone: long-press and drag the caret in a short file and in the command line.
-Unit tests (`app.test.ts`) and one e2e (`keyboard.spec.ts`) cover the
+Unit tests (`app-viewport.test.ts`) and one e2e (`keyboard.spec.ts`) cover the
 logic with synthetic events; only an iPhone shows whether the page stays still.

@@ -281,7 +281,7 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
 });
 
 // The machine's RESET(crash) for a first crash: end-worker, then start-worker. That a worker which always fails is not
-// started for ever is machine.test.ts's and app.test.ts's.
+// started for ever is machine.test.ts's and app-engine.test.ts's.
 test("a worker that fails to load says `crashed`; after end() the next start finishes", {
   timeout: 120_000,
 }, async () => {
