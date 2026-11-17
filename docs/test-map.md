@@ -62,6 +62,8 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 
 **9. Browser and Pyodide shims** (`test_browser.py`, `test_pathshim.py`, `test_linalgshim.py`)
 - The browser entry point's JSON API, and the ballast the memory cap relies on.
+- Break: a SIGINT while no run is busy (the top or the end of a run, between runs) is put back, not dropped, and stops
+  nothing by itself.
 - Mapping of foreign paths; the `numpy.linalg` shim.
 - Guards: the web highlighter's command list matches the engine, and no new path sites appear in the engine.
 - The lazy graphics part (two tests): a graph waits for it, and a Break or a failure stops only that graph; the run's log
@@ -139,7 +141,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
-  mismatch, stale entries), start and end rules, error kinds, interrupt; store failures (`started` with `storeFailed`,
+  mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts); store failures (`started` with `storeFailed`,
   `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`).
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
@@ -151,7 +153,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
   test,
   without a current snapshot).
-- `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break, a worker that fails to load.
+- `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break (also one pressed while the run waits
+  behind a describe, and one after its run ended), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).

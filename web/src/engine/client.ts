@@ -673,10 +673,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
     const live = this.#live;
     if (live?.n !== n) return Promise.reject(fail("the engine is not running", "no-engine"));
+    // a Break from before this run was the run before's; one from now on is this run's, however long it waits in the
+    // worker's queue (the worker lets Python read the buffer only during a run)
+    if (live.interrupt) Atomics.store(live.interrupt, 0, 0);
     return this.#send(live, "run", args, onLog);
   }
 
-  /** Break: SIGINT in the shared buffer stops the run at its next safe point (the worker clears it when a run starts).
+  /** Break: SIGINT in the shared buffer stops the run sent last at its next safe point (`run()` clears it).
    *  Without a SharedArrayBuffer it does nothing: the machine resets instead. */
   interrupt(n: number): void {
     const live = this.#live;

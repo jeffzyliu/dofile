@@ -48,6 +48,7 @@ declare global {
 /** dofile.browser (src/dofile/browser.py): JSON text in and out. */
 interface Browser {
   start(root: string): string;
+  keep_breaks(putBack: () => void): void;
   lazy_graphics(wait: (ms: number) => string): void; // a lazy snapshot (waitGraphics)
   graphics_written(): void;
   warm_graphics(start: number, count: number): number;
@@ -911,12 +912,13 @@ const lifecycle: Handlers<LifecycleOps> = {
       await py.runPythonAsync(`import micropip; await micropip.install(list(wheel_urls))`);
     }
     interrupt = interruptBuffer ?? null;
-    if (interrupt) py.setInterruptBuffer(interrupt);
     if (!fromSnapshot) startup.packagesS = since(tPackages);
     stage("engine");
     const tEngine = performance.now();
     browser = py.pyimport("dofile.browser");
     const about = JSON.parse(browser.start(ROOT));
+    const buffer = interrupt;
+    if (buffer) browser.keep_breaks(() => Atomics.store(buffer, 0, 2));
     if (graphics) {
       // a lazy snapshot: graphs wait for the part (browser.py); nothing else of it before `startup`
       share = { ...graphics, hdr: graphics.sab ? new Int32Array(graphics.sab, 0, 4) : null };
@@ -951,9 +953,13 @@ const lifecycle: Handlers<LifecycleOps> = {
   },
 };
 
+/** Pyodide's type takes only a TypedArray; undefined turns its reading of the buffer off (its docs). */
+function readInterrupts(buffer: Int32Array | null) {
+  (py.setInterruptBuffer as (b: Int32Array | undefined) => void)(buffer ?? undefined);
+}
+
 async function runNow({ code, fresh_locals, plot_theme }: { code: string } & RunOptions, id: number) {
   {
-    if (interrupt) interrupt[0] = 0; // a Break pressed while idle must not stop this run
     const before = walk(ROOT);
     // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets
     // a later time than any file had before (saveRun tells a same-size rewrite by it). A time after now (a clock that
@@ -965,11 +971,18 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
     }
     const t0 = performance.now();
     // Positional: a plain Pyodide call passes no keyword arguments; undefined (not null) is Python's None.
-    const result = JSON.parse(
-      browser.run(code, true, fresh_locals === true, plot_theme ?? undefined, (text) =>
-        self.postMessage({ id, log: text }),
-      ),
-    );
+    // Python reads the buffer only during a run: a Break pressed while an op ahead of the run was answered waits there
+    // for it (Python would take it as no run's and drop it), and the page clears it when it sends a run
+    readInterrupts(interrupt);
+    let text: string;
+    try {
+      text = browser.run(code, true, fresh_locals === true, plot_theme ?? undefined, (log) =>
+        self.postMessage({ id, log }),
+      );
+    } finally {
+      readInterrupts(null);
+    }
+    const result = JSON.parse(text);
     const t1 = performance.now();
     Object.assign(result, await saveRun(before));
     // The Python side gave engine and encode; save is writing the run's files to the store.
