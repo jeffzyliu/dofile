@@ -95,7 +95,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   `reply()` has no cast and puts its own effect's ticket on the event, and the `engine` signal is written with `view()`; each writer object is named only by `state.ts` and its owner;
   the Worker is posted to only in `#send`; no `.focus()` and no store write (`write`, `mkdir`, `rename`, `remove`, `change`, `applyRun`) inside a `setTimeout` or `setInterval` callback in `src/app/` (a timer's late move is the one `settle` in `e2e/fixtures.ts` cannot see; a `requestAnimationFrame` or microtask is allowed; a callback that only calls a function which focuses is not seen); no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
   in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
-  the writable signals `state.ts` exports are the views' own. `test/imports.test.ts` holds the rest: no view reaches the
+  the writable signals `state.ts` exports are the views' own. `test/cycles.test.ts`: no import cycle in `src/` (type imports count: a type a view needs lives in `src/app/types.ts`, not in a registry). `test/imports.test.ts` holds the rest: no view reaches the
   transport through value imports (transitive); `machine.ts` has two casts and no top-level variable, and the cast to
   `Ticket` occurs once in `web/`; the transport names no state, `run.ts` subscribes to nothing, no CSS reads `data-engine` and no `.tsx` spells a set
   of state names; the pages' HTML and CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not

@@ -1,11 +1,13 @@
 // The banners above the editor. A save that failed: one per file, removed by a later save that works or by a reload.
 // Download is the editor's text, saved or not, in the file's line break. Both banners hand the focus on when they go
 // with the focus in them (useFocusOnLeave).
-import type { BannerOf } from "../banners";
+
+import { saveAs } from "../files/save.ts";
 import { baseName } from "../files/tree.ts";
-import { saveAs, textInStore } from "../files.ts";
+import { textInStore } from "../files.ts";
 import { dismiss } from "../state.ts";
 import { useFocusOnLeave } from "../states/focus.ts";
+import type { BannerOf } from "../types.ts";
 import { Banner } from "../ui/Live";
 import { editorCommands } from "./commands.ts";
 import { savedIsText, textOf } from "./Editor";

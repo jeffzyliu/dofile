@@ -2,10 +2,10 @@
 // its kind. The host draws a new dialog for each new value (clash 2 after clash 1); a view unmounted with no answer
 // answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { DialogOf } from "../dialogs";
 import { editorCommands } from "../editor/commands.ts";
 import { refresh } from "../files.ts";
 import { dialog, files } from "../state.ts";
+import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries, WORDS } from "./actions.ts";
 import { focusAfterClose } from "./EditorTabs";

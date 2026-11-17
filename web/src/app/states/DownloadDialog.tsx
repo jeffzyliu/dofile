@@ -5,11 +5,10 @@
 // The take-over button is aria-disabled (and `.off`) while `other-tab-taking` (a few ms): the machine ignores a second
 // press.
 
-import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";
 import { LANDING_URL, snapshotStart } from "../env";
 import { dialog, engine, engineBytes, graphicsPart } from "../state.ts";
-import type { Stage } from "../types.ts";
+import type { DialogOf, Stage } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { useNow } from "./clock.ts";
 import { engineLoading, engineStarting } from "./predicates.ts";

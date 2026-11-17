@@ -6,11 +6,11 @@ import { effect } from "@preact/signals-core";
 import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
 import { editorCommands } from "../editor/commands.ts";
-import { saveAs } from "../files.ts";
 import { activeTab, addBanner, banners, dialog, dismiss, files, phoneTab, say, showToast, tabs } from "../state.ts";
 import { store } from "../store.ts";
 import type { Dialog } from "../types.ts";
 import { decodeText, openFile } from "./open.ts";
+import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
 
 // ---- tabs ----

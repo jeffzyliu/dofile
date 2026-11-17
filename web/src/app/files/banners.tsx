@@ -1,7 +1,8 @@
 // The Files pane's banner for a file the editor cannot open (docs/design/SPEC.md, section 3.11). open.ts adds it.
-import type { BannerOf } from "../banners";
+
 import { dismiss } from "../state.ts";
 import { useFocusOnLeave } from "../states/focus.ts";
+import type { BannerOf } from "../types.ts";
 import { Banner } from "../ui/Live";
 import { downloadEntry } from "./actions.ts";
 import { baseName } from "./tree.ts";

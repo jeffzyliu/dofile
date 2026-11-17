@@ -3,7 +3,6 @@
 // once, since a banner in the editor slot is display:none on a phone's other views, where an alert is never announced.
 // Focus: docs/web-page-flows.md, section 1.
 import { useRef } from "preact/hooks";
-import type { BannerOf } from "../banners";
 import { breakPending, resetsIn, since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { ticking } from "../editor/words.ts";
@@ -11,7 +10,7 @@ import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
 import { dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
-import type { EngineState } from "../types.ts";
+import type { BannerOf, EngineState } from "../types.ts";
 import { useFocusOnMount } from "../ui/focus-hooks.ts";
 import { Banner } from "../ui/Live";
 import { focusStable, useFocusOnLeave } from "./focus.ts";

@@ -5,6 +5,7 @@
 import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
 import { editorCommands } from "./editor/commands.ts";
+import { saveAs } from "./files/save.ts";
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
 import * as S from "./state.ts";
 import { filesWriter as W } from "./state.ts";
@@ -140,13 +141,4 @@ export async function downloadAll(): Promise<boolean> {
     S.say("Your files couldn't be downloaded");
     return false;
   }
-}
-
-/** Hand a file to the browser's download. `name` defaults to the File's own. */
-export function saveAs(blob: Blob, name = (blob as File).name ?? "download") {
-  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
