@@ -42,6 +42,7 @@ BALLAST = 20_000_000
 
 _eng: Engine | None = None
 _busy = False
+_put_back = None  # keep_breaks
 _ballast: bytearray | None = None
 
 
@@ -60,8 +61,18 @@ def _free_ballast() -> None:
 
 
 def _on_interrupt(signum, frame) -> None:
-    if _busy:  # a Break that comes between runs must not stop the next one
+    if _busy:
         request_break()
+    elif _put_back is not None:  # not dropped: the top of run(), before it is busy, reads a Break meant for it
+        _put_back()
+
+
+def keep_breaks(put_back) -> None:
+    """`put_back()`, a JS function, writes SIGINT into Pyodide's interrupt buffer again. A Break read while no run is
+    busy is put back there: the run reads it again once busy, and the page clears the buffer when it sends a run, so a
+    Break left from the run before stops nothing. Once, after start()."""
+    global _put_back
+    _put_back = put_back
 
 
 def start(root: str = "/work") -> str:

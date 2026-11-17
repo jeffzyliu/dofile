@@ -3,10 +3,11 @@
 // variable name (`pickedVar`) only scrolls Browse to its column and marks it: no command, nothing in the log.
 
 import { useEffect, useRef } from "preact/hooks";
+import { binarySize } from "../bytes.ts";
 import { moreRows } from "../run.ts";
 import { banners, data, memory, pickedVar, rows, say } from "../state.ts";
 import type { BrowseRows, DataSummary } from "../types.ts";
-import { bytes, count, cutCell } from "./format.ts";
+import { count, cutCell } from "./format.ts";
 import { filterText, focusVar, loadingRows, openCells } from "./view.ts";
 
 const EMPTY = "Load a .dta from the file list, or run ";
@@ -245,7 +246,7 @@ export function DataTab() {
             from <b>{d.filename}</b>
           </span>
         )}
-        {mem && <span>{bytes(mem.data_bytes)} in memory</span>}
+        {mem && <span>{binarySize(mem.data_bytes)} in memory</span>}
       </div>
       <Variables d={d} />
       {r && "error" in r && <p class="note">{r.error}</p>}

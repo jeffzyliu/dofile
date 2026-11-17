@@ -36,6 +36,7 @@ import type {
   SnapshotFiles,
   Stage,
   Startup,
+  StoreCause,
   ToWorker,
 } from "./types.ts";
 
@@ -48,6 +49,7 @@ declare global {
 /** dofile.browser (src/dofile/browser.py): JSON text in and out. */
 interface Browser {
   start(root: string): string;
+  keep_breaks(putBack: () => void): void;
   lazy_graphics(wait: (ms: number) => string): void; // a lazy snapshot (waitGraphics)
   graphics_written(): void;
   warm_graphics(start: number, count: number): number;
@@ -78,7 +80,8 @@ let py: SnapshotPy,
   brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
 let queue = Promise.resolve();
 let store: WorkerStore | null = null,
-  storeError = ""; // the file store, or why there is none
+  storeError: { name: string; message: string; cause: StoreCause } | null = null, // the file store, or why there is none
+  outOfStep: string | null = null; // why /work could not take the page's version after a run; said after its answer
 // path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
 let unsaved = new Map<string, { status: FileChange["status"]; dir: boolean }>();
 
@@ -86,13 +89,14 @@ const stage = (id: Stage) => self.postMessage({ stage: id });
 const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);
 
 // Emscripten's file system errors carry only a number.
-function errorForPage(e: any): { message: string; name: string } {
+function errorForPage(e: any): { message: string; name: string; type?: string } {
   if (e?.errno != null) {
     const code = Object.keys(py?.ERRNO_CODES ?? {}).find((k) => py.ERRNO_CODES[k] === e.errno);
     return { message: `file system error ${code ?? e.errno}`, name: "ErrnoError" };
   }
   const message = e?.message ?? (typeof e === "object" ? JSON.stringify(e) : e);
-  return { message: String(message), name: e?.name ?? "Error" };
+  const name = e?.name ?? "Error";
+  return { message: String(message), name, ...(name === "PythonError" && { type: e?.type }) };
 }
 const failedDownload = (message: string) => Object.assign(new Error(message), { name: "DownloadError" });
 
@@ -140,13 +144,16 @@ function putRecords({ infos, data }: { infos: FileInfo[]; data: [IDBValidKey, Ar
 // With no store (the browser refused, or there is no IndexedDB) /work starts empty; startup.storeError says why, and so
 // does the store_error of every run that writes a file.
 async function copyStore() {
+  let cause: StoreCause = "open";
   try {
     store = self.dofileStore ?? openStore();
-    putRecords(await store.takeAll());
+    const copy = await store.takeAll();
+    cause = "copy";
+    putRecords(copy);
   } catch (e) {
     store = null;
-    storeError = `the files are not saved: ${errorForPage(e).message}`;
-    console.warn(`[dofile] ${storeError}`);
+    storeError = { ...errorForPage(e), cause };
+    console.warn(`[dofile] the files are not saved: ${storeError.message}`);
   }
 }
 
@@ -186,7 +193,8 @@ function foldersAt(path: string, self: boolean) {
  * truncation is not stamped by MEMFS (its setattr takes no time with a size, and a write of 0 bytes sets none), so a
  * run that empties a file changes only its size.
  * @param before - walk() from before the run.
- * @returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again).
+ * @returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again). If
+ * /work then cannot take the page's version, `outOfStep` says why.
  */
 async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipped: string[]; store_error?: string }> {
   const was = new Map(before.map((f) => [f.path, f])),
@@ -214,7 +222,7 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
       changes.push({ path, dir: failed.dir, size: 0, mtime: 0, status: "removed" });
   }
   if (!changes.length) return { files: [], skipped: [] };
-  if (!store) return { files: [], skipped: [], store_error: storeError };
+  if (!store) return { files: [], skipped: [], store_error: storeError!.message };
   let saved: AppliedRun;
   try {
     saved = await store.applyRun(changes);
@@ -226,11 +234,7 @@ async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipp
   try {
     takePageVersion(saved);
   } catch (e) {
-    return {
-      files: saved.files,
-      skipped: saved.skipped,
-      store_error: `the engine's folder could not take your changes: ${errorForPage(e).message}`,
-    };
+    outOfStep = errorForPage(e).message; // the run's files are kept; the page replaces this worker
   }
   return { files: saved.files, skipped: saved.skipped };
 }
@@ -913,12 +917,13 @@ const lifecycle: Handlers<LifecycleOps> = {
       await py.runPythonAsync(`import micropip; await micropip.install(list(wheel_urls))`);
     }
     interrupt = interruptBuffer ?? null;
-    if (interrupt) py.setInterruptBuffer(interrupt);
     if (!fromSnapshot) startup.packagesS = since(tPackages);
     stage("engine");
     const tEngine = performance.now();
     browser = py.pyimport("dofile.browser");
     const about = JSON.parse(browser.start(ROOT));
+    const buffer = interrupt;
+    if (buffer) browser.keep_breaks(() => Atomics.store(buffer, 0, 2));
     if (graphics) {
       // a lazy snapshot: graphs wait for the part (browser.py); nothing else of it before `startup`
       share = { ...graphics, hdr: graphics.sab ? new Int32Array(graphics.sab, 0, 4) : null };
@@ -953,9 +958,13 @@ const lifecycle: Handlers<LifecycleOps> = {
   },
 };
 
+/** Pyodide's type takes only a TypedArray; undefined turns its reading of the buffer off (its docs). */
+function readInterrupts(buffer: Int32Array | null) {
+  (py.setInterruptBuffer as (b: Int32Array | undefined) => void)(buffer ?? undefined);
+}
+
 async function runNow({ code, fresh_locals, plot_theme }: { code: string } & RunOptions, id: number) {
   {
-    if (interrupt) interrupt[0] = 0; // a Break pressed while idle must not stop this run
     const before = walk(ROOT);
     // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets
     // a later time than any file had before (saveRun tells a same-size rewrite by it). A time after now (a clock that
@@ -967,11 +976,18 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
     }
     const t0 = performance.now();
     // Positional: a plain Pyodide call passes no keyword arguments; undefined (not null) is Python's None.
-    const result = JSON.parse(
-      browser.run(code, true, fresh_locals === true, plot_theme ?? undefined, (text) =>
-        self.postMessage({ id, log: text }),
-      ),
-    );
+    // Python reads the buffer only during a run: a Break pressed while an op ahead of the run was answered waits there
+    // for it (Python would take it as no run's and drop it), and the page clears it when it sends a run
+    readInterrupts(interrupt);
+    let text: string;
+    try {
+      text = browser.run(code, true, fresh_locals === true, plot_theme ?? undefined, (log) =>
+        self.postMessage({ id, log }),
+      );
+    } finally {
+      readInterrupts(null);
+    }
+    const result = JSON.parse(text);
     const t1 = performance.now();
     Object.assign(result, await saveRun(before));
     // The Python side gave engine and encode; save is writing the run's files to the store.
@@ -1031,9 +1047,13 @@ const answer = async ({ id, op, args }: ToWorker) => {
     if (!ops[op]) throw new Error(`unknown op ${op}`);
     const result = await (ops[op] as (args: unknown, id: number) => unknown)(args ?? {}, id);
     self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []); // a file: moved, not copied
+    if (outOfStep) {
+      self.postMessage({ folderError: outOfStep }); // after the run's answer, so the page keeps its result
+      outOfStep = null;
+    }
   } catch (e) {
-    const { message, name } = errorForPage(e);
-    self.postMessage({ id, error: message, name });
+    const { message, name, type } = errorForPage(e);
+    self.postMessage({ id, error: message, name, type });
   }
 };
 
@@ -1052,8 +1072,8 @@ self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
       },
       (e) => {
         bootDone.err(e);
-        const { message, name } = errorForPage(e);
-        self.postMessage({ id, error: message, name });
+        const { message, name, type } = errorForPage(e);
+        self.postMessage({ id, error: message, name, type });
       },
     );
     return;

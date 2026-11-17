@@ -71,8 +71,9 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **One state machine decides the engine's state: `src/engine/machine.ts`.** `transition(machine, event)` is pure (type
   imports only, no clock, timer, console or top-level variable; the time comes in the event) and returns the next state
   and the effects. Its state names are the `engine` signal's, `<html data-engine>`'s and SPEC section 5's. **Nothing
-  outside it decides a state**: no counter, flag or comparison of state names in the transport, the controllers or a
-  view. To add a state, event or effect, change its tables; the compiler and
+  outside it decides a state**: no counter, flag or comparison of state names in the transport or the controllers, and
+  a view asks `src/app/states/predicates.ts` (`engineUp`, `runOn`, ...) rather than spell a set of names. To add a
+  state, event or effect, change its tables; the compiler and
   `test/machine.test.ts` then say what else must follow. After a change to a cell, run
   `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` and paste the tables into SPEC section 5 (a test compares them).
 - **Who constructs, who connects, who decides.** Only `src/main.tsx` makes the transport (`EngineClient`,
@@ -94,15 +95,15 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   `reply()` has no cast and puts its own effect's ticket on the event, and the `engine` signal is written with `view()`; each writer object is named only by `state.ts` and its owner;
   the Worker is posted to only in `#send`; no `.focus()` and no store write (`write`, `mkdir`, `rename`, `remove`, `change`, `applyRun`) inside a `setTimeout` or `setInterval` callback in `src/app/` (a timer's late move is the one `settle` in `e2e/fixtures.ts` cannot see; a `requestAnimationFrame` or microtask is allowed; a callback that only calls a function which focuses is not seen); no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
   in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
-  the writable signals `state.ts` exports are the views' own. `test/imports.test.ts` holds the rest: no view reaches the
+  the writable signals `state.ts` exports are the views' own. `test/cycles.test.ts`: no import cycle in `src/` (type imports count: a type a view needs lives in `src/app/types.ts`, not in a registry). `test/imports.test.ts` holds the rest: no view reaches the
   transport through value imports (transitive); `machine.ts` has two casts and no top-level variable, and the cast to
-  `Ticket` occurs once in `web/`; the transport names no state and `run.ts` subscribes to nothing; the pages' HTML and
-  CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not
+  `Ticket` occurs once in `web/`; the transport names no state, `run.ts` subscribes to nothing, no CSS reads `data-engine` and no `.tsx` spells a set
+  of state names; the pages' HTML and CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not
   depend on how a line is wrapped.
 - **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
   `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is
   blocked until the tab lock answers: a test waits for `!store.blocked` before it writes. `<html data-engine>` always holds
-  the state name. Its type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its
+  the state name (for tests; no CSS reads it). Its type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its
   own. What a test sets up in the page's state goes through the helpers in `e2e/seed.ts` (`showEngine`, `addBanner`,
   `seedLog`, ...), not a signal written in the spec.
 - **e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not `@playwright/test`. Its fixture answers
@@ -117,7 +118,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   or `--ip 0.0.0.0`; give any new one the same.
 - **The snapshot is the page's only start; there is no fallback.** `?snapshot=0` is the normal boot, a developer's
   diagnostic, and nothing the page shows names it. A missing or stale snapshot makes the engine `failed` (stale: reason
-  "updated"), with a plain `message` for the visitor (`FAILED` in `app/engine.ts`) and the cause in `detail` (console).
+  "updated"), with a plain `message` for the visitor (`FAILED` in `app/states/words.ts`) and the cause in `detail` (console).
   Rebuild it (`npm run snapshot`) after a change to the dofile code, a wheel or the Pyodide version: `vite build` fails on
   a stale one. Its loader is a patched copy of Pyodide's that throws if Pyodide's text changes, so a Pyodide upgrade needs
   the patch updated (`docs/pyodide-snapshot.md`). `download()` in the transport is the only writer of the start files'
@@ -134,7 +135,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **One tab owns the files and the engine**: the Web Lock `dofile-engine` (`src/engine/tab.ts`). A tab without it starts
   no worker and writes nothing (`store.blocked`).
 - **Errors from `client.ts` carry a `kind`** (`ClientError` in `src/engine/types.ts` lists them); the worker answers
-  `{id, error, name}`. Keep both on a new failure path: the page decides from them, never from the text.
+  `{id, error, name, type?}` (`type`: the Python exception class of a `PythonError`). Keep these on a new failure path: the page decides from them, never from the text.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
   entry made iOS Safari run it twice.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`

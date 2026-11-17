@@ -5,32 +5,27 @@
 
 import { useEffect } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
-import { call } from "../engine.ts";
-import { baseName, formatSize } from "../files/tree.ts";
+import { formatSize } from "../bytes.ts";
+import { baseName } from "../files/tree.ts";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
 import { engine, files, showToast } from "../state.ts";
+import { workerReachable } from "../states/predicates.ts";
 import { Icon } from "../ui/Icon";
 import { copyText } from "./clip.ts";
+import { readDta } from "./dta.ts";
 import { count } from "./format.ts";
 import { dtaInfo } from "./view.ts";
 
 const NOTE = " the data in memory is untouched until you press Load.";
-// engine states in which a worker is there, or on its way, to answer a read
-const UP = new Set(["starting-worker", "ready", "running", "breaking", "waiting"]);
 
 export function DtaView({ path }: { path: string }) {
   const file = files.value.find((f) => f.path === path);
   const key = file ? `${file.size}:${file.mtime}` : "none";
-  const up = UP.has(engine.value.s);
+  const up = workerReachable(engine.value);
   useEffect(() => {
     if (!up || dtaInfo.value[path]?.key === key) return;
-    call("describe_file", { path }).then(
-      (result) => {
-        dtaInfo.value = { ...dtaInfo.value, [path]: { key, result } };
-      },
-      () => {}, // no engine, or a reset cut it: asked again when one is up
-    );
+    readDta(path, key);
   }, [path, key, up]);
 
   const info = dtaInfo.value[path]?.result;

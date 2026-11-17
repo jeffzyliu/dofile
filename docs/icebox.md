@@ -218,3 +218,17 @@ estimated splits) are the study's, not checked again here.
   - R1, only if the lazy graphics part was still changing when the audit reached it.
 
   Each gets a planning task first: `docs/web-audit-plan.md`, section 8. 2026-11-16.
+
+## Web audit phase 1: left by the bug fixes (added 2026-11-17)
+
+- **Pyodide's interrupt buffer is read and zeroed in two steps.** Pyodide's `_Py_CheckEmscriptenSignals_Helper`
+  (`pyodide.asm.mjs`) reads the buffer and then writes 0, so a SIGINT that the page stores between the two is lost. The root
+  fix is one `Atomics.exchange(buffer, 0, 0)`, applied through the patched loader the snapshot already uses (or upstream);
+  then no store is lost and the 100 ms repeat in `client.interrupt()` could go. Left because it patches Pyodide's runtime
+  text, not only the loader, and needs a re-check at every Pyodide upgrade. B3 covers the symptom: `interrupt()` writes SIGINT
+  again every 100 ms while the run is live. Measured: 8 of 2350 Breaks lost in Node (0.34%); the WebKit Break test lost about
+  1 in 100 before the repeat and 0 in 100 after. 2026-11-17.
+- **Two byte units.** The file tree, the `.dta` header and the clash dialog use decimal units (`formatSize`); the Data tab's
+  "in memory" uses binary ones (`binarySize`): a file of 1,048,576 bytes reads "1.0 MB" in the tree and "1 MB" in Data
+  (06-F14). C4 put the formatters in `app/bytes.ts` and kept each unit, because it changes no visitor-facing text. Left
+  for the maintainer to decide whether to unify them, and on which unit, since it changes what visitors read. 2026-11-17.

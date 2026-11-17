@@ -13,7 +13,18 @@ import type { ReadonlySignal, Signal } from "@preact/signals-core";
 import type { Banner, EngineState, EngineStateName, LastRun, LogItem, RunHead } from "../src/app/types.ts";
 import type { Builds, Lifecycle, Reader } from "../src/engine/client.ts";
 import type { Ending, Reply } from "../src/engine/machine.ts";
-import type { Build, Downloaded, FileInfo, Ops, Progress, ReadOps, ResetKind, RunResult } from "../src/engine/types.ts";
+import type {
+  Build,
+  CrashCause,
+  Downloaded,
+  FileInfo,
+  Ops,
+  Progress,
+  ReadOps,
+  ResetKind,
+  RunResult,
+  StoreCause,
+} from "../src/engine/types.ts";
 import { sleep } from "./harness.ts";
 
 // A log item and a banner with every member's fields, for reading in assertions: a test reads the fields of the member
@@ -30,6 +41,7 @@ export type AnyLogItem = { t: LogItem["t"] } & Partial<{
 export type AnyBanner = { b: Banner["b"] } & Partial<{
   reason: string;
   kind: ResetKind;
+  cause: CrashCause | StoreCause | null;
   path: string;
   message: string;
 }>;
@@ -47,8 +59,8 @@ Object.defineProperty(globalThis, "localStorage", {
 
 export const S = await import("../src/app/state.ts");
 export const engine = await import("../src/app/engine.ts");
-export const { runCode, runCommand, clearLog, canClearLog, addFileGraph, moreRows, handlers, MAX_GRAPHS } =
-  await import("../src/app/run.ts");
+export const { runCode, runCommand, clearLog, canClearLog, moreRows, handlers } = await import("../src/app/run.ts");
+export const { addFileGraph, MAX_GRAPHS } = await import("../src/app/graphs.ts");
 export const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.ts");
 export const { startEngine } = await import("../src/app/start.ts");
 export const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");

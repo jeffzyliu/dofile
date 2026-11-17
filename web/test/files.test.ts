@@ -720,11 +720,13 @@ test("a worker that cannot open the file store still starts, and says the files 
 }, async () => {
   const eng = new EngineClient({ createWorker: () => nodeWorker({ noDatabase: true }), wheel, extraWheels });
   await startWorker(eng);
-  assert.match(eng.storeError!, /^the files are not saved: this browser has no storage for files/);
-  assert.equal(eng.startup!.storeError, eng.storeError);
+  assert.match(eng.storeError!.message, /^this browser has no storage for files/);
+  assert.equal(eng.storeError!.name, "Error");
+  assert.equal(eng.storeError!.cause, "open", "the store did not open");
+  assert.deepEqual(eng.startup!.storeError, eng.storeError);
   const r = await runOn(eng, writes("lost.txt", "x"));
   assert.equal(r.rc, 0, r.log);
-  assert.match(r.store_error!, /the files are not saved/);
+  assert.match(r.store_error!, /^this browser has no storage for files/);
   assert.deepEqual([r.files, r.skipped], [[], []]);
   assert.equal((await runOn(eng, "display 1")).store_error, undefined, "a run that writes no file has nothing to say");
   eng.worker!.terminate();
@@ -744,12 +746,78 @@ test("the page's store with a worker that has none: the store is detached, so th
     });
   const eng = new EngineClient({ createWorker: worker, wheel, extraWheels, store });
   await startWorker(eng);
-  assert.match(eng.storeError!, /^the files are not saved/);
+  assert.match(eng.storeError!.message, /^this browser has no storage for files/);
   assert.equal(store.sync, null, "detached: the worker could not read the journal");
   await store.write("page.txt", bytes("from the page"));
   assert.equal(text(await store.read("page.txt")), "from the page");
   assert.deepEqual(await eng.query("files"), [], "/work does not get it");
   assert.deepEqual(await pendingRows(store), [], "no row that no worker would ever clear");
+  eng.worker!.terminate();
+});
+
+test("a store that opens but whose files cannot be copied into /work: storeError's cause is copy, with the file system's error name", {
+  timeout: 120_000,
+}, async () => {
+  const worker = () =>
+    nodeWorker({
+      store: {
+        // a folder and a file at one path: writing the file onto the folder fails (EISDIR)
+        takeAll: async () => ({
+          infos: [{ path: "a", dir: true, size: 0, mtime: 1 }],
+          data: [["a", new Uint8Array([1]).buffer]],
+        }),
+      } as unknown as FileStore,
+    });
+  const eng = new EngineClient({ createWorker: worker, wheel, extraWheels });
+  const said: Answer<"start-worker">[] = [];
+  await startWorker(eng, null, said);
+  assert.deepEqual(said.at(-1), { type: "started", storeFailed: "copy" });
+  assert.equal(eng.storeError!.cause, "copy");
+  assert.equal(eng.storeError!.name, "ErrnoError");
+  eng.worker!.terminate();
+});
+
+test("a database of a newer version (another page upgraded it): the worker's VersionError keeps its name, and the start fails with reason updated", {
+  timeout: 120_000,
+}, async () => {
+  const newer = Object.assign(new Error("The requested version (1) is less than the existing version (2)."), {
+    name: "VersionError",
+  });
+  const worker = () =>
+    nodeWorker({
+      store: {
+        takeAll: async () => {
+          throw newer;
+        },
+      } as unknown as FileStore,
+    });
+  const eng = new EngineClient({ createWorker: worker, wheel, extraWheels });
+  await assert.rejects(startWorker(eng), { type: "start-failed", reason: "updated", detail: newer.message });
+  eng.worker!.terminate();
+});
+
+test("a run's files are kept but /work cannot take the page's version afterwards: no store_error, and the transport says `crashed`, cause folder", {
+  timeout: 120_000,
+}, async () => {
+  const kept = [{ name: "out.txt", status: "created", bytes: 1 }];
+  const worker = () =>
+    nodeWorker({
+      store: {
+        takeAll: async () => ({ infos: [], data: [] }),
+        applyRun: async () => ({ files: kept, skipped: [], resync: null }), // takePageVersion throws on it
+      } as unknown as FileStore,
+    });
+  const eng = new EngineClient({ createWorker: worker, wheel, extraWheels });
+  const said: Answer<"start-worker">[] = [];
+  await startWorker(eng, null, said);
+  const r = await runOn(eng, writes("out.txt", "x"));
+  // the run's answer comes first: a crash said before it would cut the run (rc 9998) and lose its result
+  assert.notEqual(said.at(-1)!.type, "crashed", "the run's answer comes before folderError");
+  assert.equal(r.rc, 0, r.log);
+  assert.deepEqual([r.files, r.store_error], [kept, undefined], "the files were kept: the run does not say otherwise");
+  for (let i = 0; i < 100 && said.at(-1)!.type !== "crashed"; i++) await sleep(5);
+  const last = said.at(-1)!;
+  assert.equal(last.type === "crashed" && last.cause, "folder");
   eng.worker!.terminate();
 });
 

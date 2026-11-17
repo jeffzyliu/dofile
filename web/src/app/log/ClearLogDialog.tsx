@@ -1,8 +1,9 @@
 // The Clear log dialog (docs/design/SPEC.md, sections 3.5 and 3.10). It may be open during a run: clearLog() keeps the
 // streaming run's text item.
-import type { DialogOf } from "../dialogs";
+
 import { clearLog } from "../run.ts";
 import { dialog } from "../state.ts";
+import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 
 const close = () => {

@@ -113,7 +113,18 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
   timeout: 180_000,
 }, async (t) => {
   const said: Answer<"start-worker">[] = [],
-    { store, createWorker } = pageStore();
+    { store, createWorker: storeWorker } = pageStore();
+  let buffer!: Int32Array; // the live worker's interrupt buffer, as its boot was given it
+  const createWorker = () => {
+    const w = storeWorker();
+    const post = w.postMessage.bind(w);
+    w.postMessage = (m: unknown, t?: unknown) => {
+      const sent = m as { op?: string; args?: { interruptBuffer?: Int32Array | null } };
+      if (sent.op === "boot" && sent.args?.interruptBuffer) buffer = sent.args.interruptBuffer;
+      post(m, t as Transferable[]);
+    };
+    return w;
+  };
   const eng = new EngineClient({ createWorker, wheel, extraWheels, store });
   await startWorker(eng, null, said);
   assert.match(JSON.stringify(eng.about), /opendta/i);
@@ -258,6 +269,33 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     const after = await runOn(eng, "summarize x");
     assert.equal(after.rc, 0);
     assert.equal(after.nobs, 100);
+  });
+
+  await t.test("a Break pressed while the run waits behind a describe stops that run", async () => {
+    await runOn(eng, "clear\nset obs 100\ngen x = 0");
+    const described = eng.query("describe");
+    const running = runOn(eng, 'display "first"\nwhile 1 {\n quietly replace x = x + 1\n}');
+    // SIGINT written once, not through interrupt(), whose repeats would hide a worker that loses it: the worker has not
+    // taken the run yet, the describe is ahead of it
+    Atomics.store(buffer, 0, 2);
+    let lost = false;
+    const late = setTimeout(() => {
+      lost = true;
+      eng.interrupt(live(eng)); // so that the run ends either way
+    }, 4000);
+    const r = await running;
+    clearTimeout(late);
+    await described;
+    assert.equal(lost, false, "the Break was lost: the run went on until a second one");
+    assert.equal(r.rc, 1, r.log);
+    assert.equal(r.error_line, 1, "before its first line (the page's note: Stopped by Break before line 1)");
+    assert.doesNotMatch(r.log, /^first$/m, r.log);
+  });
+
+  await t.test("a Break that comes after its run ended does not stop the next run", async () => {
+    eng.interrupt(live(eng));
+    const r = await runOn(eng, "display 1");
+    assert.equal(r.rc, 0, r.log);
   });
 
   // the machine's RESET: end-worker, then start-worker (the run's rc 9998 result is the machine's own: machine.test.ts)

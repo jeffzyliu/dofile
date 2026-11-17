@@ -3,6 +3,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  breakAsked,
+  engineLoading,
+  engineStarting,
+  engineUp,
+  otherTab,
+  runOn,
+  workerReachable,
+} from "../src/app/states/predicates.ts";
+import {
   failedActions,
   noteFor,
   ofTotal,
@@ -14,7 +23,7 @@ import {
   secs,
   twiceWords,
 } from "../src/app/states/words.ts";
-import type { FailReason, RunHead } from "../src/app/types.ts";
+import type { EngineState, FailReason, RunHead } from "../src/app/types.ts";
 
 test("Reset resets at once only when the engine is ready and nothing has run on it; anything else asks", () => {
   assert.equal(resetAsks("ready", 0), false, "a new engine, or one just reset");
@@ -52,19 +61,32 @@ test("the times and sizes are written as the drawings write them", () => {
 });
 
 test("the reset banner's words follow the kind, and cut a cause in parentheses off", () => {
-  assert.deepEqual(resetWords("user", "reset by you", true), {
+  assert.deepEqual(resetWords("user", null, "reset by you", true), {
     head: "You reset the engine.",
     rest: "The data in memory is lost; your files are kept.",
   });
   assert.equal(
-    resetWords("break", "the code did not stop at Break", true).head,
+    resetWords("break", null, "the code did not stop at Break", true).head,
     "The engine was reset: the code did not stop at Break.",
   );
   assert.equal(
-    resetWords("crash", "the engine crashed (out of memory: x)", true).head,
+    resetWords("crash", "error", "the engine crashed (out of memory: x)", true).head,
     "The engine crashed and was reset.",
   );
-  assert.equal(resetWords("break", "Break reset the engine, because ...", false).head, "Break reset the engine.");
+  assert.equal(resetWords("break", null, "Break reset the engine, because ...", false).head, "Break reset the engine.");
+  assert.equal(
+    resetWords("crash", "folder", "any words at all", true).head,
+    "The engine's version of your files was out of date, so the engine was reset.",
+  );
+  // the head comes from the cause, never from the reason's text
+  assert.equal(
+    resetWords("crash", "storage", "the engine crashed (x)", true).head,
+    "The browser closed the file storage, and the engine was reset.",
+  );
+  assert.equal(
+    resetWords("crash", "error", "the browser closed the file storage; out of date", true).head,
+    "The engine crashed and was reset.",
+  );
 });
 
 test("the running banner names the run", () => {
@@ -97,4 +119,33 @@ test("the two notes (drafts) are chosen by the run's rc and error", () => {
   assert.equal(noteFor(199, "command frobnicate is unrecognized"), null);
   assert.equal(noteFor(601, "file wages.dta not found"), null);
   assert.equal(noteFor(0, null), null);
+});
+
+test("the engine-state predicates over all sixteen states", () => {
+  const all = [
+    "checking-lock",
+    "checking-cache",
+    "none",
+    "asking",
+    "declined",
+    "downloading",
+    "starting-list",
+    "starting-worker",
+    "ready",
+    "running",
+    "breaking",
+    "waiting",
+    "failed",
+    "failed-twice",
+    "other-tab-idle",
+    "other-tab-taking",
+  ] as const satisfies readonly EngineState["s"][];
+  const members = (p: (st: EngineState) => boolean) => all.filter((s) => p({ s } as EngineState));
+  assert.deepEqual(members(engineUp), ["ready", "running", "breaking", "waiting"]);
+  assert.deepEqual(members(runOn), ["running", "breaking", "waiting"]);
+  assert.deepEqual(members(breakAsked), ["breaking", "waiting"]);
+  assert.deepEqual(members(engineStarting), ["downloading", "starting-list", "starting-worker"]);
+  assert.deepEqual(members(engineLoading), ["starting-list", "starting-worker"]);
+  assert.deepEqual(members(workerReachable), ["starting-worker", "ready", "running", "breaking", "waiting"]);
+  assert.deepEqual(members(otherTab), ["other-tab-idle", "other-tab-taking"]);
 });

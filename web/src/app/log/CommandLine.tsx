@@ -19,10 +19,11 @@ import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { GraphsLoading, stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryTitle, memoryWords, refusedRunWords, seconds, ticking } from "../editor/words.ts";
-import { saveAs } from "../files.ts";
+import { saveAs } from "../files/save.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
 import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
+import { breakAsked } from "../states/predicates.ts";
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { MenuButton, type MenuItem } from "../ui/Menu";
@@ -298,7 +299,7 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
       <span>
         {bold && <b>{bold}</b>}
         {rest}
-        {(st.s === "breaking" || st.s === "waiting") && ` · ${ticking(since(st.t0))}`}
+        {breakAsked(st) && ` · ${ticking(since(st.t0))}`}
       </span>
     );
   }

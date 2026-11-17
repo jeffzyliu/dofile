@@ -126,8 +126,7 @@ export class FileStore {
    *  @param onClosed - called when the browser closes the database (another page deleted or upgraded it, "Clear site
    *  data"): /work then holds files the store may no longer have, which the journal cannot say. After a deleted
    *  database the new worker's mount copies the store as it is now; after an upgrade by another page this page still
-   *  opens version 1, which fails (VersionError): the new worker mounts with a store error and an empty /work, and the
-   *  store is detached from it. */
+   *  opens version 1, which fails (VersionError): the new worker's start fails with reason "updated". */
   attach(sync: FileStore["sync"], { onClosed = null }: { onClosed?: null | (() => void) } = {}) {
     Object.assign(this, { sync, onClosed });
   }

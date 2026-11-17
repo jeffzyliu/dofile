@@ -55,9 +55,9 @@ body {
 }
 
 /* The toolbar keeps one size: each button holds all its labels (RunControls.tsx), and in other-tab the run buttons keep
-   their place unseen (SPEC 5: none). It is one row and never wider than the window: if it cannot fit (a large default
-   font) it scrolls sideways instead of widening the page. */
-:root[data-engine^="other-tab"] .run-ctl {
+   their place unseen (RunControls.tsx; SPEC 5: none). It is one row and never wider than the window: if it cannot fit (a
+   large default font) it scrolls sideways instead of widening the page. */
+.run-ctl.unseen {
   visibility: hidden;
 }
 .toolbar {

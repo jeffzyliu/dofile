@@ -1,13 +1,14 @@
 // The banners above the editor. A save that failed: one per file, removed by a later save that works or by a reload.
 // Download is the editor's text, saved or not, in the file's line break. Both banners hand the focus on when they go
 // with the focus in them (useFocusOnLeave).
-import type { BannerOf } from "../banners";
+
+import { saveAs } from "../files/save.ts";
 import { baseName } from "../files/tree.ts";
-import { saveAs, textInStore } from "../files.ts";
+import { reloadFromStore } from "../files.ts";
 import { dismiss } from "../state.ts";
 import { useFocusOnLeave } from "../states/focus.ts";
+import type { BannerOf } from "../types.ts";
 import { Banner } from "../ui/Live";
-import { editorCommands } from "./commands.ts";
 import { savedIsText, textOf } from "./Editor";
 
 export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }) => {
@@ -47,8 +48,7 @@ export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }
   const text = savedIsText(banner.path);
   const ref = useFocusOnLeave<HTMLDivElement>(); // Dismiss or "Reload from the run" by keyboard: the focus goes on
   const reload = async () => {
-    const text = await textInStore(banner.path);
-    if (text !== null) editorCommands.reload(banner.path, text);
+    await reloadFromStore(banner.path);
     dismiss(banner);
   };
   return (

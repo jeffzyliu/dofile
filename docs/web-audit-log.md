@@ -96,3 +96,154 @@ Flaky tests seen at G0: none.
 
 Not checked at this gate: the preview on a real phone (the maintainer's, before the merge to `main`), Firefox and WebKit
 screenshots.
+
+## Phase 1 (session 2, branch audit/1-bugs)
+
+Bugs and names, cut from main 7b3e466. Run 2026-11-17. The branch ends at f3f09a4 and goes to `main` as one pull request
+(the maintainer merges, by merge commit, after the preview).
+
+### The pull requests
+
+Each went into audit/1-bugs by merge commit, after its checks passed and after a review. Builder and reviewer give model
+and effort. A fix round was by the builder (the same agent).
+
+| PR | Item | Merge commit | Review and verdict | Builder | Reviewer |
+|---|---|---|---|---|---|
+| #85 | C1: engine-state predicates stated once (`states/predicates.ts`) | ddb529e | rv-c1: accept (0 must-fix; 2 should-fix, done in 8a0f6c9: a reversed pair escaped the regex, PhoneRun not in e2e) | Sonnet, medium | Sonnet, high |
+| #86 | B2: store failures are shown | 56c5794 | rv-b2: accept (0 must-fix; 2 should-fix, done: the order of result and folderError was untested, the store-failed banner was not dismissed on a later ready) | Opus, high | Opus, high |
+| #87 | B3: a Break pressed before the worker takes the run is kept | 7be07ac | rv-b3: accept (should-fix: an engine test was masked by the repeat, done in 14753e0) | Opus, high | Opus, high |
+| #88 | B5: one `describe_file` per `.dta` version, the full-size viewer's Copied timer, Find's ref | fb35d17 | rv-b5: accept (0 must, 0 should) | Sonnet, medium | Sonnet, high |
+| #89 | B4: decide from kinds, not message text | 9feec50 | rv-b4: accept after fixes (1 must-fix: `worker.onerror`'s ErrorEvent has no `name`, so a memory crash was lost; should-fix: 01-F3 was broader than reported, and SPEC's run-op row) | Sonnet, medium | Sonnet, high |
+| #90 | C4 and C2 as one item (1.4): the visitor's words in `states/words.ts`, one sizes module, one UTF-8 decode, one reload of a tab from bytes; no import cycle in `src` | f3f09a4 | rv-c4c2: accept (should-fix: `engine.ts` re-exported the words for tests, done in c6d2594) | Sonnet, medium | Sonnet, high |
+
+B2 was merged right before B3, once B3's checks were green (the maintainer: "Q3 wait for B3").
+
+### Rule 7: what the re-check found
+
+Two read-only surveyors (Sonnet, medium) checked the six items against `main` at 7b3e466. No finding was dropped. Where an
+item changed shape:
+
+- **B3.** The three small edits of the row do not close the gap as written (see "B3's record for R2" below). A Python
+  change was needed (`_on_interrupt` dropped a Break while `_busy` was false).
+- **B2.** No version bump needed.
+- **B4.** The memory crash cannot be told from the name alone; the worker had to send the Python exception type.
+- **C4.** The byte formatters are not where the survey said (`output/format.ts`, `files/tree.ts`, two "mb" helpers). The UTF-8
+  unification depended on C2's cycle break, so the two went as one item.
+- **Overlaps.** B2, B3 and B4 share `client.ts` and `worker.ts`; B2 and B4 share `machine.ts`, `types.ts` and `words.ts`;
+  C1 and B5 both edit `DtaView.tsx`. Each pair ran in series (B4 after B3 and C1; B5 after C1 and B2).
+- **C1 and B5.** C1 had more sites than surveyed. For B5, the find-bar ref read is real but likely unreachable; the
+  `describe_file` doubling is real on remount; the FullSize timer was present.
+
+### Flaky tests seen
+
+- **WebKit, `editor.spec.ts:1514` "Break: the run stops before a line ..."**, rc 9998 instead of 1 (the Break was not taken
+  within the grace, the engine was reset). Sightings in CI: PR #85 (run 44020311714), PR #86 (runs 44022218871 and
+  44028735960), PR #87 on its first push (run 44030555279, rc 1 but "before line 1"). Each passed on a re-run of the
+  failed job; the first result was a failure each time. PR #84 passed it. Not in the known-flaky list at the start.
+  - Cause, found by B3, two parts. (1) A Break that reaches `browser.py` while `_busy` is false was dropped: the page
+    pressed Break while an op (describe, warm_graphics) or the first bytecodes of `run()` were ahead of the run. Fixed by B3.
+    (2) Pyodide's `_Py_CheckEmscriptenSignals_Helper` reads the interrupt buffer and then writes 0 as two steps, so a
+    SIGINT stored between them is lost: 8 of 2350 in Node (0.34%), about 1 in 100 on this machine's WebKit. Covered by
+    B3's 100 ms repeat of SIGINT while the run is live (the root fix is in the icebox).
+  - The "before line 1" failure on #87 was the test's precondition: the Break came about 0.8 s after the page showed
+    "running" and before the worker had started the first command. B3 changed the e2e to wait for `pass N` in the Log,
+    and the engine test asserts `error_line` 1 for a Break taken before the worker starts.
+  - Local WebKit runs of that test: before B3 1 of 10 failed; after B3's first fix 2 of 130 failed; with the repeat 100 of
+    100 passed; round 4, 30 each on webkit, chromium and iphone: 90 of 90 (a first try without the 800 ms wait failed
+    28 of 30 on iphone: the phone's Break pill ignores a tap in its first 600 ms). Green on CI since, and at the end gate.
+- **rv-b2's first `npm test`** exited 1 within seconds and wrote no log (it ran right after `npm run check` in one script).
+  Cause not found; the re-run passed (388 of 388). A sighting, not explained. Not seen again.
+- None at the end gate (0 failed in e2e).
+
+### B3's record for R2
+
+The plan asked B3's builder to record whether the three small edits close the gap, and the tests added.
+
+- **Do the three small edits close the gap? Not as three small edits.** (1) The send-time clear in `client.ts` and (2)
+  dropping `worker.ts`'s clear at run start are needed, but not enough: a Break that Python reads during an op ahead of
+  the run (describe, browse, macros, memory, warm_graphics) is still dropped by the `_busy` guard. (3) "`browser.py` must
+  not drop" cannot be a Python flag: a flag set at the end of `run()` cannot be told apart from one set at the top of the
+  next run, so it would stop the next run.
+- **What closes it.** `client.run()` stores 0 in the interrupt buffer as it posts the run (a Break from before belongs to the
+  run before). The worker installs Pyodide's buffer only around `browser.run` (`py.setInterruptBuffer` in `runNow`, removed in
+  a `finally`), so Python reads it only during a run. `browser.py` puts a Break it reads while not busy back into the
+  buffer through a JS function, `keep_breaks`, so that the page's send-time clear decides which run it belongs to. Put-back
+  without the narrow install would race with the page's clear while a describe runs.
+- **Round 2.** `client.interrupt()` writes SIGINT again every 100 ms while that worker's run is live, and stops when the run
+  answers or the worker changes. A repeat after the Break was taken is harmless: while busy it only sets the engine flag
+  again (cleared at the next run's `clear_break()`; `brk.check()` runs only inside commands, by reading the code, not a test);
+  after `_busy` is false it is put back and the next send clears it. A lost store delays a Break by at most about 100 ms.
+- **Tests added.** `tests/test_browser.py` 2 (a SIGINT before `_busy` is put back and the run takes it, rc 1; a SIGINT outside
+  a run or at its end stops nothing); `web/test/client.test.ts` 3 (the clear at post; a lost store written again while the run is
+  on and not after it answered; a repeat for an ended run does not reach the next run); `web/test/engine.test.ts` 2 subtests on
+  real Pyodide (a Break while the run waits behind a describe stops that run, rc 1, `error_line` 1, with one write of SIGINT
+  into the worker's buffer; a Break after its run ended does not stop the next). No new e2e: a page cannot reliably hold the
+  worker busy at the right moment; the existing Break test now waits for `pass N`.
+- **Failing first.** client.test `cleared when the run was posted`; engine.test `the Break was lost: the run went on until a second
+  one`; the repeat test `written again`. The Python tests failed on the missing `keep_breaks`; the behaviour itself was
+  shown by a CPython probe (SIGINT inside `_hold_ballast`, before `_busy`: rc 1 after 2.0 s, the first Break dropped).
+- **Not taken, for R2.** The root fix: make Pyodide's helper read and clear the buffer with one `Atomics.exchange` through the
+  patched loader. Then no store is lost and the repeat could go. Not taken because it patches Pyodide's runtime text and needs
+  a re-check at every Pyodide upgrade. In the icebox. R2 (a ticket per run) should know that a Break is now owned by the
+  buffer's send-time clear and the worker's narrow install, not by the engine machine.
+- **Not verified.** `browser.py` reverted on its own (needs a rebuilt wheel; the timing of the run's first bytecodes cannot
+  be forced); Firefox; the WebKit rate on CI.
+
+### The maintainer's decisions of this session (2026-11-17)
+
+The words are the maintainer's, as recorded in the session's notes.
+
+- **R5 note** (`docs/design/staging.md`), 05:01Z: "approve R5 recommendations with warn-only for 2a". Approved: choices 1 to 5 as
+  recommended; choice 3 amended: the dev server runs the read-only `staged()` check on each page load (not only at start)
+  and warns "restart npm run dev" when the stage is stale; no watcher, no writer in the config. Plan row R5 is unblocked.
+- **B2's visitor sentences.** 05:05Z: "2.1: B, except "the browser refused to store them" instead." and "2.2 i don't quite like any
+  of them. Maybe a reference to "The engine's version of your files"?"; then 05:06Z: "A, out of date"; then 05:59Z: "a. sentence
+  looks fine." Settled:
+  - storage that will not open (`store-failed`, cause open): "Your files couldn't be opened: the browser refused to store them.
+    Reload the page to try again."
+  - a failed copy into `/work` (`store-failed`, cause copy): "Your files couldn't be loaded into the engine. Reload the page to
+    try again."
+  - a store of a newer version than the page's (a failed start, reason updated): "The engine's version of your files was out of
+    date, so the engine was reset."
+- **B4's visitor sentences.** 07:35Z: "After B4: sentence is okay, i approve." (`FAILED.unknown` for a failed cache write); 07:50Z:
+  "yes" to approving all three 01-F3 cases with the added Reload button. 01-F3 changes which sentence shows: a Cache failure on
+  download, a no-snapshot build, and a download error with no kind now say `FAILED.unknown` instead of "download", with a Reload
+  button.
+- **Decision 2, the open documents** (`docs/design/workspace.md`). 04:59Z: "i also lean towards discriminated union, but I want to
+  see some evidence of its viability at some point."; 05:08Z: "i approve the spike."; 05:59Z: "decision 2, as recommended" (the
+  spike builds the third shape against the same suite); 06:49Z, asked "(i) with content: Signal<TextPart | DtaPart>, or (ii) with
+  the counter?": "i". Settled: one record per tab for its whole life, `content: Signal<TextPart | DtaPart>`, staleness by identity
+  of the part, no counter. The note's section 2 holds the shape and the spike's evidence with its limits. Plan row S1 is unblocked.
+- **The Save rule**, 06:40Z: "Q1 yes". A later reload, "Reload from the run", an upload's Replace, or a run's text shown in the tab
+  cancels a pending Save of that tab: the later action wins. It covers tabs with unsaved edits. Today's code writes in those
+  cases; this changes it. Written in the note's section 3; S1 puts it in SPEC.
+- **Merge order**, 06:40Z: "Q3 wait for B3". B2 merged only right before B3, once B3's checks were green.
+- **The byte units** (C4): kept as they were (the rule: nothing a visitor sees changes in C4). Unifying them is in the icebox,
+  for the maintainer to decide.
+- **Checks and spawns.** 04:33Z: "yes. restate the two things waiting on me?" (the plan, spawns, pushes, pull requests into the
+  session branch, worktree removals). 08:47Z: "yes" (to run check-pytest, check-numeric, `uv run poe test tests`). 09:01Z: "yes"
+  (the docs builder).
+
+### End gate, on audit/1-bugs at f3f09a4 (2026-11-17, worktree .claude/worktrees/audit-1)
+| Check | Result |
+|---|---|
+| `npm ci` | ok; the same install-scripts warning |
+| `npm run check` | 0 errors |
+| `npm run lint:strict` | 0 |
+| `npm test`, no snapshot | 383 pass, 5 skipped |
+| `SNAPSHOT_QUALITY=5 npm run snapshot` | ok (14 s) |
+| `npm test`, with the snapshot | 403 of 403, 0 skipped |
+| `npm run check-snapshot` | 107 cases, 0 differ (2 differ as expected) |
+| `DOFILE_URLS=production npm run build` | ok |
+| `E2E_PORT=5411 npm run e2e`, all four projects | 746 passed, 54 skipped, 0 failed (4.6 min) |
+| `npm run check-pytest` | 80 files, 0 timed out (162 s) |
+| `npm run check-numeric` | 107 cases, 0 timed out (271 s) |
+| `uv run poe test tests` | 343 passed, 3 xfailed (23 s) |
+
+The last three ran after the maintainer's "yes"; the permission check had refused them the first time.
+
+Not checked at this gate: the preview on a real phone (the maintainer's, before the merge to `main`); Firefox and WebKit
+screenshots; a real "copy" store failure in a browser (B2: the banner is tested with a fake failure); a real browser memory
+failure (B4: the `MemoryError` type is verified in Node, in Pyodide 314.0.7); an epilogue path of a run that reaches
+`brk.check()` (B3: excluded by reading the code, not by a test); Firefox on B3's Break test; `poe ci` and `poe slow`;
+the unexplained first `npm test` exit of rv-b2.

@@ -48,6 +48,7 @@ type Live = {
   worker: Worker;
   pending: Map<number, Pending>;
   interrupt: Int32Array<SharedArrayBuffer> | null;
+  run: object | null; // the run sent last, until it answers
   ended: ClientError | null;
 };
 
@@ -94,10 +95,10 @@ async function dropUnlisted(cache: Cache, list: StartFiles & { base: string }): 
 }
 
 // why a start failed or a worker crashed, from the worker's error
-function reasonOf({ name, message }: { name?: string; message: string }): "download" | "memory" | "unknown" {
+function reasonOf({ name, type }: { name?: string; type?: string }): "download" | "memory" | "unknown" {
   if (name === "DownloadError") return "download";
-  if (name === "RangeError" || /out of memory|MemoryError|could not allocate|allocation failed/i.test(message))
-    return "memory";
+  // a PythonError is every Python exception: its class is `type`
+  if (name === "RangeError" || type === "MemoryError") return "memory";
   return "unknown";
 }
 
@@ -117,7 +118,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   declare wasm: object | null | undefined;
   declare nextId: number;
   // facts of the last start, for the tests and the test hook; nothing decides by them
-  declare storeError: string | null;
+  declare storeError: Startup["storeError"] | null;
   declare about: About | null;
   declare startup: Startup | null;
   #live: Live | null = null;
@@ -567,12 +568,15 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       pending: new Map(),
       ended: null,
       interrupt: typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4)),
+      run: null,
     };
     this.#live = live;
     // A stage or an error of an ended worker is still said: its reply carries that worker's ticket, and the machine
     // drops what is out of date.
     worker.onmessage = ({ data }: MessageEvent<FromWorker>) => {
       if ("stage" in data) return reply({ type: "stage", stage: data.stage });
+      if ("folderError" in data)
+        return reply({ type: "crashed", cause: "folder", reason: "unknown", detail: data.folderError });
       if ("graphics" in data) {
         if (this.#graphics) this.#workerSaysGraphics(this.#graphics, data);
         return;
@@ -581,20 +585,28 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (!p) return;
       if ("log" in data) return p.onLog?.(data.log); // a chunk of a running run's log: the call stays pending
       live.pending.delete(data.id);
-      if ("error" in data) p.reject(fail(data.error, "op", { name: data.name ?? "Error" }));
+      if ("error" in data)
+        p.reject(fail(data.error, "op", { name: data.name ?? "Error", ...(data.type && { type: data.type }) }));
       else p.resolve(data.result);
     };
     worker.onerror = (e: any) => {
       const what = String(e?.message ?? e);
-      reply({ type: "crashed", cause: "error", reason: reasonOf({ name: e?.name, message: what }), detail: what });
+      // an ErrorEvent holds the thrown value in `error`; a test or another browser may hand over the value itself
+      const thrown = e?.error ?? e;
+      reply({
+        type: "crashed",
+        cause: "error",
+        reason: reasonOf({ name: thrown?.name, type: thrown?.type }),
+        detail: what,
+      });
     };
     // A sync that end() cuts loses nothing: its journal row stays, and the next worker copies the whole store. A
     // database the browser closes under the page ("Clear site data") may leave /work with files no row explains: that
-    // is `crashed`, cause "storage", so that a new worker copies the store as it is.
+    // is `crashed`, cause "storage", so that a new worker copies the store as it is. A sync the worker fails leaves
+    // /work out of step with the store: cause "folder", for the same new copy.
     const sync = () => {
       this.#send(live, "sync", undefined).catch((e: ClientError) => {
-        if (e.kind === "op")
-          console.warn(`[dofile] the engine's folder could not take a change to your files: ${e.message}`);
+        if (e.kind === "op") reply({ type: "crashed", cause: "folder", reason: "unknown", detail: e.message });
       });
     };
     const onClosed = () =>
@@ -629,12 +641,16 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     steps().then(
       ({ about, startup }) => {
         if (live.ended) return; // ended just as its last step was answered: it says nothing more
+        const storeError = startup?.storeError ?? null;
+        // A worker with no store cannot read the journal: detach the store, so it writes no row no worker would clear.
+        if (storeError) this.store?.attach(null);
+        // a store of a newer version: another page of a newer build upgraded it, and only a reload helps
+        if (storeError?.name === "VersionError")
+          return reply({ type: "start-failed", reason: "updated", detail: storeError.message });
         this.about = about;
         this.startup = startup;
-        this.storeError = startup?.storeError ?? null;
-        // A worker with no store cannot read the journal: detach the store, so it writes no row no worker would clear.
-        if (this.storeError) this.store?.attach(null);
-        reply({ type: "started" });
+        this.storeError = storeError;
+        reply(storeError ? { type: "started", storeFailed: storeError.cause } : { type: "started" });
         this.#wantGraphics(build);
       },
       (e: ClientError) => {
@@ -667,14 +683,36 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
     const live = this.#live;
     if (live?.n !== n) return Promise.reject(fail("the engine is not running", "no-engine"));
-    return this.#send(live, "run", args, onLog);
+    // a Break from before this run was the run before's; one from now on is this run's, however long it waits in the
+    // worker's queue (the worker lets Python read the buffer only during a run)
+    if (live.interrupt) Atomics.store(live.interrupt, 0, 0);
+    const run = {};
+    live.run = run;
+    const sent = this.#send(live, "run", args, onLog);
+    const done = () => {
+      if (live.run === run) live.run = null;
+    };
+    sent.then(done, done);
+    return sent;
   }
 
-  /** Break: SIGINT in the shared buffer stops the run at its next safe point (the worker clears it when a run starts).
+  /** Break: SIGINT in the shared buffer stops the run sent last at its next safe point (`run()` clears it).
    *  Without a SharedArrayBuffer it does nothing: the machine resets instead. */
   interrupt(n: number): void {
     const live = this.#live;
-    if (live?.n === n && live.interrupt) Atomics.store(live.interrupt, 0, 2); // SIGINT
+    if (live?.n !== n || !live.interrupt) return;
+    const buffer = live.interrupt,
+      run = live.run;
+    Atomics.store(buffer, 0, 2); // SIGINT
+    if (!run) return;
+    // Pyodide reads the buffer, then writes 0, in two steps: a store between them is lost (in Node, 8 of 2350; WebKit's
+    // Break test lost about 1 in 100). So it is written again until the run answers; then run()'s clear decides for the
+    // next run. A repeat after Python took the Break only sets the engine's flag again (cleared when a run starts), or
+    // is put back and cleared with the buffer (browser.py).
+    const again = setInterval(() => {
+      if (this.#live !== live || live.run !== run) clearInterval(again);
+      else Atomics.store(buffer, 0, 2);
+    }, 100);
   }
 
   // ---- Reader ----

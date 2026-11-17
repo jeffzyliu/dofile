@@ -254,10 +254,14 @@ test("the transport knows no state name, and run.ts does not read the engine's s
   );
 });
 
-test("the CSS that keys on the engine's state names matches both other-tab states", () => {
-  const css = readFileSync(join(web, "src/styles/app.css"), "utf8");
-  const keyed = [...css.matchAll(/\[data-engine([^\]]*)\]/g)].map((m) => m[1]);
-  assert.deepEqual(keyed, ['^="other-tab"'], "one rule, by prefix: other-tab-idle and other-tab-taking");
+test("no CSS reads data-engine, and no view spells a set of engine state names", () => {
+  for (const f of files("src", /\.css$/))
+    assert.equal(count(readFileSync(join(web, f), "utf8"), /data-engine/), 0, `${f} reads data-engine`);
+  const names =
+    "(?:ready|running|breaking|waiting|starting-list|starting-worker|downloading|other-tab-idle|other-tab-taking)";
+  const set = new RegExp(`"${names}"\\s*(?:\\|\\||&&|,)\\s*(?:[\\w.]+\\s*===?\\s*)?"${names}"`);
+  for (const f of SRC.filter((f) => f.endsWith(".tsx")))
+    assert.equal(count(source(f), set), 0, `${f} spells a set of state names: src/app/states/predicates.ts has them`);
 });
 
 // A tap on iOS leaves :hover on until the next tap elsewhere (the Files pane's caret and ⋯ and the heads' "+" stayed

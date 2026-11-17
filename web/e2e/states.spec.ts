@@ -307,7 +307,7 @@ test("a banner that goes with the focus in it hands the focus on: the editor, or
   await expect(wait).toHaveCount(0);
   await handedOn();
 
-  await addBanner(page, { b: "reset", reason: "reset by you", kind: "user", run: null });
+  await addBanner(page, { b: "reset", reason: "reset by you", kind: "user", cause: null, run: null });
   const dismiss = bannerOf(page, "You reset the engine.").getByRole("button", { name: "Dismiss" });
   await dismiss.focus(); // the keyboard's way: a click does not focus a button in Safari
   await page.keyboard.press("Enter");
@@ -372,7 +372,7 @@ test("with a .dta tab active, a banner that goes with the focus hands it to that
     .click();
   const tab = page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: /^d\.dta/ });
   await expect(tab).toHaveAttribute("aria-selected", "true");
-  await addBanner(page, { b: "reset", reason: "reset by you", kind: "user", run: null });
+  await addBanner(page, { b: "reset", reason: "reset by you", kind: "user", cause: null, run: null });
   const dismiss = bannerOf(page, "You reset the engine.").getByRole("button", { name: "Dismiss" });
   await dismiss.focus();
   await page.evaluate(() => {
@@ -500,7 +500,24 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
   await expect(breakBtn).toHaveCount(0);
 });
 
-test("the storage, reset and download-failed banners", async ({ page }) => {
+test("the storage, store-failed, reset and download-failed banners", async ({ page }) => {
+  await addBanner(page, { b: "store-failed", cause: "open" });
+  // on a phone every view draws it; the hidden views' copies are display: none
+  const store = page.locator(".banner:visible", { hasText: "Your files couldn't be opened:" });
+  await expect(store).toContainText(
+    "Your files couldn't be opened: the browser refused to store them. Reload the page to try again.",
+  );
+  await expect(store.getByRole("button", { name: "Reload the page" })).toBeVisible();
+  await store.getByRole("button", { name: "Dismiss" }).click();
+  await expect(store).toHaveCount(0);
+  await addBanner(page, { b: "store-failed", cause: "copy" });
+  const copy = page.locator(".banner:visible", { hasText: "Your files couldn't be loaded into the engine." });
+  await expect(copy).toContainText("Your files couldn't be loaded into the engine. Reload the page to try again.");
+  await expect(copy).not.toContainText("refused");
+  await expect(copy.getByRole("button", { name: "Reload the page" })).toBeVisible();
+  await copy.getByRole("button", { name: "Dismiss" }).click();
+  await expect(copy).toHaveCount(0);
+
   await addBanner(page, { b: "storage" });
   await addBanner(page, { b: "download-failed" });
   const storage = bannerOf(page, "This browser may clear your files");
@@ -514,7 +531,13 @@ test("the storage, reset and download-failed banners", async ({ page }) => {
   await expect(storage).toHaveCount(0);
 
   if (isPhone(page)) await showPhoneTab(page, "log");
-  await addBanner(page, { b: "reset", reason: "the code did not stop at Break", kind: "break", run: null });
+  await addBanner(page, {
+    b: "reset",
+    reason: "the code did not stop at Break",
+    kind: "break",
+    cause: null,
+    run: null,
+  });
   const reset = bannerOf(page, "The engine was reset:");
   await expect(reset).toContainText("The engine was reset: the code did not stop at Break.");
   await expect(reset).toContainText("The data in memory is lost; your files are kept.");
@@ -524,6 +547,7 @@ test("the storage, reset and download-failed banners", async ({ page }) => {
     b: "reset",
     reason: "the code did not stop at Break",
     kind: "break",
+    cause: null,
     run: { kind: "file", path: "gone.do", fresh_locals: true },
   });
   await expect(reset.getByRole("button", { name: "Run the file again" })).toBeDisabled();
@@ -612,6 +636,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
     b: "reset",
     reason: "reset by you",
     kind: "user",
+    cause: null,
     run: { kind: "file", path: "again.do", fresh_locals: true },
   });
   if (isPhone(page)) await showPhoneTab(page, "log");
@@ -622,6 +647,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
     b: "reset",
     reason: "the code did not stop at Break",
     kind: "break",
+    cause: null,
     run: { kind: "file", path: "again.do", fresh_locals: true },
   });
   const again = bannerOf(page, "The engine was reset:");
@@ -630,6 +656,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
     b: "reset",
     reason: "the code did not stop at Break",
     kind: "break",
+    cause: null,
     run: { kind: "file", path: "closed.do", fresh_locals: true },
   });
   await expect(again.getByRole("button", { name: "Run the file again" })).toBeDisabled();
@@ -637,6 +664,7 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
     b: "reset",
     reason: "the code did not stop at Break",
     kind: "break",
+    cause: null,
     run: { kind: "file", path: "again.do", fresh_locals: true },
   });
   await expect(again.getByRole("button", { name: "Run the file again" })).toBeEnabled();

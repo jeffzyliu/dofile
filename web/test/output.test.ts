@@ -3,8 +3,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { binarySize as bytes } from "../src/app/bytes.ts";
 import {
-  bytes,
   CELL_MAX,
   copiedNote,
   count,

@@ -1,7 +1,7 @@
 // Opening a file (docs/design/SPEC.md, section 3.11): every way to open one (the tree, the phone's file switcher, "Go
 // to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
 import { editorCommands } from "../editor/commands.ts";
-import { addFileGraph } from "../run.ts";
+import { addFileGraph } from "../graphs.ts";
 import {
   activeTab,
   addBanner,

@@ -3,7 +3,7 @@
 // once, since a banner in the editor slot is display:none on a phone's other views, where an alert is never announced.
 // Focus: docs/web-page-flows.md, section 1.
 import { useRef } from "preact/hooks";
-import type { BannerOf } from "../banners";
+import { megabytes } from "../bytes.ts";
 import { breakPending, resetsIn, since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { ticking } from "../editor/words.ts";
@@ -11,7 +11,7 @@ import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
 import { dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
-import type { EngineState } from "../types.ts";
+import type { BannerOf, EngineState } from "../types.ts";
 import { useFocusOnMount } from "../ui/focus-hooks.ts";
 import { Banner } from "../ui/Live";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
@@ -31,7 +31,7 @@ import {
 /** Where "Browsers that work" (S 6) goes: the landing page's section of that name (`/#browsers`). */
 export const BROWSERS_URL = `${LANDING_URL}#browsers`;
 
-const aboutMB = engineBytes ? `about ${Math.round(engineBytes / 1e6)} MB` : null;
+const aboutMB = engineBytes ? `about ${megabytes(engineBytes, 0)} MB` : null;
 
 const DownloadAllButton = () => (
   <button
@@ -219,7 +219,7 @@ export function LogStateBanners() {
 }
 
 export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
-  const w = resetWords(banner.kind, banner.reason, isolated.value);
+  const w = resetWords(banner.kind, banner.cause, banner.reason, isolated.value);
   const path = rerunPath(banner.kind, banner.run);
   const canRun = engine.value.s === "ready" && tabs.value.some((t) => t.path === path && t.kind === "text");
   const ref = useFocusOnLeave<HTMLDivElement>();
@@ -269,6 +269,35 @@ export function StorageBanner({ banner }: { banner: BannerOf<"storage"> }) {
       }
     >
       <b>This browser may clear your files</b> when it needs space. Download all to keep a copy.
+    </Banner>
+  );
+}
+
+export function StoreFailedBanner({ banner }: { banner: BannerOf<"store-failed"> }) {
+  const ref = useFocusOnLeave<HTMLDivElement>();
+  return (
+    <Banner
+      kind="error"
+      bannerRef={ref}
+      actions={
+        <>
+          <button type="button" class="btn" onClick={() => location.reload()}>
+            Reload the page
+          </button>
+          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
+            Dismiss
+          </button>
+        </>
+      }
+    >
+      {banner.cause === "open" ? (
+        <>
+          <b>Your files couldn't be opened:</b> the browser refused to store them.
+        </>
+      ) : (
+        <b>Your files couldn't be loaded into the engine.</b>
+      )}{" "}
+      Reload the page to try again.
     </Banner>
   );
 }
