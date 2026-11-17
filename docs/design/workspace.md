@@ -13,9 +13,10 @@ marks a name that does not exist yet.
    module, and not tabs in one module with documents in another (section 1).
 2. **Documents.** One record per tab. The unsaved dot, `tabs`, `activeTab` and the editor's "shown" are computed from
    the records and stored nowhere (section 2).
-3. **Order.** The unit is a turn: one store call and its follow-up on the documents. An operation that asks the
-   visitor takes a turn per write, so an open dialog holds no Save, and each write's turn checks again what the
-   question rested on: what changed meanwhile is asked again, never written blind (section 3).
+3. **Order.** The unit is a turn: the store calls that no question separates, and their follow-up on the documents.
+   An operation that asks the visitor takes a turn per write, so an open dialog holds no Save, and each write checks
+   again, in its own store transaction, what the question rested on: what changed meanwhile is asked again, never
+   written blind (section 3).
 4. **Graphs.** The selected graph is kept by its number, not its index (section 2).
 5. **State.** `state.ts` is split into one state module per owner and deleted; the e2e hook keeps one `state` object,
    assembled from them (sections 4 and 6).
@@ -126,7 +127,8 @@ S6 builds it.
 
 ## 3. The order of writes (decision 3; S2 and B1)
 
-**The unit of order is a turn: one store call and what must stay next to it. Never a whole operation.**
+**The unit of order is a turn: the store calls that no question separates, and what must stay next to them. Never a
+whole operation.**
 
 1. `fileTurn(fn)` runs `fn` once every earlier turn has ended, whichever way.
 2. Inside a turn: the decision (the tab's path now, whether a name is free, whether the file has unsaved edits), the
@@ -148,17 +150,37 @@ S6 builds it.
 
 **What a write's turn checks again after a question.** An upload decides from a listing taken before any dialog
 (`files/actions.ts:272, 290-295`) and from whether the file is open with unsaved edits (`:303`); a Save, a run or
-`createEntry` can change either before the write's turn. So each upload write checks again in its turn, on a fresh
-listing, and a changed answer is never a write: the turn ends without writing, and the question is asked between turns.
+`createEntry` can change either before the write's turn. So each upload write states what it expects at its path, and
+a changed answer is never a write: the turn ends without writing, and the question is asked between turns.
 
 - A path that was free at the listing and holds a file now (`createEntry` made `untitled.do`, a run wrote it) becomes
   a clash: asked like the others, or kept with no question after Esc or "Do the same" with Keep mine. A file that holds
   the uploaded bytes counts as uploaded (`holds`), as today.
-- A clash answered with Replace whose file has changed since its dialog (its `size` or `mtime` differs from
-  `ClashNow.yours`, `:212`) is asked again with what is there now. A file deleted meanwhile is written, as a free path.
+- A clash answered with Replace whose file no longer matches what the answer expected is asked again with what is there
+  now. A file deleted meanwhile is written, as a free path.
 - A file that has unsaved edits now, and was not asked about with them (the dialog did not say so, or "Do the same"
   with Replace skipped it), is asked again in the unsaved words (`:304`; `files/dialogs.tsx:67`).
 - A folder at the path: the store refuses the write, and it counts as failed, as today.
+
+**"Changed" is measured against what the visitor answered about.** A clash's dialog reads the file's `size` and
+`mtime` when it opens, shows them and keeps them as `ClashNow.yours`; its Replace expects them. (Today `yours` is the
+listing from before the first dialog, `files/actions.ts:272, 305, 309`, so a Save during an earlier dialog would be
+asked about twice.) A clash that "Do the same" with Replace decided has no dialog: it expects what a listing taken when
+that answer came shows, so a change made before the visitor ticked the box is covered by the answer, and one made after
+is asked. A path free at the first listing expects "absent".
+
+**The check and the write are one store transaction.** `store.write` (`web/src/engine/store.ts:208`) takes the
+expectation (an info, or "absent") and, inside the transaction that writes, rejects with an error of its own (new) when
+the path does not match; the turn turns that error into the question. Not the other way, making the end-of-run write a
+turn: `applyRun` (the same file, `:315`) is called in the worker (`web/src/engine/worker.ts:220`), which cannot join
+the page's chain, so with a fresh `list()` and then a write it could commit between them. One `info.get` also
+replaces a whole-store `list()` per uploaded file. **This adds to B1** a change to `web/src/engine/store.ts` and its
+tests (so B1 runs the snapshot first), and `createEntry`, whose `list()` then `write` has the same window
+(`files/actions.ts:126-135`), passes "absent" for a new file.
+
+A dialog asked again says why it is back: its meta line names the change (say, "a.do changed after you were asked"; B1
+picks the words and adds them to SPEC's "Name clash" row, `docs/design/SPEC.md:297`). An earlier "Do the same" still
+decides the clashes after it, and the box of the dialog asked again can replace it.
 
 "Restore the sample" is an upload and follows the same rules. The other writes that ask first: Delete and Delete all ask
 about names (`files/dialogs.tsx:84-148`), and their turn removes what the names hold then, as today; close-tab's Save is
@@ -192,7 +214,8 @@ Not in a turn, or not wholly, at f947053, and the item that brings each in:
 - **Why.** A queue per operation holds every Save while an upload's clash dialog is open. Today's two chains do not
   know each other, so an upload is ordered against nothing but other uploads.
 - **Against.** Rule 3 is a convention that no type holds: a nested turn hangs silently. Section 7's order tests are
-  its net. The worker's writes at the end of a run are not turns (SPEC section 7 orders them).
+  its net. The worker's writes at the end of a run are not turns (SPEC section 7 orders them); an upload's write
+  checks its expectation inside its own transaction, so they cannot land between that check and the write.
 
 ## 4. Modules, exports, signals
 
