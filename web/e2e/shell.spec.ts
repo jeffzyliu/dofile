@@ -150,7 +150,7 @@ test("the layout: desktop panes or the phone's views; the theme button cycles an
 });
 
 // A list of another build (the site deployed again since the page loaded; in development, a stale snapshot) is refused with a
-// message, not run (moved from poc.spec.ts).
+// message, not run.
 test('a snapshot from a different build of the wheel is refused with reason "updated"; the message says reload in plain words, and the detail gives the cause', async ({
   page,
   request,
@@ -182,7 +182,7 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
   expect(st.message).toBe("dofile has a newer version on this site. Reload the page to use it.");
 });
 
-// ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN), moved from poc.spec.ts.
+// ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN).
 test("?snapshot=0: the normal boot still starts and runs the sample", async ({ page, browserName }) => {
   // Not in the two WebKit projects (webkit, iphone): there, on Linux, the normal boot now and then never finishes loading
   // its packages (2 of about 49 CI runs, none in Chromium or Firefox; every download had arrived, Pyodide printed
