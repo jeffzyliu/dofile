@@ -12,12 +12,14 @@ import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
 import {
+  type BundleIndex,
   bundle,
   inflate,
   makeOptions,
   makeSnapshot,
   packGraphics,
   patchAsm,
+  type SnapshotPy,
   zeroFreeMemory,
   zeroLibraryCopies,
 } from "../src/engine/snapshot.ts";
@@ -40,7 +42,7 @@ const noMpl = process.env.SNAPSHOT_NO_MPL !== "0";
 const pyodideDir = new URL("node_modules/pyodide/", here);
 
 const t0 = performance.now();
-const lap = (what) => console.log(`${((performance.now() - t0) / 1000).toFixed(1).padStart(5)} s  ${what}`);
+const lap = (what: string) => console.log(`${((performance.now() - t0) / 1000).toFixed(1).padStart(5)} s  ${what}`);
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
@@ -53,7 +55,10 @@ writeFileSync(
 );
 const create = (await import(patched)).default;
 
-const py = await loadPyodide({ ...makeOptions(create), ...(stripDocs ? { env: { PYTHONOPTIMIZE: "2" } } : {}) });
+const py = (await loadPyodide({
+  ...makeOptions(create),
+  ...(stripDocs ? { env: { PYTHONOPTIMIZE: "2" } } : {}),
+})) as SnapshotPy;
 lap(
   `Pyodide started${stripDocs ? ` (docstrings and asserts stripped: sys.flags.optimize = ${py.runPython("import sys; sys.flags.optimize")})` : ""}`,
 );
@@ -145,7 +150,7 @@ gc.collect()
 lap("imports done, program run");
 if (noMpl) {
   // loadPackage may have linked libraries before the removal: their log entries point at files that are gone
-  const log = py._module.__dsoLog;
+  const log = py._module.__dsoLog!;
   const gone = log.filter((r) => !py._module.FS.analyzePath(r.libName).exists);
   console.log(
     `dso log: ${gone.length} of ${log.length} entries point at removed files: ${gone.map((r) => r.libName).join(", ")}`,
@@ -169,7 +174,7 @@ const free = zeroFreeMemory(py);
 lap(`zeroed ${(free.bytes / 1e6).toFixed(1)} MB of free memory in the heap (${free.blocks} blocks)`);
 const snapshot = makeSnapshot(py);
 lap(
-  `snapshot ${(snapshot.length / 1e6).toFixed(0)} MB, ${saved.index.length} files ${(saved.blob.length / 1e6).toFixed(0)} MB, ${saved.dso.length} libraries`,
+  `snapshot ${(snapshot.length / 1e6).toFixed(0)} MB, ${saved.index.length} files ${(saved.blob.length / 1e6).toFixed(0)} MB, ${saved.dso!.length} libraries`,
 );
 
 // Only the compressed files are written, and the page stores them compressed too. They end in .bin, not .br: servers
@@ -178,7 +183,7 @@ lap(
 // seconds that is about 25% bigger, for development.
 const quality = Number(process.env.SNAPSHOT_QUALITY ?? 11);
 const brotliCompress = promisify(zlib.brotliCompress);
-const compress = (data) =>
+const compress = (data: Uint8Array) =>
   brotliCompress(data, {
     params: {
       [zlib.constants.BROTLI_PARAM_QUALITY]: quality,
@@ -193,10 +198,11 @@ lap(
 
 // Decode both with the decoder the page uses and compare, so a bad build fails here, not in a user's browser.
 const brotli = createRequire(import.meta.url)("brotli-wasm");
-for (const [name, packed, original] of [
+const decoded: [string, Uint8Array, Uint8Array][] = [
   ["snapshot", snapshotBr, snapshot],
   ["bundle", bundleBr, saved.blob],
-]) {
+];
+for (const [name, packed, original] of decoded) {
   const back = inflate(brotli, new Uint8Array(packed), original.length);
   if (
     Buffer.compare(
@@ -253,7 +259,7 @@ files.add(f"{site}/_dofile_graphics_warm.txt")
 json.dumps({"files": sorted(files), "pyc": pyc, "warm": len(warm)})
 `),
   );
-  const index = listed.files.map((path) => ({ path, size: py2.FS.stat(path).size }));
+  const index: BundleIndex = listed.files.map((path: string) => ({ path, size: py2.FS.stat(path).size }));
   const blob = new Uint8Array(index.reduce((n, f) => n + f.size, 0));
   let at = 0;
   for (const { path } of index) {

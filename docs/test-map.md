@@ -107,14 +107,24 @@ These test the Stata-language engine itself. Grouping is by file name.
 Node runs the `.ts` files as they are (`npm test`); there is no Vitest or Jest. Several files make their tests in a
 loop, so a file has more tests than `test(` lines; `npm run test-counts` counts what the runner reports.
 
-- `app.test.ts`: the app controllers.
-  - Start, run, Break, reset, crash; the download dialog; the cross-tab lock; log, history, graphs, toasts, banners,
-    theme.
-  - "Clear log" and `canClearLog`; a run that rewrites an open file (`ranOver`, the run-changed banner).
-  - The phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
-  - No engine: a run or command is refused and stays out of `history`.
-  - "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the real controllers.
-  - Pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the engine.
+- `wiring.ts`: not a test file: the stand-in transport, store and tab lock, the wiring of the controllers, and
+  `resetState()`, which every `app-*.test.ts` runs before each test (through `useWiring()`): every writable signal of
+  `state.ts` back to its value at load (found by shape, so a new signal is reset too), the controllers' own state, a new
+  wiring, and the drop record checked at the end of each test. It makes the localStorage stand-in before it imports the
+  controllers.
+- `app-engine.test.ts`: the engine controller (`app/engine.ts`).
+  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios.
+  - No engine: a run or command is refused.
+- `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners.
+  - "Clear log" and `canClearLog`; no engine: a command is refused and stays out of `history`; a run's promise settles when
+    the after-run work throws.
+- `app-files.test.ts`: the files controller (`app/files.ts`): the storage banner, a run that rewrites an open file
+  (`ranOver`, the run-changed banner), Download all, `persisted`.
+- `app-theme-tabs.test.ts`: the theme button and `applyTheme`; `setDirty`; strict UTF-8 (`decodeText`).
+- `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
+- `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
+  real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
+  engine.
 - `wakelock.test.ts`: the screen wake lock (`app/wakelock.ts`) with fakes: the policy per state, taken for a run,
   refused, late and pending requests, no API.
 - `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
@@ -165,6 +175,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
+  - The editor's "Browsers that work" link (`BROWSERS_URL`, JSX, so not importable here) is held by the e2e test in
+    `e2e/landing.spec.ts`: "the failed-start banner's Browsers that work opens the landing page's section in a new tab".
   - The icons: the editor, landing and commands pages link the same three (`src/icons/`), each by a relative path the
     build hashes, and the files exist.
   - The commands list is every name of `commands.json` in order; `DENIED` marked; the six own prefixes against
@@ -185,10 +197,14 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A failed seed write is tried again; where storage is not kept, the seed brings no storage banner.
 - `sample-run.test.ts`: the sample's do-files in the page's engine: rc 0, one graph, every output line of the landing
   page's "What a run looks like" in the log.
-- `imports.test.ts`: architecture rules enforced by scanning source.
-  - Every `:hover` rule is inside `@media (hover: hover)` (SPEC).
-  - Import layering, single writers, one `postMessage` site; no old state flag outside the machine.
-  - The site pages use only `src/site/` and `src/styles/`; `ignoreHeldEnter` is the `onKeyDown` of every Run button.
+- `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
+  checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
+  - No view reaches the transport through value imports (transitive).
+  - `machine.ts`: two casts, no top-level variable; the cast to `Ticket` occurs once in `web/`.
+  - The transport names no state; `run.ts` subscribes to nothing.
+  - The pages' HTML and CSS: `src/site/` apart from the editor's.
+  - The `data-engine` CSS rule; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
+- `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
@@ -197,7 +213,6 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
 Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases:
-- `poc.spec.ts` in every profile (fixme until step 6).
 - The capped normal boot outside Chromium; the `?snapshot=0` normal boot in the two WebKit projects (its package load
   stalls now and then on Linux).
 - The folder upload outside Chromium (Playwright cannot give a folder to an input).
@@ -226,7 +241,9 @@ Specs:
   - Each banner (running, stopping, waiting, storage, reset, failed, download-failed) and where the focus goes.
   - Download all; Reset during a run; Reset's dialog and "Run the file again".
   - One clock (`page.clock`): the Break pill or status bar equals the banner's time.
-- `editor.spec.ts` (step 4b): the editor, the log and the command line, in the page.
+- `editor.spec.ts` (step 4b): the editor, the log and the command line, in the page. Includes the save flows with real
+  typing: Run doesn't save, Save writes and a reload brings the text back; a tab with edits asks before it closes (Cancel,
+  Don't save, Save); the `beforeunload` prompt for an unsaved tab, none once saved.
   - Ctrl/Cmd+Enter: runs once, which focused elements keep it, an open menu blocks it, held repeats run nothing.
   - Typing and the unsaved dot, Ctrl/Cmd+S, a failed save's banner, Save during a rename's or a delete's write.
   - Save keeps a file's form: `\r\n`, `\n` and BOM (written back for a .csv, dropped for a .do).
@@ -266,18 +283,28 @@ Specs:
   - Restore the sample as an upload: toast, "already here", the clash dialog (Keep mine, Replace with the sample).
   - The sample runs in the real engine at the editor's base to a table and a graph.
   - Where the browser keeps no storage, the sample's write brings no banner and the visitor's own change does.
-- `step2.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
+- `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
   URL flag.
+- `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
+  put the page's state in a shape (an engine state, a banner, log items, ...); `fixtures.ts` holds the helpers shared by
+  several specs (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`, `toolbarOf`).
+  `settle(page)` replaces a fixed sleep that asserts "nothing moved after this" (a late focus, a late write, a key's late
+  effect): three frames, each followed by a task, and with `{ store: true }` a read of the store between them. Use it after
+  the expected event, so the test still fails when the late move exists; a move from a timer longer than a few frames is
+  not covered. The sleeps that remain guard something else: a loop that must be running before Break (`engine.spec.ts`,
+  `graphics.spec.ts`, `editor.spec.ts` Break), a sample seed that must not write (`sample.spec.ts`), and a run, dialog or
+  download that must not start (`editor.spec.ts`).
 - `fixtures.spec.ts` (no browser page): `retryFirstGoto` in `fixtures.ts`, which the `page` fixture applies to every
-  test's page (and `engine.spec.ts`, `step2.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on
+  test's page (and `engine.spec.ts`, `start-and-lock.spec.ts` and `states.spec.ts` to pages they open themselves). A timeout on
   a page still at `about:blank` is retried once and logs "timed out on a fresh page" (WebKit bug 325840); a second
   timeout, another error, or a page that has left `about:blank` is not retried.
-- `poc.spec.ts` (all fixme): editor save semantics (Run doesn't save, Save is explicit), bound to the proof-of-concept
-  page.
 - `engine.spec.ts`: runs `.do` code in a real browser, legacy `.xls` and ReadStat formats, the memory snapshot start;
   the memory cap (`?memcap=400`: a 10-million-row `generate` is r(909), the engine stays `ready`, the data is kept),
   also
-  on the normal boot (`?snapshot=0&memcap=400`, Chromium only).
+  on the normal boot (`?snapshot=0&memcap=400`, Chromium only); a streamed run (six lines, 200 ms apart: the log shows
+  them in order while the run goes, in steps that each extend the last, and complete at the end) and, with
+  `DOFILE_STREAM_BENCH=1`, a measurement of the log's cost per chunk over 50 and 500 lines (no assertion beyond the run
+  completing).
 - `graphics.spec.ts` (experiment E1c, a lazy snapshot only; skipped without a graphics part): the part's request held or
   refused with `page.route`. A run at ready that draws nothing does not wait for it; a Break while a graph waits is rc 1
   with the data kept and the part fetched once; "Graphs loading" and its ring while it downloads (every project, the
@@ -296,6 +323,17 @@ Specs:
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the
     Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).
   - The clipboard is a recorder in every page.
+
+### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)
+
+Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own and takes one screenshot
+of each state of a fixed list into `web/.shots/baseline/` (git ignores `.shots/`); `npm run shots` builds this tree
+and compares each state with it (plan rule 10: a view move changes no pixel). Its own config (`screenshots.config.ts`:
+Chromium and the iPhone profile only, one worker, no retry), its own folder, no CI job. `shots.spec.ts` holds the
+list: the engine walk (ready with the sample, the log after a run, a results table, the graph and its full-size view,
+a .dta view; the status bar's run time and memory are put back to fixed values), several tabs with one unsaved, each dialog,
+each menu open, the tree with a rename field and with a draft row, a log with an error, each banner, the phone's three
+views. The states are seeded through `e2e/seed.ts`.
 
 ## Conformance corpus: value and limits
 
@@ -376,5 +414,5 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
 See `CLAUDE.md` (Commands) for the full list. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
 `uv run poe slow` (Stata 14 logs), `uv run poe opendta` (vendored suite), `cd web && npm test` and `npm run check`
 (Biome,
-then `tsc`), `npm run e2e` (Playwright). The format and lint gates are `uv run poe lint` and
+then `tsc`), `npm run e2e` (Playwright), `npm run shots` (the screenshot run, kept out of CI). The format and lint gates are `uv run poe lint` and
 `cd web && npm run lint:strict`; `docs/archive/formatting-proposal.md` has the rest.

@@ -1,4 +1,4 @@
-// Starts the engine from a Pyodide memory snapshot (built by `npm run snapshot`, scripts/make-snapshot.mjs;
+// Starts the engine from a Pyodide memory snapshot (built by `npm run snapshot`, scripts/make-snapshot.ts;
 // docs/pyodide-snapshot.md) instead of importing numpy, scipy, matplotlib and dofile. Runs in Node (the build script)
 // and in worker.ts.
 

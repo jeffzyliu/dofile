@@ -103,7 +103,6 @@ How it is run: `docs/web-audit-plan.md` (the execution plan; scope decided 2026-
   off-screen bottom edge). The #26 and #30 review nice-to-haves were dropped (their reports were deleted): the audit reads that
   code.
 - **Tests:** what the tests do not cover (the views are tried only by e2e; `check-pytest` and `check-numeric` run by hand);
-  `web/e2e/poc.spec.ts` is bound to the proof-of-concept page's ids and is rewritten with the page (its four tests are fixme);
   one Playwright test of a streamed run in a real browser (step 1 checked streaming in Node only); Tab out of the open ⋯ menu
   at phone width (`e2e/shell.spec.ts` checks the desktop only). New specs import `test` from `e2e/fixtures.ts`.
 - **The first real deploy's checks** (Open, critical).
@@ -145,7 +144,7 @@ browser suite was not run).
 - [x] Reload the page: files are still there; data in memory is not, and the page says so. In the e2e: Save, reload, files
       and the editor's text come back; Reset gives a new engine with no data and the files kept (not rechecked in detail).
 - [~] Break stops `while 1 {}` with rc 1 and keeps the data (e2e, four profiles). A long single command is ended by restarting
-      the worker and the page says the data is gone: tested in Node (`web/test/app.test.ts`), not in a browser. Break on a long
+      the worker and the page says the data is gone: tested in Node (`web/test/app-*.test.ts`), not in a browser. Break on a long
       model fit was not tried (verification pass).
 - [~] Works in current Chrome, Firefox and Safari. Chromium, Firefox and WebKit pass the e2e (and an iPhone 15 profile); one
       real iPhone was tried by hand; Chrome and Edge as shipped, Android and Safari on a Mac were not (verification pass).

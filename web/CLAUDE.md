@@ -20,6 +20,9 @@ npm run dev               # two dev servers, on the LAN too: the editor on 5173,
                           #   (prints a warning first when the snapshot is stale; `npm run snapshot` fixes it)
 npm run e2e               # the snapshot, `build:local`, then Chromium, Firefox, WebKit, iPhone (`npx playwright install` once;
                           #   SNAPSHOT_QUALITY=5: the snapshot in seconds; E2E_PORT=4181: ports 4181/4182, not 4173/4174)
+npm run shots:baseline -- <commit>   # N7, the screenshot run (outside e2e and CI): builds the commit in a worktree of its
+                          #   own (.claude/worktrees/shots-baseline; `node scripts/shots.ts clean` removes it), shoots into .shots/baseline
+npm run shots             # builds this tree and compares it with that baseline (`--dir`, `--app <built web/>`; same E2E_PORT)
 npm run build             # the editor into dist/app/, the pages into dist/site/; needs DOFILE_URLS=production,
                           #   DOFILE_URLS=local (`npm run build:local`), or both DOFILE_SITE_URL and DOFILE_EDITOR_URL
 npm run preview           # the two builds on two ports (4173 pages, 4174 editor, or E2E_PORT and the next)
@@ -44,8 +47,8 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   `npm run format` at the end of a task or before a commit, not after every edit. A `// @ts-expect-error` covers one
   line: if Biome would split the statement under it, put a `// biome-ignore format:` line above.
   `src/stata/commands.json` is generated (`npm run commands`, which CI checks) and not formatted.
-- **TypeScript that Node can run as is.** `src/engine/`, the controllers and `test/` have real annotations (no JSDoc
-  types); Node strips the types, so imports spell the `.ts` extension and only erasable syntax is allowed (no `enum`,
+- **TypeScript that Node can run as is.** `src/engine/`, the controllers, `test/`, `e2e/`, `scripts/` and the two configs have real annotations (no JSDoc
+  types; one `tsconfig.json` covers them all); Node strips the types, so imports spell the `.ts` extension and only erasable syntax is allowed (no `enum`,
   `namespace` or constructor parameter properties; `npm run check` enforces it). The engine's types are
   `src/engine/types.ts`; keep them and SPEC section 6 in step.
 - **Comments are sparse; the code says the rest.** A file header is 1-3 lines on the file's role, only when the name
@@ -60,16 +63,16 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   knowledge (browser quirks, measured numbers, why a simpler way failed) on the line that handles it, shortened.
 - **State.** One module of signals, `src/app/state.ts`. A signal with one owner is exported `ReadonlySignal`, so a view
   that assigns it fails `npm run check`. The controllers (`src/app/engine.ts`, `run.ts`, `files.ts`, `start.ts`) are `.ts`
-  files that import no `.tsx`, tested in Node (`test/app.test.ts`). Views read signals and call the controllers'
-  actions; they never call the transport or the machine. Dialogs and banners go through the registries `dialogs.tsx` and
-  `banners.tsx`, one view per kind; shared UI pieces are in `src/app/ui/`. A phone piece sits next to its desktop
+  files that import no `.tsx`, tested in Node (`test/app-*.test.ts`, on `test/wiring.ts`; each file starts from
+  `resetState()`). Views read signals and call the controllers' actions; they never call the transport or the machine.
+  Dialogs and banners go through the registries `dialogs.tsx` and `banners.tsx`, one view per kind; shared UI pieces are in `src/app/ui/`. A phone piece sits next to its desktop
   counterpart in `App.tsx`, and components read `isPhone` rather than take a `phone` prop. Toolbar buttons share one
   height (`--control` in `tokens.css`), a pane head's controls another (`--control-sm`).
 - **One state machine decides the engine's state: `src/engine/machine.ts`.** `transition(machine, event)` is pure (type
   imports only, no clock, timer, console or top-level variable; the time comes in the event) and returns the next state
   and the effects. Its state names are the `engine` signal's, `<html data-engine>`'s and SPEC section 5's. **Nothing
   outside it decides a state**: no counter, flag or comparison of state names in the transport, the controllers or a
-  view (a test greps for the old ones). To add a state, event or effect, change its tables; the compiler and
+  view. To add a state, event or effect, change its tables; the compiler and
   `test/machine.test.ts` then say what else must follow. After a change to a cell, run
   `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` and paste the tables into SPEC section 5 (a test compares them).
 - **Who constructs, who connects, who decides.** Only `src/main.tsx` makes the transport (`EngineClient`,
@@ -79,20 +82,37 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **Tickets.** Each asynchronous request gets a `Ticket` from the machine, and the machine drops an answer whose ticket
   is not current. Performers never write a ticket: they answer through the `reply` bound to their effect. Every event
   that changed nothing is recorded (`drops()`).
-- **`test/imports.test.ts` holds what no type can** (each test's name states its rule): no view reaches `client.ts` or
-  `worker.ts`; no `.tsx` imports the machine or `main.tsx`; `engine/` never imports `app/`; no `.ts` imports a `.tsx`; the
-  controller takes only types from `client.ts`; `machine.ts` is pure with two casts, and the cast to `Ticket` occurs once
-  in `web/`; events enter the controller through two doors and `transition()` is called once; the worker is posted to
-  only in `#send`; only `main.tsx` constructs or connects, and the store is opened once on each thread; each signal has
-  one writer; every `:hover` rule is inside `(hover: hover)`. A rule that breaks one fails `npm test`: fix the code, not
-  the test, unless the rule has changed. Tests that read source text must not depend on how a line is wrapped.
+- **Architecture rules are Biome rules, a type check and `test/imports.test.ts`**; a violation fails `npm run check`,
+  `npm run lint:strict` or `npm test`: fix the code, not the rule, unless the rule has changed. `biome.json`, by folder:
+  a view imports no transport, machine or `main.tsx`, and `main.tsx` no machine; `engine/` imports no `app/`; no `.ts` imports a `.tsx`;
+  `src/site/` imports only `src/site/` and `src/styles/`, and the editor nothing of it; a relative import in a `.ts`
+  file spells its extension; `machine.ts` names no clock, timer, console or global. `biome/architecture.grit` (a Biome
+  plugin: each rule's files are a regex on `$filename`, in that file): `machine.ts` imports types only (a default import is left to `tsc`) and names no random number; `src/app/` takes only types from the transport; only `main.tsx` constructs the transport and the Worker,
+  connects the controllers, takes the tab lock and calls `open()`; `openStore()` is called only in `src/app/store.ts`
+  (the page) and `src/engine/worker*.ts` (the Worker); only the controller calls `transition()` and `initial()`, and its
+  queue is written only in `enqueue()` (and emptied in `connectEngine()`), which only `dispatch()` and `reply()` call;
+  `reply()` has no cast and puts its own effect's ticket on the event, and the `engine` signal is written with `view()`; each writer object is named only by `state.ts` and its owner;
+  the Worker is posted to only in `#send`; no `.focus()` and no store write (`write`, `mkdir`, `rename`, `remove`, `change`, `applyRun`) inside a `setTimeout` or `setInterval` callback in `src/app/` (a timer's late move is the one `settle` in `e2e/fixtures.ts` cannot see; a `requestAnimationFrame` or microtask is allowed; a callback that only calls a function which focuses is not seen); no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
+  in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
+  the writable signals `state.ts` exports are the views' own. `test/imports.test.ts` holds the rest: no view reaches the
+  transport through value imports (transitive); `machine.ts` has two casts and no top-level variable, and the cast to
+  `Ticket` occurs once in `web/`; the transport names no state and `run.ts` subscribes to nothing; the pages' HTML and
+  CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not
+  depend on how a line is wrapped.
 - **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
   `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is
   blocked until the tab lock answers: a test waits for `!store.blocked` before it writes. `<html data-engine>` always holds
-  the state name. The tests in `e2e/poc.spec.ts` are fixme until step 6 rewrites them.
+  the state name. Its type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its
+  own. What a test sets up in the page's state goes through the helpers in `e2e/seed.ts` (`showEngine`, `addBanner`,
+  `seedLog`, ...), not a signal written in the spec.
 - **e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not `@playwright/test`. Its fixture answers
   `persisted()` true (`test.use({ persisted: false })` for the browser's own) and retries a stalled first `goto`; a context
-  or page a test makes itself needs `keepFiles(context)` or `retryFirstGoto(page)`.
+  or page a test makes itself needs `keepFiles(context)` or `retryFirstGoto(page)`. The helpers several specs share
+  (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`,
+  `statusBar`, `toolbarOf`) are in `fixtures.ts` too. To assert that a late focus or write did not happen, wait for
+  the event the move would follow, then `settle(page)`: it covers moves made by tasks, microtasks, effects and frames
+  (and, with `{ store: true }`, the store's own order), not a timer over about 50 ms. A fixed sleep stays where it must
+  let a run go on (Break's loop) and where a run, dialog or download must not start.
 - **Dev servers listen on all interfaces** (LAN phones): every dev HTTP server (`dev`, `preview`, `cf:dev`) keeps `--host`
   or `--ip 0.0.0.0`; give any new one the same.
 - **The snapshot is the page's only start; there is no fallback.** `?snapshot=0` is the normal boot, a developer's
@@ -118,7 +138,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
   entry made iOS Safari run it twice.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`
-  in `scripts/check-snapshot.mjs`, a strict xfail.
+  in `scripts/check-snapshot.ts`, a strict xfail.
 - **`wheels/`** holds wheels installed after the dofile wheel: `pyreadstat` built for Pyodide, committed so CI needs no
   Emscripten build (rebuild: `sh web/wheels/pyreadstat/build.sh`).
 - **Two origins, two Workers:** the landing and commands pages at `https://dofile.dev/` (`dist/site/`, `wrangler.jsonc`,
@@ -129,7 +149,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   the old `/app/` path or a production address. The e2e `baseURL` is the editor's origin; the pages are `LOCAL_SITE_URL`.
   What does not follow the editor to a new origin, and the details: SPEC section 8, "URLs".
 - **The landing and commands pages are static HTML** (`landing.html`, `commands.html`) whose code is `src/site/`, which
-  imports only `src/site/` and stylesheets; the editor loads none of it (`test/imports.test.ts`). They work with
+  imports only `src/site/` and stylesheets; the editor loads none of it (`biome.json`, `test/imports.test.ts`). They work with
   scripts off. The build fills their `{{tokens}}` (`scripts/site-pages.ts`); an unknown one fails `test/site.test.ts`.
 - **The sample** is `sample/`; `npm run sample` rebuilds its data and the generated `src/app/sample-files.ts` (a test
   fails when it is stale). Under `?test` the first-visit sample is off unless the URL has `?sample`.

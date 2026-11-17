@@ -2,6 +2,7 @@ node_modules/
 public/*.whl
 dist/
 test-results/
+.shots/
 playwright-report/
 public/snapshot/
 .wrangler/

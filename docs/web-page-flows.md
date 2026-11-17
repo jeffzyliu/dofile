@@ -552,7 +552,7 @@ the line.
 
 ### Tests that hold this
 
-- `web/test/app.test.ts`:
+- `web/test/app-*.test.ts`:
   - "a run: the streamed log grows one item and the result's log replaces it; …"
   - "a crash cuts a run: the new state first, then engine-gone, then the cut run's result; …"
   - "runCode while a run is on does nothing; with no engine a run is refused, …"
@@ -580,7 +580,7 @@ the line.
   - "a paste with no line break is an ordinary paste; …"
   - "a dialog's held-Enter rule (ui/keys.ts isHeldEnter): …"
   - "a refused Ctrl/Cmd+Enter's toast: …"
-- `web/test/imports.test.ts`: "events get in through two doors: …"; "each signal has one writer: …"
+- `web/biome/architecture.grit` (a Biome plugin, run by `npm run check`): the controller's queue has one way in (`enqueue()`, called from `dispatch()` and `reply()`); each signal's writer object is named only by `state.ts` and its owner
 - `web/e2e/editor.spec.ts`:
   - "the command line: Enter runs and clears, ↑ recalls; a paste of lines runs each in turn and stops at an error; …"
   - "the command line with no engine: …"
@@ -704,7 +704,7 @@ listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM 
 
 - `web/test/editor.test.ts`: "a run's version of an open file (editor/ranover.ts): …"; "a file's form
   (editor/ranover.ts): …"; "the error mark's rule (editor/errormark.ts): …"
-- `web/test/app.test.ts`: "a run that rewrites an open file: the editor follows it (ranOver); …"; "setDirty sets one
+- `web/test/app-*.test.ts`: "a run that rewrites an open file: the editor follows it (ranOver); …"; "setDirty sets one
   tab's dot; decodeText takes strict UTF-8 only"
 - `web/test/files-ui.test.ts`: "openFile: a text file gets a tab, made active, before the editor is told; …"; "closing
   a tab: …"; "rename: an open file, and a folder with open files under it: …"; "upload over an open file: …"; "rename:

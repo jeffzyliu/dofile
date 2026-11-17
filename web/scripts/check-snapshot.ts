@@ -19,7 +19,8 @@ import { installEngine } from "./install-engine.ts";
 import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "./snapshot-node.ts";
 
 const args = process.argv.slice(2);
-const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
+const arg = <T>(name: string, fallback: T): string | T =>
+  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const dir = resolve(arg("--dir", defaultDir));
 const repo = fileURLToPath(new URL("../..", import.meta.url));
 // Slow in Pyodide (docs/browser-engine.md, "Open investigation"): started first, so a long tail does not hide the rest.
@@ -52,14 +53,14 @@ async function boot() {
 
 // ---- a child process: one share of the work ------------------------------------------------------------------------
 if (args.includes("--child")) {
-  const kind = arg("--child"),
+  const kind = arg("--child", ""),
     mine = arg("--case", "").split(",").filter(Boolean);
   const { py, manifest } = await boot();
   // --no-shim: the old baseline without numpy.linalg raising LinAlgError
   if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
-  const say = (...a) => console.log(`[${kind === "compat" ? mine.join(",") : kind}]`, ...a);
+  const say = (...a: unknown[]) => console.log(`[${kind === "compat" ? mine.join(",") : kind}]`, ...a);
   say(`restored (optimize=${py.runPython("import sys; sys.flags.optimize")}, snapshot built for ${manifest.wheel})`);
-  let result;
+  let result: Record<string, unknown>;
 
   if (kind === "conformance") {
     py.FS.mkdirTree("/work");
@@ -67,7 +68,7 @@ if (args.includes("--child")) {
     py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests/conformance` }, "/conf");
     for (const f of py.FS.readdir("/conf/data"))
       if (f !== "." && f !== "..") py.FS.writeFile(`/work/${f}`, py.FS.readFile(`/conf/data/${f}`));
-    result = JSON.parse(
+    const found: { checks: number; probes: number; problems: string[] } = JSON.parse(
       py.runPython(`
 import json, re
 from pathlib import Path
@@ -94,23 +95,29 @@ r = Engine("/work").run('clear\\nset obs 50\\ngen x = _n\\ngen y = sqrt(x)\\nsca
 if r.rc or not Path("/work/s.png").exists() or Path("/work/s.png").stat().st_size < 1000: problems.append(f"graph export: rc {r.rc}")
 json.dumps({"checks": ok, "probes": probes, "problems": problems})`),
     );
-    say(`${result.checks} corpus checks as expected, ${result.probes} probes, ${result.problems.length} problems`);
+    say(`${found.checks} corpus checks as expected, ${found.probes} probes, ${found.problems.length} problems`);
     for (const [label, expr, want] of NATIVE_CHECKS) {
       try {
         const got = py.runPython(expr);
         if (want !== null && Math.abs(got - want) > 1e-6 * Math.max(1, Math.abs(want)))
-          result.problems.push(`native ${label}: ${got}, expected ${want}`);
+          found.problems.push(`native ${label}: ${got}, expected ${want}`);
       } catch (e) {
-        result.problems.push(`native ${label}: ${String(e.message).trim().split("\n").at(-1).slice(0, 120)}`);
+        found.problems.push(
+          `native ${label}: ${String(e instanceof Error ? e.message : e)
+            .trim()
+            .split("\n")
+            .at(-1)!
+            .slice(0, 120)}`,
+        );
       }
     }
     say(
-      `${NATIVE_CHECKS.length} native-library calls, ${result.problems.filter((p) => p.startsWith("native")).length} problems`,
+      `${NATIVE_CHECKS.length} native-library calls, ${found.problems.filter((p) => p.startsWith("native")).length} problems`,
     );
-    result.problems.forEach((p) => {
+    found.problems.forEach((p) => {
       say("  PROBLEM", p);
     });
-    result.failed = result.problems.length;
+    result = { ...found, failed: found.problems.length };
   } else {
     py.FS.mkdirTree("/od");
     py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests_opendta` }, "/od");
@@ -149,16 +156,17 @@ def run_case(case):
         say(
           r.why
             .split("\n")
-            .map((l) => `     ${l}`)
+            .map((l: string) => `     ${l}`)
             .join("\n"),
         );
     }
+    const failed = results.filter((r) => !r.ok).length;
     result = {
       cases: results.length,
-      failed: results.filter((r) => !r.ok).length,
+      failed,
       failures: results.filter((r) => !r.ok).map((r) => r.case),
     };
-    say(`${results.length - result.failed} of ${results.length} cases match Stata 14`);
+    say(`${results.length - failed} of ${results.length} cases match Stata 14`);
   }
   console.log(`RESULT ${JSON.stringify({ kind, ...result })}`);
   process.exit(0);
@@ -190,13 +198,14 @@ const passArgs = [
 const t0 = performance.now();
 
 // Runs one child; stdout lines are echoed, the RESULT line is parsed. A child over `limitS` seconds is killed.
-const runChild = (childArgs, limitS) =>
-  new Promise((done) => {
+type ChildExit = { code: number | null; result: { failed?: number } | null; timedOut: boolean };
+const runChild = (childArgs: string[], limitS: number) =>
+  new Promise<ChildExit>((done) => {
     const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", ...childArgs, ...passArgs], {
       stdio: ["ignore", "pipe", "inherit"],
     });
     let out = "",
-      result = null,
+      result: ChildExit["result"] = null,
       timedOut = false;
     const timer = limitS
       ? setTimeout(() => {
@@ -216,7 +225,7 @@ const runChild = (childArgs, limitS) =>
       }
     });
     child.on("exit", (code) => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       done({ code, result, timedOut });
     });
   });
@@ -241,10 +250,10 @@ const cases = (wanted ?? allCases).sort((a, b) => {
 // and what follows cascades. Expected like a strict xfail: a difference is accepted, and one that now passes is
 // reported. `--normal --pandas` loads pandas and expects no difference: run it for these two after an engine change.
 const EXPECTED_DIFFER = args.includes("--pandas") ? [] : ["1701_datamgmt_options", "1911_datamgmt"];
-const problems = [],
-  timeouts = [],
-  crashed = [],
-  passed = [];
+const problems: string[] = [],
+  timeouts: string[] = [],
+  crashed: string[] = [],
+  passed: string[] = [];
 let ran = 0;
 const conformance =
   only === "conformance" || (!only && !wanted)

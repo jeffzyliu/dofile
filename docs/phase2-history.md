@@ -168,7 +168,7 @@ profiles, each on its own runner with a 30-minute limit; since #33 every job als
 a pull request that touches none of its inputs skips the test jobs but reports through `web ok` (`ci.yml` has `ci ok` with its
 own filter). `check-pytest` (about 2 minutes) and `check-numeric` (about 4) stay by hand. First runs on GitHub found: the runner
 is slower than a laptop (1908_models2 took over 300 s with four cases at a time, so the per-case limit is 900 s); 1701 and 1911
-count as expected differences (`EXPECTED_DIFFER` in `check-snapshot.mjs`, a strict xfail); an iPhone-profile run once took
+count as expected differences (`EXPECTED_DIFFER` in `check-snapshot.ts`, a strict xfail); an iPhone-profile run once took
 about 200 s to become ready, so the e2e waits up to 300 s for the engine and a test may take 600 s. `deploy.yml` deploys the
 build to Cloudflare Workers on each merge to `main`. #20 and #21 bumped `cloudflare/wrangler-action` (3 to 4) and
 `actions/cache` (5 to 6; merged by hand, since the `gh` token has no `workflow` scope).

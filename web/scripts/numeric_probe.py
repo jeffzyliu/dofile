@@ -1,5 +1,5 @@
 """Run one Stata 14 comparison program and record, at full double precision, e() and r() after every command that
-changes them, plus the log. The same file runs on CPython and inside Pyodide (web/scripts/check-numeric.mjs), and
+changes them, plus the log. The same file runs on CPython and inside Pyodide (web/scripts/check-numeric.ts), and
 web/scripts/compare_numeric.py diffs the two outputs number by number.
 
     python numeric_probe.py CASE TOOLS_DIR OUT.json

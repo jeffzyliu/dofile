@@ -5,42 +5,12 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, keepFiles, retryFirstGoto, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { engineState, expect, keepFiles, ready, retryFirstGoto, SAMPLE, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { seedLog } from "./seed";
 
 const data = new URL("../../tests/conformance/data/", import.meta.url);
 const ref = JSON.parse(readFileSync(new URL("ref.json", data), "utf8"));
-const SAMPLE =
-  "clear\nset obs 200\nset seed 1\ngenerate x = rnormal()\ngenerate y = 1 + 2*x + rnormal()\nregress y x, robust\nscatter y x\n";
 
-type RunResult = {
-  rc: number;
-  log: string;
-  error: string | null;
-  nobs: number;
-  images: string[];
-  timing?: Record<string, number>;
-};
-type Hook = {
-  engine: { startup: { mode: string; fetched?: string } | null; query(op: "memory"): Promise<{ heap_bytes: number }> };
-  store: {
-    blocked: boolean;
-    list(): Promise<{ path: string }[]>;
-    write(path: string, data: Uint8Array): Promise<unknown>;
-  };
-  run(code: string): Promise<RunResult | null>;
-  breakRun(): void;
-  reset(): void; // the engine controller's Break and Reset
-  state: { engine: { value: { s: string } }; banners: { value: { b: string; kind?: string }[] } };
-};
-declare global {
-  interface Window {
-    __dofile: Hook;
-  }
-}
-
-const engineState = (page: Page) => page.evaluate(() => document.documentElement.dataset.engine ?? "");
-const ready = (page: Page) =>
-  expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine), { timeout: 300_000 }).toBe("ready");
 async function upload(page: Page, name: string) {
   const b64 = readFileSync(new URL(name, data)).toString("base64");
   await page.evaluate(
@@ -266,4 +236,83 @@ test("?snapshot=0&memcap=400: the normal boot is capped too", async ({ page, bro
   );
   test.setTimeout(300_000);
   await overTheCap(page, `?snapshot=0&test&memcap=${CAP_MB}`);
+});
+
+/** The numbers n of the log's lines "line n", in the order they are shown. */
+const lineNumbers = (text: string) => [...text.matchAll(/^line (\d+)$/gm)].map((m) => Number(m[1]));
+
+test("a streamed run: the log shows its lines in order while the run goes, and the whole log when it ends", async ({
+  page,
+}) => {
+  await page.goto("?test");
+  await startEngine(page);
+  await ready(page);
+  const log = page.getByRole("log", { name: "Log" });
+  // every text the running run's log item takes, as the signal is set
+  await page.evaluate(() => {
+    const w = window as unknown as { seen: string[] };
+    w.seen = [];
+    window.__dofile.state.log.subscribe((items) => {
+      for (const i of items) if (i.t === "text" && i.streaming) w.seen.push(i.text);
+    });
+  });
+  // a line, then 200 ms of work, six times: the engine sends the log before each command
+  const code = 'forvalues i = 1/6 {\n display "line `i\'"\n sleep 200\n}';
+  const done = page.evaluate((code) => window.__dofile.run(code), code);
+  await expect
+    .poll(async () => lineNumbers((await log.textContent()) ?? "").length, { timeout: 30_000, intervals: [50] })
+    .toBeGreaterThan(1);
+  expect(await engineState(page), "a line shows while the run goes on").toBe("running");
+  const midway = lineNumbers((await log.textContent()) ?? "");
+  expect(midway, "the lines so far, in order, from the first").toEqual(midway.map((_, i) => i + 1));
+  expect(midway.length).toBeLessThan(6);
+  const r = await done;
+  expect(r!.rc, r!.log).toBe(0);
+  await expect.poll(async () => lineNumbers((await log.textContent()) ?? "")).toEqual([1, 2, 3, 4, 5, 6]);
+  // each text the signal took was the one before it, longer: the page grew the item, and the lines came in several steps
+  const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+  for (let i = 1; i < seen.length; i++)
+    expect(seen[i].startsWith(seen[i - 1]), `step ${i} extends step ${i - 1}`).toBe(true);
+  expect(
+    new Set(seen.map((s) => lineNumbers(s).length)).size,
+    "at least four steps of different length",
+  ).toBeGreaterThanOrEqual(4);
+});
+
+// Cost of the log per streamed chunk (opt in: DOFILE_STREAM_BENCH=1; each size is a run of its own, a line and 10 ms of work per pass: lines printed in one burst
+// reach the page as few chunks). The log item is
+// replaced by each chunk, so the log's per-item caches miss and the whole text is split again: the time from a chunk to
+// the log's DOM change should grow with the text. It measures and asserts only that the run completes.
+test("a long streamed run: the log's cost per chunk (a measurement, DOFILE_STREAM_BENCH=1)", async ({ page }, info) => {
+  test.skip(!process.env.DOFILE_STREAM_BENCH, "a measurement: set DOFILE_STREAM_BENCH=1");
+  await page.goto("?test");
+  await startEngine(page);
+  await ready(page);
+  for (const n of [50, 500]) {
+    await seedLog(page, []);
+    await page.evaluate(() => {
+      const w = window as unknown as { bench: { sets: number; commits: number; renderMs: number; lastSet: number } };
+      const b = { sets: 0, commits: 0, renderMs: 0, lastSet: 0 };
+      w.bench = b;
+      window.__dofile.state.log.subscribe(() => {
+        b.sets++;
+        b.lastSet = performance.now();
+      });
+      new MutationObserver(() => {
+        b.commits++;
+        b.renderMs += performance.now() - b.lastSet;
+      }).observe(document.querySelector("pre.log")!, { subtree: true, childList: true, characterData: true });
+    });
+    const t0 = Date.now();
+    const r = await page.evaluate(
+      (n) => window.__dofile.run(`forvalues i = 1/${n} {\n display "line \`i' ${"x".repeat(150)}"\n sleep 10\n}`),
+      n,
+    );
+    const ms = Date.now() - t0;
+    expect(r!.rc, r!.log.slice(-500)).toBe(0);
+    const b = await page.evaluate(() => (window as unknown as { bench: Record<string, number> }).bench);
+    const line = `${info.project.name}, ${n} chunks: ${b.sets} log sets, ${b.commits} DOM commits, ${(b.renderMs / Math.max(b.commits, 1)).toFixed(2)} ms from a set to its DOM change (mean), ${ms} ms the run`;
+    console.log(line);
+    info.annotations.push({ type: "stream-cost", description: line });
+  }
 });

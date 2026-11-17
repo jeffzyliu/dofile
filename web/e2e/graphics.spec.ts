@@ -9,12 +9,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, keepFiles, retryFirstGoto, startEngine, test } from "./fixtures";
+import { expect, keepFiles, ready, retryFirstGoto, startEngine, test } from "./fixtures";
 
-type Hook = { run(code: string): Promise<any>; breakRun(): void; state: { engine: { value: { s: string } } } };
 declare global {
   interface Window {
-    __dofile: Hook;
     __partSeen: { ready: number; lines: [number, string][] }; // the return-visit test's clock (its init script)
     __runAtReady: Promise<any>; // `display 1`, sent by an init script the moment the page says "ready"
     __runAtReadySent: number; // when, Date.now()
@@ -22,9 +20,11 @@ declare global {
 }
 
 const PART = "**/snapshot/graphics.brotli.bin";
-const ready = (page: Page) =>
-  expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine), { timeout: 300_000 }).toBe("ready");
-const run = (page: Page, code: string) => page.evaluate((code) => window.__dofile.run(code), code);
+const run = async (page: Page, code: string) => {
+  const result = await page.evaluate((code) => window.__dofile.run(code), code);
+  if (!result) throw new Error(`no result: ${code}`);
+  return result;
+};
 
 /** Hold the part's request until release(); count its requests. */
 async function holdPart(page: Page) {
@@ -199,6 +199,10 @@ test("a return visit reads the part from the Cache before ready; a graph sent at
     await expect
       .poll(async () => (await partSeen()).lines.map(([, l]) => l).join("\n"), { timeout: 120_000 })
       .toMatch(/landed \(network\)/);
+
+    // the first visit's worker has written the part (its line comes after "landed"), so none of its lines is left to
+    // arrive after the count is reset
+    await expect.poll(() => worker.length, { timeout: 120_000 }).toBeGreaterThan(0);
 
     // the return visit: a graph as soon as the engine is ready
     worker.length = 0;

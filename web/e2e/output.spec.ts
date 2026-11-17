@@ -8,22 +8,15 @@
 //    leaves a wide dataset, and the tabs are checked against that. On the phone profile there is no Graph tab (graphs
 //    show in the log), so only the full-size view is checked there, opened through `graphFull`.
 import type { Page } from "@playwright/test";
-import { expect, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { addBanner, type PhoneTab, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
 
-type Hook = {
-  run(code: string): Promise<{ rc: number; log: string; error: string | null } | null>;
-  store: { blocked: boolean; write(path: string, data: Uint8Array): Promise<unknown> };
-  state: any; // the signals of src/app/state.ts
-};
 declare global {
   interface Window {
-    __dofile: Hook;
     __copied: string[];
     __clip: Clipboard; // the recorder, kept while a test takes the clipboard API away
   }
 }
-
-const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 700;
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
@@ -44,17 +37,13 @@ test.beforeEach(async ({ page }) => {
 
 /** Show an Output tab: the Output tablist on a desktop, the phone's bottom bar (its `phoneTab` signal) on a phone. */
 async function showTab(page: Page, tab: "graph" | "data" | "results") {
-  if (phone(page)) await page.evaluate((t) => (window.__dofile.state.phoneTab.value = t), tab);
+  if (isPhone(page))
+    await showPhoneTab(page, tab as PhoneTab); // never "graph": the phone has no Graph tab
   else await page.getByRole("tab", { name: tab[0].toUpperCase() + tab.slice(1), exact: true }).click();
 }
 const copied = (page: Page) => page.evaluate(() => window.__copied);
 const toastText = (page: Page) => page.evaluate(() => document.querySelector(".toast")?.textContent ?? null);
 const logLength = (page: Page) => page.evaluate(() => window.__dofile.state.log.value.length);
-async function ready(page: Page) {
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset.engine), { timeout: 300_000 })
-    .toBe("ready");
-}
 async function run(page: Page, code: string) {
   const r = await page.evaluate((code) => window.__dofile.run(code), code);
   expect(r, "the engine was ready").not.toBeNull();
@@ -64,7 +53,7 @@ async function run(page: Page, code: string) {
 test("the empty states, and the reset wording of the Data tab", async ({ page }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-  if (!phone(page)) {
+  if (!isPhone(page)) {
     await showTab(page, "graph");
     await expect(page.getByText("No graphs yet")).toBeVisible();
     await expect(page.locator(".empty code")).toHaveText("scatter wage educ");
@@ -73,7 +62,7 @@ test("the empty states, and the reset wording of the Data tab", async ({ page })
   await showTab(page, "data");
   await expect(page.getByText("No data in memory")).toBeVisible();
   await expect(page.getByText("Load a .dta from the file list, or run", { exact: false })).toBeVisible();
-  await page.evaluate(() => window.__dofile.state.addBanner({ b: "reset", reason: "test", kind: "user", run: null }));
+  await addBanner(page, { b: "reset", reason: "test", kind: "user", run: null });
   await expect(page.getByText("The engine was reset, so no data is in memory")).toBeVisible();
   await showTab(page, "results");
   await expect(page.getByText("No results yet")).toBeVisible();
@@ -83,30 +72,25 @@ test("the empty states, and the reset wording of the Data tab", async ({ page })
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
+  await showTheme(page, "dark");
   await page.evaluate(async () => {
-    window.__dofile.state.theme.value = "dark";
     await window.__dofile.store.write("g.png", Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]));
   });
-  if (phone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
+  if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
   await page
     .getByRole("tree", { name: "Files" })
     .getByRole("treeitem", { name: /^g\.png/ })
     .click();
   // desktop: the Graph tab; phone: the full-size view
-  const card = phone(page) ? page.locator(".viewer .graph-card") : page.locator(".graph-wrap .graph-card");
+  const card = isPhone(page) ? page.locator(".viewer .graph-card") : page.locator(".graph-wrap .graph-card");
   await expect(card).toHaveAttribute("data-theme", "light");
 });
 
 test("a .dta tab whose name a command can't hold says so, and Load and Copy are off", async ({ page }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
-  await page.evaluate(async () => {
-    await window.__dofile.store.write("a`b'.dta", new Uint8Array(16));
-    const s = window.__dofile.state;
-    s.tabs.value = [{ path: "a`b'.dta", kind: "dta", dirty: false }];
-    s.activeTab.value = "a`b'.dta";
-    s.phoneTab.value = "editor";
-  });
+  await putFiles(page, { "a`b'.dta": new Array(16).fill(0) });
+  await showTabs(page, [{ path: "a`b'.dta", kind: "dta", dirty: false }], "a`b'.dta", "editor");
   const view = page.locator(".dta-view");
   await expect(view.locator(".why")).toHaveText("Its name has a character a command can't use: rename the file.");
   await expect(view.locator(".cmd")).toHaveCount(0);
@@ -126,12 +110,7 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
       page.evaluate(() => window.__dofile.state.files.value.some((f: { path: string }) => f.path === "data/wages.dta")),
     )
     .toBe(true);
-  await page.evaluate(() => {
-    const s = window.__dofile.state;
-    s.tabs.value = [{ path: "data/wages.dta", kind: "dta", dirty: false }];
-    s.activeTab.value = "data/wages.dta";
-    s.phoneTab.value = "editor";
-  });
+  await showTabs(page, [{ path: "data/wages.dta", kind: "dta", dirty: false }], "data/wages.dta", "editor");
   const view = page.locator(".dta-view");
   await expect(view.locator(".bar").first()).toHaveText("data/wages.dta · 2 KB"); // 2048 bytes, as the file tree says
   await expect(view.locator(".cmd")).toHaveText('use "data/wages.dta", clear');
@@ -144,15 +123,15 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
   await load.focus();
   await expect(load).toBeFocused();
   await load.click({ force: true }); // force: Playwright treats an aria-disabled button as not clickable
-  await expect(page.locator(".toast")).toHaveText("Start the engine to load wages.dta");
+  await expect(toastOf(page)).toHaveText("Start the engine to load wages.dta");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
-  expect(await page.evaluate(() => (window.__dofile as any).drops())).toEqual([]);
+  expect(await page.evaluate(() => window.__dofile.drops())).toEqual([]);
   expect(await page.evaluate(() => window.__dofile.state.history.value)).toEqual([]);
   await expect(view.locator("table")).toHaveCount(0);
   await view.getByRole("button", { name: "Copy the use command" }).click();
   expect(await copied(page)).toEqual(['use "data/wages.dta", clear']);
-  await expect(page.locator(".toast")).toHaveText("Copied");
+  await expect(toastOf(page)).toHaveText("Copied");
 });
 
 test("the Graph, Data and Results tabs and a .dta tab, after a run through the hook", async ({ page, browserName }) => {
@@ -186,16 +165,19 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   );
 
   // ---- Graph, and the full-size view ----
-  if (!phone(page)) {
+  if (!isPhone(page)) {
     await showTab(page, "graph");
     const img = page.locator(".graph-wrap .graph-card img");
     await expect(img).toHaveAttribute("alt", "Graph 3: scatter wage educ"); // two graphs share a command: the number is added
     await expect(page.locator(".foot-title")).toHaveText("graph 3 of 3 · scatter wage educ");
-    await expect(page.locator(".graph-foot .thumb")).toHaveCount(3);
-    await page.locator(".graph-foot .thumb").first().click();
+    await expect(page.getByRole("button", { name: /^Show graph/ })).toHaveCount(3);
+    await page
+      .getByRole("button", { name: /^Show graph/ })
+      .first()
+      .click();
     await expect(img).toHaveAttribute("alt", "Graph: histogram wage");
     await expect(page.locator(".foot-title")).toHaveText("graph 1 of 3 · histogram wage");
-    await expect(page.locator(".graph-foot .thumb").first()).toHaveAttribute("aria-current", "true");
+    await expect(page.getByRole("button", { name: /^Show graph/ }).first()).toHaveAttribute("aria-current", "true");
     expect(await img.evaluate((el: HTMLImageElement) => el.naturalWidth > 0)).toBe(true);
 
     const open = page.getByRole("button", { name: "Open full size" });
@@ -210,14 +192,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     await expect(viewer.locator(".vtitle")).toHaveText("graph 3 of 3 · scatter wage educ");
     await page.keyboard.press("ArrowLeft");
     await expect(viewer.locator(".vtitle")).toHaveText("graph 2 of 3 · scatter wage educ");
-    await expect(page.locator('.visually-hidden[role="status"]')).toHaveText(/Graph 2: scatter wage educ$/); // said
+    await expect(page.getByRole("status")).toHaveText(/Graph 2: scatter wage educ$/); // said
     const copyImage = viewer.getByRole("button", { name: "Copy image" });
     if (await copyImage.isEnabled()) {
       // off in a browser that cannot put an image on the clipboard: a click would wait for it to be enabled
       await copyImage.click();
       await expect(viewer.locator(".vsaid")).toHaveText("Copied");
       expect(await copied(page)).toContain("image:1");
-      await expect(page.locator(".toast")).toBeVisible(); // the toast shows over the view, not under it
+      await expect(toastOf(page)).toBeVisible(); // the toast shows over the view, not under it
     }
     const download = page.waitForEvent("download");
     await viewer.getByRole("button", { name: "Export PNG" }).click();
@@ -230,15 +212,13 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     await expect(open).toBeFocused();
     expect(await page.evaluate(() => window.__dofile.state.graphIndex.value)).toBe(1);
   } else {
-    await page.evaluate(() => {
-      window.__dofile.state.graphFull.value = true;
-    });
+    await showGraphFull(page);
     const viewer = page.getByRole("dialog", { name: "Full-size graph" });
     await expect(viewer.locator(".vtitle")).toHaveText("graph 3 of 3 · scatter wage educ");
     await expect(viewer.getByRole("button", { name: "Next" })).toBeDisabled();
     await viewer.getByRole("button", { name: "Previous" }).click();
     await expect(viewer.locator(".vtitle")).toHaveText("graph 2 of 3 · scatter wage educ");
-    await expect(viewer.locator(".graph-card img")).toHaveAttribute("alt", "Graph 2: scatter wage educ");
+    await expect(viewer.getByRole("img")).toHaveAttribute("alt", "Graph 2: scatter wage educ");
     await viewer.getByRole("button", { name: /^Close/ }).click();
     await expect(viewer).toHaveCount(0);
   }
@@ -340,7 +320,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   const plain = await tint("e(rank)"); // a row the pointer has not been on
   await copyBtn("e(N)").click();
   expect((await copied(page)).at(-1)).toBe("160");
-  await expect(page.locator(".toast")).toHaveText("Copied e(N)");
+  await expect(toastOf(page)).toHaveText("Copied e(N)");
   const r2 = rowOf("e(r2)").locator(".val");
   const whole = (await r2.locator(".full").textContent())!; // the digits in sight are .short; .full has all
   const short = (await r2.locator(".short").textContent())!;
@@ -352,7 +332,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   // a click on it copies every digit, and the icon is a check for about 2 s
   await copyBtn("e(r2)").click();
   expect((await copied(page)).at(-1)).toBe(whole);
-  await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
+  await expect(toastOf(page)).toHaveText("Copied e(r2)");
   await expect(copyBtn("e(r2)").locator(".i-check")).toBeVisible();
   await expect(copyBtn("e(r2)")).toHaveCSS("opacity", "1");
   const r2Room = await room("e(r2)");
@@ -367,14 +347,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     b.getBoundingClientRect().width,
     b.getBoundingClientRect().height,
   ]);
-  expect(sizes).toEqual(phone(page) ? [44, 44] : [24, 24]);
+  expect(sizes).toEqual(isPhone(page) ? [44, 44] : [24, 24]);
   await expect(copyBtn("e(rank)")).toHaveCSS("cursor", "pointer");
   // a scalar row has no click of its own: the default cursor on the name, the text cursor over the value
   await expect(rowOf("e(rank)").locator("td").first()).toHaveCSS("cursor", "auto");
   await expect(rowOf("e(rank)").locator(".val")).toHaveCSS("cursor", "text");
   const copiesBefore = (await copied(page)).length;
   const toastBefore = await toastText(page);
-  if (phone(page)) {
+  if (isPhone(page)) {
     await expect(copyBtn("e(rank)")).toHaveCSS("opacity", "1");
     await rowOf("e(rank)").locator("td").first().tap();
   } else {
@@ -412,7 +392,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
     .locator(".rs tr.grp")
     .filter({ hasText: /^Locals/ })
     .locator("xpath=following-sibling::tr[1]");
-  const firstLocal = firstLocalRow.locator("button.copy");
+  const firstLocal = firstLocalRow.getByRole("button", { name: /^Copy / });
   const digitsOf = (row: ReturnType<typeof rowOf>) =>
     row.evaluate((tr) => (tr.querySelector(".val .full") ?? tr.querySelector(".val"))!.textContent!);
   await expect(firstLocal).toBeFocused();
@@ -423,7 +403,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   expect(await tint(local)).not.toBe(plain);
   await page.keyboard.press("Enter");
   expect((await copied(page)).at(-1)).toBe(value);
-  await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
+  await expect(toastOf(page)).toHaveText(`Copied ${local}`);
   await page.keyboard.press(tab); // the next row's icon
   await expect(page.locator(".rs .row button.copy:focus")).toHaveCount(1);
   const nextValue = await digitsOf(page.locator(".rs .row").filter({ has: page.locator("button.copy:focus") }));
@@ -437,14 +417,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await page.mouse.move(1, 1);
   await copyBtn("e(r2)").click();
   await page.mouse.move(1, 1);
-  await expect(page.locator(".toast")).toHaveText("Copied e(r2)");
+  await expect(toastOf(page)).toHaveText("Copied e(r2)");
   expect(await page.evaluate(() => document.querySelector(".rs :focus-visible")?.outerHTML ?? null)).toBeNull();
   expect(await tint("e(r2)")).toBe(plain);
   await page.getByRole("button", { name: /^Locals/ }).focus();
   await page.keyboard.press(tab);
   await expect(firstLocal).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".toast")).toHaveText(`Copied ${local}`);
+  await expect(toastOf(page)).toHaveText(`Copied ${local}`);
   await expect(firstLocal).toBeFocused();
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", { value: window.__clip, configurable: true }),
@@ -496,14 +476,14 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   expect(matRoom.spare, "the icon is not cut").toBeGreaterThanOrEqual(0);
   await copyBtn("e(b)").click();
   await expect.poll(async () => (await copied(page)).length, "the icon copies once").toBe(beforeView + 1);
-  await expect(page.locator(".toast")).toHaveText("Copied e(b)");
+  await expect(toastOf(page)).toHaveText("Copied e(b)");
   await expect(copyBtn("e(b)").locator(".i-check")).toBeVisible(); // the same check as a scalar's
   expect((await copied(page)).at(-1)).toMatch(/^\tage\teduc\t_cons\n\S+\t[-.\d]+\t[-.\d]+\t[-.\d]+$/);
   await expect(page.locator(".rs .mat"), "a copy that read the matrix leaves it closed").toHaveCount(0);
   await caret.click();
   await expect(grid).toBeVisible();
   await copyBtn("e(b)").click(); // on an open matrix too, the icon does not toggle
-  await expect(page.locator(".toast")).toHaveText("Copied e(b)");
+  await expect(toastOf(page)).toHaveText("Copied e(b)");
   await expect(grid).toBeVisible();
   await caret.focus(); // Ctrl/Cmd+C on the caret copies the whole matrix
   const afterIcon = (await copied(page)).length;
@@ -514,7 +494,7 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   const cell = grid.locator("tbody td.cell").nth(1);
   const full = await cell.getAttribute("title");
   await cell.click();
-  await expect(page.locator(".toast")).toHaveText(/^Copied e\(b\)\[\S+, educ\]$/);
+  await expect(toastOf(page)).toHaveText(/^Copied e\(b\)\[\S+, educ\]$/);
   expect((await copied(page)).at(-1), "a cell copies its own full value").toBe(full);
   await expect(grid, "a cell's click does not fold the grid").toBeVisible();
   await caret.click();
@@ -530,25 +510,23 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
 
   // ---- a .dta tab, with an engine ----
   await run(page, 'save "wages.dta", replace\nclear');
-  await page.evaluate(() => {
-    const s = window.__dofile.state;
-    s.tabs.value = [{ path: "wages.dta", kind: "dta", dirty: false }];
-    s.activeTab.value = "wages.dta";
-    s.phoneTab.value = "editor";
-  });
+  await showTabs(page, [{ path: "wages.dta", kind: "dta", dirty: false }], "wages.dta", "editor");
   const view = page.locator(".dta-view");
   await expect(view.locator(".bar").first()).toContainText("wages.dta · 160 obs · 35 vars");
   await expect(view.locator("tbody tr")).toHaveCount(35);
   await expect(view.locator("tbody tr").nth(2)).toContainText("Hourly wage");
   await expect(view.getByText("the data in memory is untouched until you press Load.", { exact: false })).toBeVisible();
   expect(
-    await page.evaluate(() => window.__dofile.state.data.value.nvars),
+    await page.evaluate(() => {
+      const data = window.__dofile.state.data.value;
+      return data && "nvars" in data ? data.nvars : undefined;
+    }),
     "describe_file leaves the data in memory",
   ).toBe(0);
   await view.getByRole("button", { name: "Copy the use command" }).click();
   expect((await copied(page)).at(-1)).toBe('use "wages.dta", clear');
   await view.getByRole("button", { name: "Load" }).click();
-  await expect(page.locator(".toast")).toHaveText("Loaded wages.dta");
+  await expect(toastOf(page)).toHaveText("Loaded wages.dta");
   expect(await page.evaluate(() => window.__dofile.state.history.value.at(-1))).toBe('use "wages.dta", clear');
   await showTab(page, "data");
   await expect(page.locator(".facts")).toContainText("160 obs");
