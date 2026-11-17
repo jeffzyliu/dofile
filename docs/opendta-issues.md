@@ -59,7 +59,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | PATCH-1 | dofile patch: `r(table)` after every coefficient table, with e(b)'s columns; new estimates drop a stale one | `tests/test_engine.py::test_r_table_*`, `::test_new_estimates_drop_a_stale_r_table` | 5 of 6 fixed; needs Stata check |
 | PATCH-2 | dofile patch: Break is taken only at safe points, so an interrupt can't leave the data half changed | `tests/test_break.py` | patched |
 | PATCH-3 | dofile patch: every user file name goes through one hook (`core/userpath.user_path`), for the web demo's path shim (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
-| PATCH-4 | dofile patch: `expand` and `stsplit` build `np.repeat` counts as `np.intp`, which wasm32 numpy needs | `expand` and `stsplit` cases of `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.mjs`); a CPython test cannot show it | patched (dofile-only, wasm32); the 11 cases pass in Pyodide |
+| PATCH-4 | dofile patch: `expand` and `stsplit` build `np.repeat` counts as `np.intp`, which wasm32 numpy needs | `expand` and `stsplit` cases of `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.ts`); a CPython test cannot show it | patched (dofile-only, wasm32); the 11 cases pass in Pyodide |
 
 ## Details
 
@@ -647,7 +647,7 @@ is dofile's own, not for upstream.
   `reps = np.ones(n, dtype=np.intp)`, whose later `reps[rows] = np.bincount(...)` covers both `np.repeat` calls. On
   64-bit `intp` is `int64`, so nothing changes there. Counts above 2^31 cannot exist in a 4 GiB address space.
 - Found running the 98 Stata 14 comparison cases of 0c3f3a2 inside Pyodide with `compare.py` and the known-difference rules
-  (`web/scripts/check-snapshot.mjs`; normal boot and snapshot start gave the same results). Eleven failed at their
+  (`web/scripts/check-snapshot.ts`; normal boot and snapshot start gave the same results). Eleven failed at their
   first `expand` or `stsplit`: `expand` in 0304_collapse, 1001_mixed, 1002_melogit, 1402_kappa_roc, 1601_epidemiology,
   1801_programming, 1902_multilevel, 1908_models2, 1909_other_suites and 1916_multilevel; `stsplit` in 1901_survival.
 - **Other int64 sites: none else is affected.** In Pyodide's numpy 2.4.6 only five calls refuse an int64 array:

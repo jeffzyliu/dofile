@@ -1,22 +1,24 @@
 // dofile's and OpenDTA's own pytest files, run inside Pyodide, to compare with CPython test by test (`npm run
-// check-pytest`). check-snapshot.mjs runs the conformance corpus and the Stata 14 logs; this runs the unit tests, which
+// check-pytest`). check-snapshot.ts runs the conformance corpus and the Stata 14 logs; this runs the unit tests, which
 // reach commands those do not.
 //
-//   node scripts/check-pytest.mjs [--paths a.py,b.py] [--shards 4] [--timeout 900] [--out DIR] [--no-shim] [--ios]
+//   node scripts/check-pytest.ts [--paths a.py,b.py] [--shards 4] [--timeout 900] [--out DIR] [--no-shim] [--ios]
 //
 // Each test file runs in its own process and writes DIR/<file>.json (see pytest_report.py). The CPython baseline is
 //   uv run python web/scripts/pytest_report.py OUT.json FILE -q -p no:cacheprovider
-// and `node scripts/compare-pytest.mjs BASELINE_DIR DIR` lists the differences.
+// and `node scripts/compare-pytest.ts BASELINE_DIR DIR` lists the differences.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
+import type { SnapshotPy } from "../src/engine/snapshot.ts";
 import { installEngine } from "./install-engine.ts";
 
 const args = process.argv.slice(2);
-const arg = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
+const arg = <T>(name: string, fallback: T): string | T =>
+  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const repo = fileURLToPath(new URL("../..", import.meta.url));
 const out = resolve(arg("--out", `${repo}/.dofile/pytest-wasm`));
 // dofile tests that make sense in the page's Python. Left out: those that start subprocesses, need the `mcp` package or
@@ -25,7 +27,7 @@ const out = resolve(arg("--out", `${repo}/.dofile/pytest-wasm`));
 const WEB_TESTS = ["tests/test_engine.py"];
 
 if (args.includes("--child")) {
-  const file = arg("--child");
+  const file = arg("--child", "");
   // --ios: Pyodide's loader creates no WebAssembly trampoline function (getPyEMTrampolinePtr) for an iPhone/iPad
   // navigator.userAgent; this makes Node look like that, to run the suite the way an iPhone runs the engine
   if (args.includes("--ios"))
@@ -37,7 +39,7 @@ if (args.includes("--child")) {
         maxTouchPoints: 5,
       },
     });
-  const py = await loadPyodide({ stdout: (s) => console.log(s), stderr: (s) => console.log(s) });
+  const py = (await loadPyodide({ stdout: (s) => console.log(s), stderr: (s) => console.log(s) })) as SnapshotPy;
   await py.loadPackage(["pytest", "numpy", "scipy", "matplotlib"], { messageCallback: () => {} });
   await installEngine(py);
   for (const d of ["tests_opendta", "tests"]) {
@@ -58,7 +60,8 @@ pytest_report.run(OUT, ["/repo/" + FILE, "-q", "-p", "no:cacheprovider", "--root
   // the table is one entry shorter without the trampoline: proof of which mode ran
   const result = {
     ...JSON.parse(py.FS.readFile("/tmp/result.json", { encoding: "utf8" })),
-    wasmTableLength: py._module.wasmTable.length,
+    // Emscripten exports wasmTable; AsmModule does not declare it
+    wasmTableLength: (py._module as typeof py._module & { wasmTable: WebAssembly.Table }).wasmTable.length,
     ios: args.includes("--ios"),
   };
   writeFileSync(`${out}/${basename(file)}.json`, JSON.stringify(result));
@@ -82,11 +85,11 @@ for (const f of files)
   }
 mkdirSync(out, { recursive: true });
 const t0 = performance.now(),
-  timeouts = [],
-  crashed = [];
+  timeouts: string[] = [],
+  crashed: string[] = [];
 const queue = [...files];
-const runOne = (file) =>
-  new Promise((done) => {
+const runOne = (file: string) =>
+  new Promise<void>((done) => {
     const started = performance.now();
     rmSync(`${out}/${basename(file)}.json`, { force: true }); // a result left by an earlier run would hide a crash
     const child = spawn(

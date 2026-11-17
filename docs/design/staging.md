@@ -13,7 +13,7 @@ Four kinds of file reach the editor's `public/` (all gitignored: `web/.gitignore
 | the dofile wheel, `public/dofile-*.whl` | the newest `*.whl` in the repository's `dist/` (`npm run wheel` builds it) | `vite.config.ts:55-56` | every load of the config |
 | extra wheels, `public/pyreadstat-*.whl` | `web/wheels/*.whl` (committed) | `vite.config.ts:57-58` | every load of the config |
 | Pyodide's runtime, `public/pyodide/` (3 files, `RUNTIME_FILES`, `start-files.ts:14`) | `node_modules/pyodide/` | `vite.config.ts:63-68` | every load of the config |
-| the snapshot, `public/snapshot/` (+ `manifest.json`) | built in Pyodide under Node | `scripts/make-snapshot.mjs` (`rmSync` of the folder first, then writes) | `npm run snapshot` |
+| the snapshot, `public/snapshot/` (+ `manifest.json`) | built in Pyodide under Node | `scripts/make-snapshot.ts` (`rmSync` of the folder first, then writes) | `npm run snapshot` |
 
 "Every load of the config" is every `vite` command of either mode: `vite.config.ts` calls `readInputs()` (`:47`) and copies
 at module load, before `defineConfig` (`:396`) decides what the command is. Report 10 (F2) says the pages-only mode "needs
@@ -40,8 +40,8 @@ current inputs. Wheel = a wheel in the root `dist/` (`npm run wheel`, `package.j
 | Script | Runs (today) | Needs staged | Writes | Notes |
 |---|---|---|---|---|
 | `wheel` | `rm -f dist/dofile-*.whl`, `uv build --wheel` | nothing | root `dist/` | S9 changes where it writes (clause: stops deleting the release wheels); R5 reads the place from S9's one `wheels()` helper, never spells it |
-| `snapshot` | `wheel`, `make-snapshot.mjs` | nothing: it reads W, X from `dist/`, `web/wheels/` (via `install-engine.ts`) and P from `node_modules` | S | the only writer of `public/snapshot/` |
-| `check-snapshot` | `wheel`, `check-snapshot.mjs` | S, fresh (`:168-174`, rc 2 if stale); W, X from `dist/` | none | never reads staged W, X, P |
+| `snapshot` | `wheel`, `make-snapshot.ts` | nothing: it reads W, X from `dist/`, `web/wheels/` (via `install-engine.ts`) and P from `node_modules` | S | the only writer of `public/snapshot/` |
+| `check-snapshot` | `wheel`, `check-snapshot.ts` | S, fresh (`:168-174`, rc 2 if stale); W, X from `dist/` | none | never reads staged W, X, P |
 | `check-pytest`, `check-numeric` | `wheel`, the script | nothing | none | `installEngine` reads `dist/`, `web/wheels/` |
 | `pretest` / `test` | `wheel`; `node --test` | nothing staged; one test loads the config: `test/site.test.ts:304-309` spawns `vite build` and `vite build --mode site` with no URLs and expects "Say which addresses ..." (`:398`), on a checkout where nothing is staged (the CI `unit` job runs `npm test` before any build), so `staged()` must not run at module load or before the URLs check. `test/harness.ts:15-23` reads `dist/`, `web/wheels/`; `engine.test.ts:350`, `snapshot-native.test.ts` read `public/snapshot` and skip when it is missing or stale | none | 5 tests skip with no snapshot (G0's baseline) |
 | `dev` | `wheel`, `build-id.ts --warn`, `together.ts dev`: two `vite` | W, X, P, S (S missing: the page says so; stale: a warning, the page "updated") | W, X, P (twice, racing) | serves `public/` at `/`; `devStartFiles()` (`:85`) lists `public/` and reads its manifest on every request |
@@ -52,7 +52,7 @@ current inputs. Wheel = a wheel in the root `dist/` (`npm run wheel`, `package.j
 | `cf:dev` | `snapshot`, `build` with two localhost addresses, two `wrangler dev` | as `build` (S at quality 11: the quality-5 heap is refused by wrangler) | as `build` | `wheel` twice; wrangler reads `dist/` only |
 | `deploy` | `lint:strict`, `snapshot`, `DOFILE_URLS=production npm run build`, `check-sizes.ts`, two `wrangler deploy` | as `build` | as `build` | `wheel` twice. A hand-made twin of build-web: no workflow runs it |
 | `commands`, `sample`, `check`, `lint*`, `format`, `axe`... | | nothing | `src/` generated files | out of scope |
-| `check-sizes.ts`, `smoke.ts`, `measure-startup.mjs` | | the built `dist/` (or the network) | none | read no staged file |
+| `check-sizes.ts`, `smoke.ts`, `measure-startup.ts` | | the built `dist/` (or the network) | none | read no staged file |
 
 **Workflows and the action:**
 
@@ -79,7 +79,7 @@ depends on.
 
 ## 3. The design
 
-**One writer.** `scripts/stage.ts` owns W, X, P; `make-snapshot.mjs` keeps S. Disjoint paths: stage never touches
+**One writer.** `scripts/stage.ts` owns W, X, P; `make-snapshot.ts` keeps S. Disjoint paths: stage never touches
 `public/snapshot/`, snapshot never touches the rest, so build-web's cache of S stays valid across a stage. Stage:
 (1) takes the inputs from `inputs()` (S9's `wheels()`), (2) deletes `public/stage.json` first, then every `*.whl` and `public/pyodide/` in `public/`
 (this ends problem 2), (3) copies, (4) writes `public/stage.json` **last**, so a stage that died half-way leaves no record: the inputs record (`BuildInputs`: wheel name and hash, extra
@@ -129,17 +129,17 @@ config load, so a wheel rebuilt by hand while `dev` runs is not picked up until 
 **The two CI file lists.** Today: `web.yml:50` (ENGINE, a regex: the snapshot job's inputs and its checks' inputs) and the
 cache key (`action.yml:37`, a `hashFiles` list: what makes S). They differ on purpose in part (the key lacks the tests and
 corpora) and by drift in part: the key has README.md and LICENSE (both go into the wheel), which the regex lacks; the regex has
-the checks' own files (`check-snapshot.mjs`, `snapshot-node.ts`), which the key rightly lacks. A script `make-snapshot.mjs` starts to import is in neither unless someone remembers (`make-snapshot.mjs`
+the checks' own files (`check-snapshot.ts`, `snapshot-node.ts`), which the key rightly lacks. A script `make-snapshot.ts` starts to import is in neither unless someone remembers (`make-snapshot.ts`
 imports `src/engine/snapshot.ts`, `build-id.ts`, `install-engine.ts`; the key names all three by file, the regex names
 the last two by file and `snapshot.ts` only through the directory `web/src/engine/`). The one table: `web/scripts/snapshot-inputs.txt`, git pathspecs one per line, in two
 sections: `build` (what makes S: `src/dofile/**`, `pyproject.toml`, `uv.lock`, `README.md`, `LICENSE`, `web/package-lock.json`,
-`web/wheels/*.whl`, `web/scripts/make-snapshot.mjs`, `install-engine.ts`, `build-id.ts`, `web/src/engine/snapshot.ts`, and
+`web/wheels/*.whl`, `web/scripts/make-snapshot.ts`, `install-engine.ts`, `build-id.ts`, `web/src/engine/snapshot.ts`, and
 `stage.ts` only if S9/R5 make it matter to S) and `check` (the rest the snapshot job reads: `tests/conformance`,
-`tests_opendta`, `web/src/engine/`, `check-snapshot.mjs`, `snapshot-node.ts`, the two tests and `harness.ts`,
+`tests_opendta`, `web/src/engine/`, `check-snapshot.ts`, `snapshot-node.ts`, the two tests and `harness.ts`,
 `web/package.json`, `web.yml`). Readers, in shell, so the `changes` job needs no Node: `git diff --name-only
 "origin/$BASE...HEAD" -- <both sections>` for ENGINE, and `git ls-files -- <build section> | xargs sha256sum | sha256sum`
 for the key (an output of a first step in build-web, then `actions/cache`'s `key:`). A unit test (new, small) fails when a
-relative import of `make-snapshot.mjs` (and its imports, one level) is in neither section: drift ends there, not in a review. A second test: every pathspec matches at least one tracked file (a typo matches nothing and `git ls-files` still succeeds, giving a weaker key silently).
+relative import of `make-snapshot.ts` (and its imports, one level) is in neither section: drift ends there, not in a review. A second test: every pathspec matches at least one tracked file (a typo matches nothing and `git ls-files` still succeeds, giving a weaker key silently).
 Against: `hashFiles` is what GitHub documents for keys and a shell hash of tracked files is ours to keep right; the key is also
 more exact (tracked files only: a file the runner generates cannot change it). The `web.yml:57` "code" pattern and
 `preview.yml`'s `paths` list are different questions (what needs the tests; what changes the build) and stay as they are.

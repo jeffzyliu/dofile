@@ -31,7 +31,7 @@ build and scripts.
   native decode that failed applies to one copy only (`copies`, `nativeFailedOn` in the worker).
 - So theme 4 is smaller than the surveys found, and R1's first step is on `main`. What is left is named in theme 4.
 - `vite.config.ts` gained an `fs.allow` block (a worktree whose `node_modules` is a symlink); S9 must keep it.
-  `measure-startup.mjs` gained `--engine firefox`.
+  `measure-startup.ts` gained `--engine firefox`.
 - Root `CLAUDE.md` now lets a pull request be merged by a fast-forward push to `main` when the maintainer says so for
   it.
 
@@ -43,7 +43,7 @@ Pull request 74 (3d0f4d7, merged 2026-11-16) adds to the above:
   28 of 28 twice); and S8, R1 and the sweep W1 must keep those lines' wording or change the test in the same pull
   request.
 - The same spec declares its own `window` globals for a run sent at ready; N3's typed hook takes them in.
-- `measure-startup.mjs` gained `--first-run-delay-ms`. It was used twice in two days: S9 moves it and does not fold
+- `measure-startup.ts` gained `--first-run-delay-ms`. It was used twice in two days: S9 moves it and does not fold
   it away.
 
 ## 1. Verdict
@@ -157,7 +157,7 @@ by no survey; W3 and W7 are their first read.
 | S6 | Shared UI: one roving-key hook (the editor tabs onto `Tablist`); the full-size viewer onto the shared modal trap; focus targets through exported handles, not label selectors; owner functions for `dialog`, `phoneTab` and `activeTab`, including the engine controller's writes to `dialog`. | M + M, med | 06-F3, F4, F8, F12; 05-F4; 03-F7, F9; 01-F10 |
 | S7 | Transport: per-start facts onto the start record; the controller's module-level wiring and download handle. **Graphics half** (see "What doing B first would waste", section 4): the graphics part out of `client.ts` into its own module; the four hand-over tests in `client.test.ts` are its net. | M + M, med | 01-F2, F6, F9 |
 | S8 | Worker: split into imported modules (the `/work` mirror with unit tests, boot and loader, a typed declarative dispatch). **Graphics half**: the graphics state into one object that owns it, along the seam `lazy-part.ts` started (decisions pure, `worker.ts` acts). A move, not a redesign. Imported modules are safe; separate chunks are not (iOS runs the worker twice). | M + M + S + M, med to high | 02-F4, F6, F7, F8, F13 |
-| S9 | Build: `scripts/lib` (argument parsing, the shard pool written three times, one `wheels()`); `vite.config.ts` split into plugin modules; **staging half**: file staging out of module load; every snapshot knob in the manifest; the two CI file lists generated from one table; `npm run commands` writes through a temp file; `wheel` stops deleting the release wheels in the root `dist/` and runs once per `e2e`; the denied-commands list generated, not parsed from `browser.py` by regex; `measure-startup.mjs` and `compare-pytest.mjs` moved or folded. Decision 8.2 is yes: delete the `DOFILE_EDITOR_BASE` mode in `vite.config.ts` (six branches), `urls.ts`, `site.test.ts` (five sites), the e2e reads and `measure-startup`, and SPEC section 8. | M + M + S, med | 10-F2 to F10 |
+| S9 | Build: `scripts/lib` (argument parsing, the shard pool written three times, one `wheels()`); `vite.config.ts` split into plugin modules; **staging half**: file staging out of module load; every snapshot knob in the manifest; the two CI file lists generated from one table; `npm run commands` writes through a temp file; `wheel` stops deleting the release wheels in the root `dist/` and runs once per `e2e`; the denied-commands list generated, not parsed from `browser.py` by regex; `measure-startup.ts` and `compare-pytest.ts` moved or folded. Decision 8.2 is yes: delete the `DOFILE_EDITOR_BASE` mode in `vite.config.ts` (six branches), `urls.ts`, `site.test.ts` (five sites), the e2e reads and `measure-startup`, and SPEC section 8. | M + M + S, med | 10-F2 to F10 |
 
 ### Redesigns (proposal C only; in the icebox, R1 and R5 first)
 

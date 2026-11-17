@@ -1,6 +1,6 @@
 // Draws startup-times.svg: time until the web demo's engine is ready, normal boot vs memory snapshot, by network speed,
 // for a first visit (cold cache) and a return visit (warm cache). Run: node docs/img/make-startup-times.mjs
-// The numbers are read from startup-times.json, written by web/scripts/measure-startup.mjs (Chromium, brotli-served,
+// The numbers are read from startup-times.json, written by web/scripts/measure-startup.ts (Chromium, brotli-served,
 // CDP-throttled; the median of its repetitions); the table in docs/pyodide-snapshot.md is the same data.
 // Colors: the dataviz reference palette (slots 1-2, validated for light and dark), light/dark by
 // prefers-color-scheme, on a surface of the chart's own so it stays legible on any page background.

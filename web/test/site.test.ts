@@ -221,7 +221,7 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     "playwright.config.ts",
     "e2e/global-setup.ts",
     "scripts/start-files.ts",
-    "scripts/measure-startup.mjs",
+    "scripts/measure-startup.ts",
   ])
     assert.match(web(f), /from "\.{1,2}\/(scripts\/)?urls\.ts"/, f);
   // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=`

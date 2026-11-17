@@ -1378,7 +1378,12 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.kind)).toBe("selection");
   expect(await page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(0);
   await expect(log.locator(".runhead").last()).toContainText("Run selection: line 7");
-  expect(await page.evaluate(() => window.__dofile.state.log.value.at(-1).text)).toContain("\n42\n");
+  expect(
+    await page.evaluate(() => {
+      const last = window.__dofile.state.log.value.at(-1);
+      return last && "text" in last ? last.text : undefined;
+    }),
+  ).toContain("\n42\n");
   await expect(page.locator(".cm-err-line")).toHaveCount(0); // the new run cleared the old error
   if (!phone) await expect(statusBar(page)).toContainText("Last run: line 7 · ");
 });
@@ -2121,9 +2126,7 @@ test("a run that rewrites open files: a clean tab shows the run's version, keepi
   // the tab with edits: they stay, the tab stays unsaved, and the banner says the run changed it
   await open(page, "u.csv");
   await expect(page.locator(".cm-content")).toContainText("mine");
-  expect(await page.evaluate(() => window.__dofile.state.tabs.value.find((t: any) => t.path === "u.csv").dirty)).toBe(
-    true,
-  );
+  expect(await page.evaluate(() => window.__dofile.state.tabs.value.find((t) => t.path === "u.csv")?.dirty)).toBe(true);
   await expect(banner.first()).toContainText(
     "Your unsaved edits are still in the editor; saving them overwrites the file the run wrote.",
   );

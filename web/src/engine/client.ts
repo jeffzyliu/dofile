@@ -125,7 +125,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   #graphicsListeners = new Set<(p: GraphicsProgress) => void>();
 
   /**
-   * @param snapshot - the URL (ending in "/") of a snapshot from scripts/make-snapshot.mjs; a snapshot start needs
+   * @param snapshot - the URL (ending in "/") of a snapshot from scripts/make-snapshot.ts; a snapshot start needs
    * startFiles.
    * @param brotli - "wasm" forces brotli-wasm over the browser's own decoder.
    * @param memcap - the cap on the engine's WebAssembly heap, in MiB (memcap.ts); none: no cap.

@@ -20,7 +20,11 @@ declare global {
 }
 
 const PART = "**/snapshot/graphics.brotli.bin";
-const run = (page: Page, code: string) => page.evaluate((code) => window.__dofile.run(code), code);
+const run = async (page: Page, code: string) => {
+  const result = await page.evaluate((code) => window.__dofile.run(code), code);
+  if (!result) throw new Error(`no result: ${code}`);
+  return result;
+};
 
 /** Hold the part's request until release(); count its requests. */
 async function holdPart(page: Page) {

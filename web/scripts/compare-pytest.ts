@@ -1,15 +1,16 @@
 // Compares two folders of per-file pytest results (pytest_report.py), CPython baseline against Pyodide:
-//   node scripts/compare-pytest.mjs BASELINE_DIR PYODIDE_DIR
+//   node scripts/compare-pytest.ts BASELINE_DIR PYODIDE_DIR
 // Lists every test whose outcome differs, the files with no result on one side, and the slowest tests in Pyodide
 // against CPython. Exit 1 if any outcome differs.
 import { readdirSync, readFileSync } from "node:fs";
 
 const [baseDir, wasmDir] = process.argv.slice(2);
 if (!baseDir || !wasmDir) {
-  console.error("usage: compare-pytest.mjs BASELINE_DIR PYODIDE_DIR");
+  console.error("usage: compare-pytest.ts BASELINE_DIR PYODIDE_DIR");
   process.exit(2);
 }
-const load = (dir) =>
+type Report = Record<string, { tests: Record<string, { outcome: string; s: number; why: string }> }>;
+const load = (dir: string): Report =>
   Object.fromEntries(
     readdirSync(dir)
       .filter((f) => f.endsWith(".json"))
@@ -18,9 +19,9 @@ const load = (dir) =>
 const base = load(baseDir),
   wasm = load(wasmDir);
 
-const count = {},
-  diffs = [],
-  slow = [];
+const count: Record<string, number> = {},
+  diffs: { id: string; base: string; wasm: string; why: string }[] = [],
+  slow: { id: string; ratio: number; b: number; w: number }[] = [];
 for (const f of Object.keys(base)) {
   if (!wasm[f]) continue;
   for (const [id, b] of Object.entries(base[f].tests)) {

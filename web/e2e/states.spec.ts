@@ -559,7 +559,12 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
   const banner = bannerOf(page, "You reset the engine.");
   await expect(banner).toBeVisible();
   await expect.poll(() => engineState(page), { timeout: 300_000 }).toBe("ready");
-  expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs ?? 0)).toBe(0);
+  expect(
+    await page.evaluate(() => {
+      const data = window.__dofile.state.data.value;
+      return data && "nobs" in data ? data.nobs : 0;
+    }),
+  ).toBe(0);
   // with nothing to lose: no question, the engine resets at once
   await dismissBanner(page, { b: "reset" });
   await more();
@@ -571,9 +576,14 @@ test("Reset asks once anything has run on the engine (data, a global, a scalar);
   await expect.poll(() => engineState(page), { timeout: 300_000 }).toBe("ready");
   expect(await page.evaluate(() => window.__dofile.state.engineRuns.value)).toBe(0); // a new engine: nothing has run
   expect((await page.evaluate(() => window.__dofile.run("global g hello\nscalar k = 3")))?.rc).toBe(0);
-  expect(await page.evaluate(() => window.__dofile.state.data.value?.nobs ?? 0)).toBe(0); // no data
+  expect(
+    await page.evaluate(() => {
+      const data = window.__dofile.state.data.value;
+      return data && "nobs" in data ? data.nobs : 0;
+    }),
+  ).toBe(0); // no data
   const res = await page.evaluate(() => window.__dofile.state.results.value);
-  for (const k of ["e", "r"]) {
+  for (const k of ["e", "r"] as const) {
     const r = res?.[k] ?? { scalars: {}, macros: {}, matrices: {} };
     expect(Object.keys({ ...r.scalars, ...r.macros, ...r.matrices }), k).toEqual([]); // and no e() or r() results
   }
