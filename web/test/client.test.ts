@@ -721,6 +721,17 @@ test("a worker's error is said as `crashed`, with the reason; the transport neit
   });
   assert.equal(made, 1, "no restart: that is the machine's to say (RESET, then TWICE)");
   assert.notEqual(eng.worker, null, "and it is not ended until the machine says so");
+  // the page gets an ErrorEvent: the thrown value is in `error`, and the event itself has no name
+  const { eng: event, workers: ws } = scripted(starts);
+  const heard: Said = [];
+  await startWorker(event, null, heard);
+  ws[0].onerror!({ message: "Uncaught RangeError: Out of memory", error: new RangeError("Out of memory") } as any);
+  assert.deepEqual(heard.at(-1), {
+    type: "crashed",
+    cause: "error",
+    reason: "memory",
+    detail: "Uncaught RangeError: Out of memory",
+  });
   // a crash of a worker that is up, with another error
   const { eng: other, workers } = scripted(starts);
   const said: Said = [];

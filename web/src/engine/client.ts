@@ -591,7 +591,14 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     };
     worker.onerror = (e: any) => {
       const what = String(e?.message ?? e);
-      reply({ type: "crashed", cause: "error", reason: reasonOf({ name: e?.name }), detail: what });
+      // an ErrorEvent holds the thrown value in `error`; a test or another browser may hand over the value itself
+      const thrown = e?.error ?? e;
+      reply({
+        type: "crashed",
+        cause: "error",
+        reason: reasonOf({ name: thrown?.name, type: thrown?.type }),
+        detail: what,
+      });
     };
     // A sync that end() cuts loses nothing: its journal row stays, and the next worker copies the whole store. A
     // database the browser closes under the page ("Clear site data") may leave /work with files no row explains: that
