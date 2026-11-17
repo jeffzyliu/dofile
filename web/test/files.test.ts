@@ -788,6 +788,8 @@ test("a run's files are kept but /work cannot take the page's version afterwards
   const said: Answer<"start-worker">[] = [];
   await startWorker(eng, null, said);
   const r = await runOn(eng, writes("out.txt", "x"));
+  // the run's answer comes first: a crash said before it would cut the run (rc 9998) and lose its result
+  assert.notEqual(said.at(-1)!.type, "crashed", "the run's answer comes before folderError");
   assert.equal(r.rc, 0, r.log);
   assert.deepEqual([r.files, r.store_error], [kept, undefined], "the files were kept: the run does not say otherwise");
   for (let i = 0; i < 100 && said.at(-1)!.type !== "crashed"; i++) await sleep(5);

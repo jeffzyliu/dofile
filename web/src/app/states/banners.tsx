@@ -290,8 +290,7 @@ export function StoreFailedBanner({ banner }: { banner: BannerOf<"store-failed">
         </>
       }
     >
-      <b>The engine can't read your files.</b> This browser wouldn't open the storage where dofile keeps them, so the
-      engine started with an empty folder. Reload the page to try again.
+      <b>Your files couldn't be opened:</b> the browser refused to store them. Reload the page to try again.
     </Banner>
   );
 }

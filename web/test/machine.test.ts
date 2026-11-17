@@ -722,7 +722,7 @@ const CELLS = {
         name: "the first crash: the engine's folder",
         from: row(r),
         feed: { type: "crashed", cause: "folder", reason: "unknown", detail: "ENOTDIR" },
-        want: wantReset("crash", "the engine's copy of your files fell out of step (ENOTDIR)"),
+        want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)"),
       },
       twice("memory", "error"),
       twice("unknown", "error"),
@@ -748,7 +748,7 @@ const CELLS = {
       name: "the engine's folder",
       from: row(r),
       feed: { type: "crashed", cause: "folder", reason: "unknown", detail: "ENOTDIR" },
-      want: wantReset("crash", "the engine's copy of your files fell out of step (ENOTDIR)"),
+      want: wantReset("crash", "the engine's version of your files was out of date (ENOTDIR)"),
     },
   ],
   RUN: (r) => [

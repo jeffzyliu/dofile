@@ -416,7 +416,7 @@ const crashReason = (e: EventOf<"crashed">): string =>
   ({
     error: `the engine crashed (${e.detail})`,
     storage: "the browser closed the file storage",
-    folder: `the engine's copy of your files fell out of step (${e.detail})`,
+    folder: `the engine's version of your files was out of date (${e.detail})`,
   })[e.cause];
 
 // ---- table ----

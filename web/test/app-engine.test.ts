@@ -1166,3 +1166,23 @@ test("a worker that could not open the file store: ready, and the store-failed b
     detail: "VersionError: the database is newer",
   });
 });
+
+test("the store-failed banner goes when a later start opens the store (a reset after a store error that passed)", async () => {
+  await load({ cached: true });
+  await begin();
+  client.worker.reply({ type: "started", storeFailed: true });
+  assert.deepEqual(
+    banners().map((b) => b.b),
+    ["store-failed"],
+  );
+  client.worker.reply(CRASH);
+  await tick();
+  await begin();
+  client.worker.reply({ type: "started" });
+  state("ready");
+  assert.deepEqual(
+    banners().map((b) => b.b),
+    ["reset"],
+    "the new worker copied the files: no store-failed banner",
+  );
+});

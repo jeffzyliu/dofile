@@ -503,8 +503,10 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
 test("the storage, store-failed, reset and download-failed banners", async ({ page }) => {
   await addBanner(page, { b: "store-failed" });
   // on a phone every view draws it; the hidden views' copies are display: none
-  const store = page.locator(".banner:visible", { hasText: "The engine can't read your files." });
-  await expect(store).toContainText("so the engine started with an empty folder. Reload the page to try again.");
+  const store = page.locator(".banner:visible", { hasText: "Your files couldn't be opened:" });
+  await expect(store).toContainText(
+    "Your files couldn't be opened: the browser refused to store them. Reload the page to try again.",
+  );
   await expect(store.getByRole("button", { name: "Reload the page" })).toBeVisible();
   await store.getByRole("button", { name: "Dismiss" }).click();
   await expect(store).toHaveCount(0);

@@ -362,6 +362,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "end-run":
         return runs.ended(effect.result);
       case "engine-ready":
+        S.dismiss({ b: "store-failed" }); // this start opened the store; a start that did not adds it again after this
         return runs.engineReady();
       case "engine-gone":
         return runs.engineGone();
