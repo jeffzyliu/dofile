@@ -18,6 +18,7 @@ The build spec for the pages is [`SPEC.md`](SPEC.md). This README is the history
 | `axe.mjs`, `tabwalk.mjs`, `contrast.mjs`, `fonts.mjs` | the checks (`cd web && npm run axe`, `tabwalk`, `contrast`, `fonts`) |
 | [`staging.md`](staging.md) | the R5 note (web audit): who stages `public/`, who reads it, and the design that replaces the config's module-load copies |
 | `shot.mjs` | screenshots any page with Playwright from `web/node_modules` |
+| `workspace.md` | design note S0 of the web audit (`../web-audit-plan.md`, section 6): who owns the file list, the tabs and the open documents, the order of writes, the target modules. Proposed 2026-11-16; S1 to S6 and R7r are built from it once approved |
 
 Each folder's README has the commands that rebuild its renders; renders are not committed.
 
