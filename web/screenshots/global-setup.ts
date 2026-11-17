@@ -21,6 +21,6 @@ export default async function globalSetup() {
     )
   )
     throw new Error(
-      `${out} was built for other addresses than the local ones: build it with DOFILE_URLS=local and E2E_PORT=${new URL(LOCAL_EDITOR_URL).port - 1}.`,
+      `${out} was built for other addresses than the local ones: build it with DOFILE_URLS=local and E2E_PORT=${Number(new URL(LOCAL_EDITOR_URL).port) - 1}.`,
     );
 }

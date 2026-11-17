@@ -6,13 +6,14 @@
 // two baselines of one commit is not in this file (the report says which, and why).
 import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
-import { expect, isPhone, ready, settle, startEngine, statusBar, test, unblocked } from "../e2e/fixtures";
+import { expect, isPhone, ready, settle, startEngine, test, unblocked } from "../e2e/fixtures";
 import {
   addBanner,
   openDialog,
   type PhoneTab,
   seedLastRun,
   seedLog,
+  seedStatusBar,
   showEngine,
   showGraphFull,
   showPhoneTab,
@@ -54,6 +55,14 @@ async function shot(page: Page, name: string, mask: Locator[] = []) {
   await expect.soft(page, name).toHaveScreenshot(`${name}.png`, { mask });
 }
 
+/** The status bar's inputs a run measures (its time, the memory) put back to fixed values, and then the shot. */
+const ran = { kind: "file", path: "analysis.do", fresh_locals: true, rc: 0, line: null, seconds: 1 } as const;
+
+async function pinned(page: Page, name: string, lastRun: Parameters<typeof seedStatusBar>[1]["lastRun"]) {
+  await seedStatusBar(page, { persisted: true, memory: { heap_bytes: 160e6, data_bytes: 1e6 }, lastRun });
+  await shot(page, name);
+}
+
 const tree = (page: Page) => page.getByRole("tree", { name: "Files" });
 const row = (page: Page, name: RegExp) => tree(page).getByRole("treeitem", { name });
 const toolbar = (page: Page) => page.getByRole("banner");
@@ -65,23 +74,23 @@ test("ready with the sample, then a run: the engine walk (log, results table, gr
   await startEngine(page);
   await ready(page);
   await settle(page, { store: true });
-  await shot(page, "ready-sample", [statusBar(page)]);
+  await pinned(page, "ready-sample", null);
 
   const r = await page.evaluate((code) => window.__dofile.run(code), analysis);
   expect(r?.rc, r?.log.slice(-1500)).toBe(0);
   await view(page, "log");
-  await shot(page, "log-after-run", [statusBar(page)]);
+  await pinned(page, "log-after-run", ran);
 
   if (isPhone(page)) await showPhoneTab(page, "results");
   else await page.getByRole("tab", { name: "Results", exact: true }).click();
-  await shot(page, "results-table", [statusBar(page)]);
+  await pinned(page, "results-table", ran);
 
   if (!isPhone(page)) {
     await page.getByRole("tab", { name: "Graph", exact: true }).click();
-    await shot(page, "graph", [statusBar(page)]);
+    await pinned(page, "graph", ran);
   }
   await showGraphFull(page);
-  await shot(page, "graph-full", [statusBar(page)]);
+  await pinned(page, "graph-full", ran);
   await page.keyboard.press("Escape");
 
   await showTabs(
@@ -94,7 +103,7 @@ test("ready with the sample, then a run: the engine walk (log, results table, gr
     "editor",
   );
   await expect(page.locator(".dta-view tbody tr").first()).toBeVisible();
-  await shot(page, "dta-view", [statusBar(page)]);
+  await pinned(page, "dta-view", ran);
 });
 
 test("several tabs, one with an unsaved edit", async ({ page }) => {
