@@ -8,6 +8,7 @@
       "!wheels",
       "!test-results",
       "!.dofile",
+      "!.shots",
       "!playwright-report",
       "!src/stata/commands.json",
       "!src/app/sample-files.ts",
