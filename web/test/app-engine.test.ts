@@ -1148,3 +1148,21 @@ test('C2: "Not now" during the download aborts it: no start follows, also when t
   assert.equal(client.workers.length, 0);
   expectDrops([{ type: "download-done", n: 3, row: "declined", why: "stale" }]);
 });
+
+test("a worker that could not open the file store: ready, and the store-failed banner; a start that finds a newer database fails with reason updated", async () => {
+  await load({ cached: true });
+  await begin();
+  client.worker.reply({ type: "started", storeFailed: true });
+  state("ready");
+  assert.deepEqual(banners(), [{ b: "store-failed" }]);
+
+  await load({ cached: true });
+  await begin();
+  client.worker.reply({ type: "start-failed", reason: "updated", detail: "VersionError: the database is newer" });
+  assert.deepEqual(S.engine.value, {
+    s: "failed",
+    reason: "updated",
+    message: engine.UPDATED,
+    detail: "VersionError: the database is newer",
+  });
+});

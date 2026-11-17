@@ -500,7 +500,14 @@ test("one clock: the Break pill, the status bar and the banners agree, and Stopp
   await expect(breakBtn).toHaveCount(0);
 });
 
-test("the storage, reset and download-failed banners", async ({ page }) => {
+test("the storage, store-failed, reset and download-failed banners", async ({ page }) => {
+  await addBanner(page, { b: "store-failed" });
+  const store = bannerOf(page, "The engine can't read your files.");
+  await expect(store).toContainText("so the engine started with an empty folder. Reload the page to try again.");
+  await expect(store.getByRole("button", { name: "Reload the page" })).toBeVisible();
+  await store.getByRole("button", { name: "Dismiss" }).click();
+  await expect(store).toHaveCount(0);
+
   await addBanner(page, { b: "storage" });
   await addBanner(page, { b: "download-failed" });
   const storage = bannerOf(page, "This browser may clear your files");
