@@ -2,10 +2,11 @@
 // "Not affiliated with StataCorp" shows from 1200 px only (app.css): under it the bar has no room for it beside the
 // longest last run. Screen readers get the full sentence (AFFILIATION).
 import type { ComponentChildren } from "preact";
-import { stageStatus, stagesOf } from "../engine.ts";
+import { megabytes } from "../bytes.ts";
 import { snapshotStart } from "../env";
 import { engine, graphicsPart, lastRun, memory, persisted } from "../state.ts";
 import { breakAsked, engineLoading, engineUp } from "../states/predicates.ts";
+import { stageStatus, stagesOf } from "../states/words.ts";
 import type { EngineState } from "../types.ts";
 import { resetsIn, since } from "./clock.ts";
 import { lastRunWords, linesWords, memoryTitle, memoryWords, ticking } from "./words.ts";
@@ -115,7 +116,7 @@ export function GraphsLoading() {
   const g = graphicsPart.value;
   if (g?.state !== "fetching" || !engineUp(engine.value)) return null;
   const pct = g.total ? Math.min(100, (100 * g.received) / g.total) : 0,
-    mb = (n: number) => (n / 1e6).toFixed(1);
+    mb = (n: number) => megabytes(n, 1);
   return (
     <span
       class="graphs-loading"

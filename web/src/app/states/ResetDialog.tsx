@@ -2,9 +2,9 @@
 // has run on it since it started; otherwise it opens the dialog (words.ts resetAsks). If the engine can no longer be
 // reset while the dialog is open (it failed, another tab took it), the dialog closes itself.
 import { useEffect } from "preact/hooks";
-import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";
 import { dialog, engine, engineRuns } from "../state.ts";
+import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { engineUp } from "./predicates.ts";
 import { resetAsks } from "./words.ts";

@@ -59,8 +59,8 @@ Object.defineProperty(globalThis, "localStorage", {
 
 export const S = await import("../src/app/state.ts");
 export const engine = await import("../src/app/engine.ts");
-export const { runCode, runCommand, clearLog, canClearLog, addFileGraph, moreRows, handlers, MAX_GRAPHS } =
-  await import("../src/app/run.ts");
+export const { runCode, runCommand, clearLog, canClearLog, moreRows, handlers } = await import("../src/app/run.ts");
+export const { addFileGraph, MAX_GRAPHS } = await import("../src/app/graphs.ts");
 export const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.ts");
 export const { startEngine } = await import("../src/app/start.ts");
 export const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");

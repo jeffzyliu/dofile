@@ -398,7 +398,7 @@ matrix after it; no mapping stands between them. A row below that lists two stat
 | `running` | "**Running** lines 14–15 · 3.4 s" (`E?r`); "**Running** · 12 s" (`S 11`) | Log banner (`E?r`): "Running lines 14–15 · **3.4 s**. Break stops between commands. If one long command doesn't stop within 5 s, the engine is reset: **the data in memory is lost**; your files are kept." | `aria-disabled` | "Break", live |
 | `breaking` | "**Stopping** · resets in 4 s", the run's time | `S 9` from the press until the engine confirms (OQ-21): "**Stopping…** This command can't stop until it ends. **In 4 s the engine is reset:** the data in memory is lost; your files are kept." / "Don't reset: wait for it" (focused), after 1 s | disabled | "Stopping…", disabled |
 | `waiting` | "**Waiting** · Break after this command", the run's time | `S 9b`, a banner with `tabindex="-1"` that takes the focus: "**Waiting for this command to end.** The Break is still pending: the run stops after this command, with the data kept. If it never ends, **Reset now** resets the engine: the data in memory is lost; your files are kept." | disabled | "Reset now", live; asks nothing |
-| `failed` | "**Not started** · the engine didn't start" | `S 6` (not `role="alert"`: the live region says "The engine didn't start" once): "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Try again", after a message that says "Close other tabs, then try again" (`FAILED` in `engine.ts`). | "Start engine" where the banner has "Try again" (download, memory, unknown): the same new try. Else (no-wasm, updated) "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
+| `failed` | "**Not started** · the engine didn't start" | `S 6` (not `role="alert"`: the live region says "The engine didn't start" once): "**The engine didn't start:** this browser has no WebAssembly support. Your files are safe: you can still edit and download them." / "Browsers that work" (a link), "Download all (.zip)". Other reasons, other first action: download failed, "Try again"; not enough memory, "Try again", after a message that says "Close other tabs, then try again" (`FAILED` in `states/words.ts`). | "Start engine" where the banner has "Try again" (download, memory, unknown): the same new try. Else (no-wasm, updated) "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
 | `failed-twice` | "**Stopped** · failed twice" | `S 7` (not `role="alert"`; the live region says it once): "**The engine stopped after failing twice (out of memory).** It won't restart by itself, since each attempt can use a lot of memory. Your files are safe: you can still edit and download them." / "Reload the page", "Download all (.zip)" | "Not started" (the play icon; named "Not started: the engine didn't start, so Run is not available"), disabled | disabled |
 | `other-tab-idle`, `other-tab-taking` | "**Paused** · another tab has the engine" | `WS 6`, blocking: "dofile is open in another tab" / "Only one tab can use your files at a time, so they are not overwritten. The other tab keeps its data until you take over here." / "Close editor" (focused, so a stray Enter does not take over), "Use dofile in this tab". WS 6 draws "Close this tab", but a page may close only a tab a script opened: "Close editor" goes to the landing page (`landing.html`, built in step 5) | none shown (hidden, under the blocking dialog). "Start engine" in `other-tab-idle` (Ctrl/Cmd+Enter, the command line's button, should the dialog not be up) opens this dialog again and takes no lock; off in `other-tab-taking` | none |
 
@@ -694,7 +694,7 @@ As built:
   (`DownloadError`, `SnapshotError`), never from a message's text.
 - **Stages:** the worker posts `{stage}` with a typed id: `download` (the snapshot start: the cache read, also after the
   page's `download()`), `unpack`, `python`, `files`, `packages`, `engine`. The snapshot start has no `packages`; `?snapshot=0`
-  has no `unpack` (OQ-11). The words are the controller's (`stageWords`, `stageStatus`). A failed fetch during the start ends
+  has no `unpack` (OQ-11). The words are `states/words.ts`' (`stageNow`, `stageStatus`). A failed fetch during the start ends
   it with a `DownloadError`.
 - **Test hook:** with `?test` in the URL the page sets `window.__dofile = {engine, store, start, persisted, engineBytes, state,
   run, breakRun, reset, selection, drops}`: `engine` is the transport (its facts `worker` and `startup`, and `cached()` and
@@ -1014,7 +1014,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `drops()` lists the last 200 events that changed nothing (`{type, n?, row, why}`, `why` "stale" or "not-valid"). A second
     `connectEngine` replaces the wiring: the machine, the queue, the timers and the drop record are cleared, and nothing of
     the earlier wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
-    (`UPDATED` is reason "updated"'s); `stageWords` (the live region) and `stageStatus` (the status bar) are the words of each
+    (`UPDATED` is reason "updated"'s); `stageNow` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
     `history`; it also moves `graphIndex` to the newest graph (views write `graphIndex` too). It reads no engine state: the engine controller tells it, through the
@@ -1106,7 +1106,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
     ("Reset now"), `openFile` (Go to line in a file that is not open), `store.write`, `saveAs` (Download log, the
-    save-failed banner's Download), `textInStore` and `editorCommands.reload` (the run-changed banner's "Reload from the
+    save-failed banner's Download), `reloadFromStore` (the run-changed banner's "Reload from the
     run"), `showToast`, `say`. `keepWaiting` is 4d's (the stopping banner). On a phone the command line's field and the editor's text are 16 px or more, or iOS
     Safari zooms in when they take the focus: `app.css` sets every `input`, `textarea` and `[contenteditable]` (CodeMirror's
     `.cm-content`) to at least 16 px under 700 px; do not set a smaller size on them there.
@@ -1243,7 +1243,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     .png from the files is on the light card; the full-size view is a fixed overlay (not a native modal dialog, whose top
     layer would hide the toast) with its own focus trap, which leaves the keys to a native dialog opened over it, and a
     move to another graph is said through `say()` (the graph's alt text); the .dta bar's size is the tree's
-    (`formatSize`, decimal units); picking the picked
+    (`formatSize` in `app/bytes.ts`, decimal units); picking the picked
     name again clears it; a Browse cell over 60 characters, or with a line break, is cut to one line (a break shows as ↵)
     and shows whole when pressed; the r() scalars start open when e() has no scalars; an open matrix closes when another
     run replaces the results; Load says "Loaded wages.dta" (or "Couldn't load wages.dta: r(601)") in a toast when it
@@ -1306,7 +1306,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (the reason, a cause in parentheses cut off) or, with no cross-origin isolation, "Break reset the engine." "This page
     can't ask a run to stop, so Break resets it." / crash "The engine crashed and was reset." (a storage failure: "The browser closed the file storage, and the engine was reset."); each then "The data in memory is lost; your files are kept." Running banner: "Running lines 14–15 · 3.4 s" also "Running line 9",
     "Running analysis.do", "Running a command". The failed banner: "The engine didn't start." then the engine's
-    `message` for the reason (`FAILED` in `engine.ts`), then "Your files are safe: you can still edit and download them."
+    `message` for the reason (`FAILED` in `states/words.ts`), then "Your files are safe: you can still edit and download them."
     The declined banner's "(about 48 MB)" is the build's size. Failed twice: "The engine stopped after failing twice (out of memory)." (the head) then "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe: you can still edit and download them." (the parenthesis only for reason memory) `DownloadFailedBanner` (OQ-16, storage unavailable): "Your files couldn't be downloaded. This browser wouldn't open the storage where dofile keeps your files. Try again, or reload the page." / Try again, Dismiss. Stopping banner at 0 s: "**The engine is being
     reset now:** the data in memory is lost; your files are kept."  The memory banner is not in prototype 1: no limit is measured (OQ-8); its code is removed. Progress rows: "Downloading the engine",
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
@@ -1387,7 +1387,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   reason `build()` gives for the same error: "download" for a failed fetch, "updated" as below, else "unknown"; `kind: "updated"`, from `download()` or `build()`, is `failed` with
   reason "updated": 4d offers "Reload the page", keyed on the reason. The message of reason "updated" says in plain words
   that the site has a newer version and the page must be reloaded (`UPDATED`), with no cause. The visitor's `message` is one
-  fixed sentence per reason (`FAILED` in `engine.ts`; `FAILED_TWICE` for `failed-twice`): what happened and what to do (try
+  fixed sentence per reason (`FAILED` in `states/words.ts`; `FAILED_TWICE` for `failed-twice`): what happened and what to do (try
   again, reload the page, close other tabs, another browser), with no command, file name, byte count or build term. The
   cause (it may name `npm run snapshot`, a file, bytes) is `detail`, logged to the console by the effect `warn` and not shown
   by default. No message names `?snapshot=0`, and there is no automatic fallback to the normal boot. The failed states'

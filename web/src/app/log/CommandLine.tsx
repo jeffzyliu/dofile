@@ -19,7 +19,7 @@ import { since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { GraphsLoading, stateWords } from "../editor/StatusBar";
 import { jumpLine, linesWords, memoryTitle, memoryWords, refusedRunWords, seconds, ticking } from "../editor/words.ts";
-import { saveAs } from "../files.ts";
+import { saveAs } from "../files/save.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
 import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";

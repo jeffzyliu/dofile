@@ -12,7 +12,6 @@ import type {
   Effect,
   Env,
   Event,
-  Line,
   Machine,
   PlainEvent,
   Reply,
@@ -29,48 +28,8 @@ import { editorAsked } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
 import { engineWriter, graphicsWriter } from "./state.ts";
-import { stageNow } from "./states/words.ts";
-import type { EngineState, FailReason, RunHead, Stage } from "./types.ts";
-
-// ---- the words ----
-
-/** The stages a start goes through, in order: the snapshot start, or ?snapshot=0. */
-export const stagesOf = (snapshot: boolean): Stage[] =>
-  snapshot
-    ? ["download", "unpack", "python", "files", "engine"]
-    : ["download", "python", "files", "packages", "engine"];
-
-/** What the live region and the dialog's rows say at each stage. The status bar says the same phrase with a small first
- *  letter, after its "Starting · ". */
-export const stageWords: Record<Stage, string> = stageNow;
-export const stageStatus = Object.fromEntries(
-  Object.entries(stageNow).map(([k, v]) => [k, v[0].toLowerCase() + v.slice(1)]),
-) as Record<Stage, string>;
-
-/** The message of a start that failed with reason "updated". Views key on the reason, not on these words. */
-export const UPDATED = "dofile has a newer version on this site. Reload the page to use it.";
-
-/** What a failed start tells the visitor (`message`), by reason: what happened and what they can do, in plain words.
- *  The developer's cause is `detail`, and goes to the console. */
-export const FAILED: Record<FailReason, string> = {
-  "no-wasm": "This browser can't run the engine: it has no WebAssembly support. Try another browser.",
-  download: "The engine didn't download completely. Check your connection, then try again.",
-  memory: "There wasn't enough memory to start the engine. Close other tabs, then try again.",
-  updated: UPDATED,
-  unknown: "Something went wrong while starting the engine. Try again, or reload the page.",
-};
-/** The message of `failed-twice`, whatever the reason: it is not started again, so only a reload helps. */
-export const FAILED_TWICE =
-  "The engine failed twice while starting, so it won't try again by itself. Reload the page to try again.";
-
-/** The fixed lines of the live region. A stage's line is stageWords. */
-const SAY: Record<Exclude<Line, { stage: Stage }>, string> = {
-  ready: "Engine ready",
-  reset: "Engine reset",
-  "download-stopped": "Download stopped",
-  failed: "The engine didn't start",
-  "failed-twice": "The engine stopped after failing twice",
-};
+import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
+import type { EngineState, RunHead } from "./types.ts";
 
 // ---- the wiring ----
 
@@ -396,7 +355,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "add-store-banner":
         return S.addBanner({ b: "store-failed", cause: effect.cause });
       case "say":
-        return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageWords[effect.line.stage]);
+        return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageNow[effect.line.stage]);
       case "warn":
         return console.warn(`[dofile] ${effect.text}`);
       default:

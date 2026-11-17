@@ -14,10 +14,7 @@ import {
   StorageBanner,
   StoreFailedBanner,
 } from "./states/banners";
-import type { Banner, BannerName } from "./types.ts";
-
-export type BannerOf<K extends BannerName> = Extract<Banner, { b: K }>;
-export type Place = "files" | "editor" | "log" | "output";
+import type { Banner, BannerName, BannerOf, Place } from "./types.ts";
 
 const VIEWS: { [K in BannerName]: { place: Place; phone?: "every"; view: ComponentType<{ banner: BannerOf<K> }> } } = {
   reset: { place: "log", view: ResetBanner },
