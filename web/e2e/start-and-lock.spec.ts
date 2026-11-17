@@ -4,7 +4,7 @@
 // starts no engine until start() is called), and click the shell's own dialogs (the download prompt, the take-over).
 import type { BrowserContext, Page } from "@playwright/test";
 import { LOCAL_SITE_URL } from "../scripts/urls.ts";
-import { expect, retryFirstGoto, SAMPLE, startEngine, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, retryFirstGoto, SAMPLE, startEngine, test, toolbarOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type StartFiles = {
   built: number;
@@ -367,7 +367,7 @@ test("tab lock: a second tab gets no engine and writes nothing; taking over ends
   await expect(otherTab(second)).toContainText("The other tab keeps its data until you take over here.");
   await expect(otherTab(second).getByRole("button", { name: "Close editor" })).toBeFocused();
   expect(await second.evaluate(() => window.__dofile.engine.worker)).toBeNull(); // no engine
-  await expect(second.locator(".toolbar").getByRole("button", { name: /^Run/ })).toHaveCount(0);
+  await expect(toolbarOf(second).getByRole("button", { name: /^Run/ })).toHaveCount(0);
   const refused = await second.evaluate(() =>
     window.__dofile.store.write("second-tab.do", new Uint8Array([49])).then(
       () => "written",

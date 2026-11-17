@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { bannerOf, expect, isPhone, putFiles, storedText, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { bannerOf, expect, isPhone, putFiles, settle, storedText, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 import type { DofileHook } from "./hook";
 import { markDirty, openDialog } from "./seed";
 
@@ -166,7 +166,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   if (!isPhone(page))
     await expect(page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { name: "b.do" })).toBeFocused();
   else await expect(page.locator(".cm-content")).toBeFocused();
-  await page.waitForTimeout(100); // any later move would come by now
+  await settle(page); // the three frames after the tab took the focus: a later move would have come
   expect(await movesOf(page)).toEqual(isPhone(page) ? ["textbox:2"] : ["tab:b.do×"]);
   // open it again, with edits, for Don't save
   if (isPhone(page)) await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Files" }).click();
@@ -185,7 +185,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   if (!isPhone(page)) {
     const tabs = page.getByRole("tablist", { name: "Open files" });
     await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused(); // the tab now selected, not the page
-    await page.waitForTimeout(100); // any later move would come by now
+    await settle(page); // the three frames after the tab took the focus: a later move would have come
     // one move: straight to that tab, not through the editor first (the dialog leaves the focus to the close)
     expect(await movesOf(page)).toEqual(["tab:b.do×"]); // the tab holds its × button
     await page.keyboard.press("Delete"); // the last tab: the focus goes to the file tree
@@ -194,7 +194,7 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
   } else {
     // the phone shows no tabs: one move, to the editor, which focusAfterClose chooses (not first back to the switcher)
     await expect(page.locator(".cm-content")).toBeFocused();
-    await page.waitForTimeout(100);
+    await settle(page); // the three frames after the editor took the focus: a later move would have come
     expect(await movesOf(page)).toEqual(["textbox:2"]);
   }
 });
@@ -258,7 +258,7 @@ test("a renamed row drawn after the visitor clicked into the editor leaves the f
   await expect(editor).toBeFocused();
   await page.evaluate(() => (window as any).__answer());
   await expect(row(page, /^b\.do/)).toBeVisible();
-  await page.waitForTimeout(300); // a late focus of the row would have come by now
+  await settle(page); // the three frames after the row was drawn: its late focus (a Preact effect) would have run
   await expect(editor).toBeFocused();
   await page.keyboard.type("z");
   await expect(editor).toContainText("z");
@@ -292,7 +292,7 @@ test("a renamed row drawn after the visitor clicked another row leaves the focus
   await expect(row(page, /^c\.do/)).toBeFocused();
   await page.evaluate(() => (window as any).__answer());
   await expect(row(page, /^b\.do/)).toBeVisible();
-  await page.waitForTimeout(300); // a late focus of the renamed row would have come by now
+  await settle(page); // the three frames after the renamed row was drawn: its late focus would have run
   await expect(row(page, /^c\.do/)).toBeFocused();
   // the request was ended when b.do was drawn, not left to fire when b.do is made the roving row some other way
   expect(await page.evaluate(() => window.__dofile.focusWanted.value)).toBeNull();
@@ -330,7 +330,7 @@ test("an item that turns enabled while a menu is open does not move the focus", 
     await store.write("a.do", new TextEncoder().encode("display 1\n"));
   });
   await expect(item("Download all (.zip)")).not.toHaveAttribute("aria-disabled", "true");
-  await page.waitForTimeout(300); // a late move of the focus would have come by now
+  await settle(page); // the three frames after the item turned enabled: a late move of the focus would have run
   await expect(item("Restore the sample")).toBeFocused();
   await page.keyboard.press("ArrowUp"); // the keys go on from the focused item, and the one that turned enabled takes part
   await expect(item("Download all (.zip)")).toBeFocused();

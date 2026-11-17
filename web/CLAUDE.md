@@ -89,7 +89,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   (the page) and `src/engine/worker*.ts` (the Worker); only the controller calls `transition()` and `initial()`, and its
   queue is written only in `enqueue()` (and emptied in `connectEngine()`), which only `dispatch()` and `reply()` call;
   `reply()` has no cast and puts its own effect's ticket on the event, and the `engine` signal is written with `view()`; each writer object is named only by `state.ts` and its owner;
-  the Worker is posted to only in `#send`; no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
+  the Worker is posted to only in `#send`; no `.focus()` and no store write (`write`, `mkdir`, `rename`, `remove`, `change`, `applyRun`) inside a `setTimeout` or `setInterval` callback in `src/app/` (a timer's late move is the one `settle` in `e2e/fixtures.ts` cannot see; a `requestAnimationFrame` or microtask is allowed; a callback that only calls a function which focuses is not seen); no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
   in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
   the writable signals `state.ts` exports are the views' own. `test/imports.test.ts` holds the rest: no view reaches the
   transport through value imports (transitive); `machine.ts` has two casts and no top-level variable, and the cast to
@@ -105,8 +105,11 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not `@playwright/test`. Its fixture answers
   `persisted()` true (`test.use({ persisted: false })` for the browser's own) and retries a stalled first `goto`; a context
   or page a test makes itself needs `keepFiles(context)` or `retryFirstGoto(page)`. The helpers several specs share
-  (`isPhone`, `ready`, `settled`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`,
-  `statusBar`) are in `fixtures.ts` too.
+  (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`,
+  `statusBar`, `toolbarOf`) are in `fixtures.ts` too. To assert that a late focus or write did not happen, wait for
+  the event the move would follow, then `settle(page)`: it covers moves made by tasks, microtasks, effects and frames
+  (and, with `{ store: true }`, the store's own order), not a timer over about 50 ms. A fixed sleep stays where it must
+  let a run go on (Break's loop) and where a run, dialog or download must not start.
 - **Dev servers listen on all interfaces** (LAN phones): every dev HTTP server (`dev`, `preview`, `cf:dev`) keeps `--host`
   or `--ip 0.0.0.0`; give any new one the same.
 - **The snapshot is the page's only start; there is no fallback.** `?snapshot=0` is the normal boot, a developer's

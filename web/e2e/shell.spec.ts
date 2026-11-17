@@ -2,7 +2,18 @@
 // now", "Start engine" as the way back to it and a run that does nothing with no engine; a stale snapshot refused with
 // reason "updated" (plain words in its message, the cause in its detail); ?snapshot=0 still starts. Also the phone
 // toast's place and the failed "Download all" banner.
-import { engineState, expect, putFiles, SAMPLE, settled, startEngine, statusBar, test } from "./fixtures"; // storage kept by default (fixtures.ts)
+import {
+  engineState,
+  expect,
+  putFiles,
+  SAMPLE,
+  settle,
+  settled,
+  startEngine,
+  statusBar,
+  test,
+  toolbarOf,
+} from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
   type EngineSeed,
   type Selection,
@@ -29,7 +40,7 @@ test("first visit: Esc does not dismiss the prompt; Not now leaves the page usab
     await expect(statusBar(page)).toContainText("No engine · Start engine downloads it");
   }
   // nothing offers to run: the toolbar's Run is "Start engine"
-  const bar = page.locator(".toolbar");
+  const bar = toolbarOf(page);
   await expect(bar.getByRole("button", { name: /^Run$/ })).toHaveCount(0);
   const start = bar.getByRole("button", { name: "Start engine" });
   await expect(start).toBeEnabled();
@@ -424,7 +435,7 @@ test("the folded file list with no files: opened by keyboard, the focus goes to 
   // the request ended there: a file that appears now does not take the focus
   await page.evaluate(() => window.__dofile.store.write("a.do", new TextEncoder().encode("1\n")));
   await expect(pane.getByRole("treeitem", { name: /^a\.do/ })).toBeVisible();
-  await page.waitForTimeout(300);
+  await settle(page); // the three frames after the row was drawn: a late focus would have run
   await expect(pane.getByRole("button", { name: "File actions" })).toBeFocused();
 });
 
@@ -624,7 +635,7 @@ test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ m
     await tree.getByRole("treeitem", { name: /^a\.do/ }).click();
     await expect(page.locator(".cm-content")).toHaveAttribute("aria-label", "Editor: a.do");
     // the toolbar's Save shows its chip and states its key; the note names the key
-    const save = page.locator(".toolbar").getByRole("button", { name: "Save" });
+    const save = toolbarOf(page).getByRole("button", { name: "Save" });
     await expect(save).toHaveAttribute("aria-keyshortcuts", /^(Meta|Control)\+S$/);
     expect((await keysInSight()).some((t) => /^(⌘|Ctrl) S$/.test(t))).toBe(true);
     expect((await keysInSight()).some((t) => note.test(t))).toBe(true);

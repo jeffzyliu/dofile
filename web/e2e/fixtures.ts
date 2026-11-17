@@ -74,6 +74,32 @@ export const ready = (page: Page) => expect.poll(() => engineState(page), { time
 export const settled = (page: Page) =>
   page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
+/** The end of a window in which something late could still happen, in place of a sleep that asserts "nothing happened
+ *  by now" (a late focus, a late write, a key's late effect). It covers a late move made by a task, a microtask, a
+ *  Preact effect or a frame, and (with `{ store: true }`) a store write, which the store applies in the order issued.
+ *  A move made by a timer of more than about 50 ms escapes it (a plant at 80 ms passed): the architecture rule "no focus
+ *  move or store write inside a setTimeout or setInterval callback" (biome/architecture.grit) forbids that in src/app. What it waits for:
+ *   - three frames, each followed by a task: what the page does at the next frame or in the next task (a Preact effect,
+ *     which runs after the next paint, a queued microtask, a scroll event, a timer of 0 ms) has run, and so has what
+ *     those did in turn (a signal set in an effect and the effect that follows it);
+ *   - with `{ store: true }`, a read of the store between them (its operations answer in the order they were issued, so
+ *     a write issued before it has landed), and two frames more for what the read's answer started.
+ *  Call it after the event the late thing would follow (an expect that the first, expected move happened). */
+export const settle = (page: Page, { store = false }: { store?: boolean } = {}) =>
+  page.evaluate(async (store) => {
+    const frame = () => new Promise<void>((done) => requestAnimationFrame(() => setTimeout(done, 0)));
+    for (let i = 0; i < 3; i++) await frame();
+    if (store) {
+      await window.__dofile.store.list();
+      await frame();
+      await frame();
+    }
+  }, store);
+
+/** The page's top bar: a desktop's toolbar, a phone's top bar (the only `banner`, as the other `header`s are inside a
+ *  region). */
+export const toolbarOf = (page: Page) => page.getByRole("banner");
+
 /** Wait until the tab lock has answered, so the store takes writes. */
 export const unblocked = (page: Page) => page.waitForFunction(() => window.__dofile?.store.blocked === false);
 
