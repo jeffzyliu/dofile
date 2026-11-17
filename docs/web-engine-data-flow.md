@@ -362,7 +362,10 @@ After every run (`applyRun(changes)`) it writes the run's changes and takes the 
 `interrupt` (the transport stores 2, SIGINT, in the buffer) and `start-break-timer` (the controller's `setTimeout`, 5
 seconds; the deadline is `resetAt` in the state). Pyodide checks the buffer and raises the signal; `browser.py`'s handler
 calls `request_break()` only while a run is on; the interpreter stops at the next safe point between commands with rc 1,
-data kept.
+data kept. The Break belongs to the run sent last: the transport clears the buffer as it posts a run, the worker lets
+Pyodide read it only during `browser.run`, and a Break read before the run is busy is put back for the run to read again.
+The transport writes SIGINT again every 100 ms until the run answers, since Pyodide's read and clear of the buffer are two
+steps and a store between them is lost.
 
 | State | Meaning | Leaves by |
 |---|---|---|
@@ -433,9 +436,9 @@ only other writer of `rows`.
 
 What Part 3 listed before step 3.5 was answered by its steps A to D. What remains:
 
-1. **A Break pressed between sending a run and the worker starting it is lost,** and the run ends as a 9998 reset. The worker
-   clears the interrupt buffer when a run starts (so a Break pressed while idle cannot stop the next run), and a Break in that
-   gap is cleared with it; the Break timer then runs out.
+1. (Closed: a Break pressed between sending a run and the worker starting it stops that run. The transport clears the
+   interrupt buffer when it posts a run, the worker lets Python read the buffer only during a run, and `browser.py` puts
+   back a Break it reads before the run is busy; "Break" in SPEC section 6.)
 2. (Closed: another page's upgrade of the database is a failed start with reason `updated`, and a worker that cannot open
    the store adds the `store-failed` banner; "Storage failures" above.)
 3. (Closed with 2.)

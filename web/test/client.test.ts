@@ -745,6 +745,65 @@ test("interrupt(n) puts SIGINT into the buffer the live worker was given at boot
   assert.equal(buffer[0], 0, "the worker was ended");
 });
 
+test("run() clears the buffer as it posts the run: a Break from before belongs to the run before; one after it is this run's, however long the run waits in the worker's queue", async () => {
+  let buffer!: Int32Array;
+  const { eng } = scripted((m, post) => {
+    if (m.op === "boot") buffer = m.args.interruptBuffer;
+    starts(m, post);
+  });
+  await startWorker(eng);
+  eng.interrupt(1); // pressed while the run before was ending
+  const running = eng.run(1, { code: "display 1" }, () => {});
+  assert.equal(Atomics.load(buffer, 0), 0, "cleared when the run was posted");
+  eng.interrupt(1);
+  assert.equal(Atomics.load(buffer, 0), 2, "nothing on the page clears it again before the worker takes the run");
+  eng.end(1, { kind: "stopped", reason: "x" });
+  await assert.rejects(running);
+});
+
+test("Break: a SIGINT the worker's Pyodide wrote 0 over (its read and its clear are two steps) is written again while the run is on, and not once it has answered", async () => {
+  let buffer!: Int32Array;
+  let answer!: () => void;
+  const { eng } = scripted((m, post) => {
+    if (m.op === "boot") buffer = m.args.interruptBuffer;
+    if (m.op === "run") answer = () => post({ id: m.id, result: { rc: 1 } });
+    starts(m, post);
+  });
+  await startWorker(eng);
+  const running = eng.run(1, { code: "while 1 {\n}" }, () => {});
+  await sleep(10);
+  eng.interrupt(1);
+  Atomics.store(buffer, 0, 0); // lost: Pyodide read 0 just before the store and cleared just after it
+  await sleep(250);
+  assert.equal(Atomics.load(buffer, 0), 2, "written again");
+  answer();
+  await running;
+  Atomics.store(buffer, 0, 0); // taken
+  await sleep(250);
+  assert.equal(Atomics.load(buffer, 0), 0, "nothing written once the run answered");
+});
+
+test("Break: a repeat for a run that has ended does not reach the next run", async () => {
+  let buffer!: Int32Array;
+  let answer!: () => void;
+  const { eng } = scripted((m, post) => {
+    if (m.op === "boot") buffer = m.args.interruptBuffer;
+    if (m.op === "run") answer = () => post({ id: m.id, result: { rc: 0 } });
+    starts(m, post);
+  });
+  await startWorker(eng);
+  const first = eng.run(1, { code: "display 1" }, () => {});
+  await sleep(10);
+  eng.interrupt(1); // the run ends on its own before Python reads it
+  answer();
+  await first;
+  void eng.run(1, { code: "display 2" }, () => {}).catch(() => {});
+  assert.equal(Atomics.load(buffer, 0), 0, "cleared as the next run is posted");
+  await sleep(250);
+  assert.equal(Atomics.load(buffer, 0), 0, "and no repeat writes it again");
+  eng.end(1, { kind: "stopped", reason: "x" });
+});
+
 test("the store's sync posts `sync`, with nothing in it, to the live worker; a sync that fails is `crashed`, cause folder, and one that end() cuts says nothing; a closed database is `crashed`, cause storage", async () => {
   const store = {
     sync: null as FileStore["sync"],

@@ -672,7 +672,10 @@ As built:
   result's `log` replaces it). It resolves with the worker's `RunResult`, and rejects with kind `op` when the worker answered
   with an error (that worker stays), with the ending's kind when the worker was ended meanwhile, and with `no-engine` when `n`
   is not live. The transport makes no run result: rc 9998 results are the machine's (`cutResult`).
-- `interrupt(n)` puts SIGINT in the shared interrupt buffer, which the worker clears when a run starts. Without
+- `interrupt(n)` puts SIGINT in the shared interrupt buffer, which `run(n, ...)` clears as it posts the run, so a Break
+  belongs to the run sent last, however long that run waits in the worker's queue: the worker lets Python read the buffer
+  only during a run, and `browser.py` puts back a Break it reads before the run is busy (`keep_breaks`). It writes SIGINT
+  again every 100 ms until that run answers: Pyodide reads and clears the buffer in two steps, so a store can be lost. Without
   `SharedArrayBuffer` it does nothing, and the machine resets at once instead of asking for a Break. The 5 s Break timer, the
   deadline `resetAt` and "keep waiting" are the machine's and the controller's (section 5), not the transport's.
 - `query(op, args)` rejects with kind `no-engine` with no live worker. While the worker starts or runs, the call waits in the

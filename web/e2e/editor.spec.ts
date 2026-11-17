@@ -1515,8 +1515,17 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
   page,
 }) => {
   // a loop with no end, so Break always lands inside it, however long the test's steps before Break take on a busy
-  // machine (a forvalues of fixed length ran out first once); Break ends it between passes
-  await setUp(page, { "loop.do": "clear\nwhile 1 {\n  quietly display 1\n}\ndisplay 1" }, "?test");
+  // machine (a forvalues of fixed length ran out first once); Break ends it between passes. It prints "pass N" now and
+  // then, so the test can wait until the run is inside it: a Break before the worker takes the run stops before line 1
+  // (engine.test.ts), and on a slow worker a run can begin well after the page shows it running.
+  await setUp(
+    page,
+    {
+      "loop.do":
+        "clear\nlocal i = 0\nwhile 1 {\n  local i = `i' + 1\n  if mod(`i', 1000) == 0 display \"pass `i'\"\n}\ndisplay 1",
+    },
+    "?test",
+  );
   await startEngine(page);
   await ready(page);
   await open(page, "loop.do");
@@ -1526,7 +1535,9 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
     const pill = page.locator(".btn.stop.pill .label:not([aria-hidden]) .pill-time");
     await expect(pill).toHaveText(/^\d+(\.\d)? s$/);
   } else await expect(statusBar(page)).toContainText(/Running · \d/);
-  await page.waitForTimeout(800);
+  const log = page.getByRole("log", { name: "Log" });
+  await expect(log).toContainText(/pass \d+/); // the echo shows "pass `i'": a number means the loop has run
+  await page.waitForTimeout(800); // the phone's Break pill ignores a tap in its first 600 ms (RunControls.tsx)
   if (isPhone(page)) {
     // Break from the Editor view: the Log view shows, where Break's countdown and its outcome are
     await view(page, "Editor");
@@ -1535,14 +1546,13 @@ test("Break: the run stops before a line, with a note, Go to line and no error m
   } else await page.evaluate(() => window.__dofile.breakRun());
   await ready(page);
   await expect.poll(() => page.evaluate(() => window.__dofile.state.lastRun.value?.rc)).toBe(1);
-  const log = page.getByRole("log", { name: "Log" });
   const note = log.locator(".note").last();
   await expect(note).toHaveText(
     /^Stopped by Break before line \d+\. The data is as the last complete command left it\.$/,
   );
   // the line it stopped before: a line of the loop, and "Go to line" goes there; no error mark
   const line = Number(/before line (\d+)/.exec((await note.textContent()) ?? "")![1]);
-  expect([2, 3, 4]).toContain(line);
+  expect([3, 4, 5, 6]).toContain(line);
   await log.getByRole("button", { name: `Go to line ${line}` }).click();
   await expect(page.locator(".cm-content")).toBeFocused();
   await expect
