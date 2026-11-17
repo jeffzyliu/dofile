@@ -274,7 +274,7 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
   await t.test("a Break pressed while the run waits behind a describe stops that run", async () => {
     await runOn(eng, "clear\nset obs 100\ngen x = 0");
     const described = eng.query("describe");
-    const running = runOn(eng, "while 1 {\n quietly replace x = x + 1\n}");
+    const running = runOn(eng, 'display "first"\nwhile 1 {\n quietly replace x = x + 1\n}');
     // SIGINT written once, not through interrupt(), whose repeats would hide a worker that loses it: the worker has not
     // taken the run yet, the describe is ahead of it
     Atomics.store(buffer, 0, 2);
@@ -288,6 +288,8 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     await described;
     assert.equal(lost, false, "the Break was lost: the run went on until a second one");
     assert.equal(r.rc, 1, r.log);
+    assert.equal(r.error_line, 1, "before its first line (the page's note: Stopped by Break before line 1)");
+    assert.doesNotMatch(r.log, /^first$/m, r.log);
   });
 
   await t.test("a Break that comes after its run ended does not stop the next run", async () => {
