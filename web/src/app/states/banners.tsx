@@ -219,7 +219,7 @@ export function LogStateBanners() {
 }
 
 export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
-  const w = resetWords(banner.kind, banner.reason, isolated.value);
+  const w = resetWords(banner.kind, banner.cause, banner.reason, isolated.value);
   const path = rerunPath(banner.kind, banner.run);
   const canRun = engine.value.s === "ready" && tabs.value.some((t) => t.path === path && t.kind === "text");
   const ref = useFocusOnLeave<HTMLDivElement>();

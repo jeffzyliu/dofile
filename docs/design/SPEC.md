@@ -568,7 +568,7 @@ cross-origin isolated (some hosts, or plain HTTP on a local network). The data i
 
 ## 6. Worker protocol (step 2; step 1 for the Python side of the new calls; the transport and the ops, step 3.5 C and D)
 
-The page posts `{id, op, args}`; the worker answers `{id, result}` or `{id, error, name}`, posts `{stage}` (a typed `Stage` id,
+The page posts `{id, op, args}`; the worker answers `{id, result}` or `{id, error, name, type?}` (`type`: the Python exception class, set for a `PythonError`; a start fails with reason `memory` for a `RangeError` or a `type` of `MemoryError`, never from the message), posts `{stage}` (a typed `Stage` id,
 never text) as each start-up stage begins, and `{id, log}` chunks while a run prints. Ops run one at a time in a queue, except
 `boot`. The ops are one typed map, `Ops` in `web/src/engine/types.ts`, in three sets; each op belongs to one set, in the types
 and in the worker (`web/src/engine/worker.ts` has one handler object for each set), and the set decides who may send it:
@@ -690,7 +690,7 @@ As built:
   cause), `"reset"` (a call cut
   by a reset; `reset` holds the kind: `"break" | "crash" | "user"`), `"stopped"` (cut because another tab took the engine),
   `"no-engine"` (`query()` or `run()` with no live worker), `"op"` (the worker answered with an error; `name` is the worker's
-  error name). The worker answers `{id, error, name}`. The page decides from these fields and from the worker's error name
+  error name). The worker answers `{id, error, name, type?}`. The page decides from these fields and from the worker's error name
   (`DownloadError`, `SnapshotError`), never from a message's text.
 - **Stages:** the worker posts `{stage}` with a typed id: `download` (the snapshot start: the cache read, also after the
   page's `download()`), `unpack`, `python`, `files`, `packages`, `engine`. The snapshot start has no `packages`; `?snapshot=0`
@@ -739,7 +739,7 @@ type Op = keyof Ops;
 type ViewOp = Exclude<keyof ReadOps, "files" | "read">;      // what the controller's call() accepts
 type ToWorker = { [K in Op]: { id: number; op: K; args: Ops[K]["args"] } }[Op];
 type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
-type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: number; error: string; name: string }
+type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: number; error: string; name: string; type?: string }
                | { id: number; log: string }    // a chunk of a running run's log (OQ-1)
                | { stage: Stage }               // a start-up stage began
                | { graphics: "again" | "damaged" | "fetching" | "landed" }   // the lazy graphics part (below)
@@ -931,7 +931,7 @@ interface Graph { n: number; png: string; theme: "light" | "dark"; from: "run" |
 type Dialog = null | { d: "download" } | { d: "clash"; path: string; index: number; total: number }
             | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "clear-log" } | { d: "reset" }
             | { d: "close-tab"; path: string } | { d: "other-tab" };
-type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user"; run: RunHead | null } | { b: "storage" }
+type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user"; cause: "error" | "storage" | "folder" | null; run: RunHead | null } | { b: "storage" }
             | { b: "store-failed"; cause: "open" | "copy" } | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
             | { b: "run-changed"; path: string };
 
@@ -1383,8 +1383,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   what a run sends as `plot_theme`), `graphFull`. Kept in localStorage: `dofile.theme`, `dofile.split`, `dofile.wrap`. Whether
   to ask before the download is read from the Cache, not stored.
 - **Engine controller choices.** The controller decides nothing itself; the machine's table does (section 5). It reads an
-  error's `kind`, `reason` and `name`, never its text. A `download()` failure other than "Stop download" is `failed` with
-  reason "download" at once, with no worker (section 6); `kind: "updated"`, from `download()` or `build()`, is `failed` with
+  error's `kind`, `reason` and `name`, never its text. A `download()` failure other than "Stop download" is `failed` at once, with no worker (section 6), with the
+  reason `build()` gives for the same error: "download" for a failed fetch, "updated" as below, else "unknown"; `kind: "updated"`, from `download()` or `build()`, is `failed` with
   reason "updated": 4d offers "Reload the page", keyed on the reason. The message of reason "updated" says in plain words
   that the site has a newer version and the page must be reloaded (`UPDATED`), with no cause. The visitor's `message` is one
   fixed sentence per reason (`FAILED` in `engine.ts`; `FAILED_TWICE` for `failed-twice`): what happened and what to do (try
@@ -1400,7 +1400,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     ticket on an event themselves: they answer through a `reply` bound to their effect.
   - **Resets.** A reset ends the worker, fetches the build's list afresh (`starting-list`), then starts a new worker; every
     reset goes that way, and its first stage is not announced (it reads the cache; "Download the engine" would mislead). A
-    reset of an engine that had been ready adds `{b: "reset", reason, kind, run}` (`run`: the run the reset cut, or null) and says "Engine reset"; a crash during a start
+    reset of an engine that had been ready adds `{b: "reset", reason, kind, cause, run}` (`cause`: what crashed the engine, null unless `kind` is "crash": the banner's first sentence is chosen by it, never by the reason's text; `run`: the run the reset cut, or null) and says "Engine reset"; a crash during a start
     adds nothing. Reset and "Reset now" give the reason "reset by you" (4d's words may
     change it). A page that cannot ask a run to stop (no `SharedArrayBuffer`) resets at once on Break. Every exit from
     `breaking` cancels the Break timer.
@@ -1415,7 +1415,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     the lock was lost, or after a take-over was cancelled, is stale and dropped; there is no counter for it.
   - **A step.** The `engine` signal is written before the step's effects are performed, and the effects are performed also when
     a subscriber of the signal throws. Events raised while a step's effects run wait in a queue and run in order after it.
-- **Run controller choices.** A result the machine made (rc 9998) keeps the text that streamed in and adds its `error`
+- **Run controller choices.** A run that rejects with a kind other than an ending (`op`, `no-engine`) ends as `run-failed`; an ending (`reset`, `stopped`, `failed`, `failed-twice`) says nothing, the machine cut the run. A read after a run swallows only `no-engine` and `reset`; any other failure goes to the console. A result the machine made (rc 9998) keeps the text that streamed in and adds its `error`
   as a note, since its `log` is empty; one of kind "run-failed" (the worker stays) is not a reset: the data is asked
   again. After Break, a run's result stands as the engine gave it: rc 1 when the engine took the Break at a safe point,
   the run's own rc when it had ended before one; rc 9998 is always a reset (or kind `run-failed`). After a reset whose new

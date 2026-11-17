@@ -471,6 +471,7 @@ test("a rename takes the reset banner's cut file to the new name (still one bann
     b: "reset",
     reason: "the code did not stop at Break",
     kind: "break",
+    cause: null,
     run: { kind: "file", path: "a.do", fresh_locals: true },
   });
   if (isPhone(page)) await view(page, "Files");
@@ -499,6 +500,7 @@ test("a rename takes the reset banner's cut file along when that file is not ope
     b: "reset",
     reason: "the code did not stop at Break",
     kind: "break",
+    cause: null,
     run: { kind: "file", path: "d/a.do", fresh_locals: true },
   });
   if (isPhone(page)) await view(page, "Files");

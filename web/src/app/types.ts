@@ -4,6 +4,7 @@ import type { Equal, Expect, State, Ticket } from "../engine/machine.ts";
 import type {
   About,
   BrowseRows,
+  CrashCause,
   DataSummary,
   FailReason,
   FileInfo,
@@ -20,6 +21,7 @@ import type {
 export type {
   About,
   BrowseRows,
+  CrashCause,
   DataSummary,
   FailReason,
   FileInfo,
@@ -128,12 +130,12 @@ export type Dialog =
 export type DialogName = NonNullable<Dialog>["d"];
 
 /** The banners in `banners`. `reset`: `kind` is why (Break ran out of time or the page cannot ask a run to stop, the
- *  worker crashed, or Reset / "Reset now"); `run` is the run it cut, null when none was in progress. `storage`: shown
+ *  worker crashed, or Reset / "Reset now"); `cause` is what crashed the engine (null unless `kind` is "crash"); `run` is the run it cut, null when none was in progress. `storage`: shown
  *  once per visit, when persisted() is false and the files change. `store-failed`: the engine's worker has no file
  *  store, so it started with an empty folder; `cause` says where its copy failed (StoreCause). `run-changed`: a run rewrote an open file that has
  *  unsaved edits (a save or a reload of that file removes it). */
 export type Banner =
-  | { b: "reset"; reason: string; kind: ResetKind; run: RunHead | null }
+  | { b: "reset"; reason: string; kind: ResetKind; cause: CrashCause | null; run: RunHead | null }
   | { b: "storage" }
   | { b: "store-failed"; cause: StoreCause }
   | { b: "download-failed" }

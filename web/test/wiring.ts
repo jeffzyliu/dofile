@@ -13,7 +13,18 @@ import type { ReadonlySignal, Signal } from "@preact/signals-core";
 import type { Banner, EngineState, EngineStateName, LastRun, LogItem, RunHead } from "../src/app/types.ts";
 import type { Builds, Lifecycle, Reader } from "../src/engine/client.ts";
 import type { Ending, Reply } from "../src/engine/machine.ts";
-import type { Build, CrashCause, Downloaded, FileInfo, Ops, Progress, ReadOps, ResetKind, RunResult } from "../src/engine/types.ts";
+import type {
+  Build,
+  CrashCause,
+  Downloaded,
+  FileInfo,
+  Ops,
+  Progress,
+  ReadOps,
+  ResetKind,
+  RunResult,
+  StoreCause,
+} from "../src/engine/types.ts";
 import { sleep } from "./harness.ts";
 
 // A log item and a banner with every member's fields, for reading in assertions: a test reads the fields of the member
@@ -30,7 +41,7 @@ export type AnyLogItem = { t: LogItem["t"] } & Partial<{
 export type AnyBanner = { b: Banner["b"] } & Partial<{
   reason: string;
   kind: ResetKind;
-  cause: CrashCause | null;
+  cause: CrashCause | StoreCause | null;
   path: string;
   message: string;
 }>;

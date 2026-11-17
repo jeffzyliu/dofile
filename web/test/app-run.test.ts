@@ -366,8 +366,8 @@ test("showToast, holdToast; addBanner replaces one of a kind and path, dismiss r
   }
   S.addBanner({ b: "not-text", path: "a.xlsx" });
   S.addBanner({ b: "not-text", path: "b.xlsx" });
-  S.addBanner({ b: "reset", reason: "one", kind: "crash", run: null });
-  S.addBanner({ b: "reset", reason: "two", kind: "user", run: null });
+  S.addBanner({ b: "reset", reason: "one", kind: "crash", cause: "error", run: null });
+  S.addBanner({ b: "reset", reason: "two", kind: "user", cause: null, run: null });
   assert.deepEqual(
     banners().map((b) => b.path ?? b.reason),
     ["a.xlsx", "b.xlsx", "two"],

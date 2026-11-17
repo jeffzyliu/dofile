@@ -95,10 +95,10 @@ async function dropUnlisted(cache: Cache, list: StartFiles & { base: string }): 
 }
 
 // why a start failed or a worker crashed, from the worker's error
-function reasonOf({ name, message }: { name?: string; message: string }): "download" | "memory" | "unknown" {
+function reasonOf({ name, type }: { name?: string; type?: string }): "download" | "memory" | "unknown" {
   if (name === "DownloadError") return "download";
-  if (name === "RangeError" || /out of memory|MemoryError|could not allocate|allocation failed/i.test(message))
-    return "memory";
+  // a PythonError is every Python exception: its class is `type`
+  if (name === "RangeError" || type === "MemoryError") return "memory";
   return "unknown";
 }
 
@@ -585,12 +585,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (!p) return;
       if ("log" in data) return p.onLog?.(data.log); // a chunk of a running run's log: the call stays pending
       live.pending.delete(data.id);
-      if ("error" in data) p.reject(fail(data.error, "op", { name: data.name ?? "Error" }));
+      if ("error" in data)
+        p.reject(fail(data.error, "op", { name: data.name ?? "Error", ...(data.type && { type: data.type }) }));
       else p.resolve(data.result);
     };
     worker.onerror = (e: any) => {
       const what = String(e?.message ?? e);
-      reply({ type: "crashed", cause: "error", reason: reasonOf({ name: e?.name, message: what }), detail: what });
+      reply({ type: "crashed", cause: "error", reason: reasonOf({ name: e?.name }), detail: what });
     };
     // A sync that end() cuts loses nothing: its journal row stays, and the next worker copies the whole store. A
     // database the browser closes under the page ("Clear site data") may leave /work with files no row explains: that

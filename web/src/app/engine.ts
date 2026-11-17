@@ -102,6 +102,7 @@ let dropped: Drop[] = []; // the last DROPS_KEPT
 const DROPS_KEPT = 200;
 // handles made by one effect and released by another
 let breakTimer: ReturnType<typeof setTimeout> | undefined; // start-break-timer, cancel-break-timer
+let offGraphics: (() => void) | null = null; // the transport's graphics subscription, ended by the next connectEngine
 let download: { n: Ticket; stop: AbortController } | null = null; // start-download, abort-download
 let runs: RunHandlers = { began() {}, log() {}, ended() {}, engineReady() {}, engineGone() {} };
 
@@ -127,9 +128,11 @@ export function connectEngine({
   graceMs?: number;
   canInterrupt?: boolean;
 }) {
-  client.onGraphics?.((p) => {
-    graphicsWriter.part.value = p;
-  });
+  offGraphics?.();
+  offGraphics =
+    client.onGraphics?.((p) => {
+      graphicsWriter.part.value = p;
+    }) ?? null;
   clearTimeout(breakTimer);
   download?.stop.abort();
   breakTimer = undefined;
@@ -267,11 +270,15 @@ function view(state: State): EngineState {
 
 /** Whether a download or a list fetch failed because the site was updated: from the error's kind, never its text. */
 const updated = (e: ClientError): boolean => e?.kind === "updated";
+/** Why a download or a list fetch failed, from the error's kind and reason. */
+const failReason = (e: ClientError): "download" | "updated" | "unknown" =>
+  updated(e) ? "updated" : e?.reason === "download" ? "download" : "unknown";
+
+const ENDINGS = new Set<ClientError["kind"] | undefined>(["reset", "stopped", "failed", "failed-twice"]);
 
 /** The effect performer: the only holder of the transport's Lifecycle and Builds, and the tab lock. */
 function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: Effect) => void {
-  /** An AbortError (abort-download) raises nothing. A failure for any cause other than another build is reason
-   *  "download". */
+  /** An AbortError (abort-download) raises nothing. */
   function startDownload(n: Ticket, say: Reply<"start-download">) {
     const stop = new AbortController();
     download = { n, stop };
@@ -286,7 +293,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
           if (e?.name !== "AbortError")
             say({
               type: "download-failed",
-              reason: updated(e) ? "updated" : "download",
+              reason: failReason(e),
               detail: String(e?.message ?? e),
             });
         },
@@ -301,7 +308,9 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       .then(
         (result) => say({ type: "run-ended", result }),
         (e: ClientError) => {
-          if (e?.kind === "op") say({ type: "run-failed", message: String(e.message) });
+          // an ending (reset, stopped, failed, failed-twice) was made by the machine, which has cut the run already; any
+          // other kind (op, no-engine) is the run failing, and the machine leaves `running`
+          if (!ENDINGS.has(e?.kind)) say({ type: "run-failed", message: String(e?.message ?? e) });
         },
       );
   }
@@ -333,7 +342,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
           (e: ClientError) =>
             say({
               type: "list-failed",
-              reason: updated(e) ? "updated" : e?.reason === "download" ? "download" : "unknown",
+              reason: failReason(e),
               detail: String(e?.message ?? e),
             }),
         );
@@ -377,7 +386,13 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         if (effect.focusEditor) editorAsked.value = {};
         return;
       case "add-reset-banner":
-        return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind, run: effect.run });
+        return S.addBanner({
+          b: "reset",
+          reason: effect.reason,
+          kind: effect.kind,
+          cause: effect.cause,
+          run: effect.run,
+        });
       case "add-store-banner":
         return S.addBanner({ b: "store-failed", cause: effect.cause });
       case "say":

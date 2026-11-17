@@ -2,7 +2,7 @@
 // Node tests them: test/states.test.ts).
 
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
-import type { EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../types.ts";
+import type { CrashCause, EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../types.ts";
 
 /** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by
  *  default). The page's words count from it ("In 4 s the engine is reset"); the machine decides, not these words. */
@@ -38,9 +38,14 @@ export const resetAsks = (state: EngineStateName, engineRuns: number): boolean =
 export const resetIn = (left: number): string =>
   left > 0 ? `In ${left} s the engine is reset:` : "The engine is being reset now:";
 
-/** The reset banner: `head` in bold, then `rest`. `reason` is the machine's, the developer's words for what happened
- *  ("the engine crashed (<cause>)"); the visitor sees it with a cause in parentheses cut off. */
-export function resetWords(kind: ResetKind, reason: string, isolated: boolean): { head: string; rest: string } {
+/** The reset banner: `head` in bold, then `rest`. A crash's head comes from its `cause`; `reason` is the machine's
+ *  words for a Break that ran out of time, and the developer's for the rest. */
+export function resetWords(
+  kind: ResetKind,
+  cause: CrashCause | null,
+  reason: string,
+  isolated: boolean,
+): { head: string; rest: string } {
   const kept = "The data in memory is lost; your files are kept.";
   if (kind === "user") return { head: "You reset the engine.", rest: kept };
   if (kind === "break" && !isolated)
@@ -48,17 +53,17 @@ export function resetWords(kind: ResetKind, reason: string, isolated: boolean): 
       head: "Break reset the engine.",
       rest: `This page can't ask a run to stop, so Break resets it. ${kept}`,
     };
-  const why = reason.replace(/\s*\(.*\)\s*$/, "").trim();
   if (kind === "crash")
     return {
-      head: /file storage/.test(why)
-        ? "The browser closed the file storage, and the engine was reset."
-        : /out of date/.test(why)
-          ? "The engine's version of your files was out of date, so the engine was reset."
-          : "The engine crashed and was reset.",
+      head:
+        cause === "storage"
+          ? "The browser closed the file storage, and the engine was reset."
+          : cause === "folder"
+            ? "The engine's version of your files was out of date, so the engine was reset."
+            : "The engine crashed and was reset.",
       rest: kept,
     };
-  return { head: `The engine was reset: ${why}.`, rest: kept };
+  return { head: `The engine was reset: ${reason}.`, rest: kept };
 }
 
 /** The file "Run the file again" (the reset banner) runs: the file whose run the reset cut, when it was a run of a

@@ -135,7 +135,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
 - **One tab owns the files and the engine**: the Web Lock `dofile-engine` (`src/engine/tab.ts`). A tab without it starts
   no worker and writes nothing (`store.blocked`).
 - **Errors from `client.ts` carry a `kind`** (`ClientError` in `src/engine/types.ts` lists them); the worker answers
-  `{id, error, name}`. Keep both on a new failure path: the page decides from them, never from the text.
+  `{id, error, name, type?}` (`type`: the Python exception class of a `PythonError`). Keep these on a new failure path: the page decides from them, never from the text.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
   entry made iOS Safari run it twice.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`
