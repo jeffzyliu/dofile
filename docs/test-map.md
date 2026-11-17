@@ -378,9 +378,6 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
   caps the cost. The `page` fixture's one retry (`web/e2e/fixtures.ts`) fired twice in the 42 WebKit and iPhone jobs
   since it landed (runs 43497316688 `[webkit]` and 43503620201 `[iphone]`, 2026-11-13), and the test passed both times.
   Causes: `docs/phase2-history.md`, "Prototype 1: the record from 'Where things stand'".
-- **`graphics.spec.ts` "a return visit reads the part from the Cache before ready…" writes the part twice** (`[iphone]`, local,
-  1 of 10 repeats of the spec on the N6 branch: `expect.poll(() => worker.length).toBe(1)` at line 220 received 2 after
-  its 5 s; the other 9 passed). The test holds none of N6's sleeps and no app code changed; not investigated further.
 - **`?snapshot=0` normal boot stalls at "Loading packages" in WebKit on Linux.** 2 sightings: runs 43295867614
   (`[iphone]`)
   and 43350296329 attempt 1 (`[webkit]`). Now skipped in the two WebKit projects (#34).

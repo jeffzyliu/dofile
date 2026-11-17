@@ -260,7 +260,7 @@ test("a streamed run: the log shows its lines in order while the run goes, and t
   const code = 'forvalues i = 1/6 {\n display "line `i\'"\n sleep 200\n}';
   const done = page.evaluate((code) => window.__dofile.run(code), code);
   await expect
-    .poll(async () => lineNumbers((await log.textContent()) ?? "").length, { timeout: 30_000 })
+    .poll(async () => lineNumbers((await log.textContent()) ?? "").length, { timeout: 30_000, intervals: [50] })
     .toBeGreaterThan(1);
   expect(await engineState(page), "a line shows while the run goes on").toBe("running");
   const midway = lineNumbers((await log.textContent()) ?? "");

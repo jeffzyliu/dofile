@@ -4,7 +4,7 @@
 // `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
 import type { Page } from "@playwright/test";
 import { EDITOR_BASE } from "../scripts/urls.ts";
-import { expect, isPhone, startEngine, storedText, test, toastOf, unblocked } from "./fixtures";
+import { expect, isPhone, settle, startEngine, storedText, test, toastOf, unblocked } from "./fixtures";
 
 /** The files in the store (not folders), by path. */
 const stored = (page: Page) =>
@@ -49,19 +49,19 @@ test("a first visit lists the sample and opens its main do-file; a later visit d
   await page.evaluate(() => window.__dofile.store.remove("helpers.do"));
   await page.reload();
   await unblocked(page);
-  await page.waitForTimeout(500);
+  await settle(page, { store: true }); // the seed's own store read and writes come before this read
   expect(await stored(page)).toEqual(["analysis.do", "data/wages.dta"]);
 });
 
 test("never over a visitor's own files, and not under ?test alone", async ({ page }) => {
   await page.goto("?test=manual"); // no ?sample: nothing is written
   await unblocked(page);
-  await page.waitForTimeout(500);
+  await settle(page, { store: true });
   expect(await stored(page)).toEqual([]);
   await put(page, "mine.do", "display 1\n");
   await page.goto("?test=manual&sample"); // not empty: the sample stays out
   await unblocked(page);
-  await page.waitForTimeout(500);
+  await settle(page, { store: true });
   expect(await stored(page)).toEqual(["mine.do"]);
 });
 
@@ -143,7 +143,7 @@ test.describe("where the browser does not keep storage", () => {
     await page.goto("?test=manual&sample");
     await unblocked(page);
     await expect.poll(() => stored(page)).toEqual(ALL);
-    await page.waitForTimeout(500);
+    await settle(page, { store: true }); // the seed has written its last file: a banner would be drawn by now
     const banner = page.getByText("This browser may clear your files");
     await expect(banner).toHaveCount(0);
     await put(page, "mine.do", "display 1\n");

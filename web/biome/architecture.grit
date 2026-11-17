@@ -134,6 +134,27 @@ or {
     $m <: not within JsMethodClassMember(name=`#send`),
     register_diagnostic(span=$m, message="the page posts to the Worker only in #send")
   },
+  // A focus move or a store write is not made from a timer's callback: the e2e helper settle(page) waits for tasks,
+  // microtasks, effects and frames, not for a timer of more than about 50 ms (a requestAnimationFrame is allowed).
+  or {
+    `$_.focus()`,
+    `$_.focus($_)`,
+    `$_?.focus()`,
+    `$_?.focus($_)`,
+    `store.write($_)`,
+    `store.mkdir($_)`,
+    `store.rename($_)`,
+    `store.remove($_)`,
+    `store.change($_)`,
+    `store.applyRun($_)`
+  } as $m where {
+    $filename <: r".*/src/app/.*",
+    $m <: within or {
+      `setTimeout($_)`,
+      `setInterval($_)`
+    },
+    register_diagnostic(span=$m, message="no focus move or store write inside a setTimeout or setInterval callback in src/app/ (e2e settle() does not wait for a timer): use a microtask, an effect or a frame")
+  },
   // Every button that Start engine turns into Run keeps ignoring a held Enter: one that is aria-disabled (never
   // disabled, so it keeps the focus) in the run controls, the command line and the log; and the phone's Break pill,
   // which takes the Run button's place.

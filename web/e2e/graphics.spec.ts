@@ -200,6 +200,10 @@ test("a return visit reads the part from the Cache before ready; a graph sent at
       .poll(async () => (await partSeen()).lines.map(([, l]) => l).join("\n"), { timeout: 120_000 })
       .toMatch(/landed \(network\)/);
 
+    // the first visit's worker has written the part (its line comes after "landed"), so none of its lines is left to
+    // arrive after the count is reset
+    await expect.poll(() => worker.length, { timeout: 120_000 }).toBeGreaterThan(0);
+
     // the return visit: a graph as soon as the engine is ready
     worker.length = 0;
     await page.reload();
