@@ -1,6 +1,6 @@
 # Staging `public/` (the R5 note)
 
-Status: for the maintainer's approval before R5 (phase 2, item 2.15) starts. Written at f947053 from the code; where
+Status: **approved by the maintainer 2026-11-17: choices 1 to 5 as recommended, choice 3 amended** (section 5). Before R5 (phase 2, item 2.15) starts it was for the maintainer's approval. Written at f947053 from the code; where
 report 10 (`docs/archive/web-audit-surveys/10-build-scripts.md`) and the code differ, the code is followed and the
 difference is named. No code changes here.
 
@@ -174,6 +174,8 @@ two `npm run wheel`; build-web's cache-hit path already relies on it, see sectio
 | 3 | `dev` stages at start only (above), or the config re-stages on a `stage.json` change | **at start only**: the same as today in effect, and no writer in the config | a dev server that outlives a wheel change needs a restart (it says so) |
 | 4 | `preview` and the site build stop reading `public/` and `dist/` | **yes** | a preview of a folder no build wrote fails on the missing folder, not on the wheel: the clearer failure |
 | 5 | `deploy` and `cf:dev` | **keep**, rebuilt on the same pieces | a third copy of the chain (build-web, `deploy`, `cf:dev`) remains; deleting `npm run deploy` is out of R5's scope (no workflow runs it; the docs name it) |
+
+**Approved 2026-11-17** (the maintainer: "approve R5 recommendations with warn-only for 2a"): choices 1, 2, 4 and 5 as recommended. **Choice 3 is amended:** `dev` stages at start and also re-runs the read-only `staged()` check on each page load; a stale stage warns "restart npm run dev". No watcher, and no writer in the config.
 
 Not verified: no build, snapshot or e2e was run for this note (G0 runs them elsewhere); the wheel's byte-identity (section 4);
 that a bare `vite` is used by no one (only `web/CLAUDE.md` and `README.md` were read for it); `docs/deploying.md` beyond

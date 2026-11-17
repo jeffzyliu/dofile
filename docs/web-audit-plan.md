@@ -144,7 +144,7 @@ audit's log, for R2: whether the three small edits close the gap, and the tests 
 
 ### Phase 2: moves (sessions 3 and 4)
 
-**Start gate.** S0 approved (decision 2 settled before S1). N7 tightened (the row below). N7's list of states checked
+**Start gate.** S0 approved (decision 2 settled 2026-11-17). N7 tightened (the row below). N7's list of states checked
 against phase 1's changes, then its baseline taken from `main`.
 
 | Lane | Item | After | Pull request |
@@ -155,7 +155,7 @@ against phase 1's changes, then its baseline taken from `main`.
 | a | S8, without graphics: `/work` mirror, boot and loader, typed dispatch (three items in a chain; the boundary is below) | S7 | 2.2 |
 | a | The R1 note | S8, and the condition below | 2.3 |
 | a | R1: the lazy graphics part as one machine, with its Node harness (three items). It leaves `state.ts` and `app/engine.ts` alone: a change it needs there follows R7r | the note approved | 2.3, 2.4 |
-| b, files | S1: editor documents in a DOM-free controller that owns Save, and `tabs` and `activeTab` (three items: the records with the derived signals; Save and the file code's calls; the scroll snapshot). Edits `web/src/main.tsx`. The Doc's shape is chosen first (below) | start, and S0's decision 2 settled | 2.5 |
+| b, files | S1: editor documents in a DOM-free controller that owns Save, and `tabs` and `activeTab` (three items: the records with the derived signals; Save and the file code's calls; the scroll snapshot). Edits `web/src/main.tsx`. The Doc's shape is settled (decision 2, 2026-11-17: `docs/design/workspace.md` section 2, with the Save rule of section 3; the spike's branch `spike/doc-shape` is kept locally for S1) | start | 2.5 |
 | b | S2, first half: the generator turn design (below), one door for page writes, the order tests | S1 | 2.6 |
 | b | B1: uploads and "Restore the sample" take a turn (failing test first). `store.write` takes an expectation (one transaction); `createEntry` passes "absent"; the re-ask words go into SPEC's "Name clash" row. An engine change: snapshot first | S2's first half | 2.7 |
 | b | S2, second half: `files/actions.ts` split three ways | B1 | 2.8 |
@@ -167,7 +167,7 @@ against phase 1's changes, then its baseline taken from `main`.
 | c | R7r: `state.ts` split by owner, as S0 lays out; the e2e hook's `state` object unchanged | S6 | 2.13 |
 | c | C5: phone toast placement. When it is merged into the session's branch and the preview is up, the orchestrator tells the maintainer, with the four cases to try on a real phone; the session's merge to `main` waits for that check | R7r | 2.16 |
 | d, build | S9, without staging (its clauses are below) | start | 2.14 |
-| d | R5: `public/` staged by one script, the config only reads it (its clauses are below) | S9, the R5 note approved | 2.15 |
+| d | R5: `public/` staged by one script, the config only reads it (its clauses are below) | S9; the R5 note is approved (2026-11-17, `docs/design/staging.md`: choices 1 to 5, choice 3 amended) | 2.15 |
 
 **S9 and R5, clause by clause.** S9: `scripts/lib`; `vite.config.ts` split into plugin modules; every snapshot knob in
 the manifest; `npm run commands` through a temp file; `wheel` stops deleting the release wheels in the root `dist/`; the
