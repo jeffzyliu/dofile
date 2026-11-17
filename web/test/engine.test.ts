@@ -113,7 +113,18 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
   timeout: 180_000,
 }, async (t) => {
   const said: Answer<"start-worker">[] = [],
-    { store, createWorker } = pageStore();
+    { store, createWorker: storeWorker } = pageStore();
+  let buffer!: Int32Array; // the live worker's interrupt buffer, as its boot was given it
+  const createWorker = () => {
+    const w = storeWorker();
+    const post = w.postMessage.bind(w);
+    w.postMessage = (m: unknown, t?: unknown) => {
+      const sent = m as { op?: string; args?: { interruptBuffer?: Int32Array | null } };
+      if (sent.op === "boot" && sent.args?.interruptBuffer) buffer = sent.args.interruptBuffer;
+      post(m, t as Transferable[]);
+    };
+    return w;
+  };
   const eng = new EngineClient({ createWorker, wheel, extraWheels, store });
   await startWorker(eng, null, said);
   assert.match(JSON.stringify(eng.about), /opendta/i);
@@ -264,7 +275,9 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     await runOn(eng, "clear\nset obs 100\ngen x = 0");
     const described = eng.query("describe");
     const running = runOn(eng, "while 1 {\n quietly replace x = x + 1\n}");
-    eng.interrupt(live(eng)); // the worker has not taken the run yet: the describe is ahead of it
+    // SIGINT written once, not through interrupt(), whose repeats would hide a worker that loses it: the worker has not
+    // taken the run yet, the describe is ahead of it
+    Atomics.store(buffer, 0, 2);
     let lost = false;
     const late = setTimeout(() => {
       lost = true;
