@@ -49,19 +49,26 @@ if (command === "baseline") {
   const commit = rest.shift();
   if (!commit) throw new Error("usage: npm run shots:baseline -- <commit> [--dir <folder>]");
   const sha = out("git", ["rev-parse", "--verify", `${commit}^{commit}`]);
-  if (existsSync(worktree)) out("git", ["checkout", "--detach", sha], worktree);
-  else out("git", ["worktree", "add", "--detach", worktree, sha]);
-  const wtWeb = resolve(worktree, "web");
-  // npm ci again only when the commit's lockfile is not the one node_modules was installed from
-  const stamp = resolve(wtWeb, "node_modules/.shots-lock");
-  const lock = resolve(wtWeb, "package-lock.json");
-  if (!existsSync(stamp) || readFileSync(stamp, "utf8") !== readFileSync(lock, "utf8")) {
-    sh("npm ci", wtWeb);
-    copyFileSync(lock, stamp);
+  try {
+    if (existsSync(worktree)) out("git", ["checkout", "--detach", sha], worktree);
+    else out("git", ["worktree", "add", "--detach", worktree, sha]);
+    const wtWeb = resolve(worktree, "web");
+    // npm ci again only when the commit's lockfile is not the one node_modules was installed from
+    const stamp = resolve(wtWeb, "node_modules/.shots-lock");
+    const lock = resolve(wtWeb, "package-lock.json");
+    if (!existsSync(stamp) || readFileSync(stamp, "utf8") !== readFileSync(lock, "utf8")) {
+      sh("npm ci", wtWeb);
+      copyFileSync(lock, stamp);
+    }
+    sh(BUILD, wtWeb); // the wheel goes to the worktree's own root dist/
+    rmSync(dir, { recursive: true, force: true });
+    screenshots(wtWeb, true);
+  } catch (e) {
+    console.error(
+      `the baseline failed: the worktree ${worktree} may be half made; \`node scripts/shots.ts clean\` removes it`,
+    );
+    throw e;
   }
-  sh(BUILD, wtWeb); // the wheel goes to the worktree's own root dist/
-  rmSync(dir, { recursive: true, force: true });
-  screenshots(wtWeb, true);
   console.log(`baseline of ${sha} in ${dir}`);
 } else if (command === "compare") {
   let app = take("--app");

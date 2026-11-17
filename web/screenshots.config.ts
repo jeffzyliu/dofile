@@ -19,7 +19,12 @@ export default defineConfig({
   reporter: "list",
   outputDir: resolve(baseline, "..", "results"), // the actual, expected and diff images of a failed comparison
   snapshotPathTemplate: `${baseline}/{projectName}/{arg}{ext}`,
-  expect: { toHaveScreenshot: { animations: "disabled", caret: "hide", scale: "css" } }, // Playwright's default tolerance
+  // Threshold 0 (rule 10: a move changes no pixel; the default 0.2 let a 2-3 level change of --accent pass all 50 shots).
+  // maxDiffPixels 30: the unchanged tree against two baselines, 5 runs, differed by at most 14 pixels in a state (1-10
+  // typically, in 19 of the 25 states: no one element, so nothing is masked), and 30 is twice that. A changed colour, size or glyph moves hundreds or thousands.
+  expect: {
+    toHaveScreenshot: { animations: "disabled", caret: "hide", scale: "css", threshold: 0, maxDiffPixels: 30 },
+  },
   use: { baseURL: LOCAL_EDITOR_URL, reducedMotion: "reduce" },
   webServer: {
     command: `npx vite preview --port ${editorPort} --strictPort`,
