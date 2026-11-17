@@ -11,6 +11,7 @@
 //    hides the Log head, so the same logMenuItems() are the "Log ⋯" button in its strip.
 //  - PhoneStrip: under the phone's top bar, on every view (the phone has no status bar): the last run, or the state's
 //    words. Its children go at its right end.
+
 import { signal } from "@preact/signals-core";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
@@ -23,6 +24,7 @@ import { saveAs } from "../files.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
 import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
+import { breakAsked } from "../states/predicates.ts";
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { MenuButton, type MenuItem } from "../ui/Menu";
@@ -298,7 +300,7 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
       <span>
         {bold && <b>{bold}</b>}
         {rest}
-        {(st.s === "breaking" || st.s === "waiting") && ` · ${ticking(since(st.t0))}`}
+        {breakAsked(st) && ` · ${ticking(since(st.t0))}`}
       </span>
     );
   }

@@ -53,7 +53,7 @@ effect(() => {
   viewport.update();
 });
 watchWakeLock();
-// the engine's state on <html>, for the tests and for CSS
+// the engine's state on <html>, for the tests
 effect(() => {
   document.documentElement.dataset.engine = S.engine.value.s;
 });

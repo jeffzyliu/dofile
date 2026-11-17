@@ -1,10 +1,12 @@
 // The status bar (docs/design/SPEC.md, sections 3.6 and 5). Not a live region: say() in state.ts announces changes.
 // "Not affiliated with StataCorp" shows from 1200 px only (app.css): under it the bar has no room for it beside the
 // longest last run. Screen readers get the full sentence (AFFILIATION).
+
 import type { ComponentChildren } from "preact";
 import { stageStatus, stagesOf } from "../engine.ts";
 import { snapshotStart } from "../env";
 import { engine, graphicsPart, lastRun, memory, persisted } from "../state.ts";
+import { breakAsked, engineLoading, engineUp } from "../states/predicates.ts";
 import type { EngineState } from "../types.ts";
 import { resetsIn, since } from "./clock.ts";
 import { lastRunWords, linesWords, memoryTitle, memoryWords, ticking } from "./words.ts";
@@ -78,7 +80,7 @@ export function StatusBar() {
   const st = engine.value;
   const [bold, rest] = stateWords(st);
   const busy = st.s !== "ready";
-  const starting = st.s === "starting-list" || st.s === "starting-worker";
+  const starting = engineLoading(st);
   const mem = memory.value;
   const kept = persisted.value;
   return (
@@ -88,7 +90,7 @@ export function StatusBar() {
         {bold && <b>{bold}</b>}
         {rest}
       </span>
-      {(st.s === "breaking" || st.s === "waiting") && <span>{ticking(since(st.t0))}</span>}
+      {breakAsked(st) && <span>{ticking(since(st.t0))}</span>}
       {st.s === "ready" && <LastRunText />}
       <GraphsLoading />
       {mem && <span title={memoryTitle}>{memoryWords(mem)}</span>}
@@ -111,10 +113,8 @@ export function StatusBar() {
 /** "Graphs loading" and a ring of its percent while the graphics part downloads after the start. Nothing before the
  *  engine started, once it landed, or after a failed fetch (a graph's own error says why). Not a live region. */
 export function GraphsLoading() {
-  const g = graphicsPart.value,
-    s = engine.value.s;
-  if (g?.state !== "fetching" || !(s === "ready" || s === "running" || s === "breaking" || s === "waiting"))
-    return null;
+  const g = graphicsPart.value;
+  if (g?.state !== "fetching" || !engineUp(engine.value)) return null;
   const pct = g.total ? Math.min(100, (100 * g.received) / g.total) : 0,
     mb = (n: number) => (n / 1e6).toFixed(1);
   return (

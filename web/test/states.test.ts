@@ -3,6 +3,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  breakAsked,
+  engineLoading,
+  engineStarting,
+  engineUp,
+  otherTab,
+  runOn,
+  workerReachable,
+} from "../src/app/states/predicates.ts";
+import {
   failedActions,
   noteFor,
   ofTotal,
@@ -14,7 +23,7 @@ import {
   secs,
   twiceWords,
 } from "../src/app/states/words.ts";
-import type { FailReason, RunHead } from "../src/app/types.ts";
+import type { EngineState, FailReason, RunHead } from "../src/app/types.ts";
 
 test("Reset resets at once only when the engine is ready and nothing has run on it; anything else asks", () => {
   assert.equal(resetAsks("ready", 0), false, "a new engine, or one just reset");
@@ -97,4 +106,33 @@ test("the two notes (drafts) are chosen by the run's rc and error", () => {
   assert.equal(noteFor(199, "command frobnicate is unrecognized"), null);
   assert.equal(noteFor(601, "file wages.dta not found"), null);
   assert.equal(noteFor(0, null), null);
+});
+
+test("the engine-state predicates over all sixteen states", () => {
+  const all = [
+    "checking-lock",
+    "checking-cache",
+    "none",
+    "asking",
+    "declined",
+    "downloading",
+    "starting-list",
+    "starting-worker",
+    "ready",
+    "running",
+    "breaking",
+    "waiting",
+    "failed",
+    "failed-twice",
+    "other-tab-idle",
+    "other-tab-taking",
+  ] as const satisfies readonly EngineState["s"][];
+  const members = (p: (st: EngineState) => boolean) => all.filter((s) => p({ s } as EngineState));
+  assert.deepEqual(members(engineUp), ["ready", "running", "breaking", "waiting"]);
+  assert.deepEqual(members(runOn), ["running", "breaking", "waiting"]);
+  assert.deepEqual(members(breakAsked), ["breaking", "waiting"]);
+  assert.deepEqual(members(engineStarting), ["downloading", "starting-list", "starting-worker"]);
+  assert.deepEqual(members(engineLoading), ["starting-list", "starting-worker"]);
+  assert.deepEqual(members(workerReachable), ["starting-worker", "ready", "running", "breaking", "waiting"]);
+  assert.deepEqual(members(otherTab), ["other-tab-idle", "other-tab-taking"]);
 });

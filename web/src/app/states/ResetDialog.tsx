@@ -1,11 +1,13 @@
 // Reset (docs/design/SPEC.md, section 3.10, S 14). askReset() resets at once only when the engine is ready and nothing
 // has run on it since it started; otherwise it opens the dialog (words.ts resetAsks). If the engine can no longer be
 // reset while the dialog is open (it failed, another tab took it), the dialog closes itself.
+
 import { useEffect } from "preact/hooks";
 import type { DialogOf } from "../dialogs";
 import * as eng from "../engine.ts";
 import { dialog, engine, engineRuns } from "../state.ts";
 import { Dialog } from "../ui/Dialog";
+import { engineUp } from "./predicates.ts";
 import { resetAsks } from "./words.ts";
 
 export function askReset() {
@@ -18,8 +20,7 @@ const close = () => {
 };
 
 export function ResetDialog(_: { dialog: DialogOf<"reset"> }) {
-  const s = engine.value.s;
-  const up = s === "ready" || s === "running" || s === "breaking" || s === "waiting";
+  const up = engineUp(engine.value);
   useEffect(() => {
     if (!up) close();
   }, [up]);

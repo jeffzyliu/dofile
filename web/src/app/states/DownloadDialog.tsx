@@ -12,6 +12,7 @@ import { dialog, engine, engineBytes, graphicsPart } from "../state.ts";
 import type { Stage } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { useNow } from "./clock.ts";
+import { engineLoading, engineStarting } from "./predicates.ts";
 import { ofTotal, secs, stageNow } from "./words.ts";
 
 /** "48 MB": the download size from the build (start-files.json's compressed total, in the page's meta tag). */
@@ -63,7 +64,7 @@ export function DownloadDialog(_: { dialog: DialogOf<"download"> }) {
 /** S 2 and S 3 (phone S 8): downloading, then the stages. "Edit files while it loads" only closes the dialog. */
 function ProgressDialog() {
   const st = engine.value;
-  const busy = st.s === "downloading" || st.s === "starting-list" || st.s === "starting-worker";
+  const busy = engineStarting(st);
   const now = useNow(250, busy);
   const close = () => {
     dialog.value = null;
@@ -71,7 +72,7 @@ function ProgressDialog() {
   const stages = eng.stagesOf(snapshotStart);
   const pct = st.s === "downloading" && st.total ? Math.min(100, (100 * st.received) / st.total) : null;
   const current: Stage | null = st.s === "downloading" ? "download" : busy ? (st as { stage: Stage }).stage : null;
-  const done = st.s === "starting-list" || st.s === "starting-worker" ? st.done : {};
+  const done = engineLoading(st) ? st.done : {};
   const elapsed = busy ? Math.max(0, (now - (st as { t0: number }).t0) / 1000) : 0;
   const stepNo = current ? stages.indexOf(current) + 1 : 0;
   // the graphics part is not in the bar (it follows the start): said under it

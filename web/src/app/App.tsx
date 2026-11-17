@@ -33,6 +33,7 @@ import {
   theme,
   wrap,
 } from "./state.ts";
+import { engineUp } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
 import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
 import type { OutputTab, PhoneTab } from "./types.ts";
@@ -40,8 +41,6 @@ import { Icon } from "./ui/Icon";
 import { LiveRegion, ToastHost } from "./ui/Live";
 import { MenuButton, MenuHost, type MenuItem } from "./ui/Menu";
 import { Tablist, tabpanelProps } from "./ui/Tablist";
-
-const engineUp = () => ["ready", "running", "breaking", "waiting"].includes(engine.value.s);
 
 /** Wrap lines leaves the menu open, so the visitor sees it flip. */
 const wrapItem = (): MenuItem => ({ label: "Wrap lines", checked: wrap.value, onSelect: toggleWrap, keepOpen: true });
@@ -55,7 +54,7 @@ const moreItems = (): MenuItem[] => [
     },
   },
   wrapItem(), // no "Clear log": the Log head has it (on a phone, the strip's "Log ⋯")
-  { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
+  { label: "Reset the engine…", danger: true, disabled: !engineUp(engine.value), onSelect: askReset },
   "rule",
   { label: "Commands", href: COMMANDS_URL },
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
@@ -73,7 +72,7 @@ const phoneMoreItems = (): MenuItem[] => [
     keepOpen: true,
   },
   wrapItem(),
-  { label: "Reset the engine…", danger: true, disabled: !engineUp(), onSelect: askReset },
+  { label: "Reset the engine…", danger: true, disabled: !engineUp(engine.value), onSelect: askReset },
   "rule",
   { label: "Commands", href: COMMANDS_URL },
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
