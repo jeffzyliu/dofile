@@ -376,6 +376,8 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         return;
       case "add-reset-banner":
         return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind, run: effect.run });
+      case "add-store-banner":
+        return S.addBanner({ b: "store-failed" });
       case "say":
         return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageWords[effect.line.stage]);
       case "warn":

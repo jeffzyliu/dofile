@@ -273,6 +273,29 @@ export function StorageBanner({ banner }: { banner: BannerOf<"storage"> }) {
   );
 }
 
+export function StoreFailedBanner({ banner }: { banner: BannerOf<"store-failed"> }) {
+  const ref = useFocusOnLeave<HTMLDivElement>();
+  return (
+    <Banner
+      kind="error"
+      bannerRef={ref}
+      actions={
+        <>
+          <button type="button" class="btn" onClick={() => location.reload()}>
+            Reload the page
+          </button>
+          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
+            Dismiss
+          </button>
+        </>
+      }
+    >
+      <b>The engine can't read your files.</b> This browser wouldn't open the storage where dofile keeps them, so the
+      engine started with an empty folder. Reload the page to try again.
+    </Banner>
+  );
+}
+
 export function DownloadFailedBanner({ banner }: { banner: BannerOf<"download-failed"> }) {
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (

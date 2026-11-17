@@ -1267,5 +1267,10 @@ test("the worker says its folder fell out of step after a run: `crashed`, cause 
   const said: Said = [];
   await startWorker(eng, null, said);
   workers[0].onmessage!({ data: { folderError: "file system error EISDIR" } });
-  assert.deepEqual(said.at(-1), { type: "crashed", cause: "folder", reason: "unknown", detail: "file system error EISDIR" });
+  assert.deepEqual(said.at(-1), {
+    type: "crashed",
+    cause: "folder",
+    reason: "unknown",
+    detail: "file system error EISDIR",
+  });
 });

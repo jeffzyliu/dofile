@@ -117,7 +117,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   declare wasm: object | null | undefined;
   declare nextId: number;
   // facts of the last start, for the tests and the test hook; nothing decides by them
-  declare storeError: string | null;
+  declare storeError: { name: string; message: string } | null;
   declare about: About | null;
   declare startup: Startup | null;
   #live: Live | null = null;
@@ -573,6 +573,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // drops what is out of date.
     worker.onmessage = ({ data }: MessageEvent<FromWorker>) => {
       if ("stage" in data) return reply({ type: "stage", stage: data.stage });
+      if ("folderError" in data)
+        return reply({ type: "crashed", cause: "folder", reason: "unknown", detail: data.folderError });
       if ("graphics" in data) {
         if (this.#graphics) this.#workerSaysGraphics(this.#graphics, data);
         return;
@@ -590,11 +592,11 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     };
     // A sync that end() cuts loses nothing: its journal row stays, and the next worker copies the whole store. A
     // database the browser closes under the page ("Clear site data") may leave /work with files no row explains: that
-    // is `crashed`, cause "storage", so that a new worker copies the store as it is.
+    // is `crashed`, cause "storage", so that a new worker copies the store as it is. A sync the worker fails leaves
+    // /work out of step with the store: cause "folder", for the same new copy.
     const sync = () => {
       this.#send(live, "sync", undefined).catch((e: ClientError) => {
-        if (e.kind === "op")
-          console.warn(`[dofile] the engine's folder could not take a change to your files: ${e.message}`);
+        if (e.kind === "op") reply({ type: "crashed", cause: "folder", reason: "unknown", detail: e.message });
       });
     };
     const onClosed = () =>
@@ -629,12 +631,16 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     steps().then(
       ({ about, startup }) => {
         if (live.ended) return; // ended just as its last step was answered: it says nothing more
+        const storeError = startup?.storeError ?? null;
+        // A worker with no store cannot read the journal: detach the store, so it writes no row no worker would clear.
+        if (storeError) this.store?.attach(null);
+        // a store of a newer version: another page of a newer build upgraded it, and only a reload helps
+        if (storeError?.name === "VersionError")
+          return reply({ type: "start-failed", reason: "updated", detail: storeError.message });
         this.about = about;
         this.startup = startup;
-        this.storeError = startup?.storeError ?? null;
-        // A worker with no store cannot read the journal: detach the store, so it writes no row no worker would clear.
-        if (this.storeError) this.store?.attach(null);
-        reply({ type: "started" });
+        this.storeError = storeError;
+        reply(storeError ? { type: "started", storeFailed: true } : { type: "started" });
         this.#wantGraphics(build);
       },
       (e: ClientError) => {

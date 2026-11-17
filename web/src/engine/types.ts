@@ -65,6 +65,9 @@ export type FromWorker =
   | { id: number; error: string; name: string }
   | { id: number; log: string } // a chunk of a running run's log
   | { stage: Stage } // a start-up stage began
+  // /work could not take the page's version after a run (the store has the run's files): it is out of step with the
+  // store. Sent right after that run's answer.
+  | { folderError: string }
   // the lazy graphics part. With a shared buffer: "again" (a graph found it failed) or "damaged" (the page refetches
   // it). Without one the worker fetches it and these tell the page how it goes; "damaged" then means the worker dropped
   // its copy
@@ -120,7 +123,7 @@ export interface Startup {
   notCached?: string[]; // snapshot
   runtimeS?: number;
   packagesS?: number; // normal
-  storeError?: string; // the worker could not open the store; /work started empty
+  storeError?: { name: string; message: string }; // the worker could not open the store; /work started empty
 }
 
 export interface FileInfo {

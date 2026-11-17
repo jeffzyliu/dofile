@@ -12,6 +12,7 @@ import {
   LogStateBanners,
   ResetBanner,
   StorageBanner,
+  StoreFailedBanner,
 } from "./states/banners";
 import type { Banner, BannerName } from "./types.ts";
 
@@ -21,6 +22,7 @@ export type Place = "files" | "editor" | "log" | "output";
 const VIEWS: { [K in BannerName]: { place: Place; phone?: "every"; view: ComponentType<{ banner: BannerOf<K> }> } } = {
   reset: { place: "log", view: ResetBanner },
   storage: { place: "editor", view: StorageBanner },
+  "store-failed": { place: "editor", phone: "every", view: StoreFailedBanner },
   // "Download all" is on every view's ⋯
   "download-failed": { place: "editor", phone: "every", view: DownloadFailedBanner },
   "not-text": { place: "files", view: NotTextBanner },

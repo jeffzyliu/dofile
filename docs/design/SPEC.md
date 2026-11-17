@@ -555,11 +555,11 @@ What the cells mean as a visitor meets them:
 | `checking-cache` | this build's start files are not all in the Cache (`client.cached()`: every file `start-files.json` marks `download` is in `dofile-snapshot-<built>`; false offline, with no Cache API, storage refused or `?snapshot=0`) | `asking`. Otherwise `downloading` then `starting-worker`, with no dialog (`S 4`). There is no "downloaded" flag: evicted or cleared files, a partial download, or a new build ask again. |
 | `asking` | "Download 48 MB"; "Not now" | `downloading`; `declined`. From `declined` (and `none`), "Start engine" (the toolbar's, the command line's, the banner's, Ctrl/Cmd+Enter: the event `ask`) leads back to `asking`; a `run` is not valid with no engine, so nothing is run or kept. |
 | `downloading` | all bytes in; "Stop download" or "Not now"; a failed fetch | `starting-worker`; the fetches are aborted, `declined`; `failed`. "Edit files while it loads" only closes the dialog. Stage list (`S 2`): "Downloading the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine" (the snapshot start differs: OQ-11; the words are one list, `stageNow` in `states/words.ts`, decided 2026-11-12). A download that fails is `failed`: no worker is made and there is no offline start. |
-| `starting-worker` | the last stage ends; the start is rejected | `ready` (nothing runs by itself: with no engine only "Start engine" is offered): the dialog closes by itself, focus goes to the editor, the live region says "Engine ready". `failed`, or `failed-twice` when the worker failed twice. |
+| `starting-worker` | the last stage ends; the start is rejected | `ready` (nothing runs by itself: with no engine only "Start engine" is offered): the dialog closes by itself, focus goes to the editor, the live region says "Engine ready". A worker that could not open the file store is `ready` too, with an empty `/work`, and an error banner above the editor (on a phone on every view): "**The engine can't read your files.** This browser wouldn't open the storage where dofile keeps them, so the engine started with an empty folder. Reload the page to try again." / "Reload the page", "Dismiss" (`store-failed`). `failed`, or `failed-twice` when the worker failed twice; a file store of a newer version (another page of a newer build upgraded it: `VersionError`) is `failed` with reason `updated`. |
 | `ready`, `running` | a run starts; its result arrives; Break | `running`; `ready`; `breaking`. |
 | `breaking` | the run ends with rc 1; 5 s pass; "Don't reset: wait for it" | `ready` (the log has "--Break--", "r(1);" and the note of `S 10`, OQ-9; a run that had ended before a safe point keeps its own rc); reset; `waiting`. |
 | `waiting` | the run ends; "Reset now" | `ready`; reset. |
-| `ready`, `running`, `breaking`, `waiting`, and `starting-worker` for a crash | reset (rc 9998): Break did not stop it, the worker crashed, Reset confirmed, "Reset now" | The run in progress ends with rc 9998; the worker is ended and the build's list is fetched afresh (`starting-list`), then a new worker starts by itself (`starting-worker`, `ready`). Above the log (`P/Notices`), for an engine that had been `ready`: "**The engine was reset: it ran out of memory.** The data in memory is gone; your files are kept." / "Run the file again" (only after a Break or a crash that cut a file run: it runs that file, and is on while the engine is `ready` and the file is open as a text tab), "Dismiss" (the reason's wording: OQ-9). A crash during a start adds no banner. A second worker crash before a start finishes: `failed-twice`, never a loop. A page that cannot ask a run to stop resets at once on Break. |
+| `ready`, `running`, `breaking`, `waiting`, and `starting-worker` for a crash | reset (rc 9998): Break did not stop it, the worker crashed, Reset confirmed, "Reset now" | The run in progress ends with rc 9998; the worker is ended and the build's list is fetched afresh (`starting-list`), then a new worker starts by itself (`starting-worker`, `ready`). Above the log (`P/Notices`), for an engine that had been `ready`: "**The engine was reset: it ran out of memory.** The data in memory is gone; your files are kept." / "Run the file again" (only after a Break or a crash that cut a file run: it runs that file, and is on while the engine is `ready` and the file is open as a text tab), "Dismiss" (the reason's wording: OQ-9). A crash during a start adds no banner. A crash is the worker's error (cause `error`), the browser closing the file storage (`storage`), or `/work` out of step with the store (`folder`: it could not take a change of the page's; "**The engine's copy of your files fell out of step, so the engine was reset.**"); the new worker copies the store. A second worker crash before a start finishes: `failed-twice`, never a loop. A page that cannot ask a run to stop resets at once on Break. |
 | `failed` | "Try again" (`start`) | `downloading`. `failed-twice` has no way out but a reload. |
 
 **Not cross-origin isolated** (no `SharedArrayBuffer`) is a flag, not a state. Break reads "Break (reset)" (`S 11`'s "Break · resets", shortened; its name is "Break (reset): Break resets the engine on this page") and resets
@@ -658,9 +658,12 @@ As built:
   logging any error; the machine's effect `forget-download` calls it after `failed-twice` whose reason is not `memory` or
   `no-wasm`.
 - `start(n, build, reply)` makes worker `n` and sends `mount`, `boot` and `startup` to it in order. It says what happens
-  through `reply`: `stage` as each stage begins, then `started`; `start-failed` when there is no WebAssembly, the worker cannot
-  be made, or `mount`, `boot` or `startup` fails in the worker; `crashed` when the worker errors (cause `error`) or the browser
-  closes the file storage (cause `storage`), now or at any time while it is live. The worker is made before `start()`
+  through `reply`: `stage` as each stage begins, then `started` (with `storeFailed` when `startup.storeError` is set);
+  `start-failed` when there is no WebAssembly, the worker cannot be made, `mount`, `boot` or `startup` fails in the worker,
+  or the store is of a newer version (`storeError.name` `VersionError`: reason `updated`); `crashed` when the worker errors
+  (cause `error`), the browser closes the file storage (cause `storage`), or `/work` cannot take a change of the page's
+  (cause `folder`: a `sync` the worker failed, or the worker's `{folderError}`, posted right after the answer of a run whose
+  files the store kept but whose `/work` could not then take the page's version), now or at any time while it is live. The worker is made before `start()`
   returns, so calls made right after it queue behind `mount`. A worker that failed is not ended by the transport: the machine
   says so (`end()`). The store is attached to the worker with `store.attach(sync, {onClosed})`.
 - `end(n, ending)` terminates worker `n`, detaches the store, and rejects every call of it still pending with a `ClientError`
@@ -674,7 +677,7 @@ As built:
   deadline `resetAt` and "keep waiting" are the machine's and the controller's (section 5), not the transport's.
 - `query(op, args)` rejects with kind `no-engine` with no live worker. While the worker starts or runs, the call waits in the
   worker's queue; if its worker is ended first it rejects with the ending's kind.
-- `storeError` holds the reason the worker could not open the store at `mount` (also `startup.storeError`); `/work` then
+- `storeError` holds the error (`{name, message}`) with which the worker could not open the store at `mount` (also `startup.storeError`); `/work` then
   starts empty, and the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
   it (section 7). The transport also keeps `about` and `startup`, the facts of the last start, for the tests and the hook.
 - **Errors** are `Error`s with `kind`: `"failed"` (`download()` or `build()` could not get the build's list or a file as
@@ -747,7 +750,7 @@ interface Startup {                              // seconds; the fields depend o
   fetched?: "download" | "read from cache"; fetchS?: number; unpackS?: number; heapS?: number; sitePackagesS?: number;
   decoder?: "native" | "wasm" | "none"; restoreS?: number; notCached?: string[];        // snapshot
   runtimeS?: number; packagesS?: number;                                                  // normal
-  storeError?: string;                           // the worker could not open the store; `/work` started empty
+  storeError?: { name: string; message: string }; // the worker could not open the store; `/work` started empty
 }
 interface FileInfo { path: string; dir: boolean; size: number; mtime: number }           // path inside the working folder
 
@@ -854,7 +857,7 @@ interface FileStore {                                // the page's API: works wi
 | A run that is cut | A reset, a crash or a closed tab while the run's code is still running: nothing is written to the store. A reset that lands during the after-run write may leave that run's files in the store although the machine reports rc 9998. |
 | Tab lock | The tab that holds the Web Lock `dofile-engine` (*proposed*) owns the engine. A tab that cannot get it shows the take-over dialog (section 5), starts no worker and writes nothing to the store (OQ-16). "Use dofile in this tab" takes the lock with `steal`; the tab that loses it ends its worker and shows the same dialog. A closed tab frees the lock. Without Web Locks (not a secure context: plain HTTP on a LAN, the dev server only) every tab owns the engine; accepted. |
 | Persistence | The page calls `navigator.storage.persist()` once at start (a browser may show its own prompt, `F1` branches) and puts `persisted()` in the `persisted` signal. |
-| Failures | A failed write (quota exceeded) rejects with the browser's error, keeps the old record and writes no row; the tab stays unsaved. A failed after-run write sets `RunResult.store_error`. A worker that cannot open the store still mounts, with an empty `/work`, and sets the client's `storeError`; it cannot read the journal, so the client detaches the store from it: the page's changes stay in the store and do not reach `/work`. When the browser closes the database, the worker is replaced (`crashed`, cause `storage`). If another page deleted it ("Clear site data"), `/work` may hold files the store no longer has, which no row says, and the new worker's `mount` copies the store as it is now (empty, with what the page wrote since). If another page upgraded it to a newer version, this page still opens version 1, which fails (`VersionError`) in both threads: the new worker mounts with `storeError` and an empty `/work`, and the store is detached from it, as above. A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. None of these states is drawn: OQ-16. |
+| Failures | A failed write (quota exceeded) rejects with the browser's error, keeps the old record and writes no row; the tab stays unsaved. A failed after-run write sets `RunResult.store_error` (the log says "The files this run wrote couldn't be kept in this browser"). A worker that cannot open the store still mounts, with an empty `/work`, and sets the client's `storeError` (the error's name and message); it cannot read the journal, so the client detaches the store from it: the page's changes stay in the store and do not reach `/work`, and the `store-failed` banner says so (section 5). A run whose files the store kept but whose `/work` then cannot take the page's version, and a failed `sync`, leave `/work` out of step with the store: the worker is replaced (`crashed`, cause `folder`), and the run's result has no `store_error`. When the browser closes the database, the worker is replaced (`crashed`, cause `storage`). If another page deleted it ("Clear site data"), `/work` may hold files the store no longer has, which no row says, and the new worker's `mount` copies the store as it is now (empty, with what the page wrote since). If another page upgraded it to a newer version, this page still opens version 1, which fails (`VersionError`) in both threads: the start fails with reason `updated` ("Reload the page"). A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. The page's own failure to list the store is not drawn (OQ-16). |
 
 **Tests step 2 must have** (Node with `fake-indexeddb` and the real `worker.ts`, unless "e2e"):
 1. Store API: write, list, read, mkdir; rename and remove of a file and of a folder; a path that leaves the folder is refused;
@@ -926,7 +929,7 @@ type Dialog = null | { d: "download" } | { d: "clash"; path: string; index: numb
             | { d: "delete"; paths: string[] } | { d: "delete-all"; count: number } | { d: "clear-log" } | { d: "reset" }
             | { d: "close-tab"; path: string } | { d: "other-tab" };
 type Banner = { b: "reset"; reason: string; kind: "break" | "crash" | "user"; run: RunHead | null } | { b: "storage" }
-            | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
+            | { b: "store-failed" } | { b: "download-failed" } | { b: "not-text"; path: string } | { b: "save-failed"; path: string; message: string }
             | { b: "run-changed"; path: string };
 
 // A signal with one owner is a ReadonlySignal (step 3.5 C): a view that assigns one fails `npm run check`.
@@ -982,7 +985,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 - **`ABOUT`** (`web/src/app/env.ts`) is compiled in: `dofile` (the version), `engine_commit` and `stata_version`. It is there
   from the first paint, with or without an engine; there is no `about` signal. `web/test/engine.test.ts` compares it with what
   `boot` answers.
-  - `engine.ts` owns `engine` and the reset banner. It is the one caller of the engine's state machine
+  - `engine.ts` owns `engine`, the reset banner and the store-failed banner. It is the one caller of the engine's state machine
     (`web/src/engine/machine.ts`): each action is one event, the machine's table (section 5) says in which states it acts (in
     any other it does nothing), and the `engine` signal is the machine's state as views see it (`EngineState`, with the
     sixteen names, the tickets left out, and `message` added to the two failed states).
@@ -1338,7 +1341,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     gives it to the editor or "More actions" (`focusStable`), as for an opener that has left the page.
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
-    on a phone every view draws it (download-failed, run-changed); the hidden views are `display: none`, so it is read and tabbed once.
+    on a phone every view draws it (store-failed, download-failed, run-changed); the hidden views are `display: none`, so it is read and tabbed once.
 - **The editor's interface** (`editor/commands.ts`; no-op defaults until 4b's editor mounts, so 4a can call them first):
   `runFile()`, `runSelection()`, `save(path?)` (resolves true once saved), `focus()`, and for 4a `open(path, text)` (a
   text file was opened: its tab is in `tabs`), `reload(path, text)` (an upload replaced an open file, F 3.3: edits

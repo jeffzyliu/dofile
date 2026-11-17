@@ -83,12 +83,17 @@ type Happening =
   | { type: "list-failed"; n: Ticket; reason: "download" | "updated" | "unknown"; detail: string }
   // the worker
   | { type: "stage"; n: Ticket; stage: Stage }
-  | { type: "started"; n: Ticket }
-  | { type: "start-failed"; n: Ticket; reason: "no-wasm" | "download" | "memory" | "unknown"; detail: string }
+  | { type: "started"; n: Ticket; storeFailed?: boolean } // storeFailed: the worker could not open the file store
+  | {
+      type: "start-failed";
+      n: Ticket;
+      reason: "no-wasm" | "download" | "memory" | "updated" | "unknown";
+      detail: string;
+    }
   | {
       type: "crashed";
       n: Ticket;
-      cause: "error" | "storage";
+      cause: "error" | "storage" | "folder"; // the worker's error; the browser closed the store; /work out of step
       reason: "download" | "memory" | "unknown";
       detail: string;
     }
@@ -132,6 +137,7 @@ export type Effect =
   | { do: "show-dialog"; dialog: "download" | "other-tab" }
   | { do: "close-dialog"; dialog: "download" | "other-tab"; focusEditor: boolean }
   | { do: "add-reset-banner"; reason: string; kind: ResetKind; run: RunHead | null } // run: the run this reset cut
+  | { do: "add-store-banner" }
   | { do: "say"; line: Line }
   | { do: "warn"; text: string };
 
@@ -407,7 +413,11 @@ function LOST(m: In<Exclude<RowName, "other-tab-idle" | "other-tab-taking">>): S
 }
 
 const crashReason = (e: EventOf<"crashed">): string =>
-  e.cause === "storage" ? "the browser closed the file storage" : `the engine crashed (${e.detail})`;
+  ({
+    error: `the engine crashed (${e.detail})`,
+    storage: "the browser closed the file storage",
+    folder: `the engine's copy of your files fell out of step (${e.detail})`,
+  })[e.cause];
 
 // ---- table ----
 
@@ -500,12 +510,15 @@ const TABLE: { [R in RowName]: Row<R> } = {
         [{ do: "say", line: { stage: e.stage } }],
       );
     },
-    started: (m) =>
-      step({ ...m, crashes: 0, state: { s: "ready", worker: m.state.worker } }, [
+    started: (m, e) => {
+      const effects: Effect[] = [
         { do: "close-dialog", dialog: "download", focusEditor: true },
         { do: "say", line: "ready" },
         { do: "engine-ready" },
-      ]),
+      ];
+      if (e.storeFailed) effects.push({ do: "add-store-banner" });
+      return step({ ...m, crashes: 0, state: { s: "ready", worker: m.state.worker } }, effects);
+    },
     "start-failed": (m, e) => FAIL(m, e.reason, e.detail),
     crashed: (m, e) => (m.crashes === 0 ? RESET(m, "crash", crashReason(e), e.at) : TWICE(m, e.reason, e.detail)),
   },
