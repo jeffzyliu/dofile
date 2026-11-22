@@ -247,3 +247,197 @@ screenshots; a real "copy" store failure in a browser (B2: the banner is tested 
 failure (B4: the `MemoryError` type is verified in Node, in Pyodide 314.0.7); an epilogue path of a run that reaches
 `brk.check()` (B3: excluded by reading the code, not by a test); Firefox on B3's Break test; `poe ci` and `poe slow`;
 the unexplained first `npm test` exit of rv-b2.
+
+## Phase 2 (session 3, branch audit/2a-moves)
+
+Moves, cut from main c5d7a85. Run 2026-11-22, in two orchestrator sessions. The branch ends at 9f3ff3e (every item of the
+session merged; the end gate and the async survey fix are in the sections below). It goes to `main` as one pull request
+(the maintainer merges, by merge commit, after the preview on a real phone). Not in this session: R1 and its note, S2's
+second half (S3), S5, S6, R7r, C5, R5, the Run gate (plan: session 4's).
+
+### The pull requests
+
+Each went into audit/2a-moves by merge commit, after its checks passed and after a review. Builder and reviewer give
+model and effort. A fix round was by the builder (the same agent) unless noted. "Read by the orchestrator" means a diff or
+report read, not an agent review.
+
+| PR | Item | Merge commit | Review and verdict | Builder | Reviewer |
+|---|---|---|---|---|---|
+| #99 | 2.0: the N7 tightening (deterministic flags, no allowance, near-miss report, 10 more states) | fcfc8bc | rv-n7: accept after fixes (1 must-fix: an unchanged build failed, allowances too tight); rv-n7-fix: accept after fixes (1 must-fix: the engine size text, "about 49 MB" against "50 MB", varied per build; seeded). The last fix (a33f5e9) was read by the orchestrator | Sonnet, medium | Sonnet, high |
+| #93 | C3: the part header's layout in `lazy-part.ts` | 5d431d2 | rv-c3: accept (0 must-fix; should-fix: a file header, done by the orchestrator) | Sonnet, medium | Sonnet, high |
+| #94 | S9a: `scripts/lib`, the wheel in `web/.wheel`, `commands` through a temp file | 9262e6a | rv-s9a: accept (0 must-fix; should-fix: CI's engine regex and the snapshot key must cover all of `lib/`, and docs said root `dist/`: fix round; the fix read by the orchestrator) | Sonnet, medium | Sonnet, high |
+| #95 | S9b: denied commands into `commands.json`, every knob in the manifest, tools moved to `web/tools/` | 273c5c9 | rv-s9b: accept (0 must-fix; should-fix: a README row, done; no path that ships asked for a quality knob: S9c) | Sonnet, medium | Sonnet, high |
+| #96 | S7: per-start facts on the client, the controller's wiring record | 9d871ad | rv-s7: accept (0 must-fix, 0 should-fix; mutations caught) | Opus, high | Opus, high |
+| #97 | S9c: `vite.config.ts` split, `EDITOR_BASE` deleted, `SNAPSHOT_QUALITY=11` on the deploy freshness check | 7337453 | rv-s9c: accept (0 must-fix, 0 should-fix) | Sonnet, medium | Sonnet, high |
+| #98 | S8a: the `/work` mirror (`work-mirror.ts`) | 8ba36fa | rv-s8a: accept (0 must-fix, 0 should-fix) | Opus, high | Opus, high |
+| #100 | S8b: boot and loader (`worker-boot.ts`) | f89e2ac | rv-s8b: accept (0 must-fix, 0 should-fix; nice-to-haves done by the orchestrator) | Opus, high | Opus, high |
+| #101 | S8c: typed dispatch (`worker-dispatch.ts`) | 98efd19 | rv-s8c: accept (0 must-fix, 0 should-fix; the file header trimmed by the orchestrator) | Opus, high | Opus, high |
+| #102 | S4a: the matrix reader as `output/matrix.ts` with Node tests | d78832e | rv-s4a: accept (0 must-fix; should-fix: the copy's capture before the await was untested, fix round, read by report only) | Sonnet, medium | Sonnet, high |
+| #103 | S1a: documents as records in `documents.ts` (derived `tabs`, `activeTab`, selection, dirty) | 419e083 | rv-s1a: accept; rv-s1a-fix: accept (0 must-fix; should-fix: a rename read the store after the move, a rename during a read gave two tabs one path: 2 fix rounds); rv-s1-fixes: accept after fixes (should-fix: a rename onto a tab left open after a run deleted its file; fixed by the orchestrator in 3028d3f, checked by the same reviewer: accept) | Opus, high | Opus, high |
+| #104 | S4b1: one command bar (`ui/CommandBar.tsx`) and one variables table (`output/VarTable.tsx`) | 267123d | rv-s4b1: accept (0 must-fix, 0 should-fix; 5 mutations caught) | Sonnet, medium | Sonnet, high |
+| #105 | S1b: Save in `documents.ts`, the Save rule | 46618f6 | rv-s1b: accept after fixes (should-fix: a Save answer skipped when a read had started); rv-s1b-fix: accept (should-fix: a path check lost a rename: fix round 3, read by report only); rv-s1-fixes read the merges | Opus, high | Opus, high |
+| #106 | S1c: the scroll snapshot per hidden tab | a892f07 | rv-s1c: accept (0 must-fix; should-fix: `docs/design/workspace.md` sketch stale, done by the orchestrator in 436a25e) | Opus, high | Opus, high |
+| #107 | S2a: generator turns (`files/turns.ts`), one door for store writes, a Biome rule | b8d1e94 | rv-s2a: accept after fixes (1 must-fix: removing Save's resync broke the upload case; should-fix: the one-door rule missed `store!.write`, `store?.write` and a renamed import; the Store type allowed writes); fix check: accept at cf76ab2 | Opus, high | Opus, high |
+| #108 | S4b2: one dismissible banner (`ui/DismissibleBanner.tsx`), `twiceWords` from `FILES_SAFE`, `noteFor` to `log/notes.ts` | 616e55e | rv-s4b2: accept (0 must-fix, 0 should-fix; a focus mutation caught by states.spec) | Sonnet, medium | Sonnet, high |
+| #109 | B1: uploads, the first-visit sample and `openFile`'s read take a turn; `store.write` takes an expectation; the re-ask dialog | 9f3ff3e | rv-b1: accept after fixes (1 must-fix: an unbounded retry when a clash file is gone but its tab has unsaved edits; should-fix: a clash dialog could replace a dialog opened during the read); fix check: accept at cf25220 | Opus, high | Opus, high |
+
+Order of merge: #93, #94, #95, #96, #97, #98, #100, #99, #101, #102, #104, #103, #105, #106, #107, #108, #109. Several
+stacked pull requests conflicted in `web/README.md` (table rows) and were merged with the branch in, by rows. S2's second
+half stays for session 4.
+
+### Rule 7: what the re-check found
+
+Four read-only surveyors (Sonnet, medium) checked the lanes against `main` at c5d7a85 (lane a: C3, S7, S8; lane b: S1,
+S2a, B1; lane c: S4; lane d: S9). Findings dropped or cut:
+
+- **S4 (sv-c).** About 60% was still open. 06-F7's `.dta` half is gone: phase 1's B5 (f9c65fa) put `readDta` in
+  `output/dta.ts` with `test/app-dta.test.ts`, and the doubled `describe_file` is fixed. F7's matrix half stayed (S4a).
+  F13c is mostly gone: C4's `megabytes` serves both the banner and the download dialog; two one-line constants remain.
+  F13a (the repeated Dismiss and focus pattern) and F13d stayed (S4b2). F13b was unsettled in the survey and done in S4b2.
+- **S9 (sv-d).** Every clause was live except 10-F1 (the type check misses the tooling) and 10-F12 (`.mjs` files): N5 closed
+  both (`tsconfig.json` covers scripts, e2e, `vite.config.ts`, the Playwright configs; every script is `.ts`).
+- **S7 (sv-a).** 01-F2 is the graphics half: not part of S7 (the plan leaves graphics to R1). 01-F6 was partly answered by B2.
+- **C3.** Small: the bare 0, 1 and 2 of `client.ts` (about lines 420 to 482), no test of the header round trip.
+- **S8.** Three items (mirror, boot and loader, typed dispatch). None of the 22 graphics variables moved; 8 are touched
+  through hooks. The Grit rule at `biome/architecture.grit` (lines 129 to 135) limits `postMessage` to the post callback.
+- **Lane b (sv-b).** All 11 findings present, none dropped; `docs/design/workspace.md` fits the code. The spike is 5 unwired
+  files on a pre-phase-1 base: its tests were ported. B1's "already exists" was decided by message text
+  (`FilesPane.tsx`, `actions.ts`): a store error needed a name (done in B1: `StoreConflict`).
+- **Overlaps.** Each lane ran in series; S1 and S7 meet only at `main.tsx`. N7 ran after S4's new states were added.
+- **Split by the orchestrator.** S4 into S4a (the matrix reader), S4b1 (bar and table) and S4b2 (banner, after S2a). S9 into
+  three pull requests. S1 into three. S2 first half only.
+
+### The maintainer's decisions of this session (2026-11-22)
+
+The words are the maintainer's, as recorded in the sessions' notes.
+
+- **Plans and spawns.** 06:5xZ: "yes to all." (the plan, the spawns, pushes of item branches, pull requests into the
+  session branch and merges there, the end-gate Python checks, worktree removals). 07:46Z, asked about more agents: "are
+  there any other agents you want? you can go above 5 at once". 09:08Z: "yes to all" (the second session's plan).
+- **The deploy check** (S9c), 07:48Z: "yes, add quality 11 to the deploy check". The build-web freshness check now asks for
+  quality 11; a quality-5 snapshot in the cache is rebuilt.
+- **The machine**, 10:00Z: "all other sessions are closed now. you can load the machine more."
+- **The orchestrator's choices on the open points of S1 and S2, accepted at 10:00Z** with "your decisions are fine for 2.":
+  - *Rename refusal.* A rename onto a name that a tab left open after a run deleted its file: a clean stale tab closes and
+    the rename goes through; a stale tab with unsaved edits keeps the name taken and the rename is refused with "already
+    exists" (the text the file pane already shows).
+  - *Scroll behaviours* (S1c). A new tab, or a tab retyped, opens at the top; a reload from the store keeps the place; a
+    run's text put into a clean tab does not move it. The place is kept per hidden tab and applied after the state is set.
+  - *The Save rule* (settled 2026-11-17, built in S1b). A later reload, "Reload from the run", an upload's Replace or a
+    run's text shown in the tab cancels a pending Save of that tab: the later action wins. Today's code wrote in those cases.
+  - *30 s per operation.* A turn's `Io` ends an operation that waits more than 30 s (`OP_TIMEOUT`, `files/turns.ts`) and
+    refuses a turn nested in a turn.
+- **B1's re-ask dialog**, 10:01Z, answering the orchestrator's question: the words "A: changed while deciding". Title
+  "<path> changed while you were deciding"; body "It was saved again since you were asked. Keep yours, or replace it with
+  the uploaded one?"; the "Yours" line with the new size and date; for "Restore the sample", "uploaded" becomes the
+  sample's words. The rules, "Always ask": the question is asked even after "Do the same" with Replace; a file deleted
+  meanwhile is written without asking; a name taken since the list was read gives the ordinary clash dialog (or "already
+  exists"). In SPEC's "Name clash" row.
+- **A gone file with a dirty tab**, 10:52Z, asked at 10:39Z (an upload clashes with a file a run deleted, its tab is open
+  with unsaved edits, and "Do the same" with Replace was ticked: the "deleted meanwhile" rule and the "unsaved edits are
+  always asked" rule disagree): the answer was "Ask (Recommended)". The clash dialog shows, with the unsaved-edits words,
+  even after "Do the same". A write without a question is capped at 3 tries.
+- **The narrow gaps**, 10:00Z: "4. yes, skip for now." They go to the known gaps below, not fixed.
+- **The end-gate surveyor**, 10:12Z: "yes, add that surveyor to the end gate." It mapped the page's asynchronous paths
+  (and the worker's dispatch queue, which the maintainer asked about).
+
+### Known gaps
+
+- **The narrow gaps the maintainer said to skip** ("4. yes, skip for now"):
+  - Typing into a leftover tab during the rename's one write gives two tabs on one path (reasoned from the code, not
+    shown in a test).
+  - Save against a new file written under the old name during a rename's extra read leaves the dot off (S1b's
+    variant `path === old ? saved : null` was not applied: it reverses the behaviour S1b's third fix tests).
+  - A stale tab that becomes dirty while `store.rename` runs: not handled (rare).
+- **The S1 screenshots.** N7 compared S1a, S1b, S1c and S2a (and later S4b1, S4b2, B1) with the phase's baseline at 81
+  shots and 0 px each. S1 changed the spec's seed helpers, so each spec ran on its own build: 0 px shows that each version
+  can draw the same screens, not that the same user actions reach them. Mitigation: the editor and files e2e specs drive
+  the real actions on Chromium and the iPhone project, and pass; CI ran Firefox and WebKit on each pull request. For the
+  real-phone pass: open several tabs, edit one, rename, switch tabs and panes, scroll a long file and come back.
+- **N7 stays a screen check.** What the tightened N7 cannot see (`docs/test-map.md`): the seeded FAILED words come from the
+  caller's `words.ts` (a wording change is not caught), the hidden scrollbars would hide a new overflow, and the engine size
+  text is fixed.
+- **The Pyodide interrupt buffer.** As in phase 1 (icebox).
+- **Not run in either session:** Firefox and WebKit e2e locally (CI ran them per pull request), a real iPhone,
+  `check-pytest`, `check-numeric` and `check-snapshot` per item (the gate runs them).
+
+### Flaky tests seen
+
+- **chromium `editor.spec.ts:1033`**, once, about 10:37Z, under the load of rv-b1's scratch runs. 10 of 10 re-runs passed. Not
+  tied to B1 and not run on 57729b9. First result: a failure.
+- **`check-snapshot` case 1908_models2**, 300 s timeout, under load (load average 27 to 32 on 12 CPUs, rv-s8a, earlier in the
+  session). Alone and with `--timeout 900` it matched in 330.6 s (a re-run). The case does not load `worker.ts`.
+- **S4b2's test count.** The builder saw 457 pass and 5 skipped (no snapshot); the reviewer saw 477 (with one). Not
+  investigated; the two counts may be the snapshot's 15, plus what the pull request added, but this is a guess.
+- WebKit's Break test: not seen this session.
+
+### Records for section 8
+
+- **R1 (task 2).** Not started: lane a ended at S8c. The sources do not record a check of the condition on R1
+  (the idle-wait work done, the graphics part unchanged); R1 and its note head section 8's list unless it is checked at the
+  next session. The graphics op answers beside the worker's queue (an unqueued op, with `boot`): R1's.
+- **R2 (task 3).** The ticket per run: S7 now keeps per-start facts on the client (`Live.facts`, a `Wiring` record in
+  `app/engine.ts`; facts are null between a worker's end and the next start). There is no test of the Break timer's clear
+  on a second `connectEngine` (`engine.ts:97`). Phase 1's B3 record still stands.
+- **R3, the harness (task 4).** Behaviour the page carries that only e2e covers: the `CommandBar` wiring, the focus of the
+  storage, store-failed and download-failed banners, the re-ask dialog of B1 (no e2e, no shot), the cap of 3 writes in B1.
+- **R4 (task 5).** No CSS changed in S4b1 or S4b2; N7 shows 0 px. S9c's split is of `vite.config.ts`, not the sheets.
+- **R6 (task 6).** Rule 9 was not counted in this session; S1 moved the seeds to `src/app/editor/seeds.ts` and the e2e hook
+  keeps one `state` object.
+- **W1 (the sweep of `src/engine/`).** 02-F13, the split of `snapshot.ts`, goes to W1 after R1 (icebox, with the reason).
+  The one-door rule's reach for the other stores of the audit: `files/turns.ts` and the Biome rule have no exception left
+  after B1.
+- **The async map.** The end-gate survey (below) lists loose reads of the store outside turns (`FileBar.tsx:25`,
+  `output/dta.ts:15`, `sample.ts:65`, `dialogs.tsx:94`: stale display at worst) for W3's region.
+
+### Nice-to-haves left
+
+One line each; none blocks the merge. Recorded from the reviews.
+
+- S7: no test of the Break timer's clear on a second `connectEngine`.
+- S8a: 4 branches survive mutation in the unit tests (maybe covered by `files.test.ts`); the fake `mkdirTree` is too lenient.
+- S8c: an unserialisable boot error leaves `booted` unsettled.
+- C3: the state values are not pinned; the long comment at `worker.ts:488`; `lazy-matplotlib.md` says "16 + size".
+- S9a: `--timeout 0` in `check-snapshot` means no limit (it was an immediate kill; callers pass a number).
+- S9b: about 30 bytes of unused denied data in the editor bundle; `SNAPSHOT_QUALITY=abc` reads as stale.
+- S9c: a dead `editorBase` branch in `headersFile`.
+- S1a: the comment at `actions.ts:55` names an unreachable case.
+- S1b: a failed write after a swap announces "couldn't be saved"; the S2 todo test did not reproduce its race (replaced in S2a).
+- S1c: two tab switches before the editor lays out can restore the wrong place (no user path found); a hidden tab's place is
+  not moved when a run changes its text; no browser test of the place after a reload.
+- S2a: the store call in a `finally` after a timeout.
+- S4a: two mutations caught only by a timeout.
+- S4b1: the `Picking` export is unused outside `VarTable.tsx:10`; the `CommandBar` wiring is covered by e2e only.
+- S4b2: focus untested for the storage, store-failed and download-failed banners; `docs/web-page-flows.md` (lines 108 and 233)
+  does not name `DismissibleBanner`.
+- B1: the asked-again dialog has no e2e or shot; the cap of 3 writes is untested.
+
+### End-gate survey of the page's asynchronous paths (Sonnet, medium, at 9f3ff3e)
+
+Read only; the survey found no stale-answer bug it could show. Every loose path that writes state after an await has a guard
+(an identity check, an in-flight map, a `live` flag, the transport's rejection, or a turn). Not read: `store.ts`, most of
+`client.ts` and `worker.ts`, the e2e specs; tests were read by title, not run.
+
+- **A1, worker-dispatch double answer.** In `worker-dispatch.ts` `answer`, `post`, `afterResult` and `answered(false)` share
+  one `try`: a throw in a hook posts a second `{id, error}` answer and calls `answered(true, e)` again (for `boot`, `booted`
+  then rejects for every later op). The page drops the second answer; nothing in `afterResult` can throw today, so it is
+  latent. Fixed in the gate: #110 (10a06f9), a failing test first; review Sonnet, high: accept (its should-fix and nice-to-have done).
+- **A2.** Two quick drops or file picks enter the `uploads` chain in the order their reads finish, not the order of the
+  user's actions; with the same path in both, the winner is not deterministic. Left for later.
+- **A3.** `CloseTabDialog.save` closes by the old path after the await (`files/dialogs.tsx`); the dialog is modal, so no way
+  to rename meanwhile was found (a guess). Left for later.
+- **A6.** `copyMatrix` of a closed matrix copies without the `results.value === rs` check that `readMatrix` has: a run landing
+  during the read copies the new run's matrix under "Copied e(b)". Left for later.
+
+### Gate checks
+
+On audit/2a-moves: the engine checks and N7 at 9f3ff3e, e2e at 10a06f9 (9f3ff3e plus the A1 fix, which touches only the worker's dispatch). Run 2026-11-22, locally, with no agent running.
+
+| Check | Result |
+|---|---|
+| `E2E_PORT=<port> SNAPSHOT_QUALITY=5 npm run e2e`, all four projects | 750 passed, 54 skipped, 0 failed |
+| `npm run check-snapshot` | 107 cases, 0 differ, 0 timed out (1701 and 1911 differ as expected). The first try stopped at once with rc 2: the fresh worktree had no snapshot yet |
+| `npm run check-numeric` | exit 0: 107 cases, 0 timed out |
+| `npm run check-pytest` | exit 0: 80 files, 0 timed out |
+| `uv run poe test tests` | 343 passed, 3 xfailed |
+| N7 against c5d7a85 (the phase's start baseline) | 81 shots, 0 px, no near-misses. Each side ran its own spec: c5d7a85 with 98efd19's spec (S1 changed the seed helpers, and the current spec cannot seed the old app), 9f3ff3e with its own |
