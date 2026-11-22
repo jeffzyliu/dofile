@@ -57,6 +57,8 @@ export type EngineState =
   | { s: "other-tab-idle" }
   | { s: "other-tab-taking" }; // a take-over is in progress
 export type EngineStateName = EngineState["s"];
+/** One member of EngineState, by its tag. */
+export type EngineStateOf<N extends EngineStateName> = Extract<EngineState, { s: N }>;
 
 /** true when V has the tags of the machine's State. */
 export type SameTags<V extends { s: string }> = Equal<V["s"], State["s"]>;

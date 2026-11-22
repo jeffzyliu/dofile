@@ -11,7 +11,7 @@
 import * as eng from "../engine.ts";
 import { startEngine, startOffer } from "../start.ts";
 import { activeTab, engine, isolated, phoneTab, showToast, tabs } from "../state.ts";
-import { engineStarting, otherTab, runOn } from "../states/predicates.ts";
+import { engineStarting, otherTab, runOn, takesRun } from "../states/predicates.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { since } from "./clock.ts";
@@ -43,7 +43,7 @@ function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boo
       return { label: "Not started", disabled: true, busy: false, start: false };
     return { label: "Start engine", disabled: offer === "off", busy: false, start: true };
   }
-  if (s === "ready") return { label: "Run", disabled: false, busy: false, start: false };
+  if (takesRun(st)) return { label: "Run", disabled: false, busy: false, start: false };
   if (runOn(st)) return { label: "Run", disabled: s !== "running", busy: true, start: false };
   if (engineStarting(st)) return { label: "Starting…", disabled: true, busy: false, start: false };
   return { label: "Run", disabled: true, busy: false, start: false }; // the page load (checking-lock, checking-cache)

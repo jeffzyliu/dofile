@@ -26,7 +26,21 @@ import type {
   Ticket,
   TicketedEffect,
 } from "../src/engine/machine.ts";
-import { cutResult, initial, lost, RC_RESET, ticketOf, transition } from "../src/engine/machine.ts";
+import {
+  BREAK_ASKED,
+  cutResult,
+  initial,
+  LOADING,
+  lost,
+  OTHER_TAB,
+  RC_RESET,
+  RUN_ON,
+  STARTING,
+  ticketOf,
+  transition,
+  UP,
+  WORKER_LIVE,
+} from "../src/engine/machine.ts";
 import type {
   Build,
   CrashCause,
@@ -1975,3 +1989,39 @@ export function mustNotCompile(
   const shown: EngineState = { s: "ready", worker: ticket };
   return [made, forged, shown];
 }
+
+// ---- SPEC section 5's states x groups table ----
+// A new state shows up here as a row with no mark: the review-time check that its groups were decided.
+// `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` prints the table.
+const GROUPS: [string, Partial<Record<RowName, true>>][] = [
+  ["UP", UP],
+  ["RUN_ON", RUN_ON],
+  ["BREAK_ASKED", BREAK_ASKED],
+  ["STARTING", STARTING],
+  ["LOADING", LOADING],
+  ["WORKER_LIVE", WORKER_LIVE],
+  ["OTHER_TAB", OTHER_TAB],
+];
+/** The table as SPEC section 5 has it: one row per state, a mark where the state is in the group. */
+function groupsTable(): string {
+  return [
+    `| State | ${GROUPS.map(([g]) => `\`${g}\``).join(" | ")} |`,
+    `|---|${GROUPS.map(() => "---").join("|")}|`,
+    ...ROWS.map((r) => `| \`${r}\` | ${GROUPS.map(([, g]) => (r in g ? "x" : "·")).join(" | ")} |`),
+  ].join("\n");
+}
+
+test("SPEC section 5's states x groups table is the groups machine.ts writes", () => {
+  if (process.env.PRINT_SPEC_MATRIX) console.log(groupsTable());
+  const text = readFileSync(fileURLToPath(new URL("../../docs/design/SPEC.md", import.meta.url)), "utf8");
+  const section = text.slice(text.indexOf("\n## 5. "), text.indexOf("\n## 6. "));
+  const at = section.indexOf("\n### States and groups");
+  assert.ok(at >= 0, 'SPEC section 5 has no "### States and groups"');
+  const end = section.indexOf("\n### ", at + 1);
+  const rows = section
+    .slice(at, end < 0 ? undefined : end)
+    .split("\n")
+    .filter((l) => l.startsWith("|"))
+    .join("\n");
+  assert.equal(rows, groupsTable());
+});

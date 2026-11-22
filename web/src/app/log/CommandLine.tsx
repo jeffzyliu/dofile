@@ -23,7 +23,7 @@ import { saveAs } from "../files/save.ts";
 import { canClearLog, runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
 import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
-import { breakAsked } from "../states/predicates.ts";
+import { breakAsked, takesRun } from "../states/predicates.ts";
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { MenuButton, type MenuItem } from "../ui/Menu";
@@ -63,7 +63,7 @@ export function CommandLine() {
   const input = useRef<HTMLInputElement>(null);
   const phone = isPhone.value;
   const offer = startOffer(engine.value); // not null: no engine, so the field is off and the button starts the engine
-  const busy = offer === null && engine.value.s !== "ready"; // the engine takes no command now: the button is off
+  const busy = offer === null && !takesRun(engine.value); // the engine takes no command now: the button is off
   const onKey = (e: KeyboardEvent) => {
     const list = history.value;
     if (offer !== null) {

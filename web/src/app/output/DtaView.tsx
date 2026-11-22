@@ -10,7 +10,7 @@ import { baseName } from "../files/tree.ts";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
 import { engine, files, showToast } from "../state.ts";
-import { workerReachable } from "../states/predicates.ts";
+import { takesRun, workerReachable } from "../states/predicates.ts";
 import { Icon } from "../ui/Icon";
 import { copyText } from "./clip.ts";
 import { readDta } from "./dta.ts";
@@ -64,7 +64,7 @@ export function DtaView({ path }: { path: string }) {
         <button
           type="button"
           class={`btn primary${off ? " off" : ""}`}
-          disabled={command === null || (!off && engine.value.s !== "ready")}
+          disabled={command === null || (!off && !takesRun(engine.value))}
           aria-disabled={off ? "true" : undefined}
           onClick={load}
         >

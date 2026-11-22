@@ -4,14 +4,14 @@
 import { effect, signal } from "@preact/signals-core";
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
 import { engine } from "../state.ts";
-import type { EngineState } from "../types.ts";
+import { engineLoading, runOn } from "../states/predicates.ts";
+import type { EngineStateOf } from "../types.ts";
 
 export const now = signal(Date.now());
 
-const TICKING = new Set<EngineState["s"]>(["running", "breaking", "waiting", "starting-list", "starting-worker"]);
 let timer: ReturnType<typeof setInterval> | undefined;
 effect(() => {
-  const on = TICKING.has(engine.value.s);
+  const on = runOn(engine.value) || engineLoading(engine.value);
   if (on) now.value = Date.now(); // each new state starts from the true time, not up to one tick late
   if (on && timer === undefined) {
     timer = setInterval(() => {
@@ -27,9 +27,7 @@ effect(() => {
 export const since = (t0: number) => Math.max(0, (now.value - t0) / 1000);
 
 /** While Break waits for a command: the whole seconds left before the engine is reset ("resets in 4 s"). */
-export const resetsIn = (st: Extract<EngineState, { s: "breaking" }>) =>
-  Math.max(0, Math.ceil((st.resetAt - now.value) / 1000));
+export const resetsIn = (st: EngineStateOf<"breaking">) => Math.max(0, Math.ceil((st.resetAt - now.value) / 1000));
 
 /** While Break waits for a command: the seconds since Break was pressed (`resetAt` is that moment plus the grace). */
-export const breakPending = (st: Extract<EngineState, { s: "breaking" }>) =>
-  (now.value - (st.resetAt - BREAK_GRACE_MS)) / 1000;
+export const breakPending = (st: EngineStateOf<"breaking">) => (now.value - (st.resetAt - BREAK_GRACE_MS)) / 1000;

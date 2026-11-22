@@ -215,6 +215,21 @@ A sweep that has to change a test or a shared doc logs the change for W5 or the 
 | Whole-diff review, G0 to head, by an Opus reviewer that has read none of the items; its report to `docs/archive/web-audit-surveys/` | 3.5 | 3.6 |
 | The census again, by an `orchestrate:surveyor`, with `docs/archive/web-audit-surveys/census/`, against report 04; its report to the same folder | 3.5 | 3.6 |
 
+**W1 and W2's type items** (the maintainer, 2026-11-22, after the engine-groups pull request). Besides the sweep, W1 and
+W2 take each of these, with a change or a written reason to leave it. File names are as at `ed758bb`: re-check them after
+phase 2 (S8's typed dispatch and R7r move these files).
+- `EngineState` (`app/types.ts`) restates the machine's `State` without its tickets, kept in step by `SameTags`,
+  `NothingHidden` and `view()`. The engine-groups review advised keeping it written out (its per-state comments, the
+  `message` field, readable hovers and errors). The sweep brings the maintainer the choice with the cost of each side and
+  changes nothing before that decision.
+- The type utilities `Equal` and `Expect` (and the helpers of the machine's other type checks) live in `machine.ts`, and
+  `app/types.ts` imports them from there. Give them a home of their own if that keeps the machine's type-only imports and
+  adds no import cycle.
+- The casts `as Record<Stage, string>` in `states/words.ts` and `as LogItem` in `run.ts`; and `as ComponentType<...>` in the
+  registry `banners.tsx`, a view, so W3's region: W1 and W2 log it for W3 if they leave it.
+- The per-state case lists of `startOffer` (`start.ts`) and `refusedRunWords` (`editor/words.ts`): kept, since they force a
+  decision for each new state, as `WAKE_LOCK` does, unless a group of `machine.ts` says the same and that check stays.
+
 **End gate.** Every check of every earlier gate, and `uv run poe lint` (W1 sweeps the three Python files). Then
 `docs/phase2-plan.md` records the code audit (this plan) as done. Its audit section lists more than this plan covers,
 and that stays open there: the design checks on the real pages, the accessibility items, the split of the main chunk,

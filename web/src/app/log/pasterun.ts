@@ -5,6 +5,7 @@ import type { RunResult } from "../../engine/types.ts";
 import { runCommand } from "../run.ts";
 import { noEngine } from "../start.ts";
 import { engine, lastRun } from "../state.ts";
+import { takesRun } from "../states/predicates.ts";
 import { type InTurn, inTurnWords, pastedLines, type RunOne } from "./paste.ts";
 
 /** What a paste into the command line does, decided before anything is changed:
@@ -20,7 +21,7 @@ export function pastePlan(before: string, pasted: string, after: string): Paste 
   if (noEngine()) return { do: "ordinary" };
   const lines = pastedLines(before, pasted, after);
   if (!lines) return { do: "ordinary" };
-  if (engine.value.s === "ready") return { do: "run", lines };
+  if (takesRun(engine.value)) return { do: "run", lines };
   const refused: InTurn = { total: lines.length, ran: 0, stop: { line: 1, why: "refused" } };
   return { do: "refused", words: inTurnWords(refused) ?? "The engine can't take a command now" };
 }

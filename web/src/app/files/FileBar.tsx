@@ -6,6 +6,7 @@ import { copyText } from "../output/clip.ts";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
 import { activeTab, engine, files, fresh, showToast, tabs } from "../state.ts";
+import { takesRun } from "../states/predicates.ts";
 import { store } from "../store.ts";
 import { Icon } from "../ui/Icon";
 import { downloadEntry } from "./actions.ts";
@@ -85,7 +86,7 @@ export function FileBar() {
         <button
           type="button"
           class={`btn${off ? " off" : ""}`}
-          disabled={command === null || (!off && engine.value.s !== "ready")}
+          disabled={command === null || (!off && !takesRun(engine.value))}
           aria-disabled={off ? "true" : undefined}
           onClick={() => {
             if (command === null) return;

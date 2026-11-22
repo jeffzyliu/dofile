@@ -138,6 +138,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
   - Start engine's event `ask` in each state.
+  - SPEC section 5's states x groups table matching the groups in `machine.ts`.
 - `files-ui.test.ts`: the file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb.
   - The tree and the current folder; opening each kind of file (SPEC 3.11), closing, renaming, deleting with open tabs.
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
@@ -208,7 +209,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
   checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
   - No view reaches the transport through value imports (transitive).
-  - `machine.ts`: two casts, no top-level variable; the cast to `Ticket` occurs once in `web/`.
+  - `machine.ts`: two casts, no top-level `let` or `var`; the cast to `Ticket` occurs once in `web/`.
   - The transport names no state; `run.ts` subscribes to nothing.
   - The pages' HTML and CSS: `src/site/` apart from the editor's.
   - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).

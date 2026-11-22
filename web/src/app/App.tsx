@@ -33,7 +33,7 @@ import {
   theme,
   wrap,
 } from "./state.ts";
-import { engineUp } from "./states/predicates.ts";
+import { takesReset } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
 import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
 import type { OutputTab, PhoneTab } from "./types.ts";
@@ -54,7 +54,7 @@ const moreItems = (): MenuItem[] => [
     },
   },
   wrapItem(), // no "Clear log": the Log head has it (on a phone, the strip's "Log ⋯")
-  { label: "Reset the engine…", danger: true, disabled: !engineUp(engine.value), onSelect: askReset },
+  { label: "Reset the engine…", danger: true, disabled: !takesReset(engine.value), onSelect: askReset },
   "rule",
   { label: "Commands", href: COMMANDS_URL },
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
@@ -72,7 +72,7 @@ const phoneMoreItems = (): MenuItem[] => [
     keepOpen: true,
   },
   wrapItem(),
-  { label: "Reset the engine…", danger: true, disabled: !engineUp(engine.value), onSelect: askReset },
+  { label: "Reset the engine…", danger: true, disabled: !takesReset(engine.value), onSelect: askReset },
   "rule",
   { label: "Commands", href: COMMANDS_URL },
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
