@@ -50,7 +50,7 @@ export function ClashDialog({ dialog: d }: { dialog: DialogOf<"clash"> }) {
   return (
     <Dialog
       role="alertdialog"
-      title={words.title(d.path)}
+      title={facts?.changed ? words.changedTitle(d.path) : words.title(d.path)}
       describedBy="clash-question"
       onCancel={() => give("stop")}
       actions={
@@ -64,10 +64,10 @@ export function ClashDialog({ dialog: d }: { dialog: DialogOf<"clash"> }) {
         </>
       }
     >
-      <p id="clash-question">{words.question}</p>
+      <p id="clash-question">{facts?.changed ? words.changedQuestion : words.question}</p>
       {facts?.unsaved && <p>{baseName(d.path)} is open with unsaved edits; replacing it discards them.</p>}
       <p class="meta">
-        {facts && `Yours: ${formatSize(facts.yours.size)}, ${shortDate(facts.yours.mtime)} · `}
+        {facts?.yours && `Yours: ${formatSize(facts.yours.size)}, ${shortDate(facts.yours.mtime)} · `}
         {facts && `${words.theirs}: ${formatSize(facts.uploaded)} · `}
         {`clash ${d.index} of ${d.total}`}
         {others > 0 && ` · ${words.others(others)}`}.

@@ -3,6 +3,7 @@
 // worker.
 import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { isConflict } from "../../engine/store.ts";
 import { formatSize } from "../bytes.ts";
 import { activeTab, tabs } from "../editor/documents.ts";
 import { downloadAll, refresh } from "../files.ts";
@@ -166,10 +167,7 @@ async function endRename(name: string | null, leaving = false) {
       await renameEntry(r.path, to);
     } catch (e) {
       // the list was not current: the store says why
-      return keepOpen(
-        r,
-        (e as Error)?.message?.includes("already exists") ? `${name} already exists here.` : NAME_NOT_ALLOWED,
-      );
+      return keepOpen(r, isConflict(e) ? `${name} already exists here.` : NAME_NOT_ALLOWED);
     } finally {
       ending = false;
     }
@@ -204,7 +202,7 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
     try {
       to = await createEntry(kind, dir, problem ? undefined : asked);
     } catch (e) {
-      if (asked === undefined || problem || !(e as Error)?.message?.includes("already exists")) throw e;
+      if (asked === undefined || problem || !isConflict(e)) throw e;
       problem = `${asked} already exists here.`; // the list was not current
       if (!leaving) return keepOpen(r, problem);
       to = await createEntry(kind, dir);

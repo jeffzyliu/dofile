@@ -29,7 +29,7 @@
 //   being told the operation failed, since nobody knows. The next turn starts; the store applies calls in the order
 //   they were made, so the next turn's calls land after the late one.
 
-import type { FileStore } from "../../engine/store.ts";
+import type { Expect, FileStore } from "../../engine/store.ts";
 import { store } from "../store.ts";
 import type { FileInfo } from "../types.ts";
 
@@ -50,7 +50,8 @@ export interface Issued {
 export interface Io {
   list(): Turn<FileInfo[]>;
   read(path: string): Turn<Uint8Array<ArrayBuffer>>;
-  write(path: string, data: Uint8Array): Turn<FileInfo>;
+  write(path: string, data: Uint8Array, expect?: Expect): Turn<FileInfo>;
+  info(path: string): Turn<FileInfo | null>;
   mkdir(path: string): Turn<void>;
   rename(from: string, to: string): Turn<void>;
   remove(path: string): Turn<void>;
@@ -72,7 +73,7 @@ function* op<T>(name: string, run: () => Promise<T>): Turn<T> {
   return (yield request as unknown as Op) as T; // the brand is a type only: the runner gets the request back
 }
 
-type Target = Pick<FileStore, "list" | "read" | "write" | "mkdir" | "rename" | "remove">;
+type Target = Pick<FileStore, "list" | "info" | "read" | "write" | "mkdir" | "rename" | "remove">;
 let target: Target = store;
 
 /** The store the turns call: the page's (app/store.ts) until files.ts is connected to one (connectFiles: main.tsx
@@ -85,7 +86,8 @@ export function turnsOn(s: Target): void {
 const io: Io = {
   list: () => op("list", () => target.list()),
   read: (path) => op(`read ${path}`, () => target.read(path)),
-  write: (path, data) => op(`write ${path}`, () => target.write(path, data)),
+  write: (path, data, expect) => op(`write ${path}`, () => target.write(path, data, expect)),
+  info: (path) => op(`info ${path}`, () => target.info(path)),
   mkdir: (path) => op(`mkdir ${path}`, () => target.mkdir(path)),
   rename: (from, to) => op(`rename ${from}`, () => target.rename(from, to)),
   remove: (path) => op(`remove ${path}`, () => target.remove(path)),
