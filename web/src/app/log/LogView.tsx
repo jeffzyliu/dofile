@@ -13,7 +13,6 @@ import { cardTheme } from "../output/GraphTab";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
 import { engine, graphFull, graphIndex, graphs, isPhone, log, outputTab, showToast, split, wrap } from "../state.ts";
-import { noteFor } from "../states/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { fromAnywhere, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon, isMac } from "../ui/Icon";
@@ -21,6 +20,7 @@ import { ignoreHeldEnter } from "../ui/keys.ts";
 import { commandEnd, echoed, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
 import { classify, hintParts, type LogLine, runError } from "./classify.ts";
 import { findAt, findOpen, findText, matches } from "./find.ts";
+import { noteFor } from "./notes.ts";
 
 type TextItem = Extract<LogItem, { t: "text" }>;
 

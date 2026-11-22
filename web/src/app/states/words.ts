@@ -148,24 +148,5 @@ export function failedActions(reason: FailReason): FailedAction[] {
 /** The second line of S 7 (failed twice), with the reason when it is memory. */
 export const twiceWords = (reason: FailReason): { head: string; rest: string } => ({
   head: `The engine stopped after failing twice${reason === "memory" ? " (out of memory)" : ""}.`,
-  rest: "It won't restart by itself, since each attempt can use a lot of memory. Your files are safe: you can still edit and download them.",
+  rest: `It won't restart by itself, since each attempt can use a lot of memory. ${FILES_SAFE}`,
 });
-
-// ---- the two notes in the page's own words (log/LogView.tsx shows them) ----
-
-/** Community commands the engine does not have (F 3.5). */
-export const COMMUNITY = ["reghdfe", "esttab", "estout", "outreg2", "ivreg2", "xtivreg2", "ftools", "winsor2"];
-
-/** A note to put under a run's error, in the page's words, or null (log/LogView.tsx shows it). `rc` and `error` are the
- *  run's. Two cases: `restore` with nothing preserved (r(622)); a community command (r(199)). A temporary name from an
- *  earlier run (r(601) naming the engine's temporary file) has no note: the engine's own line says it
- *  (src/dofile/browser.py TEMPFILE_HINT, "a tempfile lasts one run: save it under a name to use it in a later run"). */
-export function noteFor(rc: number, error: string | null): string | null {
-  if (!error) return null;
-  if (rc === 622 && /nothing to restore/.test(error))
-    return "Nothing was preserved. A run restores its data when it ends, so put preserve and restore in the same run.";
-  const m = rc === 199 ? /command (\S+) is unrecognized/.exec(error) : null;
-  if (m && COMMUNITY.includes(m[1]))
-    return `${m[1]} is a community command. OpenDTA, the engine behind dofile, doesn't include it.`;
-  return null;
-}
