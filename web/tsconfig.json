@@ -22,6 +22,7 @@
     "e2e",
     "screenshots",
     "scripts",
+    "tools",
     "playwright.config.ts",
     "screenshots.config.ts",
     "vite.config.ts"

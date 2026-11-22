@@ -533,5 +533,9 @@
 "stepwise",
 "svy",
 "xi"
+],
+"denied": [
+"shell",
+"webuse"
 ]
 }

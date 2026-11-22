@@ -23,7 +23,7 @@ import {
   zeroFreeMemory,
   zeroLibraryCopies,
 } from "../src/engine/snapshot.ts";
-import { inputs } from "./build-id.ts";
+import { inputs, knobs } from "./build-id.ts";
 import { installEngine } from "./install-engine.ts";
 
 const here = new URL("..", import.meta.url);
@@ -32,13 +32,15 @@ const OUT = process.env.SNAPSHOT_OUT
   : fileURLToPath(new URL("public/snapshot/", here));
 // PYTHONOPTIMIZE=2 by default: docstrings and `assert` statements are left out of everything imported or compiled, in
 // the snapshot and after the restore (the flag is part of the heap). Smaller heap. SNAPSHOT_STRIP_DOCS=0 builds without.
-const stripDocs = process.env.SNAPSHOT_STRIP_DOCS !== "0";
+// The settings come from knobs() (build-id.ts), and the manifest records them.
+const settings = knobs();
+const stripDocs = settings.optimize === 2;
 // what the snapshot is built from, with their hashes: the manifest records it
 const record = inputs();
 // The lazy graphics part (docs/lazy-matplotlib.md): matplotlib and what only it needs stay out of the heap and the
 // bundle, in a third file that the page fetches after the start files. SNAPSHOT_NO_MPL=0 builds the old single
 // snapshot.
-const noMpl = process.env.SNAPSHOT_NO_MPL !== "0";
+const noMpl = settings.noMpl;
 const pyodideDir = new URL("node_modules/pyodide/", here);
 
 const t0 = performance.now();
@@ -50,7 +52,7 @@ const patched = `${OUT}pyodide.asm.patched.mjs`;
 writeFileSync(
   patched,
   patchAsm(readFileSync(new URL("pyodide.asm.mjs", pyodideDir), "utf8"), {
-    noTrampoline: process.env.SNAPSHOT_TRAMPOLINE !== "1",
+    noTrampoline: !settings.trampoline,
   }),
 );
 const create = (await import(patched)).default;
@@ -181,7 +183,7 @@ lap(
 // (vite preview, many hosts) send a .br file with Content-Encoding: br, the browser decodes it, and the cache would hold
 // the 229 MB. Brotli quality 11 takes about 3 minutes (the two files in parallel); SNAPSHOT_QUALITY=5 makes a build in
 // seconds that is about 25% bigger, for development.
-const quality = Number(process.env.SNAPSHOT_QUALITY ?? 11);
+const quality = settings.quality;
 const brotliCompress = promisify(zlib.brotliCompress);
 const compress = (data: Uint8Array) =>
   brotliCompress(data, {
@@ -288,7 +290,7 @@ writeFileSync(
   JSON.stringify({
     ...record, // a build compares these with its own (build-id.ts, staleness)
     built: Date.now(),
-    optimize: stripDocs ? 2 : 0,
+    ...settings,
     files: {
       snapshot: { name: "heap.brotli.bin", raw: snapshot.length, size: snapshotBr.length },
       bundle: { name: "site-packages.brotli.bin", raw: saved.blob.length, size: bundleBr.length },

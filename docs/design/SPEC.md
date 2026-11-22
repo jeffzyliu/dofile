@@ -596,8 +596,10 @@ cross-origin isolated (some hosts, or plain HTTP on a local network). The data i
 
 The page posts `{id, op, args}`; the worker answers `{id, result}` or `{id, error, name, type?}` (`type`: the Python exception class, set for a `PythonError`; a start fails with reason `memory` for a `RangeError` or a `type` of `MemoryError`, never from the message), posts `{stage}` (a typed `Stage` id,
 never text) as each start-up stage begins, and `{id, log}` chunks while a run prints. Ops run one at a time in a queue, except
-`boot`. The ops are one typed map, `Ops` in `web/src/engine/types.ts`, in three sets; each op belongs to one set, in the types
-and in the worker (`web/src/engine/worker.ts` has one handler object for each set), and the set decides who may send it:
+`boot` and `graphics`. The ops are one typed map, `Ops` in `web/src/engine/types.ts`, in three sets; each op belongs to one
+set, and the set decides who may send it. The worker answers them through one table keyed by op (`OpTable` in
+`web/src/engine/worker-dispatch.ts`, filled in `web/src/engine/worker.ts`), typed from `Ops`: an op without a handler, or a
+handler with another op's arguments or result, fails the type check (`web/test/dispatch.types.ts`).
 
 - **`LifecycleOps`** (`mount`, `boot`, `startup`, `run`) change the engine. Only the transport's `start()` and `run()` send
   them, and only the machine's effect performer calls those.
@@ -708,7 +710,9 @@ As built:
   worker's queue; if its worker is ended first it rejects with the ending's kind.
 - `storeError` holds the error (`{name, message, cause}`; `cause` `open` when the store did not open or could not be read, `copy` when its files could not be written into `/work`) with which the worker has no store at `mount` (also `startup.storeError`); `/work` then
   starts empty, and the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
-  it (section 7). The transport also keeps `about` and `startup`, the facts of the last start, for the tests and the hook.
+  it (section 7). `about` and `startup` are the other facts of the start: with `storeError` they are kept on the live worker's
+  record once its start is complete, for the tests and the hook, and are null before that and with no live worker (after an
+  ending, until the next start is complete).
 - **Errors** are `Error`s with `kind`: `"failed"` (`download()` or `build()` could not get the build's list or a file as
   listed, or the build has no snapshot, with `reason` `"download" | "unknown"`; also a call cut because its worker's start
   failed, with no `reason`: why the start failed is the machine's `FailReason`), `"failed-twice"` (a call cut because its
@@ -742,8 +746,8 @@ interface LifecycleOps {                         // sent only by the transport's
   graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
-// start files: Int32 [state 0 pending / 1 landed / 2 failed, byte count, attempt (the page's fetches of it; a graph that
-// finds it failed posts {graphics: "again"} and waits for one more), 0] then from byte 16 (PART_HEADER) the compressed part (or the reason), in `sab`;
+// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; the
+// buffer's layout, the header and the states: src/engine/lazy-part.ts);
 // `sab` null (no SharedArrayBuffer): the worker fetches the part itself once started, and the page never does (a graph
 // that finds it missing stops that fetch and makes a synchronous request); the worker tells the page how it goes, for the
 // "Graphs loading" ring and the download total: {graphics: "fetching"}, {graphics: "progress", received}, {graphics: "landed"},
@@ -881,14 +885,15 @@ interface FileStore {                                // the page's API: works wi
 | Page change while a worker exists | **The journal is the only way a page change reaches `/work`.** One transaction changes `info` and `data` and adds a `pending` row; then the store calls `sync`, which posts the worker the op `sync`, with no arguments and no bytes. The worker, in one transaction, reads the `pending` rows, takes the store's version of those paths (the path and everything under it, both names of a rename; for a `mkdir` row, the folder) and clears the journal; then it puts that version into `/work`, replacing what `/work` had there. A sync that finds the journal empty (an earlier sync, a `mount` or a run's after-run write took it) does nothing. So the order in which the syncs arrive does not matter, and no change is applied twice: whichever sync or copy finds a row takes the store's version as it is then. A sync that `/work` cannot take is said on the console. Cost, accepted: the worker reads an upload back from the store, and a renamed folder is copied again, not renamed in place. `rename` rejects when `to` exists or lies inside `from`; `write` rejects when the path is a folder or a parent is a file. |
 | Page change with no worker | One transaction changes `info` and `data`; no row is written and nothing is posted. The next `mount` copies the whole store. |
 | Engine start | `mount` copies every record into `/work`, a plain in-memory folder, and clears `pending`, in one transaction. A worker started after a reset does the same: files come back, data in memory does not. |
-| After each run | Inside the `run` op, the worker lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone; in the same transaction it takes the journal, as `sync` does. A file counts as changed when its modification time or its size changed. Before the run the worker waits until the clock is past the newest mtime in the list that is not in the future (one clock step, up to 100 ms with a clamped clock): that makes the time enough for any write of one byte or more, which gets a later time than any file had (or, for a time in the future, another one), so a same-size rewrite is seen. The size catches a truncation (a file the run empties), which MEMFS does not stamp with a time. `RunResult.files` lists what it wrote. A write the store refused is tried again by the next run, unless the page changes that path first, or makes a folder where the run left a file (then the page's version wins in `/work` and the store, and nothing is owed for it). |
+| After each run | Inside the `run` op, the worker (its `/work` mirror, `web/src/engine/work-mirror.ts`) lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone; in the same transaction it takes the journal, as `sync` does. A file counts as changed when its modification time or its size changed. Before the run the worker waits until the clock is past the newest mtime in the list that is not in the future (one clock step, up to 100 ms with a clamped clock): that makes the time enough for any write of one byte or more, which gets a later time than any file had (or, for a time in the future, another one), so a same-size rewrite is seen. The size catches a truncation (a file the run empties), which MEMFS does not stamp with a time. `RunResult.files` lists what it wrote. A write the store refused is tried again by the next run, unless the page changes that path first, or makes a folder where the run left a file (then the page's version wins in `/work` and the store, and nothing is owed for it). |
 | A page change during a run wins | The page's syncs wait behind the run in the worker's queue. The after-run write reads `pending` and leaves those paths (both names of a rename) out of the difference: a changed path is left out when it is a pending path, under one, or above one (for a `mkdir` row: the path and the paths above it only). The store's records for those paths go into `/work`, and the waiting syncs then find the journal empty. A run's file under a folder the page removed, or under a folder's old name after a page rename, is not saved and is listed in `RunResult.skipped`; the other dropped cases are not listed (see `RunResult.skipped`). So after a save during a run that writes the same file, the store and `/work` both hold the user's text. |
 | A run that is cut | A reset, a crash or a closed tab while the run's code is still running: nothing is written to the store. A reset that lands during the after-run write may leave that run's files in the store although the machine reports rc 9998. |
 | Tab lock | The tab that holds the Web Lock `dofile-engine` (*proposed*) owns the engine. A tab that cannot get it shows the take-over dialog (section 5), starts no worker and writes nothing to the store (OQ-16). "Use dofile in this tab" takes the lock with `steal`; the tab that loses it ends its worker and shows the same dialog. A closed tab frees the lock. Without Web Locks (not a secure context: plain HTTP on a LAN, the dev server only) every tab owns the engine; accepted. |
 | Persistence | The page calls `navigator.storage.persist()` once at start (a browser may show its own prompt, `F1` branches) and puts `persisted()` in the `persisted` signal. |
 | Failures | A failed write (quota exceeded) rejects with the browser's error, keeps the old record and writes no row; the tab stays unsaved. A failed after-run write sets `RunResult.store_error` (the log says "The files this run wrote couldn't be kept in this browser"). A worker that cannot open the store still mounts, with an empty `/work`, and sets the client's `storeError` (the error's name and message); it cannot read the journal, so the client detaches the store from it: the page's changes stay in the store and do not reach `/work`, and the `store-failed` banner says so (section 5). A run whose files the store kept but whose `/work` then cannot take the page's version, and a failed `sync`, leave `/work` out of step with the store: the worker is replaced (`crashed`, cause `folder`), and the run's result has no `store_error`. When the browser closes the database, the worker is replaced (`crashed`, cause `storage`). If another page deleted it ("Clear site data"), `/work` may hold files the store no longer has, which no row says, and the new worker's `mount` copies the store as it is now (empty, with what the page wrote since). If another page upgraded it to a newer version, this page still opens version 1, which fails (`VersionError`) in both threads: the start fails with reason `updated` ("Reload the page"). A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. The page's own failure to list the store is not drawn (OQ-16). |
 
-**Tests step 2 must have** (Node with `fake-indexeddb` and the real `worker.ts`, unless "e2e"):
+**Tests step 2 must have** (Node with `fake-indexeddb` and the real `worker.ts`, unless "e2e"; the mirror alone, on a fake file
+system and store: `test/work-mirror.test.ts`):
 1. Store API: write, list, read, mkdir; rename and remove of a file and of a folder; a path that leaves the folder is refused;
    `list` reads no file bytes.
 2. No engine: every call works with no worker, while `mount` runs, and after a start that failed.
@@ -1043,8 +1048,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     read ops (`ViewOp`: `describe`, `describe_file`, `matrix`, `macros`, `browse`, `memory`); views use `matrix` and
     `describe_file`. It raises no event, and rejects with kind `no-engine` with no worker and `reset` when a reset cut it.
     `drops()` lists the last 200 events that changed nothing (`{type, n?, row, why}`, `why` "stale" or "not-valid"). A second
-    `connectEngine` replaces the wiring: the machine, the queue, the timers and the drop record are cleared, and nothing of
-    the earlier wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
+    `connectEngine` replaces the wiring (one record: what it was given, the performer and the performer's handles: the Break
+    timer, the download and the graphics subscription): the old handles are released (the timer cleared, the download
+    aborted, the subscription ended), the machine, the queue and the drop record are cleared, and nothing of the earlier
+    wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
     (`UPDATED` is reason "updated"'s); `stageNow` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
@@ -1572,7 +1579,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   7. The domain is new, so no tab of an older build is open on it. The one-origin build was deployed before, at the `dofile`
      Worker's workers.dev address (the editor under `/app/`): that address now serves the landing page, and files kept there
      stay with that origin (`docs/deploying.md`, section 6).
-- **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base`; the folders
+- **One setting: `web/scripts/urls.ts`.** The editor's Vite `base` is `/`; the folders
   are `EDITOR_OUT` (`dist/app/`) and `SITE_OUT` (`dist/site/`), which the Wrangler configs spell (a test compares them);
   `EDITOR_URL` is what the static pages link to; `SITE_URL` is the landing page, from the editor. A build has no default for
   them and refuses to start without one of: `DOFILE_URLS=production` (`https://dofile.dev/` and `https://app.dofile.dev/`:
@@ -1581,7 +1588,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   build, and what `npm run preview` serves); or both `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` (a pull request preview, set to
   its two `workers.dev` addresses; `npm run cf:dev`). Both URLs must end in `/` (the file throws otherwise: the editor joins
   `commands/` and `#browsers` to the landing page's). The dev servers need none (`DEV_EDITOR_PORT`, `DEV_SITE_PORT`). `vite.config.ts`, `playwright.config.ts`,
-  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.ts` read it; the tests compare with the setting.
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `tools/measure-startup.ts` read it; the tests compare with the setting.
   `e2e/global-setup.ts` fails with a message when the servers serve another build, or one made for other addresses (the page's
   link to the editor, and the editor's script, are checked for the local origins). `test/site.test.ts` fails if another
   source (`.ts`, `.tsx`, `.mjs`, `.html`, `.css`, `.json`), script, e2e test, config, page or workflow spells the editor's old path
@@ -1589,7 +1596,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   from pieces, `"/" + "app"`, is not caught: never write one), and checks the two Wrangler configs (names, folders, domains,
   `workers_dev`, `html_handling`, `not_found_handling`) against the file.
   **The steps of the move** (done; the exact list the builder followed):
-  1. The editor: `vite build` (`DOFILE_EDITOR_BASE` `/`) into `dist/app/`: the editor at the folder's root, its
+  1. The editor: `vite build` into `dist/app/`: the editor at the folder's root, its
      `start-files.json`, and its own `_headers` with every path isolated (`/*`). Vite empties the folder first.
   2. The static pages: `vite build --mode site` into `dist/site/`. The download size comes from the editor's list
      (`DOFILE_EDITOR_DIR`, default `dist/app/`); no `_headers` (the editor is elsewhere, and the pages need none). The site's
@@ -1603,8 +1610,8 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   4. The e2e setup serves the two folders on two ports (`vite preview --mode site` and `vite preview`; Playwright's `baseURL` is
      the editor's origin, and the specs spell the site's: `LOCAL_SITE_URL`); the tests that cross between the pages compare whole
      addresses, since `/` is a path of both origins. The theme test records that the choice is per origin.
-  5. The dev server is the editor's at `/`; the static pages are another site's and are not served in dev (their middleware stays
-     for an `EDITOR_BASE` other than `/`, a one-origin layout the scripts and the e2e tests no longer build: see "Builds").
+  5. The dev server is the editor's at `/`; the static pages are another site's and are not served in dev (the one-origin layout, the
+     editor under a path with the pages at `/`, is gone: see "Builds").
      Since then `npm run dev` starts the pages' own dev server too (`vite --mode site`, port 5174, the same middleware at `/`),
      and each server links to the other at the page's own host name on the other's port.
   What does not follow the editor to a new origin, because the browser keeps it per origin: the visitors' files (IndexedDB
@@ -1622,10 +1629,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   Both builds take their folder from Vite's resolved `build.outDir`, so `--outDir` moves the whole output, `start-files.json`
   included. `vite preview` serves the editor's folder (every path isolated, as its `_headers` says; `/index.html` redirected) and,
   with `--mode site`, the pages' (the folder redirects, no isolation), each as its Worker does. The editor's dev server
-  (base `/`, port 5173) is one of the two `npm run dev` starts; the pages' (`vite --mode site`, port 5174) is the other. With
-  `EDITOR_BASE` another path the editor's also serves the pages at `/` and `/commands/` (a middleware; their scripts are
-  then served from under the base, a dev-only detail), which is the layout of step 5 (the editor under `/app/` on the site's
-  origin) and is not exercised since the split.
+  (base `/`, port 5173) is one of the two `npm run dev` starts; the pages' (`vite --mode site`, port 5174) is the other.
 - **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
   the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `theme.ts`, the theme button's words,
   the editor's (a test compares them); `landing.ts`; `commands.ts` and `filter.ts`, the filter). These import nothing but

@@ -170,7 +170,7 @@
       }
     },
     {
-      "includes": ["test/**", "scripts/**"],
+      "includes": ["test/**", "scripts/**", "tools/**"],
       "linter": {
         "rules": {
           "style": {
@@ -190,7 +190,7 @@
       }
     },
     {
-      "includes": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "includes": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts", "tools/**/*.ts"],
       "linter": {
         "rules": {
           "correctness": {

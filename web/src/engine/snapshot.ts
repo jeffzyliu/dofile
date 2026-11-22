@@ -246,10 +246,6 @@ export function bundle(
   return { dso: py._module.__dsoLog, index, blob };
 }
 
-// Where the part (or the reason it failed) starts in the shared buffer the page hands the graphics part over in; the
-// header is Int32 [state, length, tries, 0] (worker.ts).
-export const PART_HEADER = 16;
-
 // The graphics part of a lazy snapshot (docs/lazy-matplotlib.md), decompressed, as one file: the index's length (4
 // bytes, little-endian), the index (JSON, a BundleIndex of absolute paths under site-packages), then the files in its
 // order.

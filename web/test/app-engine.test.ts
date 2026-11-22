@@ -959,6 +959,20 @@ test("a reply of an earlier wiring does nothing: the first wiring's download com
   await begin(); // the new wiring's own download is taken
 });
 
+test("the download handle is the wiring's own: a second connectEngine aborts the first wiring's download, and the new wiring's Stop download aborts its own", async () => {
+  await load();
+  engine.start();
+  const first = client.dl;
+  await load(); // connectEngine and open() again
+  assert.equal(first.signal.aborted, true, "the first wiring's download is aborted when the wiring is replaced");
+  engine.start();
+  const own = client.dl;
+  assert.equal(own.signal.aborted, false);
+  engine.stopDownload();
+  assert.deepEqual(S.engine.value, { s: "declined" });
+  assert.equal(own.signal.aborted, true, "Stop download aborts the new wiring's download");
+});
+
 // A wrong ticket: the old download's reply is bound to its own ticket.
 test("an older download still talking: its progress and its end are dropped as stale, and the drop record names them", async () => {
   await load();

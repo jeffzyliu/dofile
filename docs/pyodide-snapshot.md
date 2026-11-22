@@ -78,7 +78,7 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
 |---|---|
 | `web/scripts/make-snapshot.ts` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes at brotli 11, seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
 | `web/src/engine/snapshot.ts` | the loader patch, the library log, the restore options, and brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's decoder, brotli-wasm as the fallback); used by the script and the worker |
-| `web/src/engine/worker.ts` | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went. It reads everything through one Cache: "The start since prototype 1" below |
+| `web/src/engine/worker-boot.ts` (called by `worker.ts`) | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went. It reads everything through one Cache: "The start since prototype 1" below |
 | `web/src/engine/client.ts`, `main.tsx` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`. Where the start's time went: the client's `startup` and the worker's console line `[dofile] snapshot start: …` |
 | `web/spike/snapshot.mjs` | the standalone spike with its own timing comparison (removed; in git history at commit `10e0f1c`) |
 | `docs/img/make-startup-times.mjs` | draws the chart below |
@@ -106,7 +106,7 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
   code, so the manifest holds SHA-256s; `vite build` refuses a snapshot whose record differs, and the page (Vite's
   `__BUILD_ID__`, `scripts/build-id.ts`) compares its build id with `start-files.json`'s (Node tests that pass none skip
   the check). Why: on 2026-11-08 a snapshot older than `browser.py` ran the old code. `uv build --wheel` is reproducible,
-  so a rebuild without a code change does not make a snapshot stale. `npm run wheel` first deletes the old `dist/dofile-*.whl`:
+  so a rebuild without a code change does not make a snapshot stale. `npm run wheel` first deletes the old `web/.wheel/dofile-*.whl`:
   the scripts take the last wheel in file-name order, and `dofile-0.1.0.dev1` sorts after `dofile-0.1.0`. `npm run dev` warns
   of a stale or missing snapshot and starts anyway; `npm run check-snapshot` exits 2 (its results would be of the old
   engine) unless it runs with `--normal`. Test: "a snapshot from a different build of the
@@ -116,7 +116,7 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
 
 ## The start since prototype 1 (2026-11-10)
 
-How the page starts from the snapshot now (`web/src/engine/worker.ts`, `client.ts`; the contract is in
+How the page starts from the snapshot now (`web/src/engine/worker-boot.ts`, `client.ts`; the contract is in
 `docs/design/SPEC.md`, sections 6 and 7). The sections below describe the earlier start where they differ.
 
 - **The runtime comes from the page's own origin.** `vite.config.ts` copies `pyodide.asm.wasm`, `python_stdlib.zip` and
@@ -151,7 +151,7 @@ Node, local files (one run of each, same machine):
 The demo's 1.31 s: read 0.02 s, **decompress 0.70 s**, start the wasm module 0.05 s, write site-packages 0.08 s,
 **re-link 136 libraries 0.42 s**, copy the heap 0.04 s. After a restore the first program runs in 0.04–0.18 s.
 
-In the browser (2026-11-07, `web/scripts/measure-startup.ts`, the 39.9 MB build, Chromium 158, the built page, the
+In the browser (2026-11-07, `web/tools/measure-startup.ts`, the 39.9 MB build, Chromium 158, the built page, the
 network throttled through the DevTools protocol): the harness writes `docs/img/startup-times.json` and
 `docs/img/make-startup-times.mjs` draws the chart. It serves the page like a real host (brotli 5 for text and wasm, long
 caching for hashed assets, the isolation headers, the `.bin` files as they are); Pyodide's runtime and packages come
@@ -188,7 +188,7 @@ For legacy `.xls` and for SAS transport, SPSS and Stata 7 and older `.dta` files
 holds one we compiled (`web/wheels/README.md`). The snapshot holds all of them. Pandas is **not** installed: only
 `export sasxport` needs it.
 
-Four builds, measured the same day on one machine (`measure-startup.ts`, 2 reps, Chromium; the 11-07 column is the
+Four builds, measured the same day on one machine (`tools/measure-startup.ts`, 2 reps, Chromium; the 11-07 column is the
 table above, 3 reps). Times are cold / warm. The unthrottled normal-boot times swing by seconds (the CDN), so compare the
 30 Mbps rows.
 
@@ -217,7 +217,7 @@ a `.sav`, and checks the `export sasxport` refusal. To add pandas later (D): loa
 ## File size: what is done and what is not
 
 The two files and their sizes: "What is in the demo". Sizes below are compressed MB, measured unless marked; the code
-is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.ts` and `web/src/engine/worker.ts`.
+is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.ts` and `web/src/engine/worker-boot.ts`.
 
 **Download size**
 
