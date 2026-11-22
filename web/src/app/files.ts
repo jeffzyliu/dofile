@@ -8,6 +8,7 @@ import { ranOver, tabs } from "./editor/documents.ts";
 import { reloadTab } from "./files/actions.ts";
 import { decodeText } from "./files/open.ts";
 import { saveAs } from "./files/save.ts";
+import { fileTurn, turnsOn } from "./files/turns.ts";
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
 import * as S from "./state.ts";
 import { filesWriter as W } from "./state.ts";
@@ -29,8 +30,12 @@ let warned = false; // the storage banner was added in this visit
 let seeding: ReadonlySet<string> = new Set();
 
 /** Use `s` as the page's store (its changes list it again) and `manager` as the browser's storage manager. */
-export function connectFiles(s: Store, manager: Storage = globalThis.navigator?.storage) {
+export function connectFiles(
+  s: Store & Parameters<typeof turnsOn>[0],
+  manager: Storage = globalThis.navigator?.storage,
+) {
   store = s;
+  turnsOn(s);
   storage = manager;
   warned = false;
   s.onChange = (row) => {
@@ -96,30 +101,35 @@ export function afterRun(changes: FileChange[] | undefined) {
   return Promise.all([refresh(), ...(changes ?? []).map(followOpen)]);
 }
 
+// the read and what the tab does with it share a turn, so a Save or a rename cannot land between them
 async function followOpen(c: FileChange) {
-  const tab = tabs.value.find((t) => t.path === c.name && t.kind === "text");
-  if (!tab || c.status === "removed" || !store) return;
-  let bytes: Uint8Array;
-  try {
-    bytes = await store.read(c.name);
-  } catch {
-    return; // the store cannot give it now: nothing is known of the run's version
-  }
-  const text = decodeText(bytes, true);
-  if (!tabs.value.some((t) => t.path === c.name && t.kind === "text")) return; // closed meanwhile
-  if (ranOver(c.name, text) === "kept") S.addBanner({ b: "run-changed", path: c.name });
+  const textTab = () => tabs.value.some((t) => t.path === c.name && t.kind === "text");
+  if (!textTab() || c.status === "removed" || !store) return;
+  await fileTurn(function* (io) {
+    if (!textTab()) return; // closed (or renamed) before the turn
+    let bytes: Uint8Array;
+    try {
+      bytes = yield* io.read(c.name);
+    } catch {
+      return; // the store cannot give it now: nothing is known of the run's version
+    }
+    if (!textTab()) return; // closed meanwhile
+    if (ranOver(c.name, decodeText(bytes, true)) === "kept") S.addBanner({ b: "run-changed", path: c.name });
+  });
 }
 
 /** The text tab `path` shows the store's copy of the file. A copy that cannot be read or is not text changes nothing. */
 export async function reloadFromStore(path: string): Promise<void> {
   if (!store) return;
-  let bytes: Uint8Array;
-  try {
-    bytes = await store.read(path);
-  } catch {
-    return; // the store cannot give it now
-  }
-  reloadTab(path, bytes, "keep");
+  await fileTurn(function* (io) {
+    let bytes: Uint8Array;
+    try {
+      bytes = yield* io.read(path);
+    } catch {
+      return; // the store cannot give it now
+    }
+    reloadTab(path, bytes, "keep");
+  });
 }
 
 /** "Download all (.zip)": made in the page from the store, with or without an engine. Never rejects.

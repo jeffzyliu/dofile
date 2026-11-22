@@ -290,3 +290,11 @@ test("every :hover rule is inside (hover: hover)", () => {
   }
   assert.deepEqual(outside, []);
 });
+
+test("one door: in src/app/ the store keeps its name (no renamed or namespace import, no copy, no destructuring), so the Biome rule on its writes sees each one", () => {
+  const app = SRC.filter((f) => f.startsWith("src/app/") && f !== "src/app/files/turns.ts");
+  const renamed = /\bstore\s+as\s+[A-Za-z_$]|\*\s*as\s+[A-Za-z_$][\w$]*\s+from\s*["'][^"']*\/store\.ts["']/;
+  const copied = /\{[^{}]*\}\s*=\s*store\b|(?<![=!<>])=\s*store\s*!?\s*[;,)\]]/;
+  assert.deepEqual(having(app, renamed, false), {}, "renamed");
+  assert.deepEqual(having(app, copied), {}, "copied or destructured");
+});

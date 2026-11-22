@@ -268,14 +268,20 @@ test("fileTurn (the editor's Save): a turn taken while a rename or a delete is i
   for (const p of ["a.do", "b.do"]) await openFile(p);
   const tabsNow = () => D.tabs.value.map((t) => t.path);
   const renaming = A.renameEntry("a.do", "c.do");
-  const seen = fileTurn(async () => tabsNow());
+  // a turn that reads the tabs after a store call of its own (a body with no yield is a lint error)
+  const turnOf = <T>(f: () => T) =>
+    fileTurn(function* (io) {
+      yield* io.list();
+      return f();
+    });
+  const seen = turnOf(tabsNow);
   await renaming;
   assert.deepEqual(await seen, ["c.do", "b.do"], "the tab has its new name when the turn comes");
   const deleting = A.deleteEntries(["b.do"]);
-  assert.deepEqual(await fileTurn(async () => tabsNow()), ["c.do"], "and the deleted file's tab is closed");
+  assert.deepEqual(await turnOf(tabsNow), ["c.do"], "and the deleted file's tab is closed");
   await deleting;
   const refused = A.renameEntry("c.do", "c.do/x");
-  const after = fileTurn(async () => "next");
+  const after = turnOf(() => "next");
   await assert.rejects(refused);
   assert.equal(await after, "next");
 });

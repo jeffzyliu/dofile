@@ -134,6 +134,41 @@ or {
     $m <: not within JsMethodClassMember(name=`#send`),
     register_diagnostic(span=$m, message="the page posts to the Worker only in #send")
   },
+  // One door for the page's file changes: in src/app/ the store is written only through a turn's Io (files/turns.ts), so
+  // each write is ordered with the tabs that follow it. The two named exceptions are B1's next item (docs/web-audit-plan.md):
+  // an upload's writes (files/actions.ts uploadNow) and the first visit's sample (sample.ts put).
+  // test/imports.test.ts keeps the store under its own name in src/app/ (no renamed import, copy or destructuring).
+  or {
+    JsStaticMemberExpression(),
+    JsComputedMemberExpression()
+  } as $m where {
+    $m <: or {
+      r"store\s*!?\s*\??\.\s*(?:write|mkdir|rename|remove|change|applyRun)",
+      r"store\s*!?\s*(?:\?\.)?\s*\[(?s).*"
+    },
+    $filename <: r".*/src/app/.*",
+    $filename <: not r".*/src/app/files/turns\.ts$",
+    or {
+      $m <: contains or {
+        `write`,
+        `mkdir`,
+        `rename`,
+        `remove`,
+        `change`,
+        `applyRun`
+      },
+      $m <: r"store\W*\[.*"
+    },
+    not and { $filename <: r".*/src/app/files/actions\.ts$", $m <: within JsFunctionDeclaration(id=`uploadNow`) },
+    not and { $filename <: r".*/src/app/sample\.ts$", $m <: within JsFunctionDeclaration(id=`put`) },
+    register_diagnostic(span=$m, message="the page writes the store only through a turn's Io (files/turns.ts fileTurn)")
+  },
+  // The turns' store is set only where files.ts is connected (connectFiles).
+  `turnsOn($_)` as $m where {
+    $filename <: r".*/src/.*",
+    $filename <: not r".*/src/app/files\.ts$",
+    register_diagnostic(span=$m, message="only connectFiles (src/app/files.ts) sets the turns' store: turnsOn()")
+  },
   // A focus move or a store write is not made from a timer's callback: the e2e helper settle(page) waits for tasks,
   // microtasks, effects and frames, not for a timer of more than about 50 ms (a requestAnimationFrame is allowed).
   or {

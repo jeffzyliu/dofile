@@ -111,7 +111,7 @@ test("the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast
       return e.defaultPrevented;
     };
     const prevented = [fire(false), fire(true), fire(true)];
-    await new Promise((ok) => setTimeout(ok)); // a Save issues its write in its turn (files/actions.ts fileTurn)
+    await new Promise((ok) => setTimeout(ok)); // a Save issues its write in its turn (files/turns.ts fileTurn)
     s.write = real;
     return { writes, prevented };
   });
