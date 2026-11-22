@@ -57,14 +57,14 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   isolated pages only (not the plain-http phone) and saves the wasm decode (about 0.15 s with the JIT on). Without a
   SharedArrayBuffer nothing can be done. Before a graph waits, the run's log so far is sent to the page (browser.py,
   `flush_output`), so the lines before a graph do not wait for it.
-  `measure-startup.ts --first-run` times a run at "ready" on the return visit, and `--during-import` one sent while the
+  `tools/measure-startup.ts --first-run` times a run at "ready" on the return visit, and `--during-import` one sent while the
   background import runs.
 - **The widget.** `download` includes the part, so the prompt, the landing page and the meta tag show the true size. The
   dialog's bar counts what comes before the start, and says under it "+ 7.7 MB of graphics after the start"; after the
   start, while the part downloads, the status bar (on a phone, the strip under the top bar) shows "Graphs loading" and a
   ring of its percent (a progressbar named "Graphs loading, 3.1 of 7.7 MB"). Nothing once it lands, and no lasting label
   after a failure (the graph's own error says why).
-- **Measured** (`measure-startup.ts`, median of 5, brotli 11, one Mac, Chromium and WebKit; a difference counts when it
+- **Measured** (`tools/measure-startup.ts`, median of 5, brotli 11, one Mac, Chromium and WebKit; a difference counts when it
   beats the spread and is at least 0.5 s or 2 MB): before "ready" the first visit downloads 33.9 MB, not 44.1 (41.6 MB with
   the part); ready comes 1.0 s sooner at 100 Mbps and 3.0 s sooner at 30 Mbps (not different unthrottled). A non-graph run at
   "ready" takes 0.01 s on both builds, and 0.03 to 0.08 s when sent during the background import. A return visit is ready
@@ -168,7 +168,7 @@ about 0.8 s faster at 100 Mbps and 2.6 s faster at 30 Mbps, which would bring th
    core files, the graphics files, and the graphics files with `.pyc`. This replaces the estimate table.
 2. **Time it under Node:** the core restore, loading the graphics part, and the first plot with and without `.pyc` and with a
    pre-import, against the eager first program (0.11 s).
-3. **Time it in the browser** with `web/scripts/measure-startup.ts`: unthrottled, 100 and 30 Mbps, cold and warm, plus a plot
+3. **Time it in the browser** with `web/tools/measure-startup.ts`: unthrottled, 100 and 30 Mbps, cold and warm, plus a plot
    started one second after "ready".
 4. **Decide the gating:** whether `run` waits for the graphics files for every program, and what the status line says.
 5. **Regular flow:** measure (a), (b) and (c), including the compile-versus-import split for numpy, scipy and dofile.

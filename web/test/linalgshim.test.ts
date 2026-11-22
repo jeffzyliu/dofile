@@ -2,7 +2,7 @@
 // dofile's browser host fixes that (src/dofile/linalgshim.py). CPython cannot show the problem, so this runs in the real
 // WebAssembly numpy. Found with 1001_mixed: a fit that takes 0.2 s on CPython ran until the 16,000-iteration limit
 // because ml.maximize tests concavity with `except LinAlgError` (docs/browser-engine.md, "Open investigation").
-// Run `uv build --wheel` in the repo first (npm test does).
+// Run `npm run wheel` first (npm test does).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

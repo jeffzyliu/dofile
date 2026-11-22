@@ -1572,7 +1572,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   7. The domain is new, so no tab of an older build is open on it. The one-origin build was deployed before, at the `dofile`
      Worker's workers.dev address (the editor under `/app/`): that address now serves the landing page, and files kept there
      stay with that origin (`docs/deploying.md`, section 6).
-- **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base`; the folders
+- **One setting: `web/scripts/urls.ts`.** The editor's Vite `base` is `/`; the folders
   are `EDITOR_OUT` (`dist/app/`) and `SITE_OUT` (`dist/site/`), which the Wrangler configs spell (a test compares them);
   `EDITOR_URL` is what the static pages link to; `SITE_URL` is the landing page, from the editor. A build has no default for
   them and refuses to start without one of: `DOFILE_URLS=production` (`https://dofile.dev/` and `https://app.dofile.dev/`:
@@ -1581,7 +1581,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   build, and what `npm run preview` serves); or both `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` (a pull request preview, set to
   its two `workers.dev` addresses; `npm run cf:dev`). Both URLs must end in `/` (the file throws otherwise: the editor joins
   `commands/` and `#browsers` to the landing page's). The dev servers need none (`DEV_EDITOR_PORT`, `DEV_SITE_PORT`). `vite.config.ts`, `playwright.config.ts`,
-  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.ts` read it; the tests compare with the setting.
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `tools/measure-startup.ts` read it; the tests compare with the setting.
   `e2e/global-setup.ts` fails with a message when the servers serve another build, or one made for other addresses (the page's
   link to the editor, and the editor's script, are checked for the local origins). `test/site.test.ts` fails if another
   source (`.ts`, `.tsx`, `.mjs`, `.html`, `.css`, `.json`), script, e2e test, config, page or workflow spells the editor's old path
@@ -1589,7 +1589,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   from pieces, `"/" + "app"`, is not caught: never write one), and checks the two Wrangler configs (names, folders, domains,
   `workers_dev`, `html_handling`, `not_found_handling`) against the file.
   **The steps of the move** (done; the exact list the builder followed):
-  1. The editor: `vite build` (`DOFILE_EDITOR_BASE` `/`) into `dist/app/`: the editor at the folder's root, its
+  1. The editor: `vite build` into `dist/app/`: the editor at the folder's root, its
      `start-files.json`, and its own `_headers` with every path isolated (`/*`). Vite empties the folder first.
   2. The static pages: `vite build --mode site` into `dist/site/`. The download size comes from the editor's list
      (`DOFILE_EDITOR_DIR`, default `dist/app/`); no `_headers` (the editor is elsewhere, and the pages need none). The site's
@@ -1603,8 +1603,8 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   4. The e2e setup serves the two folders on two ports (`vite preview --mode site` and `vite preview`; Playwright's `baseURL` is
      the editor's origin, and the specs spell the site's: `LOCAL_SITE_URL`); the tests that cross between the pages compare whole
      addresses, since `/` is a path of both origins. The theme test records that the choice is per origin.
-  5. The dev server is the editor's at `/`; the static pages are another site's and are not served in dev (their middleware stays
-     for an `EDITOR_BASE` other than `/`, a one-origin layout the scripts and the e2e tests no longer build: see "Builds").
+  5. The dev server is the editor's at `/`; the static pages are another site's and are not served in dev (the one-origin layout, the
+     editor under a path with the pages at `/`, is gone: see "Builds").
      Since then `npm run dev` starts the pages' own dev server too (`vite --mode site`, port 5174, the same middleware at `/`),
      and each server links to the other at the page's own host name on the other's port.
   What does not follow the editor to a new origin, because the browser keeps it per origin: the visitors' files (IndexedDB
@@ -1622,10 +1622,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   Both builds take their folder from Vite's resolved `build.outDir`, so `--outDir` moves the whole output, `start-files.json`
   included. `vite preview` serves the editor's folder (every path isolated, as its `_headers` says; `/index.html` redirected) and,
   with `--mode site`, the pages' (the folder redirects, no isolation), each as its Worker does. The editor's dev server
-  (base `/`, port 5173) is one of the two `npm run dev` starts; the pages' (`vite --mode site`, port 5174) is the other. With
-  `EDITOR_BASE` another path the editor's also serves the pages at `/` and `/commands/` (a middleware; their scripts are
-  then served from under the base, a dev-only detail), which is the layout of step 5 (the editor under `/app/` on the site's
-  origin) and is not exercised since the split.
+  (base `/`, port 5173) is one of the two `npm run dev` starts; the pages' (`vite --mode site`, port 5174) is the other.
 - **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
   the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `theme.ts`, the theme button's words,
   the editor's (a test compares them); `landing.ts`; `commands.ts` and `filter.ts`, the filter). These import nothing but

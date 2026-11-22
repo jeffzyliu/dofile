@@ -60,7 +60,7 @@ if (command === "baseline") {
       sh("npm ci", wtWeb);
       copyFileSync(lock, stamp);
     }
-    sh(BUILD, wtWeb); // the wheel goes to the worktree's own root dist/
+    sh(BUILD, wtWeb); // the wheel goes to the worktree's own web/.wheel/
     rmSync(dir, { recursive: true, force: true });
     screenshots(wtWeb, true);
   } catch (e) {

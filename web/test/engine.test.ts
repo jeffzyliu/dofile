@@ -1,5 +1,5 @@
 // The engine worker and the transport in Node: worker.ts in a worker thread, Pyodide, the built dofile wheel (run
-// `uv build --wheel` first). No state machine: the test starts and ends the workers itself (harness.ts). The page's
+// `npm run wheel` first). No state machine: the test starts and ends the workers itself (harness.ts). The page's
 // file changes go through a store in this thread (fake-indexeddb): its journal and the op `sync`. `files` and `read`
 // are the worker's views of /work.
 
@@ -18,20 +18,12 @@ import { EngineClient } from "../src/engine/client.ts";
 import type { Answer } from "../src/engine/machine.ts";
 import { openStore } from "../src/engine/store.ts";
 import type { DataSummary, Matrix, ReadOps } from "../src/engine/types.ts";
-import { endWorkers, live, runOn, startWorker, nodeWorker as storeWorker } from "./harness.ts";
+import { endWorkers, extraWheels, live, runOn, startWorker, nodeWorker as storeWorker, wheel } from "./harness.ts";
 
 /** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
 type Ok<T> = Exclude<T, { error: string }>;
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
-const wheels = readdirSync(`${root}/dist`)
-  .filter((f) => f.endsWith(".whl"))
-  .sort();
-assert.ok(wheels.length, "no wheel in dist/: run `uv build --wheel` first");
-const wheel = { name: wheels.at(-1)!, bytes: readFileSync(`${root}/dist/${wheels.at(-1)}`) };
-const extraWheels = readdirSync(`${root}/web/wheels`)
-  .filter((f) => f.endsWith(".whl"))
-  .map((f) => ({ name: f, bytes: readFileSync(`${root}/web/wheels/${f}`) }));
 
 // Every worker started here is ended when the file's tests are done, passed or failed: a failing assertion skips the
 // `eng.worker.terminate()` at the end of its test, and a live worker keeps the process (and so `npm test`) from
