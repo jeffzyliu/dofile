@@ -317,8 +317,8 @@ export function edited(state: EditorState): void {
 
 /** Save `path` (default: the active tab): its text as it is now, written in its turn (files/turns.ts) under the tab's
  *  path then, so a rename or delete pressed before it is honoured. The later action wins (the Save rule, SPEC section
- *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written, and an answer that comes after
- *  one of these is not applied. A save that answers after a rename leaves its outcome on the tab under the new name;
+ *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written; an answer that comes after a
+ *  reload or a run's text shown sets that document's saved text from the store read again (resync). A save that answers after a rename leaves its outcome on the tab under the new name;
  *  the store has the bytes there too, as its rename is called after the write is issued. Resolves true once written,
  *  false when not (no such text tab, cancelled, the store refused: the save-failed banner says why). */
 export async function save(path: string | undefined = activeTab.peek() ?? undefined): Promise<boolean> {
@@ -349,9 +349,23 @@ export async function save(path: string | undefined = activeTab.peek() ?? undefi
     part.saved.value = text;
     part.form = savedForm(part.form, written);
     for (const b of banners.peek()) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === now) dismiss(b);
-  }
+  } else if (isOpen(d) && textOfDoc(d)) await resync(d);
   showToast(`Saved ${baseName(now ?? written)}`);
   return true;
+}
+
+// A Save's write answered after its tab took another document (a reload or a run's text shown) whose read may have been
+// issued before the write: the store's text is read again, so the dot says whether the tab shows what the store has.
+async function resync(d: Doc) {
+  const part = textOfDoc(d);
+  const path = d.path.peek();
+  let saved: string | null;
+  try {
+    saved = editorText(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await store.read(path)));
+  } catch {
+    saved = null; // not text, or the store cannot give it: unsaved until a Save
+  }
+  if (part && isOpen(d) && d.content.peek() === part && d.path.peek() === path) part.saved.value = saved;
 }
 
 // ---- the run's marks, the wrap setting ----
