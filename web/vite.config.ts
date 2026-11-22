@@ -42,7 +42,7 @@ import commandData from "./src/stata/commands.json" with { type: "json" };
 //    both). With EDITOR_BASE other than "/" the editor's server serves the two pages too.
 //  - `vite preview` serves the editor's folder, or with `--mode site` the pages'.
 
-// What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in ../dist), the extra wheels
+// What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in .wheel/), the extra wheels
 // (web/wheels/: pyreadstat built for Pyodide) and the Pyodide version, with their hashes.
 const inputs = readInputs(),
   wheel = inputs.wheel,
@@ -53,7 +53,7 @@ const stamp = randomUUID();
 
 // the dofile wheel and the extra wheels, served from public/
 mkdirSync(new URL("./public/", import.meta.url), { recursive: true });
-copyFileSync(new URL(`../dist/${wheel}`, import.meta.url), new URL(`./public/${wheel}`, import.meta.url));
+copyFileSync(new URL(`./.wheel/${wheel}`, import.meta.url), new URL(`./public/${wheel}`, import.meta.url));
 for (const f of extraWheels)
   copyFileSync(new URL(`./wheels/${f}`, import.meta.url), new URL(`./public/${f}`, import.meta.url));
 

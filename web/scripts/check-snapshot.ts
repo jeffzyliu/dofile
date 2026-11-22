@@ -9,20 +9,18 @@
 // Exit 1 if anything differs, times out or crashes; 2 for an unknown case, or a missing or stale snapshot (not with
 // --normal; run `npm run snapshot`). Over 30 minutes for everything.
 
-import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import { inputs, readManifest, staleness } from "./build-id.ts";
 import { installEngine } from "./install-engine.ts";
+import { arg, hasFlag } from "./lib/args.ts";
+import { repo } from "./lib/paths.ts";
+import { runChild as runScript, runShards } from "./lib/shards.ts";
 import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "./snapshot-node.ts";
 
-const args = process.argv.slice(2);
-const arg = <T>(name: string, fallback: T): string | T =>
-  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const dir = resolve(arg("--dir", defaultDir));
-const repo = fileURLToPath(new URL("../..", import.meta.url));
 // Slow in Pyodide (docs/browser-engine.md, "Open investigation"): started first, so a long tail does not hide the rest.
 const PYODIDE_SLOW = [
   "0408_mata_moptimize",
@@ -42,22 +40,22 @@ const PYODIDE_SLOW = [
 ];
 
 async function boot() {
-  if (args.includes("--normal")) {
+  if (hasFlag("--normal")) {
     // the baseline: Pyodide booted and the wheel installed the way the page does without a snapshot
     const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });
-    const wheel = await installEngine(py, { pandas: args.includes("--pandas") });
+    const wheel = await installEngine(py, { pandas: hasFlag("--pandas") });
     return { py, manifest: { wheel: `${wheel} (normal boot, no snapshot)` } };
   }
   return bootFromSnapshot(dir);
 }
 
 // ---- a child process: one share of the work ------------------------------------------------------------------------
-if (args.includes("--child")) {
+if (hasFlag("--child")) {
   const kind = arg("--child", ""),
     mine = arg("--case", "").split(",").filter(Boolean);
   const { py, manifest } = await boot();
   // --no-shim: the old baseline without numpy.linalg raising LinAlgError
-  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
+  if (!hasFlag("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
   const say = (...a: unknown[]) => console.log(`[${kind === "compat" ? mine.join(",") : kind}]`, ...a);
   say(`restored (optimize=${py.runPython("import sys; sys.flags.optimize")}, snapshot built for ${manifest.wheel})`);
   let result: Record<string, unknown>;
@@ -174,7 +172,7 @@ def run_case(case):
 
 // ---- the parent: start the children, collect their results -------------------------------------------------------------
 // A snapshot of another wheel or Pyodide would check the old engine, and its results would say nothing of this checkout.
-if (!args.includes("--normal")) {
+if (!hasFlag("--normal")) {
   const record = readManifest(dir);
   const why = record ? staleness(record, inputs()) : `no snapshot in ${dir}`;
   if (why) {
@@ -191,44 +189,25 @@ const only = arg("--only", null),
 const passArgs = [
   "--dir",
   dir,
-  ...(args.includes("--normal") ? ["--normal"] : []),
-  ...(args.includes("--pandas") ? ["--pandas"] : []),
-  ...(args.includes("--no-shim") ? ["--no-shim"] : []),
+  ...(hasFlag("--normal") ? ["--normal"] : []),
+  ...(hasFlag("--pandas") ? ["--pandas"] : []),
+  ...(hasFlag("--no-shim") ? ["--no-shim"] : []),
 ];
 const t0 = performance.now();
 
 // Runs one child; stdout lines are echoed, the RESULT line is parsed. A child over `limitS` seconds is killed.
 type ChildExit = { code: number | null; result: { failed?: number } | null; timedOut: boolean };
-const runChild = (childArgs: string[], limitS: number) =>
-  new Promise<ChildExit>((done) => {
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--child", ...childArgs, ...passArgs], {
-      stdio: ["ignore", "pipe", "inherit"],
-    });
-    let out = "",
-      result: ChildExit["result"] = null,
-      timedOut = false;
-    const timer = limitS
-      ? setTimeout(() => {
-          timedOut = true;
-          child.kill("SIGKILL");
-        }, limitS * 1000)
-      : null;
-    child.stdout.on("data", (d) => {
-      out += d;
-      for (;;) {
-        const i = out.indexOf("\n");
-        if (i < 0) break;
-        const line = out.slice(0, i);
-        out = out.slice(i + 1);
-        if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7));
-        else console.log(line);
-      }
-    });
-    child.on("exit", (code) => {
-      if (timer) clearTimeout(timer);
-      done({ code, result, timedOut });
-    });
+const runChild = async (childArgs: string[], limitS: number): Promise<ChildExit> => {
+  let result: ChildExit["result"] = null;
+  const { code, timedOut } = await runScript(fileURLToPath(import.meta.url), ["--child", ...childArgs, ...passArgs], {
+    limitS: limitS || undefined, // 0: no limit, as before
+    onLine: (line) => {
+      if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7));
+      else console.log(line);
+    },
   });
+  return { code, result, timedOut };
+};
 
 const allCases = readdirSync(`${repo}/tests_opendta/compat/do`)
   .filter((f) => f.endsWith(".do"))
@@ -249,7 +228,7 @@ const cases = (wanted ?? allCases).sort((a, b) => {
 // Cases that differ because the page has no pandas (5 MB, left out on purpose): 1701 and 1911 call `export sasxport`,
 // and what follows cascades. Expected like a strict xfail: a difference is accepted, and one that now passes is
 // reported. `--normal --pandas` loads pandas and expects no difference: run it for these two after an engine change.
-const EXPECTED_DIFFER = args.includes("--pandas") ? [] : ["1701_datamgmt_options", "1911_datamgmt"];
+const EXPECTED_DIFFER = hasFlag("--pandas") ? [] : ["1701_datamgmt_options", "1911_datamgmt"];
 const problems: string[] = [],
   timeouts: string[] = [],
   crashed: string[] = [],
@@ -262,25 +241,20 @@ const conformance =
         else if (r.result.failed) problems.push("conformance");
       })
     : Promise.resolve();
-const queue = only === "conformance" ? [] : [...cases];
-const worker = async () => {
-  for (;;) {
-    const c = queue.shift();
-    if (!c) break;
-    const started = performance.now();
-    const r = await runChild(["compat", "--case", c], timeoutS);
-    ran++;
-    if (r.timedOut) {
-      timeouts.push(c);
-      console.log(`[${c}] TIMEOUT after ${timeoutS} s (killed)`);
-    } else if (r.code !== 0 || !r.result) {
-      crashed.push(c);
-      console.log(`[${c}] crashed (exit ${r.code}) after ${((performance.now() - started) / 1000).toFixed(0)} s`);
-    } else if (r.result.failed) problems.push(c);
-    else passed.push(c);
-  }
+const runCompat = async (c: string) => {
+  const started = performance.now();
+  const r = await runChild(["compat", "--case", c], timeoutS);
+  ran++;
+  if (r.timedOut) {
+    timeouts.push(c);
+    console.log(`[${c}] TIMEOUT after ${timeoutS} s (killed)`);
+  } else if (r.code !== 0 || !r.result) {
+    crashed.push(c);
+    console.log(`[${c}] crashed (exit ${r.code}) after ${((performance.now() - started) / 1000).toFixed(0)} s`);
+  } else if (r.result.failed) problems.push(c);
+  else passed.push(c);
 };
-await Promise.all([conformance, ...Array.from({ length: shards }, worker)]);
+await Promise.all([conformance, runShards(only === "conformance" ? [] : cases, shards, runCompat)]);
 const expectedDiffer = problems.filter((c) => EXPECTED_DIFFER.includes(c));
 problems.splice(0, problems.length, ...problems.filter((c) => !EXPECTED_DIFFER.includes(c)));
 const nowPass = passed.filter((c) => EXPECTED_DIFFER.includes(c)); // the package arrived: take it off the list

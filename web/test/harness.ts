@@ -1,10 +1,10 @@
 // Shared by the tests: the built wheel, and worker.ts in a Node worker thread standing in for a browser's Web Worker.
-import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
 import { MessageChannel, Worker } from "node:worker_threads";
+import { extraWheelsDir, wheels } from "../scripts/lib/wheels.ts";
 import type { Lifecycle } from "../src/engine/client.ts";
 import type { Answer } from "../src/engine/machine.ts";
 import type { FileStore } from "../src/engine/store.ts";
@@ -12,15 +12,9 @@ import type { Build, Op, PendingRow, RunOptions, RunResult } from "../src/engine
 
 export const root = fileURLToPath(new URL("../..", import.meta.url));
 // DOFILE_WHEEL_DIR: a folder with another build of the wheel, to run the tests against it
-const dist = process.env.DOFILE_WHEEL_DIR ?? `${root}/dist`;
-const wheels = readdirSync(dist)
-  .filter((f) => f.endsWith(".whl"))
-  .sort();
-assert.ok(wheels.length, `no wheel in ${dist}: run \`uv build --wheel\` first`);
-export const wheel = { name: wheels.at(-1)!, bytes: readFileSync(`${dist}/${wheels.at(-1)}`) };
-export const extraWheels = readdirSync(`${root}/web/wheels`)
-  .filter((f) => f.endsWith(".whl"))
-  .map((f) => ({ name: f, bytes: readFileSync(`${root}/web/wheels/${f}`) }));
+const built = wheels(process.env.DOFILE_WHEEL_DIR);
+export const wheel = { name: built.dofile, bytes: readFileSync(`${built.dir}/${built.dofile}`) };
+export const extraWheels = built.extras.map((f) => ({ name: f, bytes: readFileSync(`${extraWheelsDir}/${f}`) }));
 
 // Every worker started here is ended when the file's tests are done, passed or failed (call endWorkers in `after`): a
 // failing assertion skips the test's own terminate(), and a live worker keeps the process (and so `npm test`) from exiting.
