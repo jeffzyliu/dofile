@@ -191,6 +191,36 @@ test("Save rule: an upload's Replace of the tab cancels a pending Save: the stor
   assert.deepEqual(S.banners.value, []);
 });
 
+// B1: once the upload's writes take turns, this order cannot happen (the upload's Replace then cancels the Save, as above)
+test("a Save whose write is issued after an upload's Replace of the tab (the upload takes no turn yet): once it answers, the tab shows the upload and is unsaved, as the store has the Save's text", async () => {
+  await opened("a.do", "mine");
+  edit("a.do");
+  const open = hold();
+  const saved = D.save("a.do");
+  const stop = answering({ replace: true, same: false });
+  const { write } = store;
+  let released = false;
+  // the held turn ends in the tick the upload's write is issued, so the Save's write is issued after it
+  store.write = (path, data) => {
+    const w = write.call(store, path, data);
+    if (!released) {
+      released = true;
+      open();
+    }
+    return w;
+  };
+  try {
+    await A.upload([{ path: "a.do", data: enc("uploaded") }]);
+    assert.equal(await saved, true);
+  } finally {
+    stop();
+    store.write = write;
+  }
+  assert.equal(await stored("a.do"), "edited mine");
+  assert.equal(D.textOf("a.do"), "uploaded");
+  assert.equal(tab("a.do")?.dirty, true, "the dot: the store does not have what the tab shows");
+});
+
 test('Save rule: "Reload from the run" whose turn comes before a pending Save of the edited tab cancels it: the store keeps the run\'s text', async () => {
   await opened("out.log", "old");
   edit("out.log");
