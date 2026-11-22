@@ -1,8 +1,8 @@
 // What the build puts into the landing and commands pages (web/landing.html, web/commands.html), as plain functions so a
 // test can run them (test/site.test.ts). vite.config.ts calls them from a plugin.
-import { readFileSync } from "node:fs";
-
-export type CommandData = { commands: Record<string, number>; prefixes: string[] };
+/** src/stata/commands.json (`npm run commands`): the registry's commands with their shortest forms, its prefixes, and the
+ *  commands src/dofile/browser.py turns off in the page (its DENIED tuple). */
+export type CommandData = { commands: Record<string, number>; prefixes: string[]; denied: string[] };
 
 /** Prefixes the interpreter handles itself (not in the registry); src/stata/language.ts has the same six. */
 export const OWN_PREFIXES = ["quietly", "noisily", "capture", "by", "bysort", "version"];
@@ -59,15 +59,6 @@ export function headersFile(editorBase: string | null, noindex = false): string 
 export function canonicalURL(source: string, siteURL: string, editorURL: string): string {
   const served = SITE_FILES[source];
   return served === undefined ? editorURL : `${siteURL}${served.replace(/index\.html$/, "")}`;
-}
-
-/** The commands src/dofile/browser.py turns off in the page (its DENIED tuple), read from the source text. */
-export function deniedInBrowser(
-  pySource = readFileSync(new URL("../../src/dofile/browser.py", import.meta.url), "utf8"),
-) {
-  const m = /^DENIED = \(([^)]*)\)/m.exec(pySource);
-  if (!m) throw new Error("site-pages: no DENIED tuple in browser.py");
-  return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");

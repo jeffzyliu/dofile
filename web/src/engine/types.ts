@@ -311,6 +311,11 @@ export interface SnapshotManifest {
   extraWheels: Record<string, string>;
   pyodide: string;
   built: number;
+  /** The build's settings (scripts/build-id.ts, SnapshotKnobs): PYTHONOPTIMIZE, Brotli quality, no matplotlib in the heap,
+   *  Pyodide's trampoline kept. Optional in the type: a manifest from before they were recorded has none of the last three. */
   optimize: 0 | 2;
+  quality?: number;
+  noMpl?: boolean;
+  trampoline?: boolean;
   files: SnapshotFiles;
 }

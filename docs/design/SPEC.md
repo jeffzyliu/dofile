@@ -1576,7 +1576,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   build, and what `npm run preview` serves); or both `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` (a pull request preview, set to
   its two `workers.dev` addresses; `npm run cf:dev`). Both URLs must end in `/` (the file throws otherwise: the editor joins
   `commands/` and `#browsers` to the landing page's). The dev servers need none (`DEV_EDITOR_PORT`, `DEV_SITE_PORT`). `vite.config.ts`, `playwright.config.ts`,
-  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.ts` read it; the tests compare with the setting.
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `tools/measure-startup.ts` read it; the tests compare with the setting.
   `e2e/global-setup.ts` fails with a message when the servers serve another build, or one made for other addresses (the page's
   link to the editor, and the editor's script, are checked for the local origins). `test/site.test.ts` fails if another
   source (`.ts`, `.tsx`, `.mjs`, `.html`, `.css`, `.json`), script, e2e test, config, page or workflow spells the editor's old path

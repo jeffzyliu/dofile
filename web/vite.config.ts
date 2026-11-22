@@ -7,7 +7,6 @@ import checker from "vite-plugin-checker";
 import { about, buildId, inputs as readInputs, staleness } from "./scripts/build-id.ts";
 import {
   canonicalURL,
-  deniedInBrowser,
   engineMB,
   fillCommands,
   fillTokens,
@@ -137,7 +136,7 @@ const slash =
 const fillSite = (html: string, path: string, engineBytes: number) => {
   const tokens = { version: about(inputs).dofile, engineMB: engineMB(engineBytes), editorURL: EDITOR_URL };
   const filled = fillTokens(html, tokens);
-  return path.endsWith("/commands.html") ? fillCommands(filled, commandData, deniedInBrowser()) : filled;
+  return path.endsWith("/commands.html") ? fillCommands(filled, commandData, commandData.denied) : filled;
 };
 const isSitePage = (path: string) => Object.keys(SITE_FILES).some((p) => path.endsWith(`/${p}`));
 

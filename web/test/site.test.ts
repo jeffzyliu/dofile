@@ -11,10 +11,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { bigFiles, LIMIT, NEAR } from "../scripts/check-sizes.ts";
 import {
-  type CommandData,
   canonicalURL,
   commandsHtml,
-  deniedInBrowser,
   engineMB,
   fillCommands,
   fillTokens,
@@ -49,7 +47,7 @@ test("fillTokens fills the version and the size, each only when given", () => {
 });
 
 test("the commands in the page are the registry's: every name of commands.json, in its order, with its shortest form in bold", () => {
-  const { list, count } = commandsHtml(data as CommandData, []);
+  const { list, count } = commandsHtml(data, []);
   const names = [...list.matchAll(/data-name="([^"]*)"/g)].map((m) => m[1]);
   assert.deepEqual(names, Object.keys(data.commands));
   assert.equal(count, Object.keys(data.commands).length);
@@ -61,26 +59,25 @@ test("the commands in the page are the registry's: every name of commands.json, 
   assert.ok(list.includes(`<code>${whole[0]}</code>`));
 });
 
-test("the commands the page switches off are read from browser.py's DENIED, and marked in the list", () => {
-  const denied = deniedInBrowser();
+test("the commands the page switches off are commands.json's `denied` (browser.py's DENIED), and marked in the list", () => {
+  const { denied } = data;
   assert.deepEqual(denied, ["shell", "webuse"]);
-  const { list } = commandsHtml(data as CommandData, denied);
+  const { list } = commandsHtml(data, denied);
   for (const d of denied) assert.match(list, new RegExp(`data-name="${d}" class="off"`));
   assert.doesNotMatch(list, /data-name="regress" class="off"/);
-  assert.throws(() => deniedInBrowser("no tuple here"), /DENIED/);
 });
 
 test("the six prefixes the interpreter handles itself are the highlighter's (language.ts), and the registry's prefixes follow", () => {
   const language = web("src/stata/language.ts");
   for (const p of OWN_PREFIXES) assert.match(language, new RegExp(`\\b${p}: \\d`), `${p} in language.ts`);
-  const { prefixes } = commandsHtml(data as CommandData, []);
+  const { prefixes } = commandsHtml(data, []);
   const shown = [...prefixes.matchAll(/data-name="([^"]*)"/g)].map((m) => m[1]);
   assert.deepEqual(shown, [...OWN_PREFIXES, ...data.prefixes]);
 });
 
 test("commands.html and landing.html: no placeholder is left once filled, and every placeholder is one the build knows", () => {
   const tokens = { version: "9.9.9", engineMB: "50", editorURL: LOCAL_EDITOR_URL };
-  const commands = fillCommands(fillTokens(web("commands.html"), tokens), data as CommandData, ["shell", "webuse"]);
+  const commands = fillCommands(fillTokens(web("commands.html"), tokens), data, ["shell", "webuse"]);
   assert.doesNotMatch(commands, /\{\{|<!--COMMANDS-->|<!--PREFIXES-->/);
   const landing = fillTokens(web("landing.html"), tokens);
   assert.doesNotMatch(landing, /\{\{/);
@@ -221,7 +218,7 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     "playwright.config.ts",
     "e2e/global-setup.ts",
     "scripts/start-files.ts",
-    "scripts/measure-startup.ts",
+    "tools/measure-startup.ts",
   ])
     assert.match(web(f), /from "\.{1,2}\/(scripts\/)?urls\.ts"/, f);
   // Nothing else spells the editor's path where a program reads it: after a quote, a backquote, `(` (CSS url()) or `=`
