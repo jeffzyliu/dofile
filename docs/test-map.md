@@ -153,7 +153,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   (also a name every object has) and a throwing or rejecting handler answered `{id, error, name, type?}` (a
   `PythonError`'s `type`, an errno named) with the queue going on; queued ops in order, `graphics` answered beside a
   waiting run, `run` counted as it arrives; the folder check after a result only; boot's answer posted before it settles
-  `booted`; a file's bytes moved.
+  `booted`; a hook that throws after a result posts no second answer, calls `answered` once and leaves the queue going;
+  a file's bytes moved.
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.

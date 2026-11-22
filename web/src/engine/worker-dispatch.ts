@@ -63,7 +63,7 @@ export function dispatcher(table: OpTable, { post, errorOf, afterResult }: Dispa
       try {
         hook?.();
       } catch (e) {
-        console.error("dispatch hook threw", e);
+        console.error("[dofile] dispatch hook threw", e);
       }
     }
   };
