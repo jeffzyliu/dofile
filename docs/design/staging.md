@@ -152,9 +152,8 @@ names its fix. S9 puts the snapshot's other knobs (quality, no-mpl, ...) in the 
 ## 4. Changes R5 makes (so the sections above can be checked)
 
 This note reads pre-S9 code (S9 comes first: `scripts/lib`, the config split into plugin modules, `wheel` no longer deleting old
-wheels). R5's builder re-maps every `vite.config.ts`, `build-id.ts` and `wheel` line reference below at the start. Once `wheel`
-now builds into `web/.wheel/` (S9a), so `wheels()` reads only that folder and the newest there is the one just built; S9's
-`wheels()` must return the wheel just built.
+wheels). R5's builder re-maps every `vite.config.ts`, `build-id.ts` and `wheel` line reference below at the start. `wheel`
+now builds into `web/.wheel/` (S9a), so `scripts/lib/wheels.ts` reads only that folder and the newest there is the one just built.
 
 `scripts/stage.ts` (new), `snapshot-inputs.txt` (new) with its test; `build-id.ts` (`staged()`); `vite.config.ts` loses
 the copies (`:54-68`), makes `inputs()` lazy (`:47-49`) and the editor's `build` and `serve` check `staged()` instead; `package.json` (table in section 3); `web.yml:50` (the `.md` filter at `:56` stays unless the new `git diff -- <pathspecs>` replaces it; while it stays, a README-only change does not run the snapshot job though README goes into the wheel: say which, and drop README.md from the drift claim if it stays) and
