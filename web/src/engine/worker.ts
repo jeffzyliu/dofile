@@ -1,6 +1,7 @@
-// The engine's Web Worker: Pyodide, the dofile wheel, and the user's files in /work (an in-memory folder; the files
-// live in store.ts). Protocol: types.ts (Ops, ToWorker, FromWorker); the page's side is client.ts. One op at a time;
-// `boot` runs outside the queue. A new op joins one of the three handler sets (LifecycleOps, ReadOps, JournalOps).
+// The engine's Web Worker: Pyodide, the dofile wheel, and the user's files in /work (an in-memory folder kept by
+// work-mirror.ts; the files live in store.ts). Protocol: types.ts (Ops, ToWorker, FromWorker); the page's side is
+// client.ts. One op at a time; `boot` runs outside the queue. A new op joins one of the three handler sets
+// (LifecycleOps, ReadOps, JournalOps).
 
 import type { BrotliWasmType } from "brotli-wasm";
 import { loadPyodide } from "pyodide";
@@ -30,13 +31,10 @@ import {
   withHeapCap,
   writeGraphics,
 } from "./snapshot.ts";
-import type { AppliedRun, FileStore, RunChange } from "./store.ts";
 import { openStore } from "./store.ts";
 import type {
   BootArgs,
   DescribeArgs,
-  FileChange,
-  FileInfo,
   JournalOps,
   LifecycleOps,
   MountArgs,
@@ -46,15 +44,13 @@ import type {
   SnapshotFiles,
   Stage,
   Startup,
-  StoreCause,
   ToWorker,
 } from "./types.ts";
+import type { MirrorStore } from "./work-mirror.ts";
+import { ROOT, WorkMirror } from "./work-mirror.ts";
 
-/** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in
- *  (test/node-worker.ts). */
-type WorkerStore = Pick<FileStore, "takeAll" | "applyRun">;
 declare global {
-  var dofileStore: WorkerStore | undefined;
+  var dofileStore: MirrorStore | undefined; // in the Node tests, a stand-in for the store (test/node-worker.ts)
 }
 /** dofile.browser (src/dofile/browser.py): JSON text in and out. */
 interface Browser {
@@ -81,22 +77,15 @@ type Io = { stdout: (line: string) => void; stderr: (line: string) => void };
 // The DOM types make `self` a Window, which has no postMessage(message, transfer).
 declare const self: Window & typeof globalThis & { postMessage(message: unknown, transfer: Transferable[]): void };
 
-const ROOT = "/work",
-  HIDDEN = ".dofile";
 let py: SnapshotPy,
   browser: Browser,
   interrupt: Int32Array | null = null,
   fromSnapshot = false,
   brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
 let queue = Promise.resolve();
-let store: WorkerStore | null = null,
-  storeError: { name: string; message: string; cause: StoreCause } | null = null, // the file store, or why there is none
-  outOfStep: string | null = null; // why /work could not take the page's version after a run; said after its answer
-// path -> { status, dir }: what a run did to /work that the store refused to take. The next run tries it again.
-let unsaved = new Map<string, { status: FileChange["status"]; dir: boolean }>();
+let mirror: WorkMirror | undefined; // /work: made in mount, once Pyodide is there
 
 const stage = (id: Stage) => self.postMessage({ stage: id });
-const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);
 
 // Emscripten's file system errors carry only a number.
 function errorForPage(e: any): { message: string; name: string; type?: string } {
@@ -109,145 +98,6 @@ function errorForPage(e: any): { message: string; name: string; type?: string } 
   return { message: String(message), name, ...(name === "PythonError" && { type: e?.type }) };
 }
 const failedDownload = (message: string) => Object.assign(new Error(message), { name: "DownloadError" });
-
-function inRoot(path: string): string {
-  const full = py.PATH.normalize(`${ROOT}/${path}`);
-  if (full !== ROOT && !full.startsWith(`${ROOT}/`)) throw new Error(`not in the working folder: ${path}`);
-  return full;
-}
-
-function walk(dir: string, out: FileInfo[] = []): FileInfo[] {
-  for (const name of py.FS.readdir(dir)) {
-    if (name === "." || name === ".." || (dir === ROOT && name === HIDDEN)) continue;
-    const full = `${dir}/${name}`,
-      st = py.FS.stat(full),
-      isDir = py.FS.isDir(st.mode);
-    out.push({ path: full.slice(ROOT.length + 1), dir: isDir, size: isDir ? 0 : st.size, mtime: st.mtime.getTime() });
-    if (isDir) walk(full, out);
-  }
-  return out;
-}
-
-const exists = (full: string) => py.FS.analyzePath(full).exists;
-
-function removeTree(full: string): void {
-  if (!py.FS.isDir(py.FS.stat(full).mode)) {
-    py.FS.unlink(full);
-    return;
-  }
-  for (const name of py.FS.readdir(full)) if (name !== "." && name !== "..") removeTree(`${full}/${name}`);
-  py.FS.rmdir(full);
-}
-
-function putRecords({ infos, data }: { infos: FileInfo[]; data: [IDBValidKey, ArrayBuffer][] }) {
-  const mtimes = new Map(infos.map((i) => [i.path, i.mtime]));
-  for (const i of infos) if (i.dir) py.FS.mkdirTree(`${ROOT}/${i.path}`);
-  for (const [path, bytes] of data) {
-    const full = `${ROOT}/${path}`,
-      mtime = mtimes.get(path as string) ?? Date.now();
-    py.FS.mkdirTree(py.PATH.dirname(full));
-    py.FS.writeFile(full, new Uint8Array(bytes), { canOwn: true }); // the bytes just read: no second copy
-    py.FS.utime(full, mtime, mtime);
-  }
-}
-
-// With no store (the browser refused, or there is no IndexedDB) /work starts empty; startup.storeError says why, and so
-// does the store_error of every run that writes a file.
-async function copyStore() {
-  let cause: StoreCause = "open";
-  try {
-    store = self.dofileStore ?? openStore();
-    const copy = await store.takeAll();
-    cause = "copy";
-    putRecords(copy);
-  } catch (e) {
-    store = null;
-    storeError = { ...errorForPage(e), cause };
-    console.warn(`[dofile] the files are not saved: ${storeError.message}`);
-  }
-}
-
-// Puts the page's version of the paths the journal named (applyRun's `resync`) into /work.
-function takePageVersion({ resync }: AppliedRun) {
-  for (const path of resync.paths) {
-    if (exists(`${ROOT}/${path}`)) removeTree(`${ROOT}/${path}`);
-    forget(path); // /work has the store's version there now: a run's refused write to it is not owed any more
-  }
-  // Where the store has a folder (above each record it gives, and at each folder the page made), /work may have a file:
-  // a run's that the store refused. mkdirTree would pass over it (it ignores EEXIST) and the write under it would fail.
-  for (const i of resync.infos) foldersAt(i.path, i.dir);
-  for (const path of resync.dirs) foldersAt(path, true);
-  putRecords(resync);
-  for (const path of resync.dirs) py.FS.mkdirTree(`${ROOT}/${path}`);
-}
-
-// The folders above `path` (and `path` itself, with `self`) are folders in the store: a file /work has at one of them
-// goes, and is not owed any more.
-function foldersAt(path: string, self: boolean) {
-  const parts = path.split("/");
-  for (let n = 1; n <= parts.length - (self ? 0 : 1); n++) {
-    const p = parts.slice(0, n).join("/"),
-      full = `${ROOT}/${p}`;
-    if (exists(full) && !py.FS.isDir(py.FS.stat(full).mode)) {
-      py.FS.unlink(full);
-      forget(p);
-    }
-  }
-}
-
-/**
- * After a run: writes what it did to /work to the store, and /work then takes the page's version of what the page
- * changed meanwhile. Files the run created or changed are written, files that were there before and are gone are
- * deleted, the rest is not read at all.
- * Why modification time and size: the wait in `run` makes the time enough for any write of one byte or more. A
- * truncation is not stamped by MEMFS (its setattr takes no time with a size, and a write of 0 bytes sets none), so a
- * run that empties a file changes only its size.
- * @param before - walk() from before the run.
- * @returns RunResult's `files` and `skipped`, and `store_error` if the store refused (the next run then tries again). If
- * /work then cannot take the page's version, `outOfStep` says why.
- */
-async function saveRun(before: FileInfo[]): Promise<{ files: FileChange[]; skipped: string[]; store_error?: string }> {
-  const was = new Map(before.map((f) => [f.path, f])),
-    now = new Set<string>(),
-    changes: RunChange[] = [];
-  for (const f of walk(ROOT)) {
-    now.add(f.path);
-    const old = was.get(f.path),
-      failed = unsaved.get(f.path);
-    const what = failed
-      ? failed.status === "created"
-        ? "created"
-        : "modified"
-      : !old
-        ? "created"
-        : old.dir !== f.dir || (!f.dir && (old.size !== f.size || old.mtime !== f.mtime))
-          ? "modified"
-          : null;
-    if (what) changes.push({ ...f, status: what, data: f.dir ? undefined : py.FS.readFile(`${ROOT}/${f.path}`) });
-  }
-  for (const f of before) if (!now.has(f.path) && !unsaved.has(f.path)) changes.push({ ...f, status: "removed" });
-  for (const [path, failed] of unsaved) {
-    // gone now; if the store never had it, there is nothing to delete
-    if (!now.has(path) && failed.status !== "created")
-      changes.push({ path, dir: failed.dir, size: 0, mtime: 0, status: "removed" });
-  }
-  if (!changes.length) return { files: [], skipped: [] };
-  if (!store) return { files: [], skipped: [], store_error: storeError!.message };
-  let saved: AppliedRun;
-  try {
-    saved = await store.applyRun(changes);
-  } catch (e) {
-    unsaved = new Map(changes.map((c) => [c.path, { status: c.status, dir: c.dir }]));
-    return { files: [], skipped: [], store_error: errorForPage(e).message };
-  }
-  unsaved = new Map();
-  try {
-    takePageVersion(saved);
-  } catch (e) {
-    outOfStep = errorForPage(e).message; // the run's files are kept; the page replaces this worker
-  }
-  return { files: saved.files, skipped: saved.skipped };
-}
 
 // Starting is two steps so the page can show the user's files early. `mount` is an ordinary queued op, so every `sync`
 // posted after it waits for it. `boot` runs outside the queue, so `sync`, `files` and `read` are answered while it
@@ -858,11 +708,6 @@ function idleStep() {
 const startup: Partial<Startup> = {};
 const since = (t: number) => (performance.now() - t) / 1000;
 
-// A run's refused write is owed to the store until the page moves or replaces the file.
-function forget(path: string) {
-  for (const p of [...unsaved.keys()]) if (within(p, path)) unsaved.delete(p);
-}
-
 type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A : never, id: number) => unknown };
 
 const lifecycle: Handlers<LifecycleOps> = {
@@ -891,12 +736,12 @@ const lifecycle: Handlers<LifecycleOps> = {
       }
       Object.assign(startup, { mode: "normal", runtimeS: since(tRuntime) });
     }
-    py.FS.mkdirTree(ROOT);
+    mirror = new WorkMirror(py.FS, py.PATH, errorForPage);
     const tFiles = performance.now();
     stage("files");
-    await copyStore();
+    await mirror.copyStore(() => self.dofileStore ?? openStore());
     startup.filesS = since(tFiles);
-    if (storeError) startup.storeError = storeError;
+    if (mirror.storeError) startup.storeError = mirror.storeError;
   },
   startup: async () => {
     started = true; // the part's work may begin (nativeSoon, idleSoon)
@@ -974,15 +819,7 @@ function readInterrupts(buffer: Int32Array | null) {
 
 async function runNow({ code, fresh_locals, plot_theme }: { code: string } & RunOptions, id: number) {
   {
-    const before = walk(ROOT);
-    // A file's time has 1 ms steps. Wait until the clock is past the newest file, so that anything the run writes gets
-    // a later time than any file had before (saveRun tells a same-size rewrite by it). A time after now (a clock that
-    // was ahead) is left out: any rewrite changes it anyway.
-    const now = Date.now(),
-      newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
-    while (Date.now() <= newest) {
-      /* one clock step (up to 100 ms with a clamped clock) */
-    }
+    const before = mirror!.beforeRun();
     const t0 = performance.now();
     // Positional: a plain Pyodide call passes no keyword arguments; undefined (not null) is Python's None.
     // Python reads the buffer only during a run: a Break pressed while an op ahead of the run was answered waits there
@@ -998,7 +835,7 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
     }
     const result = JSON.parse(text);
     const t1 = performance.now();
-    Object.assign(result, await saveRun(before));
+    Object.assign(result, await mirror!.saveRun(before));
     // The Python side gave engine and encode; save is writing the run's files to the store.
     const k = result.timing;
     if (k)
@@ -1020,7 +857,7 @@ const read: Handlers<ReadOps> = {
   // a .dta in /work, without loading it
   async describe_file({ path }: { path: string }) {
     await booted;
-    inRoot(path);
+    mirror!.inRoot(path);
     return JSON.parse(browser.describe_file(path));
   },
   macros: async () => {
@@ -1037,15 +874,14 @@ const read: Handlers<ReadOps> = {
     return { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length };
   },
   // views of /work, for the tests: the page lists and reads the store
-  files: () => walk(ROOT),
-  read: ({ path }: { path: string }) => py.FS.readFile(inRoot(path)),
+  files: () => mirror!.walk(),
+  read: ({ path }: { path: string }) => py.FS.readFile(mirror!.inRoot(path)),
 };
 
-// With no store (mount could not open it) there is no journal to read, and the transport attaches no `sync`: one that
-// arrives before it knows that does nothing.
 const journal: Handlers<JournalOps> = {
+  // no mirror (before mount, or after one that failed): no store either, so nothing to take
   async sync() {
-    if (store) takePageVersion(await store.applyRun([]));
+    await mirror?.sync();
   },
 };
 
@@ -1056,10 +892,8 @@ const answer = async ({ id, op, args }: ToWorker) => {
     if (!ops[op]) throw new Error(`unknown op ${op}`);
     const result = await (ops[op] as (args: unknown, id: number) => unknown)(args ?? {}, id);
     self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []); // a file: moved, not copied
-    if (outOfStep) {
-      self.postMessage({ folderError: outOfStep }); // after the run's answer, so the page keeps its result
-      outOfStep = null;
-    }
+    const outOfStep = mirror?.takeOutOfStep();
+    if (outOfStep) self.postMessage({ folderError: outOfStep }); // after the run's answer, so the page keeps its result
   } catch (e) {
     const { message, name, type } = errorForPage(e);
     self.postMessage({ id, error: message, name, type });

@@ -124,7 +124,8 @@ What each file owns and talks to: section 2.2.
 | Machine | `engine/machine.ts` | the state, the tickets, the crash count | nobody: it is a function |
 | File service | `app/files.ts`: keeps the file list fresh, "Download all", the effects own and block the files | `files`, `fresh`, `persisted`, two banners | store |
 | Transport | `engine/client.ts`: numbered messages, the interrupt buffer, the cache (`cached`, `download`, `build`, `forgetDownload`); decides nothing | the `Worker`, its pending calls, the interrupt buffer | worker (messages), store (`attach`), Cache |
-| Worker | `engine/worker.ts`: loads Python, keeps `/work`, answers one message at a time | Pyodide, `/work`, the op queue, `unsaved` | store (its own connection), Cache (read only), Python |
+| Worker | `engine/worker.ts`: loads Python, answers one message at a time | Pyodide, the op queue, the `/work` mirror | Cache (read only), Python, the mirror |
+| `/work` mirror | `engine/work-mirror.ts`: copies the store into `/work` at `mount`, takes the journal on `sync`, writes a run's changes back; given Pyodide's file system by the worker | `/work`, `unsaved` | store (its own connection) |
 | Python | `src/dofile/browser.py`: the functions the worker calls; each returns JSON text | one `Engine` | `engine.py`, OpenDTA |
 | Store | `engine/store.ts` | IndexedDB database `dofile`: `info`, `data`, `pending` | used by page and worker |
 | Tab lock | `engine/tab.ts`: the one-tab lock and the "keep my files" request | the Web Lock | engine controller |
@@ -330,7 +331,7 @@ worker reads an upload back from the store, and a renamed folder is copied again
 **The worker's other copies.** At `mount` (`takeAll`) it reads every record and clears the journal in one transaction.
 After every run (`applyRun(changes)`) it writes the run's changes and takes the journal in the same transaction.
 
-**After a run** (`saveRun` in the worker):
+**After a run** (`saveRun` in the worker's `/work` mirror, `engine/work-mirror.ts`):
 
 1. Compare `walk(/work)` before and after by modification time and size; only changed files are read. The wait before the
    run (until the clock is past the newest file) makes the time enough for any write of one byte or more; the size catches
