@@ -1091,7 +1091,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
     a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
     `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
-    `editorCommands.save(path)` and `focus` (after a tab closes), `addFileGraph`,
+    `editor/documents.ts` `save(path)` and `editorCommands.focus` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
     inline rename) calls `preventDefault()`. The Node tests of the close-tab and reload paths make
@@ -1168,7 +1168,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     Ctrl/Cmd+S saves once, and a held Ctrl/Cmd+Enter runs once; a Ctrl/Cmd+Enter that the engine does not take (run.ts
     `requestRun` answers it was refused, where the Run buttons are disabled) says why in a toast, in the words of the
     engine's state (`editor/words.ts` `refusedRunWords`, decided by the maintainer, plan's list A; nothing where the
-    press runs, `ready`, or does what "Start engine" does: `none`, `asking`, `declined`, `other-tab-idle`, and a `failed` start that can be tried again); with a dialog open it saves nothing (the browser's Save page is still kept away; C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast), and a Save pressed while a rename or a delete is being written waits for it, then writes under the new name or, for a deleted file, nothing; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    press runs, `ready`, or does what "Start engine" does: `none`, `asking`, `declined`, `other-tab-idle`, and a `failed` start that can be tried again); with a dialog open it saves nothing (the browser's Save page is still kept away; C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast), and a Save pressed while a rename or a delete is being written waits for it, then writes under the new name or, for a deleted file, nothing. **The Save rule: the later action wins.** A Save takes the tab's document when pressed; a reload (an upload's Replace, "Restore the sample" over the tab), "Reload from the run", or a run's text shown in the tab (the tab was clean) before its turn comes swaps in another document and cancels it: nothing is written, no answer and no banner, and it resolves false. This holds for a tab with unsaved edits too ("Reload from the run" is offered only for one). A run that keeps the tab's edits (the run-changed banner) swaps nothing, so a Save pressed before it still writes and replaces the run's version. A Save pressed while "Reload from the run" waits on its store read is not covered yet: the reload takes no turn, so that Save writes; it holds once the reload takes a turn (`docs/design/workspace.md`, section 3). Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
     place to change it; the joining agent's, for the maintainer to approve: `docs/phase2-history.md`, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
@@ -1381,11 +1381,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   to)` (an open file or a folder was renamed or moved: the tabs keep text, edits and undo), `retype(path, text?)` (a
   rename changed how a tab opens), `close(path)` (a tab closed, the close-tab dialog's "Don't save" too, or its file
   deleted), `ranOver(path, text)` (a run rewrote an open text file; `text` is null when the run's version is not text; it
-  answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on "kept"). `reload` does nothing when the
-  file has no text tab. What needs the mounted view is `editor/commands.ts` (no-op defaults until the editor mounts):
-  `runFile()`, `runSelection()`, `save(path?)` (resolves true once saved), `focus()`, and for 4b's log and 4d
-  `goToLine(line, path?)`. The editor fills `editorCommands` field by field when it mounts: call through the object
-  (`editorCommands.save(path)`) and never destructure it or keep a field, or the caller keeps the no-op.
+  answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on "kept"), `save(path?)` (resolves true
+  once written; the Save rule is in 4b). `reload` does nothing when the file has no text tab. What needs the mounted view is `editor/commands.ts` (no-op defaults until the editor mounts):
+  `runFile()`, `runSelection()`, `focus()`, and for 4b's log and 4d `goToLine(line, path?)`. The editor fills
+  `editorCommands` field by field when it mounts: call through the object (`editorCommands.runFile(path)`) and never destructure it or keep a field, or the caller keeps the no-op.
 - **Slots in `App.tsx`.** `FileBar` above the editor; the editor sits in `.editor-slot`, hidden (never unmounted) while a
   `dta` tab shows `DtaView`; `FullSize` once, after `main`; on a phone the Log head is hidden, so its actions are in the strip's "Log ⋯"
   button through `logMenuItems()` (its "Clear log…" asks first) while the Log view is shown (the phone's top bar, `PhoneTopBar` in `App.tsx`, which also

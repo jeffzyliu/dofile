@@ -248,7 +248,7 @@ sequenceDiagram
   participant D as ui/Dialog.tsx
   alt Save
     V->>CT: Save
-    CT->>Ed: await editorCommands.save(path), the dialog stays open
+    CT->>Ed: await documents.ts save(path), the dialog stays open
     Ed-->>CT: true
     CT->>CT: dialog = null
     CT->>A: close(path) (editor/documents.ts): the record, the active tab, its banners
@@ -621,9 +621,10 @@ the line.
 - `dirty`: computed, the text against `saved`; the unsaved dot in `tabs` is derived from it and stored nowhere.
 
 A reload, a rename's retype and a run's text shown put a new document in the record; a close drops the record. Save
-(still in `editor/Editor.tsx`) tracks each Save in progress with the path its tab has now (`saveBegins`: `moved` moves
-it, `close` and `retype` set it to null), so a Save that answers after a rename leaves its outcome on the renamed tab. A
-Save writes in its turn (`files/turns.ts` `fileTurn`): a rename or a delete keeps the turn until the tabs have followed
+(`documents.ts` `save`) holds the record and the document it took when pressed: it writes under the record's path when
+its turn comes, so a Save that answers after a rename leaves its outcome on the renamed tab, and it writes nothing (and
+applies no answer) when the record was closed or holds another document by then (the Save rule: the later action wins,
+SPEC 4b). A Save writes in its turn (`files/turns.ts` `fileTurn`): a rename or a delete keeps the turn until the tabs have followed
 it, so a Save pressed meanwhile writes under the new name, or nothing when its tab was closed; a Save's turn ends once
 its write is issued, and the store applies changes in the order they are called, so a rename after it moves the bytes it
 wrote. The file code (`files/open.ts`, `files/actions.ts`, `files.ts`) calls the owner's functions; the view attaches to
@@ -663,8 +664,9 @@ flowchart LR
 | **Edit** | changed | unchanged | unchanged | on when the text differs from the saved text (the document's computed `dirty`) | moves with the text; gone when its line is deleted (`cm.ts` `lineMarksField`, `errormark.ts` `lineDeleted`) | unchanged | unchanged |
 | **Undo back to the saved text** | equals the saved text | unchanged | unchanged | off | mapped as any edit | unchanged | unchanged |
 | **Save succeeds** (`save`) | unchanged | the text Save wrote | `savedForm`: a `.do` or `.ado` loses its BOM, by the name it was written under | off, unless the text changed while it was written | unchanged | both dismissed for the tab's path; toast "Saved name". A tab renamed while it was written gets all of this under its new path. | `fileText` bytes |
+| **Save cancelled** (a reload, "Reload from the run" or a run's text shown before its turn; its tab closed or retyped) | as the later action left it | as the later action left it | as the later action left it | as the later action left it | unchanged | unchanged; no toast | not written (a Save pressed while "Reload from the run" waits on its read still writes: the reload takes no turn yet) |
 | **Save fails** | unchanged | unchanged | unchanged | stays on | unchanged | save-failed added (one per path, under the tab's path at the time it fails; none for a tab closed meanwhile); the live region says it | unchanged |
-| **Rename** (`renameEntry` → `moved`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (`saving`) | the same bytes under the new name |
+| **Rename** (`renameEntry` → `moved`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (it holds the record) | the same bytes under the new name |
 | **Rename across a `.do` name** | as Rename | as Rename | `a.txt` with a BOM renamed `a.do`: the next Save writes no BOM. `a.do` with a BOM, never saved here, renamed `a.txt`: the next Save keeps it. | kept | kept | moved | the same bytes |
 | **Rename to a name that opens another way** | a clean tab takes the new kind in its place (`retype`: a text name is read from the store first, in the rename's turn; a name that is not text, or a file the store cannot give, closes it); a tab with edits stays as it is; a `.png` name closes a clean tab | | | | | | |
 | **Close** (`close`) | dropped | dropped | dropped | the tab is gone | dropped with the tab's state | both dismissed | unchanged ("Don't save" loses the edits) |
@@ -715,6 +717,8 @@ listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM 
   before its tab moves, …"; "rename to a text name: a file that is not text closes its tab …"
 - `web/test/documents.test.ts`: every test (open, close, move, retype, reload, a run over a tab, the dot derived, the
   view attached)
+- `web/test/save.test.ts`: every test (Save against a rename and a delete, the Save rule's cases, a run that keeps
+  the edits; the Save pressed during "Reload from the run"'s read is a todo until the reload takes a turn)
 - `web/e2e/editor.spec.ts`:
   - "the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast, a failed save shows a banner; …"
   - "a failed save's banner goes when the editor's text is replaced: …"
@@ -737,8 +741,9 @@ listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM 
   the shown tab, a tab switch would place the error again at the run's line number, not where its text has moved.
 - **A rename's retype reads the store before the tab moves,** and moves and retypes the tabs in one batch, so no tab
   shows its new name as the wrong kind (a .dta view on a .csv).
-- **A Save answers for the path its tab has when the store answers** (`saveBegins`). Code that awaits between taking a
-  tab's path and writing to its document must follow a rename the same way, or it writes under the old name.
+- **A Save holds its record and the document it took** (`documents.ts` `save`), never a path. Code that awaits between
+  taking a tab and writing to its document holds the record and compares the document with `content` after the await,
+  or it writes under the old name or over a reload.
 - **A change that tabs follow takes a turn** (`fileTurn`). A new action that renames, moves or removes files and then
   updates the tabs must hold a turn until the tabs have followed it, or a Save pressed in between writes under the old
   name (and brings a deleted file back).
