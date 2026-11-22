@@ -8,13 +8,13 @@ import { fileCommand } from "../../stata/quote.ts";
 import { formatSize } from "../bytes.ts";
 import { baseName } from "../files/tree.ts";
 import { runCommand } from "../run.ts";
-import { startFirst, startOffer } from "../start.ts";
 import { engine, files, showToast } from "../state.ts";
-import { takesRun, workerReachable } from "../states/predicates.ts";
+import { workerReachable } from "../states/predicates.ts";
+import { CommandBar } from "../ui/CommandBar";
 import { Icon } from "../ui/Icon";
-import { copyText } from "./clip.ts";
 import { readDta } from "./dta.ts";
 import { count } from "./format.ts";
+import { VarTable } from "./VarTable";
 import { dtaInfo } from "./view.ts";
 
 const NOTE = " the data in memory is untouched until you press Load.";
@@ -31,16 +31,8 @@ export function DtaView({ path }: { path: string }) {
   const info = dtaInfo.value[path]?.result;
   const summary = info && !("error" in info) ? info : null;
   const made = fileCommand("use", path);
-  const command = "command" in made ? made.command : null;
-  const offer = startOffer(engine.value),
-    off = offer !== null; // Load is off (aria-disabled, still focusable) and says why in a toast when pressed
-  const load = async () => {
-    if (command === null) return;
-    const name = baseName(path);
-    if (offer !== null) {
-      showToast(startFirst(offer, `load ${name}`), "error");
-      return;
-    }
+  const name = baseName(path);
+  const load = async (command: string) => {
     const run = runCommand(command);
     if (run.how !== "started") return; // it did not run: refused
     const r = await run.done;
@@ -54,57 +46,20 @@ export function DtaView({ path }: { path: string }) {
         {summary && ` · ${count(summary.nobs)} obs · ${count(summary.nvars)} vars`}
         {file && ` · ${formatSize(file.size)}`}
       </div>
-      <div class="bar">
-        {command !== null ? (
-          <code class="cmd">{command}</code>
-        ) : (
-          <span class="why">{"problem" in made && made.problem}</span>
-        )}
-        <span class="spacer" />
-        <button
-          type="button"
-          class={`btn primary${off ? " off" : ""}`}
-          disabled={command === null || (!off && !takesRun(engine.value))}
-          aria-disabled={off ? "true" : undefined}
-          onClick={load}
-        >
-          Load
-        </button>
-        <button
-          type="button"
-          class="btn"
-          aria-label="Copy the use command"
-          disabled={command === null}
-          onClick={() => command !== null && copyText(command)}
-        >
-          Copy
-        </button>
-      </div>
+      <CommandBar
+        made={made}
+        row="bar"
+        code="cmd"
+        button="btn primary"
+        verb="Load"
+        copyLabel="Copy the use command"
+        what={`load ${name}`}
+        run={load}
+      />
       {info && "error" in info && <p class="note">Couldn't read this file: {info.error}</p>}
       {summary && (
         <div class="dta-body">
-          <div class="scroll-x">
-            <table class="t">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Label</th>
-                  <th>Type</th>
-                  <th>Format</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.variables.map((v) => (
-                  <tr key={v.name}>
-                    <td class="mono">{v.name}</td>
-                    <td class={v.label ? undefined : "muted"}>{v.label || "no label"}</td>
-                    <td class="mono">{v.type}</td>
-                    <td class="mono">{v.format}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <VarTable variables={summary.variables} />
           <p class="note">
             Read with <code>describe using</code>;{NOTE}
           </p>
