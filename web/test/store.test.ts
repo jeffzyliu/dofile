@@ -7,7 +7,7 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { loadPyodide } from "pyodide";
 import type { FileStore, RunChange } from "../src/engine/store.ts";
-import { openStore } from "../src/engine/store.ts";
+import { CONFLICT, isConflict, openStore } from "../src/engine/store.ts";
 import { keepFiles, tabLock } from "../src/engine/tab.ts";
 import type { PendingRow } from "../src/engine/types.ts";
 import { crc32 } from "../src/engine/zip.ts";
@@ -84,6 +84,49 @@ test("store API: write, list, read, mkdir, rename and remove of a file and of a 
   await store.write("out.txt", bytes("z"));
   await store.remove("out");
   assert.deepEqual(await paths(store), ["code", "out.txt", "plain"]);
+});
+
+test("write with an expectation: compared in the write's transaction; a mismatch writes nothing and rejects with the name StoreConflict and what the store holds; info reads one path", async () => {
+  const store = fresh();
+  const rows: PendingRow[] = [];
+  store.onChange = (row) => rows.push(row);
+  const a = await store.write("a.do", bytes("one"), "absent");
+  assert.deepEqual(await store.info("a.do"), a);
+  assert.equal(await store.info("none.do"), null);
+  const taken = await store.write("a.do", bytes("two"), "absent").catch((e) => e);
+  assert.equal(taken.name, CONFLICT);
+  assert.ok(isConflict(taken));
+  assert.deepEqual(taken.now, a, "what the store holds");
+  assert.match(taken.message, /already exists/);
+  const b = await store.write("a.do", bytes("four"), { size: a.size, mtime: a.mtime }); // the file as read: written
+  const stale = await store.write("a.do", bytes("five"), { size: a.size, mtime: a.mtime }).catch((e) => e);
+  assert.ok(isConflict(stale), "the file changed since it was read");
+  assert.deepEqual(stale.now, b);
+  await store.mkdir("d");
+  assert.ok(isConflict(await store.write("d", bytes("x"), "absent").catch((e) => e)), "a folder takes the name too");
+  assert.ok(isConflict(await store.write("d", bytes("x"), b).catch((e) => e)), "a folder is not the file read");
+  const gone = await store.write("gone.do", bytes("x"), b).catch((e) => e);
+  assert.ok(isConflict(gone));
+  assert.equal(gone.now, null, "deleted since it was read");
+  assert.equal(text(await store.read("a.do")), "four", "nothing written by a mismatch");
+  assert.equal(await store.info("gone.do"), null);
+  assert.deepEqual(
+    rows.map((r) => r.path),
+    ["a.do", "a.do", "d"],
+    "a mismatch makes no change: no onChange",
+  );
+  const moved = await store.rename("d", "a.do").catch((e) => e);
+  assert.ok(isConflict(moved), "a rename onto a name taken");
+});
+
+test("two writes of one path in the same millisecond get different mtimes, so an expectation of the first refuses after the second (same size)", async (t) => {
+  const store = fresh();
+  t.mock.method(Date, "now", () => 1_000_000);
+  const first = await store.write("a.do", bytes("aaa"));
+  const second = await store.write("a.do", bytes("bbb"));
+  assert.equal(first.size, second.size);
+  assert.equal(second.mtime, first.mtime + 1);
+  assert.ok(isConflict(await store.write("a.do", bytes("ccc"), first).catch((e) => e)));
 });
 
 test("a path that leaves the folder, or names the hidden one, is refused by every call", async () => {
