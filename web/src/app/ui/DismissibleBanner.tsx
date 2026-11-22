@@ -1,0 +1,31 @@
+import { dismiss } from "../state.ts";
+import { useFocusOnLeave } from "../states/focus.ts";
+import type { Banner as BannerRecord } from "../types.ts";
+import { Banner, type BannerProps } from "./Live";
+
+/** A registry banner with a Dismiss button after its `actions`. Dismissing it by keyboard hands the focus on rather
+ *  than to the page (useFocusOnLeave). */
+export function DismissibleBanner({
+  banner,
+  actions,
+  children,
+  ...rest
+}: Omit<BannerProps, "bannerRef" | "focusable"> & { banner: BannerRecord }) {
+  const ref = useFocusOnLeave<HTMLDivElement>();
+  return (
+    <Banner
+      {...rest}
+      bannerRef={ref}
+      actions={
+        <>
+          {actions}
+          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
+            Dismiss
+          </button>
+        </>
+      }
+    >
+      {children}
+    </Banner>
+  );
+}

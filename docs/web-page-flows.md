@@ -878,7 +878,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
   unsaved file with that name. A loop's or program's body is echoed once, where it is defined, so a `do` there gets
   one note after that echo, however many passes run the file (for a program, at its definition, not its call). A `do`
   whose file name is on a continued `> ` line gets none.
-- **OQ-10's note.** When the run ended with rc above 1, `states/words.ts` `noteFor(end.rc, runError(lines))` picks
+- **OQ-10's note.** When the run ended with rc above 1, `log/notes.ts` `noteFor(end.rc, runError(lines))` picks
   the note, which goes at the run's end, after "Go to line" when that is there (Break's note is rc 1's, so never with
   it).
 - **Caches.** `kinds` (each item's `classify`) and `aligned` (each item's echoes, kept with the code they were

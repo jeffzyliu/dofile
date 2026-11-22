@@ -1356,7 +1356,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
     of M". OQ-18: "Browsers that work" goes to `/#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
     step 5 built listing the browsers that run dofile, opened in a new tab. OQ-10, the
-    notes (`noteFor(rc, error)` in `words.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
+    notes (`noteFor(rc, error)` in `log/notes.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
     error, where `error` is the error the run ended with, its last error line that is not `r(N);`, not one an earlier
     `capture noisily` caught: `log/classify.ts` `runError`): `restore` with nothing preserved (r(622);
     the engine prints only "nothing to restore") "Nothing was preserved. A run restores its data when it ends, so put preserve and restore in the same run."; a community command (the engine says "command reghdfe is unrecognized" with r(199), which the code matches, so the note shows; it may suggest a near name, "did you mean recode?") (r(199), `reghdfe`, `esttab`, `estout`, `outreg2`, `ivreg2`, `xtivreg2`, `ftools`, `winsor2`)

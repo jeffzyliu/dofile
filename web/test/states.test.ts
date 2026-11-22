@@ -2,6 +2,7 @@
 // running banner words, the stopping countdown, the action each failed reason gets, the times, and the drafted notes.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { noteFor } from "../src/app/log/notes.ts";
 import {
   breakAsked,
   engineLoading,
@@ -15,7 +16,6 @@ import {
 } from "../src/app/states/predicates.ts";
 import {
   failedActions,
-  noteFor,
   ofTotal,
   rerunPath,
   resetAsks,
