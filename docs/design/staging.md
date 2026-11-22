@@ -10,9 +10,9 @@ Four kinds of file reach the editor's `public/` (all gitignored: `web/.gitignore
 
 | Staged file | Source | Written by | Today, when |
 |---|---|---|---|
-| the dofile wheel, `public/dofile-*.whl` | the newest `*.whl` in `web/.wheel/` (`npm run wheel` builds it) | `vite.config.ts:55-56` | every load of the config |
-| extra wheels, `public/pyreadstat-*.whl` | `web/wheels/*.whl` (committed) | `vite.config.ts:57-58` | every load of the config |
-| Pyodide's runtime, `public/pyodide/` (3 files, `RUNTIME_FILES`, `start-files.ts:14`) | `node_modules/pyodide/` | `vite.config.ts:63-68` | every load of the config |
+| the dofile wheel, `public/dofile-*.whl` | the newest `*.whl` in `web/.wheel/` (`npm run wheel` builds it) | `vite.config.ts`, `stageFiles()` | every load of the config |
+| extra wheels, `public/pyreadstat-*.whl` | `web/wheels/*.whl` (committed) | `vite.config.ts`, `stageFiles()` | every load of the config |
+| Pyodide's runtime, `public/pyodide/` (3 files, `RUNTIME_FILES`, `start-files.ts:14`) | `node_modules/pyodide/` | `vite.config.ts`, `stageFiles()` | every load of the config |
 | the snapshot, `public/snapshot/` (+ `manifest.json`) | built in Pyodide under Node | `scripts/make-snapshot.ts` (`rmSync` of the folder first, then writes) | `npm run snapshot` |
 
 "Every load of the config" is every `vite` command of either mode: `vite.config.ts` calls `readInputs()` (`:47`) and copies

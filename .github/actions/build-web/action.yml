@@ -36,10 +36,11 @@ runs:
         path: web/public/snapshot
         key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.ts', 'web/scripts/install-engine.ts', 'web/scripts/build-id.ts', 'web/scripts/lib/*.ts', 'web/wheels/*.whl', 'web/src/engine/snapshot.ts') }}
     # A restored snapshot is used only if it is of the wheels and the Pyodide version just built (the build's own staleness
-    # check, scripts/build-id.ts); else it is built again, at quality 11, the shipped one (micropip fetches openpyxl from PyPI).
+    # check, scripts/build-id.ts) and of quality 11, the shipped one; else it is built again at 11 (micropip fetches openpyxl from PyPI).
     - shell: bash
       working-directory: web
       env:
+        SNAPSHOT_QUALITY: 11
         HIT: ${{ steps.cache.outputs.cache-hit }}
       run: if [ "$HIT" = true ] && node scripts/build-id.ts; then echo "the cached snapshot is current"; else npm run snapshot; fi
 
