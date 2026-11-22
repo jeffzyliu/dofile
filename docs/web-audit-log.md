@@ -421,7 +421,7 @@ Read only; the survey found no stale-answer bug it could show. Every loose path 
 - **A1, worker-dispatch double answer.** In `worker-dispatch.ts` `answer`, `post`, `afterResult` and `answered(false)` share
   one `try`: a throw in a hook posts a second `{id, error}` answer and calls `answered(true, e)` again (for `boot`, `booted`
   then rejects for every later op). The page drops the second answer; nothing in `afterResult` can throw today, so it is
-  latent. Fixed in the gate, PR TBD.
+  latent. Fixed in the gate: #110 (10a06f9), a failing test first; review Sonnet, high: accept (its should-fix and nice-to-have done).
 - **A2.** Two quick drops or file picks enter the `uploads` chain in the order their reads finish, not the order of the
   user's actions; with the same path in both, the winner is not deterministic. Left for later.
 - **A3.** `CloseTabDialog.save` closes by the old path after the await (`files/dialogs.tsx`); the dialog is modal, so no way
@@ -431,13 +431,13 @@ Read only; the survey found no stale-answer bug it could show. Every loose path 
 
 ### Gate checks
 
-On audit/2a-moves (9f3ff3e plus the A1 fix), to be filled by the orchestrator.
+On audit/2a-moves: the engine checks and N7 at 9f3ff3e, e2e at 10a06f9 (9f3ff3e plus the A1 fix, which touches only the worker's dispatch). Run 2026-11-22, locally, with no agent running.
 
 | Check | Result |
 |---|---|
-| `E2E_PORT=<port> SNAPSHOT_QUALITY=5 npm run e2e`, all four projects | TBD |
-| `npm run check-snapshot` | TBD |
-| `npm run check-numeric` | TBD |
-| `npm run check-pytest` | TBD |
-| `uv run poe test tests` | TBD |
-| N7 against c5d7a85 (the phase's start baseline) | TBD |
+| `E2E_PORT=<port> SNAPSHOT_QUALITY=5 npm run e2e`, all four projects | 750 passed, 54 skipped, 0 failed |
+| `npm run check-snapshot` | 107 cases, 0 differ, 0 timed out (1701 and 1911 differ as expected). The first try stopped at once with rc 2: the fresh worktree had no snapshot yet |
+| `npm run check-numeric` | exit 0: 107 cases, 0 timed out |
+| `npm run check-pytest` | exit 0: 80 files, 0 timed out |
+| `uv run poe test tests` | 343 passed, 3 xfailed |
+| N7 against c5d7a85 (the phase's start baseline) | 81 shots, 0 px, no near-misses. Each side ran its own spec: c5d7a85 with 98efd19's spec (S1 changed the seed helpers, and the current spec cannot seed the old app), 9f3ff3e with its own |
