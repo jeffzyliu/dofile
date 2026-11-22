@@ -1,8 +1,5 @@
-// The worker's dispatch: a table keyed by op (worker.ts fills it) says how each op is answered, and dispatcher() turns
-// it into the worker's onmessage. The table's type comes from Ops (types.ts), so an op without a handler, or a handler
-// whose arguments or result do not match its op, fails the type check. The answer on the wire: {id, result} or
-// {id, error, name, type?} (`type`: the Python exception class of a PythonError). This module posts nothing itself:
-// worker.ts hands it `post`.
+// The worker's dispatch: the table of op handlers (worker.ts fills it; its type, from Ops, makes a missing or mistyped
+// handler fail tsc) and dispatcher(), the onmessage built from it. It posts nothing itself: worker.ts hands it `post`.
 
 import type { FromWorker, Op, Ops, ToWorker } from "./types.ts";
 
