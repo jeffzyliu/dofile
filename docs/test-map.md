@@ -164,8 +164,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The tree and the current folder; opening each kind of file (SPEC 3.11), closing, renaming, deleting with open tabs.
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
   - An upload against the other file changes (each write a turn): a new file of the same name, a clash whose file
-    changed while asked or after "Do the same" (asked again), one deleted while asked (written), one edited before its
-    write's turn (asked in the unsaved words), a Replace against `openFile`'s read.
+    changed while asked or after "Do the same" (asked again), one deleted while asked (written; asked when its tab has
+    unsaved edits), one edited before its write's turn (asked in the unsaved words), a dialog opened while a clash's file
+    is read (the clash waits), a Replace against `openFile`'s read.
 - `documents.test.ts`: the open tabs and their documents (`app/editor/documents.ts`), no view or a stand-in one: open,
   activate, close and ask, close under a folder, a move, a retype, a reload, a run over a tab, the dot and `selection`
   derived, a view attached after a file opened.
