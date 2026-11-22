@@ -13,6 +13,7 @@ import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
 import { dismiss, engine, engineBytes, hasFiles, isolated } from "../state.ts";
 import type { BannerOf, EngineStateOf } from "../types.ts";
+import { DismissibleBanner } from "../ui/DismissibleBanner";
 import { useFocusOnMount } from "../ui/focus-hooks.ts";
 import { Banner } from "../ui/Live";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
@@ -224,72 +225,48 @@ export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
   const w = resetWords(banner.kind, banner.cause, banner.reason, isolated.value);
   const path = rerunPath(banner.kind, banner.run);
   const canRun = takesRun(engine.value) && tabs.value.some((t) => t.path === path && t.kind === "text");
-  const ref = useFocusOnLeave<HTMLDivElement>();
   return (
-    <Banner
-      bannerRef={ref}
+    <DismissibleBanner
+      banner={banner}
       kind={banner.kind === "crash" ? "error" : banner.kind === "break" ? "warn" : "info"}
       actions={
-        <>
-          {path && (
-            <button
-              type="button"
-              class="btn primary"
-              disabled={!canRun}
-              onClick={() => {
-                editorCommands.runFile(path);
-                dismiss(banner);
-              }}
-            >
-              Run the file again
-            </button>
-          )}
-          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
-            Dismiss
+        path && (
+          <button
+            type="button"
+            class="btn primary"
+            disabled={!canRun}
+            onClick={() => {
+              editorCommands.runFile(path);
+              dismiss(banner);
+            }}
+          >
+            Run the file again
           </button>
-        </>
+        )
       }
     >
       <b>{w.head}</b> {w.rest}
-    </Banner>
+    </DismissibleBanner>
   );
 }
 
 export function StorageBanner({ banner }: { banner: BannerOf<"storage"> }) {
-  const ref = useFocusOnLeave<HTMLDivElement>();
   return (
-    <Banner
-      kind="warn"
-      bannerRef={ref}
-      actions={
-        <>
-          <DownloadAllButton />
-          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
-            Dismiss
-          </button>
-        </>
-      }
-    >
+    <DismissibleBanner banner={banner} kind="warn" actions={<DownloadAllButton />}>
       <b>This browser may clear your files</b> when it needs space. Download all to keep a copy.
-    </Banner>
+    </DismissibleBanner>
   );
 }
 
 export function StoreFailedBanner({ banner }: { banner: BannerOf<"store-failed"> }) {
-  const ref = useFocusOnLeave<HTMLDivElement>();
   return (
-    <Banner
+    <DismissibleBanner
+      banner={banner}
       kind="error"
-      bannerRef={ref}
       actions={
-        <>
-          <button type="button" class="btn" onClick={() => location.reload()}>
-            Reload the page
-          </button>
-          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
-            Dismiss
-          </button>
-        </>
+        <button type="button" class="btn" onClick={() => location.reload()}>
+          Reload the page
+        </button>
       }
     >
       {banner.cause === "open" ? (
@@ -300,35 +277,29 @@ export function StoreFailedBanner({ banner }: { banner: BannerOf<"store-failed">
         <b>Your files couldn't be loaded into the engine.</b>
       )}{" "}
       Reload the page to try again.
-    </Banner>
+    </DismissibleBanner>
   );
 }
 
 export function DownloadFailedBanner({ banner }: { banner: BannerOf<"download-failed"> }) {
-  const ref = useFocusOnLeave<HTMLDivElement>();
   return (
-    <Banner
+    <DismissibleBanner
+      banner={banner}
       kind="error"
-      bannerRef={ref}
       actions={
-        <>
-          <button
-            type="button"
-            class="btn"
-            onClick={() => {
-              downloadAll();
-            }}
-          >
-            Try again
-          </button>
-          <button type="button" class="btn quiet" onClick={() => dismiss(banner)}>
-            Dismiss
-          </button>
-        </>
+        <button
+          type="button"
+          class="btn"
+          onClick={() => {
+            downloadAll();
+          }}
+        >
+          Try again
+        </button>
       }
     >
       <b>Your files couldn't be downloaded.</b> This browser wouldn't open the storage where dofile keeps your files.
       Try again, or reload the page.
-    </Banner>
+    </DismissibleBanner>
   );
 }
