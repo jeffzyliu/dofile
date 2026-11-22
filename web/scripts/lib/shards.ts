@@ -32,12 +32,13 @@ export const runChild = (
     });
     let pending = "",
       timedOut = false;
-    const timer = limitS !== undefined
-      ? setTimeout(() => {
-          timedOut = true;
-          child.kill("SIGKILL");
-        }, limitS * 1000)
-      : null;
+    const timer =
+      limitS !== undefined
+        ? setTimeout(() => {
+            timedOut = true;
+            child.kill("SIGKILL");
+          }, limitS * 1000)
+        : null;
     child.stdout?.on("data", (d) => {
       pending += d;
       for (;;) {
