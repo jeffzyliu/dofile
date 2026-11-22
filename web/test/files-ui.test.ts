@@ -826,3 +826,30 @@ test("rename to a text name: the new name opened while the store is read keeps o
   assert.equal(D.activeTab.value, "w.csv");
   assert.equal(D.textOf("w.csv"), "a,b\n");
 });
+
+test("rename onto the name of a file a run deleted, its tab still open: a clean tab gives way to the renamed file; one with unsaved edits keeps the name taken", async () => {
+  const tabsNow = () => D.tabs.value.map((t) => [t.path, t.kind, t.dirty]);
+  await reset({ "a.do": "1", "w.csv": "x\n", "w.dta": "a,b\n" });
+  for (const p of ["a.do", "w.csv", "w.dta"]) await openFile(p);
+  await store.remove("w.csv"); // a run's erase: files.ts afterRun keeps the tab
+  await refresh();
+  await A.renameEntry("w.dta", "w.csv");
+  assert.deepEqual(tabsNow(), [
+    ["a.do", "text", false],
+    ["w.csv", "text", false],
+  ]);
+  assert.equal(D.textOf("w.csv"), "a,b\n", "the renamed file's text, as the store has it");
+
+  await reset({ "a.do": "1", "w.csv": "x\n", "w.dta": "a,b\n" });
+  for (const p of ["a.do", "w.csv", "w.dta"]) await openFile(p);
+  edit("w.csv");
+  await store.remove("w.csv");
+  await refresh();
+  await assert.rejects(A.renameEntry("w.dta", "w.csv"), /already exists/);
+  assert.deepEqual(tabsNow(), [
+    ["a.do", "text", false],
+    ["w.csv", "text", true],
+    ["w.dta", "dta", false],
+  ]);
+  assert.deepEqual((await store.list()).map((f) => f.path).sort(), ["a.do", "w.dta"]);
+});
