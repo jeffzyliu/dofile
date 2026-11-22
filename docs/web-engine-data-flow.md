@@ -454,5 +454,6 @@ What Part 3 listed before step 3.5 was answered by its steps A to D. What remain
 8. **The controller reaches into the UI.** The effects `show-dialog` and `close-dialog` write the `dialog` signal, and
    `close-dialog` asks the editor for focus through the `editorAsked` signal (`app/editor/commands.ts`).
 9. **Module-level state in the controllers.** `connectEngine`, `connectRun` and `connectFiles` set module variables; the tests
-   reconnect them (a second `connectEngine` replaces the wiring and clears the machine). One engine per page is held by a
+   reconnect them (a second `connectEngine` replaces the wiring, one record that holds the performer and its handles, and
+   clears the machine, the queue and the drop record). One engine per page is held by a
    test that only `main.tsx` constructs or connects.
