@@ -115,7 +115,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   wiring, and the drop record checked at the end of each test. It makes the localStorage stand-in before it imports the
   controllers.
 - `app-engine.test.ts`: the engine controller (`app/engine.ts`).
-  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios.
+  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios; a second
+    `connectEngine` releases the earlier wiring's handles (download, graphics subscription).
   - No engine: a run or command is refused.
 - `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners.
   - "Clear log" and `canClearLog`; no engine: a command is refused and stays out of `history`; a run's promise settles when
@@ -146,10 +147,14 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   build
   mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
   SIGINT is written again while the run is on, never into the next run); store failures (`started` with `storeFailed`,
-  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`).
+  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`); the start's facts
+  (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
+- `part-header.test.ts`: the shared buffer the graphics part is handed over in (`engine/lazy-part.ts`): what the page's
+  writers (land, fail with a reason cut to the room, retry) leave, as the worker's readers see it, and the header's
+  layout and size.
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
   does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
   decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).

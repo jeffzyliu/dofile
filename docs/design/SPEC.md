@@ -708,7 +708,9 @@ As built:
   worker's queue; if its worker is ended first it rejects with the ending's kind.
 - `storeError` holds the error (`{name, message, cause}`; `cause` `open` when the store did not open or could not be read, `copy` when its files could not be written into `/work`) with which the worker has no store at `mount` (also `startup.storeError`); `/work` then
   starts empty, and the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
-  it (section 7). The transport also keeps `about` and `startup`, the facts of the last start, for the tests and the hook.
+  it (section 7). `about` and `startup` are the other facts of the start: with `storeError` they are kept on the live worker's
+  record once its start is complete, for the tests and the hook, and are null before that and with no live worker (after an
+  ending, until the next start is complete).
 - **Errors** are `Error`s with `kind`: `"failed"` (`download()` or `build()` could not get the build's list or a file as
   listed, or the build has no snapshot, with `reason` `"download" | "unknown"`; also a call cut because its worker's start
   failed, with no `reason`: why the start failed is the machine's `FailReason`), `"failed-twice"` (a call cut because its
@@ -742,8 +744,8 @@ interface LifecycleOps {                         // sent only by the transport's
   graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
-// start files: Int32 [state 0 pending / 1 landed / 2 failed, byte count, attempt (the page's fetches of it; a graph that
-// finds it failed posts {graphics: "again"} and waits for one more), 0] then from byte 16 (PART_HEADER) the compressed part (or the reason), in `sab`;
+// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; the
+// buffer's layout, the header and the states: src/engine/lazy-part.ts);
 // `sab` null (no SharedArrayBuffer): the worker fetches the part itself once started, and the page never does (a graph
 // that finds it missing stops that fetch and makes a synchronous request); the worker tells the page how it goes, for the
 // "Graphs loading" ring and the download total: {graphics: "fetching"}, {graphics: "progress", received}, {graphics: "landed"},
@@ -1038,8 +1040,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     read ops (`ViewOp`: `describe`, `describe_file`, `matrix`, `macros`, `browse`, `memory`); views use `matrix` and
     `describe_file`. It raises no event, and rejects with kind `no-engine` with no worker and `reset` when a reset cut it.
     `drops()` lists the last 200 events that changed nothing (`{type, n?, row, why}`, `why` "stale" or "not-valid"). A second
-    `connectEngine` replaces the wiring: the machine, the queue, the timers and the drop record are cleared, and nothing of
-    the earlier wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
+    `connectEngine` replaces the wiring (one record: what it was given, the performer and the performer's handles: the Break
+    timer, the download and the graphics subscription): the old handles are released (the timer cleared, the download
+    aborted, the subscription ended), the machine, the queue and the drop record are cleared, and nothing of the earlier
+    wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
     (`UPDATED` is reason "updated"'s); `stageNow` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and

@@ -86,8 +86,8 @@ export type BootArgs = {
   wheel: Wheel;
   extraWheels?: Wheel[];
   interruptBuffer?: Int32Array | null;
-  /** A lazy snapshot's graphics part. `sab`: Int32 [state 0 pending, 1 landed, 2 failed; byte count; tries: the page's
-   *  fetches of it; 0], then from PART_HEADER the compressed part or the reason; null: the worker fetches it itself. */
+  /** A lazy snapshot's graphics part. `sab`: the buffer the page hands it over in (layout: lazy-part.ts); null: the
+   *  worker fetches it itself. */
   graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null };
 };
 

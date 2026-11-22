@@ -4,7 +4,18 @@
 
 import type { BrotliWasmType } from "brotli-wasm";
 import { loadPyodide } from "pyodide";
-import { PART_FAILED, PART_LANDED, PART_PENDING, useNative, waitStep } from "./lazy-part.ts";
+import {
+  PART_FAILED,
+  PART_LANDED,
+  PART_PENDING,
+  partData,
+  partHeader,
+  partState,
+  partTries,
+  useNative,
+  waitPartChange,
+  waitStep,
+} from "./lazy-part.ts";
 import { MIB } from "./memcap.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
 import {
@@ -12,7 +23,6 @@ import {
   inflateNative,
   isStorageRefusal,
   openCache,
-  PART_HEADER,
   patchHeapMax,
   restoreOptions,
   unpackAsync,
@@ -475,8 +485,7 @@ async function loadFromSnapshot(
 // ---- a lazy snapshot's graphics part (docs/lazy-matplotlib.md) ----
 // matplotlib is not in the heap but in one more file (files.graphics). With a SharedArrayBuffer the page fetches it
 // (client.ts), because a worker busy in Python cannot advance a fetch of its own, and hands it over in the buffer given
-// with boot: Int32 [state, length, tries, 0], then from PART_HEADER the compressed part (landed) or the reason
-// (failed). A graph that finds it failed posts {graphics: "again"} and waits for the page's next fetch.
+// with boot (its layout: lazy-part.ts). A graph that finds it failed posts {graphics: "again"} and waits for the page's next fetch.
 // Without one (no cross-origin isolation) this worker fetches it (prefetch, fetchPartNow): a graph blocked in Python
 // could not be handed the page's bytes. Its {graphics: ...} messages let the page show the download.
 // Only a graph waits for the part (waitGraphics). Nothing happens before `startup` is answered, so a return visit is no
@@ -517,16 +526,16 @@ let share: {
   writtenInRun = 0; // performance.now() when a graph of this run wrote the part
 
 // Which copy of the part is there: the page's fetches of it (each new copy follows one), or this worker's own
-const copyNow = () => (share?.hdr ? Atomics.load(share.hdr, 2) : copies);
+const copyNow = () => (share?.hdr ? partTries(share.hdr) : copies);
 const nativeNow = () => useNative(brotliMode, hasNativeBrotli(), nativeFailedOn, copyNow());
 
 // The part as the page left it: its state, and a copy of the bytes (landed) or the reason (failed)
 function partNow(): [number, Uint8Array<ArrayBuffer> | string | null] {
   if (!share) return [PART_FAILED, "this build has no graphics part"];
   if (share.sab && share.hdr) {
-    const state = Atomics.load(share.hdr, 0);
+    const state = partState(share.hdr);
     if (state === PART_PENDING) return [state, null];
-    const data = new Uint8Array(share.sab, PART_HEADER, share.hdr[1]).slice(); // TextDecoder and Blob refuse a shared view
+    const data = partData(share.sab, share.hdr);
     return [state, state === PART_LANDED ? data : new TextDecoder().decode(data)];
   }
   if (share.bytes) return [PART_LANDED, share.bytes.slice()];
@@ -595,7 +604,7 @@ function waitGraphics(ms: number): string {
     const read = () => {
       // tries before the state: a retry started between the two loads must show as new tries, not as a failure
       // already the new try's (the graph would wait until a Break)
-      tries = share!.hdr ? Atomics.load(share!.hdr, 2) : 0;
+      tries = share!.hdr ? partTries(share!.hdr) : 0;
       const [state, now] = partNow();
       part = now;
       return { state, tries, shared: Boolean(share!.hdr) };
@@ -641,13 +650,13 @@ function waitGraphics(ms: number): string {
         case "ask-again":
           askedAt = tries;
           self.postMessage({ graphics: "again" });
-          Atomics.wait(share!.hdr!, 0, PART_FAILED, ms);
+          waitPartChange(share!.hdr!, PART_FAILED, ms);
           return "pending";
         case "wait-failed":
-          Atomics.wait(share!.hdr!, 0, PART_FAILED, ms);
+          waitPartChange(share!.hdr!, PART_FAILED, ms);
           return "pending";
         case "wait-pending":
-          Atomics.wait(share!.hdr!, 0, PART_PENDING, ms);
+          waitPartChange(share!.hdr!, PART_PENDING, ms);
           return "pending";
       }
     } catch (e) {
@@ -926,7 +935,7 @@ const lifecycle: Handlers<LifecycleOps> = {
     if (buffer) browser.keep_breaks(() => Atomics.store(buffer, 0, 2));
     if (graphics) {
       // a lazy snapshot: graphs wait for the part (browser.py); nothing else of it before `startup`
-      share = { ...graphics, hdr: graphics.sab ? new Int32Array(graphics.sab, 0, 4) : null };
+      share = { ...graphics, hdr: graphics.sab ? partHeader(graphics.sab) : null };
       browser.lazy_graphics(waitGraphics);
     }
     startup.engineS = since(tEngine);
