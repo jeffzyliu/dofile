@@ -62,6 +62,14 @@ export function startEngine(): StartOffer | null {
  *  @param what - what the visitor wanted to do: "see help regress", "load wages.dta" */
 export const startFirst = (offer: StartOffer, what: string): string =>
   offer === "off" ? `The engine isn't running: can't ${what}` : `Start the engine to ${what}`;
+/** The primary button of a command bar (Import, Load).
+ *  @param command - null when the file's name cannot be put in a command
+ *  @param takesRun - whether the engine takes a run now
+ *  @returns off: aria-disabled and focusable, a press says why in a toast; disabled: the attribute */
+export const barButton = (offer: StartOffer | null, command: string | null, takesRun: boolean) => ({
+  off: offer !== null,
+  disabled: command === null || (offer === null && !takesRun),
+});
 /** The command line's placeholder while it is off, by the offer. */
 export const startHint = (offer: StartOffer): string =>
   offer === "off" ? "The engine isn't running" : "Start the engine to run code";
