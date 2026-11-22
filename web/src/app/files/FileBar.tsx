@@ -2,12 +2,10 @@
 // files (a .dta tab's bars are output/DtaView.tsx's).
 import { useEffect, useState } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
-import { copyText } from "../output/clip.ts";
 import { runCommand } from "../run.ts";
-import { startFirst, startOffer } from "../start.ts";
-import { activeTab, engine, files, fresh, showToast, tabs } from "../state.ts";
-import { takesRun } from "../states/predicates.ts";
+import { activeTab, files, fresh, tabs } from "../state.ts";
 import { store } from "../store.ts";
+import { CommandBar } from "../ui/CommandBar";
 import { Icon } from "../ui/Icon";
 import { downloadEntry } from "./actions.ts";
 import { decodeText } from "./open.ts";
@@ -64,9 +62,6 @@ export function FileBar() {
       </div>
     );
   const made = fileCommand("import delimited", path);
-  const command = "command" in made ? made.command : null;
-  const offer = startOffer(engine.value),
-    off = offer !== null; // Import is off (aria-disabled, still focusable) and says why in a toast when pressed
   return (
     <>
       <div class="filebar">
@@ -76,38 +71,16 @@ export function FileBar() {
           {rows && ` · ${rows}`}
         </span>
       </div>
-      <div class="filebar">
-        {command !== null ? (
-          <code class="command">{command}</code>
-        ) : (
-          <span class="why">{"problem" in made && made.problem}</span>
-        )}
-        <span class="spacer" />
-        <button
-          type="button"
-          class={`btn${off ? " off" : ""}`}
-          disabled={command === null || (!off && !takesRun(engine.value))}
-          aria-disabled={off ? "true" : undefined}
-          onClick={() => {
-            if (command === null) return;
-            if (offer !== null) showToast(startFirst(offer, `import ${baseName(path)}`), "error");
-            else runCommand(command);
-          }}
-        >
-          Import
-        </button>
-        <button
-          type="button"
-          class="btn"
-          aria-label="Copy the import command"
-          disabled={command === null}
-          onClick={() => {
-            if (command !== null) copyText(command);
-          }}
-        >
-          Copy
-        </button>
-      </div>
+      <CommandBar
+        made={made}
+        row="filebar"
+        code="command"
+        button="btn"
+        verb="Import"
+        copyLabel="Copy the import command"
+        what={`import ${baseName(path)}`}
+        run={runCommand}
+      />
     </>
   );
 }

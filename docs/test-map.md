@@ -125,6 +125,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   (`ranOver`, the run-changed banner), Download all, `persisted`.
 - `app-theme-tabs.test.ts`: the theme button and `applyTheme`; `setDirty`; strict UTF-8 (`decodeText`).
 - `app-dta.test.ts`: `readDta` (`app/output/dta.ts`): one describe_file per .dta file and version, even when its tab is mounted again
+- `command-bar.test.ts`: `barButton` (`app/start.ts`), the off and disabled rule of the Import and Load buttons.
   while the first is pending; a failed call is asked again.
 - `app-matrix.test.ts`: the Results tab's matrix protocol (`app/output/matrix.ts`): a read's loading entry and answer, an error,
   the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; Copy of an open and a
