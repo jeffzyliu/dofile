@@ -7,12 +7,12 @@
 // the mockups from file: URLs; the built pages need a server).
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
-import { EDITOR_BASE, LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
+import { LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
 import { expect, isPhone, test } from "./fixtures";
 import { showEngine } from "./seed";
 
 /** The editor's address, and the page's address without its query and hash: origin and path. */
-const EDITOR = new URL(EDITOR_BASE, LOCAL_EDITOR_URL).href;
+const EDITOR = LOCAL_EDITOR_URL;
 const where = (url: string) => {
   const u = new URL(url);
   return u.origin + u.pathname;
@@ -387,16 +387,16 @@ test("the editor's addresses, on its own origin: the editor at its base, every p
   request,
 }) => {
   const get = (url: string) => request.get(url, { maxRedirects: 0 });
-  for (const url of [EDITOR_BASE, `${EDITOR_BASE}?test`, `${EDITOR_BASE}start-files.json`]) {
+  for (const url of ["/", "/?test", "/start-files.json"]) {
     const r = await get(url);
     expect(r.status(), url).toBe(200);
     expect(r.headers()["cross-origin-opener-policy"], url).toBe("same-origin");
     expect(r.headers()["cross-origin-embedder-policy"], url).toBe("require-corp");
   }
-  expect(await (await get(EDITOR_BASE)).text()).toContain('name="dofile-engine-bytes"'); // the editor's page
+  expect(await (await get("/")).text()).toContain('name="dofile-engine-bytes"'); // the editor's page
   for (const [from, to] of [
-    [`${EDITOR_BASE}index.html?test`, `${EDITOR_BASE}?test`],
-    [`${EDITOR_BASE}index.html`, EDITOR_BASE],
+    ["/index.html?test", "/?test"],
+    ["/index.html", "/"],
   ]) {
     const r = await get(from);
     expect([301, 302, 307, 308], from).toContain(r.status());

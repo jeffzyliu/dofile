@@ -92,7 +92,9 @@ test("watchFetch: GETs read the Cache first, a .wasm gets its Content-Type, rest
   assert.equal(globalThis.fetch, replaced);
 });
 
-test("watchFetch: a failed or missing fetch rejects `failed` with a DownloadError (Pyodide's loader would wait)", async () => {
+test("watchFetch: a failed or missing fetch rejects `failed` with a DownloadError (Pyodide's loader would wait)", {
+  timeout: 10_000,
+}, async () => {
   stubFetch(() => new Response("no", { status: 404 }));
   let fetches = watchFetch();
   const res = await fetch("https://x.test/pyodide.asm.wasm");

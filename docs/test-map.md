@@ -200,7 +200,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
 - `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
-- `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
+- `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`); the denied commands come from `commands.json`, generated from `browser.DENIED`.
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
@@ -242,7 +242,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
-- `build-id.test.ts`: build id and the staleness check.
+- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set).
 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
@@ -413,7 +413,8 @@ views. The states are seeded through `e2e/seed.ts`.
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`,
   the snapshot job; on `main` `deploy.yml` calls `web.yml` and deploys only if it, `ci.yml` and `lint.yml` passed);
-  `check-pytest` and `check-numeric` are run by hand.
+  `check-pytest` and `check-numeric` are run by hand. The three check scripts share `web/scripts/lib/` (argument parser,
+  shard pool, repo paths, `wheels()`); nothing tests them but running them.
 - Probes check rc 0 only, not output.
 
 ## Known flaky tests

@@ -1,5 +1,5 @@
 // Compares two folders of per-file pytest results (pytest_report.py), CPython baseline against Pyodide:
-//   node scripts/compare-pytest.ts BASELINE_DIR PYODIDE_DIR
+//   node tools/compare-pytest.ts BASELINE_DIR PYODIDE_DIR
 // Lists every test whose outcome differs, the files with no result on one side, and the slowest tests in Pyodide
 // against CPython. Exit 1 if any outcome differs.
 import { readdirSync, readFileSync } from "node:fs";
