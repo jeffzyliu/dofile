@@ -809,9 +809,23 @@ test("after Do the same with Replace, a clash whose file was saved again while a
 test("after Do the same with Replace, a clash over an open file edited before its write's turn is asked in the unsaved words, not replaced", async () => {
   await reset({ "a.do": "old a", "b.do": "old b" });
   await openFile("b.do");
-  const { write } = store;
+  const { write, read } = store;
+  let release = () => {};
+  const held = new Promise<Uint8Array<ArrayBuffer>>((ok) => {
+    release = () => ok(new Uint8Array(0));
+  });
+  store.read = (path) => (path === "held" ? held : read.call(store, path));
   store.write = (...args: Parameters<typeof write>) => {
-    if (args[0] === "a.do") edit("b.do"); // typed in b.do while a.do is written
+    if (args[0] === "a.do") {
+      // a turn holds the chain once a.do is written; b.do is edited while b.do's write waits behind it
+      fileTurn(function* (io) {
+        yield* io.read("held");
+      });
+      setTimeout(() => {
+        edit("b.do");
+        release();
+      }, 10);
+    }
     return write.apply(store, args);
   };
   const { seen, stop } = answering([
@@ -823,6 +837,7 @@ test("after Do the same with Replace, a clash over an open file edited before it
   } finally {
     stop();
     store.write = write;
+    store.read = read;
   }
   assert.deepEqual(
     seen.map((x) => [(x.dialog as { path: string }).path, x.now?.unsaved]),
@@ -833,6 +848,43 @@ test("after Do the same with Replace, a clash over an open file edited before it
   );
   assert.equal(await textOf("b.do"), "old b");
   assert.equal(D.textOf("b.do"), "edited old b", "the edits are kept");
+});
+
+test("after Do the same with Replace, a clash whose file is saved again before its write's turn is asked again", async () => {
+  await reset({ "a.do": "old a", "b.do": "old b" });
+  const { write } = store;
+  let once = false;
+  store.write = (...args: Parameters<typeof write>) => {
+    const w = write.apply(store, args);
+    if (args[0] === "a.do" && !once) {
+      once = true;
+      fileTurn(function* (io) {
+        yield* io.write("b.do", enc("saved again b")); // a Save of b.do, after the answer and before b.do's turn
+      });
+    }
+    return w;
+  };
+  const { seen, stop } = answering([
+    { replace: true, same: true },
+    { replace: true, same: false },
+  ]);
+  try {
+    assert.deepEqual(await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) }))), [
+      "a.do",
+      "b.do",
+    ]);
+  } finally {
+    stop();
+    store.write = write;
+  }
+  assert.deepEqual(
+    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.changed, x.now?.yours.size]),
+    [
+      ["a.do", false, 5],
+      ["b.do", true, 13],
+    ],
+  );
+  assert.equal(await textOf("b.do"), "new b");
 });
 
 test("an upload's Replace of a file whose opening reads the store: the tab ends with what the store ends with", async () => {
