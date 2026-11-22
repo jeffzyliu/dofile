@@ -194,7 +194,11 @@ test("a hook that throws after a good result posts no second answer, calls answe
       ]);
       assert.deepEqual(answered, [[false, undefined]], hook);
     }
-    assert.equal(errors.mock.callCount(), 2, "a throwing hook is reported, not swallowed");
+    assert.equal(
+      errors.mock.callCount(),
+      3,
+      "a throwing hook is reported, not swallowed: afterResult twice, answered once",
+    );
   } finally {
     errors.mock.restore();
   }
