@@ -10,8 +10,18 @@ import { LOCAL_EDITOR_URL } from "./scripts/urls.ts";
 const app = resolve(process.env.SHOTS_APP ?? ".");
 const port = process.env.E2E_PORT ?? "4173";
 const baseline = resolve(process.env.SHOTS_DIR ?? `.shots/${port}/baseline`);
-// The "iphone" project is WebKit (Playwright's iPhone profile): Chromium's flags do not reach it. Chromium's own rendering choices that differ between runs or machines, fixed (which of them matter: docs/test-map.md)
-const FLAGS = ["--font-render-hinting=none", "--force-color-profile=srgb", "--hide-scrollbars"];
+// The "iphone" project is WebKit (Playwright's iPhone profile): Chromium's flags do not reach it.
+// Chromium's rendering fixed for the screenshots. What mattered (docs/test-map.md, "Stability"): the four rasterizer flags;
+// without them the rounded corners of the Run button and of the panes antialiased differently from run to run.
+const FLAGS = [
+  "--font-render-hinting=none",
+  "--force-color-profile=srgb",
+  "--hide-scrollbars",
+  "--num-raster-threads=1",
+  "--disable-skia-runtime-opts",
+  "--disable-partial-raster",
+  "--disable-gpu-rasterization",
+];
 const editorPort = Number(new URL(LOCAL_EDITOR_URL).port);
 
 export default defineConfig({

@@ -352,17 +352,24 @@ as the user's and as a crash, store-failed with each cause, the others), the eng
 (failed unknown, failed updated, failed twice, declined), the phone's three views. #92 (the engine state groups)
 intended no visible change and none is shot for it. The states are seeded through `e2e/seed.ts`.
 
-Stability (N7 tightening, measured at c5d7a85, 1 baseline and 3 compares of the same build, on macOS). The "iphone"
-project is WebKit: every state was identical in every compare, so it has no allowance. Chromium differed by a few
-pixels in about 30 of 39 states with no one element, so nothing is masked. Maximum diff of any state over 3 compares
-(whole list, 39 Chromium states): no flags 34; `--font-render-hinting=none --disable-lcd-text
---disable-font-subpixel-positioning --force-color-profile=srgb --disable-gpu --hide-scrollbars` 16; the three that stay
-(`--font-render-hinting=none --force-color-profile=srgb --hide-scrollbars`) 10. The extra flags did not help (the GPU
-one made some states noisier), so they are not used. Noise is not gone: Chromium's text antialiasing differs from run to
-run by 1 to 10 pixels. Hence `ALLOW` in `shots.spec.ts`: for each Chromium state that differed, twice its measured
-maximum (a margin of 2 on only 3 compares); a state not listed has 0. `npm run shots` prints and writes the
-near-misses: the states that passed with 1 to their allowance pixels changed (a small real change hides among them, so
-read the list, and an unexpected state in it is a finding). Baselines stay per machine; Firefox and WebKit desktop are not shot.
+Stability (N7 tightening, measured on macOS: one baseline of c5d7a85, then 11 compares of the same build, one of them
+through `npm run shots`'s own build step, the others with `--app`; all 81 shots, Chromium and the "iphone" project, which
+is WebKit, so Chromium's flags do not reach it). Result: **0 pixels in every shot of every compare**, so `ALLOW` in
+`shots.spec.ts` is empty (a per-state allowance stays possible there, with the rules in its comment: the measured
+maximum over 10+ compares plus a stated margin, under 12 pixels, else the state is dropped). The causes found, in the
+order they were found: (1) with no flags, Chromium differed by up to 34 pixels in 26 of 39 states; (2) an overlay
+scrollbar in the log pane, drawn under a dialog's backdrop, flickered the dialogs by 34 pixels (the `::-webkit-scrollbar`
+and `scrollbar-width` rule in `FREEZE` removed it; `--hide-scrollbars` alone did not); (3) the rounded corners of the Run
+button and of the panes antialiased differently from run to run (1 to 12 pixels, in the states with an enabled Run
+button), and `--font-render-hinting=none --force-color-profile=srgb --hide-scrollbars --num-raster-threads=1
+--disable-skia-runtime-opts --disable-partial-raster --disable-gpu-rasterization` removed it (the four rasterizer flags
+together; not tried one by one). `--disable-gpu` and `--disable-lcd-text` did nothing for it. The first measure, 3 compares
+at 2 times the maximum, was too small a sample: an earlier version of this paragraph said 10 pixels; that was wrong.
+`npm run shots` still prints and writes the near-misses (a diff of 1 to the allowance), empty while `ALLOW` is.
+Limits: the comparison has threshold 0, so one colour level of one pixel fails; a baseline is per machine and per
+Chromium build. Two known gaps: the failed-engine banners are seeded with `FAILED.*` read from the caller's checkout, so
+a change of those words shows in neither the baseline nor the compare (the app computes them only in a real failed
+start; seeding the kind alone needs an app change); Firefox and desktop WebKit are not shot.
 
 ## Conformance corpus: value and limits
 

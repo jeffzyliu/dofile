@@ -110,5 +110,4 @@ if (command === "baseline") {
   screenshots(app, false);
 } else if (command === "clean") {
   if (existsSync(worktree)) out("git", ["worktree", "remove", "--force", worktree]);
-  out("git", ["worktree", "prune"]); // a worktree folder removed by hand
 } else throw new Error("usage: node scripts/shots.ts baseline <commit> | compare | clean (all on E2E_PORT's worktree)");

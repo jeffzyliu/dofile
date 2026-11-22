@@ -27,7 +27,7 @@ test.use({ colorScheme: "light", reducedMotion: "reduce" });
 
 /** No animation, no transition, no caret, whatever the page draws (toHaveScreenshot also disables animations). */
 const FREEZE =
-  "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }";
+  "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }\n  *::-webkit-scrollbar { display: none !important; } * { scrollbar-width: none !important; }";
 
 const analysis = readFileSync(new URL("../sample/analysis.do", import.meta.url), "utf8");
 
@@ -50,45 +50,11 @@ async function open(page: Page, url = "?test=manual&sample") {
 /** A phone shows one view at a time; on a desktop every pane is in sight and this does nothing. */
 const view = (page: Page, tab: PhoneTab) => (isPhone(page) ? showPhoneTab(page, tab) : Promise.resolve());
 
-/** The pixels a state may differ by on Chromium (0 for a state not listed; WebKit's shots, the "iphone" project, were
- *  identical in every measured compare, so it has none). Each is twice the most that state differed in 3 compares of one
- *  build against its baseline with the flags of screenshots.config.ts (docs/test-map.md has the table): a margin of 2 on
- *  a sample of 3. A change of a colour, size or glyph moves hundreds of pixels. */
-const ALLOW: Record<string, number> = {
-  "banner-not-text": 2,
-  "banner-reset": 6,
-  "banner-reset-crash": 2,
-  "banner-save-failed": 6,
-  "banner-storage": 10,
-  "banner-store-failed-open": 12,
-  "csv-command-bar": 8,
-  "data-tab": 20,
-  "dialog-clash": 2,
-  "dialog-clear-log": 2,
-  "dialog-close-tab": 2,
-  "dialog-delete": 2,
-  "dialog-delete-all": 8,
-  "dialog-download-prompt": 8,
-  "dialog-other-tab": 6,
-  "dialog-progress": 4,
-  "dialog-reset": 14,
-  "dta-view": 16,
-  "dta-view-no-engine": 8,
-  "engine-declined": 10,
-  "engine-failed-twice": 6,
-  "engine-failed-updated": 8,
-  graph: 20,
-  "log-after-run": 16,
-  "menu-file-actions": 12,
-  "menu-more": 10,
-  "menu-row-file": 2,
-  "menu-row-folder": 2,
-  "ready-sample": 14,
-  "results-table": 20,
-  "tabs-one-unsaved": 6,
-  "tree-draft": 2,
-  "tree-rename": 10,
-};
+/** The pixels a state may differ by, for a state that cannot be made to hold still (a state that will not hold still
+ *  is dropped, not loosened: an entry here needs its measured maximum over 10 or more compares, plus a stated margin, and
+ *  must stay under 12 pixels, which hide a punctuation change). Empty: with the flags of screenshots.config.ts and the
+ *  scrollbar rule in FREEZE, 81 shots over 11 compares of one build differed by 0 pixels (docs/test-map.md). */
+const ALLOW: Record<string, number> = {};
 
 /** SHOTS_DIFFS: one JSON line for each shot (project, state, pixels that differ, allowance), which `npm run shots` reads
  *  for its report of near-misses (a diff of 1 to the allowance passes, and a small real change must still be seen). */
