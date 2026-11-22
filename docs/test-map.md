@@ -149,7 +149,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `save.test.ts`: Save (`app/editor/documents.ts` `save`) over fake-indexeddb with the real file actions: its form and
   the keystroke typed while it waits, a refusal's banner, a rename or a delete before it, a rename while it writes, a
   rename that retypes its tab, and the Save rule (an upload's Replace, "Reload from the run", a run's text shown cancel a
-  pending Save; a run that keeps the edits does not). A Save pressed during "Reload from the run"'s store read is a
+  pending Save; a run that keeps the edits does not), and the dot when a Save's write answers after a reload's or a run's
+  read swapped its tab. A Save pressed during "Reload from the run"'s store read is a
   `todo` until the reload takes a turn.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build

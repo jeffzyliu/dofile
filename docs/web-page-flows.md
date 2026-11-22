@@ -664,7 +664,7 @@ flowchart LR
 | **Edit** | changed | unchanged | unchanged | on when the text differs from the saved text (the document's computed `dirty`) | moves with the text; gone when its line is deleted (`cm.ts` `lineMarksField`, `errormark.ts` `lineDeleted`) | unchanged | unchanged |
 | **Undo back to the saved text** | equals the saved text | unchanged | unchanged | off | mapped as any edit | unchanged | unchanged |
 | **Save succeeds** (`save`) | unchanged | the text Save wrote | `savedForm`: a `.do` or `.ado` loses its BOM, by the name it was written under | off, unless the text changed while it was written | unchanged | both dismissed for the tab's path; toast "Saved name". A tab renamed while it was written gets all of this under its new path. | `fileText` bytes |
-| **Save cancelled** (a reload, "Reload from the run" or a run's text shown before its turn; its tab closed or retyped) | as the later action left it | as the later action left it | as the later action left it | as the later action left it | unchanged | unchanged; no toast | not written (a Save pressed while "Reload from the run" waits on its read still writes: the reload takes no turn yet) |
+| **Save cancelled** (a reload, "Reload from the run" or a run's text shown before its turn; its tab closed or retyped) | as the later action left it | as the later action left it | as the later action left it | as the later action left it | unchanged | unchanged; no toast | not written (a Save pressed while "Reload from the run" or a run's read waits still writes, as those reads take no turn yet; its answer then reads the store again, so the dot shows whether the tab has the store's text) |
 | **Save fails** | unchanged | unchanged | unchanged | stays on | unchanged | save-failed added (one per path, under the tab's path at the time it fails; none for a tab closed meanwhile); the live region says it | unchanged |
 | **Rename** (`renameEntry` → `moved`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (it holds the record) | the same bytes under the new name |
 | **Rename across a `.do` name** | as Rename | as Rename | `a.txt` with a BOM renamed `a.do`: the next Save writes no BOM. `a.do` with a BOM, never saved here, renamed `a.txt`: the next Save keeps it. | kept | kept | moved | the same bytes |
@@ -718,7 +718,8 @@ listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM 
 - `web/test/documents.test.ts`: every test (open, close, move, retype, reload, a run over a tab, the dot derived, the
   view attached)
 - `web/test/save.test.ts`: every test (Save against a rename and a delete, the Save rule's cases, a run that keeps
-  the edits; the Save pressed during "Reload from the run"'s read is a todo until the reload takes a turn)
+  the edits, the dot after a Save whose write answers once a reload's or a run's read swapped the tab; the Save pressed
+  during "Reload from the run"'s read is a todo until the reload takes a turn)
 - `web/e2e/editor.spec.ts`:
   - "the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast, a failed save shows a banner; …"
   - "a failed save's banner goes when the editor's text is replaced: …"
