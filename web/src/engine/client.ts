@@ -2,8 +2,9 @@
 // It decides nothing: the controller (app/engine.ts) calls it when the state machine says. One worker is live at a
 // time; `n` is that worker's ticket, which the transport only compares.
 
+import { failPart, landPart, PART_HEADER, retryPart } from "./lazy-part.ts";
 import type { Ending, Reply } from "./machine.ts";
-import { isStorageRefusal, openCache, PART_HEADER } from "./snapshot.ts";
+import { isStorageRefusal, openCache } from "./snapshot.ts";
 import type { FileStore } from "./store.ts";
 import type {
   About,
@@ -417,11 +418,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // A part that failed is fetched again; the worker sees it pending, and a waiting graph waits for it.
   #retryGraphics(part: GraphicsPart): void {
     if (this.#graphics !== part || !part.sab || part.progress.state !== "failed" || part.loading) return;
-    const hdr = new Int32Array(part.sab, 0, 4);
-    Atomics.store(hdr, 1, 0);
-    Atomics.add(hdr, 2, 1); // tries: a graph that asked takes the next failure as final
-    Atomics.store(hdr, 0, 0); // pending
-    Atomics.notify(hdr, 0);
+    retryPart(part.sab);
     this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
     this.#tellGraphics(part);
     part.loading = this.#fetchGraphics(part, part.damaged).finally(() => {
@@ -462,24 +459,15 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       }
       if (bytes.length !== part.file.size)
         throw new Error(`${part.url}: ${bytes.length} bytes arrived, the build's list says ${part.file.size}`);
-      new Uint8Array(sab, PART_HEADER).set(bytes);
-      const hdr = new Int32Array(sab, 0, 4);
       part.damaged = false;
-      Atomics.store(hdr, 1, bytes.length);
-      Atomics.store(hdr, 0, 1); // landed
-      Atomics.notify(hdr, 0);
+      landPart(sab, bytes);
       console.info(
         `[dofile] graphics part: landed (${hit ? "cache" : "network"}) ${((performance.now() - t0) / 1000).toFixed(2)}s, ${bytes.length} bytes`,
       );
       this.#graphicsSay(part, { state: "landed", received: part.file.size });
     } catch (e: any) {
       const why = `the graphics files could not be downloaded (${e?.message ?? e}); they are fetched again for the next graph`;
-      const text = new TextEncoder().encode(why).subarray(0, sab.byteLength - PART_HEADER),
-        hdr = new Int32Array(sab, 0, 4);
-      new Uint8Array(sab, PART_HEADER).set(text);
-      Atomics.store(hdr, 1, text.length);
-      Atomics.store(hdr, 0, 2); // failed
-      Atomics.notify(hdr, 0);
+      failPart(sab, why);
       console.warn(`[dofile] graphics part: ${why}`);
       this.#graphicsSay(part, { state: "failed", error: why });
       // back online: fetch it again

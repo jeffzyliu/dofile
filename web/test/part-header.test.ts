@@ -1,40 +1,35 @@
 // The shared buffer the page hands the lazy graphics part over in: what the page writes, the worker reads
-// (src/engine/lazy-part.ts; client.ts writes, worker.ts reads).
+// (src/engine/lazy-part.ts; client.ts writes, worker.ts reads), both through the module's names.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PART_FAILED, PART_LANDED, PART_PENDING } from "../src/engine/lazy-part.ts";
-import { PART_HEADER } from "../src/engine/snapshot.ts";
+import {
+  failPart,
+  HDR_LENGTH,
+  HDR_STATE,
+  HDR_TRIES,
+  landPart,
+  PART_FAILED,
+  PART_HEADER,
+  PART_LANDED,
+  PART_PENDING,
+  partData,
+  partHeader,
+  partState,
+  partTries,
+  retryPart,
+} from "../src/engine/lazy-part.ts";
 
-// Today's layout, written as the page writes it and read as the worker reads it: Int32 [state, length, tries, 0]
-const land = (sab: SharedArrayBuffer, bytes: Uint8Array) => {
-  new Uint8Array(sab, PART_HEADER).set(bytes);
-  const hdr = new Int32Array(sab, 0, 4);
-  Atomics.store(hdr, 1, bytes.length);
-  Atomics.store(hdr, 0, PART_LANDED);
-  Atomics.notify(hdr, 0);
-};
-const fail = (sab: SharedArrayBuffer, why: string) => {
-  const text = new TextEncoder().encode(why).subarray(0, sab.byteLength - PART_HEADER),
-    hdr = new Int32Array(sab, 0, 4);
-  new Uint8Array(sab, PART_HEADER).set(text);
-  Atomics.store(hdr, 1, text.length);
-  Atomics.store(hdr, 0, PART_FAILED);
-  Atomics.notify(hdr, 0);
-};
-const retry = (sab: SharedArrayBuffer) => {
-  const hdr = new Int32Array(sab, 0, 4);
-  Atomics.store(hdr, 1, 0);
-  Atomics.add(hdr, 2, 1);
-  Atomics.store(hdr, 0, PART_PENDING);
-  Atomics.notify(hdr, 0);
-};
+// what the worker sees, in the order it reads (tries before state)
 const see = (sab: SharedArrayBuffer) => {
-  const hdr = new Int32Array(sab, 0, 4);
-  const tries = Atomics.load(hdr, 2),
-    state = Atomics.load(hdr, 0);
-  return { state, tries, data: new Uint8Array(sab, PART_HEADER, hdr[1]).slice() };
+  const hdr = partHeader(sab),
+    tries = partTries(hdr),
+    state = partState(hdr);
+  return { state, tries, data: partData(sab, hdr) };
 };
+const land = landPart,
+  fail = failPart,
+  retry = retryPart;
 
 test("a new buffer is pending, with no bytes and no tries", () => {
   const r = see(new SharedArrayBuffer(PART_HEADER + 8));
@@ -66,4 +61,16 @@ test("a retry counts a try, clears the length and is pending again", () => {
   land(sab, Uint8Array.of(9));
   assert.deepEqual([...see(sab).data], [9]);
   assert.equal(see(sab).tries, 1);
+});
+
+test("the layout: Int32 state, length, tries, then the bytes from PART_HEADER", () => {
+  const sab = new SharedArrayBuffer(PART_HEADER + 8);
+  land(sab, Uint8Array.of(7, 8));
+  retry(sab);
+  land(sab, Uint8Array.of(5, 6, 4));
+  const raw = new Int32Array(sab, 0, 4);
+  assert.deepEqual([HDR_STATE, HDR_LENGTH, HDR_TRIES], [0, 1, 2]);
+  assert.deepEqual([...raw], [PART_LANDED, 3, 1, 0]);
+  assert.equal(PART_HEADER, 16);
+  assert.deepEqual([...new Uint8Array(sab, PART_HEADER, 3)], [5, 6, 4]);
 });

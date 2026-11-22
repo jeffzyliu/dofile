@@ -150,6 +150,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
+- `part-header.test.ts`: the shared buffer the graphics part is handed over in (`engine/lazy-part.ts`): what the page's
+  writers (land, fail with a reason cut to the room, retry) leave, as the worker's readers see it, and the header's
+  layout and size.
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
   does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
   decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).
