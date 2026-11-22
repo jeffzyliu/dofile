@@ -135,6 +135,11 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
   store (the error's name kept; a newer database is reason `updated`), a `/work` that cannot take the page's version
   after a run (`crashed`, cause `folder`).
+- `work-mirror.test.ts`: the worker's `/work` mirror (`engine/work-mirror.ts`) on a fake file system and store: mount's
+  copy and a store that cannot be opened or copied; `sync` of a write, remove, rename and mkdir; a run's created,
+  deleted and renamed files, a same-size rewrite (time only) and an emptied file (size only), an untouched file not
+  read; a refused write tried again until the page replaces it; a file where the store has a folder; a `/work` that
+  cannot take the page's version (said once).
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
