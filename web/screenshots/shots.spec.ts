@@ -31,9 +31,25 @@ const FREEZE =
 
 const analysis = readFileSync(new URL("../sample/analysis.do", import.meta.url), "utf8");
 
+const ENGINE_BYTES = 48_000_000;
+
 /** The editor with the sample in the store and its main do-file open (the page's first-visit load), no engine. */
 async function open(page: Page, url = "?test=manual&sample") {
   page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
+  // The download size ("about 49 MB") is the snapshot's size, written into the page by the build and different in every
+  // build (38 KB between two builds of one commit moved 49.6 to 50.0 MB): a fixed value, so the text cannot depend on the build.
+  await page.route(
+    (u) => u.pathname.endsWith("/") || u.pathname.endsWith(".html"),
+    async (route) => {
+      if (route.request().resourceType() !== "document") return route.fallback();
+      const r = await route.fetch();
+      const body = (await r.text()).replace(
+        /(<meta[^>]*name="dofile-engine-bytes"[^>]*content=")\d+/,
+        `$1${ENGINE_BYTES}`,
+      );
+      await route.fulfill({ response: r, body });
+    },
+  );
   await page.goto(url);
   if (url.startsWith("?test=manual"))
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");

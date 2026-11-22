@@ -366,7 +366,7 @@ button), and `--font-render-hinting=none --force-color-profile=srgb --hide-scrol
 together; not tried one by one). `--disable-gpu` and `--disable-lcd-text` did nothing for it. The first measure, 3 compares
 at 2 times the maximum, was too small a sample: an earlier version of this paragraph said 10 pixels; that was wrong.
 `npm run shots` still prints and writes the near-misses (a diff of 1 to the allowance), empty while `ALLOW` is.
-Limits: the comparison has threshold 0, so one colour level of one pixel fails; a baseline is per machine and per
+Limits: the scrollbars are hidden, so a pane that starts to overflow is not seen by itself (content clipped or shifted still is); the download size in the page ("about 48 MB") is fixed in the spec, since the snapshot's size differs between builds of one commit (a changed size text is not seen); the comparison has threshold 0, so one colour level of one pixel fails; a baseline is per machine and per
 Chromium build. Two known gaps: the failed-engine banners are seeded with `FAILED.*` read from the caller's checkout, so
 a change of those words shows in neither the baseline nor the compare (the app computes them only in a real failed
 start; seeding the kind alone needs an app change); Firefox and desktop WebKit are not shot.
