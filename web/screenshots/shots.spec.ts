@@ -4,7 +4,8 @@
 // "the engine walk" starts a real engine for the states that need one (a results table, a .dta view, a graph) and masks
 // the status bar, which shows the last run's time and the memory in use. A state that would not hold still between
 // two baselines of one commit is not in this file (the report says which, and why).
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, isPhone, ready, settle, startEngine, test, unblocked } from "../e2e/fixtures";
 import {
@@ -19,6 +20,7 @@ import {
   showPhoneTab,
   showTabs,
 } from "../e2e/seed";
+import { FAILED, FAILED_TWICE } from "../src/app/states/words.ts";
 
 // light, so "system" cannot differ between machines; no motion
 test.use({ colorScheme: "light", reducedMotion: "reduce" });
@@ -48,11 +50,74 @@ async function open(page: Page, url = "?test=manual&sample") {
 /** A phone shows one view at a time; on a desktop every pane is in sight and this does nothing. */
 const view = (page: Page, tab: PhoneTab) => (isPhone(page) ? showPhoneTab(page, tab) : Promise.resolve());
 
+/** The pixels a state may differ by on Chromium (0 for a state not listed; WebKit's shots, the "iphone" project, were
+ *  identical in every measured compare, so it has none). Each is twice the most that state differed in 3 compares of one
+ *  build against its baseline with the flags of screenshots.config.ts (docs/test-map.md has the table): a margin of 2 on
+ *  a sample of 3. A change of a colour, size or glyph moves hundreds of pixels. */
+const ALLOW: Record<string, number> = {
+  "banner-not-text": 2,
+  "banner-reset": 6,
+  "banner-reset-crash": 2,
+  "banner-save-failed": 6,
+  "banner-storage": 10,
+  "banner-store-failed-open": 12,
+  "csv-command-bar": 8,
+  "data-tab": 20,
+  "dialog-clash": 2,
+  "dialog-clear-log": 2,
+  "dialog-close-tab": 2,
+  "dialog-delete": 2,
+  "dialog-delete-all": 8,
+  "dialog-download-prompt": 8,
+  "dialog-other-tab": 6,
+  "dialog-progress": 4,
+  "dialog-reset": 14,
+  "dta-view": 16,
+  "dta-view-no-engine": 8,
+  "engine-declined": 10,
+  "engine-failed-twice": 6,
+  "engine-failed-updated": 8,
+  graph: 20,
+  "log-after-run": 16,
+  "menu-file-actions": 12,
+  "menu-more": 10,
+  "menu-row-file": 2,
+  "menu-row-folder": 2,
+  "ready-sample": 14,
+  "results-table": 20,
+  "tabs-one-unsaved": 6,
+  "tree-draft": 2,
+  "tree-rename": 10,
+};
+
+/** SHOTS_DIFFS: one JSON line for each shot (project, state, pixels that differ, allowance), which `npm run shots` reads
+ *  for its report of near-misses (a diff of 1 to the allowance passes, and a small real change must still be seen). */
+const diffsFile = process.env.SHOTS_DIFFS;
+function record(name: string, diff: number, allow: number) {
+  if (!diffsFile) return;
+  mkdirSync(dirname(diffsFile), { recursive: true });
+  const project = test.info().project.name;
+  appendFileSync(diffsFile, `${JSON.stringify({ project, name, diff, allow })}\n`);
+}
+
 async function shot(page: Page, name: string, mask: Locator[] = []) {
   await page.mouse.move(0, 0); // no hover look from where the last click left the pointer
   await page.evaluate(() => document.fonts.ready);
   await settle(page);
-  await expect.soft(page, name).toHaveScreenshot(`${name}.png`, { mask });
+  const allow = test.info().project.name === "chromium" ? (ALLOW[name] ?? 0) : 0;
+  const expected = `${name}.png`;
+  try {
+    // First with no allowance, to count the pixels of a small difference (a pass with a diff is a near-miss).
+    await expect(page, name).toHaveScreenshot(expected, { mask, maxDiffPixels: 0 });
+    record(name, 0, allow);
+  } catch (e) {
+    const m = /(\d+) pixels? \(ratio [\d.]+ of all image pixels\) (?:is|are) different/.exec(String(e));
+    const diff = m ? Number(m[1]) : -1; // -1: not a count (no baseline, another size)
+    record(name, diff, allow);
+    // over the allowance (or not a count): the same comparison again, soft, so the failure is the run's
+    if (diff < 0 || diff > allow)
+      await expect.soft(page, name).toHaveScreenshot(expected, { mask, maxDiffPixels: allow });
+  }
 }
 
 /** The status bar's inputs a run measures (its time, the memory) put back to fixed values, and then the shot. */
@@ -84,6 +149,11 @@ test("ready with the sample, then a run: the engine walk (log, results table, gr
   if (isPhone(page)) await showPhoneTab(page, "results");
   else await page.getByRole("tab", { name: "Results", exact: true }).click();
   await pinned(page, "results-table", ran);
+
+  if (isPhone(page)) await showPhoneTab(page, "data");
+  else await page.getByRole("tab", { name: "Data", exact: true }).click();
+  await expect(page.getByRole("table").first()).toBeVisible();
+  await pinned(page, "data-tab", ran);
 
   if (!isPhone(page)) {
     await page.getByRole("tab", { name: "Graph", exact: true }).click();
@@ -118,6 +188,29 @@ test("several tabs, one with an unsaved edit", async ({ page }) => {
   await expect(page.locator(".dta-view")).toBeVisible();
   await view(page, "editor");
   await shot(page, "tabs-one-unsaved");
+});
+
+test("a .dta tab with no engine: its two bars, no table, Load off", async ({ page }) => {
+  await open(page);
+  await showTabs(page, [{ path: "data/wages.dta", kind: "dta", dirty: false }], "data/wages.dta", "editor");
+  await expect(page.locator(".dta-view")).toBeVisible();
+  await shot(page, "dta-view-no-engine");
+});
+
+test("a .csv tab: its command bar (Import)", async ({ page }) => {
+  await open(page);
+  const csv = Array.from({ length: 12 }, (_, i) => `${i},${i * 2},x${i}`).join("\n");
+  await page.evaluate(
+    (t) => window.__dofile.store.write("data/small.csv", new TextEncoder().encode(`a,b,c\n${t}\n`)),
+    csv,
+  );
+  await view(page, "files");
+  await row(page, /^data\//).focus();
+  await page.keyboard.press("ArrowRight"); // opens the folder
+  await row(page, /^small\.csv/).click();
+  await expect(page.locator(".filebar").last()).toBeVisible();
+  await view(page, "editor");
+  await shot(page, "csv-command-bar");
 });
 
 const DIALOGS: [string, (page: Page) => Promise<unknown>][] = [
@@ -220,6 +313,9 @@ test("a log with an error", async ({ page }) => {
 
 const BANNERS: [string, Parameters<typeof addBanner>[1]][] = [
   ["banner-reset", { b: "reset", reason: "reset by you", kind: "user", cause: null, run: null }],
+  ["banner-reset-crash", { b: "reset", reason: "crash", kind: "crash", cause: "storage", run: null }],
+  ["banner-store-failed-open", { b: "store-failed", cause: "open" }],
+  ["banner-store-failed-copy", { b: "store-failed", cause: "copy" }],
   ["banner-storage", { b: "storage" }],
   ["banner-download-failed", { b: "download-failed" }],
   ["banner-not-text", { b: "not-text", path: "data/wages.dta" }],
@@ -237,6 +333,22 @@ for (const [name, banner] of BANNERS)
       if (await seen.count()) break;
     }
     await expect(seen.first()).toBeVisible();
+    await shot(page, name);
+  });
+
+// the engine's states that put a banner above the editor (failed with each kind of first action, failed twice, declined)
+const FAILED_STATES: [string, Parameters<typeof showEngine>[1]][] = [
+  ["engine-failed-unknown", { s: "failed", reason: "unknown", detail: "cause", message: FAILED.unknown }],
+  ["engine-failed-updated", { s: "failed", reason: "updated", detail: "cause", message: FAILED.updated }],
+  ["engine-failed-twice", { s: "failed-twice", reason: "memory", detail: "cause", message: FAILED_TWICE }],
+  ["engine-declined", { s: "declined" }],
+];
+for (const [name, state] of FAILED_STATES)
+  test(name, async ({ page }) => {
+    await open(page);
+    await view(page, "editor");
+    await showEngine(page, state);
+    await expect(page.locator(".banner:visible").first()).toBeVisible();
     await shot(page, name);
   });
 

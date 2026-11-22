@@ -339,14 +339,30 @@ Specs:
 
 ### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)
 
-Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own and takes one screenshot
-of each state of a fixed list into `web/.shots/baseline/` (git ignores `.shots/`); `npm run shots` builds this tree
-and compares each state with it (plan rule 10: a view move changes no pixel). Its own config (`screenshots.config.ts`:
-Chromium and the iPhone profile only, one worker, no retry), its own folder, no CI job. `shots.spec.ts` holds the
-list: the engine walk (ready with the sample, the log after a run, a results table, the graph and its full-size view,
-a .dta view; the status bar's run time and memory are put back to fixed values), several tabs with one unsaved, each dialog,
-each menu open, the tree with a rename field and with a draft row, a log with an error, each banner, the phone's three
-views. The states are seeded through `e2e/seed.ts`.
+Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own (for its `E2E_PORT`:
+`.claude/worktrees/shots-baseline-<port>` in the caller's checkout, removed by `node scripts/shots.ts clean`) and takes
+one screenshot of each state of a fixed list into `web/.shots/<port>/baseline/` (git ignores `.shots/`); `npm run shots`
+builds this tree and compares each state with it (plan rule 10: a view move changes no pixel) and prints the near-misses
+(below). Its own config (`screenshots.config.ts`: Chromium and the iPhone profile only, one worker, no retry), its own
+folder, no CI job. `shots.spec.ts` holds the list: the engine walk (ready with the sample, the log after a run, a results
+table, the Data tab, the graph and its full-size view, a .dta view; the status bar's run time and memory are put back to
+fixed values), several tabs with one unsaved, a .dta tab and a .csv tab with no engine (the command bars), each dialog,
+each menu open, the tree with a rename field and with a draft row, a log with an error, each banner (the reset banner
+as the user's and as a crash, store-failed with each cause, the others), the engine-state banners above the editor
+(failed unknown, failed updated, failed twice, declined), the phone's three views. #92 (the engine state groups)
+intended no visible change and none is shot for it. The states are seeded through `e2e/seed.ts`.
+
+Stability (N7 tightening, measured at c5d7a85, 1 baseline and 3 compares of the same build, on macOS). The "iphone"
+project is WebKit: every state was identical in every compare, so it has no allowance. Chromium differed by a few
+pixels in about 30 of 39 states with no one element, so nothing is masked. Maximum diff of any state over 3 compares
+(whole list, 39 Chromium states): no flags 34; `--font-render-hinting=none --disable-lcd-text
+--disable-font-subpixel-positioning --force-color-profile=srgb --disable-gpu --hide-scrollbars` 16; the three that stay
+(`--font-render-hinting=none --force-color-profile=srgb --hide-scrollbars`) 10. The extra flags did not help (the GPU
+one made some states noisier), so they are not used. Noise is not gone: Chromium's text antialiasing differs from run to
+run by 1 to 10 pixels. Hence `ALLOW` in `shots.spec.ts`: for each Chromium state that differed, twice its measured
+maximum (a margin of 2 on only 3 compares); a state not listed has 0. `npm run shots` prints and writes the
+near-misses: the states that passed with 1 to their allowance pixels changed (a small real change hides among them, so
+read the list, and an unexpected state in it is a finding). Baselines stay per machine; Firefox and WebKit desktop are not shot.
 
 ## Conformance corpus: value and limits
 
