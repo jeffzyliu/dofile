@@ -365,7 +365,7 @@ async function resync(d: Doc) {
   } catch {
     saved = null; // not text, or the store cannot give it: unsaved until a Save
   }
-  if (part && isOpen(d) && d.content.peek() === part && d.path.peek() === path) part.saved.value = saved;
+  if (part && isOpen(d) && d.content.peek() === part) part.saved.value = saved; // renamed meanwhile: the store moved it too
 }
 
 // ---- the run's marks, the wrap setting ----

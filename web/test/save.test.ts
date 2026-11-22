@@ -274,6 +274,32 @@ test("a Save pressed while a run's read of its clean tab waits: the write answer
   assert.equal(tab("t.csv")?.dirty, true, "the dot: the store does not have what the tab shows");
 });
 
+test("a rename during the store read that follows a Save's late answer leaves the dot on (the store has the Save's text under the new name)", async () => {
+  await opened("t.csv", "old");
+  await store.write("t.csv", enc("the run's"));
+  const restore = slow();
+  const { read } = store; // the slow read
+  let reads = 0;
+  store.read = async (path) => {
+    const x = read.call(store, path);
+    if (path === "t.csv" && ++reads === 2) await A.renameEntry("t.csv", "u.csv"); // the Save's own read of the store
+    return x;
+  };
+  try {
+    const ran = afterRun([{ name: "t.csv", status: "modified", bytes: 9 }]);
+    await readIssued;
+    const saved = D.save("t.csv");
+    await ran;
+    assert.equal(await saved, true);
+  } finally {
+    restore();
+  }
+  assert.equal(reads, 2);
+  assert.equal(await stored("u.csv"), "old");
+  assert.equal(D.textOf("u.csv"), "the run's");
+  assert.equal(tab("u.csv")?.dirty, true);
+});
+
 test('a Save pressed while "Reload from the run" reads its edited tab: once the write answers the tab is unsaved (the store has the Save\'s text)', async () => {
   await opened("out.log", "old");
   edit("out.log");
