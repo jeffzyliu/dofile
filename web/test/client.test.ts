@@ -6,8 +6,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildId } from "../scripts/build-id.ts";
 import { EngineClient } from "../src/engine/client.ts";
+import { PART_HEADER } from "../src/engine/lazy-part.ts";
 import type { Answer } from "../src/engine/machine.ts";
-import { PART_HEADER } from "../src/engine/snapshot.ts";
 import type { FileStore } from "../src/engine/store.ts";
 import type { StartFiles } from "../src/engine/types.ts";
 import type { FakePort, Message, Post } from "./harness.ts";
@@ -1145,6 +1145,34 @@ test("a start that is ended while it waits for `startup` says nothing more, and 
   assert.deepEqual(first, [], "the first start said nothing: not started, and not start-failed");
   assert.deepEqual(eng.startup, { mode: "normal", worker: 1 });
   assert.equal(eng.about!.dofile, "worker 1");
+});
+
+test("the facts are the live worker's: a reset leaves none, and a second start shows none of the first start's until its own is complete", async () => {
+  let answer: (() => void) | null = null;
+  const { eng } = scripted((m, post, _port, index) => {
+    if (m.op === "mount") post({ id: m.id, result: undefined });
+    else if (m.op === "boot") post({ id: m.id, result: { dofile: `worker ${index}` } });
+    else if (m.op === "startup") {
+      const said = () => post({ id: m.id, result: { mode: "normal", worker: index } });
+      if (index === 0) said();
+      else answer = said; // the second waits until the test says
+    }
+  });
+  await new Promise<void>((ok, no) => eng.start(1, null, (a) => (a.type === "started" ? ok() : no(a))));
+  assert.deepEqual(
+    [eng.about, eng.startup, eng.storeError],
+    [{ dofile: "worker 0" }, { mode: "normal", worker: 0 }, null],
+  );
+  eng.end(1, { kind: "reset", reset: "user", reason: "reset by you" });
+  assert.deepEqual([eng.about, eng.startup, eng.storeError], [null, null, null], "after a reset: no worker, no facts");
+  const second: Said = [];
+  eng.start(2, null, (a) => second.push(a));
+  while (!answer) await sleep(1);
+  assert.deepEqual([eng.about, eng.startup], [null, null], "the second start, not complete: none of the first's");
+  (answer as () => void)();
+  await sleep(10);
+  assert.deepEqual(second, [{ type: "started" }]);
+  assert.deepEqual([eng.about, eng.startup], [{ dofile: "worker 1" }, { mode: "normal", worker: 1 }]);
 });
 
 // ---- a lazy snapshot's graphics part, with a shared buffer: the page fetches it and the worker reads it there ----

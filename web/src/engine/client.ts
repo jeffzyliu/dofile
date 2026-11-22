@@ -2,8 +2,9 @@
 // It decides nothing: the controller (app/engine.ts) calls it when the state machine says. One worker is live at a
 // time; `n` is that worker's ticket, which the transport only compares.
 
+import { failPart, landPart, PART_HEADER, retryPart } from "./lazy-part.ts";
 import type { Ending, Reply } from "./machine.ts";
-import { isStorageRefusal, openCache, PART_HEADER } from "./snapshot.ts";
+import { isStorageRefusal, openCache } from "./snapshot.ts";
 import type { FileStore } from "./store.ts";
 import type {
   About,
@@ -41,14 +42,18 @@ type GraphicsPart = {
 };
 /** A call waiting for the worker's answer. */
 type Pending = { resolve: (value: any) => void; reject: (error: ClientError) => void; onLog?: (text: string) => void };
-/** The live worker's record: its number, its calls, its interrupt buffer. `ended`: what end() rejected its calls
- *  with. */
+/** What a start learnt, once it is complete: what boot answered, where its time went (worker.ts, `startup`), and why
+ *  the worker could not copy the files, if it could not. */
+type Facts = { about: About; startup: Startup; storeError: Startup["storeError"] | null };
+/** The live worker's record: its number, its calls, its interrupt buffer, its start's facts. `ended`: what end()
+ *  rejected its calls with. */
 type Live = {
   n: number;
   worker: Worker;
   pending: Map<number, Pending>;
   interrupt: Int32Array<SharedArrayBuffer> | null;
   run: object | null; // the run sent last, until it answers
+  facts: Facts | null; // null until its start is complete
   ended: ClientError | null;
 };
 
@@ -117,10 +122,6 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   declare caches: CacheStorage | null | undefined;
   declare wasm: object | null | undefined;
   declare nextId: number;
-  // facts of the last start, for the tests and the test hook; nothing decides by them
-  declare storeError: Startup["storeError"] | null;
-  declare about: About | null;
-  declare startup: Startup | null;
   #live: Live | null = null;
   #graphics: GraphicsPart | null = null;
   #graphicsListeners = new Set<(p: GraphicsProgress) => void>();
@@ -181,14 +182,23 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       wasm,
     });
     this.nextId = 0;
-    this.storeError = null; // after a start: why the worker could not copy the files, if it could not
-    this.about = null; // what boot answered, after a start
-    this.startup = null; // where the last start's time went (worker.ts, `startup`)
   }
 
   /** The live worker, or null. */
   get worker(): Worker | null {
     return this.#live?.worker ?? null;
+  }
+
+  // The live worker's facts (Facts), for the tests and the test hook; nothing decides by them. Null with no live worker
+  // or before its start is complete.
+  get about(): About | null {
+    return this.#live?.facts?.about ?? null;
+  }
+  get startup(): Startup | null {
+    return this.#live?.facts?.startup ?? null;
+  }
+  get storeError(): Startup["storeError"] | null {
+    return this.#live?.facts?.storeError ?? null;
   }
 
   // ---- Builds ----
@@ -417,11 +427,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // A part that failed is fetched again; the worker sees it pending, and a waiting graph waits for it.
   #retryGraphics(part: GraphicsPart): void {
     if (this.#graphics !== part || !part.sab || part.progress.state !== "failed" || part.loading) return;
-    const hdr = new Int32Array(part.sab, 0, 4);
-    Atomics.store(hdr, 1, 0);
-    Atomics.add(hdr, 2, 1); // tries: a graph that asked takes the next failure as final
-    Atomics.store(hdr, 0, 0); // pending
-    Atomics.notify(hdr, 0);
+    retryPart(part.sab);
     this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
     this.#tellGraphics(part);
     part.loading = this.#fetchGraphics(part, part.damaged).finally(() => {
@@ -462,24 +468,15 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       }
       if (bytes.length !== part.file.size)
         throw new Error(`${part.url}: ${bytes.length} bytes arrived, the build's list says ${part.file.size}`);
-      new Uint8Array(sab, PART_HEADER).set(bytes);
-      const hdr = new Int32Array(sab, 0, 4);
       part.damaged = false;
-      Atomics.store(hdr, 1, bytes.length);
-      Atomics.store(hdr, 0, 1); // landed
-      Atomics.notify(hdr, 0);
+      landPart(sab, bytes);
       console.info(
         `[dofile] graphics part: landed (${hit ? "cache" : "network"}) ${((performance.now() - t0) / 1000).toFixed(2)}s, ${bytes.length} bytes`,
       );
       this.#graphicsSay(part, { state: "landed", received: part.file.size });
     } catch (e: any) {
       const why = `the graphics files could not be downloaded (${e?.message ?? e}); they are fetched again for the next graph`;
-      const text = new TextEncoder().encode(why).subarray(0, sab.byteLength - PART_HEADER),
-        hdr = new Int32Array(sab, 0, 4);
-      new Uint8Array(sab, PART_HEADER).set(text);
-      Atomics.store(hdr, 1, text.length);
-      Atomics.store(hdr, 0, 2); // failed
-      Atomics.notify(hdr, 0);
+      failPart(sab, why);
       console.warn(`[dofile] graphics part: ${why}`);
       this.#graphicsSay(part, { state: "failed", error: why });
       // back online: fetch it again
@@ -566,6 +563,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       n,
       worker,
       pending: new Map(),
+      facts: null,
       ended: null,
       interrupt: typeof SharedArrayBuffer === "undefined" ? null : new Int32Array(new SharedArrayBuffer(4)),
       run: null,
@@ -647,9 +645,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         // a store of a newer version: another page of a newer build upgraded it, and only a reload helps
         if (storeError?.name === "VersionError")
           return reply({ type: "start-failed", reason: "updated", detail: storeError.message });
-        this.about = about;
-        this.startup = startup;
-        this.storeError = storeError;
+        live.facts = { about, startup, storeError };
         reply(storeError ? { type: "started", storeFailed: storeError.cause } : { type: "started" });
         this.#wantGraphics(build);
       },

@@ -20,9 +20,11 @@ npm run dev               # two dev servers, on the LAN too: the editor on 5173,
                           #   (prints a warning first when the snapshot is stale; `npm run snapshot` fixes it)
 npm run e2e               # the snapshot, `build:local`, then Chromium, Firefox, WebKit, iPhone (`npx playwright install` once;
                           #   SNAPSHOT_QUALITY=5: the snapshot in seconds; E2E_PORT=4181: ports 4181/4182, not 4173/4174)
-npm run shots:baseline -- <commit>   # N7, the screenshot run (outside e2e and CI): builds the commit in a worktree of its
-                          #   own (.claude/worktrees/shots-baseline; `node scripts/shots.ts clean` removes it), shoots into .shots/baseline
-npm run shots             # builds this tree and compares it with that baseline (`--dir`, `--app <built web/>`; same E2E_PORT)
+npm run shots:baseline -- <commit>   # N7, the screenshot run (outside e2e and CI): builds the commit in a worktree of its own
+                          #   for this E2E_PORT (.claude/worktrees/shots-baseline-<port> in this checkout; `node scripts/shots.ts clean`
+                          #   removes it), shoots into .shots/<port>/baseline: two callers on two ports never meet
+npm run shots             # builds this tree, compares with that baseline (`--dir`, `--app <built web/>`; same E2E_PORT), prints the
+                          #   near-misses (diffs of 1 to a state's allowance; also .shots/<port>/near-misses.txt)
 npm run build             # the editor into dist/app/, the pages into dist/site/; needs DOFILE_URLS=production,
                           #   DOFILE_URLS=local (`npm run build:local`), or both DOFILE_SITE_URL and DOFILE_EDITOR_URL
 npm run preview           # the two builds on two ports (4173 pages, 4174 editor, or E2E_PORT and the next)
@@ -141,6 +143,8 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   no worker and writes nothing (`store.blocked`).
 - **Errors from `client.ts` carry a `kind`** (`ClientError` in `src/engine/types.ts` lists them); the worker answers
   `{id, error, name, type?}` (`type`: the Python exception class of a `PythonError`). Keep these on a new failure path: the page decides from them, never from the text.
+- **`vite.config.ts` holds the three configs (editor, pages, editor's preview) and staging (`stageFiles()`); the plugins are `scripts/vite/`**
+  (`headers`, `site-plugins`, `editor-plugins`, `start-list-dev`): factories that take their inputs as arguments.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
   entry made iOS Safari run it twice.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`
