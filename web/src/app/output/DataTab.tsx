@@ -8,6 +8,7 @@ import { moreRows } from "../run.ts";
 import { banners, data, memory, pickedVar, rows, say } from "../state.ts";
 import type { BrowseRows, DataSummary } from "../types.ts";
 import { count, cutCell } from "./format.ts";
+import { VarTable } from "./VarTable";
 import { filterText, focusVar, loadingRows, openCells } from "./view.ts";
 
 const EMPTY = "Load a .dta from the file list, or run ";
@@ -47,14 +48,6 @@ function Variables({ d }: { d: Summary }) {
     : d.variables;
   const stop = shown.find((v) => v.name === focusVar.value)?.name ?? shown.find((v) => v.name === picked)?.name;
   const tabbable = stop ?? shown[0]?.name;
-  const onKeyDown = (e: KeyboardEvent) => {
-    const buttons = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button.var")];
-    const i = buttons.indexOf(e.target as HTMLButtonElement);
-    const next = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: buttons.length - 1 }[e.key];
-    if (i < 0 || next === undefined) return;
-    e.preventDefault();
-    buttons[Math.min(Math.max(next, 0), buttons.length - 1)]?.focus();
-  };
   return (
     <>
       <input
@@ -71,50 +64,19 @@ function Variables({ d }: { d: Summary }) {
           filterText.value = (e.target as HTMLInputElement).value;
         }}
       />
-      <div class="scroll-x">
-        <table class="t" onKeyDown={onKeyDown}>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Label</th>
-              <th>Type</th>
-              <th>Format</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((v) => (
-              <tr key={v.name} class={v.name === picked ? "picked" : undefined}>
-                <td class="mono">
-                  <button
-                    type="button"
-                    class="var"
-                    aria-current={v.name === picked ? "true" : undefined}
-                    tabIndex={v.name === tabbable ? 0 : -1}
-                    onFocus={() => {
-                      focusVar.value = v.name;
-                    }}
-                    onClick={() => {
-                      pickedVar.value = v.name === picked ? null : v.name;
-                    }}
-                  >
-                    {v.name}
-                  </button>
-                </td>
-                <td class={v.label ? undefined : "muted"}>{v.label || "no label"}</td>
-                <td class="mono">{v.type}</td>
-                <td class="mono">{v.format}</td>
-              </tr>
-            ))}
-            {!shown.length && (
-              <tr>
-                <td class="muted" colSpan={4}>
-                  No variable matches the filter
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <VarTable
+        variables={shown}
+        pick={{
+          picked,
+          tabbable,
+          onFocus: (name) => {
+            focusVar.value = name;
+          },
+          onPick: (name) => {
+            pickedVar.value = name === picked ? null : name;
+          },
+        }}
+      />
     </>
   );
 }
