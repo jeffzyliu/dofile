@@ -19,6 +19,7 @@ import {
   toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
+  activateTab,
   addBanner,
   clearToast,
   type LastRun,
@@ -1027,6 +1028,53 @@ test("the error line goes with its tab: a file closed and opened again with the 
   await open(page, "a.do");
   await expect(page.locator(".cm-line").nth(1)).toHaveText("line 2");
   await expect(err).toHaveCount(0);
+});
+
+test("a tab keeps its place in its text: shown again after another tab, and on a phone after another view or a tab switched while the Editor view was hidden", async ({
+  page,
+}) => {
+  const long = (name: string) => `${Array.from({ length: 300 }, (_, i) => `${name} line ${i + 1}`).join("\n")}\n`;
+  await setUp(page, { "a.do": long("a"), "b.do": long("b") });
+  const scroller = page.locator(".cm-scroller");
+  const top = () => scroller.evaluate((e) => e.scrollTop);
+  // where it was, give or take a pixel (CodeMirror puts the line at the top back, with its offset)
+  const near = (y: number) => async () => Math.abs((await top()) - y);
+  const scrollTo = async (y: number) => {
+    await scroller.evaluate((e, y) => {
+      e.scrollTop = y;
+    }, y);
+    await settle(page); // the scroll event has been delivered
+  };
+  await open(page, "a.do");
+  await scrollTo(1500);
+  const a = await top();
+  expect(a).toBeGreaterThan(1000);
+  // on a phone `open` goes through the Files view: the tab changes while the Editor view is hidden
+  await open(page, "b.do");
+  await expect.poll(top).toBe(0); // a tab opened for the first time starts at the top
+  await scrollTo(600);
+  const b = await top();
+  await open(page, "a.do");
+  await expect.poll(near(a), { message: "a.do where it was" }).toBeLessThanOrEqual(1);
+  await open(page, "b.do");
+  await expect.poll(near(b), { message: "b.do where it was" }).toBeLessThanOrEqual(1);
+  if (!isPhone(page)) return;
+
+  await open(page, "a.do");
+  await expect.poll(near(a)).toBeLessThanOrEqual(1);
+  await view(page, "Log");
+  await view(page, "Editor");
+  await expect.poll(near(a), { message: "a.do after the Log view" }).toBeLessThanOrEqual(1);
+  // two switches while the Editor view is hidden: the tab left unseen keeps its place too
+  await view(page, "Log");
+  await activateTab(page, "b.do");
+  await activateTab(page, "a.do");
+  await view(page, "Editor");
+  await expect.poll(near(a), { message: "a.do after b.do was active behind the Log view" }).toBeLessThanOrEqual(1);
+  await view(page, "Log");
+  await activateTab(page, "b.do");
+  await view(page, "Editor");
+  await expect.poll(near(b), { message: "b.do made active behind the Log view" }).toBeLessThanOrEqual(1);
 });
 
 test("the notes at a run's end wrap in the Log pane, so Go to line stays in view, at every width", async ({ page }) => {

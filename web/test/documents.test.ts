@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
-import { EditorState } from "@codemirror/state";
+import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { effect } from "@preact/signals-core";
 
@@ -190,22 +190,23 @@ test("selection: the shown text tab's whole selected lines, the same array while
   assert.equal(D.selection.value, null);
 });
 
-test("attachView: a tab opened before it gets the view's extensions; the view shows the active text tab, keeps a hidden tab's scroll, and is handed a reload's new state with the scroll left", () => {
+test("attachView: a tab opened before it gets the view's extensions; the view shows the active text tab, keeps a hidden tab's place, hands a reload's new state the place it had, and shows a retyped tab from the top", () => {
   D.addText("a.do", "a");
+  const At = StateEffect.define<number>(); // a stand-in for the view's scroll snapshots
   const shows: [string | null, number | null][] = [];
-  let top = 0;
+  let top: StateEffect<unknown> | null = null;
   let shown: EditorState | null = null;
   const detach = D.attachView({
     extensions: EditorState.tabSize.of(7),
     show(state, scroll) {
       shown = state;
-      shows.push([state?.doc.toString() ?? null, scroll]);
+      shows.push([state?.doc.toString() ?? null, scroll && (scroll.value as number)]);
     },
     dispatch(spec) {
       shown = shown!.update(spec).state;
       D.edited(shown);
     },
-    scrollTop: () => top,
+    scrollSnapshot: () => top,
   });
   try {
     D.addText("b.do", "b");
@@ -215,19 +216,27 @@ test("attachView: a tab opened before it gets the view's extensions; the view sh
       [7, 7],
     );
     D.activate("a.do");
-    top = 120;
+    top = At.of(120);
     D.activate("b.do");
+    top = null;
     D.activate("a.do");
     type("a.do", 1, "!");
     assert.equal(D.stateOf("a.do"), shown, "an edit goes through the view, and the document has the view's state");
+    top = At.of(130);
     D.reload("a.do", "new a");
     D.activate("w.dta");
+    D.activate("a.do");
+    D.retype("a.do");
+    D.retype("a.do", "text again");
     assert.deepEqual(shows, [
-      ["a", 0],
-      ["b", 0],
+      ["a", null],
+      ["b", null],
       ["a", 120],
-      ["new a", null],
+      ["new a", 130],
       [null, null],
+      ["new a", 130],
+      [null, null],
+      ["text again", null],
     ]);
   } finally {
     detach();

@@ -121,6 +121,11 @@ export const showGraphFull = (page: Page) =>
 export const markDirty = (page: Page, path: string) =>
   page.evaluate((p) => window.__dofile.documents.markDirty(p), path);
 
+/** Make the open tab `path` the active one, and nothing else: a phone stays on its view (opening a file shows the
+ *  Editor view). */
+export const activateTab = (page: Page, path: string) =>
+  page.evaluate((p) => window.__dofile.documents.activate(p), path);
+
 /** These tabs open, `active` the one shown (and `phoneTab` the phone's view, when given). A text tab is opened with an
  *  empty document, and an edit when it is `dirty`. */
 export const showTabs = (page: Page, tabs: Tabs, active: string | null, phoneTab?: PhoneTab) =>

@@ -1,7 +1,7 @@
 // The editor's view (docs/design/SPEC.md, sections 3.3 and 4): one CodeMirror 6 view, mounted once, which shows the
 // active text tab of editor/documents.ts (attachView). mount() fills editorCommands.
 
-import { EditorState, Prec } from "@codemirror/state";
+import { EditorState, Prec, type StateEffect } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { signal } from "@preact/signals-core";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
@@ -184,25 +184,34 @@ function mount(host: HTMLElement, emptyView: HTMLElement) {
   editorCommands.goToLine = (line, path) => {
     goToLine(line, path);
   };
-  let shows = 0; // the scroll of an earlier show is not applied to a later one
+  // Where the shown text was last seen. A scroller under a hidden pane (a phone on another view) reads scrollTop 0 and
+  // ignores a new one, though the browser keeps its place, so a snapshot taken then is taken from here.
+  let seen: StateEffect<unknown> | null = null;
+  const TOP = v.scrollSnapshot(); // a new view is at the top: line 1 with no offset, and no sideways scroll
+  const laidOut = () => v.scrollDOM.getClientRects().length > 0;
+  const onScroll = () => {
+    if (laidOut()) seen = v.scrollSnapshot();
+  };
+  v.scrollDOM.addEventListener("scroll", onScroll);
   const detach = attachView({
     extensions: [keys, follow],
     show(state, scroll) {
       const next = state ?? emptyState;
-      if (v.state !== next) v.setState(next);
+      const fresh = v.state !== next;
+      if (fresh) v.setState(next);
       showing.value = state !== null;
-      const mine = ++shows;
-      if (state && scroll !== null)
-        requestAnimationFrame(() => {
-          if (view === v && shows === mine) v.scrollDOM.scrollTop = scroll;
-        });
+      if (!fresh || !state) return;
+      seen = scroll;
+      // CodeMirror applies it at its next measure in which the view has a height: once a hidden pane is shown
+      v.dispatch({ effects: scroll ?? TOP });
     },
     dispatch: (spec) => v.dispatch(spec),
-    scrollTop: () => v.scrollDOM.scrollTop,
+    scrollSnapshot: () => (laidOut() ? v.scrollSnapshot() : seen),
   });
   addEventListener("keydown", onKey);
   return () => {
     detach();
+    v.scrollDOM.removeEventListener("scroll", onScroll);
     removeEventListener("keydown", onKey);
     v.destroy();
     view = null;

@@ -188,7 +188,7 @@ test("a seed whose opening of analysis.do throws resolves (no unhandled rejectio
       if (state) throw new Error("no editor");
     },
     dispatch() {},
-    scrollTop: () => 0,
+    scrollSnapshot: () => null,
   });
   try {
     assert.equal(await sample.seedSample(), false);
