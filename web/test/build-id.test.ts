@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { type BuildInputs, buildId, staleness } from "../scripts/build-id.ts";
+import { askedKnobs, type BuildInputs, buildId, knobs, staleness } from "../scripts/build-id.ts";
 import { listStartFiles, writeStartFiles } from "../scripts/start-files.ts";
 
 const CURRENT: BuildInputs = {
@@ -141,4 +141,20 @@ test("writeStartFiles: a stale snapshot fails the build and writes nothing; a cu
   const dev = listStartFiles(dir, { stamp: "s", manifest: old as typeof record });
   assert.match(dev.buildId!, /^[0-9a-f]{64}$/);
   assert.notEqual(dev.buildId, buildId("s", CURRENT));
+});
+
+test("a snapshot setting is compared only when the caller asks for it", () => {
+  const built = { ...manifest({}), ...knobs({ SNAPSHOT_QUALITY: "5" }) };
+  assert.equal(built.quality, 5);
+  assert.deepEqual(askedKnobs({}), {}, "nothing set: nothing asked");
+  assert.equal(staleness(built, CURRENT, askedKnobs({})), null, "no setting asked: a quality-5 snapshot is fresh");
+  assert.equal(staleness(built, CURRENT, askedKnobs({ SNAPSHOT_QUALITY: "5" })), null, "asked and equal: fresh");
+  assert.match(
+    staleness(built, CURRENT, askedKnobs({ SNAPSHOT_QUALITY: "11" }))!,
+    /built with quality 5, 11 was asked for.*npm run snapshot/,
+  );
+  assert.match(staleness(built, CURRENT, askedKnobs({ SNAPSHOT_NO_MPL: "0" }))!, /noMpl true, false was asked/);
+  assert.match(staleness(built, CURRENT, askedKnobs({ SNAPSHOT_TRAMPOLINE: "1" }))!, /trampoline false, true/);
+  assert.match(staleness(built, CURRENT, askedKnobs({ SNAPSHOT_STRIP_DOCS: "0" }))!, /optimize 2, 0/);
+  assert.match(staleness(manifest({}), CURRENT, { quality: 11 })!, /quality \(not recorded\), 11/, "an old manifest");
 });

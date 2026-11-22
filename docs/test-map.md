@@ -115,7 +115,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   wiring, and the drop record checked at the end of each test. It makes the localStorage stand-in before it imports the
   controllers.
 - `app-engine.test.ts`: the engine controller (`app/engine.ts`).
-  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios.
+  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios; a second
+    `connectEngine` releases the earlier wiring's handles (download, graphics subscription).
   - No engine: a run or command is refused.
 - `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners.
   - "Clear log" and `canClearLog`; no engine: a command is refused and stays out of `history`; a run's promise settles when
@@ -134,6 +135,16 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
   store (the error's name kept; a newer database is reason `updated`), a `/work` that cannot take the page's version
   after a run (`crashed`, cause `folder`).
+- `work-mirror.test.ts`: the worker's `/work` mirror (`engine/work-mirror.ts`) on a fake file system and store: mount's
+  copy and a store that cannot be opened or copied; `sync` of a write, remove, rename and mkdir; a run's created,
+  deleted and renamed files, a same-size rewrite (time only) and an emptied file (size only), an untouched file not
+  read; a refused write tried again until the page replaces it; a file where the store has a folder; a `/work` that
+  cannot take the page's version (said once).
+- `worker-boot.test.ts`: the worker's start (`engine/worker-boot.ts`) without Pyodide: `fetchBytes` and `watchFetch`
+  (the Cache first, a .wasm's type, a missing or failed fetch a `DownloadError`, the real `fetch` put back), a refused
+  or absent Cache, the snapshot start's stage order and errors (a missing file `DownloadError`, a broken Cache its own
+  error, a refused one still fetched), and `boot`'s steps on a stand-in Pyodide (wheels only on the normal boot, the
+  Break callback, the graphics hook).
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
@@ -146,10 +157,14 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   build
   mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
   SIGINT is written again while the run is on, never into the next run); store failures (`started` with `storeFailed`,
-  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`).
+  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`); the start's facts
+  (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
+- `part-header.test.ts`: the shared buffer the graphics part is handed over in (`engine/lazy-part.ts`): what the page's
+  writers (land, fail with a reason cut to the room, retry) leave, as the worker's readers see it, and the header's
+  layout and size.
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
   does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
   decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).
@@ -180,7 +195,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
 - `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
-- `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
+- `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`); the denied commands come from `commands.json`, generated from `browser.DENIED`.
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
@@ -219,7 +234,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
-- `build-id.test.ts`: build id and the staleness check.
+- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set).
 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
@@ -413,7 +428,8 @@ start; seeding the kind alone needs an app change); Firefox and desktop WebKit a
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`,
   the snapshot job; on `main` `deploy.yml` calls `web.yml` and deploys only if it, `ci.yml` and `lint.yml` passed);
-  `check-pytest` and `check-numeric` are run by hand.
+  `check-pytest` and `check-numeric` are run by hand. The three check scripts share `web/scripts/lib/` (argument parser,
+  shard pool, repo paths, `wheels()`); nothing tests them but running them.
 - Probes check rc 0 only, not output.
 
 ## Known flaky tests

@@ -86,8 +86,8 @@ export type BootArgs = {
   wheel: Wheel;
   extraWheels?: Wheel[];
   interruptBuffer?: Int32Array | null;
-  /** A lazy snapshot's graphics part. `sab`: Int32 [state 0 pending, 1 landed, 2 failed; byte count; tries: the page's
-   *  fetches of it; 0], then from PART_HEADER the compressed part or the reason; null: the worker fetches it itself. */
+  /** A lazy snapshot's graphics part. `sab`: the buffer the page hands it over in (layout: lazy-part.ts); null: the
+   *  worker fetches it itself. */
   graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null };
 };
 
@@ -311,6 +311,11 @@ export interface SnapshotManifest {
   extraWheels: Record<string, string>;
   pyodide: string;
   built: number;
+  /** The build's settings (scripts/build-id.ts, SnapshotKnobs): PYTHONOPTIMIZE, Brotli quality, no matplotlib in the heap,
+   *  Pyodide's trampoline kept. Optional in the type: a manifest from before they were recorded has none of the last three. */
   optimize: 0 | 2;
+  quality?: number;
+  noMpl?: boolean;
+  trampoline?: boolean;
   files: SnapshotFiles;
 }

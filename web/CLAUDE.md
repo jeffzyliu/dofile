@@ -141,6 +141,8 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   no worker and writes nothing (`store.blocked`).
 - **Errors from `client.ts` carry a `kind`** (`ClientError` in `src/engine/types.ts` lists them); the worker answers
   `{id, error, name, type?}` (`type`: the Python exception class of a `PythonError`). Keep these on a new failure path: the page decides from them, never from the text.
+- **`vite.config.ts` holds the three configs (editor, pages, editor's preview) and staging (`stageFiles()`); the plugins are `scripts/vite/`**
+  (`headers`, `site-plugins`, `editor-plugins`, `start-list-dev`): factories that take their inputs as arguments.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
   entry made iOS Safari run it twice.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`

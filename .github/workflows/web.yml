@@ -47,7 +47,7 @@ jobs:
           # the snapshot job's inputs: the dofile wheel (src/, pyproject.toml, uv.lock), the extra wheels, the Pyodide version
           # (package.json, package-lock.json), the scripts that build, boot and check it, the engine code its tests start
           # (web/src/engine/), the tests that need it, and the corpus and Stata cases check-snapshot runs
-          ENGINE: '^(src|tests/conformance|tests_opendta|web/wheels|web/src/engine)/|^web/scripts/(make-snapshot\.ts|check-snapshot\.ts|snapshot-node\.ts|install-engine\.ts|build-id\.ts)$|^web/test/((engine|snapshot-native)\.test|harness)\.ts$|^(pyproject\.toml|uv\.lock|web/package\.json|web/package-lock\.json|\.github/workflows/web\.yml)$'
+          ENGINE: '^(src|tests/conformance|tests_opendta|web/wheels|web/src/engine)/|^web/scripts/(make-snapshot\.ts|check-snapshot\.ts|snapshot-node\.ts|install-engine\.ts|build-id\.ts|lib/[a-z]+\.ts)$|^web/test/((engine|snapshot-native)\.test|harness)\.ts$|^(pyproject\.toml|uv\.lock|web/package\.json|web/package-lock\.json|\.github/workflows/web\.yml)$'
         run: |
           code=true
           engine=true

@@ -124,7 +124,9 @@ What each file owns and talks to: section 2.2.
 | Machine | `engine/machine.ts` | the state, the tickets, the crash count | nobody: it is a function |
 | File service | `app/files.ts`: keeps the file list fresh, "Download all", the effects own and block the files | `files`, `fresh`, `persisted`, two banners | store |
 | Transport | `engine/client.ts`: numbered messages, the interrupt buffer, the cache (`cached`, `download`, `build`, `forgetDownload`); decides nothing | the `Worker`, its pending calls, the interrupt buffer | worker (messages), store (`attach`), Cache |
-| Worker | `engine/worker.ts`: loads Python, keeps `/work`, answers one message at a time | Pyodide, `/work`, the op queue, `unsaved` | store (its own connection), Cache (read only), Python |
+| Worker | `engine/worker.ts`: answers one message at a time | Pyodide, the op queue, the `/work` mirror | its start, Python, the mirror |
+| Worker's start | `engine/worker-boot.ts`: Python from the snapshot or the normal boot (`mount`), the wheels and the engine (`boot`); given the stage callback and the startup record by the worker, posts nothing | nothing | Cache (read only), the network, Python |
+| `/work` mirror | `engine/work-mirror.ts`: copies the store into `/work` at `mount`, takes the journal on `sync`, writes a run's changes back; given Pyodide's file system by the worker | `/work`, `unsaved` | store (its own connection) |
 | Python | `src/dofile/browser.py`: the functions the worker calls; each returns JSON text | one `Engine` | `engine.py`, OpenDTA |
 | Store | `engine/store.ts` | IndexedDB database `dofile`: `info`, `data`, `pending` | used by page and worker |
 | Tab lock | `engine/tab.ts`: the one-tab lock and the "keep my files" request | the Web Lock | engine controller |
@@ -230,7 +232,7 @@ Points that are not obvious:
   snapshot); it is not deployed.
 - **A restart fetches the list again** (state `starting-list`): after a reset the Cache may have been evicted, and the worker
   would then fetch whatever build the site has now. A start the visitor begins reuses the list `download()` just checked.
-- **Pyodide's loader fetches its own files.** The worker temporarily replaces `self.fetch` (`watchFetch`) so those requests
+- **Pyodide's loader fetches its own files.** The worker's start (`engine/worker-boot.ts`) temporarily replaces `fetch` (`watchFetch`) so those requests
   hit the Cache first, and a failed fetch rejects the start instead of hanging.
 - **Stage names** arrive as typed ids; the words are the controller's (`stageWords`, `stageStatus`).
 
@@ -330,7 +332,7 @@ worker reads an upload back from the store, and a renamed folder is copied again
 **The worker's other copies.** At `mount` (`takeAll`) it reads every record and clears the journal in one transaction.
 After every run (`applyRun(changes)`) it writes the run's changes and takes the journal in the same transaction.
 
-**After a run** (`saveRun` in the worker):
+**After a run** (`saveRun` in the worker's `/work` mirror, `engine/work-mirror.ts`):
 
 1. Compare `walk(/work)` before and after by modification time and size; only changed files are read. The wait before the
    run (until the clock is past the newest file) makes the time enough for any write of one byte or more; the size catches
@@ -454,5 +456,6 @@ What Part 3 listed before step 3.5 was answered by its steps A to D. What remain
 8. **The controller reaches into the UI.** The effects `show-dialog` and `close-dialog` write the `dialog` signal, and
    `close-dialog` asks the editor for focus through the `editorAsked` signal (`app/editor/commands.ts`).
 9. **Module-level state in the controllers.** `connectEngine`, `connectRun` and `connectFiles` set module variables; the tests
-   reconnect them (a second `connectEngine` replaces the wiring and clears the machine). One engine per page is held by a
+   reconnect them (a second `connectEngine` replaces the wiring, one record that holds the performer and its handles, and
+   clears the machine, the queue and the drop record). One engine per page is held by a
    test that only `main.tsx` constructs or connects.
