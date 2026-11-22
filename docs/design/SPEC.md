@@ -1176,7 +1176,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line), and when the marked line is
     deleted; it moves with edits; a command from the command line and a run of another file leave it; it lives in the
     tab's editor state, so it goes when the tab closes (a file opened again has none) and stays with a renamed tab. **A run that
-    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`; the decision
+    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `ranOver` of `editor/documents.ts`; the decision
     in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
     tab of a `\r\n` file follows a run as any other; Save keeps the file's form, noted when its text is read
     (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
