@@ -596,8 +596,10 @@ cross-origin isolated (some hosts, or plain HTTP on a local network). The data i
 
 The page posts `{id, op, args}`; the worker answers `{id, result}` or `{id, error, name, type?}` (`type`: the Python exception class, set for a `PythonError`; a start fails with reason `memory` for a `RangeError` or a `type` of `MemoryError`, never from the message), posts `{stage}` (a typed `Stage` id,
 never text) as each start-up stage begins, and `{id, log}` chunks while a run prints. Ops run one at a time in a queue, except
-`boot`. The ops are one typed map, `Ops` in `web/src/engine/types.ts`, in three sets; each op belongs to one set, in the types
-and in the worker (`web/src/engine/worker.ts` has one handler object for each set), and the set decides who may send it:
+`boot` and `graphics`. The ops are one typed map, `Ops` in `web/src/engine/types.ts`, in three sets; each op belongs to one
+set, and the set decides who may send it. The worker answers them through one table keyed by op (`OpTable` in
+`web/src/engine/worker-dispatch.ts`, filled in `web/src/engine/worker.ts`), typed from `Ops`: an op without a handler, or a
+handler with another op's arguments or result, fails the type check (`web/test/dispatch.types.ts`).
 
 - **`LifecycleOps`** (`mount`, `boot`, `startup`, `run`) change the engine. Only the transport's `start()` and `run()` send
   them, and only the machine's effect performer calls those.

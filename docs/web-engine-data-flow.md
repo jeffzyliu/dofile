@@ -124,7 +124,8 @@ What each file owns and talks to: section 2.2.
 | Machine | `engine/machine.ts` | the state, the tickets, the crash count | nobody: it is a function |
 | File service | `app/files.ts`: keeps the file list fresh, "Download all", the effects own and block the files | `files`, `fresh`, `persisted`, two banners | store |
 | Transport | `engine/client.ts`: numbered messages, the interrupt buffer, the cache (`cached`, `download`, `build`, `forgetDownload`); decides nothing | the `Worker`, its pending calls, the interrupt buffer | worker (messages), store (`attach`), Cache |
-| Worker | `engine/worker.ts`: answers one message at a time | Pyodide, the op queue, the `/work` mirror | its start, Python, the mirror |
+| Worker | `engine/worker.ts`: the table of op handlers; answers one message at a time | Pyodide, the `/work` mirror | its start, its dispatch, Python, the mirror |
+| Worker's dispatch | `engine/worker-dispatch.ts`: the worker's `onmessage` over the table (`OpTable`, typed from `Ops`): the queue, the answer `{id, result}` or `{id, error, name, type?}`; given `post` by the worker | the op queue | nobody |
 | Worker's start | `engine/worker-boot.ts`: Python from the snapshot or the normal boot (`mount`), the wheels and the engine (`boot`); given the stage callback and the startup record by the worker, posts nothing | nothing | Cache (read only), the network, Python |
 | `/work` mirror | `engine/work-mirror.ts`: copies the store into `/work` at `mount`, takes the journal on `sync`, writes a run's changes back; given Pyodide's file system by the worker | `/work`, `unsaved` | store (its own connection) |
 | Python | `src/dofile/browser.py`: the functions the worker calls; each returns JSON text | one `Engine` | `engine.py`, OpenDTA |
@@ -140,7 +141,7 @@ The page posts `{ id, op, args }`. The worker posts back one of four shapes:
 | Message | Meaning |
 |---|---|
 | `{ id, result }` | the answer; the call resolves |
-| `{ id, error, name }` | the op threw; the call rejects with kind `op` (a failed `run` is ended by the machine with rc 9998, kind `run-failed`; the worker stays) |
+| `{ id, error, name, type? }` | the op threw (`type`: a `PythonError`'s exception class); the call rejects with kind `op` (a failed `run` is ended by the machine with rc 9998, kind `run-failed`; the worker stays) |
 | `{ id, log }` | a chunk of a running run's log; the call stays pending |
 | `{ stage }` | a start-up stage id (`download`, `unpack`, `python`, `files`, `packages`, `engine`), with no id |
 
@@ -153,9 +154,12 @@ The ops are one typed map (`Ops` in `engine/types.ts`) in three sets; the set de
 - **`JournalOps`** (the page's file changes): `sync`, with no arguments. Only the function the transport gives to
   `store.attach` sends it.
 
-The worker handles ops one at a time through a promise chain (`queue = queue.then(...)`). `boot` alone runs outside the
-queue, so `sync` and the views of `/work` are answered while the interpreter loads; engine ops `await booted` first. A read
-op sent during a start or a run waits in the queue.
+The worker handles ops one at a time through a promise chain (`queue = queue.then(...)`) in `engine/worker-dispatch.ts`.
+Its table (`OpTable`, one entry per op of `Ops`, in `worker.ts`) says for each op its handler, whether it is queued, and
+the hooks around it: `run` is counted as it arrives (`arrived`), `boot`'s answer settles `booted` (`answered`).
+`boot` and `graphics` run outside the queue, so `sync` and the views of `/work` are answered while the interpreter loads,
+and a graphics note does not wait for a run; engine ops `await booted` first. A read op sent during a start or a run
+waits in the queue. An op with no entry is answered with an error in the queue.
 
 The transport keeps a record for the live worker: its number, a `pending` map of calls, its interrupt buffer, and, once
 ended, what it was ended with. Every call goes through that record, so a call on an ended worker rejects at once with what
