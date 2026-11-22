@@ -42,7 +42,6 @@ test("a file's form is kept: the editor's text has \\n and no BOM, textOf gives 
   D.addText("win.csv", "﻿a\r\nb\r\n");
   assert.equal(D.stateOf("win.csv")!.doc.toString(), "a\nb\n");
   assert.equal(D.textOf("win.csv"), "﻿a\r\nb\r\n");
-  assert.deepEqual(D.formAt("win.csv"), { br: "\r\n", bom: true });
   assert.equal(D.tabs.value[0].dirty, false);
 });
 
@@ -125,21 +124,18 @@ test("moved: a folder's tabs take their new paths with their edits; the active t
   assert.deepEqual(label("input/x.do"), ["Editor: x.do"]);
 });
 
-test("retype: a text tab becomes a .dta tab and back in its place, the active tab kept; a Save waiting then writes nothing", () => {
+test("retype: a text tab becomes a .dta tab and back in its place, the active tab kept", () => {
   D.addText("a.do", "1");
   D.addText("w.do", "2");
   D.addText("c.do", "3");
   D.activate("c.do");
-  const save = D.saveBegins("w.do");
   D.retype("w.do");
   assert.deepEqual(D.tabs.value[1], { path: "w.do", kind: "dta", dirty: false });
   assert.equal(D.stateOf("w.do"), undefined);
-  assert.equal(save.path, null, "as for a tab closed");
   D.retype("w.do", "a,b\n");
   assert.deepEqual(D.tabs.value[1], { path: "w.do", kind: "text", dirty: false });
   assert.equal(D.textOf("w.do"), "a,b\n");
   assert.equal(D.activeTab.value, "c.do");
-  D.saveEnds(save);
 });
 
 test("reload drops the edits and the banners, with a new document; a .dta or closed tab is left alone", () => {

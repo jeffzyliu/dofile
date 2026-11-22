@@ -6,30 +6,15 @@ import { EditorView, keymap } from "@codemirror/view";
 import { signal } from "@preact/signals-core";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { openFile } from "../files/open.ts";
-import { baseName } from "../files/tree.ts";
-import { fileTurn } from "../files/turns.ts";
 import { requestRun } from "../run.ts";
 import { startEngine } from "../start.ts";
-import { addBanner, dialog, engine, say, showToast } from "../state.ts";
-import { store } from "../store.ts";
+import { dialog, engine, showToast } from "../state.ts";
 import type { RunHead } from "../types.ts";
 import { openMenuState } from "../ui/Menu.tsx";
 import { wholeLines } from "./cm.ts";
 import { codeOf, editorAsked, editorCommands } from "./commands.ts";
-import {
-  activeTab,
-  attachView,
-  edited,
-  formAt,
-  saveBegins,
-  savedAs,
-  saveEnds,
-  selection,
-  stateOf,
-  tabs,
-} from "./documents.ts";
+import { activeTab, attachView, edited, save, selection, stateOf, tabs } from "./documents.ts";
 import { isRunKey, isSaveKey } from "./keys.ts";
-import { fileText } from "./ranover.ts";
 import { refusedRunWords } from "./words.ts";
 
 let view: EditorView | null = null;
@@ -113,40 +98,6 @@ function runEither() {
   else runFile(true);
 }
 
-// ---- save ----
-
-// A save writes in its turn (fileTurn), under the tab's path then, so a rename or delete pressed before it is honoured
-// (closed: nothing is written). A save that answers after a rename leaves its outcome on the tab under the new name;
-// the store has the bytes there too, as its rename is called after the write is issued.
-async function save(path: string | undefined = activeTab.value ?? undefined): Promise<boolean> {
-  const st = path ? stateOf(path) : undefined;
-  if (!path || !st) return false;
-  const text = st.doc.toString();
-  const at = saveBegins(path);
-  let written = path; // the name the text is written under: the tab's when its turn comes
-  try {
-    let write = null as Promise<unknown> | null;
-    await fileTurn(async () => {
-      if (at.path === null) return;
-      written = at.path;
-      write = store.write(written, new TextEncoder().encode(fileText(text, formAt(written), written)));
-    });
-    if (!write) return false; // its tab closed while it waited (a delete): nothing to write
-    await write;
-  } catch (e) {
-    const message = (e as Error)?.message ?? String(e);
-    if (at.path !== null) addBanner({ b: "save-failed", path: at.path, message }); // not for a tab closed meanwhile
-    say(`${baseName(at.path ?? written)} couldn't be saved`);
-    return false;
-  } finally {
-    saveEnds(at);
-  }
-  const now = at.path; // the tab's path now, or null when it was closed while the file was written
-  if (now !== null) savedAs(now, text, written);
-  showToast(`Saved ${baseName(now ?? written)}`);
-  return true;
-}
-
 async function goToLine(line: number, path: string | undefined = activeTab.value ?? undefined) {
   if (!path) return;
   await openFile(path); // opens it, or only makes it the active tab (and the Editor view on a phone)
@@ -197,7 +148,7 @@ function onKey(e: KeyboardEvent) {
   if (!isSaveKey(e)) return;
   e.preventDefault();
   if (e.repeat || dialog.value) return;
-  editorCommands.save();
+  save();
 }
 
 const TEXT_LESS_INPUTS = new Set(["button", "checkbox", "color", "file", "image", "radio", "range", "reset", "submit"]);
@@ -229,7 +180,6 @@ function mount(host: HTMLElement, emptyView: HTMLElement) {
   view = v;
   editorCommands.runFile = (path) => runFile(false, path);
   editorCommands.runSelection = () => runSelection();
-  editorCommands.save = save;
   editorCommands.focus = focus;
   editorCommands.goToLine = (line, path) => {
     goToLine(line, path);

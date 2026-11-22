@@ -2,8 +2,8 @@
 // when it mounts; until then they do nothing, so the shell runs without an editor. The tabs and their documents are
 // editor/documents.ts's, which needs no view.
 //
-// Call through the object (`editorCommands.save(path)`), never destructure it or keep a field
-// (`const { save } = editorCommands`): the copy would keep the no-op.
+// Call through the object (`editorCommands.runFile(path)`), never destructure it or keep a field
+// (`const { runFile } = editorCommands`): the copy would keep the no-op.
 import { signal } from "@preact/signals-core";
 import type { RunHead } from "../types.ts";
 
@@ -21,11 +21,6 @@ export const editorCommands = {
   runFile(_path?: string) {},
   /** Run selection: the selected lines, keeping the locals of earlier runs. */
   runSelection() {},
-  /** Save `path` (default: the active tab). Resolves true once saved, false when not (no such tab, the store refused:
-   *  the save-failed banner says why). */
-  save(_path?: string): Promise<boolean> {
-    return Promise.resolve(false);
-  },
   /** Put the focus in the editor, at once. */
   focus() {
     ((globalThis.document?.querySelector("[data-editor]") ?? null) as HTMLElement | null)?.focus();

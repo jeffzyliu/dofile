@@ -6,8 +6,10 @@ import { EditorView, highlightActiveLineGutter, lineNumbers } from "@codemirror/
 import { batch, computed, effect, type ReadonlySignal, type Signal, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
 import { baseName, movedPath, within } from "../files/tree.ts";
-import { addBanner, banners, dialog, dismiss, engine, lastRun, wrap } from "../state.ts";
+import { fileTurn } from "../files/turns.ts";
+import { addBanner, banners, dialog, dismiss, engine, lastRun, say, showToast, wrap } from "../state.ts";
 import { runOn } from "../states/predicates.ts";
+import { store } from "../store.ts";
 import type { OpenTab, RunHead } from "../types.ts";
 import {
   languageOf,
@@ -19,7 +21,7 @@ import {
   wholeLines,
 } from "./cm.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
-import { editorText, type FileForm, fileText, followRun, formOf, PLAIN, savedForm } from "./ranover.ts";
+import { editorText, type FileForm, fileText, followRun, formOf, savedForm } from "./ranover.ts";
 
 interface TextPart {
   kind: "text";
@@ -184,7 +186,6 @@ export function close(path: string): void {
   });
   for (const b of banners.peek()) if ((b.b === "run-changed" || b.b === "save-failed") && b.path === path) dismiss(b);
   if (marked?.doc === d) marked = null;
-  for (const at of saving) if (at.path === path) at.path = null;
 }
 
 /** The ×, Delete on a tab, the phone's "Close": a tab with unsaved edits asks first (dialog close-tab); another closes.
@@ -225,7 +226,6 @@ export function moved(from: string, to: string): string[] {
           dismiss(b);
           addBanner({ ...b, path: now });
         }
-      for (const at of saving) if (at.path === was) at.path = now; // a save in progress answers for the new name
     }
   });
   return paths;
@@ -236,7 +236,6 @@ export function moved(from: string, to: string): string[] {
 export function retype(path: string, file?: string): void {
   const d = find(path);
   if (!d) return;
-  for (const at of saving) if (at.path === path) at.path = null;
   if (marked?.doc === d) marked = null;
   d.scrollTop = 0;
   d.content.value = file === undefined ? { kind: "dta" } : textPart(path, file);
@@ -303,9 +302,6 @@ export function textOf(path: string): string | null {
  *  that is not text over it; the run-changed banner says so). */
 export const savedIsText = (path: string): boolean => textOfDoc(find(path))?.saved.peek() !== null;
 
-/** The form (line break, BOM) the open text file `path` is written in. */
-export const formAt = (path: string): FileForm => textOfDoc(find(path))?.form ?? PLAIN;
-
 /** Change the state of the open text tab `path` (shown or not) by `spec`. */
 export function update(path: string, spec: TransactionSpec): void {
   const part = textOfDoc(find(path));
@@ -317,29 +313,59 @@ export function edited(state: EditorState): void {
   if (onView && onView.state.peek() !== state) onView.state.value = state;
 }
 
-// ---- Save's bridge (Editor.tsx save) ----
+// ---- Save ----
 
-// The saves in progress, each with the path its tab has now: moved() moves it, and close() and retype() end it (null).
-const saving = new Set<{ path: string | null }>();
+/** Save `path` (default: the active tab): its text as it is now, written in its turn (files/turns.ts) under the tab's
+ *  path then, so a rename or delete pressed before it is honoured. The later action wins (the Save rule, SPEC section
+ *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written; an answer that comes after a
+ *  reload or a run's text shown sets that document's saved text from the store read again (resync). A save that answers after a rename leaves its outcome on the tab under the new name;
+ *  the store has the bytes there too, as its rename is called after the write is issued. Resolves true once written,
+ *  false when not (no such text tab, cancelled, the store refused: the save-failed banner says why). */
+export async function save(path: string | undefined = activeTab.peek() ?? undefined): Promise<boolean> {
+  const d = path ? find(path) : undefined;
+  const part = textOfDoc(d);
+  if (!d || !part) return false;
+  const text = part.state.peek().doc.toString(); // taken now: a keystroke while it waits is not saved
+  const ours = () => isOpen(d) && d.content.peek() === part; // the document it took is still the tab's
+  let written = d.path.peek(); // the name the text is written under: the tab's when its turn comes
+  try {
+    let write = null as Promise<unknown> | null;
+    await fileTurn(async () => {
+      if (!ours()) return;
+      written = d.path.peek();
+      write = store.write(written, new TextEncoder().encode(fileText(text, part.form, written)));
+    });
+    if (!write) return false;
+    await write;
+  } catch (e) {
+    const message = (e as Error)?.message ?? String(e);
+    if (ours()) addBanner({ b: "save-failed", path: d.path.peek(), message });
+    say(`${baseName(ours() ? d.path.peek() : written)} couldn't be saved`);
+    return false;
+  }
+  const now = ours() ? d.path.peek() : null;
+  if (now !== null) {
+    // the store has `text`: it is the saved text, in the form as written (the name decided whether the BOM was dropped)
+    part.saved.value = text;
+    part.form = savedForm(part.form, written);
+    for (const b of banners.peek()) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === now) dismiss(b);
+  } else if (isOpen(d) && textOfDoc(d)) await resync(d);
+  showToast(`Saved ${baseName(now ?? written)}`);
+  return true;
+}
 
-/** A save of `path` begins: its path follows renames, and is null once its tab closes or opens another way. */
-export function saveBegins(path: string): { path: string | null } {
-  const at = { path };
-  saving.add(at);
-  return at;
-}
-/** A save ended, whichever way. */
-export function saveEnds(at: { path: string | null }): void {
-  saving.delete(at);
-}
-/** The store has `text` for the open tab `path` now, written under the name `written`: it is the saved text, in the
- *  form as written (the name decided whether the BOM was dropped), and its save-failed and run-changed banners go. */
-export function savedAs(path: string, text: string, written: string): void {
-  const part = textOfDoc(find(path));
-  if (!part) return;
-  part.saved.value = text;
-  part.form = savedForm(part.form, written);
-  for (const b of banners.peek()) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === path) dismiss(b);
+// A Save's write answered after its tab took another document (a reload or a run's text shown) whose read may have been
+// issued before the write: the store's text is read again, so the dot says whether the tab shows what the store has.
+async function resync(d: Doc) {
+  const part = textOfDoc(d);
+  const path = d.path.peek();
+  let saved: string | null;
+  try {
+    saved = editorText(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await store.read(path)));
+  } catch {
+    saved = null; // not text, or the store cannot give it: unsaved until a Save
+  }
+  if (part && isOpen(d) && d.content.peek() === part) part.saved.value = saved; // renamed meanwhile: the store moved it too
 }
 
 // ---- the run's marks, the wrap setting ----
