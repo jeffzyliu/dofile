@@ -318,9 +318,7 @@ export function edited(state: EditorState): void {
 
 /** Save `path` (default: the active tab): its text as it is now, written in its turn (files/turns.ts) under the tab's
  *  path then, so a rename or delete pressed before it is honoured. The later action wins (the Save rule, SPEC section
- *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written. An answer that comes after the tab took
- *  another document (an upload's Replace, whose write takes no turn yet) sets that document's saved text from the store,
- *  read again in a turn (resync). A save that answers after a rename leaves its outcome on the tab under the new name;
+ *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written. A save that answers after a rename leaves its outcome on the tab under the new name;
  *  the store has the bytes there too, as its rename is called after the write is issued. Resolves true once written,
  *  false when not (no such text tab, cancelled, the store refused: the save-failed banner says why). */
 export async function save(path: string | undefined = activeTab.peek() ?? undefined): Promise<boolean> {
@@ -350,26 +348,9 @@ export async function save(path: string | undefined = activeTab.peek() ?? undefi
     part.saved.value = text;
     part.form = savedForm(part.form, written);
     for (const b of banners.peek()) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === now) dismiss(b);
-  } else if (isOpen(d) && textOfDoc(d)) await resync(d).catch(() => {}); // a store that cannot answer: the dot stays as it is
+  }
   showToast(`Saved ${baseName(now ?? written)}`);
   return true;
-}
-
-// A Save's write answered after its tab took another document whose bytes may predate the write: the store's text is read
-// again, so the dot says whether the tab shows what the store has. B1: remove once the upload's writes take turns.
-function resync(d: Doc): Promise<void> {
-  return fileTurn(function* (io) {
-    const part = textOfDoc(d);
-    if (!part || !isOpen(d)) return;
-    let saved: string | null;
-    try {
-      const bytes = yield* io.read(d.path.peek());
-      saved = editorText(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes));
-    } catch {
-      saved = null; // not text, or the store cannot give it: unsaved until a Save
-    }
-    if (isOpen(d) && d.content.peek() === part) part.saved.value = saved;
-  });
 }
 
 // ---- the run's marks, the wrap setting ----

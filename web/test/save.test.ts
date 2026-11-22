@@ -57,6 +57,12 @@ function hold() {
   };
 }
 
+/** Resolves once the clash dialog is open. */
+async function asked() {
+  for (let i = 0; i < 200 && S.dialog.value?.d !== "clash"; i++) await new Promise((r) => setTimeout(r, 5));
+  assert.equal(S.dialog.value?.d, "clash");
+}
+
 /** Answer each clash dialog as it opens with `a`. */
 function answering(a: ClashAnswer) {
   return effect(() => {
@@ -172,18 +178,18 @@ test("Save against delete: a delete pressed before it closes the tab, and nothin
 
 // ---- the Save rule: the later action wins ----
 
-test("Save rule: an upload's Replace of the tab cancels a pending Save: the store keeps the upload, the tab shows it clean", async () => {
+test("Save rule: an upload's Replace of the tab whose turn comes before a pending Save cancels it: the store keeps the upload, the tab shows it clean", async () => {
   await opened("a.do", "mine");
   edit("a.do");
+  const done = A.upload([{ path: "a.do", data: enc("uploaded") }]);
+  await asked();
   const open = hold();
-  const saved = D.save("a.do");
-  const stop = answering({ replace: true, same: false });
-  try {
-    await A.upload([{ path: "a.do", data: enc("uploaded") }]);
-  } finally {
-    stop();
-  }
+  S.dialog.value = null;
+  A.answerClash({ replace: true, same: false }); // the upload's write takes the turn after the held one
+  await new Promise((r) => setTimeout(r, 0));
+  const saved = D.save("a.do"); // and the Save the one after that
   open();
+  await done;
   assert.equal(await saved, false);
   assert.equal(await stored("a.do"), "uploaded");
   assert.equal(D.textOf("a.do"), "uploaded");
@@ -191,34 +197,39 @@ test("Save rule: an upload's Replace of the tab cancels a pending Save: the stor
   assert.deepEqual(S.banners.value, []);
 });
 
-// B1: once the upload's writes take turns, this order cannot happen (the upload's Replace then cancels the Save, as above)
-test("a Save whose write is issued after an upload's Replace of the tab (the upload takes no turn yet): once it answers, the tab shows the upload and is unsaved, as the store has the Save's text", async () => {
+test("an upload's Replace answered while a Save of the tab waits: the Save writes first, the upload asks again (the file changed), and Replace leaves the upload in the store and the tab, clean", async () => {
   await opened("a.do", "mine");
   edit("a.do");
+  const done = A.upload([{ path: "a.do", data: enc("uploaded") }]);
+  await asked();
   const open = hold();
   const saved = D.save("a.do");
-  const stop = answering({ replace: true, same: false });
   const { write } = store;
   let released = false;
-  // the held turn ends in the tick the upload's write is issued, so the Save's write is issued after it
-  store.write = (path, data) => {
-    const w = write.call(store, path, data);
-    if (!released) {
-      released = true;
-      open();
-    }
+  const release = () => {
+    if (released) return;
+    released = true;
+    open();
+  };
+  // the held turn ends when the upload's write is issued, or after 50 ms when that write waits for its turn
+  store.write = (...args: Parameters<typeof write>) => {
+    const w = write.apply(store, args);
+    release();
     return w;
   };
+  const timer = setTimeout(release, 50);
+  const stop = answering({ replace: true, same: false }); // the open dialog, and any asked again
   try {
-    await A.upload([{ path: "a.do", data: enc("uploaded") }]);
-    assert.equal(await saved, true);
+    await done;
+    await saved;
   } finally {
     stop();
+    clearTimeout(timer);
     store.write = write;
   }
-  assert.equal(await stored("a.do"), "edited mine");
+  assert.equal(await stored("a.do"), "uploaded", "the later action, the upload's Replace, wins");
   assert.equal(D.textOf("a.do"), "uploaded");
-  assert.equal(tab("a.do")?.dirty, true, "the dot: the store does not have what the tab shows");
+  assert.equal(tab("a.do")?.dirty, false);
 });
 
 test('Save rule: "Reload from the run" whose turn comes before a pending Save of the edited tab cancels it: the store keeps the run\'s text', async () => {

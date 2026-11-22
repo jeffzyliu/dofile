@@ -3,8 +3,8 @@
 import { activate, addDta, addText, tabs } from "../editor/documents.ts";
 import { addFileGraph } from "../graphs.ts";
 import { addBanner, banners, dismiss, graphFull, isPhone, outputTab, phoneTab, say } from "../state.ts";
-import { store } from "../store.ts";
 import { baseName, extOf } from "./tree.ts";
+import { fileTurn } from "./turns.ts";
 
 /** A file's text when its bytes are strict UTF-8, else null: the editor would change such a file, so it is not opened
  *  as text. A leading BOM is dropped, or with `keepBom` kept as "\uFEFF": the editor's text is decoded so
@@ -40,25 +40,29 @@ export async function openFile(path: string): Promise<void> {
     addDta(path);
     return show(path);
   }
-  let bytes: Uint8Array;
-  try {
-    bytes = await store.read(path);
-  } catch (e) {
-    console.warn(`[dofile] open ${path}: ${(e as Error)?.message ?? e}`);
-    return;
-  }
-  if (ext === ".png") {
-    addFileGraph(path, toBase64(bytes));
-    if (isPhone.value) graphFull.value = true;
-    else outputTab.value = "graph";
-    return;
-  }
-  const text = decodeText(bytes, true);
-  noteNotText(path, text);
-  if (text === null) return;
-  if (tabs.value.some((t) => t.path === path)) return show(path); // opened twice at once: the first one won
-  addText(path, text);
-  show(path);
+  // the read and the tab in one turn: an upload's Replace of the file comes wholly before it or after it (and reloads
+  // the tab), so the tab never keeps bytes the store has replaced
+  return fileTurn(function* (io) {
+    let bytes: Uint8Array;
+    try {
+      bytes = yield* io.read(path);
+    } catch (e) {
+      console.warn(`[dofile] open ${path}: ${(e as Error)?.message ?? e}`);
+      return;
+    }
+    if (ext === ".png") {
+      addFileGraph(path, toBase64(bytes));
+      if (isPhone.value) graphFull.value = true;
+      else outputTab.value = "graph";
+      return;
+    }
+    const text = decodeText(bytes, true);
+    noteNotText(path, text);
+    if (text === null) return;
+    if (tabs.value.some((t) => t.path === path)) return show(path); // opened twice at once: the first one won
+    addText(path, text);
+    show(path);
+  });
 }
 
 /** A file is opened as text (`text`) or cannot be (null): the not-text banner of an earlier file goes, and one comes
