@@ -1,4 +1,5 @@
-// The worker's decisions about a lazy snapshot's graphics part, without its side effects (worker.ts acts on them).
+// A lazy snapshot's graphics part: the shared buffer's layout and its page writers and worker readers, and the
+// worker's decisions about the part, without their side effects (worker.ts acts on them).
 
 // The shared buffer the page hands the part over in (BootArgs.graphics.sab): an Int32 header [state, length, tries, 0]
 // of PART_HEADER bytes, then the compressed part (landed) or the reason it failed, as UTF-8 (failed). The page writes
