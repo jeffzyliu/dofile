@@ -32,7 +32,13 @@ export function renameEntry(from: string, to: string): Promise<void> {
 
 async function renameNow(from: string, to: string) {
   if (from === to) return;
+  // a tab left open at the new name after a run deleted its file (files.ts afterRun keeps it): with unsaved edits the
+  // name is taken, as if the file were there; with none it closes, so the one tab of that name shows the renamed file
+  const left = () => tabs.value.filter((t) => within(t.path, to) && !within(t.path, from));
+  if (left().some((t) => t.dirty)) throw new Error(`${to} already exists`);
   await store.rename(from, to);
+  for (const t of left()) if (!t.dirty) close(t.path);
+  const before = new Set(tabs.value.map((t) => t.path));
   // the reset banner's cut file follows too, open in a tab or not (one banner: addBanner replaces it)
   for (const b of banners.value)
     if (b.b === "reset" && b.run?.path !== undefined && within(b.run.path, from))
@@ -48,7 +54,7 @@ async function renameNow(from: string, to: string) {
   batch(() => {
     // the new name opened meanwhile (openFile, from the list or Go to line) has a tab of the store's text already: the
     // old name's tab goes, so no two tabs share a path
-    for (const [p, { was }] of reads) if (tabs.value.some((t) => t.path === p)) close(was);
+    for (const [p, { was }] of reads) if (!before.has(p) && tabs.value.some((t) => t.path === p)) close(was);
     for (const p of moved(from, to)) {
       const kind = kindOf(p);
       if (!retypes(p, kind)) continue; // closed, or edited, meanwhile
