@@ -82,13 +82,13 @@ interface TextPart {                     // a text tab's document; a new one at 
   dirty: ReadonlySignal<boolean>;        // computed: the text differs from `saved` (always, when `saved` is null)
 }
 interface DtaPart { kind: "dta" }         // nothing else: a .dta tab has no document
-// Where the scroll snapshot (EditorView.scrollSnapshot(), taken when the tab is hidden) lives, on the record or on
-// the TextPart, is S1's to decide.
+// The scroll snapshot lives on the record (`scroll`, null: the top), taken when the tab is hidden: a reload keeps
+// it, a retype resets it (SPEC 3.2).
 interface EditorSurface {                // what Editor.tsx hands attachView() at mount; a Node test hands none
   extensions: Extension;                 // what needs the view: the key bindings, the listener that calls edited()
   show(state: EditorState | null, scroll: StateEffect<unknown> | null): void; // null: the empty view
   dispatch(spec: TransactionSpec): void; // a change to the shown state; the listener then calls edited()
-  scrollSnapshot(): StateEffect<unknown>;
+  scrollSnapshot(): StateEffect<unknown> | null; // null: the top; while the pane is hidden, the last place seen
 }
 ```
 
