@@ -122,7 +122,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     the after-run work throws.
 - `app-files.test.ts`: the files controller (`app/files.ts`): the storage banner, a run that rewrites an open file
   (`ranOver`, the run-changed banner), Download all, `persisted`.
-- `app-theme-tabs.test.ts`: the theme button and `applyTheme`; `setDirty`; strict UTF-8 (`decodeText`).
+- `app-theme-tabs.test.ts`: the theme button and `applyTheme`; strict UTF-8 (`decodeText`).
 - `app-dta.test.ts`: `readDta` (`app/output/dta.ts`): one describe_file per .dta file and version, even when its tab is mounted again
   while the first is pending; a failed call is asked again.
 - `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
@@ -139,9 +139,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
   - Start engine's event `ask` in each state.
   - SPEC section 5's states x groups table matching the groups in `machine.ts`.
-- `files-ui.test.ts`: the file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb.
+- `files-ui.test.ts`: the file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb, with the real
+  open documents (`editor/documents.ts`, no view).
   - The tree and the current folder; opening each kind of file (SPEC 3.11), closing, renaming, deleting with open tabs.
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
+- `documents.test.ts`: the open tabs and their documents (`app/editor/documents.ts`), no view or a stand-in one: open,
+  activate, close and ask, close under a folder, a move, a retype, a reload, a run over a tab, the dot and `selection`
+  derived, a view attached after a file opened.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
   mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
@@ -298,7 +302,8 @@ Specs:
 - `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
   URL flag.
 - `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
-  put the page's state in a shape (an engine state, a banner, log items, ...); `fixtures.ts` holds the helpers shared by
+  put the page's state in a shape (an engine state, a banner, log items, ...); the tabs' helpers (`markDirty`, `showTabs`,
+  `seedEditorBox`) call the page's `src/app/editor/seeds.ts` through the hook's `documents`, so a seeded tab has a document; `fixtures.ts` holds the helpers shared by
   several specs (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`, `toolbarOf`).
   `settle(page)` replaces a fixed sleep that asserts "nothing moved after this" (a late focus, a late write, a key's late
   effect): three frames, each followed by a task, and with `{ store: true }` a read of the store between them. Use it after

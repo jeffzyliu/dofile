@@ -61,7 +61,9 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   point to it ("the plain logic: tree.ts"), never restate it or describe what another file does. No history or
   provenance (steps, issue IDs, dates, review rounds: git has them) and no links into `docs/archive/`. Keep hard-won
   knowledge (browser quirks, measured numbers, why a simpler way failed) on the line that handles it, shortened.
-- **State.** One module of signals, `src/app/state.ts`. A signal with one owner is exported `ReadonlySignal`, so a view
+- **State.** One module of signals, `src/app/state.ts`, except the open tabs: `src/app/editor/documents.ts` keeps one
+  record per tab, its `tabs`, `activeTab` and `selection` are computeds over them, and a tab changes only through its
+  functions (it needs no view; the editor attaches its view on mount). A signal with one owner is exported `ReadonlySignal`, so a view
   that assigns it fails `npm run check`. The controllers (`src/app/engine.ts`, `run.ts`, `files.ts`, `start.ts`) are `.ts`
   files that import no `.tsx`, tested in Node (`test/app-*.test.ts`, on `test/wiring.ts`; each file starts from
   `resetState()`). Views read signals and call the controllers' actions; they never call the transport or the machine.
