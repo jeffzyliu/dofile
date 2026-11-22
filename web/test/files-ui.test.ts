@@ -755,3 +755,44 @@ test("rename: a .dta tab renamed to .png closes, and the Graph tab and the full-
     assert.equal(S.graphFull.value, false);
   }
 });
+
+test("rename: a .dta tab renamed to a text name is read before its tab moves, so it never shows the new name as a .dta tab", async () => {
+  await reset({ "v.dta": "x", "w.dta": "a,b\n1,2\n" });
+  for (const p of ["v.dta", "w.dta"]) await openFile(p);
+  const seen: string[][] = [];
+  const stop = effect(() => {
+    seen.push(D.tabs.value.map((t) => `${t.path} ${t.kind}`));
+  });
+  await A.renameEntry("w.dta", "w.csv");
+  stop();
+  assert.ok(!seen.some((tabs) => tabs.includes("w.csv dta")), JSON.stringify(seen));
+  assert.deepEqual(seen.at(-1), ["v.dta dta", "w.csv text"]);
+  assert.equal(D.activeTab.value, "w.csv");
+});
+
+test("rename to a text name: a file that is not text closes its tab with the not-text banner; one the store cannot give closes it with none", async () => {
+  await reset({ "a.do": "1", "v.dta": Uint8Array.from([0xff, 0xfe, 0x00]), "w.dta": "x" });
+  for (const p of ["a.do", "v.dta", "w.dta"]) await openFile(p);
+  await A.renameEntry("v.dta", "v.csv");
+  assert.deepEqual(
+    D.tabs.value.map((t) => t.path),
+    ["a.do", "w.dta"],
+  );
+  assert.deepEqual(S.banners.value, [{ b: "not-text", path: "v.csv" }]);
+  S.dismiss(S.banners.value[0]);
+  const read = store.read;
+  store.read = async (path) => {
+    if (path === "w.csv") throw new Error("the store failed");
+    return read.call(store, path);
+  };
+  try {
+    await A.renameEntry("w.dta", "w.csv");
+  } finally {
+    store.read = read;
+  }
+  assert.deepEqual(
+    D.tabs.value.map((t) => t.path),
+    ["a.do"],
+  );
+  assert.deepEqual(S.banners.value, []);
+});

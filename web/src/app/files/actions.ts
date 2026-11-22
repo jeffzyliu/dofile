@@ -1,7 +1,7 @@
 // What the file panel and the editor's tabs do to files and tabs (docs/design/SPEC.md, sections 3.1, 3.2 and 3.10), in
 // plain TypeScript so the Node tests run it. Files change through the store (app/store.ts), which lists itself again
 // (files.ts). The tabs and their documents are editor/documents.ts's.
-import { effect } from "@preact/signals-core";
+import { batch, effect } from "@preact/signals-core";
 import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
 import { close, closeUnder, moved, reload, retype, tabs } from "../editor/documents.ts";
@@ -37,13 +37,34 @@ async function renameNow(from: string, to: string) {
   for (const b of banners.value)
     if (b.b === "reset" && b.run?.path !== undefined && within(b.run.path, from))
       addBanner({ ...b, run: { ...b.run, path: movedPath(b.run.path, from, to) } });
-  for (const p of moved(from, to)) {
-    const kind = kindOf(p);
-    if (!retypes(p, kind)) continue;
-    if (kind === null) close(p);
-    else if (kind === "dta") retype(p);
-    else await retypeAsText(p);
+  // the tabs that become text tabs are read first, so no tab shows its new name as the wrong kind meanwhile
+  const reads = new Map<string, string | null | Error>(); // new path: its text, null when not text, or why unread
+  for (const t of tabs.value.filter((t) => within(t.path, from))) {
+    const p = movedPath(t.path, from, to);
+    if (kindOf(p) === "text" && retypes(t.path, "text")) reads.set(p, await readText(p));
   }
+  // one batch: the tabs are seen moved and retyped together
+  batch(() => {
+    for (const p of moved(from, to)) {
+      const kind = kindOf(p);
+      if (!retypes(p, kind)) continue; // closed, or edited, meanwhile
+      if (kind === null) close(p);
+      else if (kind === "dta") retype(p);
+      else {
+        const text = reads.get(p);
+        if (text === undefined) continue; // opened as a .dta tab under its old name during the reads: left as it is
+        if (text instanceof Error) {
+          // a file the store cannot give opens nothing, as openFile would
+          console.warn(`[dofile] open ${p}: ${text.message}`);
+          close(p);
+          continue;
+        }
+        noteNotText(p, text);
+        if (text === null) close(p);
+        else retype(p, text);
+      }
+    }
+  });
 }
 
 /** Whether the tab `path` is open, has no unsaved edits, and opens as another `kind` than it does. */
@@ -52,22 +73,13 @@ const retypes = (path: string, kind: "text" | "dta" | null) => {
   return !!tab && !tab.dirty && tab.kind !== kind;
 };
 
-/** The tab `path` becomes a text tab of the store's text, in the rename's turn; a file that is not text (or that the
- *  store cannot give) closes it, as opening it would show nothing. */
-async function retypeAsText(path: string) {
-  let bytes: Uint8Array;
+/** The store's copy of `path` as the editor takes it (decodeText, BOM kept): null when it is not text. */
+async function readText(path: string): Promise<string | null | Error> {
   try {
-    bytes = await store.read(path);
+    return decodeText(await store.read(path), true);
   } catch (e) {
-    console.warn(`[dofile] open ${path}: ${(e as Error)?.message ?? e}`);
-    if (retypes(path, "text")) close(path);
-    return;
+    return e instanceof Error ? e : new Error(String(e));
   }
-  if (!retypes(path, "text")) return; // closed meanwhile
-  const text = decodeText(bytes, true);
-  noteNotText(path, text);
-  if (text === null) close(path);
-  else retype(path, text);
 }
 
 /** What a new file or folder is called when the name field is left empty or unchanged. */
