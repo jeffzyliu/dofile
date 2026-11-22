@@ -125,6 +125,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `app-theme-tabs.test.ts`: the theme button and `applyTheme`; `setDirty`; strict UTF-8 (`decodeText`).
 - `app-dta.test.ts`: `readDta` (`app/output/dta.ts`): one describe_file per .dta file and version, even when its tab is mounted again
   while the first is pending; a failed call is asked again.
+- `app-matrix.test.ts`: the Results tab's matrix protocol (`app/output/matrix.ts`): a read's loading entry and answer, an error,
+  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; Copy of an open and a
+  closed matrix; the copied check's timer.
 - `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
 - `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
   real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
