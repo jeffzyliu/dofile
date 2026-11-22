@@ -70,9 +70,9 @@ function ProgressDialog() {
   };
   const stages = stagesOf(snapshotStart);
   const pct = st.s === "downloading" && st.total ? Math.min(100, (100 * st.received) / st.total) : null;
-  const current: Stage | null = st.s === "downloading" ? "download" : busy ? (st as { stage: Stage }).stage : null;
+  const current: Stage | null = st.s === "downloading" ? "download" : busy ? st.stage : null;
   const done = engineLoading(st) ? st.done : {};
-  const elapsed = busy ? Math.max(0, (now - (st as { t0: number }).t0) / 1000) : 0;
+  const elapsed = busy ? Math.max(0, (now - st.t0) / 1000) : 0;
   const stepNo = current ? stages.indexOf(current) + 1 : 0;
   // the graphics part is not in the bar (it follows the start): said under it
   const part = graphicsPart.value,

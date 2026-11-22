@@ -55,6 +55,60 @@ export type RowName = State["s"];
 /** One member of State, by its tag. */
 export type StateOf<R extends RowName> = Extract<State, { s: R }>;
 
+// ---- groups: rows by what they mean (SPEC section 5) ----
+// Each group is written once, as an object whose keys are its states: a misspelled name does not compile, and the
+// group's type is read off the keys. A bigger group spreads the smaller ones it contains. Views ask the guards made from
+// these in app/states/predicates.ts, never the names.
+
+/** A run is on: running, or Break asked for and not yet over. */
+export const RUN_ON = { running: true, breaking: true, waiting: true } satisfies Partial<Record<RowName, true>>;
+export type RunOn = keyof typeof RUN_ON;
+/** Break was asked for: the countdown, or the reset offered once it ran out. */
+export const BREAK_ASKED = { breaking: true, waiting: true } satisfies Partial<Record<RowName, true>>;
+/** An engine exists: it can be reset, and the graphics part is fetched for it. */
+export const UP = { ready: true, ...RUN_ON } satisfies Partial<Record<RowName, true>>;
+/** The start has the engine's files and a worker (no download left). */
+export const LOADING = { "starting-list": true, "starting-worker": true } satisfies Partial<Record<RowName, true>>;
+/** The engine is on its way: the download, or one of the two stages after it. */
+export const STARTING = { downloading: true, ...LOADING } satisfies Partial<Record<RowName, true>>;
+export type Starting = keyof typeof STARTING;
+/** A worker is there, or on its way, to answer a read (the client queues a call while the worker starts). */
+export const WORKER_LIVE = { "starting-worker": true, ...UP } satisfies Partial<Record<RowName, true>>;
+export type WorkerLive = keyof typeof WORKER_LIVE;
+/** Another tab holds the engine. */
+export const OTHER_TAB = { "other-tab-idle": true, "other-tab-taking": true } satisfies Partial<Record<RowName, true>>;
+export type OtherTab = keyof typeof OTHER_TAB;
+
+/**
+ * A type guard for "this state is in the group": `member(RUN_ON)(st)` is true when `st.s` is a key of RUN_ON, and
+ * narrows `st` to the members of its union that have those names (so their fields, such as `run` or `worker`, can be
+ * read in the branch).
+ *
+ * It is generic twice, on purpose:
+ * - `G`, the group's state names, is read off the key object passed in: `member(RUN_ON)` has G = "running" | "breaking"
+ *   | "waiting", so the group is written once and nowhere else.
+ * - `S`, the state union of whoever calls the guard, is read off the argument. The machine calls it on its `State`
+ *   (with tickets), a view on its `EngineState` (without); `Extract<S, { s: G }>` keeps the caller's own fields.
+ *
+ * Why a factory, and not a hand-written `st is Named<"running" | "breaking">` beside a check against a table: the
+ * annotation and the check are two statements of the same group, they compile when they disagree, and no test catches
+ * the day they do. Here the check and the type come from one object.
+ *
+ * @example
+ * const runOn = member(RUN_ON); // once, e.g. in predicates.ts
+ * if (runOn(st)) st.run; // st: the running | breaking | waiting members of its union
+ * @param group - a key object of the groups above (each value `true`)
+ * @returns a guard on any state union whose `s` is a state name
+ */
+export const member =
+  <G extends RowName>(group: Record<G, true>) =>
+  <S extends { s: RowName }>(st: S): st is Extract<S, { s: G }> =>
+    st.s in group;
+
+/** Whether the row of `s` has a cell for an event of this type: the event is valid there. A control that exists to send
+ *  an event asks this, rather than spell the states that take it. */
+export const accepts = (s: RowName, type: Event["type"]): boolean => TABLE[s][type] !== undefined;
+
 export interface Machine {
   readonly env: Env;
   readonly state: State;
@@ -272,6 +326,9 @@ export function initial(env: Env): Step {
 type In<R extends RowName> = Machine & { state: StateOf<R> };
 export type EventOf<T extends Event["type"]> = Extract<Event, { type: T }>;
 
+const runOn = member(RUN_ON);
+const workerLive = member(WORKER_LIVE);
+
 const step = (machine: Machine, effects: Effect[] = []): Step => ({ machine, effects, outcome: "taken" });
 const same = (machine: Machine, outcome: "stale" | "not-valid"): Step => ({ machine, effects: [], outcome });
 const firstStage = (env: Env): Stage => (env.snapshot ? "download" : "python");
@@ -328,7 +385,7 @@ function BREAK(m: In<"running">, at: number): Step {
 }
 
 /** END(result): the run ended and the worker stays; the result is passed on whatever its rc. */
-function END(m: In<"running" | "breaking" | "waiting">, result: RunResult): Step {
+function END(m: In<RunOn>, result: RunResult): Step {
   const effects: Effect[] = [];
   if (m.state.s === "breaking") effects.push({ do: "cancel-break-timer" });
   effects.push({ do: "end-run", result });
@@ -336,7 +393,7 @@ function END(m: In<"running" | "breaking" | "waiting">, result: RunResult): Step
 }
 
 /** FAIL: the download, the list or the start failed. The crash count stays. */
-function FAIL(m: In<"downloading" | "starting-list" | "starting-worker">, reason: FailReason, detail: string): Step {
+function FAIL(m: In<Starting>, reason: FailReason, detail: string): Step {
   const effects: Effect[] = [];
   if (m.state.s === "starting-worker")
     effects.push({ do: "end-worker", n: m.state.worker, ending: { kind: "failed", reason: detail } });
@@ -364,13 +421,7 @@ function TWICE(m: In<"starting-worker">, reason: FailReason, cause: string): Ste
 
 /** RESET: the worker is ended and a new start begins with the build's list, fetched fresh. A run in progress ends with
  *  rc 9998, as the last effect. The banner and "Engine reset" only when the engine being replaced had been ready. */
-function RESET(
-  m: In<"starting-worker" | "ready" | "running" | "breaking" | "waiting">,
-  kind: ResetKind,
-  reason: string,
-  at: number,
-  cause: CrashCause | null,
-): Step {
+function RESET(m: In<WorkerLive>, kind: ResetKind, reason: string, at: number, cause: CrashCause | null): Step {
   const old = m.state,
     next = issue(m),
     effects: Effect[] = [];
@@ -385,8 +436,7 @@ function RESET(
       { do: "say", line: "reset" },
       { do: "engine-gone" },
     );
-  if (old.s === "running" || old.s === "breaking" || old.s === "waiting")
-    effects.push({ do: "end-run", result: cutResult(lost(reason), kind) });
+  if (runOn(old)) effects.push({ do: "end-run", result: cutResult(lost(reason), kind) });
   return step(
     {
       ...m,
@@ -399,18 +449,12 @@ function RESET(
 }
 
 /** LOST: another tab took the tab lock. Whatever this tab was doing ends. */
-function LOST(m: In<Exclude<RowName, "other-tab-idle" | "other-tab-taking">>): Step {
+function LOST(m: In<Exclude<RowName, OtherTab>>): Step {
   const old = m.state,
     effects: Effect[] = [];
   if (old.s === "downloading") effects.push({ do: "abort-download", n: old.download });
   if (old.s === "breaking") effects.push({ do: "cancel-break-timer" });
-  if (
-    old.s === "starting-worker" ||
-    old.s === "ready" ||
-    old.s === "running" ||
-    old.s === "breaking" ||
-    old.s === "waiting"
-  ) {
+  if (workerLive(old)) {
     effects.push({
       do: "end-worker",
       n: old.worker,
@@ -418,9 +462,7 @@ function LOST(m: In<Exclude<RowName, "other-tab-idle" | "other-tab-taking">>): S
     });
   }
   effects.push({ do: "block-store" }, { do: "engine-gone" }, { do: "show-dialog", dialog: "other-tab" });
-  if (old.s === "running" || old.s === "breaking" || old.s === "waiting") {
-    effects.push({ do: "end-run", result: cutResult(lost("another tab took over"), "stopped") });
-  }
+  if (runOn(old)) effects.push({ do: "end-run", result: cutResult(lost("another tab took over"), "stopped") });
   return step({ ...m, crashes: 0, state: { s: "other-tab-idle" } }, effects);
 }
 

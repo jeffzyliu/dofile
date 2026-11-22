@@ -138,6 +138,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
   - Start engine's event `ask` in each state.
+  - SPEC section 5's states x groups table matching the groups in `machine.ts`.
 - `files-ui.test.ts`: the file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb.
   - The tree and the current folder; opening each kind of file (SPEC 3.11), closing, renaming, deleting with open tabs.
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.

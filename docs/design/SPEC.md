@@ -413,6 +413,32 @@ In the Run column "disabled" is the look and the role, not the attribute: Run is
 focusable (section 3.4).
 
 
+### States and groups
+
+The states are also grouped by what they mean. Each group is written once, as a key object in `machine.ts` (`UP`,
+`RUN_ON`, `BREAK_ASKED`, `STARTING`, `LOADING`, `WORKER_LIVE`, `OTHER_TAB`); the views ask the guards made from them in
+`app/states/predicates.ts`. `x` marks a state in the group. A new state is an unmarked row here until its groups are decided;
+`test/machine.test.ts` compares this table with the code.
+
+| State | `UP` | `RUN_ON` | `BREAK_ASKED` | `STARTING` | `LOADING` | `WORKER_LIVE` | `OTHER_TAB` |
+|---|---|---|---|---|---|---|---|
+| `checking-lock` | · | · | · | · | · | · | · |
+| `checking-cache` | · | · | · | · | · | · | · |
+| `none` | · | · | · | · | · | · | · |
+| `asking` | · | · | · | · | · | · | · |
+| `declined` | · | · | · | · | · | · | · |
+| `downloading` | · | · | · | x | · | · | · |
+| `starting-list` | · | · | · | x | x | · | · |
+| `starting-worker` | · | · | · | x | x | x | · |
+| `ready` | x | · | · | · | · | x | · |
+| `running` | x | x | · | · | · | x | · |
+| `breaking` | x | x | x | · | · | x | · |
+| `waiting` | x | x | x | · | · | x | · |
+| `failed` | · | · | · | · | · | · | · |
+| `failed-twice` | · | · | · | · | · | · | · |
+| `other-tab-idle` | · | · | · | · | · | · | x |
+| `other-tab-taking` | · | · | · | · | · | · | x |
+
 ### Transition matrix
 
 What each event does in each state: the state it leads to. The machine's function `transition(machine, event)` is pure and

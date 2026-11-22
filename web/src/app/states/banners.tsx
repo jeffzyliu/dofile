@@ -11,10 +11,11 @@ import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
 import { dismiss, engine, engineBytes, hasFiles, isolated, tabs } from "../state.ts";
-import type { BannerOf, EngineState } from "../types.ts";
+import type { BannerOf, EngineStateOf } from "../types.ts";
 import { useFocusOnMount } from "../ui/focus-hooks.ts";
 import { Banner } from "../ui/Live";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
+import { takesRun } from "./predicates.ts";
 import {
   FAILED_HEAD,
   FILES_SAFE,
@@ -189,7 +190,7 @@ function KeepWaitingButton() {
 
 /** `breaking`, from the press until the engine confirms (the run ends, or a reset). Its button and the focus come after
  *  STOPPING_AFTER_S, so a Break that lands at once flashes no button. */
-function StoppingBanner({ st }: { st: Extract<EngineState, { s: "breaking" }> }) {
+function StoppingBanner({ st }: { st: EngineStateOf<"breaking"> }) {
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (
     <Banner kind="warn" bannerRef={ref} actions={breakPending(st) >= STOPPING_AFTER_S && <KeepWaitingButton />}>
@@ -221,7 +222,7 @@ export function LogStateBanners() {
 export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
   const w = resetWords(banner.kind, banner.cause, banner.reason, isolated.value);
   const path = rerunPath(banner.kind, banner.run);
-  const canRun = engine.value.s === "ready" && tabs.value.some((t) => t.path === path && t.kind === "text");
+  const canRun = takesRun(engine.value) && tabs.value.some((t) => t.path === path && t.kind === "text");
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (
     <Banner

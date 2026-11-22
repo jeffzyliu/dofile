@@ -69,11 +69,14 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   counterpart in `App.tsx`, and components read `isPhone` rather than take a `phone` prop. Toolbar buttons share one
   height (`--control` in `tokens.css`), a pane head's controls another (`--control-sm`).
 - **One state machine decides the engine's state: `src/engine/machine.ts`.** `transition(machine, event)` is pure (type
-  imports only, no clock, timer, console or top-level variable; the time comes in the event) and returns the next state
+  imports only, no clock, timer, console or top-level `let`/`var`; the time comes in the event) and returns the next state
   and the effects. Its state names are the `engine` signal's, `<html data-engine>`'s and SPEC section 5's. **Nothing
   outside it decides a state**: no counter, flag or comparison of state names in the transport or the controllers, and
-  a view asks `src/app/states/predicates.ts` (`engineUp`, `runOn`, ...) rather than spell a set of names. To add a
-  state, event or effect, change its tables; the compiler and
+  a view asks `src/app/states/predicates.ts` (`engineUp`, `runOn`, `takesRun`, ...) rather than spell or compare names.
+  The groups are written once in `machine.ts` (key objects such as `RUN_ON`; `member()` makes a type guard from one);
+  `predicates.ts` is one `member(...)` line per group, and with `app/engine.ts` the only place in `src/app/` that imports
+  machine values. A control that exists to send an event asks `accepts(state, type)` (`takesRun`). To add a
+  state, event or effect, change its tables (and place the state in SPEC section 5's states x groups table); the compiler and
   `test/machine.test.ts` then say what else must follow. After a change to a cell, run
   `PRINT_SPEC_MATRIX=1 node --test test/machine.test.ts` and paste the tables into SPEC section 5 (a test compares them).
 - **Who constructs, who connects, who decides.** Only `src/main.tsx` makes the transport (`EngineClient`,
@@ -96,7 +99,7 @@ npm run sample            # the sample's data and src/app/sample-files.ts
   the Worker is posted to only in `#send`; no `.focus()` and no store write (`write`, `mkdir`, `rename`, `remove`, `change`, `applyRun`) inside a `setTimeout` or `setInterval` callback in `src/app/` (a timer's late move is the one `settle` in `e2e/fixtures.ts` cannot see; a `requestAnimationFrame` or microtask is allowed; a callback that only calls a function which focuses is not seen); no cast to `any` or `never` in `src/`; an `aria-disabled` or `.pill` button
   in `editor/` or `log/` has `onKeyDown={ignoreHeldEnter}`. `test/signals.types.ts` (compile-time, in `npm run check`):
   the writable signals `state.ts` exports are the views' own. `test/cycles.test.ts`: no import cycle in `src/` (type imports count: a type a view needs lives in `src/app/types.ts`, not in a registry). `test/imports.test.ts` holds the rest: no view reaches the
-  transport through value imports (transitive); `machine.ts` has two casts and no top-level variable, and the cast to
+  transport through value imports (transitive); `machine.ts` has two casts and no top-level `let` or `var`, and the cast to
   `Ticket` occurs once in `web/`; the transport names no state, `run.ts` subscribes to nothing, no CSS reads `data-engine` and no `.tsx` spells a set
   of state names; the pages' HTML and CSS stay apart from the editor's; every `:hover` rule is inside `(hover: hover)`. Tests that read source text must not
   depend on how a line is wrapped.
