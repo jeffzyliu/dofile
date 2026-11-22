@@ -917,6 +917,55 @@ test("an upload's Replace of a file whose opening reads the store: the tab ends 
   assert.equal(D.tabs.value.find((t) => t.path === "a.do")?.dirty, false);
 });
 
+test("a clash whose file left the store while its tab kept unsaved edits is asked in the unsaved words, with no Yours part, even after Do the same with Replace; Keep mine keeps the edits", async () => {
+  await reset({ "a.do": "old a", "b.do": "old b" });
+  await openFile("b.do");
+  edit("b.do");
+  const done = A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  await until(() => clashOf() === "a.do", "a is asked");
+  await store.remove("b.do"); // as a run's erase b.do does: the dirty tab stays (files.ts afterRun)
+  give({ replace: true, same: true });
+  await until(() => clashOf() === "b.do", "b is asked, not written or tried again without end");
+  assert.equal(A.clashNow()?.unsaved, true);
+  assert.equal(A.clashNow()?.yours, null);
+  give({ replace: false, same: false });
+  assert.deepEqual(await done, ["a.do"]);
+  assert.deepEqual(
+    (await store.list()).map((f) => f.path),
+    ["a.do"],
+  );
+  assert.equal(D.textOf("b.do"), "edited old b");
+});
+
+test("a clash waits again for a dialog opened while its file was read: it never replaces one", async () => {
+  await reset({ "a.do": "old a", "b.do": "old b" });
+  const done = A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  await until(() => clashOf() === "a.do", "a is asked");
+  const { read } = store;
+  let release = () => {};
+  const held = new Promise<Uint8Array<ArrayBuffer>>((ok) => {
+    release = () => ok(new Uint8Array(0));
+  });
+  store.read = (path) => (path === "held" ? held : read.call(store, path));
+  fileTurn(function* (io) {
+    yield* io.read("held"); // b.do's read of its file waits behind this turn
+  });
+  try {
+    give({ replace: false, same: false });
+    await sleep(10);
+    S.dialog.value = { d: "delete", paths: ["x.do"] };
+    release();
+    await sleep(30);
+    assert.deepEqual(S.dialog.value, { d: "delete", paths: ["x.do"] }, "the other dialog stays");
+  } finally {
+    store.read = read;
+  }
+  S.dialog.value = null;
+  await until(() => clashOf() === "b.do", "b is asked once it has closed");
+  give("stop");
+  assert.deepEqual(await done, []);
+});
+
 // ---- actions.ts: a rename that changes how the file opens ----
 
 test("rename: a .dta tab renamed to .csv opens again as text in its place; an unsaved text tab renamed to .dta stays text", async () => {

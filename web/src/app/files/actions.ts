@@ -197,7 +197,7 @@ export type WordsOf = keyof typeof WORDS;
 /** What the open clash dialog shows beyond the `dialog` value. */
 export interface ClashNow {
   path: string;
-  yours: { size: number; mtime: number };
+  yours: { size: number; mtime: number } | null; // null: the store has no such file now (its tab has unsaved edits)
   uploaded: number; // its size
   others: number; // the files of the upload that clashed with none, or with a file of the same bytes (in place)
   left: number; // the clashes after this one
@@ -300,6 +300,7 @@ async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
     let expect: Expect | undefined = sticky ? (decided.get(it.path) ?? "absent") : undefined;
     let changed = false; // it changed while its dialog was open: asked again
     let warned = false; // asked with the unsaved words
+    let tries = 0; // writes tried since the last question: every retry asks first, so more than 3 is a bug
     for (;;) {
       // an open file with unsaved edits is asked before "Do the same" replaces it; keeping it (Esc, Keep mine for the
       // rest) needs no question
@@ -307,15 +308,18 @@ async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
       if (changed || replace === null || (replace === true && unsaved && !warned)) {
         while (dialog.value !== null) await noDialog(); // never over another dialog
         const mine = await fileTurn((io) => io.info(it.path)); // as it is now, not as the upload first listed it
-        if (mine === null) {
+        if (dialog.value !== null) continue; // another dialog opened while the file was read: wait for it too
+        if (mine === null && !unsaved) {
           replace = true; // deleted meanwhile: written without asking, as a free path
           expect = "absent";
         } else {
-          expect = mine;
+          // a file deleted meanwhile whose tab has unsaved edits is asked, in the unsaved words
+          expect = mine ?? "absent";
           warned = unsaved;
+          tries = 0;
           const a = await ask(it, i, clashes.length, {
             path: it.path,
-            yours: { size: mine.size, mtime: mine.mtime },
+            yours: mine && { size: mine.size, mtime: mine.mtime },
             uploaded: it.data.byteLength,
             others,
             left: clashes.length - i - 1,
@@ -340,6 +344,11 @@ async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
         }
       }
       if (!replace) break;
+      if (++tries > 3) {
+        failed++;
+        console.warn(`[dofile] upload ${it.path}: tried again without an answer`);
+        break;
+      }
       const done = await fileTurn(function* (io) {
         if (openUnsaved(it.path) && !warned) return "unsaved"; // edited since: asked in the unsaved words
         return yield* put(io, it, expect, true);
