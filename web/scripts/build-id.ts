@@ -2,7 +2,8 @@
 // it is built from) and the list (start-files.json carries the id of what the snapshot was built from). The client
 // compares them (checkBuild). One stamp per `vite build` is given to both.
 // `node scripts/build-id.ts [--warn]` exits 0 when public/snapshot/ is of this checkout's wheels and Pyodide, else 1
-// with the reason (`--warn` prefixes "warning: ", for `npm run dev`, which starts anyway). Imported by the tests, so .ts.
+// with the reason (SNAPSHOT_QUALITY and the other SNAPSHOT_ settings, when set, must be what the snapshot was built with;
+// `--warn` prefixes "warning: ", for `npm run dev`, which starts anyway). Imported by the tests, so .ts.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -16,6 +17,44 @@ export interface BuildInputs {
   wheelHash: string;
   extraWheels: Record<string, string>;
   pyodide: string;
+}
+
+/** The settings that shape a snapshot beyond its inputs (scripts/make-snapshot.ts), recorded in its manifest. `optimize`:
+ *  PYTHONOPTIMIZE (2 strips docstrings and asserts), `quality`: Brotli's, `noMpl`: matplotlib left out of the heap (the lazy
+ *  graphics part), `trampoline`: Pyodide's own choice kept (not patched out). */
+export interface SnapshotKnobs {
+  quality: number;
+  optimize: 0 | 2;
+  noMpl: boolean;
+  trampoline: boolean;
+}
+
+const KNOB_ENV: {
+  [K in keyof SnapshotKnobs]: [name: string, parse: (v: string) => SnapshotKnobs[K], fallback: SnapshotKnobs[K]];
+} = {
+  quality: ["SNAPSHOT_QUALITY", Number, 11],
+  optimize: ["SNAPSHOT_STRIP_DOCS", (v) => (v === "0" ? 0 : 2), 2],
+  noMpl: ["SNAPSHOT_NO_MPL", (v) => v !== "0", true],
+  trampoline: ["SNAPSHOT_TRAMPOLINE", (v) => v === "1", false],
+};
+
+/** The settings a snapshot build reads from the environment, with their defaults: what make-snapshot.ts builds with. */
+export function knobs(env: NodeJS.ProcessEnv = process.env): SnapshotKnobs {
+  const out: Record<string, unknown> = {};
+  for (const [k, [name, parse, fallback]] of Object.entries(KNOB_ENV)) {
+    const v = env[name];
+    out[k] = v === undefined ? fallback : (parse as (v: string) => unknown)(v);
+  }
+  return out as unknown as SnapshotKnobs;
+}
+
+/** Only the settings the caller's environment sets (SNAPSHOT_QUALITY=11 asks for quality 11): what a check holds a
+ *  snapshot to. One that is not set is not asked: CI builds at quality 5 and must pass. */
+export function askedKnobs(env: NodeJS.ProcessEnv = process.env): Partial<SnapshotKnobs> {
+  const out: Record<string, unknown> = {};
+  for (const [k, [name, parse]] of Object.entries(KNOB_ENV))
+    if (env[name] !== undefined) out[k] = (parse as (v: string) => unknown)(env[name]);
+  return out as Partial<SnapshotKnobs>;
 }
 
 const web = new URL("..", import.meta.url);
@@ -63,8 +102,13 @@ export function buildId(
     .digest("hex");
 }
 
-/** Why the snapshot whose manifest is `record` is not of `current`, with what to run; null: it is. */
-export function staleness(record: Partial<BuildInputs>, current: BuildInputs): string | null {
+/** Why the snapshot whose manifest is `record` is not of `current`, with what to run; null: it is. `asked`: settings the
+ *  caller wants it built with (`askedKnobs()`): each is compared with the record's, and only those; none asked, none checked. */
+export function staleness(
+  record: Partial<BuildInputs> & Partial<SnapshotKnobs>,
+  current: BuildInputs,
+  asked: Partial<SnapshotKnobs> = {},
+): string | null {
   const why: string[] = [];
   if (record.wheelHash !== current.wheelHash)
     why.push(
@@ -83,6 +127,9 @@ export function staleness(record: Partial<BuildInputs>, current: BuildInputs): s
   }
   if (record.pyodide !== current.pyodide)
     why.push(`the Pyodide version differs (snapshot ${record.pyodide}, build ${current.pyodide})`);
+  for (const k of Object.keys(asked) as (keyof SnapshotKnobs)[])
+    if (record[k] !== asked[k])
+      why.push(`the snapshot was built with ${k} ${record[k] ?? "(not recorded)"}, ${asked[k]} was asked for`);
   return why.length ? `the snapshot is stale: ${why.join("; ")}. Run \`npm run snapshot\` in web/` : null;
 }
 
@@ -93,7 +140,9 @@ export function readManifest(dir: string = snapshotDir): SnapshotManifest | null
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const record = readManifest();
-  const why = record ? staleness(record, inputs()) : `no snapshot in ${snapshotDir}. Run \`npm run snapshot\` in web/`;
+  const why = record
+    ? staleness(record, inputs(), askedKnobs())
+    : `no snapshot in ${snapshotDir}. Run \`npm run snapshot\` in web/`;
   if (why) {
     console.log(process.argv.includes("--warn") ? `warning: ${why}` : why); // --warn: `npm run dev`, which starts anyway
     process.exit(1);

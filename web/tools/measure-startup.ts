@@ -4,7 +4,7 @@
 // `npm run build:local` after `npm run snapshot`), the network throttled through the DevTools protocol. Writes
 // docs/img/startup-times.json, which docs/img/make-startup-times.mjs draws.
 //
-//   node scripts/measure-startup.ts [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
+//   node tools/measure-startup.ts [--reps 3] [--nets unthrottled,100,30] [--modes normal,snapshot] [--out FILE]
 //                                    [--first-run display,graph] [--during-import display,graph] [--import-delay-ms 100]
 //                                    [--first-run-delay-ms 0] [--engine chromium|webkit|firefox]
 //
@@ -36,8 +36,8 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
 import { type BrowserContext, type BrowserType, chromium, firefox, type Page, webkit } from "@playwright/test";
-import { arg } from "./lib/args.ts";
-import { EDITOR_BASE, EDITOR_OUT } from "./urls.ts";
+import { arg } from "../scripts/lib/args.ts";
+import { EDITOR_BASE, EDITOR_OUT } from "../scripts/urls.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const dist = join(here, "..", EDITOR_OUT); // the editor's folder, served at the root of its own origin (EDITOR_BASE)

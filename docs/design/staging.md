@@ -52,7 +52,7 @@ current inputs. Wheel = a wheel in the root `dist/` (`npm run wheel`, `package.j
 | `cf:dev` | `snapshot`, `build` with two localhost addresses, two `wrangler dev` | as `build` (S at quality 11: the quality-5 heap is refused by wrangler) | as `build` | `wheel` twice; wrangler reads `dist/` only |
 | `deploy` | `lint:strict`, `snapshot`, `DOFILE_URLS=production npm run build`, `check-sizes.ts`, two `wrangler deploy` | as `build` | as `build` | `wheel` twice. A hand-made twin of build-web: no workflow runs it |
 | `commands`, `sample`, `check`, `lint*`, `format`, `axe`... | | nothing | `src/` generated files | out of scope |
-| `check-sizes.ts`, `smoke.ts`, `measure-startup.ts` | | the built `dist/` (or the network) | none | read no staged file |
+| `check-sizes.ts`, `smoke.ts`, `tools/measure-startup.ts` | | the built `dist/` (or the network) | none | read no staged file |
 
 **Workflows and the action:**
 

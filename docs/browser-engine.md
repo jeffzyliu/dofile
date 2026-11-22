@@ -32,7 +32,7 @@ snapshot start gives the same result (95 of 97 in about 150 s;
 [pyodide-snapshot.md](pyodide-snapshot.md#correctness-checks)).
 
 **The unit tests in Pyodide** (`npm run check-pytest`; one process per file, 72 files, 128 s; compared with CPython test by
-test by `compare-pytest.ts`): OpenDTA's suite and `tests/test_engine.py`, 1080 tests. CPython: 1067 passed, 13 skipped.
+test by `web/tools/compare-pytest.ts`): OpenDTA's suite and `tests/test_engine.py`, 1080 tests. CPython: 1067 passed, 13 skipped.
 Pyodide with the packages and no pandas: 1060 passed, 24 skipped (11 for pandas), 1 failed (`shell` cannot start a process
 in the browser); with pandas, 1067 / 13 / 1, the same as CPython. No difference is an engine problem.
 Not run in Pyodide because they need subprocesses, the `mcp` package or the source tree: `test_mcp`, `test_worker`,

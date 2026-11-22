@@ -6,7 +6,7 @@
 //
 // Each test file runs in its own process and writes DIR/<file>.json (see pytest_report.py). The CPython baseline is
 //   uv run python web/scripts/pytest_report.py OUT.json FILE -q -p no:cacheprovider
-// and `node scripts/compare-pytest.ts BASELINE_DIR DIR` lists the differences.
+// and `node tools/compare-pytest.ts BASELINE_DIR DIR` lists the differences.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";

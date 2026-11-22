@@ -151,7 +151,7 @@ Node, local files (one run of each, same machine):
 The demo's 1.31 s: read 0.02 s, **decompress 0.70 s**, start the wasm module 0.05 s, write site-packages 0.08 s,
 **re-link 136 libraries 0.42 s**, copy the heap 0.04 s. After a restore the first program runs in 0.04–0.18 s.
 
-In the browser (2026-11-07, `web/scripts/measure-startup.ts`, the 39.9 MB build, Chromium 158, the built page, the
+In the browser (2026-11-07, `web/tools/measure-startup.ts`, the 39.9 MB build, Chromium 158, the built page, the
 network throttled through the DevTools protocol): the harness writes `docs/img/startup-times.json` and
 `docs/img/make-startup-times.mjs` draws the chart. It serves the page like a real host (brotli 5 for text and wasm, long
 caching for hashed assets, the isolation headers, the `.bin` files as they are); Pyodide's runtime and packages come
@@ -188,7 +188,7 @@ For legacy `.xls` and for SAS transport, SPSS and Stata 7 and older `.dta` files
 holds one we compiled (`web/wheels/README.md`). The snapshot holds all of them. Pandas is **not** installed: only
 `export sasxport` needs it.
 
-Four builds, measured the same day on one machine (`measure-startup.ts`, 2 reps, Chromium; the 11-07 column is the
+Four builds, measured the same day on one machine (`tools/measure-startup.ts`, 2 reps, Chromium; the 11-07 column is the
 table above, 3 reps). Times are cold / warm. The unthrottled normal-boot times swing by seconds (the CDN), so compare the
 30 Mbps rows.
 
