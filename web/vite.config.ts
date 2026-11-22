@@ -19,7 +19,6 @@ import {
   DEV_EDITOR_PORT,
   DEV_SITE_PORT,
   devURL,
-  EDITOR_BASE,
   EDITOR_OUT,
   EDITOR_URL,
   PRODUCTION,
@@ -30,7 +29,7 @@ import {
 import commandData from "./src/stata/commands.json" with { type: "json" };
 
 // Two builds make the site (`npm run build`), and two dev servers serve it (docs/design/SPEC.md, section 8, "URLs"):
-//  - the editor (`vite build`): a single-page app at the root of its own origin (EDITOR_BASE "/", scripts/urls.ts), built
+//  - the editor (`vite build`): a single-page app at the root of its own origin (scripts/urls.ts), built
 //    into dist/app/ (EDITOR_OUT, or `--outDir`) with its public/ files, start-files.json and _headers.
 //  - the landing and commands pages (`vite build --mode site`): static HTML at the root of another origin, in dist/site/
 //    (SITE_OUT, or `--outDir`). Built after the editor: they say its download size, read from its start-files.json
@@ -38,7 +37,7 @@ import commandData from "./src/stata/commands.json" with { type: "json" };
 //  - Both builds refuse to start unless the environment names the addresses they link each other by (scripts/urls.ts). A
 //    production build gives each page a canonical link; any other build writes `X-Robots-Tag: noindex` into _headers.
 //  - `vite` (dev) serves the editor on DEV_EDITOR_PORT; `vite --mode site` the pages on DEV_SITE_PORT (`npm run dev` starts
-//    both). With EDITOR_BASE other than "/" the editor's server serves the two pages too.
+//    both).
 //  - `vite preview` serves the editor's folder, or with `--mode site` the pages'.
 
 // What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in .wheel/), the extra wheels
@@ -78,8 +77,6 @@ const publicDir = fileURLToPath(new URL("./public", import.meta.url)),
   editorSource = resolve(process.env.DOFILE_EDITOR_DIR ?? editorDefault);
 /** A build's output folder, as Vite resolved it (`build.outDir`, or `--outDir`). */
 const outDirOf = (config: { root: string; build: { outDir: string } }) => resolve(config.root, config.build.outDir);
-/** Whether the editor is on another origin than the static pages (EDITOR_URL a whole URL; none: a dev or preview server). */
-const editorElsewhere = EDITOR_URL === undefined || /^[a-z][a-z0-9+.-]*:/i.test(EDITOR_URL);
 let devList = { key: "", json: "" };
 function devStartFiles() {
   let key = "";
@@ -104,14 +101,12 @@ function devStartFiles() {
 // SharedArrayBuffer (the Break button) needs cross-origin isolation. The headers go on every response, 304s included:
 // WebKit refuses a worker script whose cached 304 reply lacks COEP. The static host must do the same (dist/app/_headers).
 // The dev server sends them everywhere (the checker's panel, a frame, needs them too); the editor's preview too; the
-// pages' preview, like their host, none (unless the editor is on their origin).
+// pages' preview, like their host, none.
 const isolate: Connect.NextHandleFunction = (_req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   next();
 };
-const isolateEditor: Connect.NextHandleFunction = (req, res, next) =>
-  (req.url ?? "").startsWith(EDITOR_BASE) ? isolate(req, res, next) : next();
 
 // A folder's other addresses go to the folder, the query kept, as the host does (Cloudflare's html_handling
 // "auto-trailing-slash", seen in `wrangler dev`): /commands, /commands.html and /commands/index.html to /commands/;
@@ -153,14 +148,14 @@ function editorList(): { download: number } {
 // A dev server's static pages: / and /commands/, filled and transformed as a build does, before Vite's own pages (so /
 // is never the editor's index.html). The editor's address comes from the request's Host header, so a phone on the LAN
 // gets the computer's. The pages' source files are not served as pages under `root`.
-const sitePagesDev = (root: string, editorURL: (host: string) => string): Plugin => ({
+const sitePagesDev = (editorURL: (host: string) => string): Plugin => ({
   name: "site-pages-dev",
   apply: "serve",
   configureServer(server) {
-    server.middlewares.use(slash(root, "/commands/"));
+    server.middlewares.use(slash("/", "/commands/"));
     server.middlewares.use(async (req, res, next) => {
       const path = new URL(req.url ?? "/", "http://x").pathname;
-      if (Object.keys(SITE_FILES).some((p) => path === `${root}${p}`)) {
+      if (Object.keys(SITE_FILES).some((p) => path === `/${p}`)) {
         res.statusCode = 404;
         return void res.end();
       }
@@ -210,7 +205,7 @@ const sitePages: Plugin = {
 };
 
 // The site's build: each page to the path it is served at, and the headers file. It refuses to write into the editor's own
-// folder: with the editor at the root of its origin, the landing page would take the place of the editor's index.html.
+// folder: the landing page would take the place of the editor's index.html.
 let siteOut = siteDir;
 const siteFiles: Plugin = {
   name: "site-files",
@@ -221,7 +216,7 @@ const siteFiles: Plugin = {
     const fromSite = relative(siteOut, editorSource);
     if (siteOut === editorSource || (fromSite && !fromSite.startsWith("..") && !isAbsolute(fromSite)))
       throw new Error(
-        `site: ${siteOut} is or holds the editor's folder ${editorSource} (EDITOR_BASE ${EDITOR_BASE}); its index.html is the editor's page. Build the ` +
+        `site: ${siteOut} is or holds the editor's folder ${editorSource} ; its index.html is the editor's page. Build the ` +
           "landing and commands pages into another folder (`vite build --mode site --outDir <folder>`), as their own site",
       );
   },
@@ -231,7 +226,7 @@ const siteFiles: Plugin = {
       mkdirSync(dirname(`${siteOut}/${served}`), { recursive: true });
       renameSync(`${siteOut}/${source}`, `${siteOut}/${served}`);
     }
-    const headers = headersFile(editorElsewhere ? null : EDITOR_BASE, !PRODUCTION);
+    const headers = headersFile(null, !PRODUCTION);
     if (headers) writeFileSync(`${siteOut}/_headers`, headers);
   },
 };
@@ -256,15 +251,14 @@ const site = (): UserConfig => ({
     },
   },
   plugins: [
-    sitePagesDev("/", (host) => devURL(host, DEV_EDITOR_PORT)),
+    sitePagesDev((host) => devURL(host, DEV_EDITOR_PORT)),
     sitePages,
     siteFiles,
     canonical,
     {
       name: "site-preview",
       configurePreviewServer: (server) => {
-        server.middlewares.use(slash("/commands/", ...(editorElsewhere ? [] : [EDITOR_BASE])));
-        if (!editorElsewhere) server.middlewares.use(isolateEditor); // else the pages' host sends no isolation: their _headers has none
+        server.middlewares.use(slash("/commands/"));
         // _headers is the host's setting, not a file of the site (the host does not serve it either)
         server.middlewares.use("/_headers", (_req, res) => {
           res.statusCode = 404;
@@ -280,7 +274,7 @@ let editorOut = editorDefault; // the editor's build folder, as resolved (config
 const editor = (dev: boolean): UserConfig => ({
   // No fallback to the editor for a path that is not a file: a missing page is a 404
   appType: "mpa",
-  base: EDITOR_BASE,
+  base: "/",
   server: {
     port: DEV_EDITOR_PORT, // the pages' dev server links here
     strictPort: true,
@@ -332,14 +326,13 @@ const editor = (dev: boolean): UserConfig => ({
       },
       overlay: { initialIsOpen: "error" },
     }),
-    ...(EDITOR_BASE === "/" ? [] : [sitePagesDev(EDITOR_BASE, (host) => `http://${host}${EDITOR_BASE}`)]),
     sitePages,
     canonical,
     {
       name: "start-files-dev",
       apply: "serve",
       configureServer: (server) => {
-        server.middlewares.use(`${EDITOR_BASE}start-files.json`, (_req, res) => {
+        server.middlewares.use("/start-files.json", (_req, res) => {
           res.setHeader("Content-Type", "application/json");
           res.end(devStartFiles());
         });
@@ -354,12 +347,10 @@ const editor = (dev: boolean): UserConfig => ({
       name: "start-files",
       apply: "build",
       // the editor's folder is complete: its files have their final names and sizes. An error here fails the build.
-      // An editor at the root of its own origin writes the host's headers file itself; under a path, the site's build
-      // writes it (site-pages.ts, headersFile).
       closeBundle(error?: Error) {
         if (error) return;
         writeStartFiles(editorOut, { stamp, inputs });
-        if (EDITOR_BASE === "/") writeFileSync(`${editorOut}/_headers`, headersFile("/", !PRODUCTION));
+        writeFileSync(`${editorOut}/_headers`, headersFile("/", !PRODUCTION));
       },
     },
   ],
@@ -374,14 +365,14 @@ const editor = (dev: boolean): UserConfig => ({
 // The editor's folder, served as its host serves it: every path isolated (its _headers), a missing page a 404.
 const editorPreview = (): UserConfig => ({
   appType: "mpa",
-  base: EDITOR_BASE,
+  base: "/",
   build: { outDir: editorDefault },
   plugins: [
     {
       name: "editor-preview",
       configurePreviewServer: (server) => {
         server.middlewares.use(isolate);
-        server.middlewares.use(slash(EDITOR_BASE));
+        server.middlewares.use(slash("/"));
         // _headers is the host's setting, not a file of the site (the host does not serve it either)
         server.middlewares.use("/_headers", (_req, res) => {
           res.statusCode = 404;

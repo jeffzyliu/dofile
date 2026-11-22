@@ -25,7 +25,6 @@ import {
   DEV_EDITOR_PORT,
   DEV_SITE_PORT,
   devURL,
-  EDITOR_BASE,
   EDITOR_OUT,
   LOCAL_EDITOR_URL,
   LOCAL_SITE_URL,
@@ -163,14 +162,7 @@ test("where each page is served, and the headers file: isolation on the editor's
   assert.equal(sitePageFor("/index.html"), "landing.html");
   assert.equal(sitePageFor("/commands/"), "commands.html");
   assert.equal(sitePageFor("/commands/index.html"), "commands.html");
-  for (const p of [
-    "/commands",
-    "/commands.html",
-    "/landing.html",
-    "/nope/",
-    ...(EDITOR_BASE === "/" ? [] : [EDITOR_BASE]),
-  ])
-    assert.equal(sitePageFor(p), null, p);
+  for (const p of ["/commands", "/commands.html", "/landing.html", "/nope/"]) assert.equal(sitePageFor(p), null, p);
   const rule = (base: string) =>
     new RegExp(
       `^${esc(base)}\\*\\n {2}Cross-Origin-Opener-Policy: same-origin\\n {2}Cross-Origin-Embedder-Policy: require-corp$`,
@@ -178,7 +170,6 @@ test("where each page is served, and the headers file: isolation on the editor's
     );
   assert.match(headersFile("/editor/"), rule("/editor/"));
   assert.doesNotMatch(headersFile("/editor/"), /^\/\*$/m, "no rule for the whole site");
-  assert.match(headersFile(EDITOR_BASE), rule(EDITOR_BASE));
   assert.match(headersFile("/"), rule("/"), "an editor at the root of its own origin: every path");
   // a build that is not production's: noindex on every path, in the editor's one block when it is at the root
   assert.doesNotMatch(headersFile("/"), /X-Robots-Tag/, "a production build is indexed");
@@ -203,11 +194,6 @@ test("a production build's canonical links: each page's production address", () 
 test("the editor's location is one setting: scripts/urls.ts, read by the config, the e2e config and the scripts", () => {
   // the editor is at the root of its own origin; the two addresses the pages link each other by are whole URLs ending
   // in a slash (links are joined to them), the production ones unless the environment says otherwise
-  assert.match(EDITOR_BASE, /^\/(.*\/)?$/);
-  assert.match(
-    web("scripts/urls.ts"),
-    /export const EDITOR_BASE = process\.env\.DOFILE_EDITOR_BASE \?\? "\/(?:[^"]*\/)?";/,
-  );
   assert.equal(PRODUCTION_SITE_URL, "https://dofile.dev/");
   assert.equal(PRODUCTION_EDITOR_URL, "https://app.dofile.dev/");
   for (const url of [LOCAL_SITE_URL, LOCAL_EDITOR_URL]) assert.match(url, /^https?:\/\/.*\/$/, url);
@@ -247,10 +233,10 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
     files.some((f) => f.endsWith(".css")) && files.some((f) => f.endsWith(".yml")),
     "CSS and workflows are read",
   );
-  const path = EDITOR_BASE === "/" ? "/app" : EDITOR_BASE.slice(0, -1);
+  const path = "/app";
   const spelled = new RegExp(`["'\`(=]${esc(path)}(?![\\w-])`);
   for (const probe of ['"/app/"', "'/app?test'", "`/app.html`", "url(/app/x.woff2)", "href=/app#x", '"/app"'])
-    assert.match(probe.replace("/app", path), spelled, probe);
+    assert.match(probe, spelled, probe);
   assert.doesNotMatch(`"${path}s/"`, spelled, "another name that starts the same");
   for (const f of files) assert.doesNotMatch(web(f), spelled, f);
   // Nor the origins: the production addresses are scripts/urls.ts's, and a link to another origin is made from SITE_URL
@@ -259,15 +245,6 @@ test("the editor's location is one setting: scripts/urls.ts, read by the config,
   for (const probe of ['"https://dofile.dev/"', "`https://app.dofile.dev`", "'http://dofile.dev'"])
     assert.match(probe, origin, probe);
   for (const f of files) assert.doesNotMatch(web(f), origin, `${f}: an address of the site's origins`);
-  // and no e2e test opens the editor's flags at the site's root when the editor is under a path ("/?test" is the
-  // landing page there): the editor's addresses are relative to Playwright's baseURL
-  if (EDITOR_BASE !== "/")
-    for (const f of files.filter((f) => f.startsWith("e2e/")))
-      assert.doesNotMatch(
-        web(f),
-        /["'`]\/\?(test|sample|snapshot|brotli)\b/,
-        `${f}: an editor address at the site's root`,
-      );
 });
 
 /** Runs `args` in web/ with the environment's DOFILE_URLS, DOFILE_SITE_URL and DOFILE_EDITOR_URL replaced by

@@ -3,7 +3,6 @@
 // file that differs is asked in the clash dialog). The first-visit load is off under `?test` unless the URL also has
 // `?sample` (every other spec starts from an empty store). One test runs the sample in the real engine.
 import type { Page } from "@playwright/test";
-import { EDITOR_BASE } from "../scripts/urls.ts";
 import { expect, isPhone, settle, startEngine, storedText, test, toastOf, unblocked } from "./fixtures";
 
 /** The files in the store (not folders), by path. */
@@ -118,7 +117,7 @@ test("Restore the sample is an upload of the sample: what is missing comes back 
 
 test("the sample runs in the real engine to a table and a graph", async ({ page }) => {
   await page.goto("?test&sample");
-  expect(new URL(page.url()).pathname).toBe(EDITOR_BASE); // the editor at its base, on its own origin
+  expect(new URL(page.url()).pathname).toBe("/"); // the editor at the root of its own origin
   await unblocked(page);
   await expect.poll(() => stored(page)).toEqual(ALL);
   await startEngine(page);

@@ -37,10 +37,10 @@ import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
 import { type BrowserContext, type BrowserType, chromium, firefox, type Page, webkit } from "@playwright/test";
 import { arg } from "../scripts/lib/args.ts";
-import { EDITOR_BASE, EDITOR_OUT } from "../scripts/urls.ts";
+import { EDITOR_OUT } from "../scripts/urls.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const dist = join(here, "..", EDITOR_OUT); // the editor's folder, served at the root of its own origin (EDITOR_BASE)
+const dist = join(here, "..", EDITOR_OUT); // the editor's folder, served at the root of its own origin
 const out = arg("--out", join(here, "../../docs/img/startup-times.json"));
 const reps = Number(arg("--reps", 3));
 const modes = arg("--modes", "normal,snapshot").split(",");
@@ -61,7 +61,7 @@ const nets = arg("--nets", "unthrottled,100,30")
   .map((k) => ({ key: k, ...NETS[k] }));
 if (engine !== "chromium" && nets.some((n) => n.mbps))
   throw new Error(`--engine ${engine}: --nets unthrottled only (the throttle is Chromium's)`);
-if (!existsSync(join(dist, EDITOR_BASE, "index.html")))
+if (!existsSync(join(dist, "index.html")))
   throw new Error(`no web/${EDITOR_OUT}: run \`npm run build:local\` (after \`npm run snapshot\`)`);
 
 // ---- the host ----------------------------------------------------------------------------------------------------------
@@ -166,7 +166,7 @@ const readyIn = async (page: Page) => {
 // With a lazy snapshot the cold visit waits for the "graphics part: landed" line before the reload (a reload at ready
 // would kill that fetch, and the warm visit would download it again).
 type StartList = { built: string; snapshot?: Record<string, { size: number }> };
-const startList: StartList = JSON.parse(readFileSync(join(dist, EDITOR_BASE, "start-files.json"), "utf8"));
+const startList: StartList = JSON.parse(readFileSync(join(dist, "start-files.json"), "utf8"));
 const lazy = Boolean(startList.snapshot?.graphics);
 const GRAPH = "clear\nset obs 10\ngen x = _n\nscatter x x";
 const CODES: Record<string, string> = { display: "display 1", graph: GRAPH };
@@ -312,7 +312,7 @@ async function visit(
       await new Promise((ok) => setTimeout(ok, 20));
     }
   };
-  const url = `${base}${EDITOR_BASE}?test${mode === "snapshot" ? "" : "&snapshot=0"}`; // the snapshot is the page's default; ?test: its state, for a failure's message
+  const url = `${base}/?test${mode === "snapshot" ? "" : "&snapshot=0"}`; // the snapshot is the page's default; ?test: its state, for a failure's message
   served.bytes = 0;
   await page.goto(url);
   const cold = await readyIn(page);
