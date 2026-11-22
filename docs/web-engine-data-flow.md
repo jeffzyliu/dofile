@@ -340,16 +340,21 @@ After every run (`applyRun(changes)`) it writes the run's changes and takes the 
 3. It returns `resync`, the page's version of those paths, which the worker copies into `/work`; the `sync` ops queued
    behind the run then find the journal empty.
 4. `RunResult` gains `files` (what was written), `skipped` (run output lost under a folder the page renamed or removed), and
-   `store_error` (the store refused; the worker remembers the paths in `unsaved` and tries again after the next run).
+   `store_error` (the store refused; the worker remembers the paths in `unsaved` and tries again after the next run). If
+  `/work` then cannot take `resync`, the run's files are kept and its result says nothing of it; the worker posts
+  `{folderError}` right after the run's answer, and the transport says `crashed` with cause `folder`.
 
 **Storage failures.**
 
 - If the browser closes the database under the page ("Clear site data", or another page deleted it), `/work` may hold files
   the store no longer has, which no journal row says. The store tells the transport (`onClosed`), the transport says
-  `crashed` with cause `storage`, and the machine resets: the new worker copies the store as it is. This is the one store
-  failure the machine knows.
-- If the worker alone cannot open the store, it still mounts, with an empty `/work` and `startup.storeError`; the transport
-  detaches the store from that worker, so the page's changes stay in the store and do not reach `/work`.
+  `crashed` with cause `storage`, and the machine resets: the new worker copies the store as it is.
+- A `sync` the worker fails, or a `/work` that cannot take a run's `resync`, leaves `/work` out of step with the store:
+  `crashed` with cause `folder`, and the same reset.
+- If the worker cannot open the store, it still mounts, with an empty `/work` and `startup.storeError` (the error's name and
+  message, and `cause`: `open` or `copy`, where it failed); the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
+  `/work`, and says `started` with `storeFailed`: the machine adds the `store-failed` banner. A `VersionError` (another
+  page of a newer build upgraded the database) is `start-failed` with reason `updated` instead: only a reload helps.
 
 ## 2.7 Flow: Break, reset, crash
 
@@ -357,7 +362,10 @@ After every run (`applyRun(changes)`) it writes the run's changes and takes the 
 `interrupt` (the transport stores 2, SIGINT, in the buffer) and `start-break-timer` (the controller's `setTimeout`, 5
 seconds; the deadline is `resetAt` in the state). Pyodide checks the buffer and raises the signal; `browser.py`'s handler
 calls `request_break()` only while a run is on; the interpreter stops at the next safe point between commands with rc 1,
-data kept.
+data kept. The Break belongs to the run sent last: the transport clears the buffer as it posts a run, the worker lets
+Pyodide read it only during `browser.run`, and a Break read before the run is busy is put back for the run to read again.
+The transport writes SIGINT again every 100 ms until the run answers, since Pyodide's read and clear of the buffer are two
+steps and a store between them is lost.
 
 | State | Meaning | Leaves by |
 |---|---|---|
@@ -379,7 +387,8 @@ if it ended before a safe point. Without cross-origin isolation there is no `Sha
 
 One event gives the cut result and the new state together, so no ordering between a callback and a promise must be kept.
 
-**Crash.** `worker.onerror` (cause `error`) or a closed database (cause `storage`) says `crashed`. From `ready`, `running`,
+**Crash.** `worker.onerror` (cause `error`), a closed database (cause `storage`) or a `/work` out of step with the store
+(cause `folder`) says `crashed`. From `ready`, `running`,
 `breaking` or `waiting` it is a reset of kind `crash`. During a start the first crash is a reset too (no banner, since the
 engine had not been ready); a second before any start has finished is `failed-twice`, so a phone does not loop through
 gigabyte allocations. The crash count is part of the machine; it survives a failed start and "Try again", and goes back to
@@ -427,14 +436,12 @@ only other writer of `rows`.
 
 What Part 3 listed before step 3.5 was answered by its steps A to D. What remains:
 
-1. **A Break pressed between sending a run and the worker starting it is lost,** and the run ends as a 9998 reset. The worker
-   clears the interrupt buffer when a run starts (so a Break pressed while idle cannot stop the next run), and a Break in that
-   gap is cleared with it; the Break timer then runs out.
-2. **When another page upgrades the database,** this page still opens version 1, which fails in both threads: the new worker
-   mounts with a store error and an empty `/work`, and the store is detached from it. A later idea: treat it as "reload the
-   page".
-3. **If only the worker fails to open the store,** an upload shows in the file list (the page's store works) but `use` on it
-   gives rc 601, with no banner that says why.
+1. (Closed: a Break pressed between sending a run and the worker starting it stops that run. The transport clears the
+   interrupt buffer when it posts a run, the worker lets Python read the buffer only during a run, and `browser.py` puts
+   back a Break it reads before the run is busy; "Break" in SPEC section 6.)
+2. (Closed: another page's upgrade of the database is a failed start with reason `updated`, and a worker that cannot open
+   the store adds the `store-failed` banner; "Storage failures" above.)
+3. (Closed with 2.)
 4. **A closed database keeps today's restart.** The machine resets the worker on `crashed` with cause `storage`, though the
    journal alone would not need it; it stays because a deleted database leaves `/work` with files the store no longer has,
    which no journal row says (the maintainer's ruling, 2026-11-11).

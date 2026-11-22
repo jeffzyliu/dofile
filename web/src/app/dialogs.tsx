@@ -7,9 +7,7 @@ import { ClearLogDialog } from "./log/ClearLogDialog";
 import { dialog } from "./state.ts";
 import { DownloadDialog, OtherTabDialog } from "./states/DownloadDialog";
 import { ResetDialog } from "./states/ResetDialog";
-import type { Dialog, DialogName } from "./types.ts";
-
-export type DialogOf<K extends DialogName> = Extract<NonNullable<Dialog>, { d: K }>;
+import type { DialogName, DialogOf } from "./types.ts";
 
 const VIEWS: { [K in DialogName]: ComponentType<{ dialog: DialogOf<K> }> } = {
   download: DownloadDialog,

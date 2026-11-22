@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+import { FAILED, FAILED_TWICE, UPDATED } from "../src/app/states/words.ts";
 import type { EngineStateName, RunHead } from "../src/app/types.ts";
 import { EngineClient } from "../src/engine/client.ts";
 import type { FileInfo, Results, RunResult } from "../src/engine/types.ts";
@@ -16,6 +17,7 @@ import {
   DONE,
   engine,
   expectDrops,
+  FakeTransport,
   FILE,
   failure,
   handlers,
@@ -120,7 +122,7 @@ test("an answer given while its effect is being performed waits for the step's o
   assert.deepEqual(S.engine.value, {
     s: "failed",
     reason: "no-wasm",
-    message: engine.FAILED["no-wasm"],
+    message: FAILED["no-wasm"],
     detail: "this browser has no WebAssembly support",
   });
   assert.deepEqual(client.worker.ended, { kind: "failed", reason: "this browser has no WebAssembly support" });
@@ -152,7 +154,7 @@ test("a subscriber of the `engine` signal that throws does not stop the step: it
     [null, 1],
     "and the new start has begun: the list is being fetched",
   );
-  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user", run: FILE }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user", cause: null, run: FILE }]);
   const cut = (await done)!;
   assert.deepEqual(
     [cut.rc, cut.kind],
@@ -221,7 +223,9 @@ test("the controller on the real transport, with a scripted worker: ready, a run
   // the real build() (no list: null), then start(): it would throw if the old worker were still live
   await until("ready");
   assert.deepEqual([workers.length, workers[0].terminated, transport.worker === workers[1]], [2, true, true]);
-  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (boom)", kind: "crash", run: FILE }]);
+  assert.deepEqual(banners(), [
+    { b: "reset", reason: "the engine crashed (boom)", kind: "crash", cause: "error", run: FILE },
+  ]);
   // what the ended worker still says goes through its own reply, with its own ticket: the machine drops it
   workers[0].onmessage!({ data: { stage: "engine" } });
   state("ready");
@@ -235,7 +239,7 @@ test("the controller on the real transport, with a scripted worker: ready, a run
   assert.deepEqual(S.engine.value, {
     s: "failed-twice",
     reason: "memory",
-    message: engine.FAILED_TWICE,
+    message: FAILED_TWICE,
     detail: "the engine's worker failed twice (out of memory); reload the page",
   });
   assert.deepEqual(
@@ -328,15 +332,16 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
   const failed = state("failed"); // no offline start: a failed download ends there
   assert.deepEqual(
     [failed.reason, failed.message, failed.detail],
-    ["download", engine.FAILED.download, "https://dofile.test/snapshot/heap.bin: 503"],
+    ["download", FAILED.download, "https://dofile.test/snapshot/heap.bin: 503"],
     "plain words for the visitor, and the cause for a developer",
   );
   assert.equal(client.workers.length, 0, "no worker is made");
-  // whatever reason download() gives (a Cache that breaks, a build with no snapshot), the download failed
+  // the reason is the error's own, as for the list: a Cache that breaks is "unknown", not a failed download
   engine.start();
   client.dl.done.no(failure("the cache is broken", { kind: "failed", reason: "unknown" }));
   await tick();
-  assert.deepEqual([state("failed").reason, client.workers.length], ["download", 0]);
+  assert.deepEqual([state("failed").reason, client.workers.length], ["unknown", 0]);
+  assert.equal(state("failed").message, FAILED.unknown);
 
   engine.start();
   await begin();
@@ -344,7 +349,7 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
   assert.deepEqual(S.engine.value, {
     s: "failed",
     reason: "download",
-    message: engine.FAILED.download,
+    message: FAILED.download,
     detail: "no snapshot at /snapshot/",
   });
   assert.deepEqual(
@@ -364,7 +369,7 @@ test("a failed download is `failed` (reason download) with no worker; a failed s
   assert.deepEqual(S.engine.value, {
     s: "failed-twice",
     reason: "memory",
-    message: engine.FAILED_TWICE,
+    message: FAILED_TWICE,
     detail: "the engine's worker failed twice (out of memory); reload the page",
   });
   assert.deepEqual(
@@ -525,7 +530,9 @@ test("a crash cuts a run: the new state first, then engine-gone, then the cut ru
     "run.ts gets the cut result after the `engine` signal has the new state, and after the engine is gone",
   );
   assert.deepEqual(old.ended, { kind: "reset", reset: "crash", reason: SENTENCE("the engine crashed (x)") });
-  assert.deepEqual(banners(), [{ b: "reset", reason: "the engine crashed (x)", kind: "crash", run: FILE }]);
+  assert.deepEqual(banners(), [
+    { b: "reset", reason: "the engine crashed (x)", kind: "crash", cause: "error", run: FILE },
+  ]);
   const cut = (await done)!;
   assert.deepEqual([cut.rc, cut.kind, cut.results], [9998, "crash", null], "the machine's own result");
   assert.equal(cut.error, SENTENCE("the engine crashed (x)"));
@@ -584,7 +591,7 @@ test("Break on a page that cannot ask a run to stop (no SharedArrayBuffer) reset
   state("starting-list");
   assert.deepEqual(client.interrupted, [], "there was nothing to ask");
   const reason = "Break reset the engine, because this page is not cross-origin isolated and cannot ask a run to stop";
-  assert.deepEqual(banners(), [{ b: "reset", reason, kind: "break", run: FILE }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason, kind: "break", cause: null, run: FILE }]);
   const r = (await done)!;
   assert.deepEqual([r.rc, r.kind, r.error], [9998, "break", SENTENCE(reason)]);
 });
@@ -630,7 +637,9 @@ test("the Break timer across two runs on one worker (a simulated clock): the fir
       reset: "break",
       reason: SENTENCE("the code did not stop at Break"),
     });
-    assert.deepEqual(banners(), [{ b: "reset", reason: "the code did not stop at Break", kind: "break", run: FILE }]);
+    assert.deepEqual(banners(), [
+      { b: "reset", reason: "the code did not stop at Break", kind: "break", cause: null, run: FILE },
+    ]);
     await micro();
     assert.deepEqual(
       [S.lastRun.value!.rc, logItems().at(-1)!.text],
@@ -728,10 +737,10 @@ test('an updated site fails with reason "updated", from download() at once or fr
   await tick();
   assert.deepEqual(
     [state("failed").reason, state("failed").message],
-    ["updated", engine.UPDATED],
+    ["updated", UPDATED],
     "plain words: a newer version, reload",
   );
-  assert.match(engine.UPDATED, /newer version.*Reload the page/);
+  assert.match(UPDATED, /newer version.*Reload the page/);
   assert.equal(client.workers.length, 0, "no worker after an updated download");
 
   // a page that was open when the site was deployed again: its next restart finds the list of another build
@@ -742,7 +751,7 @@ test('an updated site fails with reason "updated", from download() at once or fr
   engine.reset();
   client.list.no(failure(stale, { kind: "updated" }));
   await tick();
-  assert.deepEqual(S.engine.value, { s: "failed", reason: "updated", message: engine.UPDATED, detail: stale });
+  assert.deepEqual(S.engine.value, { s: "failed", reason: "updated", message: UPDATED, detail: stale });
   assert.deepEqual([client.workers.length, client.live], [1, null], "the old worker is ended, and no new one is made");
   assert.equal((await cut)!.kind, "user");
   // "Try again" after a reset whose new start failed: the cut run is still the last run
@@ -770,21 +779,21 @@ test('an updated site fails with reason "updated", from download() at once or fr
     assert.deepEqual(S.engine.value, {
       s: "failed",
       reason,
-      message: engine.FAILED[reason],
+      message: FAILED[reason],
       detail: "dofile was updated (not from the text)",
     });
   }
-  // and a download that fails with such words is reason download
+  // and a download that fails with such words is reason unknown: the error's reason, not its text
   await load();
   engine.start();
   client.dl.done.no(failure("dofile was updated (not from the text)", { kind: "failed", reason: "unknown" }));
   await tick();
-  assert.equal(state("failed").reason, "download");
+  assert.equal(state("failed").reason, "unknown");
 });
 
 test("a failed start's message is plain words for every reason, with no developer terms; the cause is `detail` and goes to the console", async () => {
   const dev = /npm|snapshot|manifest|bytes|worker|wheel|\.js|\.json|\?|`/i;
-  for (const m of [...Object.values(engine.FAILED), engine.FAILED_TWICE]) assert.doesNotMatch(m, dev, m);
+  for (const m of [...Object.values(FAILED), FAILED_TWICE]) assert.doesNotMatch(m, dev, m);
   const warn = mock.method(console, "warn", () => {});
   const cause = "snapshot: a file is 10 bytes, the manifest says 99; run `npm run snapshot` again";
   try {
@@ -817,7 +826,7 @@ test("Reset: the banner carries the kind; the reason is the user's; the old work
   await readyEngine();
   const old = client.worker;
   engine.reset();
-  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user", run: null }]);
+  assert.deepEqual(banners(), [{ b: "reset", reason: "reset by you", kind: "user", cause: null, run: null }]);
   assert.deepEqual(old.ended, { kind: "reset", reset: "user", reason: SENTENCE("reset by you") });
   assert.deepEqual(
     [state("starting-list").stage, client.lists.length, client.live],
@@ -1147,4 +1156,80 @@ test('C2: "Not now" during the download aborts it: no start follows, also when t
   assert.deepEqual(S.engine.value, { s: "declined" });
   assert.equal(client.workers.length, 0);
   expectDrops([{ type: "download-done", n: 3, row: "declined", why: "stale" }]);
+});
+
+test("a worker that could not open the file store: ready, and the store-failed banner; a start that finds a newer database fails with reason updated", async () => {
+  await load({ cached: true });
+  await begin();
+  client.worker.reply({ type: "started", storeFailed: "copy" });
+  state("ready");
+  assert.deepEqual(banners(), [{ b: "store-failed", cause: "copy" }]);
+
+  await load({ cached: true });
+  await begin();
+  client.worker.reply({ type: "start-failed", reason: "updated", detail: "VersionError: the database is newer" });
+  assert.deepEqual(S.engine.value, {
+    s: "failed",
+    reason: "updated",
+    message: UPDATED,
+    detail: "VersionError: the database is newer",
+  });
+});
+
+test("the store-failed banner goes when a later start opens the store (a reset after a store error that passed)", async () => {
+  await load({ cached: true });
+  await begin();
+  client.worker.reply({ type: "started", storeFailed: "open" });
+  assert.deepEqual(
+    banners().map((b) => b.b),
+    ["store-failed"],
+  );
+  client.worker.reply(CRASH);
+  await tick();
+  await begin();
+  client.worker.reply({ type: "started" });
+  state("ready");
+  assert.deepEqual(
+    banners().map((b) => b.b),
+    ["reset"],
+    "the new worker copied the files: no store-failed banner",
+  );
+});
+
+test("the reset banner carries the crash's cause (storage, folder, error), and none for a reset the visitor or Break made", async () => {
+  for (const cause of ["error", "storage", "folder"] as const) {
+    await readyEngine();
+    client.worker.reply({ type: "crashed", cause, reason: "unknown", detail: "x" });
+    await tick();
+    assert.equal(banners().at(-1)!.cause, cause);
+  }
+  await readyEngine();
+  engine.reset();
+  await tick();
+  assert.equal(banners().at(-1)!.cause, null);
+});
+
+test("a run that rejects with a kind other than op is not swallowed: no-engine ends the run (run-failed); an ending's kind says nothing, the machine cut the run", async () => {
+  await readyEngine();
+  const run = runCode("x", FILE);
+  client.run1.done.no(failure("the engine is not running", { kind: "no-engine" }));
+  await tick();
+  state("ready"); // not left in `running` for ever
+  const r = (await run)!;
+  assert.deepEqual([r.rc, r.kind, r.error], [9998, "run-failed", "the engine is not running"]);
+});
+
+test("connectEngine called again lets go of the earlier client's graphics subscription", async () => {
+  let subscribed = 0;
+  const transport = Object.assign(new FakeTransport(), {
+    onGraphics() {
+      subscribed++;
+      return () => {
+        subscribed--;
+      };
+    },
+  });
+  setUp({ transport });
+  setUp({ transport });
+  assert.equal(subscribed, 1);
 });

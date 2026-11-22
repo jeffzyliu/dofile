@@ -1,6 +1,7 @@
 // The app shell in real browsers: the layouts, the theme button, the ⋯ menu (Esc and Tab), the download prompt's "Not
 // now", "Start engine" as the way back to it and a run that does nothing with no engine; a stale snapshot refused with
-// reason "updated" (plain words in its message, the cause in its detail); ?snapshot=0 still starts. Also the phone
+// reason "updated" (plain words in its message, the cause in its detail), and so is a file store of a newer version;
+// ?snapshot=0 still starts. Also the phone
 // toast's place and the failed "Download all" banner.
 import {
   engineState,
@@ -196,6 +197,35 @@ test('a snapshot from a different build of the wheel is refused with reason "upd
   expect(st?.message).toBe("dofile has a newer version on this site. Reload the page to use it.");
 });
 
+test("a file store of a newer version (another page upgraded it): the start fails with reason updated, and the banner offers a reload", async ({
+  page,
+}) => {
+  await page.goto("?test");
+  await page.evaluate(
+    () =>
+      new Promise((ok, no) => {
+        const r = indexedDB.open("dofile", 2);
+        r.onsuccess = () => {
+          r.result.close();
+          ok(null);
+        };
+        r.onerror = () => no(r.error);
+        r.onblocked = () => no(new Error("blocked"));
+      }),
+  );
+  await startEngine(page);
+  await expect.poll(() => engineState(page), { timeout: 120_000 }).toBe("failed");
+  const st = await page.evaluate(() => {
+    const state = window.__dofile.state.engine.value;
+    return "reason" in state ? state : null;
+  });
+  expect(st?.reason).toBe("updated");
+  expect(st?.detail).toMatch(/version/i);
+  const banner = page.locator(".banner", { hasText: "The engine didn't start." });
+  await expect(banner).toContainText("newer version");
+  await expect(banner.getByRole("button", { name: "Reload the page" })).toBeVisible();
+});
+
 // ?snapshot=0 is the normal boot (Pyodide's runtime and packages from the CDN).
 test("?snapshot=0: the normal boot still starts and runs the sample", async ({ page, browserName }) => {
   // Not in the two WebKit projects (webkit, iphone): there, on Linux, the normal boot now and then never finishes loading
@@ -311,6 +341,20 @@ test("the toolbar does not move: its box and every button's box are the same in 
           return bar.scrollWidth - bar.clientWidth;
         });
         if (over > 0) cut.push(`${st.s}${sel ? " with a selection" : ""}: ${over} px`);
+        if (tab && !sel) {
+          // header.toolbar is the desktop toolbar, or the phone's top bar with PhoneRun's Run or Break pill
+          const seen = await page.evaluate(() =>
+            [...document.querySelectorAll("header.toolbar .run-ctl")].map((e) => getComputedStyle(e).visibility),
+          );
+          if (width === 390)
+            expect(
+              await page.locator("header.toolbar.topbar .run-ctl").count(),
+              "the phone's top bar holds PhoneRun's button",
+            ).toBeGreaterThan(0);
+          const want = st.s.startsWith("other-tab") ? "hidden" : "visible";
+          expect(seen.length, "the toolbar's run controls").toBeGreaterThan(0);
+          expect(seen, `the toolbar's run controls in ${st.s} at ${width} px`).toEqual(seen.map(() => want));
+        }
         if (tab && !sel)
           labels[st.s] = await page.evaluate(
             () =>

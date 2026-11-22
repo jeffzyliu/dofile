@@ -62,6 +62,8 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 
 **9. Browser and Pyodide shims** (`test_browser.py`, `test_pathshim.py`, `test_linalgshim.py`)
 - The browser entry point's JSON API, and the ballast the memory cap relies on.
+- Break: a SIGINT while no run is busy (the top or the end of a run, between runs) is put back, not dropped, and stops
+  nothing by itself.
 - Mapping of foreign paths; the `numpy.linalg` shim.
 - Guards: the web highlighter's command list matches the engine, and no new path sites appear in the engine.
 - The lazy graphics part (two tests): a graph waits for it, and a Break or a failure stops only that graph; the run's log
@@ -121,6 +123,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `app-files.test.ts`: the files controller (`app/files.ts`): the storage banner, a run that rewrites an open file
   (`ranOver`, the run-changed banner), Download all, `persisted`.
 - `app-theme-tabs.test.ts`: the theme button and `applyTheme`; `setDirty`; strict UTF-8 (`decodeText`).
+- `app-dta.test.ts`: `readDta` (`app/output/dta.ts`): one describe_file per .dta file and version, even when its tab is mounted again
+  while the first is pending; a failed call is asked again.
 - `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
 - `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
   real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
@@ -128,7 +132,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `wakelock.test.ts`: the screen wake lock (`app/wakelock.ts`) with fakes: the policy per state, taken for a run,
   refused, late and pending requests, no API.
 - `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
-  store.
+  store (the error's name kept; a newer database is reason `updated`), a `/work` that cannot take the page's version
+  after a run (`crashed`, cause `folder`).
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
@@ -138,7 +143,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
-  mismatch, stale entries), start and end rules, error kinds, interrupt.
+  mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
+  SIGINT is written again while the run is on, never into the next run); store failures (`started` with `storeFailed`,
+  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`).
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
@@ -149,7 +156,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
   test,
   without a current snapshot).
-- `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break, a worker that fails to load.
+- `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break (also one pressed while the run waits
+  behind a describe: rc 1 before its first line; and one after its run ended), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
@@ -166,10 +174,10 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - A file's form that Save keeps (`formOf`, `lineBreakOf`, `dropsBom`, `savedForm`); a run's version of an open file.
 - `straighten.test.ts`: straight quotes for typed text (`src/stata/straighten.ts`): which `inputType`s count, the caret
   kept.
-- `output.test.ts`: the Output tabs' logic (`app/output/format.ts`): number formats, missing values, a matrix as text,
+- `output.test.ts`: the Output tabs' logic (`app/output/format.ts`, and sizes: `app/bytes.ts`): number formats, missing values, a matrix as text,
   the
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
-- `states.test.ts`: step 4d's plain logic (`app/states/words.ts`): `resetAsks`, `rerunPath`, the stopping countdown, the
+- `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
 - `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
@@ -203,7 +211,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - `machine.ts`: two casts, no top-level variable; the cast to `Ticket` occurs once in `web/`.
   - The transport names no state; `run.ts` subscribes to nothing.
   - The pages' HTML and CSS: `src/site/` apart from the editor's.
-  - The `data-engine` CSS rule; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
+  - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
+- `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
+  the failure); a cycle finder on a small graph.
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
@@ -222,10 +232,11 @@ Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases
   tabs by keyboard), the folded file list's rename, the .dta tab's focus, the banner's hand-off to a .dta tab.
 
 Specs:
-- `shell.spec.ts`: layout and toolbar.
+- `shell.spec.ts`: layout and toolbar (its size in every state; the run controls unseen in the other-tab states, seen in the rest).
   - Desktop and phone layout; the first visit; the toolbar stays put from 1440 to 390 px in all sixteen engine states.
   - Panes never remounted; banners; toast position; no key names on a phone.
   - The status bar's "Not affiliated with StataCorp" (at 1440 px, not at 1199 px, not on the iPhone).
+  - A stale snapshot, and a file store of a newer version, fail with reason `updated` (a real start).
 - `keyboard.spec.ts`: the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, at 390 by 844 px:
   layout while it is open and after, a tap on the command line (touch profiles only), a new file's name field, the
   drag guard.
@@ -238,7 +249,7 @@ Specs:
   - The prompt, Not now, the progress dialog, the take-over button and a real second tab.
   - The off command line where nothing can start the engine (`aria-disabled`, the hint, toasts, nothing dropped).
   - A held Enter on Run or Start engine clicks once; the 320 px phone layout.
-  - Each banner (running, stopping, waiting, storage, reset, failed, download-failed) and where the focus goes.
+  - Each banner (running, stopping, waiting, storage, store-failed, reset, failed, download-failed) and where the focus goes.
   - Download all; Reset during a run; Reset's dialog and "Run the file again".
   - One clock (`page.clock`): the Break pill or status bar equals the banner's time.
 - `editor.spec.ts` (step 4b): the editor, the log and the command line, in the page. Includes the save flows with real
@@ -318,7 +329,8 @@ Specs:
     graph's synchronous XHR one request, the page never fetches it; a graph at ready draws without waiting for a held
     fetch and its log says it waits for the files; the ring shows the download (told by the worker) and goes when it lands;
     other runs work. A damaged part's retry goes to an address of its own (`fresh=`), not the HTTP cache's.
-- `output.spec.ts` (step 4c): the Output tabs.
+- `output.spec.ts` (step 4c): the Output tabs; Copy image twice in the full-size view (fake clock: the first "Copied" timer
+  does not clear the second).
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the
     Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).

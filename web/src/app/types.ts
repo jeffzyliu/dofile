@@ -4,6 +4,7 @@ import type { Equal, Expect, State, Ticket } from "../engine/machine.ts";
 import type {
   About,
   BrowseRows,
+  CrashCause,
   DataSummary,
   FailReason,
   FileInfo,
@@ -13,12 +14,14 @@ import type {
   Results,
   RunHead,
   Stage,
+  StoreCause,
 } from "../engine/types.ts";
 
 // Defined in engine/types.ts: the state machine uses them, and engine/ never imports app/.
 export type {
   About,
   BrowseRows,
+  CrashCause,
   DataSummary,
   FailReason,
   FileInfo,
@@ -99,7 +102,7 @@ export type LogItem =
   | { t: "graph"; n: number };
 
 /** A graph: from a run (`command` and `line` from RunResult.graph_commands and graph_lines; `line` in the text sent,
- *  so for a selection add its first line minus one) or a .png opened from the files (`path`; run.ts addFileGraph). `n`
+ *  so for a selection add its first line minus one) or a .png opened from the files (`path`; graphs.ts addFileGraph). `n`
  *  counts from 1 until "Clear log"; look a graph up by `n`, not by its index (graphs keeps the last 20). */
 export interface Graph {
   n: number;
@@ -125,19 +128,27 @@ export type Dialog =
   | { d: "close-tab"; path: string }
   | { d: "other-tab" };
 export type DialogName = NonNullable<Dialog>["d"];
+/** The value of the dialog `K`, as its view gets it. */
+export type DialogOf<K extends DialogName> = Extract<NonNullable<Dialog>, { d: K }>;
 
 /** The banners in `banners`. `reset`: `kind` is why (Break ran out of time or the page cannot ask a run to stop, the
- *  worker crashed, or Reset / "Reset now"); `run` is the run it cut, null when none was in progress. `storage`: shown
- *  once per visit, when persisted() is false and the files change. `run-changed`: a run rewrote an open file that has
+ *  worker crashed, or Reset / "Reset now"); `cause` is what crashed the engine (null unless `kind` is "crash"); `run` is the run it cut, null when none was in progress. `storage`: shown
+ *  once per visit, when persisted() is false and the files change. `store-failed`: the engine's worker has no file
+ *  store, so it started with an empty folder; `cause` says where its copy failed (StoreCause). `run-changed`: a run rewrote an open file that has
  *  unsaved edits (a save or a reload of that file removes it). */
 export type Banner =
-  | { b: "reset"; reason: string; kind: ResetKind; run: RunHead | null }
+  | { b: "reset"; reason: string; kind: ResetKind; cause: CrashCause | null; run: RunHead | null }
   | { b: "storage" }
+  | { b: "store-failed"; cause: StoreCause }
   | { b: "download-failed" }
   | { b: "not-text"; path: string }
   | { b: "save-failed"; path: string; message: string }
   | { b: "run-changed"; path: string };
 export type BannerName = Banner["b"];
+/** The value of the banner `K`, as its view gets it. */
+export type BannerOf<K extends BannerName> = Extract<Banner, { b: K }>;
+/** The pane whose banner slot draws a banner. */
+export type Place = "files" | "editor" | "log" | "output";
 
 export type Theme = "system" | "light" | "dark";
 export type OutputTab = "log" | "graph" | "data" | "results"; // "help" is P2

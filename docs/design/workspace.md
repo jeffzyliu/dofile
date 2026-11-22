@@ -3,8 +3,8 @@
 Design note S0 of the web audit (`docs/web-audit-plan.md`, section 6): who owns the file list, the tabs, each open
 document and its saved text, and in what order the page writes files. S1, S2, S3, S5, S6 and R7r are built from it; it
 changes no code. **Status: proposed 2026-11-16. Approved by the maintainer 2026-11-16: choices a, b, c (R7r deletes `state.ts`;
-`hookState()` gathers the signals for the e2e hook), d, and decision 4. Decision 2 (the open documents) is open, so S1
-does not start until it is settled; the other items do not wait for it.** Read from the code at f947053. Paths are under `web/src/app/` unless they start with `web/` or `docs/`; "(new)"
+`hookState()` gathers the signals for the e2e hook), d, and decision 4. Decision 2 (the open documents) settled 2026-11-17:
+the shape and the Save rule are in sections 2 and 3, so S1 may start.** Read from the code at f947053. Paths are under `web/src/app/` unless they start with `web/` or `docs/`; "(new)"
 marks a name that does not exist yet.
 
 ## In short: what is to be approved
@@ -36,7 +36,7 @@ Found by trying: `editor/cm.ts` does not load under Node as it is; one line in a
   code and `files/EditorTabs.tsx`, so "owner functions for `activeTab`" leaves S6's row. A fair cut is three builder
   items: the records with the derived signals; Save and the file code's calls; the scroll snapshot. S2's split of
   `files/actions.ts` is three ways, not four. S1 also edits `web/src/main.tsx`, which lane a's S7 may touch (section 4).
-  `graphIndex` joins S6. C2 and C4 (phase 1) move names cited here (`decodeText`, the import cycles): rule 7's re-check
+  `graphIndex` joins S6. C2 and C4 (phase 1, merged 2026-11-17) moved names cited here (`decodeText` stays in `files/open.ts`; the import cycles are gone): rule 7's re-check
   before S1 settles them.
 
 ## 1. Owners (decision 1)
@@ -70,14 +70,20 @@ the file code and the documents with the editor.**
 Banners and the run marks are keyed by path: who follows them is below.
 
 ```ts
-interface Doc {                          // lives as long as its tab; never copied. A Signal is what the computeds read
-  kind: Signal<"text" | "dta">;          // retype changes it in place
+interface Doc {                          // one record per tab, for its whole life; never copied. A Signal is what the computeds read
   path: Signal<string>;                  // a rename changes it
-  state: Signal<EditorState>;            // text tabs only, as the three below; always current, shown or not
+  content: Signal<TextPart | DtaPart>;   // a retype, a reload, or a run's text shown swaps the part; the record stays
+}
+interface TextPart {                     // a text tab's document; a new one at every swap, so its identity says "this document"
+  kind: "text";                         // the tag of the union
+  state: Signal<EditorState>;            // always current, shown or not
   saved: Signal<string | null>;          // the store's text in the editor's form; null: the store's version is not text
   form: FileForm;                        // line break and BOM, as Save writes them; no computed reads it
-  scroll: StateEffect<unknown> | null;   // EditorView.scrollSnapshot(), taken when the tab is hidden
+  dirty: ReadonlySignal<boolean>;        // computed: the text differs from `saved` (always, when `saved` is null)
 }
+interface DtaPart { kind: "dta" }         // nothing else: a .dta tab has no document
+// Where the scroll snapshot (EditorView.scrollSnapshot(), taken when the tab is hidden) lives, on the record or on
+// the TextPart, is S1's to decide.
 interface EditorSurface {                // what Editor.tsx hands attachView() at mount; a Node test hands none
   extensions: Extension;                 // what needs the view: the key bindings, the listener that calls edited()
   show(state: EditorState | null, scroll: StateEffect<unknown> | null): void; // null: the empty view
@@ -86,11 +92,26 @@ interface EditorSurface {                // what Editor.tsx hands attachView() a
 }
 ```
 
-**Open choice: the Doc's shape.** Either a union, `TextDoc | DtaDoc`, where a retype replaces the record in the
-`Doc[]` signal and `kind` is then a plain `readonly` field (the signal carries the retype; `path`, `state` and `saved` stay
-signals, so identity survives a rename and the computeds work); or `kind` as a `Signal`, as sketched above. S1 decides,
-unless the maintainer does first. Either way, S1's reviewer lists every place that holds a `Doc` across an await and
-checks that each handles a close, and S1 tests a pending Save while a rename retypes the same tab.
+**The shape, settled 2026-11-17 (decision 2).** One record per tab for its whole life: `path` and `content`, as above. A
+holder that wants the tab holds the record; a holder that wants the document holds the part it took. **Staleness is the
+identity of the part:** a holder compares the part it took with `content.peek()` and drops its work when they differ. There
+is no counter. A retype to or from `.dta`, a reload, and a run's text shown each swap in a new part (a part is replaced
+where it would have been rewritten in place); a close drops the record. A new content kind is a new member of the `Part`
+union, not a new field. S1's reviewer lists every place that holds a `Doc` across an await and checks that each handles a
+close, and S1 tests a pending Save while a rename retypes the same tab.
+
+**The spike's evidence** (`spike/doc-shape`, a local branch kept for S1: 86dacb7 and 80390f9; reports of the audit's
+session 2, read by two reviews). It built three shapes over one API and one suite (17 tests, 51 runs): the union
+`TextDoc | DtaDoc`; `kind` as a signal with a counter bumped at five places; and one record per tab with
+`text: Signal<TextPart | null>`. All three pass every test once their replacement points are chosen; each is about 205 to
+220 lines, and the computeds carry 3 or 4 guards in each. The suite includes a pending Save while a clean tab is reloaded,
+while it shows a run's text, while a rename retypes it, and a keystroke after Save is pressed. None of the three gets the
+in-place cases (a reload, a run's text shown) for free: each had to be chosen as a replacement point, and an in-place
+`ranOver` is the natural mistake in all of them. **Limits.** The chosen `Signal<TextPart | DtaPart>` was not built: the
+closest built shape has `null` where `DtaPart` stands. No view, no marks (the error and run-lines marks live in the
+`EditorState`, so they follow a part's state), no banners, no scroll snapshot and no e2e were built; the turns and the store
+are toys. The cost of a record replaced at every reload was reasoned, not measured. The recommendation of the second
+round, about 65% for the text shape, rested on the Save rule below.
 
 The owner keeps the records in a private `Signal<Doc[]>`, in the tabs' order, and the active one in a
 `Signal<Doc | null>`. `tabs`, `activeTab`, `selection` and each `dirty` are computeds over those and the `Signal`
@@ -100,7 +121,7 @@ The records are private. Readers keep today's names and shapes, read-only:
 
 | Today | Becomes |
 |---|---|
-| `tabs[].dirty`, `setDirty` | `tabs` is a computed `OpenTab[]`. Each text record has a computed `dirty`: its text differs from `saved` (always, when `saved` is null). `tabs` depends on those, so it changes when a dot flips, not at each keystroke. `setDirty` goes. |
+| `tabs[].dirty`, `setDirty` | `tabs` is a computed `OpenTab[]`. Each `TextPart` has a computed `dirty`: its text differs from `saved` (always, when `saved` is null). `tabs` depends on those, so it changes when a dot flips, not at each keystroke. `setDirty` goes. |
 | `activeTab` against the Editor's `shown` (`editor/Editor.tsx:55`) | The owner holds the active record; `activeTab` is a computed of its path, so a rename writes nothing. "Shown" is the active record when it is a text tab: a computed, not a second signal. |
 | The four Maps and `saving` | Fields of the record. A Save holds its record, and sees a rename or a close on it. |
 | `selection` (`editor/commands.ts:17`) | A computed of the shown record's state. |
@@ -208,8 +229,17 @@ pins this: a rename goes through while a Save's write is pending. It is safe bec
 because the store applies and answers changes in the order called (`web/src/engine/store.ts:172-176`): a later turn's
 follow-up waits for its own call, so it runs after the Save's answer. S2's test of the store's order holds that.
 Identity covers a rename or a close while the write is pending, which is what `web/e2e/editor.spec.ts:419-426` holds the
-answer for; against a later reload or run-over of the same record, only the order keeps a late answer from setting
-`saved` over it. The alternative is choice b.
+answer for. A later reload or run's text is covered by the Save rule below. The alternative is choice b.
+
+**The Save rule (approved 2026-11-17: "Q1 yes").** A reload, "Reload from the run", an upload's Replace, or a run's text
+shown in the tab **cancels a pending Save of that tab**: the later action wins. The Save took its `TextPart` when pressed;
+in its turn it finds that the tab's `content` is another part (or the record is gone), writes nothing, and applies no
+answer and no banner. It covers a tab with unsaved edits too: "Reload from the run" is offered only for such a tab (the
+run-changed banner is raised only when the run's text was kept over the edits), so that case is the main one, not an
+edge. A run that keeps the visitor's edits and shows nothing replaces no part, so a Save pressed before it still writes,
+as SPEC section 7 says (a page change during a run wins). **This changes today's code,** which writes in the reload and
+run-shown cases (`editor/Editor.tsx:254-258` checks only the path). S1 writes the rule into SPEC and tests each case,
+including a Save pressed while a reload of an edited tab waits.
 
 Not in a turn, or not wholly, at f947053, and the item that brings each in:
 
@@ -247,10 +277,11 @@ Not in a turn, or not wholly, at f947053, and the item that brings each in:
 - In a new module, an export that carries a name from today's code is that function, moved. New in the owner:
   `addText`, `addDta`, `activate`, `askClose` (today's `askCloseTab`), `moved`, `retype`, `stateOf`, `edited` and
   `attachView`.
-- `moved` takes a file or a folder and moves every record under it. `retype` changes a tab's kind in its place after
-  a rename (`text` null: a `.dta` tab), where `reopenAs` closes and opens again.
+- `moved` takes a file or a folder and moves every record under it. `retype` swaps a tab's `content` after
+  a rename (a `DtaPart` for a `.dta` tab), where `reopenAs` closes and opens again.
 - The owner imports neither `files/actions.ts`, `files/open.ts` nor `run.ts`: each imports it, or will. That is why
-  `fileTurn` moves first, and why `reloadFromStore` sits in `files.ts` beside `textInStore`.
+  `fileTurn` moves first, and why `reloadFromStore` (C4 renamed `textInStore` to it; it reads the store and calls
+  `reloadTab` in `files/actions.ts`) sits in `files.ts`.
 
 **S1's other files.** `files/EditorTabs.tsx` (`activate`); `files/dialogs.tsx`, `editor/RunControls.tsx` and
 `editor/banners.tsx` (they take `save`, `textOf` and `savedIsText` from the owner); `files.ts:97, 111` and `run.ts:76`

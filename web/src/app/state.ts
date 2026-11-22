@@ -120,7 +120,7 @@ export const rows: ReadonlySignal<BrowseRows | null> = runWriter.rows;
 export const memory: ReadonlySignal<Memory | null> = runWriter.memory;
 export const pickedVar = signal<string | null>(null); // the Data tab
 export const graphs: ReadonlySignal<Graph[]> = runWriter.graphs;
-// An index into `graphs`, which keeps the last 20 (run.ts MAX_GRAPHS): the oldest drop off the front, so an index
+// An index into `graphs`, which keeps the last 20 (graphs.ts MAX_GRAPHS): the oldest drop off the front, so an index
 // moves. Find a graph by its `n` (graphs.value.findIndex(g => g.n === n)), never keep an index: the log's links carry
 // `n`.
 export const graphIndex = signal(0);

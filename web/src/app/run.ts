@@ -7,14 +7,13 @@
 // result the machine made itself (rc 9998: a reset, or a run whose op failed in the worker) has no log of its own, so
 // what streamed in stays, with the reason as a note.
 
-import type { BrowseRows, RunResult } from "../engine/types.ts";
+import type { BrowseRows, ClientError, RunResult } from "../engine/types.ts";
 import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
+import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
 import * as S from "./state.ts";
 import { runWriter as W } from "./state.ts";
 import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
-
-export const MAX_GRAPHS = 20; // the graphs a session keeps; the oldest go first
 
 /** The run in progress: its number, how it was started, what streamed in, and its promise. */
 type Current = {
@@ -28,7 +27,6 @@ type Current = {
 };
 
 let runs = 0; // runs so far in this page: each run's items carry its number
-let graphCount = 0; // graphs drawn since the log was cleared: their numbers
 let current: Current | null = null;
 
 /** What the engine controller calls (connectRun). */
@@ -140,8 +138,15 @@ function engineReady() {
     (m) => {
       W.memory.value = m;
     },
-    () => {},
+    (e) => unlessGone(e),
   );
+}
+
+/** A read that failed. The engine being gone (no engine, or a reset meanwhile) is no news: engineGone clears what it
+ *  held. Any other failure is a bug or a broken worker: it goes to the console. */
+function unlessGone(e: ClientError | undefined) {
+  if (e?.kind !== "no-engine" && e?.kind !== "reset")
+    console.warn(`[dofile] a read of the engine failed: ${e?.message ?? e}`);
 }
 
 /** The engine is gone (a reset, or another tab has it): nothing of it is in memory. */
@@ -163,7 +168,7 @@ function setText(id: number, text: string, end: LastRun | undefined = undefined)
 function addGraphs(r: RunResult, id: number, theme: "light" | "dark") {
   if (!r.images.length) return;
   const added: Graph[] = r.images.map((png, i) => ({
-    n: ++graphCount,
+    n: nextGraphNumber(),
     png,
     theme,
     from: "run",
@@ -173,27 +178,6 @@ function addGraphs(r: RunResult, id: number, theme: "light" | "dark") {
   }));
   W.log.value = [...W.log.value, ...added.map((g) => ({ t: "graph", n: g.n }) as LogItem)];
   keepGraphs(added);
-}
-
-/** A .png opened from the files: it joins the session's graphs and is the one shown. Its colors are its own; `theme` is
- *  the page's at the time. The same file opened again replaces its entry (same `n`, same place) and selects it; one
- *  that has dropped out of the last 20 is added again. `png` is base64. */
-export function addFileGraph(path: string, png: string): Graph {
-  const i = W.graphs.value.findIndex((g) => g.from === "file" && g.path === path);
-  if (i >= 0) {
-    const g: Graph = { ...W.graphs.value[i], png, theme: S.resolvedTheme.value };
-    W.graphs.value = W.graphs.value.map((x, j) => (j === i ? g : x));
-    S.graphIndex.value = i;
-    return g;
-  }
-  const g: Graph = { n: ++graphCount, png, theme: S.resolvedTheme.value, from: "file", path };
-  keepGraphs([g]);
-  return g;
-}
-
-function keepGraphs(added: Graph[]) {
-  W.graphs.value = [...W.graphs.value, ...added].slice(-MAX_GRAPHS);
-  S.graphIndex.value = W.graphs.value.length - 1; // the latest graph is the one shown
 }
 
 /** Read the data, its first rows, the macros and the memory. With no engine, or when it is reset meanwhile, nothing is
@@ -210,8 +194,8 @@ export async function refreshData() {
     W.rows.value = rows;
     W.macros.value = macros;
     W.memory.value = memory;
-  } catch {
-    // no engine, or it was reset meanwhile
+  } catch (e: any) {
+    unlessGone(e); // no engine, or it was reset meanwhile
   }
 }
 
@@ -223,8 +207,9 @@ export async function moreRows(count = 50): Promise<boolean> {
   let next: BrowseRows;
   try {
     next = await engine.call("browse", { offset: from.offset + from.rows.length, limit: count });
-  } catch {
-    return false; // no engine, or it was reset meanwhile
+  } catch (e: any) {
+    unlessGone(e); // no engine, or it was reset meanwhile
+    return false;
   }
   if (W.rows.value !== from || "error" in next || !next.rows.length) return false;
   // rows of other data (a run ended, and its refreshData() has not answered yet) do not continue these
@@ -243,7 +228,5 @@ export function canClearLog(): boolean {
  *  text item, so its log still arrives. */
 export function clearLog() {
   W.log.value = W.log.value.filter((i) => i.t === "head" || (i.t === "text" && i.streaming));
-  W.graphs.value = [];
-  S.graphIndex.value = 0;
-  graphCount = 0;
+  clearGraphs();
 }

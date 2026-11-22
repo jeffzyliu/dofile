@@ -54,15 +54,6 @@ export const hasValues = (m: Matrix): m is Exclude<Matrix, { error: string }> =>
 
 // ---- sizes and counts ----
 
-/** 6 KB, 1.2 MB: bytes as a person reads them. */
-export function bytes(n: number): string {
-  const unit = (value: number, name: string) => `${value >= 10 ? Math.round(value) : Number(value.toFixed(1))} ${name}`;
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return unit(n / 1024, "KB");
-  if (n < 1024 ** 3) return unit(n / 1024 ** 2, "MB");
-  return unit(n / 1024 ** 3, "GB");
-}
-
 /** 1,204: a count with its thousands separators. */
 export const count = (n: number) => n.toLocaleString("en-US");
 

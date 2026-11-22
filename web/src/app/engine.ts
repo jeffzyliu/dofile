@@ -12,7 +12,6 @@ import type {
   Effect,
   Env,
   Event,
-  Line,
   Machine,
   PlainEvent,
   Reply,
@@ -29,48 +28,8 @@ import { editorAsked } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
 import { engineWriter, graphicsWriter } from "./state.ts";
-import { stageNow } from "./states/words.ts";
-import type { EngineState, FailReason, RunHead, Stage } from "./types.ts";
-
-// ---- the words ----
-
-/** The stages a start goes through, in order: the snapshot start, or ?snapshot=0. */
-export const stagesOf = (snapshot: boolean): Stage[] =>
-  snapshot
-    ? ["download", "unpack", "python", "files", "engine"]
-    : ["download", "python", "files", "packages", "engine"];
-
-/** What the live region and the dialog's rows say at each stage. The status bar says the same phrase with a small first
- *  letter, after its "Starting · ". */
-export const stageWords: Record<Stage, string> = stageNow;
-export const stageStatus = Object.fromEntries(
-  Object.entries(stageNow).map(([k, v]) => [k, v[0].toLowerCase() + v.slice(1)]),
-) as Record<Stage, string>;
-
-/** The message of a start that failed with reason "updated". Views key on the reason, not on these words. */
-export const UPDATED = "dofile has a newer version on this site. Reload the page to use it.";
-
-/** What a failed start tells the visitor (`message`), by reason: what happened and what they can do, in plain words.
- *  The developer's cause is `detail`, and goes to the console. */
-export const FAILED: Record<FailReason, string> = {
-  "no-wasm": "This browser can't run the engine: it has no WebAssembly support. Try another browser.",
-  download: "The engine didn't download completely. Check your connection, then try again.",
-  memory: "There wasn't enough memory to start the engine. Close other tabs, then try again.",
-  updated: UPDATED,
-  unknown: "Something went wrong while starting the engine. Try again, or reload the page.",
-};
-/** The message of `failed-twice`, whatever the reason: it is not started again, so only a reload helps. */
-export const FAILED_TWICE =
-  "The engine failed twice while starting, so it won't try again by itself. Reload the page to try again.";
-
-/** The fixed lines of the live region. A stage's line is stageWords. */
-const SAY: Record<Exclude<Line, { stage: Stage }>, string> = {
-  ready: "Engine ready",
-  reset: "Engine reset",
-  "download-stopped": "Download stopped",
-  failed: "The engine didn't start",
-  "failed-twice": "The engine stopped after failing twice",
-};
+import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
+import type { EngineState, RunHead } from "./types.ts";
 
 // ---- the wiring ----
 
@@ -102,6 +61,7 @@ let dropped: Drop[] = []; // the last DROPS_KEPT
 const DROPS_KEPT = 200;
 // handles made by one effect and released by another
 let breakTimer: ReturnType<typeof setTimeout> | undefined; // start-break-timer, cancel-break-timer
+let offGraphics: (() => void) | null = null; // the transport's graphics subscription, ended by the next connectEngine
 let download: { n: Ticket; stop: AbortController } | null = null; // start-download, abort-download
 let runs: RunHandlers = { began() {}, log() {}, ended() {}, engineReady() {}, engineGone() {} };
 
@@ -127,9 +87,11 @@ export function connectEngine({
   graceMs?: number;
   canInterrupt?: boolean;
 }) {
-  client.onGraphics?.((p) => {
-    graphicsWriter.part.value = p;
-  });
+  offGraphics?.();
+  offGraphics =
+    client.onGraphics?.((p) => {
+      graphicsWriter.part.value = p;
+    }) ?? null;
   clearTimeout(breakTimer);
   download?.stop.abort();
   breakTimer = undefined;
@@ -267,11 +229,15 @@ function view(state: State): EngineState {
 
 /** Whether a download or a list fetch failed because the site was updated: from the error's kind, never its text. */
 const updated = (e: ClientError): boolean => e?.kind === "updated";
+/** Why a download or a list fetch failed, from the error's kind and reason. */
+const failReason = (e: ClientError): "download" | "updated" | "unknown" =>
+  updated(e) ? "updated" : e?.reason === "download" ? "download" : "unknown";
+
+const ENDINGS = new Set<ClientError["kind"] | undefined>(["reset", "stopped", "failed", "failed-twice"]);
 
 /** The effect performer: the only holder of the transport's Lifecycle and Builds, and the tab lock. */
 function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: Effect) => void {
-  /** An AbortError (abort-download) raises nothing. A failure for any cause other than another build is reason
-   *  "download". */
+  /** An AbortError (abort-download) raises nothing. */
   function startDownload(n: Ticket, say: Reply<"start-download">) {
     const stop = new AbortController();
     download = { n, stop };
@@ -286,7 +252,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
           if (e?.name !== "AbortError")
             say({
               type: "download-failed",
-              reason: updated(e) ? "updated" : "download",
+              reason: failReason(e),
               detail: String(e?.message ?? e),
             });
         },
@@ -301,7 +267,9 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       .then(
         (result) => say({ type: "run-ended", result }),
         (e: ClientError) => {
-          if (e?.kind === "op") say({ type: "run-failed", message: String(e.message) });
+          // an ending (reset, stopped, failed, failed-twice) was made by the machine, which has cut the run already; any
+          // other kind (op, no-engine) is the run failing, and the machine leaves `running`
+          if (!ENDINGS.has(e?.kind)) say({ type: "run-failed", message: String(e?.message ?? e) });
         },
       );
   }
@@ -333,7 +301,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
           (e: ClientError) =>
             say({
               type: "list-failed",
-              reason: updated(e) ? "updated" : e?.reason === "download" ? "download" : "unknown",
+              reason: failReason(e),
               detail: String(e?.message ?? e),
             }),
         );
@@ -362,6 +330,8 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "end-run":
         return runs.ended(effect.result);
       case "engine-ready":
+        // this start has its store (banners match by kind, whatever the cause); a start that has none adds it again next
+        S.dismiss({ b: "store-failed", cause: "open" });
         return runs.engineReady();
       case "engine-gone":
         return runs.engineGone();
@@ -375,9 +345,17 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         if (effect.focusEditor) editorAsked.value = {};
         return;
       case "add-reset-banner":
-        return S.addBanner({ b: "reset", reason: effect.reason, kind: effect.kind, run: effect.run });
+        return S.addBanner({
+          b: "reset",
+          reason: effect.reason,
+          kind: effect.kind,
+          cause: effect.cause,
+          run: effect.run,
+        });
+      case "add-store-banner":
+        return S.addBanner({ b: "store-failed", cause: effect.cause });
       case "say":
-        return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageWords[effect.line.stage]);
+        return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageNow[effect.line.stage]);
       case "warn":
         return console.warn(`[dofile] ${effect.text}`);
       default:

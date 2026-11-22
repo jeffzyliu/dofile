@@ -26,6 +26,7 @@ import {
   tabs,
   wrap,
 } from "../state.ts";
+import { runOn } from "../states/predicates.ts";
 import { store } from "../store.ts";
 import type { RunHead } from "../types.ts";
 import { openMenuState } from "../ui/Menu.tsx";
@@ -211,7 +212,7 @@ let marked: { head: RunHead; path: string } | null = null;
 function followRuns() {
   const st = engine.value;
   untracked(() => {
-    const run = st.s === "running" || st.s === "breaking" || st.s === "waiting" ? st.run : null;
+    const run = runOn(st) ? st.run : null;
     if (run && marked?.head === run) return;
     if (marked && states.has(marked.path)) update(marked.path, { effects: setRunLines.of(null) });
     marked = null;

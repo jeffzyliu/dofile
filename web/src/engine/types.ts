@@ -62,15 +62,22 @@ export type ViewOp = Exclude<keyof ReadOps, "files" | "read">;
 export type ToWorker = { [K in Op]: { id: number; op: K; args: Ops[K]["args"] } }[Op];
 export type FromWorker =
   | { id: number; result: Ops[Op]["result"] }
-  | { id: number; error: string; name: string }
+  | { id: number; error: string; name: string; type?: string }
   | { id: number; log: string } // a chunk of a running run's log
   | { stage: Stage } // a start-up stage began
+  // /work could not take the page's version after a run (the store has the run's files): it is out of step with the
+  // store. Sent right after that run's answer.
+  | { folderError: string }
   // the lazy graphics part. With a shared buffer: "again" (a graph found it failed) or "damaged" (the page refetches
   // it). Without one the worker fetches it and these tell the page how it goes; "damaged" then means the worker dropped
   // its copy
   | { graphics: "again" | "damaged" | "fetching" | "landed" }
   | { graphics: "progress"; received: number }
   | { graphics: "failed"; why: string };
+
+/** Where the worker's copy of the file store failed: "open" (the storage did not open, or could not be read), "copy"
+ *  (it was read, but the files could not be written into /work). */
+export type StoreCause = "open" | "copy";
 
 /** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
 export type Wheel = string | { name: string; bytes: Uint8Array };
@@ -120,7 +127,7 @@ export interface Startup {
   notCached?: string[]; // snapshot
   runtimeS?: number;
   packagesS?: number; // normal
-  storeError?: string; // the worker could not open the store; /work started empty
+  storeError?: { name: string; message: string; cause: StoreCause }; // the worker has no store; /work started empty
 }
 
 export interface FileInfo {
@@ -155,6 +162,8 @@ export interface FileChange {
 }
 
 export type ResetKind = "break" | "crash" | "user";
+/** What crashed the engine: the worker's error; the browser closed the file store; /work out of step with the store. */
+export type CrashCause = "error" | "storage" | "folder";
 /** The `kind` of an rc 9998 run result (machine.ts, cutResult): a reset, another tab took the engine ("stopped"), or
  *  the run's op failed in the worker ("run-failed": that worker stays). */
 export type CutKind = ResetKind | "stopped" | "run-failed";
@@ -234,6 +243,7 @@ export interface ClientError extends Error {
   kind: "failed" | "failed-twice" | "updated" | "reset" | "stopped" | "no-engine" | "op";
   reason?: "download" | "unknown"; // "failed", from download() and build() only
   reset?: ResetKind; // "reset"
+  type?: string; // "op": the Python exception class, when the worker's error is a PythonError
 }
 
 export interface Progress {

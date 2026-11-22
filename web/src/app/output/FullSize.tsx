@@ -18,6 +18,8 @@ const close = () => {
 function Viewer() {
   const root = useRef<HTMLDivElement>(null);
   const [said, say] = useState("");
+  const saidTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(saidTimer.current), []);
   const list = graphs.value;
   const at = shownGraph(list, graphIndex.value);
   const g = list[at];
@@ -91,7 +93,8 @@ function Viewer() {
           onClick={async () => {
             if (await copyImage(g)) {
               say("Copied");
-              setTimeout(() => say(""), 2500);
+              clearTimeout(saidTimer.current); // a second copy keeps its own 2.5 s
+              saidTimer.current = setTimeout(() => say(""), 2500);
             }
           }}
         >
