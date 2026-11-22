@@ -42,7 +42,6 @@ test("a file's form is kept: the editor's text has \\n and no BOM, textOf gives 
   D.addText("win.csv", "﻿a\r\nb\r\n");
   assert.equal(D.stateOf("win.csv")!.doc.toString(), "a\nb\n");
   assert.equal(D.textOf("win.csv"), "﻿a\r\nb\r\n");
-  assert.deepEqual(D.formAt("win.csv"), { br: "\r\n", bom: true });
   assert.equal(D.tabs.value[0].dirty, false);
 });
 

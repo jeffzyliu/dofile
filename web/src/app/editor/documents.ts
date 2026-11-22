@@ -21,7 +21,7 @@ import {
   wholeLines,
 } from "./cm.ts";
 import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
-import { editorText, type FileForm, fileText, followRun, formOf, PLAIN, savedForm } from "./ranover.ts";
+import { editorText, type FileForm, fileText, followRun, formOf, savedForm } from "./ranover.ts";
 
 interface TextPart {
   kind: "text";
@@ -302,9 +302,6 @@ export function textOf(path: string): string | null {
  *  that is not text over it; the run-changed banner says so). */
 export const savedIsText = (path: string): boolean => textOfDoc(find(path))?.saved.peek() !== null;
 
-/** The form (line break, BOM) the open text file `path` is written in. */
-export const formAt = (path: string): FileForm => textOfDoc(find(path))?.form ?? PLAIN;
-
 /** Change the state of the open text tab `path` (shown or not) by `spec`. */
 export function update(path: string, spec: TransactionSpec): void {
   const part = textOfDoc(find(path));
@@ -319,38 +316,38 @@ export function edited(state: EditorState): void {
 // ---- Save ----
 
 /** Save `path` (default: the active tab): its text as it is now, written in its turn (files/turns.ts) under the tab's
- *  path then, so a rename or delete pressed before it is honoured (closed: nothing is written). A save that answers
- *  after a rename leaves its outcome on the tab under the new name; the store has the bytes there too, as its rename
- *  is called after the write is issued. Resolves true once saved, false when not (no such text tab, its tab closed
- *  meanwhile, the store refused: the save-failed banner says why). */
+ *  path then, so a rename or delete pressed before it is honoured. The later action wins (the Save rule, SPEC section
+ *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written, and an answer that comes after
+ *  one of these is not applied. A save that answers after a rename leaves its outcome on the tab under the new name;
+ *  the store has the bytes there too, as its rename is called after the write is issued. Resolves true once written,
+ *  false when not (no such text tab, cancelled, the store refused: the save-failed banner says why). */
 export async function save(path: string | undefined = activeTab.peek() ?? undefined): Promise<boolean> {
   const d = path ? find(path) : undefined;
   const part = textOfDoc(d);
   if (!d || !part) return false;
   const text = part.state.peek().doc.toString(); // taken now: a keystroke while it waits is not saved
-  const live = () => isOpen(d) && textOfDoc(d) !== undefined; // closed or retyped meanwhile: no write, no answer
+  const ours = () => isOpen(d) && d.content.peek() === part; // the document it took is still the tab's
   let written = d.path.peek(); // the name the text is written under: the tab's when its turn comes
   try {
     let write = null as Promise<unknown> | null;
     await fileTurn(async () => {
-      if (!live()) return;
+      if (!ours()) return;
       written = d.path.peek();
-      write = store.write(written, new TextEncoder().encode(fileText(text, formAt(written), written)));
+      write = store.write(written, new TextEncoder().encode(fileText(text, part.form, written)));
     });
     if (!write) return false;
     await write;
   } catch (e) {
     const message = (e as Error)?.message ?? String(e);
-    if (live()) addBanner({ b: "save-failed", path: d.path.peek(), message }); // not for a tab closed meanwhile
-    say(`${baseName(live() ? d.path.peek() : written)} couldn't be saved`);
+    if (ours()) addBanner({ b: "save-failed", path: d.path.peek(), message });
+    say(`${baseName(ours() ? d.path.peek() : written)} couldn't be saved`);
     return false;
   }
-  const now = live() ? d.path.peek() : null; // the tab's path now, or null when it was closed meanwhile
-  const p = textOfDoc(d);
-  if (now !== null && p) {
+  const now = ours() ? d.path.peek() : null;
+  if (now !== null) {
     // the store has `text`: it is the saved text, in the form as written (the name decided whether the BOM was dropped)
-    p.saved.value = text;
-    p.form = savedForm(p.form, written);
+    part.saved.value = text;
+    part.form = savedForm(part.form, written);
     for (const b of banners.peek()) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === now) dismiss(b);
   }
   showToast(`Saved ${baseName(now ?? written)}`);
