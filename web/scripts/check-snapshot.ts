@@ -200,7 +200,7 @@ type ChildExit = { code: number | null; result: { failed?: number } | null; time
 const runChild = async (childArgs: string[], limitS: number): Promise<ChildExit> => {
   let result: ChildExit["result"] = null;
   const { code, timedOut } = await runScript(fileURLToPath(import.meta.url), ["--child", ...childArgs, ...passArgs], {
-    limitS,
+    limitS: limitS || undefined, // 0: no limit, as before
     onLine: (line) => {
       if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7));
       else console.log(line);

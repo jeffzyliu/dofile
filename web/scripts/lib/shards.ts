@@ -19,12 +19,12 @@ export async function runShards<T>(items: T[], shards: number, run: (item: T) =>
 
 export type ChildExit = { code: number | null; timedOut: boolean };
 
-/** Runs `node script ...childArgs`; killed (SIGKILL) after `limitS` seconds (0: no limit). Stdio is ignored, except
+/** Runs `node script ...childArgs`; killed (SIGKILL) after `limitS` seconds (undefined: no limit; 0 kills at once). Stdio is ignored, except
  *  with `onLine`: stdout lines go to it, and stderr is inherited. */
 export const runChild = (
   script: string,
   childArgs: string[],
-  { limitS = 0, onLine }: { limitS?: number; onLine?: (line: string) => void } = {},
+  { limitS, onLine }: { limitS?: number; onLine?: (line: string) => void } = {},
 ) =>
   new Promise<ChildExit>((done) => {
     const child = spawn(process.execPath, [script, ...childArgs], {
@@ -32,7 +32,7 @@ export const runChild = (
     });
     let pending = "",
       timedOut = false;
-    const timer = limitS
+    const timer = limitS !== undefined
       ? setTimeout(() => {
           timedOut = true;
           child.kill("SIGKILL");

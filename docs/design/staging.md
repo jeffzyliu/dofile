@@ -10,7 +10,7 @@ Four kinds of file reach the editor's `public/` (all gitignored: `web/.gitignore
 
 | Staged file | Source | Written by | Today, when |
 |---|---|---|---|
-| the dofile wheel, `public/dofile-*.whl` | the newest `*.whl` in the repository's `dist/` (`npm run wheel` builds it) | `vite.config.ts:55-56` | every load of the config |
+| the dofile wheel, `public/dofile-*.whl` | the newest `*.whl` in `web/.wheel/` (`npm run wheel` builds it) | `vite.config.ts:55-56` | every load of the config |
 | extra wheels, `public/pyreadstat-*.whl` | `web/wheels/*.whl` (committed) | `vite.config.ts:57-58` | every load of the config |
 | Pyodide's runtime, `public/pyodide/` (3 files, `RUNTIME_FILES`, `start-files.ts:14`) | `node_modules/pyodide/` | `vite.config.ts:63-68` | every load of the config |
 | the snapshot, `public/snapshot/` (+ `manifest.json`) | built in Pyodide under Node | `scripts/make-snapshot.ts` (`rmSync` of the folder first, then writes) | `npm run snapshot` |
@@ -39,10 +39,10 @@ current inputs. Wheel = a wheel in the root `dist/` (`npm run wheel`, `package.j
 
 | Script | Runs (today) | Needs staged | Writes | Notes |
 |---|---|---|---|---|
-| `wheel` | `rm -f dist/dofile-*.whl`, `uv build --wheel` | nothing | root `dist/` | S9 changes where it writes (clause: stops deleting the release wheels); R5 reads the place from S9's one `wheels()` helper, never spells it |
+| `wheel` | `rm -f web/.wheel/dofile-*.whl`, `uv build --wheel --out-dir web/.wheel` | nothing | `web/.wheel/` | S9a moved it there (the release wheels in root `dist/` are left alone); R5 reads the place from `scripts/lib/wheels.ts`, never spells it |
 | `snapshot` | `wheel`, `make-snapshot.ts` | nothing: it reads W, X from `dist/`, `web/wheels/` (via `install-engine.ts`) and P from `node_modules` | S | the only writer of `public/snapshot/` |
 | `check-snapshot` | `wheel`, `check-snapshot.ts` | S, fresh (`:168-174`, rc 2 if stale); W, X from `dist/` | none | never reads staged W, X, P |
-| `check-pytest`, `check-numeric` | `wheel`, the script | nothing | none | `installEngine` reads `dist/`, `web/wheels/` |
+| `check-pytest`, `check-numeric` | `wheel`, the script | nothing | none | `installEngine` reads `web/.wheel/`, `web/wheels/` |
 | `pretest` / `test` | `wheel`; `node --test` | nothing staged; one test loads the config: `test/site.test.ts:304-309` spawns `vite build` and `vite build --mode site` with no URLs and expects "Say which addresses ..." (`:398`), on a checkout where nothing is staged (the CI `unit` job runs `npm test` before any build), so `staged()` must not run at module load or before the URLs check. `test/harness.ts:15-23` reads `dist/`, `web/wheels/`; `engine.test.ts:350`, `snapshot-native.test.ts` read `public/snapshot` and skip when it is missing or stale | none | 5 tests skip with no snapshot (G0's baseline) |
 | `dev` | `wheel`, `build-id.ts --warn`, `together.ts dev`: two `vite` | W, X, P, S (S missing: the page says so; stale: a warning, the page "updated") | W, X, P (twice, racing) | serves `public/` at `/`; `devStartFiles()` (`:85`) lists `public/` and reads its manifest on every request |
 | `build` | `wheel`, `vite build`, `vite build --mode site` | W, X, P, S fresh: the editor build copies all of `public/` into `dist/app/`, and `writeStartFiles` (`:362`) throws on a stale S; with no S it builds and the page fails "no snapshot in this build" | W, X, P (twice) | the site build needs only the wheel's file name (the landing page's version, `:138`) and `dist/app/start-files.json` |
@@ -153,7 +153,7 @@ names its fix. S9 puts the snapshot's other knobs (quality, no-mpl, ...) in the 
 
 This note reads pre-S9 code (S9 comes first: `scripts/lib`, the config split into plugin modules, `wheel` no longer deleting old
 wheels). R5's builder re-maps every `vite.config.ts`, `build-id.ts` and `wheel` line reference below at the start. Once `wheel`
-stops deleting `dist/dofile-*.whl`, "the newest by `sort().at(-1)`" (`build-id.ts:31`) may pick a release wheel, so S9's
+now builds into `web/.wheel/` (S9a), so `wheels()` reads only that folder and the newest there is the one just built; S9's
 `wheels()` must return the wheel just built.
 
 `scripts/stage.ts` (new), `snapshot-inputs.txt` (new) with its test; `build-id.ts` (`staged()`); `vite.config.ts` loses
