@@ -157,7 +157,8 @@ S6 builds it.
 
 **Update 2026-11-16.** S2 builds turn bodies as generators, run by `fileTurn`, with an async thunk as the fallback; the
 plan's S2 row (`docs/web-audit-plan.md`, phase 2) has the design. The rules below stand; only how a body is written
-changes.
+changes. S2's first half built them: `fileTurn(body)` in `files/turns.ts` takes a `function*` over `Io`, and
+the comment at the top of that file is the guide to writing one.
 
 **The unit of order is a turn: the store calls that no question separates, and what must stay next to them. Never a
 whole operation.**
@@ -177,8 +178,9 @@ whole operation.**
    run" (`editor/banners.tsx:49-53`), and `openFile`'s read with the tab it adds (`files/open.ts:56, 75-77`), so a
    replace or a rename cannot land between them. No turn calls `openFile`: `retype` takes a text read inside the
    rename's own turn, where `reopenAs` calls `openFile` today (`files/actions.ts:97, 108`).
-7. One door: in `web/src/app/` the store's `write`, `rename`, `remove` and `mkdir` are called only on the `Writer`
-   (new) a turn hands to `fn`. S2 picks what holds it (a type, or N1's path table).
+7. One door: in `web/src/app/` the store's `write`, `mkdir`, `rename`, `remove` and `change` are called only through
+   the `Io` a turn's body is given (`files/turns.ts`). A Biome rule holds it (`web/biome/architecture.grit`), with an
+   upload's writes and the first visit's sample as its named exceptions until B1.
 
 **What a write's turn checks again after a question.** An upload decides from a listing taken before any dialog
 (`files/actions.ts:272, 290-295`) and from whether the file is open with unsaved edits (`:303`); a Save, a run or
@@ -247,14 +249,16 @@ Not in a turn, or not wholly, at f947053, and the item that brings each in:
 |---|---|
 | Save, the only store write in a view (`editor/Editor.tsx:245-280`) | S1 moves it to the owner, in its turn as now |
 | An upload's `put` and `reopen` (`files/actions.ts:275-286, 338, 367-373`); "Restore the sample" is an upload | B1 |
-| `followOpen` (`files.ts:96-113`) | B1 |
+| `followOpen` (`files.ts:96-113`) | S2, first half |
 | `openFile`'s read and the tab it adds (`files/open.ts:56-77`); "Restore the sample" ends with one (`sample.ts:73`) | B1; S1 has `retype` read inside the rename's turn |
 | "Reload from the run" (`editor/banners.tsx:49-53`) | S1 moves it to `files.ts`; S2 puts it in a turn |
-| `deleteAll`'s list (`files/actions.ts:149-152`); the first visit's `put` (`sample.ts:27-29`) | S2, first half |
+| `deleteAll`'s list (`files/actions.ts:149-152`) | S2, first half |
+| The first visit's `put` (`sample.ts:27-29`) | B1, with the upload |
 
 - **Why.** A queue per operation holds every Save while an upload's clash dialog is open. Today's two chains do not
   know each other, so an upload is ordered against nothing but other uploads.
-- **Against.** Rule 3 is a convention that no type holds: a nested turn hangs silently. Section 7's order tests are
+- **Against.** Rule 3 is held by the bodies' form (a generator has nothing to await) and by `fileTurn` refusing a turn
+  started inside a body; a body that calls something which starts a turn is caught only when it runs. Section 7's order tests are
   its net. The worker's writes at the end of a run are not turns (SPEC section 7 orders them); an upload's write
   checks its expectation inside its own transaction, so they cannot land between that check and the write.
 
@@ -263,7 +267,7 @@ Not in a turn, or not wholly, at f947053, and the item that brings each in:
 | Module | Signals it owns | Exports | Item |
 |---|---|---|---|
 | `editor/documents.ts` (new) | the records; `tabs`, `activeTab`, `selection` | `addText(path, text)`, `addDta(path)`, `activate(path)`; `close(path)`, `askClose(path)`, `closeUnder(top)`; `moved(from, to)`, `retype(path, text)`, `reload(path, text)`, `ranOver(path, text)`; `save(path?)`; `stateOf(path)`, `textOf(path)`, `savedIsText(path)`, `update(path, spec)`, `edited(state)`; `attachView(surface)` | S1 |
-| `files/turns.ts` (new) | none | `fileTurn(fn)`; then `serial()` and the type `Writer` | S1 moves `fileTurn` as it is; S2, first half, adds the rest |
+| `files/turns.ts` (new) | none | `fileTurn(body)`, the types `Io`, `Turn`, `Issued`; `serial()` with the upload's turns | S1 moves `fileTurn` as it is; S2, first half, makes it run generators over `Io`; B1 adds `serial()` |
 | `files/open.ts` | none | as today; it calls `addText`, `addDta`, `activate` | S1 edits it |
 | `files.ts` | `files`, `hasFiles`, `fresh`, `persisted` | as today, and `reloadFromStore(path)` (new) | S1 |
 | `files/ops.ts` (new) | none | `renameEntry`, `createEntry`, `deleteEntries`, `deleteAll`, `zipFolder`, `downloadEntry`, `NEW_NAMES` | S2, second half |
