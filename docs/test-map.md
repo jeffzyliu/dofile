@@ -140,6 +140,11 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   deleted and renamed files, a same-size rewrite (time only) and an emptied file (size only), an untouched file not
   read; a refused write tried again until the page replaces it; a file where the store has a folder; a `/work` that
   cannot take the page's version (said once).
+- `worker-boot.test.ts`: the worker's start (`engine/worker-boot.ts`) without Pyodide: `fetchBytes` and `watchFetch`
+  (the Cache first, a .wasm's type, a missing or failed fetch a `DownloadError`, the real `fetch` put back), a refused
+  or absent Cache, the snapshot start's stage order and errors (a missing file `DownloadError`, a broken Cache its own
+  error, a refused one still fetched), and `boot`'s steps on a stand-in Pyodide (wheels only on the normal boot, the
+  Break callback, the graphics hook).
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.

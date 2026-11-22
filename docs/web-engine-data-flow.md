@@ -124,7 +124,8 @@ What each file owns and talks to: section 2.2.
 | Machine | `engine/machine.ts` | the state, the tickets, the crash count | nobody: it is a function |
 | File service | `app/files.ts`: keeps the file list fresh, "Download all", the effects own and block the files | `files`, `fresh`, `persisted`, two banners | store |
 | Transport | `engine/client.ts`: numbered messages, the interrupt buffer, the cache (`cached`, `download`, `build`, `forgetDownload`); decides nothing | the `Worker`, its pending calls, the interrupt buffer | worker (messages), store (`attach`), Cache |
-| Worker | `engine/worker.ts`: loads Python, answers one message at a time | Pyodide, the op queue, the `/work` mirror | Cache (read only), Python, the mirror |
+| Worker | `engine/worker.ts`: answers one message at a time | Pyodide, the op queue, the `/work` mirror | its start, Python, the mirror |
+| Worker's start | `engine/worker-boot.ts`: Python from the snapshot or the normal boot (`mount`), the wheels and the engine (`boot`); given the stage callback and the startup record by the worker, posts nothing | nothing | Cache (read only), the network, Python |
 | `/work` mirror | `engine/work-mirror.ts`: copies the store into `/work` at `mount`, takes the journal on `sync`, writes a run's changes back; given Pyodide's file system by the worker | `/work`, `unsaved` | store (its own connection) |
 | Python | `src/dofile/browser.py`: the functions the worker calls; each returns JSON text | one `Engine` | `engine.py`, OpenDTA |
 | Store | `engine/store.ts` | IndexedDB database `dofile`: `info`, `data`, `pending` | used by page and worker |
@@ -231,7 +232,7 @@ Points that are not obvious:
   snapshot); it is not deployed.
 - **A restart fetches the list again** (state `starting-list`): after a reset the Cache may have been evicted, and the worker
   would then fetch whatever build the site has now. A start the visitor begins reuses the list `download()` just checked.
-- **Pyodide's loader fetches its own files.** The worker temporarily replaces `self.fetch` (`watchFetch`) so those requests
+- **Pyodide's loader fetches its own files.** The worker's start (`engine/worker-boot.ts`) temporarily replaces `fetch` (`watchFetch`) so those requests
   hit the Cache first, and a failed fetch rejects the start instead of hanging.
 - **Stage names** arrive as typed ids; the words are the controller's (`stageWords`, `stageStatus`).
 
