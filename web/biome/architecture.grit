@@ -139,13 +139,13 @@ or {
   // an upload's writes (files/actions.ts uploadNow) and the first visit's sample (sample.ts put).
   // test/imports.test.ts keeps the store under its own name in src/app/ (no renamed import, copy or destructuring).
   or {
-    `store.$op`,
-    `store!.$op`,
-    `store?.$op`,
-    `store[$_]`,
-    `store![$_]`,
-    `store?.[$_]`
+    JsStaticMemberExpression(),
+    JsComputedMemberExpression()
   } as $m where {
+    $m <: or {
+      r"store\s*!?\s*\??\.\s*(?:write|mkdir|rename|remove|change|applyRun)",
+      r"store\s*!?\s*(?:\?\.)?\s*\[(?s).*"
+    },
     $filename <: r".*/src/app/.*",
     $filename <: not r".*/src/app/files/turns\.ts$",
     or {
