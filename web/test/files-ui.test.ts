@@ -1,6 +1,6 @@
 // The plain logic of src/app/files/*.ts on the real store module over fake-indexeddb, no DOM: tree rows and names
-// (tree.ts), opening a file (open.ts), and the file panel and tab actions (actions.ts). The editor is stood in for by
-// recording the calls made through `editorCommands`.
+// (tree.ts), opening a file (open.ts), and the file panel and tab actions (actions.ts). The tabs and their documents
+// are the real editor/documents.ts, with no view.
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
@@ -11,9 +11,10 @@ import type { ClashAnswer, ClashNow } from "../src/app/files/actions.ts";
 const S = await import("../src/app/state.ts");
 const { store } = await import("../src/app/store.ts");
 const { connectFiles, refresh } = await import("../src/app/files.ts");
-const { editorCommands } = await import("../src/app/editor/commands.ts");
+const D = await import("../src/app/editor/documents.ts");
 const { openFile, toBase64 } = await import("../src/app/files/open.ts");
 const A = await import("../src/app/files/actions.ts");
+const { fileTurn } = await import("../src/app/files/turns.ts");
 const T = await import("../src/app/files/tree.ts");
 const { formatSize } = await import("../src/app/bytes.ts");
 const { fileCommand } = await import("../src/stata/quote.ts");
@@ -22,13 +23,8 @@ const enc = (s: string) => new TextEncoder().encode(s);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const info = (path: string, size = 1, dir = false) => ({ path, dir, size, mtime: 0 });
 
-// the editor's calls, in order, with the tabs as they were at each call
-let calls: { op: string; args: unknown[]; tabs: string[] }[] = [];
-for (const op of ["open", "reload", "renamed", "closed"] as const) {
-  (editorCommands as Record<string, unknown>)[op] = (...args: unknown[]) => {
-    calls.push({ op, args, tabs: S.tabs.value.map((t) => t.path) });
-  };
-}
+// an edit typed in the tab `path`, as the editor's view would make it
+const edit = (path: string) => D.update(path, { changes: { from: 0, insert: "edited " } });
 
 connectFiles(store, { persisted: async () => true, persist: async () => true } as never);
 store.blocked = false;
@@ -38,15 +34,13 @@ async function reset(files: Record<string, string | Uint8Array> = {}) {
   for (const [path, data] of Object.entries(files))
     await store.write(path, typeof data === "string" ? enc(data) : data);
   await refresh();
-  S.tabs.value = [];
-  S.activeTab.value = null;
+  for (const t of D.tabs.value) D.close(t.path);
   S.dialog.value = null;
   S.layout.value = "desktop";
   S.phoneTab.value = "files";
   S.outputTab.value = "data";
   S.graphFull.value = false;
   for (const b of S.banners.value) S.dismiss(b);
-  calls = [];
 }
 beforeEach(() => reset());
 
@@ -153,25 +147,26 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
 
 // ---- open.ts ----
 
-test("openFile: a text file gets a tab, made active, before the editor is told; opened again it is only made active", async () => {
+test("openFile: a text file gets a tab with its document, made active; opened again it is only made active", async () => {
   await reset({ "a.do": "display 1\n", "b.do": "display 2\n" });
   await openFile("a.do");
   await openFile("b.do");
   assert.deepEqual(
-    S.tabs.value.map((t) => [t.path, t.kind, t.dirty]),
+    D.tabs.value.map((t) => [t.path, t.kind, t.dirty]),
     [
       ["a.do", "text", false],
       ["b.do", "text", false],
     ],
   );
-  assert.equal(S.activeTab.value, "b.do");
-  assert.deepEqual(calls, [
-    { op: "open", args: ["a.do", "display 1\n"], tabs: ["a.do"] },
-    { op: "open", args: ["b.do", "display 2\n"], tabs: ["a.do", "b.do"] },
-  ]);
+  assert.equal(D.activeTab.value, "b.do");
+  assert.deepEqual(
+    ["a.do", "b.do"].map((p) => D.textOf(p)),
+    ["display 1\n", "display 2\n"],
+  );
+  const a = D.stateOf("a.do");
   await openFile("a.do");
-  assert.equal(S.activeTab.value, "a.do");
-  assert.equal(calls.length, 2, "an open file is not opened again");
+  assert.equal(D.activeTab.value, "a.do");
+  assert.equal(D.stateOf("a.do"), a, "an open file is not opened again");
   assert.equal(S.phoneTab.value, "files", "the desktop leaves the phone's view alone");
 });
 
@@ -184,9 +179,9 @@ test("openFile on a phone shows the Editor view for a text or .dta tab; a .png g
   S.phoneTab.value = "files";
   await openFile("data/w.dta");
   assert.equal(S.phoneTab.value, "editor");
-  assert.deepEqual(S.tabs.value.at(-1), { path: "data/w.dta", kind: "dta", dirty: false });
-  assert.equal(S.activeTab.value, "data/w.dta");
-  assert.equal(calls.length, 1, "a .dta tab is not the editor's");
+  assert.deepEqual(D.tabs.value.at(-1), { path: "data/w.dta", kind: "dta", dirty: false });
+  assert.equal(D.activeTab.value, "data/w.dta");
+  assert.equal(D.stateOf("data/w.dta"), undefined, "a .dta tab has no document");
   S.phoneTab.value = "files";
   await openFile("out/g.png");
   assert.equal(S.graphFull.value, true);
@@ -198,7 +193,7 @@ test("openFile on a phone shows the Editor view for a text or .dta tab; a .png g
   await openFile("out/g.png");
   assert.equal(S.outputTab.value, "graph");
   assert.equal(S.graphFull.value, false);
-  assert.equal(S.tabs.value.length, 2);
+  assert.equal(D.tabs.value.length, 2);
 });
 
 test("toBase64 takes a large file in chunks", () => {
@@ -212,68 +207,58 @@ test("openFile: a file that isn't UTF-8 opens no tab and shows the not-text bann
     "b.xls": Uint8Array.from([0xd0]),
   });
   await openFile("survey.xlsx");
-  assert.deepEqual(S.tabs.value, []);
+  assert.deepEqual(D.tabs.value, []);
   assert.deepEqual(S.banners.value, [{ b: "not-text", path: "survey.xlsx" }]);
   await openFile("b.xls");
   assert.deepEqual(S.banners.value, [{ b: "not-text", path: "b.xls" }]);
   await openFile("gone.do"); // not in the store: nothing happens
-  assert.deepEqual(S.tabs.value, []);
+  assert.deepEqual(D.tabs.value, []);
 });
 
 // ---- actions.ts: tabs ----
 
-test("closing a tab: one with no edits closes (the next tab becomes active; the editor is told after `tabs` changed); one with unsaved edits asks", async () => {
+test("closing a tab: one with no edits closes (the next tab becomes active; its document goes); one with unsaved edits asks", async () => {
   await reset({ "a.do": "1", "b.do": "2", "c.do": "3" });
   for (const p of ["a.do", "b.do", "c.do"]) await openFile(p);
-  S.activeTab.value = "b.do";
-  calls = [];
-  assert.equal(A.askCloseTab("b.do"), true);
-  assert.equal(S.activeTab.value, "c.do", "the tab to the right");
-  assert.deepEqual(calls, [{ op: "closed", args: ["b.do"], tabs: ["a.do", "c.do"] }]);
-  A.closeTab("c.do");
-  assert.equal(S.activeTab.value, "a.do", "the last tab: the one to the left");
-  S.setDirty("a.do", true); // no editor here: the test makes the edits
-  calls = [];
-  assert.equal(A.askCloseTab("a.do"), false);
+  D.activate("b.do");
+  assert.equal(D.askClose("b.do"), true);
+  assert.equal(D.activeTab.value, "c.do", "the tab to the right");
+  assert.equal(D.stateOf("b.do"), undefined);
+  D.close("c.do");
+  assert.equal(D.activeTab.value, "a.do", "the last tab: the one to the left");
+  edit("a.do"); // no editor here: the test makes the edits
+  assert.equal(D.askClose("a.do"), false);
   assert.deepEqual(S.dialog.value, { d: "close-tab", path: "a.do" });
   assert.deepEqual(
-    S.tabs.value.map((t) => t.path),
+    D.tabs.value.map((t) => t.path),
     ["a.do"],
   );
-  assert.deepEqual(calls, []);
-  A.closeTab("a.do"); // the dialog's "Don't save"
-  assert.equal(S.activeTab.value, null);
-  assert.deepEqual(calls, [{ op: "closed", args: ["a.do"], tabs: [] }]);
+  assert.equal(D.textOf("a.do"), "edited 1", "asked: the document stays");
+  D.close("a.do"); // the dialog's "Don't save"
+  assert.equal(D.activeTab.value, null);
+  assert.equal(D.stateOf("a.do"), undefined);
 });
 
 // ---- actions.ts: rename, new, delete ----
 
-test("rename: an open file, and a folder with open files under it: the tabs follow, then the editor is told for each", async () => {
+test("rename: an open file, and a folder with open files under it: the tabs follow, each with its document", async () => {
   await reset({ "a.do": "1", "data/x.do": "2", "data/raw/y.csv": "3", "database.do": "4" });
   for (const p of ["a.do", "data/x.do", "data/raw/y.csv", "database.do"]) await openFile(p);
-  S.activeTab.value = "data/raw/y.csv";
-  calls = [];
+  D.activate("data/raw/y.csv");
   await A.renameEntry("data", "input");
   assert.deepEqual(
-    S.tabs.value.map((t) => t.path),
+    D.tabs.value.map((t) => t.path),
     ["a.do", "input/x.do", "input/raw/y.csv", "database.do"],
   );
-  assert.equal(S.activeTab.value, "input/raw/y.csv");
+  assert.equal(D.activeTab.value, "input/raw/y.csv");
   assert.deepEqual(
-    calls.map((c) => [c.op, ...c.args]),
-    [
-      ["renamed", "data/x.do", "input/x.do"],
-      ["renamed", "data/raw/y.csv", "input/raw/y.csv"],
-    ],
-  );
-  assert.ok(
-    calls.every((c) => c.tabs.includes("input/x.do")),
-    "tabs first, then the editor",
+    ["input/x.do", "input/raw/y.csv", "data/x.do", "data/raw/y.csv"].map((p) => D.textOf(p)),
+    ["2", "3", null, null],
   );
   await A.renameEntry("a.do", "b.do");
-  assert.equal(S.tabs.value[0].path, "b.do");
+  assert.equal(D.tabs.value[0].path, "b.do");
   await assert.rejects(A.renameEntry("b.do", "database.do"), /already exists/);
-  assert.equal(S.tabs.value[0].path, "b.do", "a refused rename changes no tab");
+  assert.equal(D.tabs.value[0].path, "b.do", "a refused rename changes no tab");
   await refresh();
   assert.ok(S.files.value.some((f) => f.path === "input/raw/y.csv"));
 });
@@ -281,16 +266,16 @@ test("rename: an open file, and a folder with open files under it: the tabs foll
 test("fileTurn (the editor's Save): a turn taken while a rename or a delete is in progress sees the tabs they left; a refused one does not stop the next", async () => {
   await reset({ "a.do": "1", "b.do": "2" });
   for (const p of ["a.do", "b.do"]) await openFile(p);
-  const tabsNow = () => S.tabs.value.map((t) => t.path);
+  const tabsNow = () => D.tabs.value.map((t) => t.path);
   const renaming = A.renameEntry("a.do", "c.do");
-  const seen = A.fileTurn(async () => tabsNow());
+  const seen = fileTurn(async () => tabsNow());
   await renaming;
   assert.deepEqual(await seen, ["c.do", "b.do"], "the tab has its new name when the turn comes");
   const deleting = A.deleteEntries(["b.do"]);
-  assert.deepEqual(await A.fileTurn(async () => tabsNow()), ["c.do"], "and the deleted file's tab is closed");
+  assert.deepEqual(await fileTurn(async () => tabsNow()), ["c.do"], "and the deleted file's tab is closed");
   await deleting;
   const refused = A.renameEntry("c.do", "c.do/x");
-  const after = A.fileTurn(async () => "next");
+  const after = fileTurn(async () => "next");
   await assert.rejects(refused);
   assert.equal(await after, "next");
 });
@@ -322,24 +307,20 @@ test("a new .do file and a new folder take the name asked for or the first free 
   await store.write("survey.xlsx", Uint8Array.from([0xff]));
   for (const p of ["data/x.do", "untitled.do", "data/y.do"]) await openFile(p);
   await openFile("survey.xlsx");
-  calls = [];
   await A.deleteEntries(["data"]);
   assert.deepEqual(
-    S.tabs.value.map((t) => t.path),
+    D.tabs.value.map((t) => t.path),
     ["untitled.do"],
   );
   assert.deepEqual(
-    calls.map((c) => [c.op, ...c.args]),
-    [
-      ["closed", "data/x.do"],
-      ["closed", "data/y.do"],
-    ],
+    ["data/x.do", "data/y.do"].map((p) => D.stateOf(p)),
+    [undefined, undefined],
   );
   await A.deleteEntries(["survey.xlsx"]);
   assert.deepEqual(S.banners.value, [], "a deleted file's not-text banner goes");
   await A.deleteAll();
   assert.deepEqual(await store.list(), []);
-  assert.deepEqual(S.tabs.value, []);
+  assert.deepEqual(D.tabs.value, []);
 });
 
 test("a folder's Download (.zip): every file and folder under it, named under the folder, nothing else", async () => {
@@ -461,8 +442,8 @@ test("upload: a clash with the same bytes but open with unsaved edits is still a
   await reset({ "a.do": "same a", "b.do": "same b" });
   await openFile("a.do");
   await openFile("b.do");
-  S.setDirty("a.do", true);
-  calls = [];
+  edit("a.do");
+  const b = D.stateOf("b.do");
   const { seen, stop } = answering([{ replace: true, same: false }]);
   await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`same ${n}`) })));
   stop();
@@ -471,8 +452,8 @@ test("upload: a clash with the same bytes but open with unsaved edits is still a
     [[{ d: "clash", path: "a.do", index: 1, total: 1 }, true]],
   );
   assert.deepEqual(
-    calls.map((c) => [c.op, ...c.args]),
-    [["reload", "a.do", "same a"]],
+    [D.textOf("a.do"), D.tabs.value[0].dirty, D.stateOf("b.do") === b],
+    ["same a", false, true],
     "Replace drops the edits; b.do, clean and identical, is left as it is",
   );
 });
@@ -542,8 +523,7 @@ test("upload over an open file: the clash says it has unsaved edits; Replace rel
   await reset({ "a.do": "old a", "b.do": "old b" });
   await openFile("a.do");
   await openFile("b.do");
-  S.setDirty("a.do", true); // no editor here: the test makes the edits
-  calls = [];
+  edit("a.do"); // no editor here: the test makes the edits
   const { seen, stop } = answering([
     { replace: true, same: false },
     { replace: true, same: false },
@@ -555,15 +535,9 @@ test("upload over an open file: the clash says it has unsaved edits; Replace rel
   stop();
   assert.equal(seen[0].now?.unsaved, true);
   assert.equal(seen[1].now?.unsaved, false);
+  assert.deepEqual([D.textOf("a.do"), D.tabs.value[0].dirty, D.stateOf("b.do")], ["new a", false, undefined]);
   assert.deepEqual(
-    calls.map((c) => [c.op, ...c.args]),
-    [
-      ["reload", "a.do", "new a"],
-      ["closed", "b.do"],
-    ],
-  );
-  assert.deepEqual(
-    S.tabs.value.map((t) => t.path),
+    D.tabs.value.map((t) => t.path),
     ["a.do"],
   );
 });
@@ -664,7 +638,7 @@ test("another dialog put in the clash's place with no answer keeps yours for eve
 test("after Do the same with Replace, a clash over an open file with unsaved edits is still asked", async () => {
   await reset({ "a.do": "old a", "b.do": "old b", "c.do": "old c" });
   await openFile("b.do");
-  S.setDirty("b.do", true); // no editor here: the test makes the edits
+  edit("b.do"); // no editor here: the test makes the edits
   const { seen, stop } = answering([
     { replace: true, same: true }, // a: replace, and the rest the same
     { replace: false, same: false }, // b: asked all the same, as it has unsaved edits: keep it
@@ -685,7 +659,7 @@ test("after Esc, or Do the same with Keep mine, a clash over a file with unsaved
   for (const first of ["stop", { replace: false, same: true }] as ClashAnswer[]) {
     await reset({ "a.do": "old a", "b.do": "old b" });
     await openFile("b.do");
-    S.setDirty("b.do", true);
+    edit("b.do");
     const { seen, stop } = answering([first, { replace: true, same: false }]);
     const done = await A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
     stop();
@@ -705,7 +679,7 @@ test("another dialog put in the place of a clash, with an unsaved file's clash a
 }, async () => {
   await reset({ "a.do": "old a", "b.do": "old b" });
   await openFile("b.do");
-  S.setDirty("b.do", true);
+  edit("b.do");
   const done = A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "the clash is asked");
   S.dialog.value = { d: "other-tab" }; // another tab took the engine
@@ -744,24 +718,23 @@ test("upload: a name with a control character is refused and counted", async () 
 test("rename: a .dta tab renamed to .csv opens again as text in its place; an unsaved text tab renamed to .dta stays text", async () => {
   await reset({ "a.do": "1", "w.dta": "a,b\n1,2\n", "c.do": "3" });
   for (const p of ["a.do", "w.dta", "c.do"]) await openFile(p);
-  S.activeTab.value = "a.do";
+  D.activate("a.do");
   S.phoneTab.value = "files";
-  calls = [];
   await A.renameEntry("w.dta", "w.csv");
   assert.deepEqual(
-    S.tabs.value.map((t) => [t.path, t.kind]),
+    D.tabs.value.map((t) => [t.path, t.kind]),
     [
       ["a.do", "text"],
       ["w.csv", "text"],
       ["c.do", "text"],
     ],
   );
-  assert.equal(S.activeTab.value, "a.do", "the active tab stays");
+  assert.equal(D.activeTab.value, "a.do", "the active tab stays");
   assert.equal(S.phoneTab.value, "files");
-  assert.ok(calls.some((c) => c.op === "open" && c.args[0] === "w.csv"));
-  S.setDirty("c.do", true);
+  assert.equal(D.textOf("w.csv"), "a,b\n1,2\n", "the store's text, read in the rename's turn");
+  edit("c.do");
   await A.renameEntry("c.do", "c.dta");
-  assert.deepEqual(S.tabs.value.at(-1), { path: "c.dta", kind: "text", dirty: true }, "the editor keeps the edits");
+  assert.deepEqual(D.tabs.value.at(-1), { path: "c.dta", kind: "text", dirty: true }, "the editor keeps the edits");
 });
 
 test("rename: a .dta tab renamed to .png closes, and the Graph tab and the full-size view are left alone (a phone too)", async () => {
@@ -772,13 +745,111 @@ test("rename: a .dta tab renamed to .png closes, and the Graph tab and the full-
     const graphs = S.graphs.value.length;
     await A.renameEntry("w.dta", "w.png");
     assert.deepEqual(
-      S.tabs.value.map((t) => t.path),
+      D.tabs.value.map((t) => t.path),
       ["a.do"],
       layout,
     );
-    assert.equal(S.activeTab.value, "a.do");
+    assert.equal(D.activeTab.value, "a.do");
     assert.equal(S.graphs.value.length, graphs, "the .png is not opened");
     assert.equal(S.outputTab.value, "data");
     assert.equal(S.graphFull.value, false);
   }
+});
+
+test("rename: a .dta tab renamed to a text name is read before its tab moves, so it never shows the new name as a .dta tab", async () => {
+  await reset({ "v.dta": "x", "w.dta": "a,b\n1,2\n" });
+  for (const p of ["v.dta", "w.dta"]) await openFile(p);
+  const seen: string[][] = [];
+  const stop = effect(() => {
+    seen.push(D.tabs.value.map((t) => `${t.path} ${t.kind}`));
+  });
+  await A.renameEntry("w.dta", "w.csv");
+  stop();
+  assert.ok(!seen.some((tabs) => tabs.includes("w.csv dta")), JSON.stringify(seen));
+  assert.deepEqual(seen.at(-1), ["v.dta dta", "w.csv text"]);
+  assert.equal(D.activeTab.value, "w.csv");
+});
+
+test("rename to a text name: a file that is not text closes its tab with the not-text banner; one the store cannot give closes it with none", async () => {
+  await reset({ "a.do": "1", "v.dta": Uint8Array.from([0xff, 0xfe, 0x00]), "w.dta": "x" });
+  for (const p of ["a.do", "v.dta", "w.dta"]) await openFile(p);
+  await A.renameEntry("v.dta", "v.csv");
+  assert.deepEqual(
+    D.tabs.value.map((t) => t.path),
+    ["a.do", "w.dta"],
+  );
+  assert.deepEqual(S.banners.value, [{ b: "not-text", path: "v.csv" }]);
+  S.dismiss(S.banners.value[0]);
+  const read = store.read;
+  store.read = async (path) => {
+    if (path === "w.csv") throw new Error("the store failed");
+    return read.call(store, path);
+  };
+  try {
+    await A.renameEntry("w.dta", "w.csv");
+  } finally {
+    store.read = read;
+  }
+  assert.deepEqual(
+    D.tabs.value.map((t) => t.path),
+    ["a.do"],
+  );
+  assert.deepEqual(S.banners.value, []);
+});
+
+test("rename to a text name: the new name opened while the store is read keeps one tab for it", async () => {
+  await reset({ "a.do": "1", "w.dta": "a,b\n" });
+  for (const p of ["a.do", "w.dta"]) await openFile(p);
+  const read = store.read;
+  let opened: Promise<void> | null = null;
+  store.read = async (path) => {
+    const bytes = await read.call(store, path);
+    if (path === "w.csv" && !opened) {
+      opened = openFile("w.csv"); // the visitor opens the new name from the list meanwhile
+      await opened;
+    }
+    return bytes;
+  };
+  try {
+    await A.renameEntry("w.dta", "w.csv");
+  } finally {
+    store.read = read;
+  }
+  assert.ok(opened, "the store was read during the rename");
+  assert.deepEqual(
+    D.tabs.value.map((t) => [t.path, t.kind]),
+    [
+      ["a.do", "text"],
+      ["w.csv", "text"],
+    ],
+  );
+  assert.equal(D.activeTab.value, "w.csv");
+  assert.equal(D.textOf("w.csv"), "a,b\n");
+});
+
+test("rename onto the name of a file a run deleted, its tab still open: a clean tab gives way to the renamed file; one with unsaved edits keeps the name taken", async () => {
+  const tabsNow = () => D.tabs.value.map((t) => [t.path, t.kind, t.dirty]);
+  await reset({ "a.do": "1", "w.csv": "x\n", "w.dta": "a,b\n" });
+  for (const p of ["a.do", "w.csv", "w.dta"]) await openFile(p);
+  await store.remove("w.csv"); // a run's erase: files.ts afterRun keeps the tab
+  await refresh();
+  await A.renameEntry("w.dta", "w.csv");
+  assert.deepEqual(tabsNow(), [
+    ["a.do", "text", false],
+    ["w.csv", "text", false],
+  ]);
+  assert.equal(D.textOf("w.csv"), "a,b\n", "the renamed file's text, as the store has it");
+
+  await reset({ "a.do": "1", "w.csv": "x\n", "w.dta": "a,b\n" });
+  for (const p of ["a.do", "w.csv", "w.dta"]) await openFile(p);
+  edit("w.csv");
+  await store.remove("w.csv");
+  await refresh();
+  await assert.rejects(A.renameEntry("w.dta", "w.csv"), /already exists/);
+  assert.deepEqual(tabsNow(), [
+    ["a.do", "text", false],
+    ["w.csv", "text", true],
+    ["w.dta", "dta", false],
+  ]);
+  assert.deepEqual((await store.list()).map((f) => f.path).sort(), ["a.do", "w.dta"]);
 });

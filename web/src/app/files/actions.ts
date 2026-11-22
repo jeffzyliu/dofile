@@ -1,63 +1,17 @@
 // What the file panel and the editor's tabs do to files and tabs (docs/design/SPEC.md, sections 3.1, 3.2 and 3.10), in
 // plain TypeScript so the Node tests run it. Files change through the store (app/store.ts), which lists itself again
-// (files.ts). This file and open.ts write `tabs` and `activeTab`, always before they call the editor (editorCommands);
-// `dirty` is the editor's (state.ts setDirty).
-import { effect } from "@preact/signals-core";
+// (files.ts). The tabs and their documents are editor/documents.ts's.
+import { batch, effect } from "@preact/signals-core";
 import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
-import { editorCommands } from "../editor/commands.ts";
-import { activeTab, addBanner, banners, dialog, dismiss, files, phoneTab, say, showToast, tabs } from "../state.ts";
+import { close, closeUnder, moved, reload, retype, tabs } from "../editor/documents.ts";
+import { addBanner, banners, dialog, files, say, showToast } from "../state.ts";
 import { store } from "../store.ts";
 import type { Dialog } from "../types.ts";
-import { decodeText, openFile } from "./open.ts";
+import { decodeText, noteNotText } from "./open.ts";
 import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
-
-// ---- tabs ----
-
-/** Close the tab of `path` with no question: the tab to its right becomes active (else the one to its left), then the
- *  editor drops its state. */
-export function closeTab(path: string): void {
-  const i = tabs.value.findIndex((t) => t.path === path);
-  if (i < 0) return;
-  const rest = tabs.value.filter((t) => t.path !== path);
-  tabs.value = rest;
-  if (activeTab.value === path) activeTab.value = (rest[i] ?? rest[i - 1])?.path ?? null;
-  editorCommands.closed(path);
-}
-
-/** The ×, Delete on a tab, the phone's "Close": a tab with unsaved edits asks first (dialog close-tab); another closes.
- *  Returns true when it closed now. */
-export function askCloseTab(path: string): boolean {
-  const tab = tabs.value.find((t) => t.path === path);
-  if (!tab) return false;
-  if (tab.dirty) {
-    dialog.value = { d: "close-tab", path };
-    return false;
-  }
-  closeTab(path);
-  return true;
-}
-
-/** The tabs of `top` and of everything under it are closed (it was deleted). */
-function closeUnder(top: string) {
-  for (const t of tabs.value.filter((t) => within(t.path, top))) closeTab(t.path);
-  for (const b of banners.value) if (b.b === "not-text" && within(b.path, top)) dismiss(b);
-}
-
-// ---- turns ----
-
-let turns: Promise<unknown> = Promise.resolve(); // the changes that tabs follow, one after the other
-
-/** Run `fn` once the changes started before it have ended (a rejection ends one too). Resolves or rejects as `fn`.
- *  A rename or a delete keeps its turn until the tabs have followed it, so a Save pressed meanwhile writes under the
- *  tab's path as it is then (renamed, or closed: no write). A Save's turn only issues its write: the store applies
- *  changes in call order (engine/store.ts `change`), so a later rename moves the bytes it wrote. */
-export function fileTurn<T>(fn: () => Promise<T>): Promise<T> {
-  const run = turns.then(fn);
-  turns = run.catch(() => {});
-  return run;
-}
+import { fileTurn } from "./turns.ts";
 
 // ---- rename, new, delete, download ----
 
@@ -68,52 +22,75 @@ const kindOf = (path: string) => {
   return ext === ".dta" ? "dta" : ext === ".png" ? null : "text";
 };
 
-/** Rename (or move) `from` to `to` in the store; the tabs of it and of everything under it follow (`tabs` first, then
- *  editorCommands.renamed for each open file). A tab whose new name opens another way (a .dta renamed to .csv, a text
- *  file to .dta) is opened again as its new name says, in its place, unless it has unsaved edits (the editor keeps
- *  them); one whose new name opens in no tab (a .png) just closes, and the Graph tab is left alone. Rejects as the
- *  store does (`to` exists, ...). */
+/** Rename (or move) `from` to `to` in the store; the tabs of it and of everything under it follow (documents.ts
+ *  moved). A tab whose new name opens another way (a .dta renamed to .csv, a text file to .dta) opens as its new name
+ *  says, in its place, unless it has unsaved edits (the editor keeps them); one whose new name opens in no tab (a .png)
+ *  just closes, and the Graph tab is left alone. Rejects as the store does (`to` exists, ...), and when a tab with
+ *  unsaved edits is still open at `to` (its file deleted by a run); such a tab with no edits closes. */
 export function renameEntry(from: string, to: string): Promise<void> {
   return fileTurn(() => renameNow(from, to)); // a Save pressed meanwhile waits for the tabs to have the new name
 }
 
 async function renameNow(from: string, to: string) {
   if (from === to) return;
+  // a tab left open at the new name after a run deleted its file (files.ts afterRun keeps it): with unsaved edits the
+  // name is taken, as if the file were there; with none it closes, so the one tab of that name shows the renamed file
+  const left = () => tabs.value.filter((t) => within(t.path, to) && !within(t.path, from));
+  if (left().some((t) => t.dirty)) throw new Error(`${to} already exists`);
   await store.rename(from, to);
+  for (const t of left()) if (!t.dirty) close(t.path);
+  const before = new Set(tabs.value.map((t) => t.path));
   // the reset banner's cut file follows too, open in a tab or not (one banner: addBanner replaces it)
   for (const b of banners.value)
     if (b.b === "reset" && b.run?.path !== undefined && within(b.run.path, from))
       addBanner({ ...b, run: { ...b.run, path: movedPath(b.run.path, from, to) } });
-  const moved = tabs.value.filter((t) => within(t.path, from)).map((t) => t.path);
-  if (!moved.length) return;
-  tabs.value = tabs.value.map((t) => ({ ...t, path: movedPath(t.path, from, to) }));
-  if (activeTab.value !== null) activeTab.value = movedPath(activeTab.value, from, to);
-  for (const p of moved) editorCommands.renamed(p, movedPath(p, from, to));
-  for (const p of moved.map((p) => movedPath(p, from, to))) {
-    const tab = tabs.value.find((t) => t.path === p);
-    const kind = kindOf(p);
-    if (!tab || tab.dirty || tab.kind === kind) continue;
-    if (kind === null) closeTab(p);
-    else await reopenAs(p);
+  // the tabs that become text tabs are read first, so no tab shows its new name as the wrong kind meanwhile
+  // new path: the tab's old path, and the text (null when not text, or why it was not read)
+  const reads = new Map<string, { was: string; text: string | null | Error }>();
+  for (const t of tabs.value.filter((t) => within(t.path, from))) {
+    const p = movedPath(t.path, from, to);
+    if (kindOf(p) === "text" && retypes(t.path, "text")) reads.set(p, { was: t.path, text: await readText(p) });
   }
+  // one batch: the tabs are seen moved and retyped together
+  batch(() => {
+    // the new name opened meanwhile (openFile, from the list or Go to line) has a tab of the store's text already: the
+    // old name's tab goes, so no two tabs share a path
+    for (const [p, { was }] of reads) if (!before.has(p) && tabs.value.some((t) => t.path === p)) close(was);
+    for (const p of moved(from, to)) {
+      const kind = kindOf(p);
+      if (!retypes(p, kind)) continue; // closed, or edited, meanwhile
+      if (kind === null) close(p);
+      else if (kind === "dta") retype(p);
+      else {
+        const text = reads.get(p)?.text;
+        if (text === undefined) continue; // a guard: every tab that retypes to text was read above
+        if (text instanceof Error) {
+          // a file the store cannot give opens nothing, as openFile would
+          console.warn(`[dofile] open ${p}: ${text.message}`);
+          close(p);
+          continue;
+        }
+        noteNotText(p, text);
+        if (text === null) close(p);
+        else retype(p, text);
+      }
+    }
+  });
 }
 
-/** Close the tab of `path` and open the file again (open.ts), in the same place, leaving the active tab and the phone's
- *  view as they were. */
-async function reopenAs(path: string) {
-  const place = tabs.value.findIndex((t) => t.path === path);
-  const active = activeTab.value;
-  const view = phoneTab.value;
-  closeTab(path);
-  await openFile(path);
+/** Whether the tab `path` is open, has no unsaved edits, and opens as another `kind` than it does. */
+const retypes = (path: string, kind: "text" | "dta" | null) => {
   const tab = tabs.value.find((t) => t.path === path);
-  if (tab) {
-    const rest = tabs.value.filter((t) => t !== tab);
-    rest.splice(place, 0, tab);
-    tabs.value = rest;
+  return !!tab && !tab.dirty && tab.kind !== kind;
+};
+
+/** The store's copy of `path` as the editor takes it (decodeText, BOM kept): null when it is not text. */
+async function readText(path: string): Promise<string | null | Error> {
+  try {
+    return decodeText(await store.read(path), true);
+  } catch (e) {
+    return e instanceof Error ? e : new Error(String(e));
   }
-  if (active !== path && tabs.value.some((t) => t.path === active)) activeTab.value = active;
-  phoneTab.value = view;
 }
 
 /** What a new file or folder is called when the name field is left empty or unchanged. */
@@ -367,8 +344,8 @@ async function holds({ path, data }: Incoming): Promise<boolean> {
  *  close the tab, or with `notText` "keep" leave it as it is. */
 export function reloadTab(path: string, bytes: Uint8Array, notText: "close" | "keep"): void {
   const text = decodeText(bytes, true);
-  if (text !== null) editorCommands.reload(path, text);
-  else if (notText === "close") closeTab(path);
+  if (text !== null) reload(path, text);
+  else if (notText === "close") close(path);
 }
 
 // an upload replaced an open file: the editor shows the new text, or the tab closes if it is not text any more

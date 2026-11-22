@@ -2,7 +2,7 @@
 // (commands.json, `npm run commands`), so a highlighted command is one dofile runs; abbreviations follow the registry's
 // minimum length (`reg`, `gen`).
 import { StreamLanguage, type StringStream } from "@codemirror/language";
-import data from "./commands.json";
+import data from "./commands.json" with { type: "json" };
 
 const COMMANDS: Record<string, number> = data.commands;
 // prefixes the interpreter itself handles (not in the registry), with their shortest forms

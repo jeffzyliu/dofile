@@ -2,8 +2,9 @@
 // files (a .dta tab's bars are output/DtaView.tsx's).
 import { useEffect, useState } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
+import { activeTab, tabs } from "../editor/documents.ts";
 import { runCommand } from "../run.ts";
-import { activeTab, files, fresh, tabs } from "../state.ts";
+import { files, fresh } from "../state.ts";
 import { store } from "../store.ts";
 import { CommandBar } from "../ui/CommandBar";
 import { Icon } from "../ui/Icon";

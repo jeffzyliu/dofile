@@ -4,9 +4,10 @@
 import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
+import { activeTab, tabs } from "../editor/documents.ts";
 import { downloadAll, refresh } from "../files.ts";
 import { restoreSample } from "../sample.ts";
-import { activeTab, dialog, files, fresh, hasFiles, say, showToast, tabs } from "../state.ts";
+import { dialog, files, fresh, hasFiles, say, showToast } from "../state.ts";
 import { store } from "../store.ts";
 import { fromAnywhere, fromNothing, useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";

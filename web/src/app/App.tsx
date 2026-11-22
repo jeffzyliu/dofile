@@ -5,6 +5,7 @@ import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { BannerSlot } from "./banners";
 import { DialogHost } from "./dialogs";
+import { activeTab, tabs } from "./editor/documents.ts";
 import { Editor } from "./editor/Editor";
 import { PhoneRun, RunControls } from "./editor/RunControls";
 import { StatusBar } from "./editor/StatusBar";
@@ -18,21 +19,7 @@ import { LogView } from "./log/LogView";
 import { DtaView } from "./output/DtaView";
 import { FullSize } from "./output/FullSize";
 import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
-import {
-  activeTab,
-  engine,
-  files,
-  hasFiles,
-  isPhone,
-  layout,
-  outputTab,
-  phoneTab,
-  saved,
-  split,
-  tabs,
-  theme,
-  wrap,
-} from "./state.ts";
+import { engine, files, hasFiles, isPhone, layout, outputTab, phoneTab, saved, split, theme, wrap } from "./state.ts";
 import { takesReset } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
 import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";

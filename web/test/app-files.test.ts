@@ -3,7 +3,20 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import { sleep } from "./harness.ts";
-import { afterRun, banners, downloadAll, heard, keep, later, S, setUp, store, useWiring, writable } from "./wiring.ts";
+import {
+  afterRun,
+  banners,
+  D,
+  downloadAll,
+  heard,
+  keep,
+  later,
+  S,
+  setUp,
+  store,
+  useWiring,
+  writable,
+} from "./wiring.ts";
 
 useWiring();
 
@@ -40,31 +53,18 @@ test("the storage banner: once per visit, when persisted() is false and the file
 test("a run that rewrites an open file: the editor follows it (ranOver); the banner when it keeps the tab's text: edits, or a version that is not text; nothing for the same text", async () => {
   setUp();
   store.blocked = false;
-  const { editorCommands } = await import("../src/app/editor/commands.ts");
-  const calls: string[] = [];
-  const kept = { reload: editorCommands.reload, ranOver: editorCommands.ranOver };
-  // the editor's answers, as Editor.tsx gives them: the same text again, a clean tab shown, edits (or not text) kept
-  const answers: Record<string, "same" | "shown" | "kept"> = {
-    "t.csv": "shown",
-    "out.log": "kept",
-    "same.log": "same",
-    "bin.csv": "kept",
-  };
-  editorCommands.reload = (path, text) => calls.push(`reload ${path} ${text}`);
-  editorCommands.ranOver = (path, text) => {
-    calls.push(`ranOver ${path} ${text}`);
-    return answers[path];
-  };
   const read = store.read;
   store.read = async (path) => (path === "bin.csv" ? new Uint8Array([0x9e, 0xff, 0x00]) : read(path));
   try {
-    writable(S.tabs).value = [
-      { path: "t.csv", kind: "text", dirty: false },
-      { path: "out.log", kind: "text", dirty: true },
-      { path: "same.log", kind: "text", dirty: true },
-      { path: "bin.csv", kind: "text", dirty: false },
-      { path: "d.dta", kind: "dta", dirty: false },
-    ];
+    // a clean tab (shown), unsaved edits (kept), unsaved edits that the run writes again (the same), a clean tab the
+    // run makes not text (kept), a .dta tab
+    D.addText("t.csv", "old t.csv");
+    D.addText("out.log", "old out.log");
+    D.update("out.log", { changes: { from: 0, insert: "mine " } });
+    D.addText("same.log", "old same.log");
+    D.update("same.log", { changes: { from: 0, to: 12, insert: "new same.log" } });
+    D.addText("bin.csv", "old bin.csv");
+    D.addDta("d.dta");
     for (const p of ["t.csv", "out.log", "same.log", "d.dta", "other.csv"]) store.texts.set(p, `new ${p}`);
     await afterRun([
       { name: "t.csv", status: "modified", bytes: 9 },
@@ -75,12 +75,21 @@ test("a run that rewrites an open file: the editor follows it (ranOver); the ban
       { name: "other.csv", status: "created", bytes: 9 },
       { name: "gone.do", status: "removed", bytes: 0 },
     ]);
-    assert.deepEqual(calls.sort(), [
-      "ranOver bin.csv null", // not text: null, not left alone
-      "ranOver out.log new out.log",
-      "ranOver same.log new same.log",
-      "ranOver t.csv new t.csv",
-    ]);
+    assert.deepEqual(
+      ["t.csv", "out.log", "same.log", "bin.csv"].map((p) => D.textOf(p)),
+      ["new t.csv", "mine old out.log", "new same.log", "old bin.csv"],
+    );
+    assert.deepEqual(
+      D.tabs.value.map((t) => [t.path, t.dirty]),
+      [
+        ["t.csv", false],
+        ["out.log", true],
+        ["same.log", false],
+        ["bin.csv", true], // not text: unsaved until a save
+        ["d.dta", false],
+      ],
+    );
+    assert.deepEqual([D.savedIsText("bin.csv"), D.savedIsText("t.csv")], [false, true]);
     assert.deepEqual(
       banners()
         .map((b) => b.path)
@@ -89,16 +98,15 @@ test("a run that rewrites an open file: the editor follows it (ranOver); the ban
       "a banner where the editor kept its text; none for the same text or a clean tab shown",
     );
     // a store that cannot be read: nothing is known of the run's version, so nothing is done
-    calls.length = 0;
+    const t = D.stateOf("t.csv");
+    store.texts.set("t.csv", "newer");
     store.read = async () => {
       throw new Error("the store failed");
     };
     await afterRun([{ name: "t.csv", status: "modified", bytes: 9 }]);
-    assert.deepEqual(calls, []);
+    assert.equal(D.stateOf("t.csv"), t);
   } finally {
-    Object.assign(editorCommands, kept);
     store.read = read;
-    writable(S.tabs).value = [];
   }
 });
 

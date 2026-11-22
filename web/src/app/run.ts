@@ -8,6 +8,7 @@
 // what streamed in stays, with the reason as a note.
 
 import type { BrowseRows, ClientError, RunResult } from "../engine/types.ts";
+import { tabs } from "./editor/documents.ts";
 import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
 import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
@@ -71,7 +72,7 @@ function began(head: RunHead, theme: "light" | "dark") {
   const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.value === 0 }];
   // now, not after the run: a reset that cuts it starts the count again, and the next run is first
   W.engineRuns.value++;
-  const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for the note under a nested do
+  const unsaved = tabs.value.filter((t) => t.dirty).map((t) => t.path); // for the note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");
   let done!: (result: RunResult) => void;

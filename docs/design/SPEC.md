@@ -974,8 +974,6 @@ export const memory: ReadonlySignal<Memory | null>;      // run controller, afte
 export const files: ReadonlySignal<FileInfo[]>;          // file service, after every store change and every run
 export const fresh: ReadonlySignal<Set<string>>;         // file service: paths the last run created or changed (the "new" badge)
 export const persisted: ReadonlySignal<boolean | null>;  // file service, from storage.persist() and persisted()
-export const tabs: Signal<OpenTab[]>;            // editor tabs (4a); `dirty` only through setDirty(path, on) (the editor, 4b)
-export const activeTab: Signal<string | null>;   // editor tabs, and the file tree when it opens a file (4a, files/open.ts)
 export const split: Signal<boolean>;             // the Log head's Split and Unsplit; kept in localStorage
 export const outputTab: Signal<"log" | "graph" | "data" | "results" | "help">;   // the Output tablist; "log" only unsplit; Unsplit always shows it
 export const phoneTab: Signal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar; Run sets "log";
@@ -1014,8 +1012,15 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `engine`; `memory`, `log`, `lastRun`, `history`, `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`,
   `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`). The owner
   writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state.ts`), which only its owner imports (a
-  test checks it). The others stay writable by views: `graphIndex`, `graphFull`, `dialog`, `tabs`, `activeTab`, `split`,
+  test checks it). The others stay writable by views: `graphIndex`, `graphFull`, `dialog`, `split`,
   `outputTab`, `phoneTab`, `pickedVar`, `theme`, `layout`, `isolated`.
+- **The open tabs** are not in `state.ts`: `editor/documents.ts` keeps one record per tab (its path and its document,
+  or nothing for a .dta tab) and exports `tabs: ReadonlySignal<OpenTab[]>`, `activeTab: ReadonlySignal<string | null>`
+  and `selection` (the shown text tab's whole selected lines), all computed from the records; a tab's `dirty` is its
+  text against the store's, stored nowhere. Tabs change only through its functions (`addText`, `addDta`, `activate`,
+  `close`, `askClose`, `closeUnder`, `moved`, `retype`, `reload`, `ranOver`, `update`); it needs no view, and the
+  editor's view attaches to it when it mounts (`attachView`). The test hook's `state` has `tabs` and `activeTab` beside
+  the signals of `state.ts`.
 - **`ABOUT`** (`web/src/app/env.ts`) is compiled in: `dofile` (the version), `engine_commit` and `stata_version`. It is there
   from the first paint, with or without an engine; there is no `about` signal. `web/test/engine.test.ts` compares it with what
   `boot` answers.
@@ -1080,7 +1085,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`hasFiles`).
   - The page's one store: `web/src/app/store.ts`; views change files through it. It starts `blocked` and is unblocked
     once the tab lock is this tab's (`files.ts` `own()`).
-  - Helpers in `state.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `setDirty(path, on)`, `saved`
+  - Helpers in `state.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `saved`
     (localStorage); computed `isPhone` (the layout is the phone's: read it, never pass a `phone` prop) and `hasFiles`
     (the store has a file; folders do not count).
 - **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
@@ -1089,15 +1094,15 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
-    delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Writes `tabs`
-    (not `dirty`), `activeTab`, `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
+    delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Opens, closes,
+    renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
     a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
     `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
-    `editorCommands.open`, `reload`, `renamed`, `closed`, `save(path)` and `focus` (after a tab closes), `addFileGraph`,
+    `editorCommands.save(path)` and `focus` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
-    inline rename) calls `preventDefault()`. No tab can become dirty before 4b's
-    editor exists, so 4a's tests of the close-tab and reload paths call `setDirty(path, true)` themselves.
+    inline rename) calls `preventDefault()`. The Node tests of the close-tab and reload paths make
+    an edit with `editor/documents.ts` `update`, as the view would.
     **As built in step 4a:** the plain logic is in `files/tree.ts` (the rows: in each folder its folders first, then its
     files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
     with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
@@ -1108,7 +1113,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
     is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), both tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
-    its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
+    its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). A tab still open at the new name after a run deleted its file closes for the rename, or, with unsaved edits, the rename is refused as if the file were there. After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
     now selected, else the tree's row, else the editor; the close-tab dialog stays open while its Save writes the file,
     so the focus moves once there too. The commands built from a path (Import here, Load in 4c) come
     from `web/src/stata/quote.ts` `fileCommand` (3.11). The page's drop listeners are the window's, in the capture phase,
@@ -1128,13 +1133,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     data/?" / "The folder and its files exist only in this browser. This can't be undone."); an upload with files
     the store refused ("2 files uploaded · 1 failed", the pattern "N files uploaded · M failed"); the live region's "survey.xlsx can't be opened in the
     editor" and "Couldn't create the file", "Couldn't create the folder", "The upload failed". The rename's refusal from the store is "That name isn't allowed.", the same sentence as for `.` and `..` (`NAME_NOT_ALLOWED`).
-  - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands` and `selection`), `editor/RunControls.tsx`
+  - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands`), `editor/RunControls.tsx`
     (built for the section 5 states, each button at one size, 3.4; 4b adds the timers, and the pill's time goes into
     its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the
     timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px),
     `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
     `log/CommandLine.tsx` (`CommandLine`, `LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too,
-    `PhoneStrip`). Writes `dirty` only through `setDirty`, `banners` (`addBanner` for save-failed; `dismiss` for
+    `PhoneStrip`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
     save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
     Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
@@ -1178,7 +1183,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line), and when the marked line is
     deleted; it moves with edits; a command from the command line and a run of another file leave it; it lives in the
     tab's editor state, so it goes when the tab closes (a file opened again has none) and stays with a renamed tab. **A run that
-    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`; the decision
+    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `ranOver` of `editor/documents.ts`; the decision
     in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
     tab of a `\r\n` file follows a run as any other; Save keeps the file's form, noted when its text is read
     (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
@@ -1378,16 +1383,16 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
     on a phone every view draws it (store-failed, download-failed, run-changed); the hidden views are `display: none`, so it is read and tabbed once.
-- **The editor's interface** (`editor/commands.ts`; no-op defaults until 4b's editor mounts, so 4a can call them first):
-  `runFile()`, `runSelection()`, `save(path?)` (resolves true once saved), `focus()`, and for 4a `open(path, text)` (a
-  text file was opened: its tab is in `tabs`), `reload(path, text)` (an upload replaced an open file, F 3.3: edits
-  dropped), `renamed(from, to)` (an open file was renamed or moved: the editor keeps text, edits and undo), `closed(path)`
-  (a tab closed, the close-tab dialog's "Don't save" too, or its file deleted: the state is dropped); for 4b's log and 4d
-  `goToLine(line, path?)`; for files.ts `ranOver(path, text)` (a run rewrote an open text file; `text` is null when the
-  run's version is not text; it answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on
-  "kept"). `reload` returns at once when the file has no tab or state. 4a changes `tabs` first, then calls these. `selection` is the editor's. The editor fills
-  `editorCommands` field by field when it mounts: call through the object (`editorCommands.save(path)`) and never
-  destructure it or keep a field, or the caller keeps the no-op.
+- **The editor's interface.** The tabs' documents are `editor/documents.ts`'s, which needs no view: `addText(path, text)`
+  (a text file was opened), `reload(path, text)` (an upload replaced an open file, F 3.3: edits dropped), `moved(from,
+  to)` (an open file or a folder was renamed or moved: the tabs keep text, edits and undo), `retype(path, text?)` (a
+  rename changed how a tab opens), `close(path)` (a tab closed, the close-tab dialog's "Don't save" too, or its file
+  deleted), `ranOver(path, text)` (a run rewrote an open text file; `text` is null when the run's version is not text; it
+  answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on "kept"). `reload` does nothing when the
+  file has no text tab. What needs the mounted view is `editor/commands.ts` (no-op defaults until the editor mounts):
+  `runFile()`, `runSelection()`, `save(path?)` (resolves true once saved), `focus()`, and for 4b's log and 4d
+  `goToLine(line, path?)`. The editor fills `editorCommands` field by field when it mounts: call through the object
+  (`editorCommands.save(path)`) and never destructure it or keep a field, or the caller keeps the no-op.
 - **Slots in `App.tsx`.** `FileBar` above the editor; the editor sits in `.editor-slot`, hidden (never unmounted) while a
   `dta` tab shows `DtaView`; `FullSize` once, after `main`; on a phone the Log head is hidden, so its actions are in the strip's "Log ⋯"
   button through `logMenuItems()` (its "Clear log…" asks first) while the Log view is shown (the phone's top bar, `PhoneTopBar` in `App.tsx`, which also

@@ -27,7 +27,8 @@ const page = (search = "") => Object.assign(globalThis, { location: { search } }
 const S = await import("../src/app/state.ts");
 const { store } = await import("../src/app/store.ts");
 const { afterRun, connectFiles, keep, own, refresh } = await import("../src/app/files.ts");
-const { editorCommands } = await import("../src/app/editor/commands.ts");
+const D = await import("../src/app/editor/documents.ts");
+const { openFile } = await import("../src/app/files/open.ts");
 const A = await import("../src/app/files/actions.ts");
 const { answerClash, clashNow } = A;
 const sample = await import("../src/app/sample.ts");
@@ -44,9 +45,6 @@ const kept = { persisted: async () => true, persist: async () => true } as never
 const notKept = { persisted: async () => false, persist: async () => false } as never;
 const storageBanner = () => S.banners.value.some((b) => b.b === "storage");
 
-const reloads: [string, string][] = [];
-(editorCommands as Record<string, unknown>).open = () => {};
-(editorCommands as Record<string, unknown>).reload = (p: string, t: string) => void reloads.push([p, t]);
 connectFiles(store, kept);
 store.blocked = false;
 
@@ -54,12 +52,10 @@ async function empty() {
   for (const f of await store.list()) if (!f.path.includes("/")) await store.remove(f.path);
   await refresh();
   memory.clear();
-  S.tabs.value = [];
-  S.activeTab.value = null;
+  for (const t of D.tabs.value) D.close(t.path);
   S.dialog.value = null;
   S.layout.value = "desktop";
   for (const b of S.banners.value) S.dismiss(b);
-  reloads.length = 0;
 }
 beforeEach(async () => {
   await empty();
@@ -76,8 +72,8 @@ test("the generated module is what scripts/make-sample.ts makes from web/sample/
 test("a first visit with an empty store writes the sample and opens analysis.do", async () => {
   assert.equal(await sample.seedSample(), true);
   assert.deepEqual(await names(), ALL);
-  assert.equal(S.activeTab.value, "analysis.do");
-  assert.equal(S.tabs.value.length, 1);
+  assert.equal(D.activeTab.value, "analysis.do");
+  assert.equal(D.tabs.value.length, 1);
   assert.equal(dec(await store.read("analysis.do")), dec(sample.sampleFiles()[0].bytes));
   assert.equal(await sample.seedSample(), false, "only once: the mark is kept");
 });
@@ -135,20 +131,19 @@ test("Restore the sample: missing files are written with no question, other file
   assert.deepEqual(await names(), [...ALL, "mine.do"].sort());
   assert.equal(S.toast.value, "Sample restored");
   assert.equal(dec(await store.read("mine.do")), "display 1");
-  assert.equal(S.activeTab.value, "analysis.do");
-  S.tabs.value = [];
-  S.activeTab.value = null;
+  assert.equal(D.activeTab.value, "analysis.do");
+  for (const t of D.tabs.value) D.close(t.path);
   S.showToast("sentinel");
   await sample.restoreSample();
   assert.equal(S.toast.value, "The sample is already here", "nothing to write, nothing asked");
-  assert.equal(S.activeTab.value, "analysis.do", "opened even when nothing was written");
+  assert.equal(D.activeTab.value, "analysis.do", "opened even when nothing was written");
 });
 
 test("Restore the sample asks about a file that differs, in the clash dialog with the sample's words; Keep mine writes nothing, Replace writes the sample's version; analysis.do opens either way", async () => {
   await sample.seedSample();
   await store.write("helpers.do", enc("* mine"));
-  S.tabs.value = [{ path: "helpers.do", kind: "text", dirty: false }];
-  S.activeTab.value = "helpers.do";
+  await openFile("helpers.do"); // made active
+  const mine = D.stateOf("helpers.do");
   const keep = answering([{ replace: false, same: false }]);
   await sample.restoreSample();
   keep.stop();
@@ -156,20 +151,16 @@ test("Restore the sample asks about a file that differs, in the clash dialog wit
     { dialog: { d: "clash", path: "helpers.do", index: 1, total: 1 }, words: A.WORDS.sample },
   ]);
   assert.equal(dec(await store.read("helpers.do")), "* mine", "kept");
-  assert.deepEqual(reloads, []);
-  assert.equal(S.activeTab.value, "analysis.do", "the tab of analysis.do, which the visitor never changed");
-  S.activeTab.value = "helpers.do";
+  assert.equal(D.stateOf("helpers.do"), mine, "not reloaded");
+  assert.equal(D.activeTab.value, "analysis.do", "the tab of analysis.do, which the visitor never changed");
+  D.activate("helpers.do");
   const replace = answering([{ replace: true, same: false }]);
   await sample.restoreSample();
   replace.stop();
   assert.equal(dec(await store.read("helpers.do")), dec(sample.sampleFiles()[1].bytes));
-  assert.deepEqual(
-    reloads.map((r) => r[0]),
-    ["helpers.do"],
-    "the open tab shows the restored text",
-  );
+  assert.equal(D.textOf("helpers.do"), dec(sample.sampleFiles()[1].bytes), "the open tab shows the restored text");
   assert.equal(S.toast.value, "Sample restored");
-  assert.equal(S.activeTab.value, "analysis.do");
+  assert.equal(D.activeTab.value, "analysis.do");
 });
 
 test("a seed whose write fails sets no mark, never rejects, and is tried again on a later visit to an empty store", async () => {
@@ -190,21 +181,27 @@ test("a seed whose write fails sets no mark, never rejects, and is tried again o
 });
 
 test("a seed whose opening of analysis.do throws resolves (no unhandled rejection), with the files written", async () => {
-  const open = editorCommands.open;
-  (editorCommands as Record<string, unknown>).open = () => {
-    throw new Error("no editor");
-  };
+  // a view that fails to show a text
+  const detach = D.attachView({
+    extensions: [],
+    show(state) {
+      if (state) throw new Error("no editor");
+    },
+    dispatch() {},
+    scrollTop: () => 0,
+  });
   try {
     assert.equal(await sample.seedSample(), false);
   } finally {
-    (editorCommands as Record<string, unknown>).open = open;
+    detach();
   }
   assert.deepEqual(await names(), ALL);
 });
 
 test("Restore the sample asks about a sample file open with unsaved edits, even when its stored copy is the sample's; Replace shows the sample's text in the tab", async () => {
   await sample.seedSample();
-  S.tabs.value = [{ path: "analysis.do", kind: "text", dirty: true }];
+  await openFile("analysis.do");
+  D.update("analysis.do", { changes: { from: 0, insert: "* edited\n" } });
   const { seen, stop } = answering([{ replace: true, same: false }]);
   await sample.restoreSample();
   stop();
@@ -212,13 +209,10 @@ test("Restore the sample asks about a sample file open with unsaved edits, even 
     seen.map((s) => s.dialog),
     [{ d: "clash", path: "analysis.do", index: 1, total: 1 }],
   );
-  assert.deepEqual(
-    reloads.map((r) => r[0]),
-    ["analysis.do"],
-  );
+  assert.equal(D.tabs.value[0].dirty, false, "the edits are dropped");
   // the editor is given the file's text as it reads a file: the sample's own form, "\n" and no BOM (its Save then keeps
   // it)
-  const given = reloads[0][1];
+  const given = D.textOf("analysis.do")!;
   assert.equal(given, dec(sample.sampleFiles()[0].bytes));
   assert.ok(!given.includes("\r") && !given.startsWith("\uFEFF"));
 });
@@ -226,11 +220,12 @@ test("Restore the sample asks about a sample file open with unsaved edits, even 
 test("Restore the sample over an open tab whose file has \\r\\n and a BOM: the editor is given the sample's text", async () => {
   await sample.seedSample();
   await store.write("helpers.do", enc("\uFEFF* mine\r\n"));
-  S.tabs.value = [{ path: "helpers.do", kind: "text", dirty: false }];
+  await openFile("helpers.do");
   const { stop } = answering([{ replace: true, same: false }]);
   await sample.restoreSample();
   stop();
-  assert.equal(reloads[0][1], dec(sample.sampleFiles()[1].bytes));
+  assert.equal(D.stateOf("helpers.do")!.doc.toString(), dec(sample.sampleFiles()[1].bytes));
+  assert.equal(D.textOf("helpers.do"), dec(sample.sampleFiles()[1].bytes), "and Save writes the sample's form");
 });
 
 // S 19: where the browser may clear the files, the sample's own writes bring no storage banner; the visitor's first

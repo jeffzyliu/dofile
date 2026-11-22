@@ -117,22 +117,23 @@ export const showGraphFull = (page: Page) =>
     window.__dofile.state.graphFull.value = true;
   });
 
-/** Mark a tab's text as edited without typing. */
-export const markDirty = (page: Page, path: string, on = true) =>
-  page.evaluate(([p, d]) => window.__dofile.state.setDirty(p, d), [path, on] as const);
+/** Give an open text tab an edit (a space at its end) without typing, so it is unsaved. */
+export const markDirty = (page: Page, path: string) =>
+  page.evaluate((p) => window.__dofile.documents.markDirty(p), path);
 
-/** These tabs open, `active` the one shown (and `phoneTab` the phone's view, when given). */
+/** These tabs open, `active` the one shown (and `phoneTab` the phone's view, when given). A text tab is opened with an
+ *  empty document, and an edit when it is `dirty`. */
 export const showTabs = (page: Page, tabs: Tabs, active: string | null, phoneTab?: PhoneTab) =>
   page.evaluate(
     (v) => {
-      window.__dofile.state.tabs.value = v.tabs;
-      window.__dofile.state.activeTab.value = v.active;
+      window.__dofile.documents.showTabs(v.tabs, v.active);
       if (v.phoneTab) window.__dofile.state.phoneTab.value = v.phoneTab;
     },
     { tabs, active, phoneTab },
   );
 
-/** The editor with these tabs open (`active` shown), no dialog, `engine` shown and `selection` made. */
+/** The editor with these tabs open (`active` shown), no dialog, `engine` shown and `selection` made. A text tab has as
+ *  many empty lines as the selection needs, and an edit when it is `dirty`. */
 export const seedEditorBox = (
   page: Page,
   { engine, tabs, active, selection }: { engine: EngineSeed; tabs: Tabs; active: string | null; selection: Selection },
@@ -142,9 +143,8 @@ export const seedEditorBox = (
       const d = window.__dofile;
       d.state.dialog.value = null;
       (d.state.engine as Writable<"engine">).value = v.engine as EngineState;
-      d.state.tabs.value = v.tabs;
-      d.state.activeTab.value = v.active;
-      d.selection.value = v.selection;
+      d.documents.showTabs(v.tabs, v.active, v.selection?.[1] ?? 1);
+      d.documents.selectLines(v.selection);
     },
     { engine, tabs, active, selection },
   );

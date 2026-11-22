@@ -4,7 +4,7 @@
 
 import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
-import { editorCommands } from "./editor/commands.ts";
+import { ranOver, tabs } from "./editor/documents.ts";
 import { reloadTab } from "./files/actions.ts";
 import { decodeText } from "./files/open.ts";
 import { saveAs } from "./files/save.ts";
@@ -87,7 +87,7 @@ export function keep(manager: Storage = globalThis.navigator?.storage) {
 }
 
 /** After a run: `fresh` is what it created or changed, and the list is read again. An open text tab whose file the run
- *  rewrote follows it (editorCommands.ranOver): with no unsaved edits it shows the run's version, if that is text;
+ *  rewrote follows it (documents.ts ranOver): with no unsaved edits it shows the run's version, if that is text;
  *  otherwise it keeps its text and the banner run-changed says so. A file the run deleted keeps its tab (a Save writes
  *  it again). */
 export function afterRun(changes: FileChange[] | undefined) {
@@ -97,7 +97,7 @@ export function afterRun(changes: FileChange[] | undefined) {
 }
 
 async function followOpen(c: FileChange) {
-  const tab = S.tabs.value.find((t) => t.path === c.name && t.kind === "text");
+  const tab = tabs.value.find((t) => t.path === c.name && t.kind === "text");
   if (!tab || c.status === "removed" || !store) return;
   let bytes: Uint8Array;
   try {
@@ -106,8 +106,8 @@ async function followOpen(c: FileChange) {
     return; // the store cannot give it now: nothing is known of the run's version
   }
   const text = decodeText(bytes, true);
-  if (!S.tabs.value.some((t) => t.path === c.name && t.kind === "text")) return; // closed meanwhile
-  if (editorCommands.ranOver(c.name, text) === "kept") S.addBanner({ b: "run-changed", path: c.name });
+  if (!tabs.value.some((t) => t.path === c.name && t.kind === "text")) return; // closed meanwhile
+  if (ranOver(c.name, text) === "kept") S.addBanner({ b: "run-changed", path: c.name });
 }
 
 /** The text tab `path` shows the store's copy of the file. A copy that cannot be read or is not text changes nothing. */
