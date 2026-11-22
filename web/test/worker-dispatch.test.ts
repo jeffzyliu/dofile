@@ -2,7 +2,7 @@
 // posted for a result and for an error, and the order of the queue. engine.test.ts runs it in the real worker.
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import type { Op, ToWorker } from "../src/engine/types.ts";
 import type { OpEntry, OpTable } from "../src/engine/worker-dispatch.ts";
 import { dispatcher, errorForPage } from "../src/engine/worker-dispatch.ts";
@@ -29,7 +29,7 @@ const ERRNO = { ENOENT: 44, EISDIR: 31 };
 type Stand = Partial<Omit<OpEntry<Op>, "handle">> & { handle?: (args: unknown, id: number) => unknown };
 
 /** Every op answers undefined in the queue, but those given. */
-function setup(entries: Partial<Record<Op, Stand>> = {}) {
+function setup(entries: Partial<Record<Op, Stand>> = {}, afterResult?: () => void) {
   const posted: { message: unknown; transfer: Transferable[] }[] = [],
     events: string[] = [];
   const table = Object.fromEntries(
@@ -41,7 +41,11 @@ function setup(entries: Partial<Record<Op, Stand>> = {}) {
       events.push(`post ${JSON.stringify(message)}`);
     },
     errorOf: (e) => errorForPage(e, ERRNO),
-    afterResult: () => events.push("after result"),
+    afterResult:
+      afterResult ??
+      (() => {
+        events.push("after result");
+      }),
   });
   const send = (id: number, op: string, args?: unknown) => dispatch({ id, op, args } as ToWorker);
   return { posted, events, send, messages: () => posted.map((p) => p.message) };
@@ -156,4 +160,46 @@ test("a file's bytes are moved, not copied", async () => {
   await tick();
   assert.deepEqual(posted[0].transfer, [bytes.buffer]);
   assert.deepEqual(posted[1].transfer, []);
+});
+
+test("a hook that throws after a good result posts no second answer, calls answered once, and the queue goes on", async () => {
+  const errors = mock.method(console, "error", () => {});
+  try {
+    for (const hook of ["afterResult", "answered"]) {
+      const answered: unknown[] = [];
+      const boom = new Error(`${hook} threw`);
+      const { send, messages } = setup(
+        {
+          matrix: {
+            handle: () => ({ ok: 1 }),
+            answered: (failed, e) => {
+              answered.push([failed, e]);
+              if (hook === "answered") throw boom;
+            },
+          },
+          memory: { handle: () => ({ heap_bytes: 1 }) },
+        },
+        hook === "afterResult"
+          ? () => {
+              throw boom;
+            }
+          : undefined,
+      );
+      send(1, "matrix", {});
+      send(2, "memory");
+      await tick();
+      assert.deepEqual(messages(), [
+        { id: 1, result: { ok: 1 } },
+        { id: 2, result: { heap_bytes: 1 } },
+      ]);
+      assert.deepEqual(answered, [[false, undefined]], hook);
+    }
+    assert.equal(
+      errors.mock.callCount(),
+      3,
+      "a throwing hook is reported, not swallowed: afterResult twice, answered once",
+    );
+  } finally {
+    errors.mock.restore();
+  }
 });

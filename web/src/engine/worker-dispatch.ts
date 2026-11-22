@@ -11,7 +11,7 @@ export interface OpEntry<K extends Op> {
   queued: boolean;
   /** Called as the message arrives, before the queue reaches it. */
   arrived?: () => void;
-  /** Called right after the answer is posted. @param failed - the handler threw `error` */
+  /** Called right after the answer is posted (a throw is logged; the answer stands). @param failed - the handler threw `error` */
   answered?: (failed: boolean, error?: unknown) => void;
 }
 /** Every op has an entry; nothing else has one. */
@@ -24,7 +24,7 @@ export interface DispatchHooks {
   post(message: FromWorker, transfer: Transferable[]): void;
   /** How an error reads on the page. */
   errorOf(e: unknown): PageError;
-  /** Called right after each result is posted (not after an error). */
+  /** Called right after each result is posted (not after an error). A throw is logged; the answer stands. */
   afterResult?(): void;
 }
 
@@ -46,16 +46,25 @@ type Loose = Omit<OpEntry<Op>, "handle"> & { handle: (args: unknown, id: number)
 export function dispatcher(table: OpTable, { post, errorOf, afterResult }: DispatchHooks) {
   let queue = Promise.resolve();
   const answer = async ({ id, op, args }: ToWorker, entry: Loose | undefined) => {
+    let failed = false,
+      error: unknown;
     try {
       if (!entry) throw new Error(`unknown op ${op}`);
       const result = await entry.handle(args ?? {}, id);
       post({ id, result } as FromWorker, result instanceof Uint8Array ? [result.buffer] : []); // a file: moved, not copied
-      afterResult?.();
-      entry.answered?.(false);
     } catch (e) {
+      failed = true;
+      error = e;
       const { message, name, type } = errorOf(e);
       post({ id, error: message, name, type }, []);
-      entry?.answered?.(true, e);
+    }
+    // A hook that throws never reaches the catch above (one answer per id) and never rejects the queue: it is reported.
+    for (const hook of [failed ? undefined : afterResult, () => entry?.answered?.(failed, error)]) {
+      try {
+        hook?.();
+      } catch (e) {
+        console.error("[dofile] dispatch hook threw", e);
+      }
     }
   };
   return (data: ToWorker) => {
