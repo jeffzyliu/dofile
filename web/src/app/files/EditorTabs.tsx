@@ -3,7 +3,7 @@
 import { signal } from "@preact/signals";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { editorCommands } from "../editor/commands.ts";
-import { activate, activeTab, askClose, tabs } from "../editor/documents.ts";
+import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
 import { phoneTab } from "../state.ts";
 import type { OpenTab } from "../types.ts";
 import { fromNothing, useFocusRequest } from "../ui/focus-hooks.ts";
@@ -141,7 +141,7 @@ const switcherItems = (): MenuItem[] => {
       label: "Save",
       disabled: tabs.value.find((t) => t.path === active)?.kind !== "text", // as the toolbar's Save
       onSelect: () => {
-        editorCommands.save();
+        save();
       },
     },
     "rule",

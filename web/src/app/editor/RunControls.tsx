@@ -16,7 +16,7 @@ import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
 import { since } from "./clock.ts";
 import { editorCommands } from "./commands.ts";
-import { activeTab, selection, tabs } from "./documents.ts";
+import { activeTab, save, selection, tabs } from "./documents.ts";
 import { PILL_WIDEST, pillTime, refusedRunWords } from "./words.ts";
 
 /** The run controls' class: in the other-tab states they keep their place and are unseen (app.css). */
@@ -148,7 +148,7 @@ export function RunControls() {
         class={`btn ${ctl()}`}
         disabled={!text}
         aria-keyshortcuts={text ? modShortcut("S") : undefined}
-        onClick={() => editorCommands.save()}
+        onClick={() => save()}
       >
         <Labels
           at={text && dirty ? 0 : 1}

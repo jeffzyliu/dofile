@@ -3,8 +3,7 @@
 // answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
-import { editorCommands } from "../editor/commands.ts";
-import { close as closeTab } from "../editor/documents.ts";
+import { close as closeTab, save as saveTab } from "../editor/documents.ts";
 import { refresh } from "../files.ts";
 import { dialog, files } from "../state.ts";
 import type { DialogOf } from "../types.ts";
@@ -156,7 +155,7 @@ export function CloseTabDialog({ dialog: d }: { dialog: DialogOf<"close-tab"> })
   const save = async () => {
     if (saving.current) return;
     saving.current = true;
-    const saved = await editorCommands.save(d.path);
+    const saved = await saveTab(d.path);
     if (dialog.value === d) close(); // not a dialog that replaced this one meanwhile
     if (saved) {
       closeTab(d.path);
