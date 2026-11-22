@@ -38,21 +38,25 @@ async function renameNow(from: string, to: string) {
     if (b.b === "reset" && b.run?.path !== undefined && within(b.run.path, from))
       addBanner({ ...b, run: { ...b.run, path: movedPath(b.run.path, from, to) } });
   // the tabs that become text tabs are read first, so no tab shows its new name as the wrong kind meanwhile
-  const reads = new Map<string, string | null | Error>(); // new path: its text, null when not text, or why unread
+  // new path: the tab's old path, and the text (null when not text, or why it was not read)
+  const reads = new Map<string, { was: string; text: string | null | Error }>();
   for (const t of tabs.value.filter((t) => within(t.path, from))) {
     const p = movedPath(t.path, from, to);
-    if (kindOf(p) === "text" && retypes(t.path, "text")) reads.set(p, await readText(p));
+    if (kindOf(p) === "text" && retypes(t.path, "text")) reads.set(p, { was: t.path, text: await readText(p) });
   }
   // one batch: the tabs are seen moved and retyped together
   batch(() => {
+    // the new name opened meanwhile (openFile, from the list or Go to line) has a tab of the store's text already: the
+    // old name's tab goes, so no two tabs share a path
+    for (const [p, { was }] of reads) if (tabs.value.some((t) => t.path === p)) close(was);
     for (const p of moved(from, to)) {
       const kind = kindOf(p);
       if (!retypes(p, kind)) continue; // closed, or edited, meanwhile
       if (kind === null) close(p);
       else if (kind === "dta") retype(p);
       else {
-        const text = reads.get(p);
-        if (text === undefined) continue; // opened as a .dta tab under its old name during the reads: left as it is
+        const text = reads.get(p)?.text;
+        if (text === undefined) continue; // a guard: every tab that retypes to text was read above
         if (text instanceof Error) {
           // a file the store cannot give opens nothing, as openFile would
           console.warn(`[dofile] open ${p}: ${text.message}`);

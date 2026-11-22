@@ -796,3 +796,33 @@ test("rename to a text name: a file that is not text closes its tab with the not
   );
   assert.deepEqual(S.banners.value, []);
 });
+
+test("rename to a text name: the new name opened while the store is read keeps one tab for it", async () => {
+  await reset({ "a.do": "1", "w.dta": "a,b\n" });
+  for (const p of ["a.do", "w.dta"]) await openFile(p);
+  const read = store.read;
+  let opened: Promise<void> | null = null;
+  store.read = async (path) => {
+    const bytes = await read.call(store, path);
+    if (path === "w.csv" && !opened) {
+      opened = openFile("w.csv"); // the visitor opens the new name from the list meanwhile
+      await opened;
+    }
+    return bytes;
+  };
+  try {
+    await A.renameEntry("w.dta", "w.csv");
+  } finally {
+    store.read = read;
+  }
+  assert.ok(opened, "the store was read during the rename");
+  assert.deepEqual(
+    D.tabs.value.map((t) => [t.path, t.kind]),
+    [
+      ["a.do", "text"],
+      ["w.csv", "text"],
+    ],
+  );
+  assert.equal(D.activeTab.value, "w.csv");
+  assert.equal(D.textOf("w.csv"), "a,b\n");
+});
