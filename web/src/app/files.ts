@@ -3,20 +3,18 @@
 // the store again here. docs/design/SPEC.md, sections 3.1 and 7.
 
 import { keepFiles } from "../engine/tab.ts";
-import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
+import type { FileChange, PendingRow } from "../engine/types.ts";
 import { ranOver, tabs } from "./editor/documents.ts";
 import { reloadTab } from "./files/actions.ts";
 import { decodeText } from "./files/open.ts";
 import { saveAs } from "./files/save.ts";
-import { fileTurn } from "./files/turns.ts";
+import { fileTurn, turnsOn } from "./files/turns.ts";
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
 import * as S from "./state.ts";
 import { filesWriter as W } from "./state.ts";
 
-type Store = {
-  list(): Promise<FileInfo[]>;
+type Store = Parameters<typeof turnsOn>[0] & {
   zip(): Promise<File>;
-  read(path: string): Promise<Uint8Array>;
   onChange: null | ((row: PendingRow) => void);
   blocked: boolean;
 };
@@ -32,6 +30,7 @@ let seeding: ReadonlySet<string> = new Set();
 /** Use `s` as the page's store (its changes list it again) and `manager` as the browser's storage manager. */
 export function connectFiles(s: Store, manager: Storage = globalThis.navigator?.storage) {
   store = s;
+  turnsOn(s);
   storage = manager;
   warned = false;
   s.onChange = (row) => {

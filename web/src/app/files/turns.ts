@@ -29,6 +29,7 @@
 //   being told the operation failed, since nobody knows. The next turn starts; the store applies calls in the order
 //   they were made, so the next turn's calls land after the late one.
 
+import type { FileStore } from "../../engine/store.ts";
 import { store } from "../store.ts";
 import type { FileInfo } from "../types.ts";
 
@@ -71,15 +72,24 @@ function* op<T>(name: string, run: () => Promise<T>): Turn<T> {
   return (yield request as unknown as Op) as T; // the brand is a type only: the runner gets the request back
 }
 
-// `store` is read at each call, so a test that replaces one of its methods is seen
+type Target = Pick<FileStore, "list" | "read" | "write" | "mkdir" | "rename" | "remove">;
+let target: Target = store;
+
+/** The store the turns call: the page's (app/store.ts) until files.ts is connected to one (connectFiles: main.tsx
+ *  gives it the page's, a controller test its stand-in). */
+export function turnsOn(s: Target): void {
+  target = s;
+}
+
+// the method is looked up at each call, so a test that replaces one is seen
 const io: Io = {
-  list: () => op("list", () => store.list()),
-  read: (path) => op(`read ${path}`, () => store.read(path)),
-  write: (path, data) => op(`write ${path}`, () => store.write(path, data)),
-  mkdir: (path) => op(`mkdir ${path}`, () => store.mkdir(path)),
-  rename: (from, to) => op(`rename ${from}`, () => store.rename(from, to)),
-  remove: (path) => op(`remove ${path}`, () => store.remove(path)),
-  issue: (path, data) => op(`issue ${path}`, async () => ({ answer: store.write(path, data) })),
+  list: () => op("list", () => target.list()),
+  read: (path) => op(`read ${path}`, () => target.read(path)),
+  write: (path, data) => op(`write ${path}`, () => target.write(path, data)),
+  mkdir: (path) => op(`mkdir ${path}`, () => target.mkdir(path)),
+  rename: (from, to) => op(`rename ${from}`, () => target.rename(from, to)),
+  remove: (path) => op(`remove ${path}`, () => target.remove(path)),
+  issue: (path, data) => op(`issue ${path}`, async () => ({ answer: target.write(path, data) })),
 };
 
 let turns: Promise<unknown> = Promise.resolve(); // the turns, one after the other
