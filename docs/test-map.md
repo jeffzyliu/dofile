@@ -390,7 +390,8 @@ views. The states are seeded through `e2e/seed.ts`.
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`,
   the snapshot job; on `main` `deploy.yml` calls `web.yml` and deploys only if it, `ci.yml` and `lint.yml` passed);
-  `check-pytest` and `check-numeric` are run by hand.
+  `check-pytest` and `check-numeric` are run by hand. The three check scripts share `web/scripts/lib/` (argument parser,
+  shard pool, repo paths, `wheels()`); nothing tests them but running them.
 - Probes check rc 0 only, not output.
 
 ## Known flaky tests

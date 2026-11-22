@@ -36,11 +36,9 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
 import { type BrowserContext, type BrowserType, chromium, firefox, type Page, webkit } from "@playwright/test";
+import { arg } from "./lib/args.ts";
 import { EDITOR_BASE, EDITOR_OUT } from "./urls.ts";
 
-const args = process.argv.slice(2);
-const arg = <T>(name: string, fallback: T): string | T =>
-  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const here = fileURLToPath(new URL(".", import.meta.url));
 const dist = join(here, "..", EDITOR_OUT); // the editor's folder, served at the root of its own origin (EDITOR_BASE)
 const out = arg("--out", join(here, "../../docs/img/startup-times.json"));

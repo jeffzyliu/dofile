@@ -4,10 +4,11 @@
 // `node scripts/build-id.ts [--warn]` exits 0 when public/snapshot/ is of this checkout's wheels and Pyodide, else 1
 // with the reason (`--warn` prefixes "warning: ", for `npm run dev`, which starts anyway). Imported by the tests, so .ts.
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { About, SnapshotManifest } from "../src/engine/types.ts";
+import { extraWheelsDir, wheels } from "./lib/wheels.ts";
 
 /** What a snapshot is built from, and what the page is built against. `extraWheels`: file name -> SHA-256. */
 export interface BuildInputs {
@@ -19,24 +20,15 @@ export interface BuildInputs {
 
 const web = new URL("..", import.meta.url);
 export const snapshotDir = fileURLToPath(new URL("public/snapshot", web));
-const sha256 = (path: URL) => createHash("sha256").update(readFileSync(path)).digest("hex");
+const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-/** The inputs of this checkout: the newest wheel in ../dist (`npm run wheel`), web/wheels/*.whl, the pyodide npm package. */
+/** The inputs of this checkout: the newest wheel in web/.wheel (`npm run wheel`), web/wheels/*.whl, the pyodide npm package. */
 export function inputs(): BuildInputs {
-  const dist = new URL("../dist/", web),
-    wheels = new URL("wheels/", web);
-  const wheel = readdirSync(dist)
-    .filter((f) => f.endsWith(".whl"))
-    .sort()
-    .at(-1);
-  if (!wheel) throw new Error("no wheel in ../dist: run `npm run wheel`");
+  const { dir, dofile: wheel, extras } = wheels();
   const extraWheels: Record<string, string> = {};
-  for (const f of readdirSync(wheels)
-    .filter((f) => f.endsWith(".whl"))
-    .sort())
-    extraWheels[f] = sha256(new URL(f, wheels));
+  for (const f of extras) extraWheels[f] = sha256(`${extraWheelsDir}/${f}`);
   const pyodide = JSON.parse(readFileSync(new URL("node_modules/pyodide/package.json", web), "utf8")).version;
-  return { wheel, wheelHash: sha256(new URL(wheel, dist)), extraWheels, pyodide };
+  return { wheel, wheelHash: sha256(`${dir}/${wheel}`), extraWheels, pyodide };
 }
 
 /** What the page shows of the engine without asking it (the "About dofile" hint, the log's head). The wheel's file name

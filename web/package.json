@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "commands": "cd .. && uv run python -c \"import json; from dofile._vendor.opendta.session import Session; from dofile._vendor.opendta.commands.registry import REGISTRY as R; print(json.dumps({'commands': {k: v.min_abbrev for k, v in sorted(R.items())}, 'prefixes': sorted(k for k, v in R.items() if v.prefix)}, indent=0))\" > web/src/stata/commands.json",
+    "commands": "cd .. && uv run python -c \"import json; from dofile._vendor.opendta.session import Session; from dofile._vendor.opendta.commands.registry import REGISTRY as R; print(json.dumps({'commands': {k: v.min_abbrev for k, v in sorted(R.items())}, 'prefixes': sorted(k for k, v in R.items() if v.prefix)}, indent=0))\" > web/src/stata/commands.json.tmp && mv web/src/stata/commands.json.tmp web/src/stata/commands.json || { rm -f web/src/stata/commands.json.tmp; exit 1; }",
     "sample": "cd .. && uv run python web/sample/make_sample.py && cd web && node scripts/make-sample.ts",
-    "wheel": "cd .. && rm -f dist/dofile-*.whl && uv build --wheel -q",
+    "wheel": "cd .. && rm -f web/.wheel/dofile-*.whl && uv build --wheel -q --out-dir web/.wheel",
     "snapshot": "npm run wheel && node scripts/make-snapshot.ts",
     "check-snapshot": "npm run wheel && node scripts/check-snapshot.ts",
     "check-pytest": "npm run wheel && node scripts/check-pytest.ts",

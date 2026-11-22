@@ -8,29 +8,27 @@
 //   uv run python web/scripts/pytest_report.py OUT.json FILE -q -p no:cacheprovider
 // and `node scripts/compare-pytest.ts BASELINE_DIR DIR` lists the differences.
 
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import type { SnapshotPy } from "../src/engine/snapshot.ts";
 import { installEngine } from "./install-engine.ts";
+import { arg, hasFlag } from "./lib/args.ts";
+import { repo } from "./lib/paths.ts";
+import { runChild, runShards } from "./lib/shards.ts";
 
-const args = process.argv.slice(2);
-const arg = <T>(name: string, fallback: T): string | T =>
-  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
-const repo = fileURLToPath(new URL("../..", import.meta.url));
 const out = resolve(arg("--out", `${repo}/.dofile/pytest-wasm`));
 // dofile tests that make sense in the page's Python. Left out: those that start subprocesses, need the `mcp` package or
 // the repo's src/ tree (test_mcp, test_worker, test_sandbox, test_break, test_dofile_cli, test_vendor, test_conformance,
 // test_stata_compat, test_log_cut, test_pathshim), and those covered by web/test (test_browser, test_linalgshim).
 const WEB_TESTS = ["tests/test_engine.py"];
 
-if (args.includes("--child")) {
+if (hasFlag("--child")) {
   const file = arg("--child", "");
   // --ios: Pyodide's loader creates no WebAssembly trampoline function (getPyEMTrampolinePtr) for an iPhone/iPad
   // navigator.userAgent; this makes Node look like that, to run the suite the way an iPhone runs the engine
-  if (args.includes("--ios"))
+  if (hasFlag("--ios"))
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
       value: {
@@ -48,7 +46,7 @@ if (args.includes("--child")) {
   }
   py.FS.mkdirTree("/work");
   py.FS.writeFile("/tmp/pytest_report.py", readFileSync(`${repo}/web/scripts/pytest_report.py`));
-  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
+  if (!hasFlag("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
   py.globals.set("FILE", file);
   py.globals.set("OUT", "/tmp/result.json");
   py.runPython(`
@@ -62,7 +60,7 @@ pytest_report.run(OUT, ["/repo/" + FILE, "-q", "-p", "no:cacheprovider", "--root
     ...JSON.parse(py.FS.readFile("/tmp/result.json", { encoding: "utf8" })),
     // Emscripten exports wasmTable; AsmModule does not declare it
     wasmTableLength: (py._module as typeof py._module & { wasmTable: WebAssembly.Table }).wasmTable.length,
-    ios: args.includes("--ios"),
+    ios: hasFlag("--ios"),
   };
   writeFileSync(`${out}/${basename(file)}.json`, JSON.stringify(result));
   process.exit(0);
@@ -87,45 +85,27 @@ mkdirSync(out, { recursive: true });
 const t0 = performance.now(),
   timeouts: string[] = [],
   crashed: string[] = [];
-const queue = [...files];
-const runOne = (file: string) =>
-  new Promise<void>((done) => {
-    const started = performance.now();
-    rmSync(`${out}/${basename(file)}.json`, { force: true }); // a result left by an earlier run would hide a crash
-    const child = spawn(
-      process.execPath,
-      [
-        fileURLToPath(import.meta.url),
-        "--child",
-        file,
-        "--out",
-        out,
-        ...(args.includes("--no-shim") ? ["--no-shim"] : []),
-        ...(args.includes("--ios") ? ["--ios"] : []),
-      ],
-      { stdio: ["ignore", "ignore", "ignore"] },
-    );
-    const timer = setTimeout(() => {
-      timeouts.push(file);
-      child.kill("SIGKILL");
-    }, timeoutS * 1000);
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      const s = ((performance.now() - started) / 1000).toFixed(0);
-      if (!timeouts.includes(file) && !existsSync(`${out}/${basename(file)}.json`)) crashed.push(file);
-      console.log(`${timeouts.includes(file) ? "TIMEOUT" : code === 0 ? "done   " : `exit ${code}`} ${file} (${s} s)`);
-      done();
-    });
-  });
-await Promise.all(
-  Array.from({ length: shards }, async () => {
-    for (;;) {
-      const f = queue.shift();
-      if (!f) break;
-      await runOne(f);
-    }
-  }),
-);
+const runOne = async (file: string) => {
+  const started = performance.now();
+  rmSync(`${out}/${basename(file)}.json`, { force: true }); // a result left by an earlier run would hide a crash
+  const { code, timedOut } = await runChild(
+    fileURLToPath(import.meta.url),
+    [
+      "--child",
+      file,
+      "--out",
+      out,
+      ...(hasFlag("--no-shim") ? ["--no-shim"] : []),
+      ...(hasFlag("--ios") ? ["--ios"] : []),
+    ],
+    { limitS: timeoutS },
+  );
+  if (timedOut) timeouts.push(file);
+  const s = ((performance.now() - started) / 1000).toFixed(0);
+  if (!timedOut && !existsSync(`${out}/${basename(file)}.json`)) crashed.push(file);
+  console.log(`${timedOut ? "TIMEOUT" : code === 0 ? "done   " : `exit ${code}`} ${file} (${s} s)`);
+};
+await runShards(files, shards, runOne);
 console.log(
   `\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${files.length} files, ${timeouts.length} timed out, ${crashed.length} without a result`,
 );
