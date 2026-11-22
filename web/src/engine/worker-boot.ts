@@ -14,7 +14,7 @@ import {
   unpackAsync,
   withHeapCap,
 } from "./snapshot.ts";
-import type { BootArgs, MountArgs, SnapshotFile, SnapshotFiles, Stage, Startup } from "./types.ts";
+import type { About, BootArgs, MountArgs, SnapshotFile, SnapshotFiles, Stage, Startup } from "./types.ts";
 import { ROOT } from "./work-mirror.ts";
 
 /** dofile.browser (src/dofile/browser.py): JSON text in and out. */
@@ -324,7 +324,7 @@ export async function startEngine(
     startup: Partial<Startup>;
     lazyGraphics: (browser: Browser, part: GraphicsArgs) => void;
   },
-): Promise<{ browser: Browser; about: unknown }> {
+): Promise<{ browser: Browser; about: About }> {
   const tPackages = performance.now();
   if (!fromSnapshot) {
     stage("packages");

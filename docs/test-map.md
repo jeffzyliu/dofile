@@ -145,6 +145,11 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   or absent Cache, the snapshot start's stage order and errors (a missing file `DownloadError`, a broken Cache its own
   error, a refused one still fetched), and `boot`'s steps on a stand-in Pyodide (wheels only on the normal boot, the
   Break callback, the graphics hook).
+- `worker-dispatch.test.ts`: the worker's dispatch (`engine/worker-dispatch.ts`) over stand-in handlers: an unknown op
+  (also a name every object has) and a throwing or rejecting handler answered `{id, error, name, type?}` (a
+  `PythonError`'s `type`, an errno named) with the queue going on; queued ops in order, `graphics` answered beside a
+  waiting run, `run` counted as it arrives; the folder check after a result only; boot's answer posted before it settles
+  `booted`; a file's bytes moved.
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
@@ -231,6 +236,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
   the failure); a cycle finder on a small graph.
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
+- `dispatch.types.ts` (not run: `npm run check` compiles it): the worker's dispatch table has an entry for every op and
+  no other, each handler with its op's arguments and result (a missing op, a wrong result, wrong arguments and an extra
+  op each fail to compile).
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.

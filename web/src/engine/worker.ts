@@ -1,7 +1,7 @@
 // The engine's Web Worker: Pyodide, the dofile wheel, and the user's files in /work (an in-memory folder kept by
 // work-mirror.ts; the files live in store.ts). Protocol: types.ts (Ops, ToWorker, FromWorker); the page's side is
-// client.ts. One op at a time; `boot` runs outside the queue. A new op joins one of the three handler sets
-// (LifecycleOps, ReadOps, JournalOps).
+// client.ts. One op at a time; `boot` and `graphics` run outside the queue. A new op gets an entry in `table` (its type,
+// OpTable in worker-dispatch.ts, comes from Ops).
 
 import type { BrotliWasmType } from "brotli-wasm";
 import {
@@ -19,23 +19,13 @@ import {
 import type { SnapshotPy } from "./snapshot.ts";
 import { hasNativeBrotli, inflateNative, unpackSteps, writeGraphics } from "./snapshot.ts";
 import { openStore } from "./store.ts";
-import type {
-  BootArgs,
-  DescribeArgs,
-  JournalOps,
-  LifecycleOps,
-  MountArgs,
-  ReadOps,
-  RunOptions,
-  SnapshotFile,
-  Stage,
-  Startup,
-  ToWorker,
-} from "./types.ts";
+import type { About, RunOptions, SnapshotFile, Stage, Startup, ToWorker } from "./types.ts";
 import type { MirrorStore } from "./work-mirror.ts";
 import { WorkMirror } from "./work-mirror.ts";
 import type { Browser } from "./worker-boot.ts";
 import { since, startEngine, startPython } from "./worker-boot.ts";
+import type { OpTable } from "./worker-dispatch.ts";
+import { dispatcher, errorForPage as pageError } from "./worker-dispatch.ts";
 
 declare global {
   var dofileStore: MirrorStore | undefined; // in the Node tests, a stand-in for the store (test/node-worker.ts)
@@ -48,21 +38,11 @@ let py: SnapshotPy,
   interrupt: Int32Array | null = null,
   fromSnapshot = false,
   brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
-let queue = Promise.resolve();
 let mirror: WorkMirror | undefined; // /work: made in mount, once Pyodide is there
 
 const stage = (id: Stage) => self.postMessage({ stage: id });
 
-// Emscripten's file system errors carry only a number.
-function errorForPage(e: any): { message: string; name: string; type?: string } {
-  if (e?.errno != null) {
-    const code = Object.keys(py?.ERRNO_CODES ?? {}).find((k) => py.ERRNO_CODES[k] === e.errno);
-    return { message: `file system error ${code ?? e.errno}`, name: "ErrnoError" };
-  }
-  const message = e?.message ?? (typeof e === "object" ? JSON.stringify(e) : e);
-  const name = e?.name ?? "Error";
-  return { message: String(message), name, ...(name === "PythonError" && { type: e?.type }) };
-}
+const errorForPage = (e: unknown) => pageError(e, py?.ERRNO_CODES);
 
 // Starting is two steps so the page can show the user's files early. `mount` is an ordinary queued op, so every `sync`
 // posted after it waits for it. `boot` runs outside the queue, so `sync`, `files` and `read` are answered while it
@@ -448,67 +428,144 @@ function idleStep() {
 // not be copied from the store, so the engine runs and nothing it writes is kept.
 const startup: Partial<Startup> = {};
 
-type Handlers<S> = { [K in keyof S]: (args: S[K] extends { args: infer A } ? A : never, id: number) => unknown };
-
-const lifecycle: Handlers<LifecycleOps> = {
-  async mount(args: MountArgs) {
-    brotliMode = args.brotli;
-    snapshotBase = args.snapshot ?? "";
-    fromSnapshot = Boolean(args.snapshot);
-    ({ py, brotli: brotliWasm } = await startPython(args, stage, startup));
-    mirror = new WorkMirror(py.FS, py.PATH, errorForPage);
-    const tFiles = performance.now();
-    stage("files");
-    await mirror.copyStore(() => self.dofileStore ?? openStore());
-    startup.filesS = since(tFiles);
-    if (mirror.storeError) startup.storeError = mirror.storeError;
+// Each op's entry: the lifecycle ops, then the read ops, then the journal's (the three sets of Ops, types.ts).
+export const table: OpTable = {
+  mount: {
+    queued: true,
+    async handle(args) {
+      brotliMode = args.brotli;
+      snapshotBase = args.snapshot ?? "";
+      fromSnapshot = Boolean(args.snapshot);
+      ({ py, brotli: brotliWasm } = await startPython(args, stage, startup));
+      mirror = new WorkMirror(py.FS, py.PATH, errorForPage);
+      const tFiles = performance.now();
+      stage("files");
+      await mirror.copyStore(() => self.dofileStore ?? openStore());
+      startup.filesS = since(tFiles);
+      if (mirror.storeError) startup.storeError = mirror.storeError;
+    },
   },
-  startup: async () => {
-    started = true; // the part's work may begin (nativeSoon, idleSoon)
-    idleSince = performance.now();
-    if (share && !share.sab) setTimeout(() => void prefetch(), 0); // after this answer, as nativeSoon
-    nativeSoon();
-    idleSoon();
-    return startup;
-  },
+  // Outside the queue (see `booted`); its answer settles `booted`.
   // wheel: URL or {name, bytes}; extraWheels: the same, installed with it; interruptBuffer: Int32Array or null
-  async boot(args: BootArgs) {
-    interrupt = args.interruptBuffer ?? null;
-    let about: unknown;
-    ({ browser, about } = await startEngine(py, args, {
-      fromSnapshot,
-      stage,
-      startup,
-      lazyGraphics: (engine, graphics) => {
-        share = { ...graphics, hdr: graphics.sab ? partHeader(graphics.sab) : null };
-        engine.lazy_graphics(waitGraphics);
-      },
-    }));
-    return about;
+  boot: {
+    queued: false,
+    async handle(args) {
+      interrupt = args.interruptBuffer ?? null;
+      let about: About;
+      ({ browser, about } = await startEngine(py, args, {
+        fromSnapshot,
+        stage,
+        startup,
+        lazyGraphics: (engine, graphics) => {
+          share = { ...graphics, hdr: graphics.sab ? partHeader(graphics.sab) : null };
+          engine.lazy_graphics(waitGraphics);
+        },
+      }));
+      return about;
+    },
+    answered: (failed, error) => (failed ? bootDone.err(error) : bootDone.ok()),
   },
-  // {id, log} chunks go to the page while the run prints.
-  async run({ code, fresh_locals, plot_theme }: { code: string } & RunOptions, id: number) {
-    try {
-      await booted;
-      askedAt = null;
-      return await runNow({ code, fresh_locals, plot_theme }, id);
-    } finally {
-      if (writtenInRun) {
-        console.info(
-          `[dofile] graphics part: in the run, after the write: import and draw ${since(writtenInRun).toFixed(2)}s`,
-        );
-        writtenInRun = 0;
-      }
-      runs--; // counted in onmessage
+  startup: {
+    queued: true,
+    handle: async () => {
+      started = true; // the part's work may begin (nativeSoon, idleSoon)
       idleSince = performance.now();
+      if (share && !share.sab) setTimeout(() => void prefetch(), 0); // after this answer, as nativeSoon
       nativeSoon();
       idleSoon();
-    }
+      // mode, filesS and engineS are set by now: the page asks only after boot's answer
+      return startup as Startup;
+    },
   },
-  // the page's graphics part landed, failed, or is fetched again
-  graphics() {
-    nativeSoon();
-    idleSoon();
+  // {id, log} chunks go to the page while the run prints.
+  run: {
+    queued: true,
+    arrived: () => {
+      runs++; // at once, not when the queue reaches it: the part's idle steps stop for it (idleStep)
+    },
+    async handle({ code, fresh_locals, plot_theme }, id) {
+      try {
+        await booted;
+        askedAt = null;
+        return await runNow({ code, fresh_locals, plot_theme }, id);
+      } finally {
+        if (writtenInRun) {
+          console.info(
+            `[dofile] graphics part: in the run, after the write: import and draw ${since(writtenInRun).toFixed(2)}s`,
+          );
+          writtenInRun = 0;
+        }
+        runs--; // counted as it arrived
+        idleSince = performance.now();
+        nativeSoon();
+        idleSoon();
+      }
+    },
+  },
+  // the page's graphics part landed, failed, or is fetched again. Outside the queue: it only notes the part, so a run
+  // sent after it does not wait for it
+  graphics: {
+    queued: false,
+    handle() {
+      nativeSoon();
+      idleSoon();
+    },
+  },
+  // undefined becomes Python's None (null would become JsNull)
+  describe: {
+    queued: true,
+    handle: async ({ vars, offset = 0, limit }) => {
+      await booted;
+      return JSON.parse(browser.describe(vars, offset, limit));
+    },
+  },
+  // a .dta in /work, without loading it
+  describe_file: {
+    queued: true,
+    async handle({ path }) {
+      await booted;
+      mirror!.inRoot(path);
+      return JSON.parse(browser.describe_file(path));
+    },
+  },
+  matrix: {
+    queued: true,
+    handle: async ({ name }) => {
+      await booted;
+      return JSON.parse(browser.matrix(name));
+    },
+  },
+  macros: {
+    queued: true,
+    handle: async () => {
+      await booted;
+      return JSON.parse(browser.macros());
+    },
+  },
+  browse: {
+    queued: true,
+    handle: async ({ vars, offset, limit }) => {
+      await booted;
+      return JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50));
+    },
+  },
+  // heap_bytes: the size of this worker's WebAssembly memory
+  memory: {
+    queued: true,
+    handle: async () => {
+      await booted;
+      return { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length };
+    },
+  },
+  // views of /work, for the tests: the page lists and reads the store
+  files: { queued: true, handle: () => mirror!.walk() },
+  read: { queued: true, handle: ({ path }) => py.FS.readFile(mirror!.inRoot(path)) },
+  // no mirror (before mount, or after one that failed): no store either, so nothing to take
+  sync: {
+    queued: true,
+    async handle() {
+      await mirror?.sync();
+    },
   },
 };
 
@@ -544,82 +601,12 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
   }
 }
 
-const read: Handlers<ReadOps> = {
-  // undefined becomes Python's None (null would become JsNull)
-  describe: async ({ vars, offset = 0, limit }: DescribeArgs) => {
-    await booted;
-    return JSON.parse(browser.describe(vars, offset, limit));
-  },
-  matrix: async ({ name }: { name: string }) => {
-    await booted;
-    return JSON.parse(browser.matrix(name));
-  },
-  // a .dta in /work, without loading it
-  async describe_file({ path }: { path: string }) {
-    await booted;
-    mirror!.inRoot(path);
-    return JSON.parse(browser.describe_file(path));
-  },
-  macros: async () => {
-    await booted;
-    return JSON.parse(browser.macros());
-  },
-  browse: async ({ vars, offset, limit }: DescribeArgs) => {
-    await booted;
-    return JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50));
-  },
-  // heap_bytes: the size of this worker's WebAssembly memory
-  memory: async () => {
-    await booted;
-    return { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length };
-  },
-  // views of /work, for the tests: the page lists and reads the store
-  files: () => mirror!.walk(),
-  read: ({ path }: { path: string }) => py.FS.readFile(mirror!.inRoot(path)),
-};
-
-const journal: Handlers<JournalOps> = {
-  // no mirror (before mount, or after one that failed): no store either, so nothing to take
-  async sync() {
-    await mirror?.sync();
-  },
-};
-
-const ops = { ...lifecycle, ...read, ...journal };
-
-const answer = async ({ id, op, args }: ToWorker) => {
-  try {
-    if (!ops[op]) throw new Error(`unknown op ${op}`);
-    const result = await (ops[op] as (args: unknown, id: number) => unknown)(args ?? {}, id);
-    self.postMessage({ id, result }, result instanceof Uint8Array ? [result.buffer] : []); // a file: moved, not copied
+const dispatch = dispatcher(table, {
+  post: (message, transfer) => self.postMessage(message, transfer),
+  errorOf: errorForPage,
+  afterResult: () => {
     const outOfStep = mirror?.takeOutOfStep();
     if (outOfStep) self.postMessage({ folderError: outOfStep }); // after the run's answer, so the page keeps its result
-  } catch (e) {
-    const { message, name, type } = errorForPage(e);
-    self.postMessage({ id, error: message, name, type });
-  }
-};
-
-self.onmessage = ({ data }: MessageEvent<ToWorker>) => {
-  if (data.op === "graphics") {
-    void answer(data); // outside the queue: it only notes the part, so a run sent after it does not wait for it
-    return;
-  }
-  if (data.op === "run") runs++; // at once, not when the queue reaches it: the part's idle steps stop for it (idleStep)
-  if (data.op === "boot") {
-    const { id } = data;
-    Promise.resolve(lifecycle.boot(data.args, id)).then(
-      (about) => {
-        bootDone.ok();
-        self.postMessage({ id, result: about });
-      },
-      (e) => {
-        bootDone.err(e);
-        const { message, name, type } = errorForPage(e);
-        self.postMessage({ id, error: message, name, type });
-      },
-    );
-    return;
-  }
-  queue = queue.then(() => answer(data));
-};
+  },
+});
+self.onmessage = ({ data }: MessageEvent<ToWorker>) => dispatch(data);
