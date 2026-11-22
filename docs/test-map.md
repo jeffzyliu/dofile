@@ -362,14 +362,37 @@ Specs:
 
 ### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)
 
-Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own and takes one screenshot
-of each state of a fixed list into `web/.shots/baseline/` (git ignores `.shots/`); `npm run shots` builds this tree
-and compares each state with it (plan rule 10: a view move changes no pixel). Its own config (`screenshots.config.ts`:
-Chromium and the iPhone profile only, one worker, no retry), its own folder, no CI job. `shots.spec.ts` holds the
-list: the engine walk (ready with the sample, the log after a run, a results table, the graph and its full-size view,
-a .dta view; the status bar's run time and memory are put back to fixed values), several tabs with one unsaved, each dialog,
-each menu open, the tree with a rename field and with a draft row, a log with an error, each banner, the phone's three
-views. The states are seeded through `e2e/seed.ts`.
+Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own (for its `E2E_PORT`:
+`.claude/worktrees/shots-baseline-<port>` in the caller's checkout, removed by `node scripts/shots.ts clean`) and takes
+one screenshot of each state of a fixed list into `web/.shots/<port>/baseline/` (git ignores `.shots/`); `npm run shots`
+builds this tree and compares each state with it (plan rule 10: a view move changes no pixel) and prints the near-misses
+(below). Its own config (`screenshots.config.ts`: Chromium and the iPhone profile only, one worker, no retry), its own
+folder, no CI job. `shots.spec.ts` holds the list: the engine walk (ready with the sample, the log after a run, a results
+table, the Data tab, the graph and its full-size view, a .dta view; the status bar's run time and memory are put back to
+fixed values), several tabs with one unsaved, a .dta tab and a .csv tab with no engine (the command bars), each dialog,
+each menu open, the tree with a rename field and with a draft row, a log with an error, each banner (the reset banner
+as the user's and as a crash, store-failed with each cause, the others), the engine-state banners above the editor
+(failed unknown, failed updated, failed twice, declined), the phone's three views. #92 (the engine state groups)
+intended no visible change and none is shot for it. The states are seeded through `e2e/seed.ts`.
+
+Stability (N7 tightening, measured on macOS: one baseline of c5d7a85, then 11 compares of the same build, one of them
+through `npm run shots`'s own build step, the others with `--app`; all 81 shots, Chromium and the "iphone" project, which
+is WebKit, so Chromium's flags do not reach it). Result: **0 pixels in every shot of every compare**, so `ALLOW` in
+`shots.spec.ts` is empty (a per-state allowance stays possible there, with the rules in its comment: the measured
+maximum over 10+ compares plus a stated margin, under 12 pixels, else the state is dropped). The causes found, in the
+order they were found: (1) with no flags, Chromium differed by up to 34 pixels in 26 of 39 states; (2) an overlay
+scrollbar in the log pane, drawn under a dialog's backdrop, flickered the dialogs by 34 pixels (the `::-webkit-scrollbar`
+and `scrollbar-width` rule in `FREEZE` removed it; `--hide-scrollbars` alone did not); (3) the rounded corners of the Run
+button and of the panes antialiased differently from run to run (1 to 12 pixels, in the states with an enabled Run
+button), and `--font-render-hinting=none --force-color-profile=srgb --hide-scrollbars --num-raster-threads=1
+--disable-skia-runtime-opts --disable-partial-raster --disable-gpu-rasterization` removed it (the four rasterizer flags
+together; not tried one by one). `--disable-gpu` and `--disable-lcd-text` did nothing for it. The first measure, 3 compares
+at 2 times the maximum, was too small a sample: an earlier version of this paragraph said 10 pixels; that was wrong.
+`npm run shots` still prints and writes the near-misses (a diff of 1 to the allowance), empty while `ALLOW` is.
+Limits: the scrollbars are hidden, so a pane that starts to overflow is not seen by itself (content clipped or shifted still is); the download size in the page ("about 48 MB") is fixed in the spec, since the snapshot's size differs between builds of one commit (a changed size text is not seen); the comparison has threshold 0, so one colour level of one pixel fails; a baseline is per machine and per
+Chromium build. Two known gaps: the failed-engine banners are seeded with `FAILED.*` read from the caller's checkout, so
+a change of those words shows in neither the baseline nor the compare (the app computes them only in a real failed
+start; seeding the kind alone needs an app change); Firefox and desktop WebKit are not shot.
 
 ## Conformance corpus: value and limits
 
