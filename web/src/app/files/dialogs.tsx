@@ -4,11 +4,12 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
 import { editorCommands } from "../editor/commands.ts";
+import { close as closeTab } from "../editor/documents.ts";
 import { refresh } from "../files.ts";
 import { dialog, files } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
-import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries, WORDS } from "./actions.ts";
+import { answerClash, type ClashAnswer, clashNow, deleteAll, deleteEntries, WORDS } from "./actions.ts";
 import { focusAfterClose } from "./EditorTabs";
 import { focusTree } from "./FilesPane";
 import { baseName, shortDate } from "./tree.ts";

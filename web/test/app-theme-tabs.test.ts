@@ -20,20 +20,7 @@ test("the theme button cycles System, Light, Dark; applyTheme keeps <html data-t
   off();
 });
 
-test("setDirty sets one tab's dot; decodeText takes strict UTF-8 only", () => {
-  S.tabs.value = [
-    { path: "a.do", kind: "text", dirty: false },
-    { path: "b.do", kind: "text", dirty: false },
-  ];
-  S.setDirty("b.do", true);
-  assert.deepEqual(
-    S.tabs.value.map((t) => t.dirty),
-    [false, true],
-  );
-  const before = S.tabs.value;
-  S.setDirty("b.do", true);
-  S.setDirty("gone.do", true);
-  assert.equal(S.tabs.value, before, "no change, no new list");
+test("decodeText takes strict UTF-8 only", () => {
   assert.equal(decodeText(new TextEncoder().encode("café\n")), "café\n");
   assert.equal(decodeText(Uint8Array.from([0x63, 0x61, 0x66, 0xe9])), null, "Latin-1 is not text");
   assert.equal(decodeText(Uint8Array.from([0xef, 0xbb, 0xbf, 0x61])), "a", "a leading BOM is dropped, as before");

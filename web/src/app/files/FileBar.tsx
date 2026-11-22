@@ -2,10 +2,11 @@
 // files (a .dta tab's bars are output/DtaView.tsx's).
 import { useEffect, useState } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
+import { activeTab, tabs } from "../editor/documents.ts";
 import { copyText } from "../output/clip.ts";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
-import { activeTab, engine, files, fresh, showToast, tabs } from "../state.ts";
+import { engine, files, fresh, showToast } from "../state.ts";
 import { takesRun } from "../states/predicates.ts";
 import { store } from "../store.ts";
 import { Icon } from "../ui/Icon";

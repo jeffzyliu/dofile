@@ -9,7 +9,7 @@ import { dismiss } from "../state.ts";
 import { useFocusOnLeave } from "../states/focus.ts";
 import type { BannerOf } from "../types.ts";
 import { Banner } from "../ui/Live";
-import { savedIsText, textOf } from "./Editor";
+import { savedIsText, textOf } from "./documents.ts";
 
 export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }) => {
   const name = baseName(banner.path);
@@ -42,7 +42,7 @@ export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }
 // A run rewrote an open file that has unsaved edits, or wrote something that is not text over an open file. The editor
 // keeps its text and the tab stays unsaved, so a Save then replaces the run's version knowingly. "Reload from the run"
 // takes the store's version and drops the edits. A save, a reload, a close or a delete of the file removes the banner;
-// a rename moves it (Editor.tsx).
+// a rename moves it (documents.ts).
 export const RunChangedBanner = ({ banner }: { banner: BannerOf<"run-changed"> }) => {
   const name = baseName(banner.path);
   const text = savedIsText(banner.path);

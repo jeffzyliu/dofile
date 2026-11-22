@@ -17,7 +17,6 @@ import type {
   LogItem,
   Macros,
   Memory,
-  OpenTab,
   OutputTab,
   PhoneTab,
   Results,
@@ -75,16 +74,6 @@ export const files: ReadonlySignal<FileInfo[]> = filesWriter.files;
 export const hasFiles = computed(() => files.value.some((f) => !f.dir));
 export const fresh: ReadonlySignal<Set<string>> = filesWriter.fresh;
 export const persisted: ReadonlySignal<boolean | null> = filesWriter.persisted;
-
-// ---- editor tabs ----
-export const tabs = signal<OpenTab[]>([]); // `dirty` is set only through setDirty()
-export const activeTab = signal<string | null>(null);
-
-/** Set the unsaved dot of an open file. A path with no tab is ignored. */
-export function setDirty(path: string, on: boolean) {
-  if (!tabs.value.some((t) => t.path === path && t.dirty !== on)) return;
-  tabs.value = tabs.value.map((t) => (t.path === path ? { ...t, dirty: on } : t));
-}
 
 // ---- layout ----
 export const split = signal(saved.get("dofile.split") !== "0"); // kept in localStorage
