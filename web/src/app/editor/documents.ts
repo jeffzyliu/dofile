@@ -9,7 +9,6 @@ import { baseName, movedPath, within } from "../files/tree.ts";
 import { fileTurn } from "../files/turns.ts";
 import { addBanner, banners, dialog, dismiss, engine, lastRun, say, showToast, wrap } from "../state.ts";
 import { runOn } from "../states/predicates.ts";
-import { store } from "../store.ts";
 import type { OpenTab, RunHead } from "../types.ts";
 import {
   languageOf,
@@ -319,8 +318,9 @@ export function edited(state: EditorState): void {
 
 /** Save `path` (default: the active tab): its text as it is now, written in its turn (files/turns.ts) under the tab's
  *  path then, so a rename or delete pressed before it is honoured. The later action wins (the Save rule, SPEC section
- *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written; an answer that comes after a
- *  reload or a run's text shown sets that document's saved text from the store read again (resync). A save that answers after a rename leaves its outcome on the tab under the new name;
+ *  4): a tab closed, retyped, reloaded or showing a run's text by then is not written. An answer is applied only to the
+ *  document the Save took: a document swapped in after its turn was read after its write (such reads take turns), so it
+ *  has the store's text already. A save that answers after a rename leaves its outcome on the tab under the new name;
  *  the store has the bytes there too, as its rename is called after the write is issued. Resolves true once written,
  *  false when not (no such text tab, cancelled, the store refused: the save-failed banner says why). */
 export async function save(path: string | undefined = activeTab.peek() ?? undefined): Promise<boolean> {
@@ -331,14 +331,13 @@ export async function save(path: string | undefined = activeTab.peek() ?? undefi
   const ours = () => isOpen(d) && d.content.peek() === part; // the document it took is still the tab's
   let written = d.path.peek(); // the name the text is written under: the tab's when its turn comes
   try {
-    let write = null as Promise<unknown> | null;
-    await fileTurn(async () => {
-      if (!ours()) return;
+    const issued = await fileTurn(function* (io) {
+      if (!ours()) return null;
       written = d.path.peek();
-      write = store.write(written, new TextEncoder().encode(fileText(text, part.form, written)));
+      return yield* io.issue(written, new TextEncoder().encode(fileText(text, part.form, written)));
     });
-    if (!write) return false;
-    await write;
+    if (!issued) return false;
+    await issued.answer; // after the turn: a rename or a delete pressed meanwhile is not held by a slow write
   } catch (e) {
     const message = (e as Error)?.message ?? String(e);
     if (ours()) addBanner({ b: "save-failed", path: d.path.peek(), message });
@@ -351,23 +350,9 @@ export async function save(path: string | undefined = activeTab.peek() ?? undefi
     part.saved.value = text;
     part.form = savedForm(part.form, written);
     for (const b of banners.peek()) if ((b.b === "save-failed" || b.b === "run-changed") && b.path === now) dismiss(b);
-  } else if (isOpen(d) && textOfDoc(d)) await resync(d);
+  }
   showToast(`Saved ${baseName(now ?? written)}`);
   return true;
-}
-
-// A Save's write answered after its tab took another document (a reload or a run's text shown) whose read may have been
-// issued before the write: the store's text is read again, so the dot says whether the tab shows what the store has.
-async function resync(d: Doc) {
-  const part = textOfDoc(d);
-  const path = d.path.peek();
-  let saved: string | null;
-  try {
-    saved = editorText(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await store.read(path)));
-  } catch {
-    saved = null; // not text, or the store cannot give it: unsaved until a Save
-  }
-  if (part && isOpen(d) && d.content.peek() === part) part.saved.value = saved; // renamed meanwhile: the store moved it too
 }
 
 // ---- the run's marks, the wrap setting ----

@@ -11,7 +11,7 @@ import type { Dialog } from "../types.ts";
 import { decodeText, noteNotText } from "./open.ts";
 import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
-import { fileTurn } from "./turns.ts";
+import { fileTurn, type Io, type Turn } from "./turns.ts";
 
 // ---- rename, new, delete, download ----
 
@@ -27,16 +27,16 @@ const kindOf = (path: string) => {
  *  says, in its place, unless it has unsaved edits (the editor keeps them); one whose new name opens in no tab (a .png)
  *  just closes, and the Graph tab is left alone. Rejects as the store does (`to` exists, ...). */
 export function renameEntry(from: string, to: string): Promise<void> {
-  return fileTurn(() => renameNow(from, to)); // a Save pressed meanwhile waits for the tabs to have the new name
+  return fileTurn((io) => renameNow(io, from, to)); // a Save pressed meanwhile waits for the tabs to have the new name
 }
 
-async function renameNow(from: string, to: string) {
+function* renameNow(io: Io, from: string, to: string): Turn<void> {
   if (from === to) return;
   // a tab left open at the new name after a run deleted its file (files.ts afterRun keeps it): with unsaved edits the
   // name is taken, as if the file were there; with none it closes, so the one tab of that name shows the renamed file
   const left = () => tabs.value.filter((t) => within(t.path, to) && !within(t.path, from));
   if (left().some((t) => t.dirty)) throw new Error(`${to} already exists`);
-  await store.rename(from, to);
+  yield* io.rename(from, to);
   for (const t of left()) if (!t.dirty) close(t.path);
   const before = new Set(tabs.value.map((t) => t.path));
   // the reset banner's cut file follows too, open in a tab or not (one banner: addBanner replaces it)
@@ -48,7 +48,7 @@ async function renameNow(from: string, to: string) {
   const reads = new Map<string, { was: string; text: string | null | Error }>();
   for (const t of tabs.value.filter((t) => within(t.path, from))) {
     const p = movedPath(t.path, from, to);
-    if (kindOf(p) === "text" && retypes(t.path, "text")) reads.set(p, { was: t.path, text: await readText(p) });
+    if (kindOf(p) === "text" && retypes(t.path, "text")) reads.set(p, { was: t.path, text: yield* readText(io, p) });
   }
   // one batch: the tabs are seen moved and retyped together
   batch(() => {
@@ -84,9 +84,9 @@ const retypes = (path: string, kind: "text" | "dta" | null) => {
 };
 
 /** The store's copy of `path` as the editor takes it (decodeText, BOM kept): null when it is not text. */
-async function readText(path: string): Promise<string | null | Error> {
+function* readText(io: Io, path: string): Turn<string | null | Error> {
   try {
-    return decodeText(await store.read(path), true);
+    return decodeText(yield* io.read(path), true);
   } catch (e) {
     return e instanceof Error ? e : new Error(String(e));
   }
@@ -100,12 +100,12 @@ export const NEW_NAMES = { file: "untitled.do", folder: "folder" } as const;
  *  ...) or `folder`. The store is listed fresh and in a turn, so two quick ones cannot both take a name; a `name` in
  *  use rejects with "already exists" (a write would replace it). Returns its path. */
 export function createEntry(kind: keyof typeof NEW_NAMES, dir = "", name?: string): Promise<string> {
-  return fileTurn(async () => {
-    const taken = (await store.list()).map((f) => f.path);
+  return fileTurn(function* (io) {
+    const taken = (yield* io.list()).map((f) => f.path);
     const path = name === undefined ? freeName(dir, NEW_NAMES[kind], taken) : joinPath(dir, name);
     if (taken.includes(path)) throw new Error(`${path} already exists`);
-    if (kind === "file") await store.write(path, new Uint8Array(0));
-    else await store.mkdir(path);
+    if (kind === "file") yield* io.write(path, new Uint8Array(0));
+    else yield* io.mkdir(path);
     return path;
   });
 }
@@ -113,18 +113,22 @@ export function createEntry(kind: keyof typeof NEW_NAMES, dir = "", name?: strin
 /** Delete each path (a folder with everything under it) and close their tabs (in a turn: a Save pressed meanwhile finds
  *  its tab closed and writes nothing). */
 export function deleteEntries(paths: string[]): Promise<void> {
-  return fileTurn(async () => {
-    for (const p of paths) {
-      await store.remove(p);
-      closeUnder(p);
-    }
-  });
+  return fileTurn((io) => removeAll(io, paths));
 }
 
-/** "Delete all files…": every file and folder; every tab closes. */
-export async function deleteAll(): Promise<void> {
-  const top = (await store.list()).filter((f) => !f.path.includes("/")).map((f) => f.path);
-  await deleteEntries(top);
+function* removeAll(io: Io, paths: string[]): Turn<void> {
+  for (const p of paths) {
+    yield* io.remove(p);
+    closeUnder(p);
+  }
+}
+
+/** "Delete all files…": every file and folder the store has when its turn comes; every tab closes. */
+export function deleteAll(): Promise<void> {
+  return fileTurn(function* (io) {
+    const top = (yield* io.list()).filter((f) => !f.path.includes("/")).map((f) => f.path);
+    yield* removeAll(io, top);
+  });
 }
 
 /** The files under the folder `dir` as a .zip named after it ("data.zip"), its entries under the folder's name
