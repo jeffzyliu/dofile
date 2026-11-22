@@ -29,5 +29,7 @@ export const workerReachable = member(WORKER_LIVE);
 /** Another tab holds the engine: the toolbar's run controls keep their place, unseen. */
 export const otherTab = member(OTHER_TAB);
 
+/** The engine takes a reset now (the machine's table has a `reset` cell in this state). */
+export const takesReset = (st: EngineState): boolean => accepts(st.s, "reset");
 /** The engine takes a run now (the machine's table has a `run` cell in this state). */
 export const takesRun = (st: EngineState): boolean => accepts(st.s, "run");

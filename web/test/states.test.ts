@@ -9,6 +9,8 @@ import {
   engineUp,
   otherTab,
   runOn,
+  takesReset,
+  takesRun,
   workerReachable,
 } from "../src/app/states/predicates.ts";
 import {
@@ -148,4 +150,7 @@ test("the engine-state predicates over all sixteen states", () => {
   assert.deepEqual(members(engineLoading), ["starting-list", "starting-worker"]);
   assert.deepEqual(members(workerReachable), ["starting-worker", "ready", "running", "breaking", "waiting"]);
   assert.deepEqual(members(otherTab), ["other-tab-idle", "other-tab-taking"]);
+  // the controls that send an event read the machine's table: it must agree with what they replaced
+  assert.deepEqual(members(takesRun), ["ready"]);
+  assert.deepEqual(members(takesReset), members(engineUp));
 });
