@@ -133,6 +133,12 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Keyboard and ARIA:** `role="tablist" aria-label="Open files"`; tabs have `aria-selected` and `aria-keyshortcuts="Delete"`;
   arrows move; Delete closes the selected tab. The × is `aria-hidden`, mouse only, 22 px. Do not bind Ctrl/Cmd+W: the browser
   owns it. The dot is `role="img" aria-label="unsaved changes"`.
+- **Place in the text:** a tab shown again is where it was left: after another tab or a .dta tab, and on a phone after
+  another view, also when the active tab changed while the Editor view was hidden. A tab opened, and a tab a rename
+  retyped (.dta to text), starts at the top. A reload ("Replace with uploaded", "Restore the sample" over it, "Reload from
+  the run") keeps the tab's place in the new text as near as that text allows (the line that was at the top, by its
+  position), and a run's text shown in a clean tab keeps it as it is. `editor/documents.ts` keeps each hidden tab's
+  `EditorView.scrollSnapshot()`; the view hands it the last one it saw while its pane is hidden.
 
 ### 3.3 Editor (P1, step 4b)
 - CodeMirror 6 with `web/src/stata/language.ts` for .do and .ado; other text as in 3.11. Edits are never blocked, during a run
