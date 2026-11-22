@@ -181,7 +181,7 @@ sequenceDiagram
   D->>D: cleanup and microtask T2, opener 1 gets the focus
 ```
 
-T1 can also run before the upload goes on (after "Replace with uploaded" the upload first awaits `store.write`). Then
+T1 can also run before the upload goes on (the upload first awaits its turns: a Replace's write, and the next clash's read of its file). Then
 T1 gives the focus to opener 1, and clash 2 takes it as the active element: the same result.
 
 ### A dialog whose opener leaves the page (other-tab over the stopping banner)
@@ -664,7 +664,7 @@ flowchart LR
 | **Edit** | changed | unchanged | unchanged | on when the text differs from the saved text (the document's computed `dirty`) | moves with the text; gone when its line is deleted (`cm.ts` `lineMarksField`, `errormark.ts` `lineDeleted`) | unchanged | unchanged |
 | **Undo back to the saved text** | equals the saved text | unchanged | unchanged | off | mapped as any edit | unchanged | unchanged |
 | **Save succeeds** (`save`) | unchanged | the text Save wrote | `savedForm`: a `.do` or `.ado` loses its BOM, by the name it was written under | off, unless the text changed while it was written | unchanged | both dismissed for the tab's path; toast "Saved name". A tab renamed while it was written gets all of this under its new path. | `fileText` bytes |
-| **Save cancelled** (a reload, "Reload from the run" or a run's text shown before its turn; its tab closed or retyped) | as the later action left it | as the later action left it | as the later action left it | as the later action left it | unchanged | unchanged; no toast | not written (also when pressed while "Reload from the run"'s or a run's store read waits: that read's turn comes first; a Save written after an upload's Replace, which takes no turn yet, re-reads the store, and the dot stays on) |
+| **Save cancelled** (a reload, "Reload from the run" or a run's text shown before its turn; its tab closed or retyped) | as the later action left it | as the later action left it | as the later action left it | as the later action left it | unchanged | unchanged; no toast | not written (also when pressed while "Reload from the run"'s or a run's store read waits: that read's turn comes first; an upload's Replace takes a turn too: one whose turn comes first cancels the Save, and one that comes after finds the file changed and asks again) |
 | **Save fails** | unchanged | unchanged | unchanged | stays on | unchanged | save-failed added (one per path, under the tab's path at the time it fails; none for a tab closed meanwhile); the live region says it | unchanged |
 | **Rename** (`renameEntry` → `moved`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (it holds the record) | the same bytes under the new name |
 | **Rename across a `.do` name** | as Rename | as Rename | `a.txt` with a BOM renamed `a.do`: the next Save writes no BOM. `a.do` with a BOM, never saved here, renamed `a.txt`: the next Save keeps it. | kept | kept | moved | the same bytes |

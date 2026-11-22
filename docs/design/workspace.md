@@ -158,7 +158,10 @@ S6 builds it.
 **Update 2026-11-16.** S2 builds turn bodies as generators, run by `fileTurn`, with an async thunk as the fallback; the
 plan's S2 row (`docs/web-audit-plan.md`, phase 2) has the design. The rules below stand; only how a body is written
 changes. S2's first half built them: `fileTurn(body)` in `files/turns.ts` takes a `function*` over `Io`, and
-the comment at the top of that file is the guide to writing one.
+the comment at the top of that file is the guide to writing one. B1 built the rest of this section: the upload's
+writes, the first visit's sample and `openFile` take turns; `store.write` takes the expectation and `store.info` reads
+one path. Whole uploads stay on their own chain in `files/actions.ts` (`upload`), not a `serial()` in `turns.ts`.
+The words of a dialog asked again are the maintainer's (SPEC, "Name clash"): its title and question, not its meta line.
 
 **The unit of order is a turn: the store calls that no question separates, and what must stay next to them. Never a
 whole operation.**
@@ -179,8 +182,8 @@ whole operation.**
    replace or a rename cannot land between them. No turn calls `openFile`: `retype` takes a text read inside the
    rename's own turn, where `reopenAs` calls `openFile` today (`files/actions.ts:97, 108`).
 7. One door: in `web/src/app/` the store's `write`, `mkdir`, `rename`, `remove` and `change` are called only through
-   the `Io` a turn's body is given (`files/turns.ts`). A Biome rule holds it (`web/biome/architecture.grit`), with an
-   upload's writes and the first visit's sample as its named exceptions until B1.
+   the `Io` a turn's body is given (`files/turns.ts`). A Biome rule holds it (`web/biome/architecture.grit`), with no
+   exceptions.
 
 **What a write's turn checks again after a question.** An upload decides from a listing taken before any dialog
 (`files/actions.ts:272, 290-295`) and from whether the file is open with unsaved edits (`:303`); a Save, a run or

@@ -163,6 +163,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   open documents (`editor/documents.ts`, no view).
   - The tree and the current folder; opening each kind of file (SPEC 3.11), closing, renaming, deleting with open tabs.
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
+  - An upload against the other file changes (each write a turn): a new file of the same name, a clash whose file
+    changed while asked or after "Do the same" (asked again), one deleted while asked (written), one edited before its
+    write's turn (asked in the unsaved words), a Replace against `openFile`'s read.
 - `documents.test.ts`: the open tabs and their documents (`app/editor/documents.ts`), no view or a stand-in one: open,
   activate, close and ask, close under a folder, a move, a retype, a reload, a run over a tab, the dot and `selection`
   derived, a view attached after a file opened.
@@ -170,8 +173,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   the keystroke typed while it waits, a refusal's banner, a rename or a delete before it, a rename while it writes, a
   rename that retypes its tab, and the Save rule (an upload's Replace, "Reload from the run", a run's text shown cancel a
   pending Save; a run that keeps the edits does not), a Save pressed while a reload's or a run's read waits (cancelled: the
-  read's turn comes first, 03-F5) or before it (it writes, and the read takes its text), and a Save written after an
-  upload's Replace (the store read again: the dot stays on).
+  read's turn comes first, 03-F5) or before it (it writes, and the read takes its text), and an upload's Replace answered
+  while a Save waits (the Save writes first; the upload asks again, and Replace leaves the upload, clean).
 - `turns.test.ts`: the order of the page's file changes (`app/files/turns.ts`) over fake-indexeddb: a turn body's store
   calls and errors, a yield that is not a store operation and a turn started inside a body refused, the time limit
   (`TurnTimeout`; the late write still applied, before the next turn's calls), the store's own order (02-F10), Delete
@@ -191,7 +194,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
   does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
   decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).
-- `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock.
+- `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
+  expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
   test,
   without a current snapshot).
