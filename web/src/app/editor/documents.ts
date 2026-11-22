@@ -1,11 +1,5 @@
-// The open tabs and their documents (docs/design/workspace.md, section 2): one record per tab for its whole life, kept
-// here and nowhere else, with no DOM, so the Node tests run it. `tabs`, `activeTab`, `selection` and each tab's unsaved
-// dot are computed from the records. Editor.tsx hands attachView() the view once it mounts; until then, and in a Node
-// test, every document still has its state and follows renames, runs and marks.
-//
-// A record's `content` is a part: a text tab's document (TextPart) or a .dta tab's nothing (DtaPart). A retype, a
-// reload and a run's text shown swap in a new part, so a holder of a part can tell by identity that it is stale
-// (compare it with `content.peek()`); a close drops the record.
+// The open tabs and their documents (docs/design/workspace.md, section 2): one record per tab, with no DOM; `tabs`,
+// `activeTab`, `selection` and each dot are computed from the records.
 
 import { Compartment, EditorState, type Extension, type TransactionSpec } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
@@ -39,7 +33,7 @@ interface DtaPart {
 }
 interface Doc {
   path: Signal<string>; // a rename changes it
-  content: Signal<TextPart | DtaPart>;
+  content: Signal<TextPart | DtaPart>; // a retype, a reload or a run's text shown swaps in a new part: compare by identity
   scrollTop: number; // where its text was scrolled to when it was last hidden (the view keeps it while shown)
 }
 
@@ -323,7 +317,7 @@ export function edited(state: EditorState): void {
   if (onView && onView.state.peek() !== state) onView.state.value = state;
 }
 
-// ---- Save, until it moves here (S1b) ----
+// ---- Save's bridge (Editor.tsx save) ----
 
 // The saves in progress, each with the path its tab has now: moved() moves it, and close() and retype() end it (null).
 const saving = new Set<{ path: string | null }>();

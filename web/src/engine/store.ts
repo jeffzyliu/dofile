@@ -171,7 +171,7 @@ export class FileStore {
   /** A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then
    *  `sync`. Changes apply in the order called: `tx` makes its transaction right after the shared `opened` promise, and
    *  IndexedDB runs readwrite transactions over the same stores in the order made (a write called before a rename is
-   *  moved by it; the page's Save relies on that: app/files/actions.ts fileTurn). */
+   *  moved by it; the page's Save relies on that: app/files/turns.ts fileTurn). */
   async change<T>(row: PendingRow, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
     if (this.blocked) throw new Error("dofile is open in another tab");
     const sync = this.sync;
