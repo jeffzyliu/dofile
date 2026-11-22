@@ -25,7 +25,8 @@ const kindOf = (path: string) => {
 /** Rename (or move) `from` to `to` in the store; the tabs of it and of everything under it follow (documents.ts
  *  moved). A tab whose new name opens another way (a .dta renamed to .csv, a text file to .dta) opens as its new name
  *  says, in its place, unless it has unsaved edits (the editor keeps them); one whose new name opens in no tab (a .png)
- *  just closes, and the Graph tab is left alone. Rejects as the store does (`to` exists, ...). */
+ *  just closes, and the Graph tab is left alone. Rejects as the store does (`to` exists, ...), and when a tab with
+ *  unsaved edits is still open at `to` (its file deleted by a run); such a tab with no edits closes. */
 export function renameEntry(from: string, to: string): Promise<void> {
   return fileTurn(() => renameNow(from, to)); // a Save pressed meanwhile waits for the tabs to have the new name
 }

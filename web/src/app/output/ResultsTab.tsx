@@ -4,31 +4,17 @@
 // another model's).
 
 import { useId } from "preact/hooks";
-import { call } from "../engine.ts";
-import { macros, results, showToast } from "../state.ts";
-import type { Results } from "../types.ts";
+import { macros, results } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { copyText } from "./clip.ts";
-import {
-  copiedNote,
-  full,
-  hasValues,
-  matrixTsv,
-  type ResultGroup,
-  type ResultRow,
-  type ResultSection,
-  sections,
-  shown,
-  sizeLabel,
-} from "./format.ts";
-import { copiedRow, folds, type OpenMatrix, openMatrices } from "./view.ts";
+import { full, type ResultGroup, type ResultRow, type ResultSection, sections, shown, sizeLabel } from "./format.ts";
+import { closeMatrix, copyRow, matrixFor, readMatrix } from "./matrix.ts";
+import { copiedRow, folds, type OpenMatrix } from "./view.ts";
 
 const EMPTY = "e() and r() appear after an estimation or a command such as ";
 const EMPTY_2 = ", with the locals and globals your runs set.";
 const MAX_ROWS = 100; // a matrix grid shows this many rows and columns at most; Copy has them all
 const MAX_COLS = 30;
-const NO_ENGINE = "the engine isn't running";
-const COPIED_MS = 2000; // as the landing page's Copy (src/site/site.ts)
 
 export const EmptyResults = () => (
   <div class="empty">
@@ -40,68 +26,6 @@ export const EmptyResults = () => (
 );
 
 const isOpen = (g: ResultGroup) => folds.value[g.id] ?? g.open;
-
-/** The matrix `name` ("e(b)") as it was read for `rs`, or null: not opened, or opened for earlier results. */
-const matrixFor = (name: string, rs: Results | null): OpenMatrix | null => {
-  const m = openMatrices.value[name];
-  return m && m.for === rs ? m : null;
-};
-
-function setMatrix(name: string, m: OpenMatrix | null) {
-  const next = { ...openMatrices.value };
-  if (m) next[name] = m;
-  else delete next[name];
-  openMatrices.value = next;
-}
-
-/** Ask the engine for matrix `name` as it stands for `rs`. */
-async function fetchMatrix(name: string, rs: Results): Promise<OpenMatrix> {
-  try {
-    const m = await call("matrix", { name });
-    return hasValues(m) ? { for: rs, status: "ready", matrix: m } : { for: rs, status: "error", message: m.error };
-  } catch {
-    return { for: rs, status: "error", message: NO_ENGINE };
-  }
-}
-
-/** Read matrix `name` of the current results from the engine and open it. Resolves the entry written (null when the
- *  results changed meanwhile and the answer is not for them). */
-async function readMatrix(name: string): Promise<OpenMatrix | null> {
-  const rs = results.value;
-  if (!rs) return null;
-  const loading: OpenMatrix = { for: rs, status: "loading" };
-  setMatrix(name, loading);
-  const entry = await fetchMatrix(name, rs);
-  if (results.value !== rs) return null; // another run replaced the results: this answer is for the old ones
-  if (openMatrices.value[name] !== loading) return null; // hidden (or read again) while it was loading: leave it so
-  setMatrix(name, entry);
-  return entry;
-}
-
-/** Copy a matrix as tab-separated text; `done` is the toast. An open matrix is copied as it is; a closed one is read
- *  without opening it. Resolves whether it was copied. */
-async function copyMatrix(name: string, done: string): Promise<boolean> {
-  const rs = results.value;
-  const open = matrixFor(name, rs);
-  const entry = open?.status === "ready" ? open : rs ? await fetchMatrix(name, rs) : null;
-  if (entry?.status === "ready") return copyText(matrixTsv(entry.matrix), done);
-  showToast("Couldn't read the matrix", "error");
-  return false;
-}
-
-let copiedTimer: ReturnType<typeof setTimeout> | undefined;
-/** Copy a row (a matrix as a whole); once copied, its icon is a check for COPIED_MS. */
-async function copyRow(row: ResultRow) {
-  const copied = { key: row.key, for: results.value, macros: macros.value }; // the run's, before a newer run can land
-  const done =
-    row.matrix !== undefined ? copyMatrix(row.matrix, copiedNote(row)) : copyText(full(row.value), copiedNote(row));
-  if (!(await done)) return;
-  copiedRow.value = copied;
-  clearTimeout(copiedTimer);
-  copiedTimer = setTimeout(() => {
-    copiedRow.value = null;
-  }, COPIED_MS);
-}
 
 /** A click that ends a text selection inside `box` selects; Enter and Space have detail 0. */
 const endsSelection = (e: MouseEvent, box: Element) => {
@@ -175,7 +99,7 @@ function Row({ row }: { row: ResultRow }) {
   const short = isMatrix ? size : shown(row.value);
   const long = isMatrix ? size : full(row.value);
   const toggle = () => {
-    if (open) setMatrix(row.matrix as string, null);
+    if (open) closeMatrix(row.matrix as string);
     else readMatrix(row.matrix as string);
   };
   const copyKey = (e: KeyboardEvent) => {
