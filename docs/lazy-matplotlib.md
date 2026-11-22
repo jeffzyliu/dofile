@@ -17,8 +17,7 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
 - **With a SharedArrayBuffer the page fetches, never the worker** (`client.ts`, `#graphics`): a busy worker cannot advance a fetch. The Cache first
   (at the start, so a return visit has it by "ready"), else the network once the start files are in, with
   `cache: "no-cache"` (`"reload"` after the worker found it damaged) and the size checked. It is written to the Cache only when the build's heap is already there. The bytes
-  go to the worker in one `SharedArrayBuffer(16 + size)`: Int32 `[state, byte count, tries, 0]` (state 0 pending, 1 landed, 2 failed; `tries`: the page's fetches, counted), then the
-  part, or the reason as UTF-8. The page is cross-origin isolated in production (`_headers`: COOP `same-origin`, COEP
+  go to the worker in one `SharedArrayBuffer(16 + size)` (its layout, the header and the states: `src/engine/lazy-part.ts`). The page is cross-origin isolated in production (`_headers`: COOP `same-origin`, COEP
   `require-corp` on every path), as Break already needs. Without a SharedArrayBuffer (plain http on a LAN address, say)
   **the worker is the part's one owner and the page never fetches it**: a message cannot reach a graph blocked in Python,
   so a graph could not use the page's bytes and would download them again. The worker fetches it itself once `startup`

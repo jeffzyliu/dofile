@@ -742,8 +742,8 @@ interface LifecycleOps {                         // sent only by the transport's
   graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
-// start files: Int32 [state 0 pending / 1 landed / 2 failed, byte count, attempt (the page's fetches of it; a graph that
-// finds it failed posts {graphics: "again"} and waits for one more), 0] then from byte 16 (PART_HEADER) the compressed part (or the reason), in `sab`;
+// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; the
+// buffer's layout, the header and the states: src/engine/lazy-part.ts);
 // `sab` null (no SharedArrayBuffer): the worker fetches the part itself once started, and the page never does (a graph
 // that finds it missing stops that fetch and makes a synchronous request); the worker tells the page how it goes, for the
 // "Graphs loading" ring and the download total: {graphics: "fetching"}, {graphics: "progress", received}, {graphics: "landed"},
