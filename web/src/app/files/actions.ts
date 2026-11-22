@@ -12,6 +12,7 @@ import type { Dialog } from "../types.ts";
 import { decodeText, openFile } from "./open.ts";
 import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
+import { fileTurn } from "./turns.ts";
 
 // ---- tabs ----
 
@@ -43,20 +44,6 @@ export function askCloseTab(path: string): boolean {
 function closeUnder(top: string) {
   for (const t of tabs.value.filter((t) => within(t.path, top))) closeTab(t.path);
   for (const b of banners.value) if (b.b === "not-text" && within(b.path, top)) dismiss(b);
-}
-
-// ---- turns ----
-
-let turns: Promise<unknown> = Promise.resolve(); // the changes that tabs follow, one after the other
-
-/** Run `fn` once the changes started before it have ended (a rejection ends one too). Resolves or rejects as `fn`.
- *  A rename or a delete keeps its turn until the tabs have followed it, so a Save pressed meanwhile writes under the
- *  tab's path as it is then (renamed, or closed: no write). A Save's turn only issues its write: the store applies
- *  changes in call order (engine/store.ts `change`), so a later rename moves the bytes it wrote. */
-export function fileTurn<T>(fn: () => Promise<T>): Promise<T> {
-  const run = turns.then(fn);
-  turns = run.catch(() => {});
-  return run;
 }
 
 // ---- rename, new, delete, download ----

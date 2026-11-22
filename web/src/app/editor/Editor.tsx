@@ -7,9 +7,9 @@ import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from "@cod
 import { effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
-import { fileTurn } from "../files/actions.ts";
 import { openFile } from "../files/open.ts";
 import { baseName } from "../files/tree.ts";
+import { fileTurn } from "../files/turns.ts";
 import { requestRun } from "../run.ts";
 import { startEngine } from "../start.ts";
 import {
