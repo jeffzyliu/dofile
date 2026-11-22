@@ -33,4 +33,4 @@ function selectLines(lines: [number, number] | null): void {
   });
 }
 
-export const documentSeeds = { markDirty, showTabs, selectLines };
+export const documentSeeds = { markDirty, showTabs, selectLines, activate };

@@ -297,6 +297,8 @@ Specs:
   - Typing and the unsaved dot, Ctrl/Cmd+S, a failed save's banner, Save during a rename's or a delete's write.
   - Save keeps a file's form: `\r\n`, `\n` and BOM (written back for a .csv, dropped for a .do).
   - Tokens by file type; a file dropped on the editor is uploaded; 16 px on a phone.
+  - A tab's place in its text when shown again: after another tab, and on a phone after another view or a tab switched
+    while the Editor view was hidden.
   - The log: formatting, Go to line, the run-head, Download log, Find, Clear log; the unsplit Output tabs by keyboard.
   - The error line: kept across a tab switch, its clear rules, back when its file is closed and opened with the same
     text.

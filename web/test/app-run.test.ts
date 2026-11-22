@@ -389,7 +389,7 @@ test("J5: a run's promise settles even when the after-run work throws (an open t
     dispatch(spec) {
       if (spec.changes) throw new Error("the editor failed");
     },
-    scrollTop: () => 0,
+    scrollSnapshot: () => null,
   });
   try {
     D.addText("t.csv", "old");

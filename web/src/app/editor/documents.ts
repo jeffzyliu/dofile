@@ -1,7 +1,7 @@
 // The open tabs and their documents (docs/design/workspace.md, section 2): one record per tab, with no DOM; `tabs`,
 // `activeTab`, `selection` and each dot are computed from the records.
 
-import { Compartment, EditorState, type Extension, type TransactionSpec } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, type StateEffect, type TransactionSpec } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { batch, computed, effect, type ReadonlySignal, type Signal, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
@@ -36,19 +36,21 @@ interface DtaPart {
 interface Doc {
   path: Signal<string>; // a rename changes it
   content: Signal<TextPart | DtaPart>; // a retype, a reload or a run's text shown swaps in a new part: compare by identity
-  scrollTop: number; // where its text was scrolled to when it was last hidden (the view keeps it while shown)
+  scroll: StateEffect<unknown> | null; // where its text was when it was last hidden (EditorSurface.scrollSnapshot); null: the top
 }
 
 /** What Editor.tsx hands attachView() when it mounts. */
 export interface EditorSurface {
   /** What needs the view (the key bindings, the listener that calls edited()); every document gets them. */
   extensions: Extension;
-  /** Show `state` (null: the empty view). `scroll`: where to scroll it to, or null to leave the scroll as it is. */
-  show(state: EditorState | null, scroll: number | null): void;
+  /** Show `state` (null: the empty view) at `scroll`, a scrollSnapshot() of its text (null: the top). The state the
+   *  view shows already keeps its place. */
+  show(state: EditorState | null, scroll: StateEffect<unknown> | null): void;
   /** Change the shown state; the view's listener then calls edited(). */
   dispatch(spec: TransactionSpec): void;
-  /** Where the shown text is scrolled to now. */
-  scrollTop(): number;
+  /** Where the shown text is scrolled to, for show() (null: the top); while the editor's pane is hidden, where it was
+   *  last seen. */
+  scrollSnapshot(): StateEffect<unknown> | null;
 }
 
 const records = signal<Doc[]>([]); // in the tabs' order
@@ -154,7 +156,7 @@ function updatePart(part: TextPart, spec: TransactionSpec) {
  *  not make it active (activate). Nothing when `path` is open already. */
 export function addText(path: string, file: string): void {
   if (find(path)) return;
-  records.value = [...records.peek(), { path: signal(path), content: signal(textPart(path, file)), scrollTop: 0 }];
+  records.value = [...records.peek(), { path: signal(path), content: signal(textPart(path, file)), scroll: null }];
 }
 
 /** Open a .dta tab of `path`, at the end. Nothing when `path` is open already. */
@@ -162,7 +164,7 @@ export function addDta(path: string): void {
   if (find(path)) return;
   records.value = [
     ...records.peek(),
-    { path: signal(path), content: signal<TextPart | DtaPart>({ kind: "dta" }), scrollTop: 0 },
+    { path: signal(path), content: signal<TextPart | DtaPart>({ kind: "dta" }), scroll: null },
   ];
 }
 
@@ -237,7 +239,7 @@ export function retype(path: string, file?: string): void {
   const d = find(path);
   if (!d) return;
   if (marked?.doc === d) marked = null;
-  d.scrollTop = 0;
+  d.scroll = null;
   d.content.value = file === undefined ? { kind: "dta" } : textPart(path, file);
 }
 
@@ -434,9 +436,12 @@ export function attachView(view: EditorSurface): () => void {
     const part = d ? (d.content.value as TextPart) : null;
     untracked(() => {
       if (part === onView) return;
-      // the tab hidden keeps where it was scrolled to; a part swapped in the same tab (a reload) leaves the scroll
-      if (viewDoc && viewDoc !== d && isOpen(viewDoc)) viewDoc.scrollTop = view.scrollTop();
-      const scroll = d && d !== viewDoc ? d.scrollTop : null;
+      // the place in the text the view leaves, when its tab is open and still text: a tab hidden keeps it, and a part
+      // swapped in the shown tab (a reload, a run's text) takes it
+      const left = viewDoc && isOpen(viewDoc) && textOfDoc(viewDoc) ? viewDoc : null;
+      const place = left ? view.scrollSnapshot() : null;
+      if (left && left !== d) left.scroll = place;
+      const scroll = d && d === left ? place : (d?.scroll ?? null);
       onView = part;
       viewDoc = d;
       view.show(part?.state.peek() ?? null, scroll);
