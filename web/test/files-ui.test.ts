@@ -769,7 +769,7 @@ test("a clash whose file was saved again while its dialog was open: Replace writ
   give({ replace: true, same: false });
   await until(() => clashOf() === "a.do" && A.clashNow()?.changed === true, "a is asked again");
   assert.equal(await textOf("a.do"), "saved again a", "nothing written before the second answer");
-  assert.equal(A.clashNow()?.yours.size, 13);
+  assert.equal(A.clashNow()?.yours?.size, 13);
   assert.equal(A.WORDS.upload.changedTitle("data/wages.dta"), "data/wages.dta changed while you were deciding");
   assert.equal(
     A.WORDS.upload.changedQuestion,
@@ -777,7 +777,7 @@ test("a clash whose file was saved again while its dialog was open: Replace writ
   );
   give({ replace: true, same: false });
   await until(() => clashOf() === "b.do", "then b is asked");
-  assert.equal(A.clashNow()?.yours.size, 14, "b as it is now, not as the upload first listed it");
+  assert.equal(A.clashNow()?.yours?.size, 14, "b as it is now, not as the upload first listed it");
   assert.equal(A.clashNow()?.changed, false);
   give({ replace: false, same: false });
   await until(() => clashOf() === "c.do", "then c is asked");
@@ -878,7 +878,7 @@ test("after Do the same with Replace, a clash whose file is saved again before i
     store.write = write;
   }
   assert.deepEqual(
-    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.changed, x.now?.yours.size]),
+    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.changed, x.now?.yours?.size]),
     [
       ["a.do", false, 5],
       ["b.do", true, 13],
