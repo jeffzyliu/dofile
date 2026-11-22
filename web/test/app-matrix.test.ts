@@ -51,8 +51,9 @@ test("a call that throws is NO_ENGINE; no results is no read", async () => {
   assert.deepEqual(await read, { for: rs, status: "error", message: NO_ENGINE });
 
   setResults(null);
-  assert.equal(await readMatrix("e(V)"), null);
-  assert.equal(asked(), 1);
+  const none = readMatrix("e(V)");
+  assert.equal(asked(), 1, "no results: the engine is not asked"); // before the await: a call would wait for ever
+  assert.equal(await none, null);
 });
 
 test("an answer for replaced results, for a matrix hidden meanwhile, or for an earlier read is not written", async () => {
@@ -104,15 +105,19 @@ test("Copy reads a closed matrix without opening it, copies an open one as it is
   copies.length = 0;
   const closed = copyRow(row("a", "e(b)"));
   await tick();
+  setResults(results()); // another run lands while the matrix is read
   client.waiting[0].ok(MATRIX);
   await closed;
+  assert.equal(copiedRow.value?.for, rs, "the check is for the results the copy began with");
   assert.equal(copies.length, 1);
   assert.equal(openMatrices.value["e(b)"], undefined, "not opened");
   assert.equal(copiedRow.value?.key, "a");
 
   openMatrices.value = { "e(b)": { for: rs, status: "ready", matrix: MATRIX } };
-  await copyRow(row("a", "e(b)"));
-  assert.equal(asked(), 1, "an open matrix is not read again");
+  setResults(rs);
+  const again = copyRow(row("a", "e(b)"));
+  assert.equal(asked(), 1, "an open matrix is not read again"); // before the await: a call would wait for ever
+  await again;
   assert.equal(copies.length, 2);
 
   const failing = copyRow(row("b", "e(V)"));
