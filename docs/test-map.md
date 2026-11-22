@@ -209,7 +209,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
   checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
   - No view reaches the transport through value imports (transitive).
-  - `machine.ts`: two casts, no top-level variable; the cast to `Ticket` occurs once in `web/`.
+  - `machine.ts`: two casts, no top-level `let` or `var`; the cast to `Ticket` occurs once in `web/`.
   - The transport names no state; `run.ts` subscribes to nothing.
   - The pages' HTML and CSS: `src/site/` apart from the editor's.
   - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
