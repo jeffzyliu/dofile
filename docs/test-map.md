@@ -501,7 +501,7 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
 
 ## Running them
 
-See `CLAUDE.md` (Commands) for the full list. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
+`uv run poe` lists the Python tasks and `web/README.md` the web scripts. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
 `uv run poe slow` (Stata 14 logs), `uv run poe opendta` (vendored suite), `cd web && npm test` and `npm run check`
 (Biome,
 then `tsc`), `npm run e2e` (Playwright), `npm run shots` (the screenshot run, kept out of CI). The format and lint gates are `uv run poe lint` and

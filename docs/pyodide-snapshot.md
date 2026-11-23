@@ -134,6 +134,11 @@ How the page starts from the snapshot now (`web/src/engine/worker-boot.ts`, `cli
   otherwise poison it). The start works without `download()`, uncached; the page calls it before each start
   (`src/app/engine.ts`). A cached `.wasm` is given the type `application/wasm`, since Pyodide compiles it with
   `instantiateStreaming` and has no fallback; a failed fetch ends the start with an error (Pyodide would wait for ever).
+- **A lazy snapshot's graphics part is the one other entry the page writes.** The page's `#graphics` in `client.ts`
+  fetches it at the end of `download()` (after the start files on a first visit, from the Cache while the worker starts on
+  a return visit) and writes it only when the heap is there; the worker never does, and `download()`'s clean-up keeps it.
+  Without a SharedArrayBuffer the worker fetches the part itself and the page does not (nor writes it to the Cache); the
+  worker's messages (`fetching`, `progress`, `landed`, `failed`) are how the page shows the download.
 - **The patched loader is imported from a `blob:` URL** made from the cached bytes, so it is not fetched twice; if a
   browser refuses, the worker imports the loader's own URL. Checked in Chromium, Firefox and WebKit.
 - **A cached file that `unpack` refuses is deleted**, so the next start fetches it again.

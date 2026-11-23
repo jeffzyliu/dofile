@@ -1,7 +1,7 @@
 // The worker's dispatch: the table of op handlers (worker.ts fills it; its type, from Ops, makes a missing or mistyped
 // handler fail tsc) and dispatcher(), the onmessage built from it. It posts nothing itself: worker.ts hands it `post`.
 
-import type { FromWorker, Op, Ops, ToWorker } from "./types.ts";
+import type { FromWorker, Op, Ops, PageError, ToWorker } from "./types.ts";
 
 /** How the worker answers one op. */
 export interface OpEntry<K extends Op> {
@@ -16,9 +16,6 @@ export interface OpEntry<K extends Op> {
 }
 /** Every op has an entry; nothing else has one. */
 export type OpTable = { [K in Op]: OpEntry<K> };
-
-/** What the page is told of an error: the worker answers {id, error: message, name, type?}. */
-export type PageError = { message: string; name: string; type?: string };
 
 export interface DispatchHooks {
   post(message: FromWorker, transfer: Transferable[]): void;

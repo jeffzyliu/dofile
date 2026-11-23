@@ -2,7 +2,7 @@
 // through the journal (`sync`), and a run's changes written back to the store. Contract: SPEC section 7.
 
 import type { AppliedRun, FileStore, RunChange, StoreCopy } from "./store.ts";
-import type { FileChange, FileInfo, StoreCause } from "./types.ts";
+import type { FileChange, FileInfo, PageError, StoreCause, StoreError } from "./types.ts";
 
 export const ROOT = "/work";
 const HIDDEN = ".dofile";
@@ -27,8 +27,6 @@ export interface MirrorPath {
 }
 /** What the worker uses of the file store: the page's FileStore, or in the Node tests a stand-in. */
 export type MirrorStore = Pick<FileStore, "takeAll" | "applyRun">;
-export type PageError = { message: string; name: string; type?: string };
-export type StoreError = PageError & { cause: StoreCause };
 export type SavedRun = { files: FileChange[]; skipped: string[]; store_error?: string };
 
 const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);

@@ -789,8 +789,11 @@ interface Startup {                              // seconds; the fields depend o
   fetched?: "download" | "read from cache"; fetchS?: number; unpackS?: number; heapS?: number; sitePackagesS?: number;
   decoder?: "native" | "wasm" | "none"; restoreS?: number; notCached?: string[];        // snapshot
   runtimeS?: number; packagesS?: number;                                                  // normal
-  storeError?: { name: string; message: string; cause: "open" | "copy" }; // no store; `/work` started empty
+  storeError?: StoreError;                                                                // no store; `/work` started empty
 }
+// an error as the worker tells the page (`type`: a PythonError's exception class); an op's error answer is {id, error: message, name, type?}
+type PageError = { message: string; name: string; type?: string };
+type StoreError = PageError & { cause: "open" | "copy" };
 interface FileInfo { path: string; dir: boolean; size: number; mtime: number }           // path inside the working folder
 
 type Value = number | string | null;             // null: missing "." (or infinity); ".a" to ".z": extended missing

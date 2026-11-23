@@ -11,7 +11,7 @@ writes back what each run changed. The page is Preact with signals on the projec
 [`../docs/design/SPEC.md`](../docs/design/SPEC.md). Plan, decisions and status: [`../docs/phase2-plan.md`](../docs/phase2-plan.md).
 Data flow through the engine code: [`../docs/web-engine-data-flow.md`](../docs/web-engine-data-flow.md); the page's focus,
 runs, open files and log links: [`../docs/web-page-flows.md`](../docs/web-page-flows.md). Rules for changing the code:
-[`CLAUDE.md`](CLAUDE.md).
+[`CLAUDE.md`](CLAUDE.md); how it is written: [`STYLE.md`](STYLE.md).
 
 ## Setup
 
