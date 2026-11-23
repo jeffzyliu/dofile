@@ -135,7 +135,7 @@ test("useNative: after the native decoder failed on a copy, that copy goes to br
 const work: PartWork = {
   started: true,
   phase: "none",
-  native: false,
+  nativeRunning: false,
   damage: false,
   useNative: (copy) => copy !== 9,
   file: { size: 4, raw: 10 },
@@ -148,9 +148,9 @@ test("nativeGate: started, nothing unpacked or under way, no damage to say; else
   assert.equal(r.reads, 1);
   const closed: [string, Partial<PartWork>][] = [
     ["before startup is answered", { started: false }],
-    ["the browser's decoder is under way", { native: true }],
+    ["the browser's decoder is under way", { nativeRunning: true }],
     ["damage not yet said", { damage: true }],
-    ...(["unpacking", "unpacked", "written", "warming", "warmed"] as UnpackPhase[]).map(
+    ...(["native", "unpacking", "unpacked", "written", "warming", "warmed"] as UnpackPhase[]).map(
       (phase): [string, Partial<PartWork>] => [phase, { phase }],
     ),
   ];
@@ -188,6 +188,7 @@ test("idleStep: a run in flight, then IDLE_MS of idle, then the phase decides; n
     ["written", "warm"],
     ["warming", "warm"],
     ["warmed", "none"],
+    ["native", "none"],
   ];
   for (const [phase, step] of byPhase) assert.equal(idleStep({ ...at, phase }, r.read), step, phase);
   assert.equal(r.reads, 0, "the part (a copy of up to 33 MB) is not read");
@@ -196,7 +197,7 @@ test("idleStep: a run in flight, then IDLE_MS of idle, then the phase decides; n
 test("idleStep: with nothing unpacked, a landed copy goes to the native gate when it fits, else to brotli-wasm", () => {
   const at = { ...work, runsInFlight: 0, idleFor: IDLE_MS };
   assert.equal(idleStep(at, readOf(landedBytes(4))), "native");
-  assert.equal(idleStep({ ...at, native: true }, readOf(landedBytes(4))), "native", "the gate, not a second unpack");
+  assert.equal(idleStep({ ...at, nativeRunning: true }, readOf(landedBytes(4))), "native", "the gate, not a second unpack");
   assert.equal(idleStep(at, readOf(landedBytes(4, 9))), "unpack", "the copy the decoder failed on");
   assert.equal(idleStep(at, readOf(landedBytes(3))), "unpack", "not brotli-sized: brotli-wasm says what is wrong");
   assert.equal(idleStep({ ...at, useNative: () => false }, readOf(landedBytes(4))), "unpack", "no native decoder");

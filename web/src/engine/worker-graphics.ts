@@ -28,6 +28,7 @@ const UNPACK_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/
  *  a shared buffer: copy 0, the first fetch). */
 type Unpack =
   | { phase: "none" }
+  | { phase: "native"; copy: number } // the browser's decoder unpacks it; a graph's unpack takes over (unpacking)
   | { phase: "unpacking"; copy: number; steps: Generator<number, Uint8Array, void>; t0: number; longest: number }
   | { phase: "unpacked"; copy: number; raw: Uint8Array; secs: number; decoder: "wasm" | "native"; longest: number }
   | { phase: "written"; copy: number }
@@ -56,7 +57,7 @@ export function graphicsWorker(env: GraphicsEnv) {
     timer: 0 as ReturnType<typeof setTimeout> | 0,
     // the unpack
     unpack: { phase: "none" } as Unpack,
-    native: false, // the browser's decoder is unpacking a copy (idle only)
+    nativeRunning: false, // the browser's decoder is unpacking a copy, which the unpack may have left since
     // copies and damage
     nativeFailedOn: null as number | null, // the copy the browser's decoder failed on
     damage: "", // why the part did not unpack or write; said once, by the next graph
@@ -67,7 +68,7 @@ export function graphicsWorker(env: GraphicsEnv) {
   const work = (): PartWork => ({
     started: rec.started,
     phase: rec.unpack.phase,
-    native: rec.native,
+    nativeRunning: rec.nativeRunning,
     damage: Boolean(rec.damage),
     useNative: (copy) => useNative(rec.source.brotliMode, hasNativeBrotli(), rec.nativeFailedOn, copy),
     file: rec.part!.file,
@@ -192,7 +193,8 @@ export function graphicsWorker(env: GraphicsEnv) {
 
   // The browser's own decoder (off this thread) unpacks the part as soon as it is here. A graph that comes meanwhile
   // cannot use the result: it is blocked in Python, so this thread's event loop never delivers the promise. That graph
-  // unpacks with brotli-wasm itself and the result is dropped. Does nothing where there is no native decoder (Chromium).
+  // unpacks with brotli-wasm itself (unpacking takes over from native), and the result, kept only while the unpack is
+  // still native for its copy, is dropped. The decoder still runs then: nothing starts a second one until it ends. Does nothing where there is no native decoder (Chromium).
   function nativeSoon() {
     // busy or not landed: the op graphics after the page's write calls this again
     if (!rec.part || !nativeGate(work(), () => readGraphics(0, false))) return;
@@ -204,31 +206,34 @@ export function graphicsWorker(env: GraphicsEnv) {
     const landed = rec.part && nativeGate(work(), () => readGraphics(0, true));
     if (!landed) return;
     const { copy } = landed;
-    rec.native = true;
+    rec.unpack = { phase: "native", copy };
+    rec.nativeRunning = true;
+    const still = () => rec.unpack.phase === "native" && rec.unpack.copy === copy;
     const t0 = performance.now();
     unpackNative(landed.bytes!, rec.part!.file.raw)
       .then(
         (raw) => {
-          // a graph that came meanwhile unpacked the part itself (see nativeSoon): this result is spare
+          // else a graph that came meanwhile unpacked the part itself (see nativeSoon), and may have found it damaged
           // secs: to the unpack's end; the write waits for IDLE_MS more
-          if (rec.unpack.phase === "none") {
+          if (still()) {
             rec.unpack = { phase: "unpacked", copy, raw, secs: since(t0), decoder: "native", longest: 0 };
           }
         },
         (e) => {
           console.warn(`[dofile] graphics part: native brotli failed (${e?.message ?? e}); using brotli-wasm`);
           rec.nativeFailedOn = copy; // the next step starts the brotli-wasm unpack, which says if it is damaged
+          if (still()) rec.unpack = { phase: "none" };
         },
       )
       .finally(() => {
-        rec.native = false;
+        rec.nativeRunning = false;
         idleSoon(0);
       });
   }
 
   // The one door to the part's work while idle: after `startup`, IDLE_MS after the last run.
   function idleSoon(delay = Math.max(0, rec.idleSince + IDLE_MS - performance.now())) {
-    if (!rec.started || !rec.part || rec.timer || rec.native || rec.damage || rec.unpack.phase === "warmed") return;
+    if (!rec.started || !rec.part || rec.timer || rec.nativeRunning || rec.damage || rec.unpack.phase === "warmed") return;
     rec.timer = setTimeout(runIdleStep, delay);
   }
 

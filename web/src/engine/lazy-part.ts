@@ -126,16 +126,17 @@ export function waitStep(
   return "wait";
 }
 
-/** The unpack's phase (worker-graphics.ts keeps it with the copy it came from): none; unpacking (brotli-wasm steps);
- *  unpacked, not yet written; written; warming (its modules imported a few at a time); warmed. */
-export type UnpackPhase = "none" | "unpacking" | "unpacked" | "written" | "warming" | "warmed";
+/** The unpack's phase (worker-graphics.ts keeps it with the copy it came from): none; native (the browser's decoder
+ *  unpacks a copy off this thread); unpacking (brotli-wasm steps); unpacked, not yet written; written; warming (its
+ *  modules imported a few at a time); warmed. */
+export type UnpackPhase = "none" | "native" | "unpacking" | "unpacked" | "written" | "warming" | "warmed";
 
 /** What the native gate and the idle step know besides the part. `useNative`: useNative for a copy, with mount's mode,
  *  the decoder there is and the copy it failed on bound; `file`: the part's sizes, compressed and unpacked. */
 export type PartWork = {
   started: boolean; // `startup` was answered
   phase: UnpackPhase;
-  native: boolean; // the browser's decoder is unpacking a copy
+  nativeRunning: boolean; // the browser's decoder is unpacking a copy, which the unpack may have left since
   damage: boolean; // damage was found and no graph has said it yet
   useNative: (copy: number) => boolean;
   file: { size: number; raw: number };
@@ -153,11 +154,12 @@ function nativeFits(w: PartWork, now: SeqRead<PartRead>): now is { seq: number; 
 }
 
 /**
- * The native gate: the part the browser's decoder starts on, or null. Started, nothing unpacked or under way, no
- * damage left to say, then a read that fits (the part is read only past the flags).
+ * The native gate: the part the browser's decoder starts on, or null. Started, nothing unpacked or under way, the
+ * decoder not running (one 33 MB decode at a time), no damage left to say, then a read that fits (the part is read only
+ * past the flags).
  */
 export function nativeGate(w: PartWork, read: () => SeqRead<PartRead>): LandedPart | null {
-  if (!w.started || w.phase !== "none" || w.native || w.damage) return null;
+  if (!w.started || w.phase !== "none" || w.nativeRunning || w.damage) return null;
   const now = read();
   return nativeFits(w, now) ? now.value : null;
 }
@@ -189,6 +191,7 @@ export function idleStep(
     case "written":
     case "warming":
       return "warm";
+    case "native": // the decoder's end comes back
     case "warmed":
       return "none";
   }

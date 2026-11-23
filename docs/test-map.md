@@ -216,14 +216,15 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   does (Break, write, unpack, ask again once per run, a final failure with its reason, wait, also on a
   busy read); races 1 to 3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy,
   never the empty reason (the answer for written); when the browser's own decoder is used (never when mount forces
-  brotli-wasm; not on the copy it failed on, again on a fresh one); the native gate (started, no unpack, none under way,
+  brotli-wasm; not on the copy it failed on, again on a fresh one); the native gate (started, no unpack, the decoder not running,
   no damage to say, and only then a read: a landed, brotli-sized copy, or a read without the bytes on its copy); and
-  what an idle step does (a run in flight, IDLE_MS of idle, then by the unpack's phase; with none, the native gate or
+  what an idle step does (a run in flight, IDLE_MS of idle, then by the unpack's phase, nothing while native; with none, the native gate or
   brotli-wasm, nothing on a busy or unlanded read).
 - `worker-graphics.test.ts`: the worker's record of the graphics part (`engine/worker-graphics.ts`) with a fake engine
   and a real shared region (a small brotli part; Node's `DecompressionStream` as the browser's decoder, held when a test
   needs it): the idle steps stop for a run in flight and go on at its end with nothing else to wake them; a graph after
-  the write answers at once, with no second unpack or write.
+  the write answers at once, with no second unpack or write; race 13: the decoder's late result of a copy a graph found
+  damaged meanwhile is dropped, not written; one browser decode at a time (a fresh copy waits for the running one).
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one

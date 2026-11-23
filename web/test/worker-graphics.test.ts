@@ -167,3 +167,41 @@ test("a graph after the write answers at once: the part is not unpacked or writt
   assert.deepEqual(w.written, [1]);
   w.g.runEnded();
 });
+
+test("race 13: a graph that finds a copy damaged while the browser's decoder unpacks it: the decoder's late result is dropped, not written again", async (t) => {
+  const native = heldDecoder(t);
+  const w = part({ failWrites: 1, page: true });
+  w.land(1);
+  w.g.startupAnswered();
+  await until(() => native.started === 1, "the browser's decoder began");
+  w.g.runArrived();
+  w.g.runStarts();
+  assert.match(w.wait(), /arrived damaged/, "the graph unpacks it with brotli-wasm, and the write throws");
+  w.g.runEnded();
+  native.release();
+  await sleep(3 * IDLE_MS);
+  assert.deepEqual(w.written, [1], "copy 1 written once");
+  assert.deepEqual(w.posted, [{ graphics: "damaged" }]);
+});
+
+test("one browser decode at a time: a fresh copy that lands while the decoder still runs on a damaged one waits for it, then is unpacked and written", async (t) => {
+  const native = heldDecoder(t);
+  const w = part({ failWrites: 1, page: true });
+  w.land(1);
+  w.g.startupAnswered();
+  await until(() => native.started === 1, "the browser's decoder began");
+  w.g.runArrived();
+  w.g.runStarts();
+  assert.match(w.wait(), /arrived damaged/);
+  w.g.runEnded();
+  w.land(2); // the page's fetch again, as the op graphics says
+  w.g.pageWrote();
+  await sleep(3 * IDLE_MS);
+  assert.equal(native.started, 1, "no second decode while the first runs");
+  native.release(); // copy 1's result: dropped
+  await until(() => native.started === 2, "the decoder takes copy 2");
+  native.release();
+  await until(() => w.written.length === 2, "copy 2 written while idle");
+  assert.deepEqual(w.written, [1, 2]);
+  assert.equal(native.most, 1);
+});
