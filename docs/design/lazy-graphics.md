@@ -433,8 +433,10 @@ The second read must show the opposite: that the copy saw none of the next write
 does not show it. It orders what comes after it, not the plain reads before it: a plain read written before an
 `Atomics.load` in the code may still take its value later, after the page has started its next write section, while the
 load returns the old count. The re-check would then pass over a torn copy. On ARM64 (iPhones, Apple-silicon Macs) the
-processor itself allows this (V8 compiles `Atomics.load` to a load-acquire, which does not hold back earlier reads); on
-x86 it cannot happen, so a test on a PC would never show it.
+processor itself allows this (V8, in Chrome on Macs and Android, compiles `Atomics.load` to a load-acquire, which does
+not hold back earlier reads; every browser on an iPhone runs WebKit's JavaScriptCore instead, whose compiled code was
+not checked here, and the language's memory model allows the same reordering in every engine); on x86 it cannot happen,
+so a test on a PC would never show it.
 
 A read-modify-write on the same word closes it. `Atomics.add(hdr, HDR_SEQ, 0)` reads the counter and writes the same
 value back, in one step. The page's first add is a read-modify-write on that word too, and the steps on one word happen
@@ -449,7 +451,7 @@ This is reasoned, not proven by a tool: from ECMA-262's memory model (happens-be
 that a read cannot see a write that happens after it) and ARMv8's acquire and release. No mechanised model (such as
 herd) was run, and a Node test cannot show a torn read (x86, and one interleaving of whole steps at a time). The problem
 and this fix are the ones Hans-J. Boehm describes for C++ seqlocks ("Can Seqlocks Get Along With Programming Language
-Memory Models?", MSPC 2012).
+Memory Models?", MSPC 2012, doi:10.1145/2247684.2247688).
 
 ### The designs weighed before the decision
 
@@ -489,16 +491,23 @@ Each candidate below, with what it removes, what it fixes by construction, and w
   about the copy I have" (`#refetchDamaged`'s "landed, not loading", and its rewrite of `progress.state` to "failed"
   only to steer `#retryGraphics`). Fixes by construction: race 13's second, stale `damaged` (the page would drop a good
   copy), the same stale `damaged` sent twice by two graphs of one run, and a late `again` for a copy already replaced
-  (race 4 is today ordered by the guard; with the number it no longer depends on it). Adds: one number in two messages,
-  taken from a read the worker already makes. Recommended.
-
+  (race 4 is today ordered by the guard; with the number it no longer depends on it). Adds: one number in two messages.
+  The number travels with the bytes: the brotli-wasm decode (`decode`, `decoded`) and the native result carry the copy
+  of the read that produced them, and `damaged` names that copy, never `copyNow()` at the throw (by then a fresh copy
+  may have landed, and naming it would drop a good copy). Recommended.
 - **The copy number on the worker's own findings.** Not shared state, the same idea inside the worker: `graphicsError`
   (the damage found) and the native decode's result each keep the copy they are about, and are used only while
-  `copyNow()` is still that copy. Fixes by construction: race 11 (damage found by an idle step no longer blocks a fresh
-  copy that has landed since, and the next graph is not told about damage to a copy that is gone) and race 13 (a native
-  result of a copy found damaged is not kept). Adds: one field each in the worker's record. Recommended; race 11's fix
-  changes behaviour (today the next graph reports the damage), so it is the maintainer's call, and R1b's.
-
+  `copyNow()` is still that copy. The damaged copy's number is a field of its own, which saying the error does not clear
+  (today both paths that say it clear `graphicsError`), so that race 13's native result can still be checked against it.
+  Fixes by construction: race 11 (damage found by an idle step no longer blocks a fresh copy that has landed since, and
+  the next graph is not told about damage to a copy that is gone) and race 13 (a native result of a copy found damaged
+  is not kept). Adds: one field each in the worker's record. Recommended. Race 11's fix changes behaviour. Today the
+  next graph reports the damage. With a buffer, the page acts on `damaged` at once (`#refetchDamaged`, then `retryPart`
+  moves `tries` within milliseconds, and the Cache entry is deleted first, so the refetch is a download), so damage
+  found by an idle step is stale almost at once: the next graph no longer reports it; it waits for the refetch (its
+  waiting line, for the download's length) and draws, or reports that fetch's failure. Without a buffer `copyNow()` is
+  the worker's own `copies`, which moves only when the worker fetches again, so the next graph reports the damage as
+  today. **Decided** (the maintainer, 2026-11-23): "yes, fix race 11"; it is in R1b.
 - **A worker region** (a second seqlock region the worker writes: the copy it is working on, its unpack phase, damage
   tagged with a copy number). Removes: in principle the `again` and `damaged` messages. But the page's main thread
   cannot block on `Atomics.wait`, so it would still need a message (a doorbell with no content) or `Atomics.waitAsync`
@@ -590,8 +599,11 @@ each thread keeps its own machine.
     to pending. Not ordered. Guess: whether a terminated worker's queued messages are still delivered was not checked.
 11. Damage found by an idle step, then the fresh copy lands: `graphicsError` blocks `nativeSoon` and `idleSoon`, so the
     fresh copy waits; the next graph reports the damage (rc 199) although a fresh copy is there, the one after it draws.
-    As `damaged()`'s comment says. Section 6 ("How far to lean on the shared state") recommends fixing it by
-    construction in R1b: the damage names its copy; the maintainer decides.
+    As `damaged()`'s comment says. The maintainer's decision, 2026-11-23: "yes, fix race 11". R1b fixes it by
+    construction (section 6, "How far to lean on the shared state"): the damage keeps the copy it was found on, so
+    damage found on one copy no longer blocks a newer good copy. With a buffer the next graph then waits for the refetch
+    and draws (or reports that fetch's failure) instead of reporting the damage; without a buffer it reports it as
+    today.
 12. Each failed page fetch adds one `online` listener (`once`); they pile up until the browser is online, each a no-op
     after the first. Not a race; noted.
 13. **A native decode of a copy a graph has already found damaged is written again** (read, not run). The part lands,
@@ -671,7 +683,8 @@ construction, using the complexity there already is; add none.
    imports statically; the idle step and the native gate as pure functions next to `waitStep`; the renames; `table`'s
    hooks call it; wire and words unchanged (section 3). Tests d for the worker. Its behaviour fixes come first, each
    with its failing test: race 3 (section 6's sequence counter; no "" from a failed part), race 13 (the native result
-   tied to its copy), and, if the maintainer agrees, race 11 (the damage found tied to its copy; section 6, "How far to
+   tied to its copy), and race 11, decided by the maintainer on 2026-11-23 ("yes, fix race 11"): the damage found tied
+   to its copy, a behaviour change (damage found on one copy no longer blocks a newer good copy; section 6, "How far to
    lean on the shared state").
 3. **R1c, the page's machine and the docs (2.4).** `client.ts`'s part as one state with its transitions (no rewrite of
    `progress.state` to steer a guard; `progress` becomes derived for the status bar); the `online` listener once per
