@@ -197,26 +197,26 @@ export const WORDS = {
 export type WordsOf = keyof typeof WORDS;
 
 /** What the open clash dialog shows beyond the `dialog` value. */
-export interface ClashNow {
+export interface ClashFacts {
   path: string;
   yours: { size: number; mtime: number } | null; // null: the store has no such file now (its tab has unsaved edits)
-  uploaded: number; // its size
-  others: number; // the files of the upload that clashed with none, or with a file of the same bytes (in place)
-  left: number; // the clashes after this one
-  unsaved: boolean; // the file is open with unsaved edits
-  changed: boolean; // asked again: the file changed while its dialog was open
+  uploadedBytes: number; // the uploaded file's size
+  unaskedCount: number; // the files of the upload that clashed with none, or with a file of the same bytes (in place)
+  remainingCount: number; // the clashes after this one
+  hasUnsavedEdits: boolean; // the file is open with unsaved edits
+  changedWhileAsked: boolean; // asked again: the file changed while its dialog was open
   words: (typeof WORDS)[WordsOf];
 }
 
-/** The dialog's answer: replace this one or keep it; `same`: the box "Do the same for the other n clashes". "stop" is
- *  Esc: keep yours for every clash left, and ask no more. */
-export type ClashAnswer = { replace: boolean; same: boolean } | "stop";
+/** The dialog's answer: replace this one or keep it; `isForRest`: the box "Do the same for the other n clashes".
+ *  "stop" is Esc: keep yours for every clash left, and ask no more. */
+export type ClashAnswer = { replace: boolean; isForRest: boolean } | "stop";
 
-let now: ClashNow | null = null;
+let askedClash: ClashFacts | null = null;
 let answerWith: ((a: ClashAnswer) => void) | null = null;
 
 /** The clash the dialog is asking about, or null. */
-export const clashNow = () => now;
+export const clashNow = () => askedClash;
 
 /** The clash dialog's answer (Esc and an unmount with no answer give "stop"). A second answer does nothing. */
 export function answerClash(a: ClashAnswer) {
@@ -325,22 +325,22 @@ async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
           expectedStored = storedNow ?? "absent";
           askedAboutUnsaved = hasUnsavedEdits;
           triesSinceAnswer = 0;
-          const reply = await ask(clash, index, clashes.length, {
+          const reply = await askClash(clash, index, clashes.length, {
             path: clash.path,
             yours: storedNow && { size: storedNow.size, mtime: storedNow.mtime },
-            uploaded: clash.data.byteLength,
-            others: unaskedCount,
-            left: clashes.length - index - 1,
-            unsaved: hasUnsavedEdits,
-            changed: changedWhileAsked,
+            uploadedBytes: clash.data.byteLength,
+            unaskedCount,
+            remainingCount: clashes.length - index - 1,
+            hasUnsavedEdits,
+            changedWhileAsked,
             words: WORDS[words],
           });
           lastClashDialog = reply.shown;
           if (reply.answer === "stop") answerForRest = willReplace = false;
           else {
             willReplace = reply.answer.replace;
-            if (reply.answer.same) answerForRest = reply.answer.replace;
-            if (reply.answer.same && reply.answer.replace) {
+            if (reply.answer.isForRest) answerForRest = reply.answer.replace;
+            if (reply.answer.isForRest && reply.answer.replace) {
               const restPaths = clashes.slice(index + 1).map((c) => c.path);
               storedWhenRestDecided = await fileTurn(function* (io) {
                 const stored = new Map<string, FileInfo | null>();
@@ -381,17 +381,17 @@ async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
   return writtenPaths;
 }
 
-/** Ask the clash `facts` (clash `i` + 1 of `total`) in the clash dialog and wait for the answer. */
-async function ask(
-  it: Incoming,
-  i: number,
-  total: number,
-  facts: ClashNow,
+/** Ask the clash `facts` (clash `index` + 1 of `clashCount`) in the clash dialog and wait for the answer. */
+async function askClash(
+  clash: Incoming,
+  index: number,
+  clashCount: number,
+  facts: ClashFacts,
 ): Promise<{ answer: ClashAnswer; shown: Dialog }> {
-  now = facts;
-  const shown: Dialog = { d: "clash", path: it.path, index: i + 1, total };
-  const answer = await new Promise<ClashAnswer>((ok) => {
-    answerWith = ok;
+  askedClash = facts;
+  const shown: Dialog = { d: "clash", path: clash.path, index: index + 1, total: clashCount };
+  const answer = await new Promise<ClashAnswer>((resolve) => {
+    answerWith = resolve;
     dialog.value = shown;
     // another dialog put in its place (another tab took the engine), with no answer: Esc's meaning. Here, not only
     // in the view, so an upload never waits for an answer that cannot come (the uploads after it would wait too).
@@ -399,11 +399,11 @@ async function ask(
       if (dialog.value === shown) return;
       queueMicrotask(() => {
         stop();
-        if (answerWith === ok) answerClash("stop");
+        if (answerWith === resolve) answerClash("stop");
       });
     });
   });
-  now = null;
+  askedClash = null;
   return { answer, shown };
 }
 

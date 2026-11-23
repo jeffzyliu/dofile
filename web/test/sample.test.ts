@@ -144,7 +144,7 @@ test("Restore the sample asks about a file that differs, in the clash dialog wit
   await store.write("helpers.do", enc("* mine"));
   await openFile("helpers.do"); // made active
   const mine = D.stateOf("helpers.do");
-  const keep = answering([{ replace: false, same: false }]);
+  const keep = answering([{ replace: false, isForRest: false }]);
   await sample.restoreSample();
   keep.stop();
   assert.deepEqual(keep.seen, [
@@ -154,7 +154,7 @@ test("Restore the sample asks about a file that differs, in the clash dialog wit
   assert.equal(D.stateOf("helpers.do"), mine, "not reloaded");
   assert.equal(D.activeTab.value, "analysis.do", "the tab of analysis.do, which the visitor never changed");
   D.activate("helpers.do");
-  const replace = answering([{ replace: true, same: false }]);
+  const replace = answering([{ replace: true, isForRest: false }]);
   await sample.restoreSample();
   replace.stop();
   assert.equal(dec(await store.read("helpers.do")), dec(sample.sampleFiles()[1].bytes));
@@ -202,7 +202,7 @@ test("Restore the sample asks about a sample file open with unsaved edits, even 
   await sample.seedSample();
   await openFile("analysis.do");
   D.update("analysis.do", { changes: { from: 0, insert: "* edited\n" } });
-  const { seen, stop } = answering([{ replace: true, same: false }]);
+  const { seen, stop } = answering([{ replace: true, isForRest: false }]);
   await sample.restoreSample();
   stop();
   assert.deepEqual(
@@ -221,7 +221,7 @@ test("Restore the sample over an open tab whose file has \\r\\n and a BOM: the e
   await sample.seedSample();
   await store.write("helpers.do", enc("\uFEFF* mine\r\n"));
   await openFile("helpers.do");
-  const { stop } = answering([{ replace: true, same: false }]);
+  const { stop } = answering([{ replace: true, isForRest: false }]);
   await sample.restoreSample();
   stop();
   assert.equal(D.stateOf("helpers.do")!.doc.toString(), dec(sample.sampleFiles()[1].bytes));

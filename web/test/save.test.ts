@@ -207,7 +207,7 @@ test("Save rule: an upload's Replace of the tab whose turn comes before a pendin
   await asked();
   const open = await hold();
   S.dialog.value = null;
-  A.answerClash({ replace: true, same: false }); // the upload's write takes the turn after the held one
+  A.answerClash({ replace: true, isForRest: false }); // the upload's write takes the turn after the held one
   await new Promise((r) => setTimeout(r, 0));
   const saved = D.save("a.do"); // and the Save the one after that
   open();
@@ -247,7 +247,7 @@ test("an upload's Replace answered while a Save of the tab waits: the Save write
   const count = effect(() => {
     if (S.dialog.value?.d === "clash") clashDialogs.add(S.dialog.value);
   });
-  const stop = answering({ replace: true, same: false }); // the open dialog, and any asked again
+  const stop = answering({ replace: true, isForRest: false }); // the open dialog, and any asked again
   try {
     await done;
     await saved;
