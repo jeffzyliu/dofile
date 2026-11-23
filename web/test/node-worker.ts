@@ -6,6 +6,8 @@
 //     oldDatabase, a database as Emscripten's IDBFS left it ("/work") is made first; {harness: "databases"} reports
 //     what is there afterwards.
 
+import { registerHooks } from "node:module";
+import { format } from "node:util";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
 import { parentPort, workerData } from "node:worker_threads";
 
@@ -81,6 +83,24 @@ parentPort!.on("message", async (data) => {
   if (data?.harness === "databases") return parentPort!.postMessage({ harness: await databases() });
   (globalThis.onmessage as ((event: MessageEvent) => void) | null)?.({ data } as MessageEvent);
 });
+if (workerData.console) {
+  // the thread's console lines go to the test, stamped on the clock both threads share, instead of to the output
+  for (const level of ["log", "info", "warn", "error"] as const)
+    console[level] = (...args: unknown[]) =>
+      parentPort!.postMessage({
+        workerConsole: { level, text: format(...args), at: performance.timeOrigin + performance.now() },
+      });
+}
+if (workerData.served) {
+  // Node imports no http: URL: a module from the folder the test serves is imported from the folder itself
+  const { url, dir } = workerData.served as { url: string; dir: string };
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (!specifier.startsWith(url)) return nextResolve(specifier, context);
+      return { url: new URL(specifier.slice(url.length), dir).href, shortCircuit: true };
+    },
+  });
+}
 if (workerData.failParse) {
   // a JSON text with this in it does not parse: the op that reads it fails after the engine ran (a result the worker
   // cannot read back)

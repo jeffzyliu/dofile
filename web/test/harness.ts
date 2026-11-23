@@ -26,16 +26,22 @@ export const endWorkers = () => {
 // A Worker as client.ts wants it. `store`: the page's FileStore, which the worker thread then uses (node-worker.ts);
 // without it the thread has its own database, and `oldDatabase` puts an IDBFS-style "/work" database there first;
 // `noDatabase`: the thread has no IndexedDB at all; `failParse`: a JSON text with that string in it fails to parse. port.harness("databases") asks the thread what its IndexedDB holds.
+// `onConsole`: gets each of the thread's console lines (worker.ts's `[dofile]` lines, Pyodide's), which then are not printed.
+// `served`: a folder (`dir`, a file: URL) the test serves over HTTP at `url`, whose modules the thread imports from disk.
 export function nodeWorker({
   store,
   oldDatabase = false,
   noDatabase = false,
   failParse,
+  onConsole,
+  served,
 }: {
   store?: FileStore;
   oldDatabase?: boolean;
   noDatabase?: boolean;
   failParse?: string;
+  onConsole?: (line: ConsoleLine) => void;
+  served?: { url: string; dir: string };
 } = {}) {
   const channel = store && new MessageChannel();
   if (channel) {
@@ -61,6 +67,8 @@ export function nodeWorker({
       oldDatabase,
       noDatabase,
       failParse,
+      console: Boolean(onConsole),
+      served,
     },
     transferList: channel ? [channel.port2] : [],
   });
@@ -80,10 +88,18 @@ export function nodeWorker({
         w.postMessage({ harness: what });
       }),
   };
-  w.on("message", (data) => (data?.harness ? asks.shift()!(data.harness) : port.onmessage?.({ data })));
+  w.on("message", (data) => {
+    if (data?.harness) asks.shift()!(data.harness);
+    else if (data?.workerConsole) onConsole!(data.workerConsole);
+    else port.onmessage?.({ data });
+  });
   w.on("error", (e) => port.onerror?.(e));
   return port as typeof port & globalThis.Worker; // what client.ts wants of a (Web) Worker
 }
+
+/** A console line of a worker thread (nodeWorker's `onConsole`). `at`: performance.timeOrigin + performance.now(), the
+ *  same clock in every thread. */
+export type ConsoleLine = { level: "log" | "info" | "warn" | "error"; text: string; at: number };
 
 // ---- a transport alone, with no state machine: the tests that drive a real worker ----
 

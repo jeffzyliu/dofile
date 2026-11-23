@@ -32,5 +32,7 @@ web/scripts/snapshot-inputs.sh
 web/test/engine.test.ts
 web/test/snapshot-native.test.ts
 web/test/harness.ts
+web/test/node-worker.ts
+web/test/lazy-graphics.test.ts
 web/package.json
 .github/workflows/web.yml
