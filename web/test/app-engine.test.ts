@@ -873,8 +873,8 @@ test("runCode while a run is on does nothing; with no engine a run is refused, s
   const refused = runCode("not kept", FILE);
   let settled = false;
   refused.then(() => (settled = true));
-  await Promise.resolve();
-  assert.equal(settled, true, "it settles at once: nothing waits for the engine");
+  await new Promise((done) => setTimeout(done, 0)); // runCode is async: a few microtasks, but no wait for the engine
+  assert.equal(settled, true, "it settles without waiting for the engine");
   assert.equal(await refused, null);
   assert.equal(S.dialog.value, null, "a run opens no prompt");
   assert.equal(startEngine(), "prompt");
