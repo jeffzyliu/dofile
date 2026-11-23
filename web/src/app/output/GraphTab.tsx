@@ -3,7 +3,7 @@
 // the tab on nothing.
 
 import type { ComponentChildren } from "preact";
-import { graphIndex, graphs, selectGraph, showFullSize } from "../state.ts";
+import { graphIndex, graphs, selectGraph, showFullSize } from "../state/run.ts";
 import type { Graph } from "../types.ts";
 import { exportPng } from "./clip.ts";
 import { graphAlt, graphSubject, graphTitle } from "./format.ts";

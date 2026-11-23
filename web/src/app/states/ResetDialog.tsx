@@ -3,7 +3,9 @@
 // reset while the dialog is open (it failed, another tab took it), the dialog closes itself.
 import { useEffect } from "preact/hooks";
 import * as eng from "../engine.ts";
-import { closeDialog, engine, engineRuns, openDialog } from "../state.ts";
+import { engine } from "../state/engine.ts";
+import { closeDialog, openDialog } from "../state/notices.ts";
+import { engineRuns } from "../state/run.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { engineUp } from "./predicates.ts";

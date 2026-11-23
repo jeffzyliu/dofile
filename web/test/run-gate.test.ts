@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 
-const S = await import("../src/app/state.ts");
+const { S } = await import("./state-all.ts");
 const D = await import("../src/app/editor/documents.ts");
 const G = await import("../src/app/editor/runnable.ts");
 

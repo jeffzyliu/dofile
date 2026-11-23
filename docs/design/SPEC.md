@@ -189,7 +189,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   run-head (`.runhead`, section 4); each echo (`.echo`); output; notes (`.note`: the path shim's "(path … is … in the working
   folder)"); the error and its `r(N);` (`.err`); the engine's hint (`.hint`); "Go to line 17" (`.jump`), which moves the
   editor's cursor. A rename of the run's file, or of a folder above it, moves the last run's path and every run-head's and
-  run end's too (`runMoved`, `state.ts`), so the link opens the renamed file; a file that cannot be read (deleted) opens
+  run end's too (`runMoved`, `state/run.ts`), so the link opens the renamed file; a file that cannot be read (deleted) opens
   nothing and a toast says so. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
   exception: they wrap in the pane (section 8, "As built in step 4b").
 - The head, run-heads and the page's own notes are shown only: never in Download log or a log file (`S 15`).
@@ -684,7 +684,7 @@ As built:
   "Stop download") the state is `failed` and no worker is made. There is no offline start. `startList()` fetches the list.
   A restart is another path: the machine's `starting-list` state asks `build()` for the list, fetched fresh and checked, before
   it makes a worker (the Cache may have been evicted since the first start). The page's download size, `engineBytes`, is a
-  constant of `web/src/app/state.ts`, read from the page's meta tag at load.
+  constant of `web/src/app/state/engine.ts`, read from the page's meta tag at load.
 - **One statement of the build:** `start-files.json`. `checkBuild(list)` is the one comparison of the page's build with
   it: the build id, a SHA-256 over a stamp made once per build (or per dev-server start), the dofile wheel's hash, the extra
   wheels' hashes and the Pyodide version (`scripts/build-id.ts`, `buildId`). The page's id is made from the files it is
@@ -1026,7 +1026,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 ```
 
 **As built** (steps 3 and 3.5; the step 4 agents write against this):
-- **Files.** The signals: `web/src/app/state.ts` (TypeScript on `@preact/signals-core`, so the Node tests import it as it is;
+- **Files.** The signals: `web/src/app/state/`, one module per owner (`engine.ts`, `files.ts`, `run.ts`, `layout.ts`, `notices.ts`, `saved.ts`), with `theme` in `theme.ts` and `pickedVar` in `output/view.ts` (TypeScript on `@preact/signals-core`, so the Node tests import it as it is;
   components read the same signals through `@preact/signals`). The types above: `web/src/app/types.ts`; section 6's:
   `web/src/engine/types.ts`. Everything in `web/src/engine/`, the controllers and `web/test/` is TypeScript, which Node runs by
   removing the types. The controllers are `.ts` files that import no `.tsx`, tested in `web/test/app-*.test.ts`.
@@ -1038,16 +1038,16 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `engine`; `memory`, `log`, `lastRun`, `history`, `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`,
   `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`); `dialog`
   (`openDialog`, `closeDialog`); `phoneTab` (`showPhone`). The owner
-  writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state.ts`), which only its owner imports (a
+  writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state/engine.ts`, `state/run.ts`, `state/files.ts`), which only its owner imports (a
   test checks it). The others stay writable by views: `split`,
-  `outputTab`, `pickedVar`, `theme`, `layout`, `isolated`.
-- **The open tabs** are not in `state.ts`: `editor/documents.ts` keeps one record per tab (its path and its document,
+  `outputTab`, `wrap`, `pickedVar`, `theme`. (`layout` is set through `setLayout`; `isolated` is set once at load.)
+- **The open tabs** are not in `state/`: `editor/documents.ts` keeps one record per tab (its path and its document,
   or nothing for a .dta tab) and exports `tabs: ReadonlySignal<OpenTab[]>`, `activeTab: ReadonlySignal<string | null>`
   and `selection` (the shown text tab's whole selected lines), all computed from the records; a tab's `dirty` is its
   text against the store's, stored nowhere. Tabs change only through its functions (`addText`, `addDta`, `activate`,
   `close`, `askClose`, `closeUnder`, `moved`, `retype`, `reload`, `ranOver`, `update`); it needs no view, and the
   editor's view attaches to it when it mounts (`attachView`). The test hook's `state` has `tabs` and `activeTab` beside
-  the signals of `state.ts`.
+  the signals of the state modules.
 - **`ABOUT`** (`web/src/app/env.ts`) is compiled in: `dofile` (the version), `engine_commit` and `stata_version`. It is there
   from the first paint, with or without an engine; there is no `about` signal. `web/test/engine.test.ts` compares it with what
   `boot` answers.
@@ -1112,7 +1112,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`hasFiles`).
   - The page's one store: `web/src/app/store.ts`; views change files through it. It starts `blocked` and is unblocked
     once the tab lock is this tab's (`files.ts` `own()`).
-  - Helpers in `state.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `saved`
+  - Helpers in `state/notices.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`; `saved` is in `state/saved.ts`
     (localStorage); computed `isPhone` (the layout is the phone's: read it, never pass a `phone` prop) and `hasFiles`
     (the store has a file; folders do not count).
 - **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
@@ -1341,7 +1341,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     no bar, done stages keep their time (the download's as "48 MB · 7.1 s"). "Use dofile in this tab" is `aria-disabled`
     and `.off` (same label; ui.css's disabled look, as Run's) in `other-tab-taking`, and a press then does nothing.
     Reset (the maintainer settled it with C 1, 2026-11-13: B 5 and C 1 of the plan's list): `askReset()` is synchronous and
-    resets at once only while the engine is `ready` and nothing has run on it since it started (`state.ts` `engineRuns`, a
+    resets at once only while the engine is `ready` and nothing has run on it since it started (`state/run.ts` `engineRuns`, a
     count of runs begun on the live engine, 0 after a reset; `words.ts` `resetAsks`). Anything that has run asks, so a run
     that left only a global or a scalar asks too; it no longer describes the memory again. The dialog closes itself if the engine can no
     longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending

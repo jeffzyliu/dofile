@@ -44,7 +44,7 @@ export const showPhoneTab = (page: Page, tab: PhoneTab, also: { toast?: string; 
 /** The theme, as the page sets it (signal and `data-theme`). */
 export const showTheme = (page: Page, theme: "light" | "dark") =>
   page.evaluate((t) => {
-    window.__dofile.state.theme.value = t;
+    window.__dofile.state.setTheme(t);
     document.documentElement.dataset.theme = t;
   }, theme);
 

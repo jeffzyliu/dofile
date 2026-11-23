@@ -3,7 +3,8 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
 import { activeTab, tabs } from "../editor/documents.ts";
-import { fresh, openDialog } from "../state.ts";
+import { fresh } from "../state/files.ts";
+import { openDialog } from "../state/notices.ts";
 import { useFocusOnMount, useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { roveKey } from "../ui/keys.ts";

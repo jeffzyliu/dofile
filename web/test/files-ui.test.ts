@@ -8,7 +8,7 @@ import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
 import type { ClashAnswer, ClashFacts, Incoming } from "../src/app/files/upload.ts";
 
-const S = await import("../src/app/state.ts");
+const { S } = await import("./state-all.ts");
 const { store } = await import("../src/app/store.ts");
 const { connectFiles, refresh } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");
@@ -17,6 +17,7 @@ const Ops = await import("../src/app/files/ops.ts");
 const Up = await import("../src/app/files/upload.ts");
 const { fileTurn } = await import("../src/app/files/turns.ts");
 const T = await import("../src/app/files/tree.ts");
+const P = await import("../src/app/paths.ts");
 const { formatSize } = await import("../src/app/bytes.ts");
 const { fileCommand } = await import("../src/stata/quote.ts");
 
@@ -37,7 +38,7 @@ async function reset(files: Record<string, string | Uint8Array> = {}) {
   await refresh();
   for (const t of D.tabs.value) D.close(t.path);
   S.closeDialog();
-  S.layout.value = "desktop";
+  S.setLayout("desktop");
   S.showPhone("files");
   S.outputTab.value = "data";
   S.closeFullSize();
@@ -133,8 +134,8 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.equal(T.rowCount("x"), "1 row");
   assert.match(T.nameProblem("a\nb.do", "", taken) ?? "", /line break/);
   assert.match(T.nameProblem("a\tb.do", "", taken) ?? "", /line break/);
-  assert.equal(T.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
-  assert.equal(T.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
+  assert.equal(P.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
+  assert.equal(P.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
   const info = (path: string, dir = false) => ({ path, dir, size: 0, mtime: 0 });
   const kept = [info("a.do"), info("data", true), info("data/c.do"), info("pkg/m.do")];
   assert.equal(T.folderOrAbove("data", kept), "data");
@@ -174,7 +175,7 @@ test("openFile: a text file gets a tab with its document, made active; opened ag
 test("openFile on a phone shows the Editor view for a text or .dta tab; a .png goes to the graphs (desktop: the Graph tab; phone: full size)", async () => {
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 250]);
   await reset({ "a.do": "x", "data/w.dta": Uint8Array.from([0x72, 0xff]), "out/g.png": png });
-  S.layout.value = "phone";
+  S.setLayout("phone");
   await openFile("a.do");
   assert.equal(S.phoneTab.value, "editor");
   S.showPhone("files");
@@ -189,7 +190,7 @@ test("openFile on a phone shows the Editor view for a text or .dta tab; a .png g
   assert.equal(S.phoneTab.value, "files", "a graph is no tab");
   const g = S.graphs.value.at(-1)!;
   assert.deepEqual([g.from, g.path, g.png], ["file", "out/g.png", Buffer.from(png).toString("base64")]);
-  S.layout.value = "desktop";
+  S.setLayout("desktop");
   S.closeFullSize();
   await openFile("out/g.png");
   assert.equal(S.outputTab.value, "graph");
@@ -1057,7 +1058,7 @@ test("rename: a .dta tab renamed to .csv opens again as text in its place; an un
 test("rename: a .dta tab renamed to .png closes, and the Graph tab and the full-size view are left alone (a phone too)", async () => {
   for (const layout of ["desktop", "phone"] as const) {
     await reset({ "a.do": "1", "w.dta": "x" });
-    S.layout.value = layout;
+    S.setLayout(layout);
     for (const p of ["a.do", "w.dta"]) await openFile(p);
     const graphs = S.graphs.value.length;
     await Ops.renameEntry("w.dta", "w.png");

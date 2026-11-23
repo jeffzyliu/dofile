@@ -113,10 +113,10 @@ test("a run whose op failed in the worker (run-failed) is not a reset: rc 9998 w
 
 test("a run's graphs keep the theme the run was sent, not the one at its end", async () => {
   await readyEngine();
-  S.theme.value = "light";
+  S.setTheme("light");
   const done = runCode("x", FILE);
   assert.equal(client.run1.args.plot_theme, "light");
-  S.theme.value = "dark";
+  S.setTheme("dark");
   client.run1.done.ok(result({ images: ["PNG"], graph_commands: ["scatter y x"], graph_lines: [1] }));
   await done;
   assert.equal(S.graphs.value.at(-1)!.theme, "light");
@@ -305,7 +305,7 @@ test("addFileGraph: the same .png opened again replaces its entry (new image, sa
 
 test("a run's graphs take the run's theme, whatever colors their commands name", async () => {
   await readyEngine();
-  S.theme.value = "dark";
+  S.setTheme("dark");
   const done = runCode("x", FILE);
   client.run1.done.ok(
     result({
@@ -319,7 +319,7 @@ test("a run's graphs take the run's theme, whatever colors their commands name",
     S.graphs.value.map((g) => g.theme),
     ["dark", "dark"],
   );
-  S.theme.value = "system";
+  S.setTheme("system");
 });
 
 test("addFileGraph: a .png gets the next number after the run's graphs; graphs keep the last 20, so look one up by n", async () => {

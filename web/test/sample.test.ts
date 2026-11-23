@@ -12,7 +12,7 @@ import { effect } from "@preact/signals-core";
 import { moduleText } from "../scripts/make-sample.ts";
 import type { ClashAnswer } from "../src/app/files/upload.ts";
 
-// localStorage and a page's location, which Node lacks: state.ts reads the first at load, sample.ts the second when
+// localStorage and a page's location, which Node lacks: state/saved.ts reads the first at load, sample.ts the second when
 // called
 const memory = new Map<string, string>();
 Object.assign(globalThis, {
@@ -24,7 +24,7 @@ Object.assign(globalThis, {
 });
 const page = (search = "") => Object.assign(globalThis, { location: { search } });
 
-const S = await import("../src/app/state.ts");
+const { S } = await import("./state-all.ts");
 const { store } = await import("../src/app/store.ts");
 const { afterRun, connectFiles, keep, own, refresh } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");
@@ -54,7 +54,7 @@ async function empty() {
   memory.clear();
   for (const t of D.tabs.value) D.close(t.path);
   S.closeDialog();
-  S.layout.value = "desktop";
+  S.setLayout("desktop");
   for (const b of S.banners.value) S.dismiss(b);
 }
 beforeEach(async () => {

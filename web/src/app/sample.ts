@@ -6,7 +6,8 @@ import { openFile } from "./files/open.ts";
 import { fileTurn } from "./files/turns.ts";
 import { upload } from "./files/upload.ts";
 import { SAMPLE } from "./sample-files.ts";
-import { saved, showToast } from "./state.ts";
+import { showToast } from "./state/notices.ts";
+import { saved } from "./state/saved.ts";
 import { store } from "./store.ts";
 
 /** The file the first visit opens. */

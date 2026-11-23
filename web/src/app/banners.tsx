@@ -5,7 +5,8 @@
 import type { ComponentType } from "preact";
 import { RunChangedBanner, SaveFailedBanner } from "./editor/banners";
 import { NotTextBanner } from "./files/banners";
-import { banners, isPhone } from "./state.ts";
+import { isPhone } from "./state/layout.ts";
+import { banners } from "./state/notices.ts";
 import {
   DownloadFailedBanner,
   EditorStateBanners,

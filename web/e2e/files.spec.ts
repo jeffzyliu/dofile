@@ -228,7 +228,7 @@ test("rename in place: F2; a name in use keeps the field open with the reason; E
   await page.keyboard.type("b");
   await page.keyboard.press("Enter");
   await expect(field).toHaveAttribute("aria-invalid", "true");
-  // in the tree: the live region says the same words 50 ms later (state.ts say), and two matches fail the locator
+  // in the tree: the live region says the same words 50 ms later (state/notices.ts say), and two matches fail the locator
   await expect(tree(page).getByText("b.do already exists here.")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(field).toBeHidden();

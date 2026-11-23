@@ -22,23 +22,12 @@ import { PhoneStrip } from "./log/PhoneStrip";
 import { DtaView } from "./output/DtaView";
 import { FullSize } from "./output/FullSize";
 import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
-import { setSplit, toggleWrap } from "./state/layout.ts";
-import {
-  engine,
-  files,
-  hasFiles,
-  isPhone,
-  layout,
-  outputTab,
-  phoneTab,
-  showPhone,
-  split,
-  theme,
-  wrap,
-} from "./state.ts";
+import { engine } from "./state/engine.ts";
+import { files, hasFiles } from "./state/files.ts";
+import { isPhone, layout, outputTab, phoneTab, setSplit, showPhone, split, toggleWrap, wrap } from "./state/layout.ts";
 import { takesReset } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
-import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
+import { cycleTheme, THEME_ARIA, THEME_LABEL, theme } from "./theme.ts";
 import type { OutputTab, PhoneTab } from "./types.ts";
 import { useFocusTarget } from "./ui/focus-hooks.ts";
 import { Icon } from "./ui/Icon";

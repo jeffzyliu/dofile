@@ -5,7 +5,7 @@ import { effect } from "@preact/signals-core";
 import { type Expect, isConflict } from "../../engine/store.ts";
 import { CONTROL } from "../../stata/quote.ts";
 import { close, reload, tabs } from "../editor/documents.ts";
-import { closeDialog, dialog, openDialog, showToast } from "../state.ts";
+import { closeDialog, dialog, openDialog, showToast } from "../state/notices.ts";
 import type { Dialog, FileInfo } from "../types.ts";
 import { decodeText } from "./open.ts";
 import { SequentialPromiseQueue } from "./sequential-promise-queue.ts";

@@ -1,6 +1,6 @@
 // A drop of files on the page, and the one way an upload starts from a drop or a picked file.
 import { useEffect } from "preact/hooks";
-import { dialog } from "../state.ts";
+import { dialog } from "../state/notices.ts";
 import { store } from "../store.ts";
 import { entriesOf, fromDrop } from "./intake.ts";
 import { fail } from "./ops.ts";

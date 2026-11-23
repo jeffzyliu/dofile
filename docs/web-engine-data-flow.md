@@ -45,7 +45,7 @@ Worker, and the dofile interpreter runs inside that Python. As a kitchen behind 
 flowchart TD
   M["Wiring, the only place that constructs<br/>main.tsx"]
   V["Views: buttons, editor, log<br/>app/*.tsx"]
-  ST["State: one module of signals<br/>app/state.ts"]
+  ST["State: one module of signals per owner<br/>app/state/"]
   RUN["Run controller<br/>app/run.ts"]
   ENG["Engine controller<br/>app/engine.ts"]
   MCH["State machine, pure<br/>engine/machine.ts"]
@@ -117,8 +117,8 @@ What each file owns and talks to: section 2.2.
 | Layer | File | Owns | Talks to |
 |---|---|---|---|
 | Wiring | `main.tsx` | nothing durable; builds the one transport and tab lock, connects the controllers (`connectFiles`, `connectRun`, `connectEngine`) and calls `open()`. Nothing else constructs or connects | everything, once, at load |
-| Views | `app/**/*.tsx` | nothing durable | controllers, `state.ts`, `store` |
-| State | `app/state.ts` | all signals | nobody |
+| Views | `app/**/*.tsx` | nothing durable | controllers, `state/`, `store` |
+| State | `app/state/` | all signals | nobody |
 | Run controller | `app/run.ts`: runs code, stores what a run leaves; reads no engine state | `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs`, `history` | engine controller (`run`, `call`), `files.ts` |
 | Engine controller | `app/engine.ts`: the machine's one caller; feeds events in, performs the effects, writes `engine` from the machine's state | `engine`, the reset banner, the Break timer and the download's abort handle | machine, transport, tab lock, `files.ts`, `run.ts` (through its handlers) |
 | Machine | `engine/machine.ts` | the state, the tickets, the crash count | nobody: it is a function |

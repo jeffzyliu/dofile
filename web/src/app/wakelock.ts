@@ -3,7 +3,7 @@
 // without it gets no lock and no message. test/wakelock.test.ts drives this with a fake `wakeLock` and document.
 
 import type { ReadonlySignal } from "@preact/signals-core";
-import * as S from "./state.ts";
+import { engine as engineState } from "./state/engine.ts";
 import type { EngineState, EngineStateName } from "./types.ts";
 
 /** Whether the lock is wanted in each engine state: while the engine works for the visitor, not while it is idle,
@@ -42,7 +42,7 @@ export type VisibilityDocument = Pick<Document, "visibilityState" | "addEventLis
 export function watchWakeLock({
   wakeLock = globalThis.navigator?.wakeLock,
   doc = globalThis.document,
-  engine = S.engine,
+  engine = engineState,
 }: {
   wakeLock?: WakeLockLike | null;
   doc?: VisibilityDocument | null;

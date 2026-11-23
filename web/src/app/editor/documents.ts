@@ -5,9 +5,13 @@ import { Compartment, EditorState, type Extension, type StateEffect, type Transa
 import { EditorView, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { batch, computed, effect, type ReadonlySignal, type Signal, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
-import { baseName, movedPath, within } from "../files/tree.ts";
+import { baseName } from "../files/tree.ts";
 import { fileTurn } from "../files/turns.ts";
-import { addBanner, banners, dismiss, engine, lastRun, openDialog, say, showToast, wrap } from "../state.ts";
+import { movedPath, within } from "../paths.ts";
+import { engine } from "../state/engine.ts";
+import { wrap } from "../state/layout.ts";
+import { addBanner, banners, dismiss, openDialog, say, showToast } from "../state/notices.ts";
+import { lastRun } from "../state/run.ts";
 import { runOn } from "../states/predicates.ts";
 import type { OpenTab, RunHead } from "../types.ts";
 import {

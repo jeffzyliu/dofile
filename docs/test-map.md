@@ -111,7 +111,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 
 - `wiring.ts`: not a test file: the stand-in transport, store and tab lock, the wiring of the controllers, and
   `resetState()`, which every `app-*.test.ts` runs before each test (through `useWiring()`): every writable signal of
-  `state.ts` back to its value at load (found by shape, so a new signal is reset too), the controllers' own state, a new
+  the state modules (`state-all.ts` joins them as `S`) back to its value at load (found by shape, so a new signal is reset too), the controllers' own state, a new
   wiring, and the drop record checked at the end of each test. It makes the localStorage stand-in before it imports the
   controllers.
 - `app-engine.test.ts`: the engine controller (`app/engine.ts`).
@@ -320,13 +320,15 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
   checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
   - No view reaches the transport through value imports (transitive).
+  - A state module (`src/app/state/`) imports values only from the signals package, `app/paths.ts` and other state modules.
   - `machine.ts`: two casts, no top-level `let` or `var`; the cast to `Ticket` occurs once in `web/`.
   - The transport names no state; `run.ts` subscribes to nothing.
   - The pages' HTML and CSS: `src/site/` apart from the editor's.
   - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
 - `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
   the failure); a cycle finder on a small graph.
-- `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
+- `hook-state.test.ts`: `hookState()` (`src/app/hook-state.ts`, which `main.tsx` gives the e2e hook and `state-all.ts` gives the tests as `S`) has every name the specs read as `state.<name>`.
+- `signals.types.ts` (not run: `npm run check` compiles it): the writable signals the state modules export (`state/*.ts`, `theme.ts`, `pickedVar` in `output/view.ts`) are the views' own.
 - `seqlock.types.ts` (not run: `npm run check` compiles it): `writeSeq` refuses an asynchronous write and one that
   returns a value; `readSeq` refuses an asynchronous or thenable result; `failPart` refuses a plain string as its
   `PartReason`.

@@ -57,7 +57,7 @@ Object.defineProperty(globalThis, "localStorage", {
   },
 });
 
-export const S = await import("../src/app/state.ts");
+export const { S } = await import("./state-all.ts");
 /** The open tabs and their documents. */
 export const D = await import("../src/app/editor/documents.ts");
 export const engine = await import("../src/app/engine.ts");
@@ -296,7 +296,7 @@ export function setUp(opts: Wiring = {}) {
   wire(opts);
 }
 
-/** The writable signals of state.ts: every exported signal that takes an assignment (a computed one does not). */
+/** The writable signals of the state modules: every exported signal that takes an assignment (a computed one does not). */
 const initial = new Map<string, unknown>();
 const writables = Object.entries(S).filter(([, v]) => {
   const proto = v !== null && typeof v === "object" ? Object.getPrototypeOf(v) : null;
@@ -304,14 +304,15 @@ const writables = Object.entries(S).filter(([, v]) => {
 }) as [string, Signal<unknown>][];
 for (const [name, signal] of writables) initial.set(name, structuredClone(signal.peek()));
 
-/** Every writable signal of state.ts back to its value at load, the controllers' own state, the stand-ins and the drop
- *  record: a new wiring that nothing of an earlier test can reach. A signal added to state.ts is reset too. */
+/** Every writable signal of the state modules back to its value at load, the controllers' own state, the stand-ins and the drop
+ *  record: a new wiring that nothing of an earlier test can reach. A signal added to one of them is reset too. */
 export function resetState() {
   stored.clear();
   dropsWanted = [];
   wire(); // not opened: nothing of the last test's can act, and the drop record is empty
   handlers.engineGone(); // the controllers' own state: the count of the session's runs, what the old engine left
   for (const [name, signal] of writables) signal.value = structuredClone(initial.get(name));
+  S.setLayout("desktop"); // read-only for the views: set through its function
   S.holdToast(true); // no toast timer left over
   for (const t of D.tabs.value) D.close(t.path);
   clearLog();

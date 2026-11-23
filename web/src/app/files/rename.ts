@@ -3,21 +3,14 @@
 import { signal } from "@preact/signals-core";
 import { isConflict } from "../../engine/store.ts";
 import { refresh } from "../files.ts";
-import { files, say, showToast } from "../state.ts";
+import { movedPath } from "../paths.ts";
+import { files } from "../state/files.ts";
+import { say, showToast } from "../state/notices.ts";
 import { store } from "../store.ts";
 import { cancel } from "../ui/focus-targets.ts";
 import { openFile } from "./open.ts";
 import { createEntry, fail, NEW_NAMES, renameEntry } from "./ops.ts";
-import {
-  baseName,
-  freeName,
-  joinPath,
-  movedPath,
-  NAME_NOT_ALLOWED,
-  nameProblem,
-  newPathProblem,
-  parentOf,
-} from "./tree.ts";
+import { baseName, freeName, joinPath, NAME_NOT_ALLOWED, nameProblem, newPathProblem, parentOf } from "./tree.ts";
 import { currentDir, focusRow, focusTree, rovingPath, unfold } from "./tree-state.ts";
 
 export interface Renaming {

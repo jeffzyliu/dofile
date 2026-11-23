@@ -5,14 +5,17 @@ import "./styles/app.css";
 import { effect } from "@preact/signals";
 import { render } from "preact";
 import { App } from "./app/App";
-import { activeTab, selection, tabs } from "./app/editor/documents.ts";
+import { selection, tabs } from "./app/editor/documents.ts";
 import { documentSeeds } from "./app/editor/seeds.ts";
 import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
 import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
 import { focusWanted } from "./app/files/tree-state.ts";
 import { connectFiles } from "./app/files.ts";
+import { hookState } from "./app/hook-state.ts";
 import { handlers, runCode } from "./app/run.ts";
-import * as S from "./app/state.ts";
+import * as Engine from "./app/state/engine.ts";
+import * as Files from "./app/state/files.ts";
+import * as Layout from "./app/state/layout.ts";
 import { store } from "./app/store.ts";
 import { applyTheme } from "./app/theme.ts";
 import { watchViewport } from "./app/viewport.ts";
@@ -42,21 +45,21 @@ console.info(capLine(memcap));
 applyTheme();
 const narrow = matchMedia("(max-width: 699.98px)");
 const fit = () => {
-  S.layout.value = narrow.matches ? "phone" : "desktop";
+  Layout.setLayout(narrow.matches ? "phone" : "desktop");
 };
 fit();
 narrow.addEventListener("change", fit);
 // Without ?kblog the overlay's module is not loaded.
-const viewport = watchViewport({ enabled: () => S.isPhone.value });
+const viewport = watchViewport({ enabled: () => Layout.isPhone.value });
 if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
 effect(() => {
-  S.isPhone.value;
+  Layout.isPhone.value;
   viewport.update();
 });
 watchWakeLock();
 // the engine's state on <html>, for the tests
 effect(() => {
-  document.documentElement.dataset.engine = S.engine.value.s;
+  document.documentElement.dataset.engine = Engine.engine.value.s;
 });
 addEventListener("beforeunload", (e) => {
   if (tabs.value.some((t) => t.dirty)) e.preventDefault();
@@ -72,9 +75,9 @@ const testHook = {
   engine: client,
   store,
   start,
-  persisted: () => S.persisted.value,
-  engineBytes: S.engineBytes,
-  state: { ...S, tabs, activeTab }, // one object: the signals, and the tabs from their owner
+  persisted: () => Files.persisted.value,
+  engineBytes: Engine.engineBytes,
+  state: hookState(),
   documents: documentSeeds,
   run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
   breakRun,
