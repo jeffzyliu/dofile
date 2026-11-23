@@ -53,7 +53,7 @@ rules, only who holds the handles.
 | `filesToggle`, `foldFiles`, `onFilesKey` | `App.tsx` (a module `let` holding the Files button) | the Files button, Esc in the folded list |
 | `fullOpener` | `output/view.ts`, set by `output/GraphTab.tsx`, read by `output/FullSize.tsx` | the full-size view's opener (Safari focuses no pressed button) |
 | `leaving` | `ui/Dialog.tsx` (module `let`) | a dialog that follows another (rule 4) |
-| `useFocusRequest`, `useFocusOnMount`, `fromNothing`, `fromAnywhere`, `useFocusOnLeave` | `ui/focus-hooks.ts` | every taker above; banners; `RenameField` |
+| the hooks and predicates | `ui/focus-hooks.ts` (`useFocusRequest`, `useFocusOnMount`, `useFocusOnLeave`, `useFocusTarget`: each takes `{ get?: Get<T> }` from `ui/element.ts` and returns the ref to attach); `ui/focus-targets.ts` (`fromNothing`, `fromAnywhere`, `register`, `ask`, `focusNow`, `focusStable`) | every taker above; banners; `RenameField` |
 
 Not handles, and they stay: `log/CommandLine.tsx`'s `onTouchEnd` and the Run button's refocus, `output/clip.ts`
 `fallbackCopy`, `FindBar`'s close falling back to the log `<pre>`, `ui/Menu.tsx`'s `restore` and `MenuEntry`, and

@@ -41,7 +41,7 @@ The shared pieces (components, hooks) are a small library: a consumer learns one
   on its own element. A hook never takes a ref or an element.
 - **A hook returns the ref to attach.** The consumer writes `const ref = useX<HTMLButtonElement>()` and `ref={ref}`, and
   imports `useRef` only for a ref it uses itself. When a second helper needs the same element it gets
-  `get: () => ref.current`. A hook given a `get` returns a ref that nothing attaches: ignore it.
+  `get: () => ref.current`. Attach the returned ref whenever `get` reads `own` (it is the hook's own element); ignore it only when `get` ignores `own`.
 - **A function called at event time with the element in hand takes the element** (`openMenu({ anchor })`): `get` is for
   what must be found later.
 - **Options are one object after what is acted on** (`useFocusTarget(name, { get, key, focus })`, `register(name, { get,
