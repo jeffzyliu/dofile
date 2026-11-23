@@ -187,7 +187,9 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   "dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax" from `ABOUT` (`web/src/app/env.ts`: compiled in, section 8); "Files stay in this browser. Try: help regress"); per run a
   run-head (`.runhead`, section 4); each echo (`.echo`); output; notes (`.note`: the path shim's "(path … is … in the working
   folder)"); the error and its `r(N);` (`.err`); the engine's hint (`.hint`); "Go to line 17" (`.jump`), which moves the
-  editor's cursor. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
+  editor's cursor. A rename of the run's file, or of a folder above it, moves the last run's path and every run-head's and
+  run end's too (`runMoved`, `state.ts`), so the link opens the renamed file; a file that cannot be read (deleted) opens
+  nothing and a toast says so. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
   exception: they wrap in the pane (section 8, "As built in step 4b").
 - The head, run-heads and the page's own notes are shown only: never in Download log or a log file (`S 15`).
 - The log streams during a run (OQ-1): the worker posts `{id, log}` chunks, and the page appends them. When the run ends, the

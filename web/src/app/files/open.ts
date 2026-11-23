@@ -2,7 +2,7 @@
 // to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
 import { activate, addDta, addText, tabs } from "../editor/documents.ts";
 import { addFileGraph } from "../graphs.ts";
-import { addBanner, banners, dismiss, graphFull, isPhone, outputTab, phoneTab, say } from "../state.ts";
+import { addBanner, banners, dismiss, graphFull, isPhone, outputTab, phoneTab, say, showToast } from "../state.ts";
 import { baseName, extOf } from "./tree.ts";
 import { fileTurn } from "./turns.ts";
 
@@ -31,7 +31,7 @@ function show(path: string) {
 }
 
 /** Open `path` from the store as section 3.11 says. Resolves once it is shown; a file
- *  the store cannot read (deleted meanwhile) opens nothing, and the reason goes to the console. A file that is not
+ *  the store cannot read (deleted meanwhile) opens nothing: a toast says so, and the reason goes to the console. A file that is not
  *  text, .dta or .png gets no tab but the not-text banner (one at a time: an earlier file's goes). */
 export async function openFile(path: string): Promise<void> {
   if (tabs.value.some((t) => t.path === path)) return show(path);
@@ -48,6 +48,7 @@ export async function openFile(path: string): Promise<void> {
       bytes = yield* io.read(path);
     } catch (e) {
       console.warn(`[dofile] open ${path}: ${(e as Error)?.message ?? e}`);
+      showToast(`Couldn't open ${baseName(path)}: the file is gone.`, "error");
       return;
     }
     if (ext === ".png") {

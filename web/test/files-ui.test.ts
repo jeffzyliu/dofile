@@ -263,6 +263,39 @@ test("rename: an open file, and a folder with open files under it: the tabs foll
   assert.ok(S.files.value.some((f) => f.path === "input/raw/y.csv"));
 });
 
+test("rename: the last run and the log's run heads follow the file (Go to line opens the renamed file); a file that cannot be read gives a toast", async () => {
+  await reset({ "a.do": "1", "data/x.do": "2" });
+  const run = (path: string): import("../src/app/types.ts").LastRun => ({
+    kind: "file",
+    path,
+    fresh_locals: true,
+    rc: 111,
+    line: 1,
+    seconds: 0,
+  });
+  S.runWriter.lastRun.value = run("data/x.do");
+  S.runWriter.log.value = [
+    { t: "head" },
+    { t: "runhead", run: { kind: "file", path: "data/x.do", fresh_locals: true }, first: true },
+    { t: "text", text: "", run: 1, end: run("data/x.do") },
+    { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: false },
+    { t: "runhead", run: { kind: "command", fresh_locals: false }, first: false },
+  ];
+  await A.renameEntry("data", "input");
+  assert.equal(S.lastRun.value?.path, "input/x.do");
+  const paths = () => S.log.value.map((i) => (i.t === "runhead" ? i.run.path : i.t === "text" ? i.end?.path : null));
+  assert.deepEqual(paths(), [null, "input/x.do", "input/x.do", "a.do", undefined]);
+  S.runWriter.lastRun.value = run("a.do");
+  await A.renameEntry("a.do", "b.do");
+  assert.equal(S.lastRun.value?.path, "b.do");
+  await openFile("b.do");
+  assert.equal(D.activeTab.value, "b.do");
+  D.close("b.do");
+  S.showToast("");
+  await openFile("a.do");
+  assert.match(S.toast.value ?? "", /a\.do/);
+});
+
 test("fileTurn (the editor's Save): a turn taken while a rename or a delete is in progress sees the tabs they left; a refused one does not stop the next", async () => {
   await reset({ "a.do": "1", "b.do": "2" });
   for (const p of ["a.do", "b.do"]) await openFile(p);
