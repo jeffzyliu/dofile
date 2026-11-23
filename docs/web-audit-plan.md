@@ -216,7 +216,7 @@ literals), and promise callbacks (one spelling). Renames follow rule 12.
 
 | Item | After | Pull request |
 |---|---|---|
-| 3.0: the glossary's vocabulary applied across `web/` (touches `types.ts` and SPEC section 6); starts after the maintainer has chosen the words (`web/STYLE.md`, Glossary) | phase 2 | 3.0 |
+| 3.0: the glossary's vocabulary applied across `web/` (touches `types.ts` and SPEC section 6); the words are `web/STYLE.md`'s Glossary | phase 2 | 3.0 |
 | W1, W2: sweep of `src/engine/`, the Python files, controllers and state | 3.0 | 3.1 |
 | W3, W4: sweep of the views and `src/stata/` | 3.0 | 3.2 |
 | W6, W7: CSS deletions; scripts, config, site, sample, HTML | 3.0 | 3.3 |
