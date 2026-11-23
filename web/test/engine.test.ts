@@ -61,6 +61,7 @@ function pageStore() {
 // values are compared as `list` prints them), and state inside Python that no command shows (a cache, the heap).
 // `graphs`: list the graphs in memory too. Only `graph dir` lists them, and it sets r(list) (as Stata's does), so it is
 // in the probe only once r() is already what it leaves: the test runs `graph dir` first.
+let latestRunId = 0; // the number of the results the last fingerprint's probe left: what a matrix read must name
 async function fingerprint(eng: EngineClient, graphs: boolean) {
   // the variables in order, with type, format and labels; the counts; the file name
   const described = await eng.query("describe");
@@ -79,18 +80,26 @@ async function fingerprint(eng: EngineClient, graphs: boolean) {
     [false, false],
     "the probe leaves r() and e() as they were",
   );
+  const { runId, ...results } = probe.results!; // each probe is a run: its number is not the engine's state
+  latestRunId = runId;
   const matrices: Record<string, Matrix> = {}; // the values of each matrix of r() and e()
   for (const set of ["e", "r"] as const) {
-    for (const name of Object.keys(probe.results![set].matrices))
-      matrices[`${set}(${name})`] = await eng.query("matrix", { name: `${set}(${name})` });
+    for (const name of Object.keys(results[set].matrices))
+      matrices[`${set}(${name})`] = (await eng.query("matrix", { name: `${set}(${name})`, runId })) as Matrix;
   }
-  return { described, rows, macros, data_bytes, files, results: probe.results, matrices, log: probe.log };
+  return { described, rows, macros, data_bytes, files, results, matrices, log: probe.log };
 }
 // Each read op, with arguments other than the defaults. A new read op fails the check until it has a row here.
+// (A matrix's runId is set to the latest results' when it is sent.)
 const READ_ARGS: { [K in keyof ReadOps]: ReadOps[K]["args"][] } = {
   describe: [{ vars: "x s", offset: 1, limit: 1 }, { vars: "nosuchvar" }],
   describe_file: [{ path: "fp.dta" }, { path: "nothing.dta" }],
-  matrix: [{ name: "e(b)" }, { name: "e(V)" }, { name: "M" }, { name: "r(nothing)" }],
+  matrix: [
+    { name: "e(b)", runId: 0 },
+    { name: "e(V)", runId: 0 },
+    { name: "M", runId: 0 },
+    { name: "r(nothing)", runId: 0 },
+  ],
   macros: [undefined],
   browse: [{ vars: "y", offset: 5, limit: 7 }, { limit: 1000 }],
   memory: [undefined],
@@ -154,7 +163,7 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     const reg = await runOn(eng, "regress lwage yrsed, robust");
     assert.equal(reg.rc, 0, reg.log);
     assert.equal(reg.results!.e.macros.vcetype, "Robust");
-    const b = (await eng.query("matrix", { name: "e(b)" })) as Ok<Matrix>;
+    const b = (await eng.query("matrix", { name: "e(b)", runId: reg.results!.runId })) as Ok<Matrix>;
     assert.deepEqual(b.cols, ["yrsed", "_cons"]);
     assert.equal((await runOn(eng, "shell ls")).rc, 199);
   });
@@ -227,7 +236,8 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
         assert.deepEqual(await fingerprint(eng, graphs), before, "fingerprint() twice in a row");
         for (const op of Object.keys(READ_ARGS) as (keyof ReadOps)[]) {
           for (const args of READ_ARGS[op]) {
-            const answers = [await eng.query(op, args), await eng.query(op, args)];
+            const sent = op === "matrix" ? { ...args, runId: latestRunId } : args;
+            const answers = [await eng.query(op, sent), await eng.query(op, sent)];
             assert.deepEqual(answers[1], answers[0], `${op}: the same answer twice`);
             assert.deepEqual(await fingerprint(eng, graphs), before, `${op} ${JSON.stringify(args)} changed something`);
           }

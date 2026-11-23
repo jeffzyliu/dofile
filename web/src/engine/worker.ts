@@ -78,6 +78,7 @@ let brotliWasm: BrotliWasmType | null = null;
 let snapshotBase = ""; // mount's `snapshot`: where the part is, for fetchPartNow
 let started = false; // `startup` was answered
 let runs = 0; // runs sent and not ended (counted before the queue)
+let resultsRunId = 0; // the run that made the engine's results now: counted as each run that gave results ends
 let idleSince = 0;
 let idleTimer: ReturnType<typeof setTimeout> | 0 = 0;
 let decode: { steps: Generator<number, Uint8Array, void>; t0: number; how: string; longest: number } | null = null;
@@ -490,7 +491,9 @@ export const table: OpTable = {
       try {
         await booted;
         askedAt = null;
-        return await runNow({ code, fresh_locals, plot_theme }, id);
+        const result = await runNow({ code, fresh_locals, plot_theme }, id);
+        if (result.results) result.results.runId = ++resultsRunId;
+        return result;
       } finally {
         if (writtenInRun) {
           console.info(
@@ -533,8 +536,9 @@ export const table: OpTable = {
   },
   matrix: {
     queued: true,
-    async handle({ name }) {
+    async handle({ name, runId }) {
       await booted;
+      if (runId !== resultsRunId) return { changed: true }; // the ops run in order: a run ahead of this one made newer results
       return JSON.parse(browser.matrix(name));
     },
   },

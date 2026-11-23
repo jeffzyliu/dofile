@@ -128,8 +128,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `command-bar.test.ts`: `barButton` (`app/start.ts`), the off and disabled rule of the Import and Load buttons.
   while the first is pending; a failed call is asked again.
 - `app-matrix.test.ts`: the Results tab's matrix protocol (`app/output/matrix.ts`): a read's loading entry and answer, an error,
-  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; Copy of an open and a
-  closed matrix; the copied check's timer.
+  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; the request names the
+  results' run, and a refused answer (or results replaced before it) opens and copies nothing and says so; Copy of an
+  open and a closed matrix; the copied check's timer.
 - `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
 - `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
   real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
@@ -205,7 +206,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   test,
   without a current snapshot).
 - `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break (also one pressed while the run waits
-  behind a describe: rc 1 before its first line; and one after its run ended), a worker that fails to load.
+  behind a describe: rc 1 before its first line; and one after its run ended), a matrix request ahead of, behind and
+  two runs behind other runs (refused when it names older results), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
@@ -388,6 +390,8 @@ Specs:
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the
     Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).
+  - Copy of a closed matrix pressed while a run goes on is refused when that run replaces the results (toast, nothing
+    copied); pressed again it copies the new results' matrix.
   - The clipboard is a recorder in every page.
 
 ### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)

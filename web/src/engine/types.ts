@@ -42,7 +42,7 @@ export interface LifecycleOps {
 export interface ReadOps {
   describe: { args: DescribeArgs; result: DataSummary };
   describe_file: { args: { path: string }; result: DataSummary };
-  matrix: { args: { name: string }; result: Matrix };
+  matrix: { args: { name: string; runId: number }; result: MatrixAnswer };
   macros: { args: void; result: Macros };
   browse: { args: DescribeArgs; result: BrowseRows };
   memory: { args: void; result: Memory };
@@ -149,6 +149,8 @@ export interface ResultSet {
   matrices: Record<string, string>;
 } // "3x3"
 export interface Results {
+  /** The worker's number of the run that made these results (it counts those that gave results); the `matrix` op names it. */
+  runId: number;
   e: ResultSet;
   r: ResultSet;
   e_changed: boolean;
@@ -213,6 +215,8 @@ export type DataSummary =
     }
   | { error: string };
 export type Matrix = { rows: string[]; cols: string[]; data: Value[][] } | { error: string }; // names as "eq:name"
+/** `changed`: a later run than `runId` has made the results since, so the matrix is not the one the page showed. */
+export type MatrixAnswer = Matrix | { changed: true };
 export interface Macros {
   locals: Record<string, string>;
   globals: Record<string, string>;
