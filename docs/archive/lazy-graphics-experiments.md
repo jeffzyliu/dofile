@@ -281,8 +281,9 @@ a graph took 3.2-3.5 s at every delay up to 1.5 s at both values, and the longes
 
 ## 8. The first experiment: loading matplotlib lazily
 
-Status: **done as the lazy graphics part (above)**. Findings and conjectures recorded 2026-11-07, while working on the snapshot
-([pyodide-snapshot.md](../pyodide-snapshot.md)).
+Status: **done as the lazy graphics part ([lazy-matplotlib.md](../lazy-matplotlib.md))**. Findings and conjectures recorded
+2026-11-07, while working on the snapshot ([pyodide-snapshot.md](../pyodide-snapshot.md)). Moved out of `phase2-plan.md` on
+2026-11-10 and out of `lazy-matplotlib.md` on 2026-11-23; the text is unchanged and its estimates are not updated.
 
 **The question.** Matplotlib is about 28% of the site-packages files and about 23 MB of the snapshot's raw heap, and it is
 needed only when a program draws a graph. Should it be loaded on demand in the snapshot flow (left out of the heap and the

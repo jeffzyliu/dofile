@@ -92,9 +92,5 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   (2026-11-16), also not measured: memory, and typing during the warm-up; a slow CPU only by proxy (efficiency cores).
 - **Not done:** the restart race and the two-tab case are argued, not tested; `nodraw` graphs also wait.
 
-The sections below are the 2026-11-07 findings and the plan this design replaces; their estimates are not updated.
-
-An experiment that is not done: whether the snapshot should load matplotlib on the first plot.
-Moved out of [phase2-plan.md](phase2-plan.md) on 2026-11-10; the text is unchanged.
-
-The experiment that led to this design: [archive/lazy-graphics-experiments.md](archive/lazy-graphics-experiments.md).
+The 2026-11-07 findings and the plan this design replaced (their estimates not updated) are in
+[archive/lazy-graphics-experiments.md](archive/lazy-graphics-experiments.md), section 8.

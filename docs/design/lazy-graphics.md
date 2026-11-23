@@ -4,8 +4,8 @@ The R1 note of the web audit (`docs/web-audit-plan.md`, section 6). A lazy snaps
 file fetched after the start, `docs/lazy-matplotlib.md`) is fetched by the page and handed to the worker in a shared
 buffer. This note is the one design R1 builds for it: a shared region written and read only through a small seqlock
 utility (section 3), the page's machine (section 1) and the worker's machine (section 2) on top of it, and the races
-that closes (section 6). It changes no code. **Status: built (#147, #151); where the code differs from sections 1 and 2: section 8, As built;** the
-maintainer's decisions so far are quoted in "Decisions" at the end. Read from the code at e496b4c. Paths are under
+that closes (section 6). It changes no code. **Status: built (#147, #151); where the code differs from sections 1
+and 2: section 8, As built;** the maintainer's decisions so far are quoted in "Decisions" at the end. Read from the code at e496b4c. Paths are under
 `web/src/engine/` unless they start with `web/`, `src/` or `docs/`. "Guess" marks what was not checked; "(new)" marks a
 name that does not exist yet (R1 may choose another).
 
