@@ -239,16 +239,142 @@ stateDiagram-v2
 failed), two flags beside them (`loading`, `damaged`), 7 event rows and 7 transitions; the worker's has 7 unpack states
 (none, native, decode, decoded, graphicsWritten, warmed, graphicsError), 13 event rows and 13 transitions, plus the idle
 clock and a waiting graph's 10 steps (`waitStep`). Proposed (R1; the counts are a guess until it is built): the page
-keeps its 4 states, with `damaged` as the argument of a retry rather than a flag, and about 6 events (want, landed,
-failed, again, damaged, online); the worker keeps its 7 states as one field of its record, and about 9 events (startup,
-the op `graphics`, run arrives, run ends, idle step, native done, native failed, a graph's wait, damage; today's own
-fetch landed and failed go with the path without a buffer). They own different things: the page owns the download, the
-Cache, the copy number (`tries`) and the progress the status bar shows; the worker owns everything after the bytes
-arrive (unpack, write into Python's files, warm-up, the idle clock, the waiting graph). What they share is the buffer's
-fields (its three states `PART_PENDING`, `PART_LANDED`, `PART_FAILED`, the length, `tries` and the bytes or reason),
-nothing else. The page's names pending, landed and failed match the buffer's; its fetching is not in the buffer; the
-worker's names match neither. Today, without a buffer, the page's machine shrinks to a display of the worker's messages
-(`#workerSaysGraphics`); after section 6's decision there is no lazy part then, so no machine on either side.
+reads its 3 shared states from the header and keeps a fetch in flight and `fresh` (`damaged` today) beside them, with
+about 9 events (the subsection "Proposed: the page's machine" below); the worker keeps its 7 states as one field of its
+record, and about 9 events (startup, the op `graphics`, run arrives, run ends, idle step, native done, native failed, a
+graph's wait, damage; today's own fetch landed and failed go with the path without a buffer). They own different things:
+the page owns the download, the Cache, the copy number (`tries`) and the progress the status bar shows; the worker owns
+everything after the bytes arrive (unpack, write into Python's files, warm-up, the idle clock, the waiting graph). What
+they share is the buffer's fields (its three states `PART_PENDING`, `PART_LANDED`, `PART_FAILED`, the length, `tries`
+and the bytes or reason), nothing else. The page's names pending, landed and failed match the buffer's; its fetching is
+not in the buffer; the worker's names match neither. Today, without a buffer, the page's machine shrinks to a display of
+the worker's messages (`#workerSaysGraphics`); after section 6's decision there is no lazy part then, so no machine on
+either side.
+
+### Proposed: the page's machine (R1c)
+
+The page's part redrawn under section 6's counter and copy number and the maintainer's principle (section 6, "How far to
+lean on the shared state"). A guess until R1c builds it; names are R1c's to choose.
+
+**Where each fact lives.** With a buffer, the page today keeps its part's state twice: in `progress.state` and in the
+header, written one after the other in five places (`#fetchGraphics` twice, `#retryGraphics`, `#refetchDamaged`'s
+rewrite, `#graphicsOf`'s start). Checked against the code (read, not run), the framing "three of the four states are the
+header's" holds, with four corrections:
+
+- **The header is the single source of pending, landed and failed, and of the copy number** (`tries`) **and the
+  reason** (the bytes after the header, when failed). The page writes them only through `landPart`, `failPart` and
+  `retryPart`, each one write section under the counter (section 6). It reads them back with `Atomics.load` and
+  needs no counter for that: it is the only writer, its writers are synchronous, so on its own thread it never meets a
+  half-written section. It never needs `Atomics.wait` (which its main thread may not call): it learns of its own
+  writes as it makes them, and of the worker's findings by message.
+- **"fetching" is not "a fetch in flight".** Today the status bar says fetching only once the Cache has missed and a
+  download has begun (`#fetchGraphics`); during the Cache lookup, and for a Cache hit, it says pending although a
+  fetch is under way. So the page keeps locally the fetch in flight (the copy it is for), whether it is downloading,
+  and the bytes received. None of them is shared: the worker needs none.
+- **`damaged` is not one retry's argument.** After a damaged copy, every fetch skips the HTTP cache until a copy lands,
+  so an `again` or `online` retry after a failed fresh fetch is fresh too (`test/client.test.ts`, "after a damaged copy,
+  a re-fetch that fails is retried with cache reload too"). It stays a page-local flag, `fresh` here, set by `damaged`
+  and cleared by a landing.
+- **Without a buffer there is no lazy part**, so no page machine (the maintainer's decision of 2026-11-23, section 6,
+  "Without cross-origin isolation, no lazy part"): the worker loads the part with the start files and writes it at
+  `boot`. The machine below exists only with a buffer, and has no path without one.
+
+Page-local, then: the fetch in flight (`{copy, downloading, received}` or none), `fresh`, and whether the part's
+one `online` listener is set. `progress`, `loading` and `damaged` go.
+
+What it removes: `progress.state` as a stored copy of the header, and so `#refetchDamaged`'s rewrite of it to
+"failed" (a value the header never had) only to steer `#retryGraphics`; the state comparisons in the three guards,
+which become one read of the header; the `loading` promise, whose `finally` clears it a microtask after the header
+already says landed or failed (no task can run in that gap, so no bug today; the local fetch is cleared in the same
+step as the write instead).
+
+What it fixes by construction: the status bar and the header cannot disagree, since one is computed from the other.
+A guess, read and not run: an older build's part whose download is still on its way when `#graphicsOf` makes a new
+one keeps calling `#graphicsSay` on itself, which hands the old part's progress to the listeners; progress computed
+only from the current part cannot. With section 6's copy number in `again` and `damaged`, every page event about a
+copy is checked by one comparison, and the state guards follow from it: a copy is replaced only by `retryPart`, so
+`damaged` naming the header's copy implies landed, and `again` naming it implies failed.
+
+Fragility it adds: little, and named. The status bar now reads shared memory: three `Atomics.load`s per update, and
+on each download chunk too (cheap), plus a decode of the reason when failed. The page must not reuse the worker's
+reader, which copies the bytes after the header: for a landed part that is the whole compressed part (about 7.7 MB) on
+every status update. The page's header reader reads the state and the copy, and the bytes only when failed.
+
+**Progress for the status bar, in one place.** One function of the current part (`#graphics`) gives the
+`GraphicsProgress` that `onGraphics` hands on, its shape unchanged: `state` and the reason (`error`) from the
+header, except that pending is shown as fetching while the local fetch is downloading; `received` from the local
+fetch (the file's size when landed); `total`, the file's size. Every row below that changes anything ends by calling
+it for the listeners. No other code writes progress, and nothing stores it.
+
+**Without a buffer: no record to fill.** Section 6's record-shaped message for the path without a buffer is not
+needed: that path has no lazy part. The page shows only the start's download there. Whether the start screen can count
+the part's bytes, from the code: over plain http to a LAN address (the case in practice) the page is not a secure
+context, so it has no Cache API, `download()` returns `cached: false` ("there is no Cache API here") and the worker
+downloads every start file by itself, uncounted: the start screen shows the stages ("download", "unpack", ...), not
+bytes, and the part's bytes would be uncounted the same way. On a secure origin without isolation (https or localhost
+without COOP and COEP; production and the dev server send both, so a misconfiguration, and how often it happens is a
+guess) `download()` does fill the Cache and count bytes, against a `total` that is `list.download` less the
+part's size: it can count the part by fetching it as one more start file and not subtracting it, and the worker then
+reads it from the Cache as it reads the heap.
+
+| Header state | Page-local | Event | Guard | Effect | Next |
+|---|---|---|---|---|---|
+| | | part made (`#graphicsOf`, in `download()` or `start()`) | a buffer (else no lazy part) | buffer zero-filled (pending, copy 0, counter 0) | pending, no fetch |
+| pending | no fetch | want (`download()`'s start files in; `start()`'s `started`) | | local fetch for the header's copy; fetch (the Cache, else a download; skips the HTTP cache if `fresh`) | pending, fetch on its way |
+| pending | fetch on its way | the Cache missed, the download begins | | local: downloading, received 0 | same (shown as fetching) |
+| pending | downloading | bytes arrive | | local: received | same |
+| pending | fetch for copy c | fetch landed (c, the bytes; size checked) | c is the header's copy | `landPart` (one write section); local fetch cleared; `fresh` cleared; `#tellGraphics` | landed |
+| pending | fetch for copy c | fetch failed (c, why) | c is the header's copy | `failPart` (one write section); local fetch cleared; the part's `online` listener if not yet set; `#tellGraphics` | failed |
+| failed | | worker posts `again` (c) | c is the header's copy | retry: `retryPart` (copy c + 1, pending), `#tellGraphics`, local fetch for c + 1, fetch | pending, fetch on its way |
+| failed | | `online` | | retry, as above | pending, fetch on its way |
+| landed | | worker posts `damaged` (c) | c is the header's copy | `fresh` set; retry, as above (the Cache entry deleted first) | pending, fetch on its way |
+| any | | `again` or `damaged` naming another copy, or from a worker that is not `live`; `online` when not failed | | none (dropped) | same |
+| any | | a new worker (`start()`, a restart) | | none: the new worker gets the same buffer at `boot` and reads the header at `startup`; want follows `started` | same |
+| | | a new build | | a new part (first row); every event of the old part dropped (one check at the entry: the part is `#graphics`) | the new part's |
+
+Every row with an effect ends with the progress function above. The effects `landPart`, `failPart` and
+`retryPart` are section 6's write sections (two adds on the counter, the writes, a notify); `#tellGraphics` follows
+each, as today. The copy a fetch's result names is the one it was started for; today only one fetch is ever in flight
+(want and retry require none), so the check costs nothing and keeps that true by construction.
+
+```mermaid
+stateDiagram-v2
+    state "pending, no fetch" as idle
+    state "pending, a fetch on its way" as fetch
+    [*] --> idle: #35;graphicsOf, the buffer zero-filled (copy 0)
+    idle --> fetch: want (start files in, or started)
+    fetch --> fetch: the Cache missed, bytes arrive (local, shown as fetching)
+    fetch --> landed: fetch landed for copy c, landPart, #35;tellGraphics
+    fetch --> failed: fetch failed for copy c, failPart, #35;tellGraphics
+    failed --> fetch: again naming copy c, or online, retryPart (copy c + 1), #35;tellGraphics
+    landed --> fetch: damaged naming copy c, fresh set, retryPart (copy c + 1), #35;tellGraphics
+    note right of failed
+        pending, landed and failed are the header's.
+        The fetch on its way, downloading, received
+        and fresh are the page's own.
+        again or damaged naming another copy is dropped.
+    end note
+```
+
+**What R1c builds from it.** In `client.ts`: `GraphicsPart` as the page-local fields above (no `progress`,
+`loading`, `damaged`); the transitions as one pure function over (the header's state and copy, the local fields,
+the event) returning the next local fields and the effects, tested as a table as `waitStep` is; the progress
+function; one `online` listener per part; messages from a worker that is not `live` dropped. In `lazy-part.ts`:
+the page's header reader (state, copy, and the reason only when failed). In `types.ts` (`FromWorker`) and SPEC
+section 6 together: `again` and `damaged` with the copy. In `worker.ts`: `again` and `damaged` naming the
+copy of the read that produced them (section 6). R1b's write sections, copy numbers and the removal of the path without
+a buffer come first; R1c needs them.
+
+**Which tests come first**, before a line of `client.ts` moves:
+- Pins of today, which must stay green: the four "graphics part" tests in `test/client.test.ts`, the sticky
+  `fresh` among them, plus one new pin of the progress sequence the listeners see (a Cache hit, a miss with its
+  bytes, a failure, a retry, a damage), so that the derived progress is shown to match it.
+- Written to fail first: a `damaged` naming copy c after copy c + 1 has landed is dropped (race 13's page half; today
+  the page drops the good copy); an `again` or `damaged` from an ended worker is dropped (race 10's check, kept for
+  the two messages that remain; whether a browser still delivers it is section 7's guess, so the test sends it through
+  the client directly); an old build's download
+  does not reach the listeners (if it passes today, the guess above was wrong, and it stays as a pin).
+- Then the pure table: each row above, including the dropped events.
 
 ## 2. The 22 variables as one record
 
@@ -579,13 +705,10 @@ write before `boot` answers; whether it is warmed in idle steps then or not at a
 idle steps keep warming it). Guess: `boot`'s `graphics` argument says which way (a `sab` or none), as it does today.
 
 What it costs: without isolation, the start downloads the part too (about 7.7 MB more, `docs/lazy-matplotlib.md`'s
-sizes) and unpacks and writes it before "ready". What the start screen shows: over plain http there is no Cache API
-(not a secure context), so `download()` returns `cached: false` and the worker downloads every start file
-uncounted; the screen shows the stages, not bytes, and the part adds time to the "download" and "unpack" stages, not a
-count. A secure origin without isolation (https or localhost without COOP and COEP; a misconfiguration) has a Cache,
-and `download()` could count the part as one more start file (its `total` today is `list.download` less the part).
-A damaged part then fails the start the way a damaged heap does (`loadFromSnapshot` deletes the file from the Cache
-and throws; the next start fetches it again): a guess at R1b's choice, which it states.
+sizes) and unpacks and writes it before "ready". What the start screen shows then: section 1, "Proposed: the page's
+machine" (over plain http, stages and no byte count, as for every start file). A damaged part then fails the start the
+way a damaged heap does (`loadFromSnapshot` deletes the file from the Cache and throws; the next start fetches it
+again): a guess at R1b's choice, which it states.
 
 What it fixes by construction: races 9, 10 (as it stands, for the download messages) and 14, which exist only on the
 path without a buffer (section 7), and the dead `share.error` branch (section 2). Without isolation there is still no
