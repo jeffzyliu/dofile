@@ -16,13 +16,14 @@ Run from `web/` (`npm install` once). The scripts that need the dofile wheel reb
 
 ```bash
 npm test                  # the engine in Pyodide under Node, the file store, the client, the controllers (~70 s)
-npm run dev               # two dev servers, on the LAN too: the editor on 5173, the landing and commands pages on 5174
+npm run dev               # `stage`, then two dev servers, on the LAN too: the editor on 5173, the landing and commands pages on 5174
                           #   (prints a warning first when the snapshot is stale; `npm run snapshot` fixes it)
-npm run e2e               # the snapshot, `build:local`, then Chromium, Firefox, WebKit, iPhone (`npx playwright install` once;
+npm run e2e               # `e2e:prepare` (`stage`, the snapshot, `build:vite` for local), then Chromium, Firefox, WebKit, iPhone (`npx playwright install` once;
                           #   SNAPSHOT_QUALITY=5: the snapshot in seconds; E2E_PORT=4181: ports 4181/4182, not 4173/4174)
-npm run build             # the editor into dist/app/, the pages into dist/site/; needs DOFILE_URLS=production,
+npm run build             # `stage`, then the editor into dist/app/ and the pages into dist/site/; needs DOFILE_URLS=production,
                           #   DOFILE_URLS=local (`npm run build:local`), or both DOFILE_SITE_URL and DOFILE_EDITOR_URL
 npm run snapshot          # the Pyodide memory snapshot the page starts from; again after any engine change
+npm run stage             # the wheel, then `public/` (wheels, Pyodide's runtime): the only writer of them; `vite` only reads
 npm run check             # Biome (errors), then TypeScript
 npm run format            # Biome: layout, import order, safe lint fixes
 npm run lint:strict       # Biome as CI runs it: warnings fail too

@@ -10,7 +10,7 @@ import type { SnapshotManifest, StartFiles } from "../src/engine/types.ts";
 import { type BuildInputs, buildId, readManifest, staleness } from "./build-id.ts";
 import { EDITOR_OUT } from "./urls.ts";
 
-// Pyodide's own files that the snapshot start needs; vite.config.ts copies them from the npm package into public/pyodide/
+// Pyodide's own files that the snapshot start needs; scripts/stage.ts copies them from the npm package into public/pyodide/
 export const RUNTIME_FILES = ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
 
 // What a host sends for these bytes: brotli at quality 5 (about what a CDN does), or the file as it is when that is no
@@ -77,7 +77,7 @@ export const engineBytesMeta = (bytes: number) => `<meta name="dofile-engine-byt
 const META = /\s*<meta name="dofile-engine-bytes" content="\d+">/g;
 
 // After a build: write the list as `dir`/start-files.json and its download size into `dir`/index.html, and remove the
-// snapshot's manifest.json from `dir` (Vite copied it from public/). Throws if it cannot (a page without the number
+// snapshot's manifest.json and the staging record, stage.json, from `dir` (Vite copied them from public/). Throws if it cannot (a page without the number
 // would show a prompt without a size), and if the snapshot is not of `inputs` (build-id.ts, staleness). With no snapshot
 // the list says so (built: null) and the build goes on: the page then fails with "no snapshot in this build". Returns
 // the list.
@@ -102,7 +102,8 @@ export function writeStartFiles(
   Object.assign(list, { size: rest.size + text.length, compressed: rest.compressed + entry!.compressed });
   writeFileSync(`${dir}/index.html`, text);
   writeFileSync(`${dir}/start-files.json`, JSON.stringify(list));
-  rmSync(`${dir}/snapshot/manifest.json`, { force: true }); // the build's record, not a file of the site
+  rmSync(`${dir}/snapshot/manifest.json`, { force: true }); // the build's records, not files of the site
+  rmSync(`${dir}/stage.json`, { force: true });
   return list;
 }
 

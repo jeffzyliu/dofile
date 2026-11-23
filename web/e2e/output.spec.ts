@@ -8,7 +8,7 @@
 //    leaves a wide dataset, and the tabs are checked against that. On the phone profile there is no Graph tab (graphs
 //    show in the log), so only the full-size view is checked there, opened through `graphFull`.
 import type { Page } from "@playwright/test";
-import { expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { engineState, expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 import { addBanner, type PhoneTab, seedGraphs, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
 
 declare global {
@@ -151,6 +151,36 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
   await view.getByRole("button", { name: "Copy the use command" }).click();
   expect(await copied(page)).toEqual(['use "data/wages.dta", clear']);
   await expect(toastOf(page)).toHaveText("Copied");
+});
+
+test("Copy of a closed matrix pressed while a run goes on is refused when that run replaces the results", async ({
+  page,
+}) => {
+  await page.goto("?test");
+  await startEngine(page);
+  await ready(page);
+  await run(page, "clear\nset obs 20\ngenerate x = _n\ngenerate y = x + mod(_n, 3)\nquietly regress y x");
+  await showTab(page, "results");
+  await page
+    .getByRole("button", { name: /^Matrices/ })
+    .first()
+    .click();
+  const copyBtn = page.getByRole("button", { name: "Copy e(b)", exact: true });
+  await expect(copyBtn).toBeVisible();
+  const before = (await copied(page)).length;
+
+  // the matrix is read after the run that is on its way (the engine answers one op at a time, in order)
+  const slow = page.evaluate(() => window.__dofile.run("sleep 1500\nquietly regress y"));
+  await expect.poll(() => engineState(page)).toBe("running");
+  await showTab(page, "results"); // a phone's run opened the Log
+  await copyBtn.click();
+  expect((await slow)!.rc).toBe(0);
+  await expect(toastOf(page)).toHaveText("The results changed: copy again");
+  expect(await copied(page), "nothing was copied").toHaveLength(before);
+
+  await copyBtn.click(); // pressed again: the new results' matrix (the constant only)
+  await expect(toastOf(page)).toHaveText("Copied e(b)");
+  expect((await copied(page)).at(-1)).toMatch(/^\t_cons\n\S+\t[-.\d]+$/);
 });
 
 test("the Graph, Data and Results tabs and a .dta tab, after a run through the hook", async ({ page, browserName }) => {

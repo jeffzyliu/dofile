@@ -79,6 +79,7 @@ const result = (rc: number): RunResult => ({
   error_command: null,
   log: ". display 1\n1\n",
   results: {
+    runId: 1,
     e: { scalars: {}, macros: {}, matrices: {} },
     r: { scalars: {}, macros: {}, matrices: {} },
     e_changed: false,

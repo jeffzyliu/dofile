@@ -119,7 +119,7 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
 How the page starts from the snapshot now (`web/src/engine/worker-boot.ts`, `client.ts`; the contract is in
 `docs/design/SPEC.md`, sections 6 and 7). The sections below describe the earlier start where they differ.
 
-- **The runtime comes from the page's own origin.** `vite.config.ts` copies `pyodide.asm.wasm`, `python_stdlib.zip` and
+- **The runtime comes from the page's own origin.** `scripts/stage.ts` (`npm run stage`) copies `pyodide.asm.wasm`, `python_stdlib.zip` and
   `pyodide-lock.json` from the `pyodide` npm package into `web/public/pyodide/`. The snapshot start makes no request to
   another origin (a browser test checks it). `?snapshot=0` keeps the CDN.
 - **The page can download first, counting bytes.** `client.download()` fetches every start file into the Cache
@@ -240,7 +240,7 @@ is in `web/src/engine/snapshot.ts`, `web/scripts/make-snapshot.ts` and `web/src/
 | Leave out unused scipy subpackages (`io`, `signal`, `cluster`, `odr`: 4.1 of 40.8 MB raw) | **Not done** | little to gain | the corpus programs import 493 scipy modules |
 | zstd or gzip instead of brotli | **Tried, rejected** | zstd 22 decoded the heap wrongly without any error; gzip is half as good | the build compares the decoded files with the originals |
 | Explain the 12 MB the heap gains from installing the packages, before any import | **Explained** (E6) | at brotli 5, of the 12.8 MB: 5.9 for the 137 library file copies, 1.6 for the openblas copy, 3.8 for free memory with old data, 1.3 for the libraries' data and bss; the first three are now zeroed | what remains is the libraries' data and bss and Python's own objects (0.2 MB over bare Pyodide). Not loading the 36 libraries nothing imports would save at most 0.21 MB: not done |
-| A smaller Pyodide runtime, or self-hosting it | **Self-hosted** (2026-11-10), not smaller | the snapshot start asks nothing of another origin | `vite.config.ts` copies `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` from the npm package into `public/pyodide/` (5.75 MB as a host sends them, 12.3 MB on disk); `?snapshot=0` still loads the runtime and the packages from jsDelivr |
+| A smaller Pyodide runtime, or self-hosting it | **Self-hosted** (2026-11-10), not smaller | the snapshot start asks nothing of another origin | `scripts/stage.ts` copies `pyodide.asm.wasm`, `python_stdlib.zip` and `pyodide-lock.json` from the npm package into `public/pyodide/` (5.75 MB as a host sends them, 12.3 MB on disk); `?snapshot=0` still loads the runtime and the packages from jsDelivr |
 
 **Start time and memory**
 

@@ -87,7 +87,7 @@ estimated splits) are the study's, not checked again here.
   has no automatic fallback from the snapshot to the normal boot (by grep, not a full read). The words a failed start shows
   are the maintainer's. 2026-11-12.
 - **Split `check-snapshot` in CI.** The `memory snapshot` job takes about 8 to 11 minutes, `check-snapshot` being most of
-  it. It now runs on a pull request only when the snapshot's inputs change (`web.yml`, `ENGINE`); when it runs, `web ok`
+  it. It now runs on a pull request only when the snapshot's inputs change (`web.yml`, from `web/scripts/snapshot-inputs.txt`); when it runs, `web ok`
   still waits for it. Not tried: split it into shards with its `--cases` and `--only` options. 2026-11-12, 2026-11-13.
 - **More Playwright workers.** The config sets no worker count, so a browsers job runs the default 2 workers; they are busy
   about 97% of the time. The CI speed investigation replayed past runs: 3 workers saves 0 to 3 minutes and 4 workers about 4
