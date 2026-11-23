@@ -27,10 +27,10 @@ export interface Renaming {
   from: string | null; // the row in the tab order before the field: a draft's Esc gives the focus back to it
 }
 export const renaming = signal<Renaming | null>(null);
-let fields = 0;
+let lastFieldId = 0;
 
 export function startRename(path: string, draft?: Renaming["draft"]) {
-  renaming.value = { id: ++fields, path, problem: null, draft, from: rovingPath.value };
+  renaming.value = { id: ++lastFieldId, path, problem: null, draft, from: rovingPath.value };
   rovingPath.value = path;
   focusWanted.value = null; // the field takes the focus: a waiting request ends
 }
@@ -54,94 +54,94 @@ export function startDraft(kind: keyof typeof NEW_NAMES, dir: string) {
   );
 }
 
-let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
+let isEnding = false; // an endRename is in progress (Enter, then the blur as the field goes)
 
-/** Keep the field `r` open with `problem` under it, unless it has gone. */
-function keepOpen(r: Renaming, problem: string) {
-  if (renaming.value?.id === r.id) renaming.value = { ...r, problem };
+/** Keep the field `field` open with `problem` under it, unless it has gone. */
+function keepOpen(field: Renaming, problem: string) {
+  if (renaming.value?.id === field.id) renaming.value = { ...field, problem };
   say(problem);
 }
 
 /** End the inline rename: `name` is the new name, or null to cancel. Keeps the field open when the name cannot be used.
  *  `leaving`: the field was left, not Enter pressed. A draft is written here, whatever the name (endDraft). */
 export async function endRename(name: string | null, leaving = false) {
-  const r = renaming.value;
-  if (!r || ending) return;
-  if (r.draft) return endDraft(r, name, leaving);
-  const dir = parentOf(r.path);
-  const to = name === null ? r.path : joinPath(dir, name);
-  if (to !== r.path) {
+  const field = renaming.value;
+  if (!field || isEnding) return;
+  if (field.draft) return endDraft(field, name, leaving);
+  const dir = parentOf(field.path);
+  const newPath = name === null ? field.path : joinPath(dir, name);
+  if (newPath !== field.path) {
     const problem = nameProblem(
       name!,
       dir,
       files.value.map((f) => f.path),
-      r.path,
+      field.path,
     );
-    if (problem) return keepOpen(r, problem);
-    ending = true;
+    if (problem) return keepOpen(field, problem);
+    isEnding = true;
     try {
-      await renameEntry(r.path, to);
+      await renameEntry(field.path, newPath);
     } catch (e) {
       // the list was not current: the store says why
-      return keepOpen(r, isConflict(e) ? `${name} already exists here.` : NAME_NOT_ALLOWED);
+      return keepOpen(field, isConflict(e) ? `${name} already exists here.` : NAME_NOT_ALLOWED);
     } finally {
-      ending = false;
+      isEnding = false;
     }
-    currentDir.value = movedPath(currentDir.value, r.path, to); // the current folder, or one above it, was renamed
+    currentDir.value = movedPath(currentDir.value, field.path, newPath); // the current folder, or one above it, was renamed
   }
-  if (renaming.value?.id !== r.id) return; // another field was started meanwhile
+  if (renaming.value?.id !== field.id) return; // another field was started meanwhile
   renaming.value = null;
-  focusRow(to);
+  focusRow(newPath);
 }
 
 /** The end of a draft's field. Esc writes nothing. Enter writes the typed name, or the free default when it is empty or
  *  unchanged; a name in use keeps the field open. Leaving the field always writes: a name that cannot be used makes the
  *  free default (a toast says so), and nothing opens, so the focus stays where the visitor tapped. */
-async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
-  const kind = r.draft!;
+async function endDraft(field: Renaming, name: string | null, leaving: boolean) {
+  const kind = field.draft!;
   const what = kind === "file" ? "file" : "folder";
   if (name === null) {
     renaming.value = null;
-    rovingPath.value = r.from; // the row the visitor came from, not the draft's path or the open file's row
+    rovingPath.value = field.from; // the row the visitor came from, not the draft's path or the open file's row
     focusTree();
     return;
   }
-  const dir = parentOf(r.path);
-  const asked = name.trim() === "" || name === baseName(r.path) ? undefined : name;
+  const dir = parentOf(field.path);
+  const askedName = name.trim() === "" || name === baseName(field.path) ? undefined : name;
   // a draft's name may be a path: "sub/x.do" makes sub
-  let problem = asked === undefined ? null : newPathProblem(asked, dir, files.value);
-  if (problem && !leaving) return keepOpen(r, problem);
-  if (leaving && rovingPath.value === r.path) rovingPath.value = r.from; // the draft's path is not a row
-  ending = true;
-  let to: string;
+  let problem = askedName === undefined ? null : newPathProblem(askedName, dir, files.value);
+  if (problem && !leaving) return keepOpen(field, problem);
+  if (leaving && rovingPath.value === field.path) rovingPath.value = field.from; // the draft's path is not a row
+  isEnding = true;
+  let newPath: string;
   try {
     try {
-      to = await createEntry(kind, dir, problem ? undefined : asked);
+      newPath = await createEntry(kind, dir, problem ? undefined : askedName);
     } catch (e) {
-      if (asked === undefined || problem || !isConflict(e)) throw e;
-      problem = `${asked} already exists here.`; // the list was not current
-      if (!leaving) return keepOpen(r, problem);
-      to = await createEntry(kind, dir);
+      if (askedName === undefined || problem || !isConflict(e)) throw e;
+      problem = `${askedName} already exists here.`; // the list was not current
+      if (!leaving) return keepOpen(field, problem);
+      newPath = await createEntry(kind, dir);
     }
     await refresh();
   } catch (e) {
     fail(`New ${what}`, `Couldn't create the ${what}`)(e);
-    if (renaming.value?.id === r.id) {
+    if (renaming.value?.id === field.id) {
       renaming.value = null;
       focusTree();
     }
     return;
   } finally {
-    ending = false;
+    isEnding = false;
   }
   if (problem)
-    showToast(`${problem} Made ${baseName(to)} instead.`); // the reason line is gone with the field
-  else if (asked?.includes("/")) unfold(parentOf(to)); // a folder the name went through may be folded
+    showToast(`${problem} Made ${baseName(newPath)} instead.`); // the reason line is gone with the field
+  else if (askedName?.includes("/")) unfold(parentOf(newPath)); // a folder the name went through may be folded
   // leaving: the visitor's tap decides what is open and where the focus is
-  if (kind === "file" && !leaving) openFile(to);
-  if (renaming.value?.id !== r.id) return; // another field was started meanwhile
+  if (kind === "file" && !leaving) openFile(newPath);
+  if (renaming.value?.id !== field.id) return; // another field was started meanwhile
   renaming.value = null;
-  if (!leaving) focusRow(to);
+  if (!leaving) focusRow(newPath);
 }
 
 /** The visitor typed in the field `field`: its problem sentence goes. */

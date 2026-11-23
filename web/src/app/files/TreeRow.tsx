@@ -52,27 +52,27 @@ function rowItems(row: Row): MenuItem[] {
 
 const menuLabel = (row: Row) => `Actions for ${row.path}${row.dir ? "/" : ""}`;
 
-function RenameField({ r, row }: { r: Renaming; row: Row }) {
-  const field = useRef<HTMLInputElement>(null);
-  useFocusOnMount(field);
+function RenameField({ field, row }: { field: Renaming; row: Row }) {
+  const input = useRef<HTMLInputElement>(null);
+  useFocusOnMount(input);
   useLayoutEffect(() => {
     const dot = row.dir ? -1 : row.name.lastIndexOf(".");
-    field.current?.setSelectionRange(0, dot > 0 ? dot : row.name.length); // the name without its extension
+    input.current?.setSelectionRange(0, dot > 0 ? dot : row.name.length); // the name without its extension
   }, []);
   return (
     <>
       <input
         class="rename-field"
         aria-label={`New name for ${row.name}`}
-        aria-invalid={r.problem ? "true" : undefined}
-        aria-describedby={r.problem ? "rename-problem" : undefined}
+        aria-invalid={field.problem ? "true" : undefined}
+        aria-describedby={field.problem ? "rename-problem" : undefined}
         defaultValue={row.name}
         spellcheck={false}
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
-        ref={field}
-        onInput={() => clearProblem(r)}
+        ref={input}
+        onInput={() => clearProblem(field)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -82,11 +82,11 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
             endRename(null);
           }
         }}
-        onBlur={(e) => leaveField(r, e.currentTarget.value)}
+        onBlur={(e) => leaveField(field, e.currentTarget.value)}
       />
-      {r.problem && (
+      {field.problem && (
         <span class="rename-problem" id="rename-problem">
-          {r.problem}
+          {field.problem}
         </span>
       )}
     </>
@@ -95,10 +95,10 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
 
 /** A row asked for (by its path, or as the row in the tab order) takes the focus once it is drawn, if the focus is free
  *  (on the page body, where the removed rename field leaves it, or in the tree) or the request says `anywhere`. */
-function useRovingFocus(path: string, li: { current: HTMLElement | null }, renaming: boolean, tabbable: boolean) {
+function useRovingFocus(path: string, li: { current: HTMLElement | null }, isRenaming: boolean, tabbable: boolean) {
   const w = focusWanted.value;
   useFocusRequest(
-    !!w && (w.path === null ? tabbable : w.path === path) && !renaming, // a row being renamed waits for the field to go
+    !!w && (w.path === null ? tabbable : w.path === path) && !isRenaming, // a row being renamed waits for the field to go
     li,
     () => {
       focusWanted.value = null;
@@ -120,9 +120,9 @@ export function TreeRow({
 }) {
   const tab = tabs.value.find((t) => t.path === row.path);
   const open = !row.dir && activeTab.value === row.path;
-  const r = renaming.value?.path === row.path ? renaming.value : null;
+  const field = renaming.value?.path === row.path ? renaming.value : null;
   const li = useRef<HTMLLIElement>(null);
-  useRovingFocus(row.path, li, r !== null, tabbable);
+  useRovingFocus(row.path, li, field !== null, tabbable);
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }, anchor: HTMLElement | null = at ? null : el) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor, at, restore: el });
   // a folder is made current and unfolded, never folded (its caret and Left fold it); a file opens, and its folder is
@@ -185,14 +185,16 @@ export function TreeRow({
         return;
     }
   };
-  const cls = [row.dir && "folder", open && "open", current && "current", r && "renaming"].filter(Boolean).join(" ");
+  const cls = [row.dir && "folder", open && "open", current && "current", field && "renaming"]
+    .filter(Boolean)
+    .join(" ");
   return (
     <li
       ref={li}
       role="treeitem"
       class={cls || undefined}
       style={row.depth ? { "--d": row.depth } : undefined}
-      title={r ? undefined : row.path}
+      title={field ? undefined : row.path}
       aria-level={row.depth + 1}
       aria-expanded={row.dir ? row.expanded : undefined}
       aria-selected={row.dir ? undefined : open}
@@ -203,7 +205,7 @@ export function TreeRow({
         if (e.target === e.currentTarget) rove(row.path);
       }}
       onClick={(e) => {
-        if (r || (e.target as HTMLElement).closest(".rename-field")) return;
+        if (field || (e.target as HTMLElement).closest(".rename-field")) return;
         rove(row.path);
         // a second tap on the current folder: the top; not the second click of a double-click, which means "open it"
         if (row.dir && currentDir.value === row.path) {
@@ -211,7 +213,7 @@ export function TreeRow({
         } else activate();
       }}
       onContextMenu={(e) => {
-        if (r) return;
+        if (field) return;
         e.preventDefault();
         const el = e.currentTarget as HTMLElement;
         // a context menu from the keyboard comes with no pointer position: the menu goes under the row
@@ -232,8 +234,8 @@ export function TreeRow({
           <Icon name={row.expanded ? "down" : "right"} />
         </span>
       )}
-      {r ? (
-        <RenameField key={r.id} r={r} row={row} /> // a field started over this one is a new field: it takes the focus
+      {field ? (
+        <RenameField key={field.id} field={field} row={row} /> // a field started over this one is a new field: it takes the focus
       ) : (
         <>
           <span class="name">
