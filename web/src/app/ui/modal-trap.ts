@@ -64,8 +64,11 @@ export function useModalTrap(root: { current: HTMLElement | null }, options: Mod
         if (!latest.current.onEscape) return;
         e.preventDefault();
         latest.current.onEscape();
-      } else if (e.key === "Tab") wrapTab(e, el);
-      else latest.current.onKey?.(e);
+      } else if (e.key === "Tab") {
+        wrapTab(e, el);
+      } else {
+        latest.current.onKey?.(e);
+      }
     };
     if (!native) document.addEventListener("keydown", onKey);
     return () => {

@@ -168,8 +168,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - An upload against the other file changes (each write a turn): a new file of the same name, a clash whose file
     changed while asked or after "Do the same" (asked again), one deleted while asked (written; asked when its tab has
     unsaved edits), one edited before its write's turn (asked in the unsaved words), a dialog opened while a clash's file
-    is read (the clash waits), a Replace against `openFile`'s read; the re-ask dialog ("changed while you were deciding") takes the focus on Keep mine and hands it back
-    to what had it before the first.
+    is read (the clash waits), a Replace against `openFile`'s read.
 - `rename.test.ts`: the inline rename and the draft rows (`app/files/rename.ts`, with the tree's state in
   `tree-state.ts`) over fake-indexeddb, as the focus request and the tree's state show them.
   - A field starting (the row in the tab order, the draft's free default, a blocked store), Enter, Esc and leaving a
@@ -345,7 +344,8 @@ Specs:
 - `files.spec.ts`: files, tabs and the file panel.
   - The tree by keyboard; tabs with and without unsaved edits; Save; inline rename; row and head menus; delete.
   - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page, two quick drops
-    of one path (applied in drop order).
+    of one path (applied in drop order); the re-ask dialog ("changed while you were deciding") takes the focus on Keep
+    mine and hands it back to what had it before the first.
   - New .do file and New folder; drafts in a folder; the current folder (selecting, folding, rename and delete).
   - The phone's strip, file dropdown (44 px targets) and "Files ⋯"; the desktop's tablist.
 - `states.spec.ts` (step 4d): engine states and their banners.
@@ -439,7 +439,8 @@ Specs:
   does not clear the second).
   - The full-size view's modal trap (`ui/modal-trap.ts`): a Space that opened it leaves the focus on the view, not on Close; Tab and
     Shift+Tab wrap inside; Esc gives the focus back to Open full size; an opener that has left the page (the Graph tab
-    gone while it is open) gives the focus to the editor.
+    gone while it is open) gives the focus to the editor; a dialog over it (the other-tab dialog) has the keys: Esc and the
+    arrows leave the view alone, and closing the dialog gives the focus back to the view.
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more; the
     name buttons' arrow keys leave Alt, Ctrl and Cmd alone), the

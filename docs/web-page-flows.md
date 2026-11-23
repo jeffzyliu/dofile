@@ -312,6 +312,12 @@ On a phone one view shows at a time, so the Editor pane is often hidden and `foc
   - "New .do file and New folder: the name field has the focus within the tap's microtasks, …" (rule 8), and the tests
     after it: Esc, Enter, leaving the field, a name in use, a second New while the first is written
   - "a clash dialog that follows another (Keep mine, then the next clash at once): …"
+  - "a clash asked again because the file changed while it was asked: …" (the re-ask dialog's focus)
+- `web/e2e/output.spec.ts`:
+  - "the full-size view: its first focus is the view, not Close; Tab and Shift+Tab wrap inside it; Esc hands the focus back
+    to Open full size"
+  - "the full-size view whose opener has left the page gives the focus to the editor, not to the page"
+  - "a dialog over the full-size view has the keys: …"
 - `web/e2e/editor.spec.ts`: "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to
   that tab"; "Find in the log: … Esc gives the focus back"; "the Output tabs by keyboard: …"
 - `web/e2e/shell.spec.ts`: "the layout: … the ⋯ menu works by keyboard"; "the folded file list: … Esc folds it and

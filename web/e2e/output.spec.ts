@@ -9,7 +9,17 @@
 //    show in the log), so only the full-size view is checked there, opened through `graphFull`.
 import type { Page } from "@playwright/test";
 import { engineState, expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
-import { addBanner, type PhoneTab, seedGraphs, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
+import {
+  addBanner,
+  closeDialog,
+  openDialog,
+  type PhoneTab,
+  seedGraphs,
+  showGraphFull,
+  showPhoneTab,
+  showTabs,
+  showTheme,
+} from "./seed";
 
 declare global {
   interface Window {
@@ -150,6 +160,36 @@ test("the full-size view whose opener has left the page gives the focus to the e
   await page.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]")))).toBe(true);
+});
+
+test("a dialog over the full-size view has the keys: Esc and the arrows leave the view alone, and closing it gives the focus back to the view", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  const graphs = [1, 2].map((n) => ({
+    n,
+    png: PIXEL,
+    theme: "light" as const,
+    from: "run" as const,
+    command: "scatter y x",
+  }));
+  await seedGraphs(page, graphs, { full: true });
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  const title = await viewer.locator(".vtitle").textContent();
+  await openDialog(page, { d: "other-tab" });
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeVisible();
+  await expect(viewer).toBeVisible();
+  await expect(viewer.locator(".vtitle")).toHaveText(title ?? "");
+  if (!isPhone(page)) {
+    await page.keyboard.press("Tab"); // WebKit's Tab skips buttons by default
+    await expect(page.getByRole("button", { name: "Use dofile in this tab" })).toBeFocused();
+  }
+  await closeDialog(page);
+  await expect(viewer).toBeFocused();
 });
 
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {

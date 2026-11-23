@@ -76,7 +76,8 @@ export function GraphTab() {
           type="button"
           class="head-link"
           onClick={(e) => {
-            e.currentTarget.focus(); // Safari focuses no pressed button: the view hands the focus back to the active element
+            // Safari focuses no pressed button: the view hands the focus back to the active element
+            e.currentTarget.focus();
             graphIndex.value = at;
             graphFull.value = true;
           }}
