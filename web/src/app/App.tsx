@@ -1,7 +1,6 @@
 // The editor page's layout (SPEC section 2). One tree for every width, so the editor and the log are never mounted
 // twice; app.css arranges it by `data-layout` and the width.
 
-import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { BannerSlot } from "./banners";
 import { DialogHost } from "./dialogs";
@@ -12,14 +11,18 @@ import { StatusBar } from "./editor/StatusBar";
 import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
-import { FilesBody, FilesHead, fileMenuItems, focusTree, NewFileButton } from "./files/FilesPane";
+import { FilesBody, FilesHead, fileMenuItems, NewFileButton } from "./files/FilesPane";
+import { filesOpen, foldFiles, holdFilesToggle, onFilesKey } from "./files/fold.ts";
 import { downloadAll } from "./files.ts";
-import { CommandLine, LogActions, logMenuItems, PhoneStrip } from "./log/CommandLine";
+import { CommandLine } from "./log/CommandLine";
+import { LogActions, logMenuItems } from "./log/LogActions";
 import { LogView } from "./log/LogView";
+import { PhoneStrip } from "./log/PhoneStrip";
 import { DtaView } from "./output/DtaView";
 import { FullSize } from "./output/FullSize";
 import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
-import { engine, files, hasFiles, isPhone, layout, outputTab, phoneTab, saved, split, theme, wrap } from "./state.ts";
+import { setSplit, toggleWrap } from "./state/layout.ts";
+import { engine, files, hasFiles, isPhone, layout, outputTab, phoneTab, split, theme, wrap } from "./state.ts";
 import { takesReset } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
 import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
@@ -117,32 +120,13 @@ function Pane({ view, class: cls, label, children, ...rest }: PaneProps) {
   );
 }
 
-/** Whether the folded file list (700 to 1199 px) is shown. */
-const filesOpen = signal(false);
-let filesToggle: HTMLButtonElement | null = null;
-
-function foldFiles(open: boolean) {
-  filesOpen.value = open;
-  if (!open) filesToggle?.focus();
-  else focusTree(true);
-}
-
-/** Esc in the unfolded file list folds it, unless a handler in the list already used that Esc (preventDefault). */
-function onFilesKey(e: KeyboardEvent) {
-  if (e.key !== "Escape" || e.defaultPrevented || !filesOpen.value || !filesToggle?.getClientRects().length) return;
-  e.preventDefault();
-  foldFiles(false);
-}
-
 function FilesToggle() {
   const n = files.value.filter((f) => !f.dir).length;
   return (
     <button
       type="button"
       class="fold-toggle"
-      ref={(el) => {
-        filesToggle = el;
-      }}
+      ref={holdFilesToggle}
       aria-expanded={filesOpen.value}
       aria-controls="files-pane"
       onClick={() => foldFiles(!filesOpen.value)}
@@ -151,18 +135,6 @@ function FilesToggle() {
       Files{n > 0 && <span class="count">{n}</span>}
     </button>
   );
-}
-
-function toggleWrap() {
-  wrap.value = !wrap.value;
-  saved.set("dofile.wrap", wrap.value ? "1" : null);
-}
-
-function setSplit(on: boolean) {
-  split.value = on;
-  saved.set("dofile.split", on ? null : "0");
-  if (on && outputTab.value === "log") outputTab.value = "graph";
-  if (!on) outputTab.value = "log"; // unsplit: the Log is what the visitor sees first
 }
 
 const OUTPUT_TABS = [

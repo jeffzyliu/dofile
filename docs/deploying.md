@@ -32,8 +32,8 @@ checks are named `ci / ci ok`, `web / web ok` and `lint / lint ok`.
 | `release.yml` | push of a tag `v*` | tag on `main` and equal to `pyproject.toml`'s version, `poe test`, `uv build`, `twine check`, the wheel's smoke test, then `uv publish` ([`docs/releasing.md`](releasing.md)) | none | no secret: PyPI Trusted Publishing (OIDC), environment `pypi` |
 | Dependabot (`.github/dependabot.yml`) | weekly | update pull requests for the GitHub Actions in the workflows and in `.github/actions/*` | (its pull requests run the checks above) | none |
 
-`build-web` is the composite action `.github/actions/build-web` (the wheel, the snapshot at quality 11, both builds, the
-size check); the tip check is `.github/scripts/is-main-tip.sh`. Why: [How the workflows work](#how-the-workflows-work).
+`build-web` is the composite action `.github/actions/build-web` (`npm run stage`: the wheel, built once and staged into `web/public/`; the snapshot at quality 11, cached on a hash of the build section of `web/scripts/snapshot-inputs.txt`; both builds;
+the size check); the tip check is `.github/scripts/is-main-tip.sh`. Why: [How the workflows work](#how-the-workflows-work).
 
 **Merge method.** A pull request that holds a reformat commit named in `.git-blame-ignore-revs` is merged with a merge
 commit: a rebase or squash changes the commit's hash, and the ignore file would name a commit `main` does not have. Any
@@ -224,8 +224,9 @@ Cloudflare token, which is why it runs only for branches of this repository: nev
 Dependabot. The token that can write to the pull request (`pull-requests: write`) is in `comment` only, a job that runs no
 code from the pull request and gets the two addresses as `upload`'s outputs.
 
-**What the build shares.** `.github/actions/build-web` is the one build for production and previews: the wheel, the
-snapshot (cached on a hash of its inputs, and used only if `node scripts/build-id.ts` says it is of the wheels just built;
+**What the build shares.** `.github/actions/build-web` is the one build for production and previews: the wheel
+(built once, by `npm run stage`, which also stages the files the editor serves besides the snapshot), the
+snapshot (cached on a hash of the tracked files `web/scripts/snapshot-inputs.txt` names for it, the same table that decides whether `web.yml` runs its snapshot job; used only if `node scripts/build-id.ts` says it is of the wheels just built;
 GitHub scopes a pull request's cache to it, so a preview never feeds production), both builds and the 25 MiB size check
 (`web/scripts/check-sizes.ts`, which `npm run deploy` runs too). The caller names the addresses: `urls: production`, or the
 two preview URLs; with neither the build fails (`web/scripts/urls.ts`). A production build carries canonical links; a

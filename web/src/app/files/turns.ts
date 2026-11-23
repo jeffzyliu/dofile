@@ -18,7 +18,7 @@
 // - Always `yield*`, never `yield`: `yield* io.read(p)` has the type of the answer. A bare `yield` of anything
 //   else (a promise, another turn) is a type error, and the runner rejects the turn if one gets through.
 // - A helper that makes store calls is a generator too, called with `yield*` (renameNow's readText in
-//   files/actions.ts); a helper that makes none is a plain function.
+//   files/ops.ts); a helper that makes none is a plain function.
 // - What must wait for something outside the store goes after the turn, in the caller. Save is the case: its turn
 //   issues the write without waiting for it (`io.issue`) and returns it wrapped; the caller awaits the answer and
 //   applies it after the turn, so a slow write holds no rename.

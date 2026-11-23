@@ -128,8 +128,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `command-bar.test.ts`: `barButton` (`app/start.ts`), the off and disabled rule of the Import and Load buttons.
   while the first is pending; a failed call is asked again.
 - `app-matrix.test.ts`: the Results tab's matrix protocol (`app/output/matrix.ts`): a read's loading entry and answer, an error,
-  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; Copy of an open and a
-  closed matrix; the copied check's timer.
+  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; the request names the
+  results' run, and a refused answer (or results replaced before it) opens and copies nothing and says so; Copy of an
+  open and a closed matrix; the copied check's timer.
 - `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
 - `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
   real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
@@ -168,6 +169,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     changed while asked or after "Do the same" (asked again), one deleted while asked (written; asked when its tab has
     unsaved edits), one edited before its write's turn (asked in the unsaved words), a dialog opened while a clash's file
     is read (the clash waits), a Replace against `openFile`'s read.
+- `rename.test.ts`: the inline rename and the draft rows (`app/files/rename.ts`, with the tree's state in
+  `tree-state.ts`) over fake-indexeddb, as the focus request and the tree's state show them.
+  - A field starting (the row in the tab order, the draft's free default, a blocked store), Enter, Esc and leaving a
+    rename (a usable name, one in use, one the store refuses, a list that was not current), Enter then the blur (one
+    rename), another field started meanwhile.
+  - A draft: Esc, Enter with a typed name, an empty one, a path, one in use; leaving it (writes the typed name or the free
+    default with a toast; opens nothing); a failed write; another field started meanwhile.
 - `documents.test.ts`: the open tabs and their documents (`app/editor/documents.ts`), no view or a stand-in one: open,
   activate, close and ask, close under a folder, a move, a retype, a reload, a run over a tab, the dot and `selection`
   derived, a view attached after a file opened.
@@ -205,7 +213,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   test,
   without a current snapshot).
 - `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break (also one pressed while the run waits
-  behind a describe: rc 1 before its first line; and one after its run ended), a worker that fails to load.
+  behind a describe: rc 1 before its first line; and one after its run ended), a matrix request ahead of, behind and
+  two runs behind other runs (refused when it names older results), and after a run whose op failed once the engine ran
+  (a worker whose result will not parse), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
@@ -213,6 +223,15 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     of 4 or less.
   - `?memcap=<MB>` wins both ways, 0 is none, a bad value is ignored and said.
   - The loader patch applies to `pyodide.asm.mjs` once and throws on other text.
+- `run-parts.test.ts`: what the log draws after a run's lines (`log/run-parts.ts`, no DOM): graph links, the unsaved-do
+  note in each layout's words, a phone's hint block and wide-table hint, Go to line, the end notes.
+- `layout.test.ts`: the layout's actions (`state/layout.ts`, no DOM): Wrap lines flips the signal and keeps "1" in localStorage
+  only while on; Split and Unsplit keep the choice and leave the Output tab the pane can show (Unsplit: the Log; Split:
+  Graph instead of the Log tab, Data and Results as they were).
+- `fold.test.ts`: the folded file list's moves (`files/fold.ts`, a stand-in for the Files button; the list's focus move is read from
+  `focusWanted`): opening focuses the list from anywhere, folding focuses the button, Esc folds only an open list whose button
+  is drawn and only when no handler used the key.
+- `run-gate.test.ts`: the Run gate (`src/app/editor/runnable.ts`): `runRefusal` per path kind, `activeRunRefusal` following the active tab, `canRunFile` combining the engine's `takesRun`.
 - `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`).
   - The .log tokenizer, Download log's text, Find's matches, `runError`, a .csv's columns, the run-head words.
   - Where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture`
@@ -227,6 +246,11 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
 - `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
+- `status.test.ts`: what the status bar and the phone's strip say (`editor/status.ts`, no DOM): each engine state's words in the
+  bar's full form and the strip's short form (the run's timer only in the bar; Break's timer beside the words in the bar,
+  after them in the strip), the start's step count, the last run's words in both forms and Go to line (strip only), the
+  memory, "Graphs loading" and its percent, the parts only the bar has (affiliation, the files note), and the order of
+  the parts in each form.
 - `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`); the denied commands come from `commands.json`, generated from `browser.DENIED`.
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
@@ -269,7 +293,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
-- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set).
+- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set); `writeStartFiles` leaves neither `manifest.json` nor `stage.json` in the built folder.
+- `stage.test.ts`: `scripts/stage.ts` into a temporary folder (copies, removes an older wheel, writes `stage.json` last) and `staged()`: each of a missing record, another wheel, extra wheel or Pyodide version, and a missing or cut-short file gives a reason that names `npm run stage`.
+- `snapshot-inputs.test.ts`: `scripts/snapshot-inputs.txt`, the one list of the snapshot's inputs (read by `web.yml` and the `build-web` cache key through `snapshot-inputs.sh`): every pathspec matches a tracked file, the shell reader gives the table's lines, the workflows keep no list of their own, and every file `make-snapshot.ts` imports (transitively, runtime imports) is in the `[build]` section.
 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
@@ -293,7 +319,8 @@ Specs:
   drag guard.
 - `files.spec.ts`: files, tabs and the file panel.
   - The tree by keyboard; tabs with and without unsaved edits; Save; inline rename; row and head menus; delete.
-  - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page.
+  - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page, two quick drops
+    of one path (applied in drop order).
   - New .do file and New folder; drafts in a folder; the current folder (selecting, folding, rename and delete).
   - The phone's strip, file dropdown (44 px targets) and "Files ⋯"; the desktop's tablist.
 - `states.spec.ts` (step 4d): engine states and their banners.
@@ -388,6 +415,8 @@ Specs:
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the
     Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).
+  - Copy of a closed matrix pressed while a run goes on is refused when that run replaces the results (toast, nothing
+    copied); pressed again it copies the new results' matrix.
   - The clipboard is a recorder in every page.
 
 ### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)

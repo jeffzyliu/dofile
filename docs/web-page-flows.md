@@ -48,7 +48,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    `leaving`).
 5. **A view that takes the focus when it appears takes it in a layout effect:** a dialog (`ui/Dialog.tsx`), the
    stopping banner's "Don't reset: wait for it", the waiting banner itself (`states/banners.tsx`), and the inline
-   rename field (`files/FilesPane.tsx`), the last three through `ui/focus-hooks.ts` `useFocusOnMount`. So a hand-off
+   rename field (`files/TreeRow.tsx`), the last three through `ui/focus-hooks.ts` `useFocusOnMount`. So a hand-off
    that waits for a microtask finds the focus already taken.
 6. **After a tab closes** (`files/EditorTabs.tsx` `focusAfterClose` sets `closeAsked`, which `EditorTabs` takes in a
    layout effect of its next render) the focus goes to the selected tab (its `tabAsked` request), else the file tree's
@@ -81,7 +81,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
      folder is written when the field is left (Enter or blur; Esc writes nothing), and `startRename` and `startDraft`
      are synchronous.
    - **The current folder** (what it does: SPEC 3.1, "Folders and the current folder", and OQ-21): `currentDir` in
-     `FilesPane.tsx`, kept apart from the roving focus (`rovingPath`); arrow keys select nothing; the caret is a span,
+     `files/tree-state.ts`, kept apart from the roving focus (`rovingPath`); arrow keys select nothing; the caret is a span,
      `aria-hidden`, not a tab stop, and it folds and unfolds and selects nothing; a tap on the rest of the row selects and
      unfolds, never folds; folding it or a folder above it makes the parent current; it is drawn as an accent outline, no
      fill. The "+" (and the head
@@ -111,15 +111,15 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | sets `editorAsked` (`{}`) in the step; the Editor takes it in a layout effect of the render that removes the dialog | `editorCommands.focus()` |
 | `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | sets `closeAsked` (rule 6) | rule 6 |
 | `files/dialogs.tsx` `DeleteDialog` | Delete's store change is done and the list read again (`files.ts` `refresh`) | `focusTree()`, taken by the tree's render; only a focus on nothing or in the tree | the tree's row in the tab order; with no rows, the head's File actions (`FilesHead`) |
-| `App.tsx` `foldFiles` | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere | as `DeleteDialog` |
+| `files/fold.ts` `foldFiles` (the Files button in `App.tsx`) | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere | as `DeleteDialog` |
 | `ui/Menu.tsx` `closeMenu(true)` | Esc, Tab, a picked item (before its `onSelect`) | synchronous | the trigger (`restore`, else `anchor`). A click outside, a resize or the window's blur close it with no focus move. |
 | `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
-| `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts (a New's field is a draft, `renaming.draft`, rule 8) | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
-| `files/FilesPane.tsx` `endDraft` | Esc in a draft's field | `focusTree()`, as `DeleteDialog` | as `DeleteDialog` (File actions is hidden on a phone) |
+| `files/TreeRow.tsx` `RenameField` | F2, New .do file, New folder: the field mounts (a New's field is a draft, `renaming.draft`, rule 8) | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
+| `files/rename.ts` `endDraft` | Esc in a draft's field | `focusTree()`, as `DeleteDialog` | as `DeleteDialog` (File actions is hidden on a phone) |
 | `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist | `useFocusRequest` (rule 7) | the tab moved to, only while the focus is inside that tablist |
-| `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and `focusWanted`; `focusTree` sets a keyless request | rule 7 | the row, only while the focus is on the page body or inside the tree (the tree's `role`) |
-| `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | `useFocusRequest`; once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
-| `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, else the focus at that time), if it is visible; else the log `<pre>` |
+| `files/TreeRow.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and `focusWanted`; `focusTree` sets a keyless request | rule 7 | the row, only while the focus is on the page body or inside the tree (the tree's `role`) |
+| `log/LogView.tsx` `FindBar` open | `openFind` (`log/find.ts`) sets `findAsked` | `useFocusRequest`; once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
+| `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, kept as `findReturn` in `log/find.ts`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
 | `output/clip.ts` `fallbackCopy` | a copy without the clipboard API (plain HTTP): Results, Copy on a .dta tab or a file's bar | synchronous: the hidden field takes the focus to copy, then gives it back only to an element that had keyboard focus (`:focus-visible`) | that element; after a click the focus stays off (the page body), so no ring shows. The Results tab moves no other focus: every value is a Tab stop, no arrow keys (SPEC 3.9) |
 
@@ -165,7 +165,7 @@ dialog replaces any dialog (the host keys each view on the whole `dialog` value)
 sequenceDiagram
   participant V as Visitor
   participant C1 as clash 1 view
-  participant U as files/actions.ts uploadNow
+  participant U as files/upload.ts uploadNow
   participant D as ui/Dialog.tsx
   participant C2 as clash 2 view
   V->>C1: Keep mine
@@ -243,7 +243,7 @@ sequenceDiagram
   participant V as Visitor
   participant CT as CloseTabDialog
   participant Ed as editor/Editor.tsx
-  participant A as files/actions.ts
+  participant A as editor/documents.ts
   participant ET as files/EditorTabs.tsx
   participant D as ui/Dialog.tsx
   alt Save
@@ -419,7 +419,7 @@ becomes ready.
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile(path)` for the file whose run the reset cut (`rerunPath`), then the banner is dismissed | drawn only for a Break or a crash that cut a file run (not after a Reset the visitor asked for); enabled in `ready` with that file open as a text tab |
 | The command line | `runCommand(text)` | in `ready` it runs. With an engine not ready, or on its way, the field is on and the command is refused with a toast (the button is off). Off with no engine |
-| A hint's `help x` link (`log/LogView.tsx`) | `runCommand(text)` | in `ready` it runs; during a run or a start the machine refuses it with the command line's toast (`refusedRunWords`). Off with no engine |
+| A hint's `help x` link (`log/LogParts.tsx`) | `runCommand(text)` | in `ready` it runs; during a run or a start the machine refuses it with the command line's toast (`refusedRunWords`). Off with no engine |
 | Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`; off with no engine (`aria-disabled`, a toast); `disabled` in the other states |
 
 The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` on `engine`, `followErrors` on
@@ -627,7 +627,7 @@ applies no answer) when the record was closed or holds another document by then 
 SPEC 4b). A Save writes in its turn (`files/turns.ts` `fileTurn`): a rename or a delete keeps the turn until the tabs have followed
 it, so a Save pressed meanwhile writes under the new name, or nothing when its tab was closed; a Save's turn ends once
 its write is issued, and the store applies changes in the order they are called, so a rename after it moves the bytes it
-wrote. The file code (`files/open.ts`, `files/actions.ts`, `files.ts`) calls the owner's functions; the view attaches to
+wrote. The file code (`files/open.ts`, `files/ops.ts`, `files/upload.ts`, `files.ts`) calls the owner's functions; the view attaches to
 it when the Editor mounts (`attachView`).
 
 ### The three text forms
@@ -767,7 +767,7 @@ walks the log's echoes beside the code to find, for each code line, the index of
   - the text `end of do-file`, which is classed `out`.
 - **`runError(lines)`:** the last `err` line that is not `r(N);`.
 - **The code** (`editor/commands.ts` `codeOf`): a `WeakMap` from the run's `RunHead` to the code sent, which
-  `Editor.tsx` `start` fills before `runCode`. A command has no run-head: `LogView` takes its first echo's text as
+  `Editor.tsx` `start` fills before `runCode`. A command has no run-head: `runParts` takes its first echo's text as
   the code. A run started from elsewhere (the test hook) has no code, so its links go to the run's end.
 - **Per code line** (`blocks`, `comments`):
   - `inside` a block: `{ }`, `program define` … `end`, `mata` … `end`. `inBlocks` exports it.
@@ -865,7 +865,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
 
 ### Where `LogView` uses the result
 
-`log/LogView.tsx` `runText`, for each text item:
+`log/run-parts.ts` `runParts` (LogView draws its parts: `log/LogParts.tsx`), for each text item:
 
 - **Graph links.** Each graph of this run (`graphs` with `from: "run"` and this `run`) goes after
   `commandEnd(lines, echoes.get(g.line))`, the last `> ` line of that command. When the line has no echo, or the graph
@@ -881,7 +881,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
 - **OQ-10's note.** When the run ended with rc above 1, `log/notes.ts` `noteFor(end.rc, runError(lines))` picks
   the note, which goes at the run's end, after "Go to line" when that is there (Break's note is rc 1's, so never with
   it).
-- **Caches.** `kinds` (each item's `classify`) and `aligned` (each item's echoes, kept with the code they were
+- **Caches.** `linesByItem` (each item's `classify`) and `echoesByItem` (each item's echoes, kept with the code they were
   computed for) are `WeakMap`s keyed by the text item. `run.ts` replaces an item on every change (`setText` maps to a
   new object), so a streamed chunk is classified again, and an ended run is aligned once.
 
