@@ -132,6 +132,29 @@ test("the full-size view: its first focus is the view, not Close; Tab and Shift+
   }
 });
 
+test("the full-size view whose opener has left the page gives the focus to the editor, not to the page", async ({
+  page,
+}) => {
+  test.skip(isPhone(page), "a phone has no Graph tab, so no Open full size to leave");
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }]);
+  await showTab(page, "graph");
+  await page.getByRole("button", { name: "Open full size" }).click();
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  await expect(viewer).toBeFocused();
+  // the Graph tab, and with it the opener, goes while the view is open
+  await page.evaluate(() => {
+    window.__dofile.state.outputTab.value = "data";
+  });
+  await expect(page.getByRole("button", { name: "Open full size" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]"))))
+    .toBe(true);
+});
+
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
