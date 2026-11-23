@@ -304,7 +304,7 @@ test("without a SharedArrayBuffer (no cross-origin isolation): the part is a sta
   expect(ok.rc, ok.log).toBe(0);
 });
 
-test("a damaged part: the graph says it will be fetched again, the Cache entry is dropped, the next graph fetches it and draws", async ({
+test("a damaged part found while idle: the Cache entry is dropped and the part fetched again at once, and a graph draws without saying the damage (race 11)", async ({
   page,
 }) => {
   const list = await (await page.request.get("start-files.json")).json();
@@ -321,16 +321,12 @@ test("a damaged part: the graph says it will be fetched again, the Cache entry i
   await page.goto("?test");
   await startEngine(page);
   await ready(page);
+  // no run: the idle steps find the damage, and the page fetches the part again
+  await expect.poll(() => hits, { timeout: 30_000 }).toBe(2);
   await run(page, "clear\nset obs 5\ngen x = _n");
-  const bad = await run(page, "scatter x x");
-  expect(bad.rc, bad.log).toBe(199);
-  expect(bad.log).toContain("arrived damaged");
-  expect(bad.log).toContain("fetched again for the next graph");
-  expect(bad.log).not.toContain("reload the page");
-  const ok = await run(page, "count");
-  expect(ok.rc).toBe(0);
-  const drawn = await run(page, "scatter x x"); // waits for the fresh fetch
+  const drawn = await run(page, "scatter x x"); // the fresh copy, or a wait for it
   expect(drawn.rc, drawn.log).toBe(0);
+  expect(drawn.log).not.toContain("arrived damaged");
   expect(drawn.images).toHaveLength(1);
   expect(hits, "the damaged entry was not read again: the part came from the network once more").toBe(2);
 });

@@ -311,7 +311,11 @@ test("a damaged copy: the graph that finds it says so (r(199)), the page fetches
   const drawn = await runOn(eng, "scatter x x");
 
   assert.equal(found.rc, 199, found.log);
-  assert.match(found.log, /graphs are not available: the graphics files arrived damaged/);
+  assert.match(
+    found.log,
+    /graphs are not available: the graphics files arrived damaged \(.*\); they are fetched again for the next graph/,
+  );
+  assert.doesNotMatch(found.log, /reload the page/);
   assert.deepEqual(net.modes, ["no-cache", "reload"]);
   assert.equal(drawn.rc, 0, drawn.log);
   assert.equal(drawn.images.length, 1);

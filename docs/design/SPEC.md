@@ -765,8 +765,10 @@ interface LifecycleOps {                         // sent only by the transport's
   graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
-// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; the
-// buffer's layout, the header and the states: src/engine/lazy-part.ts);
+// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; a copy that
+// will not unpack or write posts {graphics: "damaged"}, and the page fetches it again past the HTTP cache, except the
+// copy fetched right after a damaged one, which fails the part until a graph's "again"; the buffer's layout, the header
+// and the states: src/engine/lazy-part.ts);
 // `sab` null (no SharedArrayBuffer): the part is a start file (`download()`), and `boot` reads it as `mount` reads the
 // heap (the snapshot's Cache, else the network), unpacks and writes it before it answers; a part that will not unpack or
 // write is deleted from the Cache and fails the start, as a damaged heap does. No {graphics} message is sent then. With
