@@ -29,32 +29,32 @@ export interface SnapshotKnobs {
   trampoline: boolean;
 }
 
-const KNOB_ENV: {
-  [K in keyof SnapshotKnobs]: [name: string, parse: (v: string) => SnapshotKnobs[K], fallback: SnapshotKnobs[K]];
-} = {
-  quality: ["SNAPSHOT_QUALITY", Number, 11],
-  optimize: ["SNAPSHOT_STRIP_DOCS", (v) => (v === "0" ? 0 : 2), 2],
-  noMpl: ["SNAPSHOT_NO_MPL", (v) => v !== "0", true],
-  trampoline: ["SNAPSHOT_TRAMPOLINE", (v) => v === "1", false],
-};
+/** Each knob's environment variable: setting one is what asks for it (askedKnobs). */
+const KNOB_ENV = {
+  quality: "SNAPSHOT_QUALITY",
+  optimize: "SNAPSHOT_STRIP_DOCS",
+  noMpl: "SNAPSHOT_NO_MPL",
+  trampoline: "SNAPSHOT_TRAMPOLINE",
+} as const satisfies Record<keyof SnapshotKnobs, string>;
 
 /** The settings a snapshot build reads from the environment, with their defaults: what make-snapshot.ts builds with. */
 export function knobs(env: NodeJS.ProcessEnv = process.env): SnapshotKnobs {
-  const out: Record<string, unknown> = {};
-  for (const [k, [name, parse, fallback]] of Object.entries(KNOB_ENV)) {
-    const v = env[name];
-    out[k] = v === undefined ? fallback : (parse as (v: string) => unknown)(v);
-  }
-  return out as unknown as SnapshotKnobs;
+  return {
+    quality: env.SNAPSHOT_QUALITY === undefined ? 11 : Number(env.SNAPSHOT_QUALITY),
+    optimize: env.SNAPSHOT_STRIP_DOCS === "0" ? 0 : 2,
+    noMpl: env.SNAPSHOT_NO_MPL !== "0",
+    trampoline: env.SNAPSHOT_TRAMPOLINE === "1",
+  };
 }
 
 /** Only the settings the caller's environment sets (SNAPSHOT_QUALITY=11 asks for quality 11): what a check holds a
  *  snapshot to. One that is not set is not asked: CI builds at quality 5 and must pass. */
 export function askedKnobs(env: NodeJS.ProcessEnv = process.env): Partial<SnapshotKnobs> {
-  const out: Record<string, unknown> = {};
-  for (const [k, [name, parse]] of Object.entries(KNOB_ENV))
-    if (env[name] !== undefined) out[k] = (parse as (v: string) => unknown)(env[name]);
-  return out as Partial<SnapshotKnobs>;
+  const all = knobs(env);
+  const asked: Partial<SnapshotKnobs> = {};
+  for (const k of Object.keys(KNOB_ENV) as (keyof SnapshotKnobs)[])
+    if (env[KNOB_ENV[k]] !== undefined) Object.assign(asked, { [k]: all[k] });
+  return asked;
 }
 
 const web = new URL("..", import.meta.url);
