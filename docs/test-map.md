@@ -233,9 +233,10 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   part. A graph at `started` waits for the part and writes it in its run, then it is warmed while idle; a restarted
   worker gets the landed part with no fetch and writes and warms it while idle with no run, and no sooner than `IDLE_MS`
   after the last of a train of runs. With the snapshot served over HTTP (the harness's `served`), so that the page's
-  `fetch` can hold or damage the part: a Break while a graph waits for a held part is rc 1 within seconds with the data
-  kept, and a graph draws once it lands (one fetch); a damaged copy is r(199) for the graph that finds it, fetched again
-  with `cache: "reload"`, and the next graph draws.
+  `fetch` can hold or damage the part: a graph waiting for a held part pauses in 100 ms slices (the harness's `waits`
+  counts them), a Break meanwhile is rc 1 within seconds with the data kept, and a graph draws once it lands (one
+  fetch); a damaged copy is r(199) for the graph that finds it, fetched again with `cache: "reload"`, and the next graph
+  draws.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
   - iPhone, iPad and a touch Mac are capped (750 MB), a Mac without touch is not; `userAgentData.mobile`, `deviceMemory`
     of 4 or less.

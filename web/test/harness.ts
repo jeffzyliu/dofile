@@ -28,6 +28,7 @@ export const endWorkers = () => {
 // `noDatabase`: the thread has no IndexedDB at all; `failParse`: a JSON text with that string in it fails to parse. port.harness("databases") asks the thread what its IndexedDB holds.
 // `onConsole`: gets each of the thread's console lines (worker.ts's `[dofile]` lines, Pyodide's), which then are not printed.
 // `served`: a folder (`dir`, a file: URL) the test serves over HTTP at `url`, whose modules the thread imports from disk.
+// `waits`: word 0 counts the thread's Atomics.wait calls that ran to their time limit.
 export function nodeWorker({
   store,
   oldDatabase = false,
@@ -35,6 +36,7 @@ export function nodeWorker({
   failParse,
   onConsole,
   served,
+  waits,
 }: {
   store?: FileStore;
   oldDatabase?: boolean;
@@ -42,6 +44,7 @@ export function nodeWorker({
   failParse?: string;
   onConsole?: (line: ConsoleLine) => void;
   served?: { url: string; dir: string };
+  waits?: SharedArrayBuffer;
 } = {}) {
   const channel = store && new MessageChannel();
   if (channel) {
@@ -69,6 +72,7 @@ export function nodeWorker({
       failParse,
       console: Boolean(onConsole),
       served,
+      waits,
     },
     transferList: channel ? [channel.port2] : [],
   });
