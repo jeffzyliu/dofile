@@ -419,7 +419,7 @@ becomes ready.
 | The phone's pill | replaces the phone's Run in `running`, `breaking` and `waiting`; does what Break does, then sets `phoneTab` to `"log"` | a tap within 600 ms of the run's `t0` is ignored, so a double tap on Run does not break the run |
 | "Run the file again" (the reset banner) | `editorCommands.runFile(path)` for the file whose run the reset cut (`rerunPath`), then the banner is dismissed | drawn only for a Break or a crash that cut a file run (not after a Reset the visitor asked for); enabled in `ready` with that file open as a text tab |
 | The command line | `runCommand(text)` | in `ready` it runs. With an engine not ready, or on its way, the field is on and the command is refused with a toast (the button is off). Off with no engine |
-| A hint's `help x` link (`log/LogView.tsx`) | `runCommand(text)` | in `ready` it runs; during a run or a start the machine refuses it with the command line's toast (`refusedRunWords`). Off with no engine |
+| A hint's `help x` link (`log/LogParts.tsx`) | `runCommand(text)` | in `ready` it runs; during a run or a start the machine refuses it with the command line's toast (`refusedRunWords`). Off with no engine |
 | Load (`output/DtaView.tsx`), Import (`files/FileBar.tsx`) | `runCommand(text)` | enabled in `ready`; off with no engine (`aria-disabled`, a toast); `disabled` in the other states |
 
 The error mark's hooks are signal effects in `editor/Editor.tsx`: `followRuns` on `engine`, `followErrors` on
@@ -767,7 +767,7 @@ walks the log's echoes beside the code to find, for each code line, the index of
   - the text `end of do-file`, which is classed `out`.
 - **`runError(lines)`:** the last `err` line that is not `r(N);`.
 - **The code** (`editor/commands.ts` `codeOf`): a `WeakMap` from the run's `RunHead` to the code sent, which
-  `Editor.tsx` `start` fills before `runCode`. A command has no run-head: `LogView` takes its first echo's text as
+  `Editor.tsx` `start` fills before `runCode`. A command has no run-head: `runParts` takes its first echo's text as
   the code. A run started from elsewhere (the test hook) has no code, so its links go to the run's end.
 - **Per code line** (`blocks`, `comments`):
   - `inside` a block: `{ }`, `program define` … `end`, `mata` … `end`. `inBlocks` exports it.
@@ -865,7 +865,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
 
 ### Where `LogView` uses the result
 
-`log/LogView.tsx` `runText`, for each text item:
+`log/run-parts.ts` `runParts` (LogView draws its parts: `log/LogParts.tsx`), for each text item:
 
 - **Graph links.** Each graph of this run (`graphs` with `from: "run"` and this `run`) goes after
   `commandEnd(lines, echoes.get(g.line))`, the last `> ` line of that command. When the line has no echo, or the graph
@@ -881,7 +881,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
 - **OQ-10's note.** When the run ended with rc above 1, `log/notes.ts` `noteFor(end.rc, runError(lines))` picks
   the note, which goes at the run's end, after "Go to line" when that is there (Break's note is rc 1's, so never with
   it).
-- **Caches.** `kinds` (each item's `classify`) and `aligned` (each item's echoes, kept with the code they were
+- **Caches.** `linesByItem` (each item's `classify`) and `echoesByItem` (each item's echoes, kept with the code they were
   computed for) are `WeakMap`s keyed by the text item. `run.ts` replaces an item on every change (`setText` maps to a
   new object), so a streamed chunk is classified again, and an ended run is aligned once.
 

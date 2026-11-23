@@ -1,47 +1,19 @@
 // The log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[]) and draws the head, then per run its run-head and
-// its text, each line by its kind (classify.ts). What goes after a line's echo, graph links and notes, is placed with
-// align.ts; the notes at a run's end follow its last line. The head, run-heads and the page's notes are shown only:
-// Download log has the runs' text alone. The pane follows the end of the log unless the visitor has scrolled up.
+// its text (run-parts.ts makes its parts, LogParts.tsx draws them), each line by its kind (classify.ts). The head,
+// run-heads and the page's notes are shown only: Download log has the runs' text alone.
 import { signal } from "@preact/signals";
-import { type ComponentChildren, Fragment, type RefObject } from "preact";
+import { Fragment, type RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { codeOf, editorCommands } from "../editor/commands.ts";
-import { jumpLine, refusedRunWords, runheadWords } from "../editor/words.ts";
+import { codeOf } from "../editor/commands.ts";
+import { runheadWords } from "../editor/words.ts";
 import { ABOUT } from "../env";
-import { graphOpenName } from "../output/format.ts";
-import { cardTheme } from "../output/GraphTab";
-import { runCommand } from "../run.ts";
-import { startFirst, startOffer } from "../start.ts";
-import { engine, graphFull, graphIndex, graphs, isPhone, log, outputTab, showToast, split, wrap } from "../state.ts";
-import type { Graph, LogItem, RunHead } from "../types.ts";
+import { graphs, isPhone, log, outputTab, split, wrap } from "../state.ts";
+import type { RunHead } from "../types.ts";
 import { fromAnywhere, useFocusRequest } from "../ui/focus-hooks.ts";
-import { Icon, isMac } from "../ui/Icon";
-import { ignoreHeldEnter } from "../ui/keys.ts";
-import { commandEnd, echoed, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
-import { classify, hintParts, type LogLine, runError } from "./classify.ts";
-import { findAt, findOpen, findText, matches } from "./find.ts";
-import { noteFor } from "./notes.ts";
-
-type TextItem = Extract<LogItem, { t: "text" }>;
-
-// each text item's lines, worked out once: an item is replaced when it changes
-const kinds = new WeakMap<TextItem, LogLine[]>();
-const linesOf = (item: TextItem) => {
-  const known = kinds.get(item);
-  if (known) return known;
-  const l = classify(item.text);
-  kinds.set(item, l);
-  return l;
-};
-// each text item's echo of each code line (align.ts), worked out once for its code
-const aligned = new WeakMap<TextItem, { code: string; echoes: Map<number, number> }>();
-const echoesOf = (item: TextItem, lines: LogLine[], code: string) => {
-  const known = aligned.get(item);
-  if (known?.code === code) return known.echoes;
-  const echoes = echoLines(lines, code);
-  aligned.set(item, { code, echoes });
-  return echoes;
-};
+import { isMac } from "../ui/Icon";
+import { findAt, findOpen, findText } from "./find.ts";
+import { drawRunParts, GraphLink, type Marker, marked } from "./LogParts.tsx";
+import { runParts } from "./run-parts.ts";
 
 const ART = [
   "     ██            ▄█▀▀  ▄▄  ██",
@@ -50,239 +22,6 @@ const ART = [
   "██   ██  ██   ██   ██    ██  ██   ██▀▀▀▀▀",
   "▀█▄▄▄██  ▀█▄▄▄█▀   ██    ██  ▀█▄  ▀█▄▄▄▄▄",
 ]; // banner B2, "book+drop+skew" (docs/design/mockups/art.js): each line slanted by its height above the last
-
-/** The marks of Find: a counter over the whole render, so each match has its number. */
-type Marker = { n: number; query: string; at: number };
-
-function marked(text: string, m: Marker): ComponentChildren {
-  const found = matches(text, m.query);
-  if (!found.length) return text;
-  const out: ComponentChildren[] = [];
-  let last = 0;
-  for (const [from, to] of found) {
-    out.push(text.slice(last, from));
-    const k = m.n++;
-    out.push(
-      <mark key={k} class={k === m.at ? "on" : undefined} data-find={k}>
-        {text.slice(from, to)}
-      </mark>,
-    );
-    last = to;
-  }
-  out.push(text.slice(last));
-  return out;
-}
-
-function GraphLink({ g }: { g: Graph }) {
-  const all = graphs.value;
-  const i = all.findIndex((x) => x.n === g.n);
-  if (isPhone.value)
-    return (
-      <button
-        type="button"
-        class="inline-graph"
-        data-theme={cardTheme(g)}
-        aria-label={graphOpenName(g, all)}
-        onClick={() => {
-          graphIndex.value = i;
-          graphFull.value = true;
-        }}
-      >
-        <img src={`data:image/png;base64,${g.png}`} alt="" />
-      </button>
-    );
-  return (
-    <button
-      type="button"
-      class="glink"
-      onClick={() => {
-        graphIndex.value = i;
-        outputTab.value = "graph";
-      }}
-    >
-      <Icon name="graph" />
-      {`graph ${g.n}`}
-    </button>
-  );
-}
-
-const Jump = ({ line, path }: { line: number; path?: string }) => (
-  <button type="button" class="jump" onClick={() => editorCommands.goToLine(line, path)}>
-    {`Go to line ${line}`}
-  </button>
-);
-
-/** A hint's `help x` link: it runs the command. With no engine it is off, aria-disabled and `.off`, still focusable,
- *  and a press only says why in a toast. While a run or a start is on, the command is refused and the toast says why. A
- *  held Enter's repeats are ignored (ui/keys.ts), so the toast shows once and `help x` is not run again when the engine
- *  is free. */
-function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
-  const offer = startOffer(engine.value);
-  const off = offer !== null;
-  return (
-    <button
-      type="button"
-      class={`help-link${off ? " off" : ""}`}
-      aria-disabled={off ? "true" : undefined}
-      onKeyDown={ignoreHeldEnter}
-      onClick={() => {
-        if (offer !== null) showToast(startFirst(offer, `see ${command}`), "error");
-        else if (runCommand(command).how === "refused") {
-          const words = refusedRunWords(engine.value.s);
-          if (words) showToast(words, "error");
-        }
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** A hint line: its bold words and its `help x` link. */
-const hintLine = (text: string, m: Marker) =>
-  hintParts(text).map((p, i) =>
-    p.t === "bold" ? (
-      <b key={i}>{marked(p.text, m)}</b>
-    ) : p.t === "help" ? (
-      <HelpLink key={i} command={p.text}>
-        {marked(p.text, m)}
-      </HelpLink>
-    ) : (
-      marked(p.text, m)
-    ),
-  );
-
-const PHONE_COLUMNS = 48; // about what a phone's log shows across; a wider block of output says it scrolls sideways
-
-/** One run's text, with what goes after its lines. A plain function that LogView calls, not a component: every match
- *  of Find is then numbered while LogView renders, in the order the log shows them, and counted before FindBar uses
- *  the count (a child component would render after LogView had read it). */
-function runText(item: TextItem, head: RunHead | null, m: Marker): ComponentChildren {
-  const lines = linesOf(item);
-  const phone = isPhone.value;
-  const after = new Map<number, ComponentChildren[]>();
-  const put = (at: number, el: ComponentChildren) => after.set(at, [...(after.get(at) ?? []), el]);
-  const last = lines.length - (lines.at(-1)?.text === "" ? 2 : 1); // the last line with text
-
-  // the code it sent: kept by the editor (codeOf); a command's is its one echo
-  const code = head ? codeOf.get(head) : lines.find((l) => l.kind === "echo")?.text.replace(/^\. ?/, "");
-  const echoes = code === undefined ? new Map<number, number>() : echoesOf(item, lines, code);
-  for (const g of graphs.value.filter((x) => x.from === "run" && x.run === item.run)) {
-    const at = g.line != null ? echoes.get(g.line) : undefined;
-    put(at === undefined ? last : commandEnd(lines, at), <GraphLink key={`g${g.n}`} g={g} />);
-  }
-  // one note per `do` line of the code, after its echo: a loop's body is echoed once however many passes run the file
-  if (item.unsaved?.length)
-    for (const at of echoes.values()) {
-      const command = echoed(lines[at]); // the echo in any of its forms: `. do x`, a loop's or program's `  2. do x`
-      const target = command === null ? null : nestedTarget(command);
-      const file = target ? unsavedTarget(target, item.unsaved) : null;
-      if (!file) continue;
-      const name = file.slice(file.lastIndexOf("/") + 1);
-      put(
-        commandEnd(lines, at),
-        <span key={`u${at}`} class="warn">
-          {`Note: ${name} has unsaved edits in the editor; do runs the saved file. Save it (${phone ? "the file name's menu › Save" : `${isMac ? "⌘" : "Ctrl"} S`}) to run your edits.`}
-        </span>,
-      );
-    }
-
-  const end = item.end;
-  const jump = end ? jumpLine(end) : null;
-  let rcAt = -1; // the r(N); the jump goes beside
-  if (end && end.rc !== 1 && jump !== null)
-    for (let i = lines.length - 1; i >= 0; i--)
-      if (lines[i].kind === "err" && /^r\(\d+\);$/.test(lines[i].text)) {
-        rcAt = i;
-        break;
-      }
-
-  const out: ComponentChildren[] = [];
-  let hint: ComponentChildren[] | null = null; // a phone's hint block in progress
-  let widest = 0;
-  lines.forEach((l, i) => {
-    const isLast = i === lines.length - 1;
-    if (isLast && l.text === "" && !after.has(i)) return; // the text's own last line break
-    if (phone && l.kind === "hint") {
-      hint ??= [];
-      const text = l.text.replace(/^\s*(→ )?/, "");
-      if (hint.length && /^(How to fix:|Learn more:)/.test(text)) hint.push(<br key={`b${i}`} />);
-      else if (hint.length) hint.push(" ");
-      hint.push(...[hintLine(text, m)].flat());
-      if (lines[i + 1]?.kind !== "hint") {
-        out.push(
-          <span key={`h${i}`} class="explain">
-            {hint}
-          </span>,
-        );
-        hint = null;
-      }
-      return;
-    }
-    if (l.kind === "out") widest = Math.max(widest, l.text.length);
-    out.push(
-      <span key={i} class={l.kind === "out" ? undefined : l.kind}>
-        {l.kind === "hint" ? hintLine(l.text, m) : marked(l.text, m)}
-      </span>,
-    );
-    if (i === rcAt) out.push("  ", <Jump key="jump" line={jump!} path={end!.path} />);
-    if (!isLast) out.push("\n");
-    if (phone && widest > PHONE_COLUMNS && lines[i + 1]?.kind !== "out") {
-      out.push(
-        <span key={`w${i}`} class="hscroll">
-          {"← wide table: swipe sideways →"}
-        </span>,
-      );
-      widest = 0;
-    } else if (lines[i + 1]?.kind !== "out") widest = 0;
-    const extra = after.get(i);
-    if (extra) {
-      if (isLast) out.push("\n");
-      out.push(...extra.flatMap((el) => [el, "\n"]));
-    }
-  });
-
-  // the notes at the run's end are blocks that wrap (.endnote), so a long one and its "Go to line" stay in the pane;
-  // each ends with its line break, which a block's last line does not show, so the log's text keeps its lines
-  if (end?.rc === 1)
-    out.push(
-      <span key="break" class="endnote">
-        <span class="note">
-          {end.line !== null && end.kind !== "command"
-            ? `Stopped by Break before line ${end.line}. The data is as the last complete command left it.`
-            : "Stopped by Break. The data is as the last complete command left it."}
-        </span>
-        {jump !== null && "  "}
-        {jump !== null && <Jump line={jump} path={end.path} />}
-        {"\n"}
-      </span>,
-    );
-  else if (jump !== null && rcAt < 0) out.push(<Jump key="jump" line={jump} path={end!.path} />, "\n");
-  // the note under the error the run ended with (runError: not one an earlier `capture noisily` caught)
-  const note = end && end.rc > 1 ? noteFor(end.rc, runError(lines)) : null;
-  if (note)
-    out.push(
-      <span key="oq10" class="note endnote">
-        {note}
-        {"\n"}
-      </span>,
-    );
-  if (end?.skipped?.length)
-    out.push(
-      <span key="skipped" class="note endnote">
-        {`Not kept: ${end.skipped.join(", ")}. ${end.skipped.length === 1 ? "Its" : "Their"} folder was renamed or deleted during the run.`}
-        {"\n"}
-      </span>,
-    );
-  if (end?.store_error)
-    out.push(
-      <span key="store" class="note endnote">
-        {`The files this run wrote couldn't be kept in this browser: ${end.store_error}`}
-        {"\n"}
-      </span>,
-    );
-  return out;
-}
 
 /** The log's head: the banner and the versions (shown only). A plain function, as runText is. */
 function logHead(m: Marker) {
@@ -373,7 +112,6 @@ export function openFind(from: HTMLElement | null) {
 
 export function LogView() {
   const pre = useRef<HTMLPreElement>(null);
-  const stick = useRef(true); // following the end
   const items = log.value;
   const m: Marker = { n: 0, query: findOpen.value ? findText.value : "", at: findAt.value };
   let head: RunHead | null = null;
@@ -397,7 +135,14 @@ export function LogView() {
       case "text": {
         const h = head;
         head = null;
-        return <Fragment key={k}>{runText(item, h, m)}</Fragment>;
+        const parts = runParts(item, {
+          head: h,
+          phone: isPhone.value,
+          graphs: graphs.value,
+          mac: isMac,
+          sentCode: (run) => codeOf.get(run),
+        });
+        return <Fragment key={k}>{drawRunParts(parts, m)}</Fragment>;
       }
       case "note":
         return (
@@ -421,7 +166,8 @@ export function LogView() {
   });
   const total = m.n;
 
-  // follow the end unless the visitor scrolled up; Find scrolls to its match
+  // follow the end unless the visitor scrolled up
+  const stick = useRef(true); // following the end
   useLayoutEffect(() => {
     const box = pre.current?.parentElement;
     if (!box) return;
@@ -472,6 +218,7 @@ export function LogView() {
     const box = pre.current?.parentElement;
     if (box && stick.current && !findOpen.value) box.scrollTop = box.scrollHeight;
   });
+  // Find scrolls to its match
   useLayoutEffect(() => {
     if (findOpen.value && findText.value) pre.current?.querySelector("mark.on")?.scrollIntoView({ block: "nearest" });
   }, [findAt.value, findText.value]);

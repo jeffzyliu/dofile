@@ -550,7 +550,7 @@ test("nestedTarget and unsavedTarget: the file a do or include runs, and the ope
   assert.equal(unsavedTarget("C:/proj/clean.do", ["code/clean.do"]), "code/clean.do");
   assert.equal(unsavedTarget("clean.do", ["a/clean.do", "b/clean.do"]), null, "two files of that name: neither");
   assert.equal(unsavedTarget("clean.do", []), null);
-  // the log's echo of a nested do in each of its forms, as LogView reads it for the nested-do note: a top-level `. `, a
+  // the log's echo of a nested do in each of its forms, as run-parts.ts reads it for the nested-do note: a top-level `. `, a
   // loop's or a program's body line `  2. `
   const target = (log: string) =>
     classify(log).map((l) => {
