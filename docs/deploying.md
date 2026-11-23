@@ -20,7 +20,7 @@ two builds link to each other is in `docs/design/SPEC.md`, section 8, "URLs". Pr
 ## Every workflow at a glance
 
 All in `.github/workflows/`. The required checks are the branch ruleset's; on `main`, called from `deploy.yml`, the same
-checks are named `ci / ci ok`, `web / web ok` and `lint / lint ok`.
+checks are named `ci / ci ok`, `web / web ok` and `lint / lint ok`. Each gate also lists the jobs of its run (`gh api`, `actions: read`) and fails unless every one, bar the gates, is `success` or `skipped`: a matrix leg GitHub never ran counts as success in `needs`.
 
 | Workflow | Trigger | What it runs | Required check | Secrets, variables |
 |---|---|---|---|---|
