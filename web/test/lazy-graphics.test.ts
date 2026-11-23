@@ -67,6 +67,19 @@ async function until(check: () => boolean, said: () => string, ms = 60_000) {
   }
 }
 
+/** Waits for `promise`; fails after `ms` with what `said()` gives (a hang would otherwise end only at the test's timeout). */
+async function within<T>(promise: Promise<T>, said: () => string, ms = 60_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, no) => {
+    timer = setTimeout(() => no(new Error(`not within ${ms} ms:\n${said()}`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Waits for the `count`th line that matches, and returns it. */
 async function line(lines: Line[], pattern: RegExp, count = 1): Promise<Line> {
   await until(
@@ -78,7 +91,7 @@ async function line(lines: Line[], pattern: RegExp, count = 1): Promise<Line> {
 
 /** A transport whose workers send their `[dofile]` lines to `lines`. `fetch`: the page's; with it the snapshot is
  *  served (served()). */
-function client(snapshot: string, lines: Line[], fetch?: typeof globalThis.fetch) {
+function client(snapshot: string, lines: Line[], fetch?: typeof globalThis.fetch, brotli?: "wasm") {
   const served = fetch && { url: snapshot, dir: pathToFileURL(snapshotDir).href };
   const onConsole = (l: ConsoleLine) => {
     if (l.text.includes("[dofile]")) lines.push({ ...l, from: "worker" });
@@ -91,6 +104,7 @@ function client(snapshot: string, lines: Line[], fetch?: typeof globalThis.fetch
     startFiles: startFiles!,
     snapshot,
     ...(fetch && { fetch }),
+    ...(brotli && { brotli }),
   });
 }
 
@@ -149,69 +163,71 @@ function partFetch() {
 
 const GRAPH = "clear\nset obs 10\ngen x = _n\nscatter x x";
 
-test("a graph at started waits for the part and writes it in its run, then it is warmed while idle; a restarted worker gets the landed part with no fetch and writes it while idle, with no run after its start, and no sooner than IDLE_MS after the last run", {
-  timeout: 240_000,
-  skip,
-}, async (t) => {
-  const lines = dofileLines(t);
-  // the snapshot's files without manifest.json, as the page has them (engine.test.ts)
-  const bare = mkdtempSync(join(tmpdir(), "dofile-lazy-"));
-  t.after(() => rmSync(bare, { recursive: true, force: true }));
-  for (const f of readdirSync(snapshotDir)) if (f !== "manifest.json") symlinkSync(join(snapshotDir, f), join(bare, f));
-  const eng = client(`${pathToFileURL(bare).href}/`, lines);
-  await startWorker(eng, await eng.build());
+for (const brotli of [undefined, "wasm"] as const)
+  test(`(${brotli ?? "native"} decoder) a graph at started waits for the part and writes it in its run, then it is warmed while idle; a restarted worker gets the landed part with no fetch and writes it while idle, with no run after its start, and no sooner than IDLE_MS after the last run`, {
+    timeout: 240_000,
+    skip,
+  }, async (t) => {
+    const lines = dofileLines(t);
+    // the snapshot's files without manifest.json, as the page has them (engine.test.ts)
+    const bare = mkdtempSync(join(tmpdir(), "dofile-lazy-"));
+    t.after(() => rmSync(bare, { recursive: true, force: true }));
+    for (const f of readdirSync(snapshotDir))
+      if (f !== "manifest.json") symlinkSync(join(snapshotDir, f), join(bare, f));
+    const eng = client(`${pathToFileURL(bare).href}/`, lines, undefined, brotli);
+    await startWorker(eng, await eng.build());
 
-  // the page fetches the part once the worker has started: this graph is there first
-  const graph = await runOn(eng, GRAPH);
-  await line(lines, /warmed/);
-  const first = lines.length;
+    // the page fetches the part once the worker has started: this graph is there first
+    const graph = await within(runOn(eng, GRAPH), () => shown(lines));
+    await line(lines, /warmed/);
+    const first = lines.length;
 
-  assert.equal(graph.rc, 0, graph.log);
-  assert.equal(graph.images.length, 1);
-  assert.match(
-    shown(lines),
-    /page: .*landed \(network\)[\s\S]*worker: .*written in a run[\s\S]*worker: .*in the run, after the write[\s\S]*worker: .*warmed/,
-  );
-  assert.equal(matching(lines, /written while idle/).length, 0, shown(lines));
+    assert.equal(graph.rc, 0, graph.log);
+    assert.equal(graph.images.length, 1);
+    assert.match(
+      shown(lines),
+      /page: .*landed \(network\)[\s\S]*worker: .*written in a run[\s\S]*worker: .*in the run, after the write[\s\S]*worker: .*warmed/,
+    );
+    assert.equal(matching(lines, /written while idle/).length, 0, shown(lines));
 
-  // restarted, and no run: the start alone begins the part's work
-  eng.end(live(eng), { kind: "reset", reset: "user", reason: "session reset: test." });
-  await startWorker(eng, await eng.build());
-  await line(lines, /written while idle/);
-  await line(lines, /warmed/, 2);
-  const second = lines.length;
+    // restarted, and no run: the start alone begins the part's work
+    eng.end(live(eng), { kind: "reset", reset: "user", reason: "session reset: test." });
+    await startWorker(eng, await eng.build());
+    await line(lines, /written while idle/);
+    await line(lines, /warmed/, 2);
+    const second = lines.length;
 
-  eng.end(live(eng), { kind: "reset", reset: "user", reason: "session reset: test." });
-  await startWorker(eng, await eng.build());
-  // runs IDLE_MS / 5 apart for 1.5 s (room for a slow machine): no step of the part's comes between them (the browser's
-  // decoder may run)
-  let lastSent = 0;
-  let lastAnswered = 0;
-  for (const end = now() + 1500; now() < end; await sleep(IDLE_MS / 5)) {
-    lastSent = now();
-    const r = await runOn(eng, "display 1");
-    lastAnswered = now();
-    assert.equal(r.rc, 0, r.log);
-  }
-  const written = await line(lines, /written while idle/, 2);
-  await line(lines, /warmed/, 3);
-  const restarted = lines.slice(first);
-  const third = lines.slice(second);
+    eng.end(live(eng), { kind: "reset", reset: "user", reason: "session reset: test." });
+    await startWorker(eng, await eng.build());
+    // runs IDLE_MS / 5 apart for 1.5 s (room for a slow machine): no step of the part's comes between them (the browser's
+    // decoder may run)
+    let lastSent = 0;
+    let lastAnswered = 0;
+    for (const end = now() + 1500; now() < end; await sleep(IDLE_MS / 5)) {
+      lastSent = now();
+      const r = await runOn(eng, "display 1");
+      lastAnswered = now();
+      assert.equal(r.rc, 0, r.log);
+    }
+    const written = await line(lines, /written while idle/, 2);
+    await line(lines, /warmed/, 3);
+    const restarted = lines.slice(first);
+    const third = lines.slice(second);
 
-  assert.equal(matching(lines, /landed/).length, 1, `fetched once:\n${shown(lines)}`);
-  assert.match(shown(restarted), /(worker: .*written while idle[\s\S]*worker: .*warmed[\s\S]*){2}/);
-  assert.equal(matching(restarted, /written in a run/).length, 0, shown(restarted));
-  assert.ok(written.at > lastAnswered, `written after the last run's answer:\n${shown(third)}`);
-  // the written line's own work: the write, and a brotli-wasm unpack in idle steps (the browser's decoder unpacks off
-  // the thread from the start)
-  const [, decoder, unpackS, writeS] = written.text.match(/unpack \((\w+)\) ([\d.]+)s.*write \d+ files ([\d.]+)s/)!;
-  const firstStep = written.at - 1000 * (Number(writeS) + (decoder === "wasm" ? Number(unpackS) : 0));
-  assert.ok(
-    firstStep - lastSent > IDLE_MS - 20, // 20 ms: the line's seconds are rounded to 10 ms
-    `the first step ${(firstStep - lastSent).toFixed(0)} ms after the last run was sent:\n${shown(third)}`,
-  );
-  eng.worker!.terminate();
-});
+    assert.equal(matching(lines, /landed/).length, 1, `fetched once:\n${shown(lines)}`);
+    assert.match(shown(restarted), /(worker: .*written while idle[\s\S]*worker: .*warmed[\s\S]*){2}/);
+    assert.equal(matching(restarted, /written in a run/).length, 0, shown(restarted));
+    assert.ok(written.at > lastAnswered, `written after the last run's answer:\n${shown(third)}`);
+    // the written line's own work: the write, and a brotli-wasm unpack in idle steps (the browser's decoder unpacks off
+    // the thread from the start)
+    const [, decoder, unpackS, writeS] = written.text.match(/unpack \((\w+)\) ([\d.]+)s.*write \d+ files ([\d.]+)s/)!;
+    const firstStep = written.at - 1000 * (Number(writeS) + (decoder === "wasm" ? Number(unpackS) : 0));
+    assert.ok(
+      firstStep - lastSent > IDLE_MS - 20, // 20 ms: the line's seconds are rounded to 10 ms
+      `the first step ${(firstStep - lastSent).toFixed(0)} ms after the last run was sent:\n${shown(third)}`,
+    );
+    eng.worker!.terminate();
+  });
 
 test("a Break while a graph waits for a part held on its way is rc 1 within seconds, with the data kept; once the part lands, a graph draws, and the part was fetched once", {
   timeout: 240_000,
@@ -235,7 +251,7 @@ test("a Break while a graph waits for a part held on its way is rc 1 within seco
   );
   eng.interrupt(live(eng));
   const pressed = now();
-  const broken = await running;
+  const broken = await within(running, () => `${log}\n${shown(lines)}`);
   const breakMs = now() - pressed;
   const kept = await runOn(eng, "summarize x");
   release();
@@ -262,7 +278,7 @@ test("a damaged copy: the graph that finds it says so (r(199)), the page fetches
   const eng = client(await served(t), lines, net.fetch);
   await startWorker(eng, await eng.build());
 
-  const found = await runOn(eng, GRAPH);
+  const found = await within(runOn(eng, GRAPH), () => shown(lines));
   await line(lines, /landed \(network\)/, 2);
   const drawn = await runOn(eng, "scatter x x");
 
