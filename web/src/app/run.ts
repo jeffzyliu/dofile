@@ -49,7 +49,7 @@ export function requestRun(code: string, head: RunHead): Requested {
 }
 
 /** Run `code` as `head` says (SPEC section 4). Resolves with the result, or null when it did not run. */
-export function runCode(code: string, head: RunHead): Promise<RunResult | null> {
+export async function runCode(code: string, head: RunHead): Promise<RunResult | null> {
   return requestRun(code, head).done;
 }
 

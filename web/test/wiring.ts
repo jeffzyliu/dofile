@@ -204,7 +204,7 @@ export class FakeTransport implements Reader, Lifecycle, Builds {
     this.interrupted.push(n);
   }
 
-  query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
+  async query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
     this.calls.push([op, args]);
     if (!this.live) return Promise.reject(failure("the engine is not running", { kind: "no-engine" }));
     const answer = this.hold ? later() : Promise.resolve({ op });

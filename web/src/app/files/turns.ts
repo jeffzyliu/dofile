@@ -111,7 +111,7 @@ class TurnTimeout extends Error {
 }
 
 /** The store call, rejected with a TurnTimeout if it has not answered in time. */
-function callWithTimeout(request: Request): Promise<unknown> {
+async function callWithTimeout(request: Request): Promise<unknown> {
   const OP_TIMEOUT = 30_000; // ms: an IndexedDB call that has not answered by then is stuck (a hung disk, a blocked upgrade)
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<never>((_, reject) => {

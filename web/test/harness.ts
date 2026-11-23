@@ -91,7 +91,7 @@ export const live = (client: Lifecycle): number => numbers.get(client) ?? 0;
 /** Start a worker: client.start() with the next number. Resolves at `started`; rejects with the `start-failed` or
  *  `crashed` answer. `said` collects every answer (the stages too). A restart is `client.end(live(client), ending)`, then
  *  this again. `build`: for a snapshot start, `await client.build()`. */
-export function startWorker(
+export async function startWorker(
   client: Lifecycle,
   build: Build | null = null,
   said: Answer<"start-worker">[] = [],
@@ -107,7 +107,7 @@ export function startWorker(
   );
 }
 /** Run `code` on the worker startWorker() made last. Rejects if the worker is ended first, or its `run` op fails. */
-export const runOn = (
+export const runOn = async (
   client: Lifecycle,
   code: string,
   { onLog = () => {}, ...options }: RunOptions & { onLog?: (text: string) => void } = {},

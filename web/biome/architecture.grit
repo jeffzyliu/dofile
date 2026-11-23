@@ -198,5 +198,17 @@ or {
     },
     $props <: not contains `onKeyDown={ignoreHeldEnter}`,
     register_diagnostic(span=$m, message="a Run or Break pill button (aria-disabled, or .pill) in editor/ or log/ ignores a held Enter: onKeyDown={ignoreHeldEnter}")
+  },
+  // A function, method or arrow whose return type is written Promise<...> is async. Syntactic only: an inferred
+  // return type is not seen. A text test on the node finds the keyword, with or without class modifiers before it.
+  or {
+    JsFunctionDeclaration(return_type_annotation=TsReturnTypeAnnotation(ty=TsReferenceType(name=`Promise`))),
+    JsFunctionExpression(return_type_annotation=TsReturnTypeAnnotation(ty=TsReferenceType(name=`Promise`))),
+    JsArrowFunctionExpression(return_type_annotation=TsReturnTypeAnnotation(ty=TsReferenceType(name=`Promise`))),
+    JsMethodClassMember(return_type_annotation=TsReturnTypeAnnotation(ty=TsReferenceType(name=`Promise`))),
+    JsMethodObjectMember(return_type_annotation=TsReturnTypeAnnotation(ty=TsReferenceType(name=`Promise`)))
+  } as $m where {
+    $m <: not r"(?s)^(?:(?:static|public|private|protected|override)\s+)*async\b.*",
+    register_diagnostic(span=$m, message="a function with a Promise<...> return type is async: add async. Where it must not be (it returns one cached promise each time, a promise-like object with more methods, or throws synchronously on purpose), put // biome-ignore lint/plugin: <reason> above it")
   }
 }

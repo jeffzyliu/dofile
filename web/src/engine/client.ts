@@ -676,7 +676,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   /** Rejects with kind "op" when the worker answered with an error (the worker stays), or the ending's kind when it was
    *  ended meanwhile.
    *  @param onLog - gets each chunk of the log as the run prints: a preview, which the result's `log` replaces. */
-  run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
+  async run(n: number, args: Ops["run"]["args"], onLog: (text: string) => void): Promise<RunResult> {
     const live = this.#live;
     if (live?.n !== n) return Promise.reject(fail("the engine is not running", "no-engine"));
     // a Break from before this run was the run before's; one from now on is this run's, however long it waits in the
@@ -715,13 +715,13 @@ export class EngineClient implements Reader, Lifecycle, Builds {
 
   /** While the worker starts or runs, the call waits in its queue. Rejects with kind "no-engine" with no live worker,
    *  or with the ending's kind when its worker is ended first. */
-  query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
+  async query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
     if (!this.#live) return Promise.reject(fail("the engine is not running", "no-engine"));
     return this.#send(this.#live, op, args);
   }
 
   // The one place the worker is posted to. On an ended record a call rejects at once with what end() said.
-  #send<K extends Op>(
+  async #send<K extends Op>(
     live: Live,
     op: K,
     args: Ops[K]["args"] | undefined,

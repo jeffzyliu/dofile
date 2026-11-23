@@ -282,7 +282,7 @@ function fetchPartNow(): string {
 
 // Without a shared buffer: this worker's own fetch of the part, started after `startup` is answered. A graph that comes
 // first stops it and fetches the part itself.
-function prefetch(): Promise<void> {
+async function prefetch(): Promise<void> {
   if (!share || share.sab || share.bytes) return Promise.resolve();
   if (prefetching) return prefetching.done;
   const stop = new AbortController(),
