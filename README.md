@@ -56,7 +56,7 @@ The interpreter is [OpenDTA](https://github.com/yaskepalhares/opendta) (MIT), by
 [dofile.dev/commands](https://dofile.dev/commands/), or the `dofile://commands` MCP resource). dofile adds the sandbox,
 the web editor, the command line and the MCP server.
 
-Status: alpha (0.1.x). Emulates Stata 14. The screenshots use the editor's sample project, whose data are synthetic.
+Status: alpha (0.2.x). Emulates Stata 14. The screenshots use the editor's sample project, whose data are synthetic.
 
 ## Project structure
 

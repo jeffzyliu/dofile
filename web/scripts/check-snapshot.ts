@@ -72,8 +72,9 @@ import json, re
 from pathlib import Path
 from dofile.engine import Engine
 REF = json.loads(Path("/conf/data/ref.json").read_text())
-GAPS = {"hdfe_b_x1"}   # GAP-1, as in tests/test_conformance.py
-PGAPS = {"p06_esttab.do", "p07_outreg2.do"}
+_gaps = json.loads(Path("/conf/known-gaps.json").read_text())   # the same file as tests/test_conformance.py
+GAPS = set(_gaps["corpus"])
+PGAPS = set(_gaps["probes"])
 ok = 0; problems = []
 for f in sorted(Path("/conf/corpus").glob("*.do")):
     text = f.read_text()

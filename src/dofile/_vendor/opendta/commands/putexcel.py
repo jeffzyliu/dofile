@@ -18,6 +18,7 @@ from ..core.errors import StataError
 from ..lang.syntax import find_top, match_options, parse_options
 from ..lang.words import strip_outer_quotes
 from .registry import command
+from ._util import shown_path
 from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
@@ -159,10 +160,10 @@ def cmd_putexcel(s: "Session", args: str) -> None:
     try:
         wb.save(path)
     except OSError:
-        raise StataError(603, f"file {path} could not be opened")
+        raise StataError(603, f"file {shown_path(path)} could not be opened")
     if st:
         st["fresh"] = False    # after the first write, the following ones modify
-    s.output.write(f"file {path} saved\n", "text")
+    s.output.write(f"file {shown_path(path)} saved\n", "text")
 
 
 def _write_value(s: "Session", ws, row: int, col: int, val: str, o: dict) -> None:

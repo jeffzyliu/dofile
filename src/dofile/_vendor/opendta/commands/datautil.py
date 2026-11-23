@@ -16,6 +16,7 @@ from ..core.errors import StataError
 from ..lang.syntax import find_top, match_options
 from ..lang.words import strip_outer_quotes
 from .registry import command
+from ._util import shown_path
 from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
@@ -53,7 +54,7 @@ def cmd_copy(s: "Session", args: str) -> None:
     if target.is_dir():
         target = target / Path(src).name
     if target.exists() and not o.get("replace"):
-        raise StataError(602, f"file {dst} already exists")
+        raise StataError(602, f"file {shown_path(dst)} already exists")
     if src.startswith(("http://", "https://")):
         import urllib.request
         from ..updater import ssl_context
@@ -61,17 +62,22 @@ def cmd_copy(s: "Session", args: str) -> None:
             with urllib.request.urlopen(src, timeout=30, context=ssl_context()) as r:
                 data = r.read()
         except Exception as e:   # noqa: BLE001
-            raise StataError(631, f"host not found or file {src} not found ({e})")   # VERIFY
+            raise StataError(631, f"host not found or file {shown_path(src)} not found ({e})")   # VERIFY
         target.write_bytes(data)
         return
     p = _path(src)
     if not p.exists():
-        raise StataError(601, f"file {src} not found")
-    if o.get("text"):
-        data = p.read_bytes().replace(b"\r\n", b"\n")
-        target.write_bytes(data.replace(b"\n", os.linesep.encode()))
-    else:
-        shutil.copyfile(p, target)
+        raise StataError(601, f"file {shown_path(src)} not found")
+    if o.get("replace") and not target.exists():
+        s.output.write(f"(note: file {shown_path(dst)} not found)\n", "text")
+    try:
+        if o.get("text"):
+            data = p.read_bytes().replace(b"\r\n", b"\n")
+            target.write_bytes(data.replace(b"\n", os.linesep.encode()))
+        else:
+            shutil.copyfile(p, target)
+    except OSError:
+        raise StataError(603, f"file {shown_path(dst)} could not be opened")
 
 
 @command("mkdir", "mkdir")

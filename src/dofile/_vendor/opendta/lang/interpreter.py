@@ -11,6 +11,7 @@ as Stata does.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import TYPE_CHECKING
 
@@ -645,7 +646,14 @@ class Interpreter:
         counted = spec.name not in ("do", "run", "include")
         brk.depth += counted
         try:
-            spec.fn(self.s, rest)
+            try:
+                spec.fn(self.s, rest)
+            except (OSError, IndexError, KeyError, ValueError) as exc:
+                err = _as_stata_error(exc)
+                if not isinstance(exc, OSError):   # dofile patch (PATCH-5): report_error names the Python error
+                    why = (str(exc).strip().splitlines() or [""])[0]
+                    err.engine_error = f"{type(exc).__name__}{': ' + why if why else ''}"
+                raise err from exc
         except StataError as err:
             if err.context is None:
                 err.context = (spec.name, text)   # for the error explanation
@@ -701,6 +709,16 @@ class Interpreter:
                 (lambda: self._with_prefixes(tail, action) if tail else action())()
             finally:
                 out.noisy_depth -= 1
+
+
+def _as_stata_error(exc: Exception) -> StataError:
+    """Python error escaped from a command, as a Stata error that `capture` takes: a file that
+    cannot be read or written is r(603) (compat/do/2006); the rest falls back on r(198)."""
+    if isinstance(exc, OSError):
+        # the name with /, as typed and as Stata shows it on every system
+        name = f" {str(exc.filename).replace(os.sep, '/')}" if exc.filename else ""
+        return StataError(603, f"file{name} could not be opened")
+    return StataError(198, "invalid syntax")
 
 
 def _forvalues_range(rng: str) -> list[float]:

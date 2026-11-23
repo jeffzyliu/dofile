@@ -1,0 +1,32 @@
+diff --git a/src/dofile/_vendor/opendta/lang/interpreter.py b/src/dofile/_vendor/opendta/lang/interpreter.py
+index b59fe5b..f5fd63d 100644
+--- a/src/dofile/_vendor/opendta/lang/interpreter.py
++++ b/src/dofile/_vendor/opendta/lang/interpreter.py
+@@ -649,7 +649,11 @@ class Interpreter:
+             try:
+                 spec.fn(self.s, rest)
+             except (OSError, IndexError, KeyError, ValueError) as exc:
+-                raise _as_stata_error(exc) from exc
++                err = _as_stata_error(exc)
++                if not isinstance(exc, OSError):   # dofile patch (PATCH-5): report_error names the Python error
++                    why = (str(exc).strip().splitlines() or [""])[0]
++                    err.engine_error = f"{type(exc).__name__}{': ' + why if why else ''}"
++                raise err from exc
+         except StataError as err:
+             if err.context is None:
+                 err.context = (spec.name, text)   # for the error explanation
+diff --git a/src/dofile/_vendor/opendta/session.py b/src/dofile/_vendor/opendta/session.py
+index 9897f3e..233054b 100644
+--- a/src/dofile/_vendor/opendta/session.py
++++ b/src/dofile/_vendor/opendta/session.py
+@@ -553,6 +553,10 @@ class Session:
+                     hint = render(expl, int(float(self.settings.get("linesize", 80))) - 1)
+             except Exception:  # noqa: BLE001 - an explanation never brings down the original error
+                 hint = []
++        engine_error = getattr(e, "engine_error", None)   # dofile patch (PATCH-5): the Python error behind an r(198)
++        if engine_error:
++            self.output.ensure_line_start(force=True)
++            self.output.write(f"engine error: {engine_error}\n", "error", force=True)
+         from .i18n import translate_error
+         self.output.error(translate_error(e.message), e.rc, show_rc=show_rc, hint=hint)
+ 

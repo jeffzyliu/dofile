@@ -1,6 +1,7 @@
 """Sandbox tests. The audit hook cannot be removed, so every case runs in a fresh subprocess."""
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -92,6 +93,8 @@ def test_denied_commands_return_rc_199(work, cmd):
         ("use panel, clear\nsave ../escaped.dta", "escaped.dta", True),
         ("use panel, clear\nexport delimited using ../escaped.csv", "escaped.csv", True),
         ("log using ../escaped.log, text", "escaped.log", True),
+        # outfile has no OSError handler of its own: the dispatcher's 603 names the file from the refusal
+        ("use panel, clear\noutfile using ../escaped.raw", "escaped.raw", True),
         # graph export prints OpenDTA's own 603 message; Engine.run adds the sandbox's reason (ERG-5)
         ("use panel, clear\nscatter y x1\ngraph export ../escaped.png", "escaped.png", True),
     ],
@@ -123,6 +126,25 @@ def test_a_refusal_is_told_apart_from_a_missing_folder_inside_capture(work):
     assert log[k + 1].startswith("dofile sandbox: cannot write") and log[k + 1].endswith("escaped.png")
     j = log.index("file nofolder/x.png could not be opened")
     assert not log[j + 1].startswith("dofile sandbox") and "dofile sandbox" not in "\n".join(log[j:])
+
+
+@pytest.mark.parametrize("cmd", ["type", "hexdump"])
+def test_a_refused_read_names_the_file_and_says_why(work, tmp_path, cmd):
+    """MCP-SCHEMA.md, rc 603: a refusal ends the error and its line in the log with the sandbox's reason."""
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOP-SECRET-VALUE\n")
+    real = os.path.realpath(secret)
+    reason = f"dofile sandbox: cannot read {real}"
+    (r,) = sandboxed(work, f'{cmd} "{secret}"')
+    assert r["rc"] == 603 and "TOP-SECRET-VALUE" not in r["log"]
+    assert r["error"] == f"file {real} could not be opened ({reason})"
+    assert f"file {real} could not be opened\n{reason}\n" in r["log"]
+
+
+def test_c_values_work_under_the_sandbox(work):
+    """c() reads the OS version on every reference: on macOS platform.mac_ver() opens one system file."""
+    for r in sandboxed(work, "display c(N)", 'display "`c(current_date)\'"', "creturn list"):
+        assert r["rc"] == 0, r["log"]
 
 
 def test_reads_outside_allowed_dirs_are_blocked(work, tmp_path):
@@ -196,3 +218,20 @@ def test_capture_catches_a_sandbox_refusal_like_any_file_error(work):
         work, 'capture type /etc/passwd\ndisplay "after rc=" _rc\ncapture noisily type /etc/passwd\ndisplay "again"'
     )[0]
     assert r["rc"] == 0 and "after rc=603" in r["log"] and "again" in r["log"]
+
+
+def test_capture_catches_a_refusal_raised_outside_a_command(work, tmp_path):
+    """ODT-23: upstream turns a refusal inside a command into r(603); the autoload of an ado file and macro expansion in
+    a `capture { }` block run outside one, so only the patch lets capture take those refusals."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "foo.ado").write_text('program foo\n    display "foo ran"\nend\n')
+    after = '\ndisplay "after rc=" _rc'
+    results = sandboxed(
+        work,
+        f'adopath + "{outside}"\ncapture foo' + after,
+        f'sysdir set PERSONAL "{outside}"\ncapture foo' + after,
+        f'capture {{\n    display `"`: dir "{outside}" files "*"\'"\'\n}}' + after,
+    )
+    failed = [r for r in results if not (r["rc"] == 0 and "after rc=603" in r["log"] and "foo ran" not in r["log"])]
+    assert failed == [], failed

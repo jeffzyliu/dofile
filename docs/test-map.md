@@ -26,8 +26,9 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 **1. Engine adapter** (`test_engine.py`)
 - Result shape: log, rc, `results()`, `r(table)`, the e_changed and r_changed flags, JSON for missing values and
   matrices.
-- Error containment: a Python exception is rc 9999; a MemoryError or a full WebAssembly heap is r(909) after
-  `on_memory_error`; a crash inside a program closes its scope; each call is a do-file scope.
+- Error containment: a Python exception is rc 9999, inside a command or outside one, except an IndexError, KeyError or
+  ValueError inside a command, which is rc 198 with an `engine error:` log line where the error is reported, none when
+  statsby takes it (PATCH-5); a MemoryError or a full WebAssembly heap is r(909) after `on_memory_error`; a crash inside a program closes its scope; each call is a do-file scope.
 - Regression tests for OpenDTA fixes (`test_odtN_*`, with the patches in `scripts/patches/`); Stata expressions cannot
   reach Python.
 
@@ -44,6 +45,11 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 **5. Sandbox and security** (`test_sandbox.py`; also parts of `test_engine`, `test_worker`, `test_mcp`)
 - Denied commands return rc 199.
 - Reads and writes outside the allowed folders are blocked; symlinks cannot leave the workdir.
+- A refusal is rc 603 that names the file and ends with the sandbox's reason, also in commands with no file-error
+  handling of their own (`type`, `hexdump`, `outfile`).
+- `capture` takes a refusal also when it is raised outside a command: the ado autoload from an `adopath` or `sysdir`
+  folder, macro expansion inside a `capture { }` block (ODT-23).
+- `c()` works with the sandbox on (on macOS it reads one system file).
 - The audit hook blocks network access and subprocesses.
 - Unsafe mode over HTTP is allowed only on loopback.
 - Each case runs in a subprocess, because audit hooks cannot be removed.
@@ -79,7 +85,8 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 - The `CHECK name=value` lines of the corpus files must match `data/ref.json` to 1e-6 relative. The values come from
   statsmodels and linearmodels, not from OpenDTA.
 - The probes (`probe/*.do`) must run with rc 0.
-- Known gaps are `xfail(strict=True)`: `reghdfe`, `esttab` and `outreg2` (GAP-1, community commands).
+- Known gaps (`tests/conformance/known-gaps.json`, also read by the web `check-snapshot`) are `xfail(strict=True)`: `reghdfe`, `esttab` and `outreg2` (GAP-1, community commands), and the probe
+  `p13_set_linesize_text` (ODT-35: `set linesize abc` is accepted, then every command is rc 9999).
 - `test_sandbox.py::test_corpus_and_probes_still_work_under_sandbox` runs the same corpus with the sandbox on.
 
 ### Vendored OpenDTA suite, by function
@@ -441,7 +448,7 @@ start; seeding the kind alone needs an app change); Firefox and desktop WebKit a
   comparisons cover far more, as does the vendored suite for basic regression.
 - Not every check is independent: the data-management, programming and error checks (counts, `wordcount`, `err_*_rc`)
   are regression tests with expected values set by hand.
-- The probes assert rc 0 only, so a wrong output passes. Two probes are expected failures (`esttab`, `outreg2`).
+- The probes assert rc 0 only, so a wrong output passes. Three probes are expected failures (`esttab`, `outreg2`, `p13_set_linesize_text`).
 - The one xfail among the value checks (`reghdfe`, GAP-1) is a missing community command, not a bug, so it will never
   flip by an upstream fix.
 - The tolerance is 1e-6 relative for every value; iterative estimators (nonlinear, multilevel) may need a looser one.

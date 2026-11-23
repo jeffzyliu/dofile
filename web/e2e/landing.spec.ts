@@ -5,11 +5,17 @@
 // URL check. And they compare the whole address, origin included: "/" is a path of both origins. Also: the build's
 // numbers in the text, the theme button, the Copy buttons, and axe on the real page in both themes (`npm run axe` reads
 // the mockups from file: URLs; the built pages need a server).
+import { readFileSync } from "node:fs";
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
 import { expect, isPhone, test } from "./fixtures";
 import { showEngine } from "./seed";
+
+const PACKAGE_VERSION = /^version = "(.+)"$/m.exec(
+  readFileSync(new URL("../../pyproject.toml", import.meta.url), "utf8"),
+)?.[1];
+if (!PACKAGE_VERSION) throw new Error("no version in pyproject.toml");
 
 /** The editor's address, and the page's address without its query and hash: origin and path. */
 const EDITOR = LOCAL_EDITOR_URL;
@@ -33,8 +39,8 @@ test("the landing page shows its content, and the pages that do not exist are 40
   await expect(
     page.getByText("Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp."),
   ).toBeVisible();
-  // the version is the package's, not a literal
-  await expect(page.locator("body")).toContainText(/\b0\.1\.0\S*/);
+  // the version is the package's (pyproject.toml), not a literal
+  await expect(page.locator("body")).toContainText(PACKAGE_VERSION);
   const landing = await request.get(SITE);
   expect(landing.status()).toBe(200);
   expect(await landing.text()).not.toContain("{{"); // every placeholder is filled by the build

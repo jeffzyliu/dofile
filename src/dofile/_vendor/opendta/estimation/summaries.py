@@ -274,14 +274,15 @@ class SRS:
 # ---------------------------------------------------------------------------
 
 def _replay_summary(s: "Session", stat: str, args: str) -> None:
-    """dofile patch (ODT-13): `mean`, `mean, level(90)`, `mean, noheader` redisplay the last mean/proportion/ratio/total."""
+    """dofile patch (ODT-13): `mean`, `mean, level(90)`, `mean, noheader`, `mean, notable` redisplay the last
+    mean/proportion/ratio/total, with its header as typed the first time."""
     from .postest import current
     est = current(s)
     replay = getattr(est, "replay_summary", None)
     if est.cmd != stat or replay is None:
         raise StataError(301, "last estimates not found")
-    o = match_options(args.lstrip(", "), {"level": 1, "noheader": 6}) if args.strip(" ,") else {}
-    replay(s, float(o["level"]) if o.get("level") else None, bool(o.get("noheader")))
+    o = match_options(args.lstrip(", "), {"level": 1, "noheader": 6, "notable": 5}) if args.strip(" ,") else {}
+    replay(s, float(o["level"]) if o.get("level") else None, bool(o.get("noheader")), bool(o.get("notable")))
 
 
 def summary_stat(s: "Session", stat: str, args: str,
@@ -322,10 +323,12 @@ def summary_stat(s: "Session", stat: str, args: str,
     est.level = req.level
     est.display = table
 
-    def replay(ss, level=None, noheader=False):   # dofile patch (ODT-13)
+    def replay(ss, level=None, noheader=False, notable=False):   # dofile patch (ODT-13)
         lv = req.level if level is None else level
         if not noheader:
             header(ss)
+        if notable:
+            return
         summary_table(ss, req.info.column, fit.labels, vals, se, df, lv, vcetype, req.over)
         _post_r_table(ss, fit.colnames, vals, se, df, lv, req.info.column, vcetype)
     est.replay_summary = replay
@@ -396,17 +399,33 @@ def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetyp
     out.write("-" * width + "\n", "text")
 
 
+def _replay(s: "Session", cmd: str, args: str) -> bool:
+    """Without a varlist the command shows its last results (compat 2005: prop -> r(301))."""
+    if args.strip() and not args.strip().startswith(","):
+        return False
+    _replay_summary(s, cmd, args)   # dofile patch (ODT-13): postest.replay shows only the table
+    return True
+
+
 def cmd_mean(s: "Session", args: str) -> None:
+    if _replay(s, "mean", args):
+        return
     summary_stat(s, "mean", args)
 
 
 def cmd_proportion(s: "Session", args: str) -> None:
+    if _replay(s, "proportion", args):
+        return
     summary_stat(s, "proportion", args)
 
 
 def cmd_total(s: "Session", args: str) -> None:
+    if _replay(s, "total", args):
+        return
     summary_stat(s, "total", args)
 
 
 def cmd_ratio(s: "Session", args: str) -> None:
+    if _replay(s, "ratio", args):
+        return
     summary_stat(s, "ratio", args)

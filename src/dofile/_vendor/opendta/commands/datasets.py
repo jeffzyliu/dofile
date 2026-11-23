@@ -30,6 +30,7 @@ from ..lang.words import strip_outer_quotes
 from ._util import touse
 from .data import _note
 from .registry import command
+from ._util import shown_path
 from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
@@ -605,7 +606,7 @@ def cmd_bcal(s: "Session", args: str) -> None:
             path = path.with_suffix(".stbcal")
         path = user_path(path)
         if path.exists() and not o.get("replace"):
-            raise StataError(602, f"file {path} already exists")
+            raise StataError(602, f"file {shown_path(path)} already exists")
         v = s.data.get(s.expand_varlist(str(o["from"]))[0])
         d = v.data
         days = np.unique(d[d < SYS]).astype(int)
@@ -637,7 +638,7 @@ def cmd_bcal(s: "Session", args: str) -> None:
         path.write_text("\n".join(x for x in lines if x) + "\n", encoding="utf-8")
         bcal.clear_cache()
         out.write(f"\n  Business calendar {path.stem} (format %tb{path.stem}):\n", "text")
-        out.write(f"    file {path} saved\n", "text")   # VERIFY
+        out.write(f"    file {shown_path(path)} saved\n", "text")   # VERIFY
         if isinstance(o.get("generate"), str):
             cal = bcal.get(path.stem) if path.parent.resolve() == Path.cwd().resolve() else \
                 bcal.parse(path.stem, path.read_text(encoding="utf-8"), str(path))

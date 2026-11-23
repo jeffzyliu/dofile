@@ -35,7 +35,7 @@ def command(name: str, abbrev: str | None = None, *, prefix: bool = False, byabl
         raise ValueError(f"abbreviation {minimal!r} is not a prefix of {name!r}")
 
     def deco(fn: CommandFn) -> CommandFn:
-        REGISTRY[name] = CommandSpec(name, len(minimal), _python_errors_as_stata(fn), prefix, byable)
+        REGISTRY[name] = CommandSpec(name, len(minimal), _memory_error_as_stata(fn), prefix, byable)
         return fn
     return deco
 
@@ -52,22 +52,14 @@ def lazy_commands(module: str, *names: str | tuple[str, str], prefix: bool = Fal
         command(name, abbrev, prefix=prefix)(run)
 
 
-def _python_errors_as_stata(fn: CommandFn) -> CommandFn:
-    """dofile patch (ODT-28): Python errors that escape a command become the Stata errors they stand for, which
-    `capture` can catch, not an internal error. An OSError (a folder that is missing, a directory where a file is
-    expected) becomes r(603) "file ... could not be opened"; a MemoryError (numpy could not allocate an array) becomes
-    r(909). A command's own StataError (erase 693, cd 170, ...) never gets here. A PermissionError is left alone: the
-    dofile sandbox's refusals use it (ODT-23). The data is not rolled back: a command that fails partway may leave it
-    partly changed."""
+def _memory_error_as_stata(fn: CommandFn) -> CommandFn:
+    """dofile patch (ODT-28): a MemoryError that escapes a command (numpy could not allocate an array) becomes
+    r(909) "op. sys. refuses to provide memory", which `capture` can catch, not an internal error. OpenDTA turns an
+    OSError into r(603) itself (`_as_stata_error` in lang/interpreter.py). The data is not rolled back: a command that
+    fails partway may leave it partly changed."""
     def run(s: "Session", rest: str) -> None:
         try:
             fn(s, rest)
-        except PermissionError:
-            raise
-        except OSError as e:
-            from ..core.errors import StataError
-            where = f" {e.filename}" if e.filename else ""
-            raise StataError(603, f"file{where} could not be opened ({e.strerror})") from e
         except MemoryError as e:
             from ..core.errors import StataError
             raise StataError(909, "op. sys. refuses to provide memory") from e

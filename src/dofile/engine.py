@@ -23,7 +23,7 @@ from ._vendor.opendta.core.output import Capture
 from ._vendor.opendta.lang.programs import Scope
 from ._vendor.opendta.session import Session
 
-RC_INTERNAL = 9999  # a Python exception escaped the interpreter (an engine bug, not a Stata error)
+RC_INTERNAL = 9999  # any other Python exception, inside or outside a command (IndexError/KeyError/ValueError in one: 198, PATCH-5)
 RC_FILE = 603  # Stata: file could not be opened
 RC_BREAK = 1  # Stata: --Break-- (the user pressed Break); the session keeps its data
 BREAK = "--Break--"
@@ -43,7 +43,8 @@ def _refusal_for(error: str | None) -> str | None:
     if not error:
         return None
     for path, message in reversed(sandbox.refusals):
-        name = os.path.basename(path.rstrip("/\\"))
+        # OpenDTA writes a .dta or Excel file through <name>.opendta-tmp, and its error names <name>
+        name = os.path.basename(path.rstrip("/\\")).removesuffix(".opendta-tmp")
         if name and re.search(rf"(?<![\w.-]){re.escape(name)}", error):  # whole name, so a.png isn't found in data.png
             return message
     return None

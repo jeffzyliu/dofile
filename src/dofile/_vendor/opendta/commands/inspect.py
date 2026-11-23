@@ -17,6 +17,7 @@ from ..core.varlist import expand
 from ..lang.syntax import match_options, parse_standard
 from ._util import touse
 from .registry import command
+from ._util import shown_path
 from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
@@ -360,6 +361,13 @@ def cmd_describe(s: "Session", args: str) -> None:
             star = "*" if ds.chars.get(n, {}).get("note0") else " "
             # formatos longos aparecem cortados ("%tdnn/dd/CCYY" → "%td..")
             fmt = v.fmt if len(v.fmt) <= 9 else v.fmt[:3] + ".."   # VERIFY truncation rule
+            if len(v.value_label) > 9 and v.label:
+                # a long value label name pushes the variable label to the next line, under its
+                # column (seen with a 15-character name; VERIFY the limit, compat/do/2001)
+                line = f"{shown:<{17 if numbers else 16}}{v.vtype:<8}{fmt:<11}{v.value_label}{star}"
+                out.write(line.rstrip() + "\n", "text")
+                out.write(" " * (47 if numbers else 46) + v.label + "\n", "text")
+                continue
             line = f"{shown:<{17 if numbers else 16}}{v.vtype:<8}{fmt:<11}{v.value_label:<9}{star} {v.label}"
             out.write(line.rstrip() + "\n", "text")
     if only_vars:
@@ -387,7 +395,7 @@ def _describe_using(s: "Session", p, opts: dict) -> None:
         path = path.with_suffix(".dta")
     path = user_path(path)
     if not path.exists():
-        raise StataError(601, f"file {path} not found")
+        raise StataError(601, f"file {shown_path(path)} not found")
     saved, saved_r = s.data, s.r
     try:
         new = read_dta(path)

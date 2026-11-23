@@ -55,6 +55,14 @@ class MacroStore:
             self.locals[name] = value
 
     def get_global(self, name: str) -> str:
+        if name in ("S_DATE", "S_TIME") and name not in self.globals:
+            # system globals that follow the clock (VERIFY: same text as c(current_date), c(current_time))
+            import datetime as _dt
+            now = _dt.datetime.now()
+            if name == "S_TIME":
+                return now.strftime("%H:%M:%S")
+            months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            return f"{now.day:2d} {months[now.month - 1]} {now.year}"
         return self.globals.get(name, "")
 
     def set_global(self, name: str, value: str) -> None:
@@ -108,6 +116,10 @@ def expand(text: str, store: MacroStore, *,
                 j = s.find("}", i + 2)
                 if j != -1:
                     name = s[i + 2:j]
+                    if "`" in name:
+                        # ${`m'}: the local inside names the global
+                        name = expand(name, store, eval_inline=eval_inline, extended=extended,
+                                      results=results, objects=objects)
                     value = store.get_global(name)
                     s = s[:i] + value + s[j + 1:]
                     i += len(value)

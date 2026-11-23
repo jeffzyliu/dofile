@@ -69,7 +69,9 @@ refusals: deque[tuple[str, str]] = deque(maxlen=50)  # (path, message)
 class SandboxError(PermissionError):
     def __init__(self, message: str, path: str = ""):
         refusals.append((path, message))
-        super().__init__(errno.EACCES, message)  # strerror = message, so OpenDTA's own 603 errors show it
+        # strerror = message, so OpenDTA's own 603 errors show it; filename = path, so the dispatcher's 603 for a command
+        # without its own file-error handling (type, outfile, hexdump) names the file and Engine.run adds the reason
+        super().__init__(errno.EACCES, message, path or None)
 
 
 def deny_commands(names: tuple[str, ...] = DENIED) -> None:
@@ -125,6 +127,10 @@ def install(workdir: str | os.PathLike, read_dirs: tuple[str, ...] = ()) -> None
     py_roots |= {os.path.realpath(p) for p in code_dirs if os.path.isdir(p)}
     writable = (work,)
     readable = (work, *sorted({os.path.realpath(d) for d in read_dirs} | py_roots), "/dev/null")
+    if sys.platform == "darwin":
+        # c() builds its OS values on every reference: platform.mac_ver() reads this one file (it holds only the macOS
+        # version). Allowed as a file, not its folder; on Linux platform.release() calls uname, with no file read.
+        readable += ("/System/Library/CoreServices/SystemVersion.plist",)
 
     def hook(event: str, args: tuple) -> None:
         if event.startswith(_BLOCKED_EVENTS):

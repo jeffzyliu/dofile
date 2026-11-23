@@ -18,9 +18,8 @@ from dofile.engine import Engine
 HERE = Path(__file__).parent / "conformance"
 REF = json.loads((HERE / "data" / "ref.json").read_text())
 CHECK = re.compile(r"^CHECK (\w+)=\s*(\S+)", re.MULTILINE)
-KNOWN_GAPS = {
-    "hdfe_b_x1": "GAP-1: reghdfe is a community command, not in OpenDTA",
-}
+_GAPS = json.loads((HERE / "known-gaps.json").read_text())  # also read by web/scripts/check-snapshot.ts
+KNOWN_GAPS = _GAPS["corpus"]
 CASES = [
     (f.name, k) for f in sorted((HERE / "corpus").glob("*.do")) for k in re.findall(r'"CHECK (\w+)=', f.read_text())
 ]
@@ -51,10 +50,7 @@ def test_check_matches_reference(dofile, key, workdir, monkeypatch, request):
     assert abs(x - ref) <= max(1e-6 * abs(ref), 1e-12), f"{key}: {x} vs reference {ref}"
 
 
-PROBE_GAPS = {
-    "p06_esttab.do": "GAP-1: esttab (community command)",
-    "p07_outreg2.do": "GAP-1: outreg2 (community command)",
-}
+PROBE_GAPS = _GAPS["probes"]
 PROBES = sorted(p.name for p in (HERE / "probe").glob("*.do"))
 
 

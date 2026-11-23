@@ -16,6 +16,7 @@ from ..core.smcl import render_text
 from ..lang.adopath import find_file
 from ..lang.words import strip_outer_quotes
 from .registry import REGISTRY, command
+from ._util import shown_path
 from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ ALIASES = {
     "testnl": "postest2", "predictnl": "postest2", "linktest": "postest2", "contrast": "postest2", "pwcompare": "postest2", "pwmean": "postest2", "suest": "postest2",
     "bitest": "basetests", "bitesti": "basetests", "ksmirnov": "basetests", "median": "basetests", "nptrend": "basetests", "runtest": "basetests", "tetrachoric": "basetests", "ktau": "basetests", "pcorr": "basetests",
     "ameans": "basestats", "icc": "basestats", "loneway": "basestats", "esize": "basestats", "esizei": "basestats", "lnskew0": "basestats", "ladder": "basestats", "boxcox": "basestats",
-    "quantile": "basegraphs", "symplot": "basegraphs", "serrbar": "basegraphs", "dotplot": "basegraphs", "sunflower": "basegraphs", "lpoly": "basegraphs", "cusum": "basegraphs", "gladder": "basegraphs",
+    "quantile": "basegraphs", "symplot": "basegraphs", "serrbar": "basegraphs", "dotplot": "basegraphs", "sunflower": "basegraphs", "lpoly": "basegraphs", "cusum": "basegraphs", "gladder": "basegraphs", "qqplot": "basegraphs", "qladder": "basegraphs",
     "cumul": "basedisp", "stem": "basedisp", "lv": "basedisp", "smooth": "basedisp",
     "stjoin": "stsplit", "stfill": "stsplit", "stvary": "stsplit", "stgen": "stsplit", "stbase": "stsplit", "snapspan": "stsplit", "stptime": "strate", "stci": "strate", "stir": "strate", "stmh": "strate", "stmc": "strate", "ltable": "strate", "ctset": "ct", "cttost": "ct", "sttoct": "ct", "sttocc": "ct",
     "moptimize": "mata", "optimize": "mata", "m2_class": "mata", "class": "mata",
@@ -94,9 +95,9 @@ ALIASES = {
     "xtset": "xtreg", "tsset": "xtreg", "testparm": "test", "lincom": "test", "nlcom": "test",
     "est": "estimates", "estimates_table": "estimates", "estimates_store": "estimates",
     "proportion": "mean", "ratio": "mean", "total": "mean", "ranksum": "nptests",
-    "signrank": "nptests", "kwallis": "nptests", "spearman": "nptests", "swilk": "nptests",
-    "sktest": "nptests", "sdtest": "nptests", "cii": "immediate", "tabi": "immediate",
-    "ttesti": "immediate", "prtesti": "immediate", "drop": "datamgmt", "keep": "datamgmt",
+    "signrank": "nptests", "kwallis": "nptests", "spearman": "nptests", "swilk": "nptests", "sfrancia": "nptests",
+    "sktest": "nptests", "sdtest": "nptests", "robvar": "nptests", "cii": "immediate", "tabi": "immediate",
+    "ttesti": "immediate", "sdtesti": "immediate", "prtesti": "immediate", "drop": "datamgmt", "keep": "datamgmt",
     "sort": "datamgmt", "gsort": "datamgmt", "rename": "datamgmt", "order": "datamgmt",
     "count": "datamgmt", "notes": "label", "char": "label", "recast": "format",
     "compress": "format", "di": "display", "local": "macro", "global": "macro",
@@ -128,6 +129,12 @@ ALIASES = {
     "viewsource": "progutil", "signestimationsample": "estprog", "checkestimationsample": "estprog",
     "makecns": "estprog", "matcproc": "estprog", "mark": "syntax", "markin": "syntax",
     "sortpreserve": "program", "cutil": "classutil",
+    "hettest": "estat", "ovtest": "estat", "lstat": "estat", "vif": "estat",
+    "pkexamine": "pk", "pksumm": "pk", "pkcollapse": "pk", "pkshape": "pk", "pkequiv": "pk",
+    "pkcross": "pk", "bsqreg": "qreg", "iqreg": "qreg", "sqreg": "qreg", "hexdump": "filesys", "bsample": "bootstrap", "rcof": "progutil", "query": "interface", "set_defaults": "interface",
+    "mkmat": "matrix", "svmat": "matrix", "numlist": "macro",
+    "aorder": "datamgmt", "move": "datamgmt", "renpfix": "datamgmt", "numlabel": "label",
+    "treatreg": "treatment", "svydes": "svy", "svylc": "test",
 }
 
 
@@ -183,7 +190,7 @@ def cmd_view(s: "Session", args: str) -> None:
         t = t[5:]
     path = user_path(Path(strip_outer_quotes(t)).expanduser())
     if not path.exists():
-        raise StataError(601, f"file {path} not found")
+        raise StataError(601, f"file {shown_path(path)} not found")
     hook = s.ui_hooks.get("view")
     if hook is not None:
         hook(path, path.name)
