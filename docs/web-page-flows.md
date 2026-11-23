@@ -81,7 +81,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
      folder is written when the field is left (Enter or blur; Esc writes nothing), and `startRename` and `startDraft`
      are synchronous.
    - **The current folder** (what it does: SPEC 3.1, "Folders and the current folder", and OQ-21): `currentDir` in
-     `FilesPane.tsx`, kept apart from the roving focus (`rovingPath`); arrow keys select nothing; the caret is a span,
+     `files/tree-state.ts`, kept apart from the roving focus (`rovingPath`); arrow keys select nothing; the caret is a span,
      `aria-hidden`, not a tab stop, and it folds and unfolds and selects nothing; a tap on the rest of the row selects and
      unfolds, never folds; folding it or a folder above it makes the parent current; it is drawn as an accent outline, no
      fill. The "+" (and the head
@@ -115,7 +115,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `ui/Menu.tsx` `closeMenu(true)` | Esc, Tab, a picked item (before its `onSelect`) | synchronous | the trigger (`restore`, else `anchor`). A click outside, a resize or the window's blur close it with no focus move. |
 | `ui/Menu.tsx` `MenuEntry` | the menu opens and is placed; an arrow, Home or End changes the active item (a position among all its items, disabled ones included, so an item that turns enabled or disabled while it is open does not move the focus) | layout effect, from the item's own render | the active item; the open file's item (`current`) is scrolled into view the same way |
 | `files/FilesPane.tsx` `RenameField` | F2, New .do file, New folder: the field mounts (a New's field is a draft, `renaming.draft`, rule 8) | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
-| `files/FilesPane.tsx` `endDraft` | Esc in a draft's field | `focusTree()`, as `DeleteDialog` | as `DeleteDialog` (File actions is hidden on a phone) |
+| `files/rename.ts` `endDraft` | Esc in a draft's field | `focusTree()`, as `DeleteDialog` | as `DeleteDialog` (File actions is hidden on a phone) |
 | `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist | `useFocusRequest` (rule 7) | the tab moved to, only while the focus is inside that tablist |
 | `files/FilesPane.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and `focusWanted`; `focusTree` sets a keyless request | rule 7 | the row, only while the focus is on the page body or inside the tree (the tree's `role`) |
 | `log/LogView.tsx` `FindBar` open | `openFind` sets `findAsked` | `useFocusRequest`; once per `openFind`, so the Log drawn again with Find open takes no focus | the field |

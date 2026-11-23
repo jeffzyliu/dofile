@@ -168,6 +168,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     changed while asked or after "Do the same" (asked again), one deleted while asked (written; asked when its tab has
     unsaved edits), one edited before its write's turn (asked in the unsaved words), a dialog opened while a clash's file
     is read (the clash waits), a Replace against `openFile`'s read.
+- `rename.test.ts`: the inline rename and the draft rows (`app/files/rename.ts`, with the tree's state in
+  `tree-state.ts`) over fake-indexeddb, as the focus request and the tree's state show them.
+  - A field starting (the row in the tab order, the draft's free default, a blocked store), Enter, Esc and leaving a
+    rename (a usable name, one in use, one the store refuses, a list that was not current), Enter then the blur (one
+    rename), another field started meanwhile.
+  - A draft: Esc, Enter with a typed name, an empty one, a path, one in use; leaving it (writes the typed name or the free
+    default with a toast; opens nothing); a failed write; another field started meanwhile.
 - `documents.test.ts`: the open tabs and their documents (`app/editor/documents.ts`), no view or a stand-in one: open,
   activate, close and ask, close under a folder, a move, a retype, a reload, a run over a tab, the dot and `selection`
   derived, a view attached after a file opened.

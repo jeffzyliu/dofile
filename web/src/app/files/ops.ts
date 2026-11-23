@@ -12,6 +12,12 @@ import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
 import { fileTurn, type Io, type Turn } from "./turns.ts";
 
+/** A failure handler for a call whose promise nobody awaits: the cause to the console, `said` to the visitor. */
+export const fail = (what: string, said: string) => (e: unknown) => {
+  console.warn(`[dofile] ${what}: ${(e as Error)?.message ?? e}`);
+  say(said);
+};
+
 /** How a file opens by its name: a .dta tab, the editor (open.ts says which text files the editor takes), or no tab (a
  *  .png goes to the Graph tab). */
 const kindOf = (path: string) => {

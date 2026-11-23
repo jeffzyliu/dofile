@@ -9,7 +9,7 @@ import { activeTab, selection, tabs } from "./app/editor/documents.ts";
 import { documentSeeds } from "./app/editor/seeds.ts";
 import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
 import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
-import { focusWanted } from "./app/files/FilesPane.tsx";
+import { focusWanted } from "./app/files/tree-state.ts";
 import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
 import * as S from "./app/state.ts";

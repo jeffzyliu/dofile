@@ -9,9 +9,9 @@ import { dialog, files } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { focusAfterClose } from "./EditorTabs";
-import { focusTree } from "./FilesPane";
 import { deleteAll, deleteEntries } from "./ops.ts";
 import { baseName, shortDate } from "./tree.ts";
+import { focusTree } from "./tree-state.ts";
 import { answerClash, type ClashAnswer, clashNow, WORDS } from "./upload.ts";
 
 const close = () => {

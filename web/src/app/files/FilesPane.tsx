@@ -1,224 +1,36 @@
 // The file panel (docs/design/SPEC.md, section 3.1): the head menu and the body (tree, dropzone). The rows, keys,
 // rename and drafts follow SPEC 3.1 and docs/web-page-flows.md. Files change through the store (ops.ts, upload.ts), never the
 // worker.
-import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
-import { isConflict } from "../../engine/store.ts";
 import { formatSize } from "../bytes.ts";
 import { activeTab, tabs } from "../editor/documents.ts";
-import { downloadAll, refresh } from "../files.ts";
+import { downloadAll } from "../files.ts";
 import { restoreSample } from "../sample.ts";
-import { dialog, files, fresh, hasFiles, say, showToast } from "../state.ts";
+import { dialog, files, fresh, hasFiles } from "../state.ts";
 import { store } from "../store.ts";
 import { fromAnywhere, fromNothing, useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { closeMenu, MenuButton, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { entriesOf, fromDrop, fromFileList } from "./intake.ts";
 import { openFile } from "./open.ts";
-import { createEntry, downloadEntry, NEW_NAMES, renameEntry } from "./ops.ts";
+import { downloadEntry, fail } from "./ops.ts";
+import { clearProblem, endRename, leaveField, type Renaming, renaming, startDraft, startRename } from "./rename.ts";
+import { parentOf, type Row, treeRows } from "./tree.ts";
 import {
-  baseName,
-  folderOrAbove,
-  freeName,
-  joinPath,
-  movedPath,
-  NAME_NOT_ALLOWED,
-  nameProblem,
-  newPathProblem,
-  parentOf,
-  type Row,
-  treeRows,
-  within,
-} from "./tree.ts";
+  currentDir,
+  focusRow,
+  focusWanted,
+  folded,
+  newFileDir,
+  rove,
+  rovingPath,
+  setTree,
+  toggle,
+} from "./tree-state.ts";
 import { type Incoming, upload } from "./upload.ts";
-
-const folded = signal<ReadonlySet<string>>(new Set());
-const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused
-// the current folder ("" is the top): where the "+", New .do file and New folder make their file
-const currentDir = signal("");
-// the focus request (docs/web-page-flows.md, section 1): the row of `path` takes it once drawn; with no path, the row
-// in the tab order. `anywhere`: also from outside the tree
-export const focusWanted = signal<{ path: string | null; anywhere?: boolean } | null>(null); // the test hook reads it
-interface Renaming {
-  id: number; // which field: a commit that ends after another one began leaves it alone
-  path: string; // a draft: the name it was offered, picked in the tap
-  problem: string | null;
-  draft?: keyof typeof NEW_NAMES; // a new file or folder: nothing is written until the field is left
-  from: string | null; // the row in the tab order before the field: a draft's Esc gives the focus back to it
-}
-const renaming = signal<Renaming | null>(null);
-let fields = 0;
 
 let pickFiles: HTMLInputElement | null = null; // the hidden file inputs
 let pickFolder: HTMLInputElement | null = null;
-let treeList: HTMLUListElement | null = null; // the tree, drawn while it has rows
-const setTree = (el: HTMLUListElement | null) => {
-  treeList = el;
-};
-
-/** Whether the tree is on screen with its rows (not folded away, not on another phone view, not empty). */
-export const treeShown = () => (treeList?.getClientRects().length ?? 0) > 0;
-
-/** Make `path` the row in the tab order and have it take the focus when it is drawn (at once for a row on screen; after
- *  a rename, once the store has been listed again), unless the focus has gone out of the tree by then (TreeRow). */
-function focusRow(path: string) {
-  rovingPath.value = path;
-  focusWanted.value = { path };
-}
-
-/** Have the tree's row in the tab order take the focus when it is drawn. */
-export function focusTree(anywhere = false) {
-  focusWanted.value = { path: null, anywhere };
-}
-
-/** A visitor focused or clicked the row `path`: it is the roving one, and a request for another row ends there. */
-function rove(path: string) {
-  rovingPath.value = path;
-  if (focusWanted.value && focusWanted.value.path !== path) focusWanted.value = null;
-}
-
-const fail = (what: string, said: string) => (e: unknown) => {
-  console.warn(`[dofile] ${what}: ${(e as Error)?.message ?? e}`);
-  say(said);
-};
-
-/** Fold or unfold a folder (`open`: unfold, else swap). Folding the current folder, or one above it, makes the folded
- *  folder's parent current. */
-function toggle(path: string, open?: boolean) {
-  const next = new Set(folded.value);
-  if (open ?? next.has(path)) next.delete(path);
-  else {
-    next.add(path);
-    if (within(currentDir.value, path)) currentDir.value = parentOf(path);
-  }
-  folded.value = next;
-}
-
-/** Unfold `dir` and every folder above it, so a row inside it is drawn. */
-function unfold(dir: string) {
-  const next = new Set(folded.value);
-  for (let p = dir; p; p = parentOf(p)) next.delete(p);
-  folded.value = next;
-}
-
-function startRename(path: string, draft?: Renaming["draft"]) {
-  renaming.value = { id: ++fields, path, problem: null, draft, from: rovingPath.value };
-  rovingPath.value = path;
-  focusWanted.value = null; // the field takes the focus: a waiting request ends
-}
-
-/** "New .do file", "New folder" and the "+": draw the name field at once in `dir` (unfolded, made current), writing
- *  nothing yet: on iOS the focus that raises the keyboard has to be made in the tap (docs/web-page-flows.md, section 1,
- *  rule 8). endRename writes it. */
-function startDraft(kind: keyof typeof NEW_NAMES, dir: string) {
-  const what = kind === "file" ? "file" : "folder";
-  if (store.blocked)
-    return fail(`New ${what}`, `Couldn't create the ${what}`)(new Error("the files are another tab's"));
-  unfold(dir);
-  currentDir.value = dir;
-  startRename(
-    freeName(
-      dir,
-      NEW_NAMES[kind],
-      files.value.map((f) => f.path),
-    ),
-    kind,
-  );
-}
-
-/** The folder the "+" makes a file in (docs/web-page-flows.md, section 1): the current folder, or the nearest one above
- *  it that exists (the current folder may have been deleted); else the top. */
-const newFileDir = () => folderOrAbove(currentDir.value, files.value);
-
-let ending = false; // an endRename is in progress (Enter, then the blur as the field goes)
-
-/** Keep the field `r` open with `problem` under it, unless it has gone. */
-function keepOpen(r: Renaming, problem: string) {
-  if (renaming.value?.id === r.id) renaming.value = { ...r, problem };
-  say(problem);
-}
-
-/** End the inline rename: `name` is the new name, or null to cancel. Keeps the field open when the name cannot be used.
- *  `leaving`: the field was left, not Enter pressed. A draft is written here, whatever the name (endDraft). */
-async function endRename(name: string | null, leaving = false) {
-  const r = renaming.value;
-  if (!r || ending) return;
-  if (r.draft) return endDraft(r, name, leaving);
-  const dir = parentOf(r.path);
-  const to = name === null ? r.path : joinPath(dir, name);
-  if (to !== r.path) {
-    const problem = nameProblem(
-      name!,
-      dir,
-      files.value.map((f) => f.path),
-      r.path,
-    );
-    if (problem) return keepOpen(r, problem);
-    ending = true;
-    try {
-      await renameEntry(r.path, to);
-    } catch (e) {
-      // the list was not current: the store says why
-      return keepOpen(r, isConflict(e) ? `${name} already exists here.` : NAME_NOT_ALLOWED);
-    } finally {
-      ending = false;
-    }
-    currentDir.value = movedPath(currentDir.value, r.path, to); // the current folder, or one above it, was renamed
-  }
-  if (renaming.value?.id !== r.id) return; // another field was started meanwhile
-  renaming.value = null;
-  focusRow(to);
-}
-
-/** The end of a draft's field. Esc writes nothing. Enter writes the typed name, or the free default when it is empty or
- *  unchanged; a name in use keeps the field open. Leaving the field always writes: a name that cannot be used makes the
- *  free default (a toast says so), and nothing opens, so the focus stays where the visitor tapped. */
-async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
-  const kind = r.draft!;
-  const what = kind === "file" ? "file" : "folder";
-  if (name === null) {
-    renaming.value = null;
-    rovingPath.value = r.from; // the row the visitor came from, not the draft's path or the open file's row
-    focusTree();
-    return;
-  }
-  const dir = parentOf(r.path);
-  const asked = name.trim() === "" || name === baseName(r.path) ? undefined : name;
-  // a draft's name may be a path: "sub/x.do" makes sub
-  let problem = asked === undefined ? null : newPathProblem(asked, dir, files.value);
-  if (problem && !leaving) return keepOpen(r, problem);
-  if (leaving && rovingPath.value === r.path) rovingPath.value = r.from; // the draft's path is not a row
-  ending = true;
-  let to: string;
-  try {
-    try {
-      to = await createEntry(kind, dir, problem ? undefined : asked);
-    } catch (e) {
-      if (asked === undefined || problem || !isConflict(e)) throw e;
-      problem = `${asked} already exists here.`; // the list was not current
-      if (!leaving) return keepOpen(r, problem);
-      to = await createEntry(kind, dir);
-    }
-    await refresh();
-  } catch (e) {
-    fail(`New ${what}`, `Couldn't create the ${what}`)(e);
-    if (renaming.value?.id === r.id) {
-      renaming.value = null;
-      focusTree();
-    }
-    return;
-  } finally {
-    ending = false;
-  }
-  if (problem)
-    showToast(`${problem} Made ${baseName(to)} instead.`); // the reason line is gone with the field
-  else if (asked?.includes("/")) unfold(parentOf(to)); // a folder the name went through may be folded
-  // leaving: the visitor's tap decides what is open and where the focus is
-  if (kind === "file" && !leaving) openFile(to);
-  if (renaming.value?.id !== r.id) return; // another field was started meanwhile
-  renaming.value = null;
-  if (!leaving) focusRow(to);
-}
 
 function send(items: Promise<Incoming[]>) {
   upload(items).catch(fail("The upload", "The upload failed")); // in its place in the queue now, before its read ends
@@ -346,9 +158,7 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
         autoCorrect="off"
         autoCapitalize="off"
         ref={field}
-        onInput={() => {
-          if (r.problem) renaming.value = { ...r, problem: null };
-        }}
+        onInput={() => clearProblem(r)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -358,21 +168,7 @@ function RenameField({ r, row }: { r: Renaming; row: Row }) {
             endRename(null);
           }
         }}
-        onBlur={(e) => {
-          const name = e.currentTarget.value;
-          if (renaming.value?.id !== r.id) return;
-          if (r.draft) return void endRename(name, true); // a draft is written when the field is left
-          // leaving the field: rename when the name can be used, else cancel
-          const usable =
-            name === row.name ||
-            !nameProblem(
-              name,
-              parentOf(row.path),
-              files.value.map((f) => f.path),
-              row.path,
-            );
-          endRename(usable ? name : null);
-        }}
+        onBlur={(e) => leaveField(r, e.currentTarget.value)}
       />
       {r.problem && (
         <span class="rename-problem" id="rename-problem">
