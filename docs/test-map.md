@@ -85,7 +85,7 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 - The `CHECK name=value` lines of the corpus files must match `data/ref.json` to 1e-6 relative. The values come from
   statsmodels and linearmodels, not from OpenDTA.
 - The probes (`probe/*.do`) must run with rc 0.
-- Known gaps are `xfail(strict=True)`: `reghdfe`, `esttab` and `outreg2` (GAP-1, community commands), and the probe
+- Known gaps (`tests/conformance/known-gaps.json`, also read by the web `check-snapshot`) are `xfail(strict=True)`: `reghdfe`, `esttab` and `outreg2` (GAP-1, community commands), and the probe
   `p13_set_linesize_text` (ODT-35: `set linesize abc` is accepted, then every command is rc 9999).
 - `test_sandbox.py::test_corpus_and_probes_still_work_under_sandbox` runs the same corpus with the sandbox on.
 

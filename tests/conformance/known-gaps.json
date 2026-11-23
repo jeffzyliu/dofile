@@ -1,0 +1,10 @@
+{
+  "corpus": {
+    "hdfe_b_x1": "GAP-1: reghdfe is a community command, not in OpenDTA"
+  },
+  "probes": {
+    "p06_esttab.do": "GAP-1: esttab (community command)",
+    "p07_outreg2.do": "GAP-1: outreg2 (community command)",
+    "p13_set_linesize_text.do": "ODT-35: set linesize with text is accepted and breaks every later command"
+  }
+}
