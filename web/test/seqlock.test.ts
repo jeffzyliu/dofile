@@ -123,6 +123,32 @@ test("a page write between the reader's two counter reads: the copy is read agai
   }
 });
 
+test("a busy read after a write moved the count gives the count its copy began at, so a waitSeq on it returns at once", () => {
+  const { region } = fresh();
+  let wrote = false;
+  const read = readSeq(
+    region,
+    (reader) => {
+      const word = reader.readWord(0);
+      if (!wrote) {
+        wrote = true;
+        writeSeq(region, (writer) => {
+          writer.setWord(0, 1);
+          return undefined;
+        });
+      }
+      return word;
+    },
+    0,
+  );
+  assert.deepEqual(read, { seq: 0, busy: true });
+
+  const t0 = performance.now();
+  waitSeq(region, read.seq, 2000);
+  const waitedMs = performance.now() - t0;
+  assert.ok(waitedMs < 500, `waitSeq on a count already passed waited ${waitedMs.toFixed(0)} ms`);
+});
+
 test("an odd counter (a writer stopped mid-section): the callback is not run, busy after about waitMs; a second thread's write wakes it", async () => {
   const { sab, region } = fresh();
   Atomics.add(new Int32Array(sab, 0, WORDS), WORDS - 1, 1);
