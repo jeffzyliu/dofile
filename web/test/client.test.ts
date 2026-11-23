@@ -1245,6 +1245,7 @@ test("graphics part: the shared buffer is pending while the part is fetched, the
   await startWorker(page.eng, done.build);
   assert.ok(page.got.sab, "the worker was booted with the shared buffer");
   assert.deepEqual(page.header(), [0, 0, 0], "pending");
+  assert.equal(await page.eng.cached(), true, "the part follows the start: it is not waited for");
   await f.release();
   await until(() => page.states.at(-1) === "landed", "landed");
   assert.deepEqual(page.header(), [1, PART.size, 0], "landed, its byte count, the first try");
@@ -1357,9 +1358,12 @@ test("graphics part without a shared buffer (no cross-origin isolation): downloa
     startFiles: { base: `${BASE}start-files.json`, ...LAZY } as StartFiles & { base: string },
   });
   const seen: { received: number; total: number }[] = [];
+  const said: string[] = [];
+  eng.onGraphics((p) => said.push(p.state));
   const downloading = eng.download({ onProgress: (p) => seen.push(p) });
   await f.release();
   const done = await downloading;
+  assert.deepEqual(said, [], 'no "after the start" line: nothing follows the start');
   assert.deepEqual(
     { ...done, build: null },
     { cached: true, received: LAZY.download, total: LAZY.download, build: null },
