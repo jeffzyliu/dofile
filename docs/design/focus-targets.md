@@ -47,9 +47,9 @@ rules, only who holds the handles.
 | `editorCommands.focus` | `editor/commands.ts` (default: a `[data-editor]` query), replaced at mount by `editor/Editor.tsx` `focus`, which for a `.dta` tab queries `[role="tablist"][aria-label="Open files"]`'s selected tab and `.editor-pane .dta-view button` | `focusStable`, `EditorTabs` |
 | `focusStable` | `states/focus.ts`: `editorCommands.focus()`, then the first shown `button[aria-label="More actions"]` | `ui/Dialog.tsx` hand-back, `useFocusOnLeave` (banners, `DismissibleBanner`), `DeclinedBanner` |
 | `editorAsked` | `editor/commands.ts`: `{}` (focus) or `{ path, line }` (Go to line), taken by `Editor`'s layout effect | `engine.ts` (effect `close-dialog` with `focusEditor`), `goToLine` |
-| `focusWanted`, `focusRow`, `focusTree`, `rove`, `treeShown` | `files/FilesPane.tsx`, taken by `useRovingFocus` (`TreeRow`) and `FilesHead` | `App.tsx` `foldFiles`, `files/dialogs.tsx` (Delete), `EditorTabs`, `endDraft`; the test hook's `focusWanted` key (`web/src/main.tsx`, read by `web/e2e/files.spec.ts`) |
+| `focusWanted`, `focusRow`, `focusTree`, `rove`, `treeShown` | `files/tree-state.ts`, taken by `useRovingFocus` (`files/TreeRow.tsx`) and `FilesHead` (`files/FilesPane.tsx`) | `App.tsx` `foldFiles`, `files/dialogs.tsx` (Delete), `EditorTabs`, `endDraft`; the test hook's `focusWanted` key (`web/src/main.tsx`, read by `web/e2e/files.spec.ts`) |
 | `focusAfterClose`, `closeAsked`, `tabAsked` | `files/EditorTabs.tsx` | `files/dialogs.tsx` (close-tab), Delete on a tab |
-| `openFind`, `findAsked`, `findReturn` | `log/LogView.tsx` (`FindBar`) | `log/CommandLine.tsx`: the Log head's Find (passes its button), `logMenuItems` (passes `null`) |
+| `openFind`, `findAsked`, `findReturn` | `log/find.ts`, taken by `FindBar` (`log/LogView.tsx`) | `log/LogActions.tsx`: the Log head's Find (passes its button), `logMenuItems` (passes `null`) |
 | `filesToggle`, `foldFiles`, `onFilesKey` | `App.tsx` (a module `let` holding the Files button) | the Files button, Esc in the folded list |
 | `fullOpener` | `output/view.ts`, set by `output/GraphTab.tsx`, read by `output/FullSize.tsx` | the full-size view's opener (Safari focuses no pressed button) |
 | `leaving` | `ui/Dialog.tsx` (module `let`) | a dialog that follows another (rule 4) |
