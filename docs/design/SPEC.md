@@ -242,6 +242,10 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   and the landing page carries the line. State texts: section 5. Last run: "Last run: whole file (started with no locals)
   · r(111) at line 17 · 0.38 s" (`E`); "Last run: stopped by Break · r(1) · 18.4 s" (`S 10`); the rc in the error color.
   Memory comes from the `memory` op after the start and each run; it cannot update during a run (OQ-8).
+- **One model for the bar and the phone's strip** (`editor/status.ts`, tested in Node): the bar draws its full form, the strip
+  its short form of the same parts (the state's words without the run's timer, "Engine 612 MB", the last run as "r(111)"
+  and "line 17 · 0.38 s", Go to line, and "Graphs loading" after the memory). The affiliation line and the files note
+  are the bar's only. The words of the strip are as section 3.5's Phone only item gives them.
 
 ### 3.7 Graph tab and full-size view (P1, step 4c)
 - **Tab** (`E`): the latest graph on `.graph-card`; a foot with thumbnails of the session's graphs, "graph 1 of 1 · scatter
@@ -1157,11 +1161,12 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     editor" and "Couldn't create the file", "Couldn't create the folder", "The upload failed". The rename's refusal from the store is "That name isn't allowed.", the same sentence as for `.` and `..` (`NAME_NOT_ALLOWED`).
   - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands`), `editor/RunControls.tsx`
     (built for the section 5 states, each button at one size, 3.4; 4b adds the timers, and the pill's time goes into
-    its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the
-    timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px),
+    its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: draws the status bar; 4b adds the
+    timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px; the words are
+    `editor/status.ts`, one model with a full form for the bar and a short form for the phone's strip),
     `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
     `log/CommandLine.tsx` (`CommandLine`), `log/LogActions.tsx` (`LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too),
-    `log/PhoneStrip.tsx` (`PhoneStrip`), `log/find.ts` (Find's signals and `openFind`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
+    `log/PhoneStrip.tsx` (`PhoneStrip`: draws the short form), `log/find.ts` (Find's signals and `openFind`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
     save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
     Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`

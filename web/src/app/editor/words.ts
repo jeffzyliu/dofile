@@ -39,8 +39,14 @@ export function runheadWords(head: RunHead, first: boolean, phone: boolean): [st
 }
 
 /** The status bar's last run, in pieces (SPEC section 10): "Last run: " + what, then rc (in the error color) and where,
- *  then the time. */
-export function lastRunWords(r: LastRun): { what: string; rc: string | null; where: string | null; time: string } {
+ *  then the time. `line` is the line an error or Break (not a command's) came at, for the phone strip's shorter words. */
+export function lastRunWords(r: LastRun): {
+  what: string;
+  rc: string | null;
+  line: number | null;
+  where: string | null;
+  time: string;
+} {
   const what =
     r.rc === 1
       ? "stopped by Break"
@@ -52,8 +58,9 @@ export function lastRunWords(r: LastRun): { what: string; rc: string | null; whe
             : "the selection"
           : "a command";
   const rc = r.rc === 0 ? null : `r(${r.rc})`;
-  const where = r.rc !== 0 && r.rc !== 1 && r.line !== null && r.kind !== "command" ? `at line ${r.line}` : null;
-  return { what, rc, where, time: seconds(r.seconds) };
+  const line = r.rc !== 0 && r.kind !== "command" ? r.line : null;
+  const where = line !== null && r.rc !== 1 ? `at line ${line}` : null;
+  return { what, rc, line, where, time: seconds(r.seconds) };
 }
 
 /** "Engine memory 612 MB" (status bar) or "Engine 612 MB" (the phone's strip), from the heap the engine reports. */

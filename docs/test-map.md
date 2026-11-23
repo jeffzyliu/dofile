@@ -239,6 +239,11 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
 - `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
+- `status.test.ts`: what the status bar and the phone's strip say (`editor/status.ts`, no DOM): each engine state's words in the
+  bar's full form and the strip's short form (the run's timer only in the bar; Break's timer beside the words in the bar,
+  after them in the strip), the start's step count, the last run's words in both forms and Go to line (strip only), the
+  memory, "Graphs loading" and its percent, the parts only the bar has (affiliation, the files note), and the order of
+  the parts in each form.
 - `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`); the denied commands come from `commands.json`, generated from `browser.DENIED`.
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
