@@ -17,6 +17,7 @@ import { ignoreHeldEnter } from "../ui/keys.ts";
 import { since } from "./clock.ts";
 import { editorCommands } from "./commands.ts";
 import { activeTab, save, selection, tabs } from "./documents.ts";
+import { activeRunRefusal } from "./runnable.ts";
 import { PILL_WIDEST, pillTime, refusedRunWords } from "./words.ts";
 
 /** The run controls' class: in the other-tab states they keep their place and are unseen (app.css). */
@@ -33,7 +34,13 @@ const NAME: Partial<Record<string, string>> = {
 
 /** Run's label and whether it can be pressed, by engine state (SPEC section 5's Run column). `start`: the button is
  *  "Start engine" (there is no engine, and a press starts it), not a run. */
-function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boolean; start: boolean } {
+function runState(): {
+  label: (typeof RUN)[number];
+  disabled: boolean;
+  busy: boolean;
+  start: boolean;
+  reason?: string;
+} {
   const st = engine.value;
   const s = st.s;
   const offer = startOffer(st);
@@ -44,7 +51,12 @@ function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boo
       return { label: "Not started", disabled: true, busy: false, start: false };
     return { label: "Start engine", disabled: offer === "off", busy: false, start: true };
   }
-  if (takesRun(st)) return { label: "Run", disabled: false, busy: false, start: false };
+  if (takesRun(st)) {
+    const reason = activeRunRefusal.value; // the active tab is not a .do or .ado file
+    return reason === null
+      ? { label: "Run", disabled: false, busy: false, start: false }
+      : { label: "Run", disabled: true, busy: false, start: false, reason };
+  }
   if (runOn(st)) return { label: "Run", disabled: s !== "running", busy: true, start: false };
   if (engineStarting(st)) return { label: "Starting…", disabled: true, busy: false, start: false };
   return { label: "Run", disabled: true, busy: false, start: false }; // the page load (checking-lock, checking-cache)
@@ -64,7 +76,7 @@ function breakState(): { label: (typeof BREAK)[number]; live: boolean; disabled:
 function pressRun(run: ReturnType<typeof runState>, go: () => void) {
   if (run.busy) return;
   if (run.disabled) {
-    const words = refusedRunWords(engine.value.s);
+    const words = run.reason ?? refusedRunWords(engine.value.s);
     if (words) showToast(words, "error");
   } else if (run.start) startEngine();
   else go();
@@ -96,7 +108,8 @@ export function RunControls() {
       <button
         type="button"
         class={`btn primary ${ctl()}${run.busy || run.disabled ? " off" : ""}`}
-        aria-label={NAME[run.label]}
+        aria-label={run.reason ? `Run is not available: ${run.reason}` : NAME[run.label]}
+        title={run.reason}
         aria-disabled={run.busy || run.disabled || undefined}
         aria-keyshortcuts={(usable && !sel) || (run.start && !run.disabled) ? modShortcut("Enter") : undefined}
         onKeyDown={ignoreHeldEnter}
@@ -121,6 +134,7 @@ export function RunControls() {
         type="button"
         class={`btn ${ctl()}`}
         disabled={!usable || !sel}
+        title={run.reason}
         aria-keyshortcuts={usable && sel ? modShortcut("Enter") : undefined}
         onClick={() => editorCommands.runSelection()}
       >
@@ -222,12 +236,19 @@ export function PhoneRun() {
       </button>
     );
   }
-  const name = !range ? NAME[run.label] : range.includes("–") ? `Run lines ${range}` : `Run line ${range}`;
+  const name = run.reason
+    ? `Run is not available: ${run.reason}`
+    : !range
+      ? NAME[run.label]
+      : range.includes("–")
+        ? `Run lines ${range}`
+        : `Run line ${range}`;
   return (
     <button
       type="button"
       class={`btn primary ${ctl()}${run.disabled ? " off" : ""}`}
       aria-label={name}
+      title={run.reason}
       aria-disabled={run.disabled || undefined}
       onKeyDown={ignoreHeldEnter}
       onClick={() => pressRun(run, () => (sel ? editorCommands.runSelection() : editorCommands.runFile()))}
