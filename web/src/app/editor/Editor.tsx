@@ -229,7 +229,7 @@ export function Editor() {
   const host = useRef<HTMLDivElement>(null);
   const emptyRef = useRef<HTMLDivElement>(null);
   useEffect(() => mount(host.current!, emptyRef.current!), []);
-  useFocusTarget("editor", focusTarget, { focus: focusIn });
+  useFocusTarget("editor", { get: focusTarget, focus: focusIn });
   const ask = editorAsked.value;
   useLayoutEffect(() => {
     if (ask) takeAsk(ask);

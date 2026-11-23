@@ -31,11 +31,11 @@ export interface BannerProps {
   children: ComponentChildren; // the sentence; its first words in <b> as drawn
   actions?: ComponentChildren; // buttons under it
   focusable?: boolean; // tabindex=-1, for a banner that takes the focus (S 9b)
-  bannerRef?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement>;
 }
 
-export const Banner = ({ kind = "info", children, actions, focusable, bannerRef }: BannerProps) => (
-  <div ref={bannerRef} class={`banner${kind === "info" ? "" : ` ${kind}`}`} tabIndex={focusable ? -1 : undefined}>
+export const Banner = ({ kind = "info", children, actions, focusable, ref }: BannerProps) => (
+  <div ref={ref} class={`banner${kind === "info" ? "" : ` ${kind}`}`} tabIndex={focusable ? -1 : undefined}>
     {kind !== "info" && <Icon name="warn" />}
     <div>
       {children}

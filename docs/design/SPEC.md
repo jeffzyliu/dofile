@@ -1333,7 +1333,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `ask()` (the declined banner's "Start engine" leads back to `asking`, section 5), `decline`,
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
-    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `focusStable` (`states/focus.ts`), `downloadAll`, and run.ts `refreshData`.
+    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `focusStable` (`ui/focus-targets.ts`), `downloadAll`, and run.ts `refreshData`.
     **As built (4d, to review).** `states/words.ts` holds the logic and the words with no view (Node-tested:
     `test/states.test.ts`), `states/clock.ts` the `useNow` timer of the download dialog (the machine has no clock; a view reads `Date.now()`). Every other elapsed time (the Break pill, the status bar, the running and stopping banners) reads the one `now` of `editor/clock.ts` and the status bar's `ticking` formatter, so they show the same seconds at every tick.
     S 2 and S 3 are one progress dialog: while `downloading` the header row "Downloading  14.2 of 48 MB · 6 s", the bar
@@ -1348,7 +1348,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
     under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (the `editor` target, which focuses at once; with a .dta tab
     active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
-    focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/modal-trap.ts` (which `ui/Dialog.tsx` and the
+    focus nowhere (the Editor pane hidden: another phone view) (`ui/focus-targets.ts` `focusStable`). `ui/modal-trap.ts` (which `ui/Dialog.tsx` and the
     full-size view use) calls the same `focusStable` when a modal closes and its opener has left the page (a banner's button: another tab took
     the lock during a Break, then "Use dofile in this tab"), after the timers its answer set and only for a focus left on
     `<body>`; the opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on
@@ -1432,7 +1432,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   it treats that as Cancel.
 - **Primitives** (`web/src/app/ui/`): `Dialog` (a native modal `<dialog>`: `title`, `actions`, `role`, `onCancel` = Esc,
   none = blocking; `data-autofocus` marks the first focus; focus returns to the opener when it unmounts, or, when the
-  opener has left the page, to the editor or "More actions" (`states/focus.ts` `focusStable`), after the timers its answer
+  opener has left the page, to the editor or "More actions" (`ui/focus-targets.ts` `focusStable`), after the timers its answer
   set and only for a focus left on nothing, so it moves once (`ui/modal-trap.ts` `useModalTrap`, which the full-size view uses too); a bottom sheet
   under 700 px); `MenuButton` and `openMenu({label, items, anchor | at})` (one menu at a time, in the top layer, arrows,
   Home, End (the menu owns its active item, a position among all its items; an item takes the focus from its own render), Esc returns focus, Tab closes and moves on from the trigger; an item is `{label, onSelect | href, hint,

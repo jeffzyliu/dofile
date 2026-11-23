@@ -58,7 +58,7 @@ export function Tablist<T extends string>({
           idPrefix={idPrefix}
           tabClass={tabClass}
           asked={asked}
-          list={list}
+          list={() => list.current}
           onSelect={() => onChange(t.id)}
         />
       ))}
@@ -81,18 +81,16 @@ function Tab<T extends string>({
   idPrefix: string;
   tabClass: string;
   asked: Signal<T | null>;
-  list: { current: HTMLElement | null };
+  list: () => HTMLElement | null;
   onSelect: () => void;
 }) {
-  const el = useRef<HTMLButtonElement>(null);
-  useFocusRequest(
-    asked.value === t.id,
-    el,
-    () => {
+  const el = useFocusRequest<HTMLButtonElement>({
+    asked: asked.value === t.id,
+    end: () => {
       asked.value = null;
     },
-    (focused) => !!focused && !!list.current?.contains(focused),
-  );
+    from: (focused) => !!focused && !!list()?.contains(focused),
+  });
   return (
     <button
       ref={el}

@@ -9,6 +9,7 @@ import { engine as engineState } from "./state/engine.ts";
 
 import * as engine from "./engine.ts";
 
+import { takesRun } from "./states/predicates.ts";
 import { failedActions } from "./states/words.ts";
 
 /** What "Start engine" does in a state with no engine:
@@ -74,6 +75,11 @@ export const barButton = (offer: StartOffer | null, command: string | null, take
   off: offer !== null,
   disabled: command === null || (offer === null && !takesRun),
 });
+/** The offer and the primary button of a command bar in engine state `st` (barButton, with the engine's gate). */
+export const barOf = (st: EngineState, command: string | null) => {
+  const offer = startOffer(st);
+  return { offer, ...barButton(offer, command, takesRun(st)) };
+};
 /** The command line's placeholder while it is off, by the offer. */
 export const startHint = (offer: StartOffer): string =>
   offer === "off" ? "The engine isn't running" : "Start the engine to run code";

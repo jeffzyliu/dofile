@@ -1,7 +1,5 @@
 // The file panel (docs/design/SPEC.md, section 3.1): the head menu and the body (tree, dropzone). Files change through the
 // store (ops.ts, upload.ts), never the worker.
-import { useRef } from "preact/hooks";
-
 import { files, hasFiles } from "../state/files.ts";
 import { openDialog } from "../state/notices.ts";
 
@@ -56,9 +54,8 @@ export const fileMenuItems = (): MenuItem[] => [
 ];
 
 export function FilesHead() {
-  const button = useRef<HTMLButtonElement>(null);
   // with no rows a request for the row in the tab order comes here, File actions
-  useFocusTarget("tree", () => (files.value.length ? null : button.current));
+  const button = useFocusTarget<HTMLButtonElement>("tree", { get: (own) => (files.value.length ? null : own) });
   return (
     <>
       <NewFileButton class="head-link icon" />
@@ -81,8 +78,7 @@ export function NewFileButton({ class: cls }: { class: string }) {
 }
 
 export function FilesBody() {
-  const ref = useRef<HTMLDivElement>(null);
-  useDrop(ref);
+  const ref = useDrop<HTMLDivElement>();
   const draft = renaming.value?.draft ? renaming.value : null;
   // a draft is a row of its own before anything is written; a real file at its path hides it (treeRows keeps the last)
   const rows = treeRows(

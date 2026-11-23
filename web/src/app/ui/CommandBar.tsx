@@ -4,10 +4,9 @@ import type { fileCommand } from "../../stata/quote.ts";
 import { engine } from "../state/engine.ts";
 import { showToast } from "../state/notices.ts";
 
-import { barButton, startFirst, startOffer } from "../start.ts";
+import { barOf, startFirst } from "../start.ts";
 
 import { copyText } from "../output/clip.ts";
-import { takesRun } from "../states/predicates.ts";
 
 type Props = {
   made: ReturnType<typeof fileCommand>;
@@ -24,8 +23,7 @@ type Props = {
 
 export function CommandBar({ made, row, code, button, verb, copyLabel, what, run }: Props) {
   const command = "command" in made ? made.command : null;
-  const offer = startOffer(engine.value);
-  const { off, disabled } = barButton(offer, command, takesRun(engine.value));
+  const { offer, off, disabled } = barOf(engine.value, command);
   return (
     <div class={row}>
       {command !== null ? (

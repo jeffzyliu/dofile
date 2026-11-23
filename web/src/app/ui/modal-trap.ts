@@ -2,7 +2,9 @@
 // docs/design/focus-targets.md, section 5; the rules it keeps are docs/web-page-flows.md, section 1.
 import { useLayoutEffect, useRef } from "preact/hooks";
 
-import { focusStable } from "../states/focus.ts";
+import type { Get } from "./element.ts";
+import { useElement } from "./element.ts";
+import { focusStable } from "./focus-targets.ts";
 
 /** What the caller decides; the rest is the trap's. */
 export interface ModalTrap {
@@ -45,12 +47,14 @@ function wrapTab(e: KeyboardEvent, root: HTMLElement) {
  *    It lets go of the focus before a native <dialog> opens, so the browser keeps no element to give it back to on
  *    close() (WebKit does, before an answer can place it).
  *  - A root that is a native <dialog> is opened with showModal(), and the browser keeps Tab inside. Any other root keeps
- *    Tab inside itself, takes Esc and the caller's keys, and leaves every key to a native dialog open over it. */
-export function useModalTrap(root: { current: HTMLElement | null }, options: ModalTrap) {
+ *    Tab inside itself, takes Esc and the caller's keys, and leaves every key to a native dialog open over it.
+ *  @returns the ref to attach to the modal's root */
+export function useModalTrap<T extends HTMLElement = HTMLElement>(options: ModalTrap & { get?: Get<T> }) {
+  const { ref, el: read } = useElement(options.get);
   const latest = useRef(options);
   latest.current = options;
   useLayoutEffect(() => {
-    const el = root.current!;
+    const el = read()!;
     const native = el instanceof HTMLDialogElement;
     const active = document.activeElement;
     const opener = active instanceof HTMLElement && active !== document.body ? active : leaving;
@@ -86,4 +90,5 @@ export function useModalTrap(root: { current: HTMLElement | null }, options: Mod
       });
     };
   }, []);
+  return ref;
 }

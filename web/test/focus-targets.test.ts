@@ -13,6 +13,7 @@ import {
   cancel,
   focusNow,
   focusRequest,
+  focusStable,
   fromAnywhere,
   fromNothing,
   register,
@@ -20,8 +21,6 @@ import {
   TARGET_NAMES,
   takeRequest,
 } from "../src/app/ui/focus-targets.ts";
-
-import { focusStable } from "../src/app/states/focus.ts";
 
 interface Fake {
   isConnected: boolean;
@@ -48,7 +47,7 @@ const fake = (over: Partial<Fake> = {}): Fake & HTMLElement => {
 
 const undo: (() => void)[] = [];
 const reg = (name: TargetName, get: () => HTMLElement | null, key?: string, focus?: (el: HTMLElement) => void) => {
-  undo.push(register(name, get, key, focus));
+  undo.push(register(name, { get, key, focus }));
 };
 afterEach(() => {
   for (const u of undo.splice(0)) u();
@@ -154,7 +153,7 @@ test("an entry follows its getter, and unregistering ends it", () => {
   const a = fake();
   const b = fake();
   let at: HTMLElement = a;
-  const off = register("editor", () => at);
+  const off = register("editor", { get: () => at });
 
   focusNow("editor");
 
@@ -317,7 +316,7 @@ test("each target name is registered by a component, and a component registers n
         .join("\n"),
     )
     .join("\n");
-  const used = [...text.matchAll(/\buseFocusTarget\(\s*"([^"]+)"/g)].map((m) => m[1]);
+  const used = [...text.matchAll(/\buseFocusTarget(?:<[^>]*>)?\(\s*"([^"]+)"/g)].map((m) => m[1]);
   for (const name of TARGET_NAMES) assert.ok(used.includes(name), `${name} is registered by a component`);
   for (const name of used) assert.ok((TARGET_NAMES as readonly string[]).includes(name), `${name} is a target name`);
 });

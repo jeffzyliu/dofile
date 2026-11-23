@@ -45,7 +45,7 @@ rules, only who holds the handles.
 | Handle | Where | Who uses it |
 |---|---|---|
 | `editorCommands.focus` | `editor/commands.ts` (default: a `[data-editor]` query), replaced at mount by `editor/Editor.tsx` `focus`, which for a `.dta` tab queries `[role="tablist"][aria-label="Open files"]`'s selected tab and `.editor-pane .dta-view button` | `focusStable`, `EditorTabs` |
-| `focusStable` | `states/focus.ts`: `editorCommands.focus()`, then the first shown `button[aria-label="More actions"]` | `ui/Dialog.tsx` hand-back, `useFocusOnLeave` (banners, `DismissibleBanner`), `DeclinedBanner` |
+| `focusStable` | `ui/focus-targets.ts`: `editorCommands.focus()`, then the first shown `button[aria-label="More actions"]` | `ui/Dialog.tsx` hand-back, `useFocusOnLeave` (banners, `DismissibleBanner`), `DeclinedBanner` |
 | `editorAsked` | `editor/commands.ts`: `{}` (focus) or `{ path, line }` (Go to line), taken by `Editor`'s layout effect | `engine.ts` (effect `close-dialog` with `focusEditor`), `goToLine` |
 | `focusWanted`, `focusRow`, `focusTree`, `rove`, `treeShown` | `files/tree-state.ts`, taken by `useRovingFocus` (`files/TreeRow.tsx`) and `FilesHead` (`files/FilesPane.tsx`) | `App.tsx` `foldFiles`, `files/dialogs.tsx` (Delete), `EditorTabs`, `endDraft`; the test hook's `focusWanted` key (`web/src/main.tsx`, read by `web/e2e/files.spec.ts`) |
 | `focusAfterClose`, `closeAsked`, `tabAsked` | `files/EditorTabs.tsx` | `files/dialogs.tsx` (close-tab), Delete on a tab |
@@ -53,7 +53,7 @@ rules, only who holds the handles.
 | `filesToggle`, `foldFiles`, `onFilesKey` | `App.tsx` (a module `let` holding the Files button) | the Files button, Esc in the folded list |
 | `fullOpener` | `output/view.ts`, set by `output/GraphTab.tsx`, read by `output/FullSize.tsx` | the full-size view's opener (Safari focuses no pressed button) |
 | `leaving` | `ui/Dialog.tsx` (module `let`) | a dialog that follows another (rule 4) |
-| `useFocusRequest`, `useFocusOnMount`, `fromNothing`, `fromAnywhere`, `useFocusOnLeave` | `ui/focus-hooks.ts`, `states/focus.ts` | every taker above; banners; `RenameField` |
+| the hooks and predicates | `ui/focus-hooks.ts` (`useFocusRequest`, `useFocusOnMount`, `useFocusOnLeave`, `useFocusTarget`: each takes `{ get?: Get<T> }` from `ui/element.ts` and returns the ref to attach); `ui/focus-targets.ts` (`fromNothing`, `fromAnywhere`, `register`, `ask`, `focusNow`, `focusStable`) | every taker above; banners; `RenameField` |
 
 Not handles, and they stay: `log/CommandLine.tsx`'s `onTouchEnd` and the Run button's refocus, `output/clip.ts`
 `fallbackCopy`, `FindBar`'s close falling back to the log `<pre>`, `ui/Menu.tsx`'s `restore` and `MenuEntry`, and
@@ -76,18 +76,22 @@ becomes `focusNow("editor") || focusNow("more-actions")`, and `editorAsked` keep
 
 ## 3. The registry and `useFocusRequest`
 
-- `register(name, get, key?)` (new) returns its unregister. `get` returns the element or `null`, so one entry follows a
-  ref that changes (the editor's two elements).
+- `register(name, { get, key?, focus? })` (new) returns its unregister. `get` returns the element or `null`, so one entry
+  follows a ref that changes (the editor's two elements).
 - `focusNow(name, key?)` (new): synchronous; focuses the first entry whose element is in the page and shown
   (`getClientRects().length > 0`) and returns whether the focus is now on it. `focusStable` needs that answer at once
   (rule 2), which is why `editorCommands.focus` had to focus synchronously.
 - `ask(name, { key?, from })` (new) sets the one waiting request (`focusRequest`, choice b); `cancel(name)` (new) ends
   it when it is for `name` (`rove` on another row, `startRename`).
-- `useFocusTarget(name, ref, key?)` (new, `ui/focus-hooks.ts`) does both halves in the component that draws the
+- `useFocusTarget(name, { get?, key?, focus? })` (new, `ui/focus-hooks.ts`) does both halves in the component that draws the
   target: it registers in a layout effect, and in a layout effect of the render that follows `ask` it takes a matching
   request on `useFocusRequest`'s terms: the request ends there, taken or not, and the focus moves only when `from`
   allows (rule 7, unchanged, with the same `from` per target). `useFocusRequest` stays as the half that takes, used by
-  `useFocusTarget` and the roving hook. `useFocusOnMount` and `useFocusOnLeave` stay as they are.
+  `useFocusTarget`; its `get` is the optional getter of the shared contract (`web/STYLE.md`, "UI helpers"): it receives the hook's own
+  element, and without it the hook acts on that element. Every one of these hooks returns the ref to attach, and
+  `useFocusRequest`, `useFocusOnMount` and `useFocusOnLeave` take `{ get? }` the same way (`useFocusRequest` also
+  `{ asked, end, from? }`). `useFocusOnLeave` and `focusStable` live in `ui/` (`ui/focus-hooks.ts`, `ui/focus-targets.ts`), so
+  `ui/` imports nothing from `states/`. `useModalTrap` (section 5) takes `{ first, onEscape?, onKey?, get? }` and returns its root's ref.
 - The test hook keeps its `focusWanted` key, as a computed: the waiting request when it is for `tree`, else `null`
   (same values, so no e2e read changes; plan rule 9 applies only if S6 changes what it means).
 
@@ -127,9 +131,9 @@ not Close (`web/e2e/output.spec.ts` checks only that the focus is inside it): S6
 ## 6. The roving-key hook
 
 One pure function, `rove(key, at, count, { axis, wrap })` (new, `ui/keys.ts`): the next place, or `null` for a key it
-leaves alone (any key with Alt, Ctrl or Cmd: Alt+Left is Back). A small hook on top keeps the moved-to item's request
-and lets the item take it from its render (today's `Tablist` `asked` and `EditorTabs` `tabAsked`). Each widget keeps
-its own extra keys.
+leaves alone (any key with Alt, Ctrl or Cmd: Alt+Left is Back). The hook on top that keeps the moved-to item's
+request and lets the item take it from its render was not built: `Tablist` (`asked`) and `EditorTabs` (`tabAsked`) each
+keep that request with `useFocusRequest`. Each widget keeps its own extra keys.
 
 | Widget | Arrows | Ends | Kept by the widget |
 |---|---|---|---|

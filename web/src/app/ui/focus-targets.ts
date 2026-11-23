@@ -44,16 +44,18 @@ const shownEntry = (name: TargetName, key?: string) => {
 
 /**
  * Make `name` a target until the returned function is called.
- * @param get - the element, or null while there is none; read at each use, so one entry follows a ref that changes
- * @param key - tells entries of one name apart: a request reaches only the entries with its own key, and one with no key
+ * @param options.get - the element, or null while there is none; read at each use, so one entry follows a ref that changes
+ * @param options.key - tells entries of one name apart: a request reaches only the entries with its own key, and one with no key
  *   only the entries with none (so a target that is one of many, and also "the one in the tab order", registers twice)
- * @param focus - how the element takes the focus, when `el.focus()` is not enough
+ * @param options.focus - how the element takes the focus, when `el.focus()` is not enough
  */
 export function register(
   name: TargetName,
-  get: () => HTMLElement | null,
-  key?: string,
-  focus: (el: HTMLElement) => void = (el) => el.focus(),
+  {
+    get,
+    key,
+    focus = (el) => el.focus(),
+  }: { get: () => HTMLElement | null; key?: string; focus?: (el: HTMLElement) => void },
 ): () => void {
   const entry: Entry = { name, key, get, focus };
   entries.add(entry);
@@ -73,6 +75,14 @@ export function focusNow(name: TargetName, key?: string): boolean {
   if (!hit) return false;
   hit.entry.focus(hit.el);
   return hit.el.ownerDocument.activeElement === hit.el;
+}
+
+/** Put the focus on the editor, or on the visible "More actions" button when the editor cannot take it (the Editor pane
+ *  hidden, a phone on another view). It focuses at once, and with a .dta tab active the editor's target is that tab's own
+ *  (editor/Editor.tsx), so the focus moves once. Where the focus goes when what held it leaves the page: never <body>
+ *  (docs/web-page-flows.md, section 1). */
+export function focusStable() {
+  if (!focusNow("editor")) focusNow("more-actions");
 }
 
 interface FocusRequest {

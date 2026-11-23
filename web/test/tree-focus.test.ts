@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
+import type { TargetName } from "../src/app/ui/focus-targets.ts";
+
 import { filesOpen } from "../src/app/files/fold.ts";
 
 const D = await import("../src/app/editor/documents.ts");
@@ -31,8 +33,8 @@ const fake = ({ shown = true, inside = [] as string[] } = {}) => {
 const TREE = '[role="tree"]';
 
 const undo: (() => void)[] = [];
-const reg = (...args: Parameters<typeof register>) => {
-  undo.push(register(...args));
+const reg = (name: TargetName, get: () => HTMLElement | null, key?: string) => {
+  undo.push(register(name, { get, key }));
 };
 afterEach(() => {
   for (const u of undo.splice(0)) u();

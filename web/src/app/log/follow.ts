@@ -1,15 +1,14 @@
-import type { RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 
 import { findOpen } from "./find.ts";
 
-/** Keep the end of the log in view unless the visitor has scrolled up. The scroll box is `pre`'s parent, which App
- *  renders; Find scrolls to its match itself, so the hook stands off while Find is open. */
-export function useFollowEnd(pre: RefObject<HTMLElement | null>) {
+/** Keep the end of the log in view unless the visitor has scrolled up. The scroll box is the `get`'s element (`pre`'s
+ *  parent, which App renders); Find scrolls to its match itself, so the hook stands off while Find is open. */
+export function useFollowEnd({ get }: { get: () => HTMLElement | null }) {
   const stick = useRef(true); // following the end
 
   useLayoutEffect(() => {
-    const box = pre.current?.parentElement;
+    const box = get();
     if (!box) return;
 
     // The visitor leaves the end only by an upward scroll that follows their own input (wheel, touch, a press on the
@@ -63,7 +62,7 @@ export function useFollowEnd(pre: RefObject<HTMLElement | null>) {
   }, []);
 
   useLayoutEffect(() => {
-    const box = pre.current?.parentElement;
+    const box = get();
     if (box && stick.current && !findOpen.value) box.scrollTop = box.scrollHeight;
   });
 }

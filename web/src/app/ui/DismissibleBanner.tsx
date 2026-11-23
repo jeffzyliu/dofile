@@ -2,8 +2,7 @@ import type { Banner as BannerRecord } from "../types.ts";
 
 import { dismiss } from "../state/notices.ts";
 
-import { useFocusOnLeave } from "../states/focus.ts";
-
+import { useFocusOnLeave } from "./focus-hooks.ts";
 import type { BannerProps } from "./Live";
 import { Banner } from "./Live";
 
@@ -14,12 +13,12 @@ export function DismissibleBanner({
   actions,
   children,
   ...rest
-}: Omit<BannerProps, "bannerRef" | "focusable"> & { banner: BannerRecord }) {
+}: Omit<BannerProps, "ref" | "focusable"> & { banner: BannerRecord }) {
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (
     <Banner
       {...rest}
-      bannerRef={ref}
+      ref={ref}
       actions={
         <>
           {actions}
