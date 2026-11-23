@@ -39,9 +39,9 @@ export function listStartFiles(
     const bytes = readFileSync(`${dir}/${path}`);
     files.push({ path, size: bytes.length, compressed: compressedSize(bytes), download });
   };
-  let built: number | null = null,
-    id: string | null = null,
-    snapshot: List["snapshot"] = null;
+  let built: number | null = null;
+  let id: string | null = null;
+  let snapshot: List["snapshot"] = null;
   if (manifest) {
     built = manifest.built ?? null;
     id = stamp ? buildId(stamp, manifest) : null;
@@ -91,8 +91,8 @@ export function writeStartFiles(
 ): List {
   const stale = manifest && staleness(manifest, inputs);
   if (stale) throw new Error(`start-files: ${stale}`);
-  const list = listStartFiles(dir, { stamp, manifest }),
-    entry = list.files.find((f) => f.path === "index.html");
+  const list = listStartFiles(dir, { stamp, manifest });
+  const entry = list.files.find((f) => f.path === "index.html");
   const html = entry ? readFileSync(`${dir}/index.html`, "utf8").replace(META, "") : "";
   if (!html.includes("</head>")) throw new Error(`start-files: no index.html with a <head> in ${dir}`);
   // index.html is not a download file, so the number in it does not change the number: one pass

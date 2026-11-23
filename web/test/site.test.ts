@@ -321,8 +321,8 @@ test("a dev server finds the other at the host name the browser used, on the oth
 
 test("the two Wrangler configs agree with scripts/urls.ts: the folder each Worker serves, its domain, and each other's settings", () => {
   const config = (f: string) => JSON.parse(web(f).replace(/^\s*\/\/.*$/gm, ""));
-  const site = config("wrangler.jsonc"),
-    app = config("wrangler.app.jsonc");
+  const site = config("wrangler.jsonc");
+  const app = config("wrangler.app.jsonc");
   assert.equal(site.name, "dofile");
   assert.equal(app.name, "dofile-app");
   assert.equal(site.assets.directory, `./${SITE_OUT}`);

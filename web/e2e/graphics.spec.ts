@@ -65,8 +65,8 @@ test("a run at ready that draws nothing does not wait for the graphics part; a B
   browserName,
 }) => {
   const { release, seen } = await holdPart(page);
-  const lines: string[] = [],
-    stamped: [number, string][] = []; // Date.now(): stamped by the browser, a Firefox worker's line on arrival (later)
+  const lines: string[] = [];
+  const stamped: [number, string][] = []; // Date.now(): stamped by the browser, a Firefox worker's line on arrival (later)
   page.on("console", (m) => {
     if (!m.text().includes("[dofile] graphics part")) return;
     lines.push(m.text());

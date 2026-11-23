@@ -75,8 +75,8 @@ function ProgressDialog() {
   const elapsed = busy ? Math.max(0, (now - st.t0) / 1000) : 0;
   const stepNo = current ? stages.indexOf(current) + 1 : 0;
   // the graphics part is not in the bar (it follows the start): said under it
-  const part = graphicsPart.value,
-    later = part && part.state !== "landed" ? `${megabytes(part.total, 1)} MB` : null;
+  const part = graphicsPart.value;
+  const later = part && part.state !== "landed" ? `${megabytes(part.total, 1)} MB` : null;
   return (
     <Dialog
       key="progress"

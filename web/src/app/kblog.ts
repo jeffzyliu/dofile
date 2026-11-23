@@ -31,9 +31,9 @@ export function showKbLog(): void {
   const version = navigator.userAgent.match(/OS [\d_]+|Version\/[\d.]+/g)?.join(" ") ?? navigator.userAgent;
   const head = `${version}\n   ms event         offTop  vvH scrlY innrH clntH appTop`;
   const rows: string[] = [];
-  let t0 = performance.now(),
-    last = "",
-    until = 0;
+  let t0 = performance.now();
+  let last = "";
+  let until = 0;
   const num = (n: number) => (Number.isFinite(n) ? n.toFixed(0) : "-").padStart(5);
   const snap = () =>
     [

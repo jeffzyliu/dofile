@@ -13,8 +13,8 @@ export const findAt = signal(0);
 export function matches(line: string, query: string): [number, number][] {
   if (!query) return [];
   const out: [number, number][] = [];
-  const hay = line.toLowerCase(),
-    needle = query.toLowerCase();
+  const hay = line.toLowerCase();
+  const needle = query.toLowerCase();
   for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length))
     out.push([i, i + needle.length]);
   return out;

@@ -51,8 +51,8 @@ async function boot() {
 
 // ---- a child process: one share of the work ------------------------------------------------------------------------
 if (hasFlag("--child")) {
-  const kind = arg("--child", ""),
-    mine = arg("--case", "").split(",").filter(Boolean);
+  const kind = arg("--child", "");
+  const mine = arg("--case", "").split(",").filter(Boolean);
   const { py, manifest } = await boot();
   // --no-shim: the old baseline without numpy.linalg raising LinAlgError
   if (!hasFlag("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
@@ -182,10 +182,10 @@ if (!hasFlag("--normal")) {
     process.exit(2);
   }
 }
-const shards = Number(arg("--shards", 4)),
-  timeoutS = Number(arg("--timeout", 300));
-const only = arg("--only", null),
-  wanted = arg("--cases", null)?.split(",");
+const shards = Number(arg("--shards", 4));
+const timeoutS = Number(arg("--timeout", 300));
+const only = arg("--only", null);
+const wanted = arg("--cases", null)?.split(",");
 const passArgs = [
   "--dir",
   dir,
@@ -220,8 +220,8 @@ for (const c of wanted ?? [])
     process.exit(2);
   }
 const cases = (wanted ?? allCases).sort((a, b) => {
-  const ra = PYODIDE_SLOW.indexOf(a),
-    rb = PYODIDE_SLOW.indexOf(b);
+  const ra = PYODIDE_SLOW.indexOf(a);
+  const rb = PYODIDE_SLOW.indexOf(b);
   return (ra < 0 ? 1e6 : ra) - (rb < 0 ? 1e6 : rb) || (a < b ? -1 : 1);
 });
 
@@ -229,10 +229,10 @@ const cases = (wanted ?? allCases).sort((a, b) => {
 // and what follows cascades. Expected like a strict xfail: a difference is accepted, and one that now passes is
 // reported. `--normal --pandas` loads pandas and expects no difference: run it for these two after an engine change.
 const EXPECTED_DIFFER = hasFlag("--pandas") ? [] : ["1701_datamgmt_options", "1911_datamgmt"];
-const problems: string[] = [],
-  timeouts: string[] = [],
-  crashed: string[] = [],
-  passed: string[] = [];
+const problems: string[] = [];
+const timeouts: string[] = [];
+const crashed: string[] = [];
+const passed: string[] = [];
 let ran = 0;
 const conformance =
   only === "conformance" || (!only && !wanted)

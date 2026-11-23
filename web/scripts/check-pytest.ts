@@ -67,8 +67,8 @@ pytest_report.run(OUT, ["/repo/" + FILE, "-q", "-p", "no:cacheprovider", "--root
 }
 
 // ---- the parent ------------------------------------------------------------------------------------------------------
-const shards = Number(arg("--shards", 4)),
-  timeoutS = Number(arg("--timeout", 900));
+const shards = Number(arg("--shards", 4));
+const timeoutS = Number(arg("--timeout", 900));
 const files = arg("--paths", null)?.split(",") ?? [
   ...readdirSync(`${repo}/tests_opendta/tests`)
     .filter((f) => /^test_.*\.py$/.test(f))
@@ -82,9 +82,9 @@ for (const f of files)
     process.exit(2);
   }
 mkdirSync(out, { recursive: true });
-const t0 = performance.now(),
-  timeouts: string[] = [],
-  crashed: string[] = [];
+const t0 = performance.now();
+const timeouts: string[] = [];
+const crashed: string[] = [];
 const runOne = async (file: string) => {
   const started = performance.now();
   rmSync(`${out}/${basename(file)}.json`, { force: true }); // a result left by an earlier run would hide a crash

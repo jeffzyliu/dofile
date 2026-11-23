@@ -43,8 +43,8 @@ type Loose = Omit<OpEntry<Op>, "handle"> & { handle: (args: unknown, id: number)
 export function dispatcher(table: OpTable, { post, errorOf, afterResult }: DispatchHooks) {
   let queue = Promise.resolve();
   const answer = async ({ id, op, args }: ToWorker, entry: Loose | undefined) => {
-    let failed = false,
-      error: unknown;
+    let failed = false;
+    let error: unknown;
     try {
       if (!entry) throw new Error(`unknown op ${op}`);
       const result = await entry.handle(args ?? {}, id);

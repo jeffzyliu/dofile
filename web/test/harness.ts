@@ -165,8 +165,8 @@ export const pendingRows = (store: FileStore) =>
 // Make transactions fail as on a full disk: the browser refuses to write a file's bytes. For a thread that has
 // fake-indexeddb's globals. Returns the function that ends it (also run when the test `t` ends).
 export function refuseWrites(t: TestContext) {
-  const proto = IDBObjectStore.prototype,
-    put = proto.put;
+  const proto = IDBObjectStore.prototype;
+  const put = proto.put;
   proto.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["put"]>) {
     if (this.name === "data") throw new DOMException("the quota has been exceeded", "QuotaExceededError");
     return put.apply(this, args);
@@ -181,8 +181,8 @@ export function refuseWrites(t: TestContext) {
 // Make a transaction abort after its requests were taken, the way a real quota error arrives: a request fails later and
 // the transaction aborts with that error (here a ConstraintError, from adding the file's key a second time).
 export function abortWrites(t: TestContext) {
-  const proto = IDBObjectStore.prototype,
-    put = proto.put;
+  const proto = IDBObjectStore.prototype;
+  const put = proto.put;
   proto.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["put"]>) {
     const request = put.apply(this, args);
     if (this.name === "data") this.add(new ArrayBuffer(1), args[1]);

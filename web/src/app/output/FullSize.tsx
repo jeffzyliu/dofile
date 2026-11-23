@@ -48,9 +48,9 @@ function Viewer() {
         const shown = (el: HTMLElement) => el.getClientRects().length > 0; // Previous and Next are hidden on a desktop
         const stops = [...(root.current?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? [])].filter(shown);
         if (!stops.length) return;
-        const first = stops[0],
-          last = stops[stops.length - 1],
-          now = document.activeElement;
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        const now = document.activeElement;
         if (!root.current?.contains(now) || (e.shiftKey && (now === first || now === root.current))) {
           e.preventDefault();
           (e.shiftKey ? last : first).focus();

@@ -313,10 +313,10 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // is said here first so that the dialog can show its size
     const part = this.#graphicsOf(build);
     if (part) this.#graphicsSay(part, {});
-    const total = list.download - (list.snapshot?.graphics?.size ?? 0),
-      got = new Map<StartFile, number>();
-    let received = 0,
-      last = -1;
+    const total = list.download - (list.snapshot?.graphics?.size ?? 0);
+    const got = new Map<StartFile, number>();
+    let received = 0;
+    let last = -1;
     const count = (f: StartFile, bytes: number) => {
       // `bytes` of this file are here, decoded
       const scaled = Math.round(Math.min(bytes / (f.size || 1), 1) * f.compressed);
@@ -328,8 +328,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       }
     };
     onProgress({ received, total });
-    const stop = new AbortController(),
-      abort = () => stop.abort(signal!.reason);
+    const stop = new AbortController();
+    const abort = () => stop.abort(signal!.reason);
     if (signal?.aborted) abort();
     signal?.addEventListener("abort", abort);
     const one = async (f: StartFile) => {
@@ -338,8 +338,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       // not an older build's file from the HTTP cache
       const res = await this.fetch(url, { signal: stop.signal, cache: "no-cache" });
       if (!res.ok) throw fail(`${url}: ${res.status}`, "failed", { reason: "download" });
-      const chunks: Uint8Array<ArrayBuffer>[] = [],
-        reader = res.body!.getReader();
+      const chunks: Uint8Array<ArrayBuffer>[] = [];
+      const reader = res.body!.getReader();
       let n = 0;
       for (;;) {
         const { done, value } = await reader.read();
@@ -444,8 +444,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   }
 
   async #fetchGraphics(part: GraphicsPart, fresh = false): Promise<void> {
-    const sab = part.sab!, // #wantGraphics and #retryGraphics take only a part with one
-      t0 = performance.now();
+    const sab = part.sab!; // #wantGraphics and #retryGraphics take only a part with one
+    const t0 = performance.now();
     let cache: Cache | null = null;
     try {
       if (this.caches && !part.url.startsWith("file:")) cache = await openCache(this.caches, part.built);
@@ -494,8 +494,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // same bytes)
     const res = await this.fetch(part.url, { cache: fresh ? "reload" : "no-cache" });
     if (!res.ok) throw new Error(`${part.url}: ${res.status}`);
-    const out = new Uint8Array(part.file.size),
-      reader = res.body!.getReader();
+    const out = new Uint8Array(part.file.size);
+    const reader = res.body!.getReader();
     let n = 0;
     for (;;) {
       const { done, value } = await reader.read();
@@ -697,8 +697,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   interrupt(n: number): void {
     const live = this.#live;
     if (live?.n !== n || !live.interrupt) return;
-    const buffer = live.interrupt,
-      run = live.run;
+    const buffer = live.interrupt;
+    const run = live.run;
     Atomics.store(buffer, 0, 2); // SIGINT
     if (!run) return;
     // Pyodide reads the buffer, then writes 0, in two steps: a store between them is lost (in Node, 8 of 2350; WebKit's

@@ -28,7 +28,8 @@
       },
       "style": {
         "noNonNullAssertion": "off",
-        "noDescendingSpecificity": "off"
+        "noDescendingSpecificity": "off",
+        "useSingleVarDeclarator": "error"
       },
       "suspicious": {
         "noExplicitAny": "off",

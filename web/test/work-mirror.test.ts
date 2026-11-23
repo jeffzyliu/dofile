@@ -8,8 +8,8 @@ import type { AppliedRun, RunChange, StoreCopy } from "../src/engine/store.ts";
 import type { MirrorFS, MirrorStore } from "../src/engine/work-mirror.ts";
 import { WorkMirror } from "../src/engine/work-mirror.ts";
 
-const DIR = 0o040000,
-  FILE = 0o100000;
+const DIR = 0o040000;
+const FILE = 0o100000;
 type Node = { dir: boolean; data: Uint8Array; mtime: number };
 const errno = (n: number) => Object.assign(new Error(`errno ${n}`), { errno: n });
 
@@ -89,9 +89,9 @@ function fakeStore(copy: StoreCopy = { infos: [], data: [] }) {
 }
 
 async function mirrorOf(copy?: StoreCopy) {
-  const { fs, nodes } = memfs(),
-    store = fakeStore(copy),
-    mirror = new WorkMirror(fs, posix, (e) => ({ message: (e as Error).message, name: (e as Error).name }));
+  const { fs, nodes } = memfs();
+  const store = fakeStore(copy);
+  const mirror = new WorkMirror(fs, posix, (e) => ({ message: (e as Error).message, name: (e as Error).name }));
   await mirror.copyStore(() => store as MirrorStore);
   const file = (path: string) => nodes.get(`/work/${path}`);
   const write = (path: string, body: string) => fs.writeFile(`/work/${path}`, bytes(body));
@@ -100,8 +100,8 @@ async function mirrorOf(copy?: StoreCopy) {
 const changed = (changes: RunChange[] | undefined) => (changes ?? []).map((c) => `${c.status} ${c.path}`).sort();
 
 test("mount's copy puts each record in /work with its time; the hidden folder is not listed", async () => {
-  const a = record("a.do", "display 1\n", 1700000000000),
-    b = record("data/b.csv", "x\n1\n", 1700000001000);
+  const a = record("a.do", "display 1\n", 1700000000000);
+  const b = record("data/b.csv", "x\n1\n", 1700000001000);
   const { mirror, write, fs } = await mirrorOf({
     infos: [{ path: "data", dir: true, size: 0, mtime: 1 }, a.info, b.info],
     data: [a.data, b.data],
@@ -123,8 +123,8 @@ test("mount's copy puts each record in /work with its time; the hidden folder is
 });
 
 test("a store that cannot be opened, or whose copy fails, leaves /work empty and says why; a run then says it too", async () => {
-  const { fs } = memfs(),
-    opened = new WorkMirror(fs, posix, (e) => ({ message: (e as Error).message, name: "QuotaExceededError" }));
+  const { fs } = memfs();
+  const opened = new WorkMirror(fs, posix, (e) => ({ message: (e as Error).message, name: "QuotaExceededError" }));
   await opened.copyStore(() => {
     throw new Error("refused");
   });
@@ -133,8 +133,8 @@ test("a store that cannot be opened, or whose copy fails, leaves /work empty and
   fs.writeFile("/work/out.csv", bytes("1"));
   assert.deepEqual(await opened.saveRun([]), { files: [], skipped: [], store_error: "refused" });
 
-  const { fs: fs2 } = memfs(),
-    copied = new WorkMirror(fs2, posix, (e) => ({ message: (e as Error).message, name: "Error" }));
+  const { fs: fs2 } = memfs();
+  const copied = new WorkMirror(fs2, posix, (e) => ({ message: (e as Error).message, name: "Error" }));
   const a = record("a.do", "x", 1);
   fs2.failWrites = true;
   await copied.copyStore(() => fakeStore({ infos: [a.info], data: [a.data] }));
@@ -146,8 +146,8 @@ test("sync puts the page's version of each path the journal named into /work: a 
   write("old.do", "old");
   nodes.set("/work/gone", { dir: true, data: new Uint8Array(), mtime: 1 });
   write("gone/x.do", "x");
-  const saved = record("a.do", "page's", 5),
-    moved = record("new.do", "old", 6);
+  const saved = record("a.do", "page's", 5);
+  const moved = record("new.do", "old", 6);
   store.resync = {
     paths: ["a.do", "gone", "old.do", "new.do"],
     infos: [saved.info, moved.info],
@@ -181,8 +181,8 @@ test("a run: created, a same-size rewrite (time only), emptied (size only), dele
   fs.unlink("/work/delete.do");
   write("to.do", text(fs.readFile("/work/from.do")));
   fs.unlink("/work/from.do");
-  const read: string[] = [],
-    readFile = fs.readFile;
+  const read: string[] = [];
+  const readFile = fs.readFile;
   fs.readFile = (p) => {
     read.push(p);
     return readFile(p);

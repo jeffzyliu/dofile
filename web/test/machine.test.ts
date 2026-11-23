@@ -175,8 +175,8 @@ function eventAt(at: At, f: Feed, o: { n?: Ticket; at?: number } = {}): Event {
   return isAnswer(f) ? { ...f, n: o.n ?? asked(at, ASKED_BY[f.type]), at: time } : { ...f, at: time };
 }
 function feed(at: At, f: Feed, o: { n?: Ticket; at?: number } = {}): At {
-  const event = eventAt(at, f, o),
-    step = pure(at.m, event);
+  const event = eventAt(at, f, o);
+  const step = pure(at.m, event);
   return { m: step.machine, clock: event.at, first: at.first, trail: [...at.trail, { before: at.m, event, step }] };
 }
 /** feed(), for an event that must be taken. */
@@ -369,8 +369,8 @@ const LOST_DOES: Record<Exclude<RowName, "other-tab-idle" | "other-tab-taking">,
   "failed-twice": ["block-store", "engine-gone", "show-dialog"],
 };
 const wantLost = ({ old }: Ctx): Want => {
-  const was = old.state,
-    held = ticketOf(was);
+  const was = old.state;
+  const held = ticketOf(was);
   const all: Partial<Record<Effect["do"], Effect>> = {
     "abort-download": held === null ? undefined : { do: "abort-download", n: held },
     "cancel-break-timer": { do: "cancel-break-timer" },
@@ -586,8 +586,8 @@ const CELLS = {
         from: row(r, o),
         feed: { type: "download-done", build } as const,
         want: ({ old, at, next }: Ctx): Want => {
-          const was = inRow(old, "downloading"),
-            stage = firstStage(old);
+          const was = inRow(old, "downloading");
+          const stage = firstStage(old);
           return {
             issues: true,
             state: {
@@ -642,8 +642,8 @@ const CELLS = {
       want: wantFail(reason, "the list did not arrive"),
     })),
   STAGE: (r) => {
-    const start = row(r),
-      unpack = go(start, { type: "stage", stage: "unpack" }, { at: start.clock + 700 });
+    const start = row(r);
+    const unpack = go(start, { type: "stage", stage: "unpack" }, { at: start.clock + 700 });
     return [
       {
         name: "the same stage: no change, no effects",
@@ -883,8 +883,8 @@ const CELLS = {
 } satisfies Record<string, (r: RowName, t: EventType) => Variant[]>;
 
 type CellName = keyof typeof CELLS | "·" | "STALE";
-const _ = "·",
-  X = "STALE";
+const _ = "·";
+const X = "STALE";
 
 // A. The visitor's engine actions
 const A: Record<RowName, Record<"start" | "ask" | "decline" | "stop-download" | "reset" | "take-over", CellName>> = {
@@ -1120,10 +1120,10 @@ type Case = {
 };
 
 function casesOf(r: RowName, t: EventType): Case[] {
-  const cell = gridRow(r)[t],
-    here = row(r),
-    held = ticketOf(here.m.state),
-    answer = t in ASKED_BY;
+  const cell = gridRow(r)[t];
+  const here = row(r);
+  const held = ticketOf(here.m.state);
+  const answer = t in ASKED_BY;
   const made = (name: string, from: At, f: Feed, n: Ticket | null, want: Case["want"], also?: Case["also"]): Case => ({
     row: r,
     type: t,
@@ -1159,9 +1159,9 @@ const label = (c: Case) => `${c.row} x ${c.type}${c.name ? ` (${c.name})` : ""}`
 test("the table: every row by every event, 16 by 24, with every variant of the cells that depend on a payload or on the machine", () => {
   assert.deepEqual([ROWS.length, TYPES.length, new Set(TYPES).size], [16, 24, 24]);
   for (const c of CASES) {
-    const old = c.from.m,
-      step = pure(old, c.event),
-      what = label(c);
+    const old = c.from.m;
+    const step = pure(old, c.event);
+    const what = label(c);
     if (typeof c.want === "string") {
       assert.equal(step.outcome, c.want, what);
       assert.equal(step.machine, old, `${what}: the machine itself, unchanged`);
@@ -1261,8 +1261,8 @@ function specMatrix(): { cells: Map<string, string>; twice: string[] } {
   const section = text.slice(text.indexOf("\n## 5. "), text.indexOf("\n## 6. "));
   const at = section.indexOf("\n### Transition matrix");
   assert.ok(at >= 0, 'SPEC section 5 has no "### Transition matrix"');
-  const cells = new Map<string, string>(),
-    twice: string[] = [];
+  const cells = new Map<string, string>();
+  const twice: string[] = [];
   let events: string[] | null = null;
   for (const line of section
     .slice(at + 1)
@@ -1304,14 +1304,14 @@ const asSet = (cell: string) =>
 
 test("SPEC section 5's transition matrix is the matrix built from transition(): every cell, none missing, none extra", () => {
   if (process.env.PRINT_SPEC_MATRIX) console.log(specTables());
-  const built = matrix(),
-    spec = specMatrix(),
-    problems: string[] = spec.twice.map((k) => `${k}: in SPEC twice`);
+  const built = matrix();
+  const spec = specMatrix();
+  const problems: string[] = spec.twice.map((k) => `${k}: in SPEC twice`);
   const known = new Set<string>();
   for (const r of ROWS) {
     for (const t of TYPES) {
-      const key = `${r} x ${t}`,
-        got = spec.cells.get(key);
+      const key = `${r} x ${t}`;
+      const got = spec.cells.get(key);
       known.add(key);
       if (got === undefined) problems.push(`${key}: missing in SPEC`);
       else if (asSet(got) !== asSet(built[r][t]))
@@ -1834,8 +1834,8 @@ test("property: no run is held: send-run comes only from a run in ready, with th
 
 test("property: a transition from ready, running, breaking or waiting to a state that does not hold the same worker has engine-gone, once", () => {
   for (const m of everyMove()) {
-    const a = m.before.state,
-      b = m.step.machine.state;
+    const a = m.before.state;
+    const b = m.step.machine.state;
     if (a.s !== "ready" && !running(a)) continue;
     assert.equal(count(m.step, "engine-gone"), liveWorker(b) === liveWorker(a) ? 0 : 1, says(m));
   }
@@ -1843,8 +1843,8 @@ test("property: a transition from ready, running, breaking or waiting to a state
 
 test("property: a ticket is issued once: no state holds one above `issued`, `issued` never goes down, and a new ticket is the old `issued` + 1", () => {
   for (const m of everyMove()) {
-    const was = m.before.issued,
-      now = m.step.machine.issued;
+    const was = m.before.issued;
+    const now = m.step.machine.issued;
     assert.ok(now === was || now === was + 1, `${says(m)}: issued ${was} -> ${now}`);
     for (const n of ticketsOf(m.step)) {
       assert.ok(n <= now, `${says(m)}: ticket ${n} above issued ${now}`);
@@ -1869,9 +1869,9 @@ test("property: the machine only asks for answers it can accept: an answered eff
 
 test("property: every exit from breaking cancels the Break timer, before any end-worker; start-break-timer only from running to breaking", () => {
   for (const m of everyMove()) {
-    const a = m.before.state.s,
-      b = m.step.machine.state.s,
-      names = m.step.effects.map((e) => e.do);
+    const a = m.before.state.s;
+    const b = m.step.machine.state.s;
+    const names = m.step.effects.map((e) => e.do);
     if (a === "breaking" && b !== "breaking") {
       assert.equal(count(m.step, "cancel-break-timer"), 1, says(m));
       if (names.includes("end-worker"))
@@ -1886,8 +1886,8 @@ test("property: every exit from breaking cancels the Break timer, before any end
 test("property: every exit from downloading that is not that download's own end aborts it, once, with the state's ticket; no other transition aborts", () => {
   let exits = 0;
   for (const m of everyMove()) {
-    const a = m.before.state,
-      aborts = m.step.effects.filter((e) => e.do === "abort-download");
+    const a = m.before.state;
+    const aborts = m.step.effects.filter((e) => e.do === "abort-download");
     const own = m.event.type === "download-done" || m.event.type === "download-failed";
     if (a.s === "downloading" && m.step.machine.state.s !== "downloading" && !own) {
       exits++;
@@ -1901,11 +1901,11 @@ test("property: every exit from downloading that is not that download's own end 
 
 test("property: one live worker: start-worker only from downloading and starting-list, into starting-worker with that ticket; a worker that is left is ended, once, and nothing else is", () => {
   for (const m of everyMove()) {
-    const a = m.before.state,
-      b = m.step.machine.state,
-      was = liveWorker(a);
-    const starts = m.step.effects.filter((e) => e.do === "start-worker"),
-      ends = m.step.effects.filter((e) => e.do === "end-worker");
+    const a = m.before.state;
+    const b = m.step.machine.state;
+    const was = liveWorker(a);
+    const starts = m.step.effects.filter((e) => e.do === "start-worker");
+    const ends = m.step.effects.filter((e) => e.do === "end-worker");
     if (starts.length) {
       assert.ok(a.s === "downloading" || a.s === "starting-list", says(m));
       assert.equal(starts.length, 1, says(m));
@@ -1924,8 +1924,8 @@ test("property: one live worker: start-worker only from downloading and starting
 test("property: over every path, the effects never make a second worker while one is live, and never end one that was not made", () => {
   const paths = [...ROWS.map((r) => row(r)), ...Object.values(SCENARIOS).flatMap((run) => run())];
   for (const at of paths) {
-    let live: Ticket | null = null,
-      made = 0;
+    let live: Ticket | null = null;
+    let made = 0;
     for (const e of stepsOf(at).flatMap((s) => s.effects)) {
       if (e.do === "start-worker") {
         assert.equal(live, null, "a worker is still live");

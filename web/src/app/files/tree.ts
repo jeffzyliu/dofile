@@ -32,8 +32,8 @@ export function folderOrAbove(dir: string, files: readonly FileInfo[]): string {
 }
 /** The lowercased extension with its dot (".do"), or "". */
 export const extOf = (path: string) => {
-  const name = baseName(path),
-    dot = name.lastIndexOf(".");
+  const name = baseName(path);
+  const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(dot).toLowerCase() : "";
 };
 
@@ -75,9 +75,9 @@ export function treeRows(files: FileInfo[], folded: ReadonlySet<string> = new Se
  *  before the extension). */
 export function freeName(dir: string, name: string, taken: Iterable<string>): string {
   const used = new Set(taken);
-  const dot = name.lastIndexOf("."),
-    stem = dot > 0 ? name.slice(0, dot) : name,
-    ext = dot > 0 ? name.slice(dot) : "";
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
   for (let n = 1; ; n++) {
     const candidate = joinPath(dir, n === 1 ? name : `${stem}-${n}${ext}`);
     if (!used.has(candidate)) return candidate;

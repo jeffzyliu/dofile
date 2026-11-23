@@ -158,8 +158,8 @@ test("a path that leaves the folder, or names the hidden one, is refused by ever
 test("list reads the info records only, never a file's bytes", async () => {
   const store = fresh();
   await store.write("big.dta", new Uint8Array(1 << 20));
-  const opened: string[][] = [],
-    tx = store.tx.bind(store);
+  const opened: string[][] = [];
+  const tx = store.tx.bind(store);
   store.tx = (stores, ...rest) => {
     opened.push(stores);
     return tx(stores, ...rest);
@@ -404,8 +404,8 @@ test("a transaction that aborts after its requests were taken rejects the write 
 });
 
 test("a database the browser closed under the store is opened again by the next call", async () => {
-  const factory = new IDBFactory(),
-    store = openStore({ indexedDB: factory });
+  const factory = new IDBFactory();
+  const store = openStore({ indexedDB: factory });
   await store.write("a.do", bytes("x"));
   // another page deletes (or upgrades) the database: this one gets "versionchange" and must close
   await new Promise((ok, err) => {
@@ -472,8 +472,8 @@ test("zip: every file with its folders, no engine, named with the date, and a re
   await store.mkdir("out/empty-folder");
   assert.equal(store.sync, null, "no worker was ever attached");
   const zip = await store.zip();
-  const d = new Date(),
-    two = (n: number) => String(n).padStart(2, "0");
+  const d = new Date();
+  const two = (n: number) => String(n).padStart(2, "0");
   assert.equal(zip.name, `dofile-${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}.zip`);
   assert.equal(zip.type, "application/zip");
   assert.ok(zip instanceof Blob);
@@ -521,9 +521,9 @@ test("storage.persist() is asked once, and what persisted() says comes back: fal
       return answer;
     },
   });
-  const no = storage(false),
-    yes = storage(true),
-    heard: (boolean | null)[] = [];
+  const no = storage(false);
+  const yes = storage(true);
+  const heard: (boolean | null)[] = [];
   assert.equal(await keepFiles(no, (kept) => heard.push(kept)), false);
   assert.equal(await keepFiles(no), false);
   assert.equal(await keepFiles(no), false);
@@ -542,14 +542,14 @@ test("storage.persist() is asked once, and what persisted() says comes back: fal
   };
   assert.equal(await keepFiles(throwing), false);
   const broken = {
-      async persist() {
-        return true;
-      },
-      async persisted(): Promise<boolean> {
-        throw new DOMException("no", "SecurityError");
-      },
+    async persist() {
+      return true;
     },
-    told: (boolean | null)[] = [];
+    async persisted(): Promise<boolean> {
+      throw new DOMException("no", "SecurityError");
+    },
+  };
+  const told: (boolean | null)[] = [];
   assert.equal(
     await keepFiles(broken, (kept) => told.push(kept)),
     null,
@@ -564,8 +564,8 @@ test("storage.persist() is asked once, and what persisted() says comes back: fal
 });
 
 test("a browser that asks the user before it answers persist(): the page has the state at once, and the answer when it comes", async () => {
-  let answer: () => void,
-    granted = false;
+  let answer: () => void;
+  let granted = false;
   const prompting = {
     asks: 0,
     persist() {
@@ -594,8 +594,8 @@ test("a browser that asks the user before it answers persist(): the page has the
 test("the tab lock: one holder; a second tab is told no; a take-over tells the first it lost", {
   skip: !globalThis.navigator?.locks && "this Node has no Web Locks",
 }, async () => {
-  const name = `dofile-test-${process.pid}-${Date.now()}`,
-    lost: [string, string][] = [];
+  const name = `dofile-test-${process.pid}-${Date.now()}`;
+  const lost: [string, string][] = [];
   let firstLost!: () => void;
   const told = new Promise<void>((ok) => {
     firstLost = ok;

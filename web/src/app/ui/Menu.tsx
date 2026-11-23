@@ -135,12 +135,12 @@ export function MenuHost() {
     if (!m || !el) return;
     if (hasPopover && !el.matches(":popover-open")) el.showPopover();
     // place it under the trigger (or at the point), inside the window
-    const w = el.offsetWidth,
-      h = el.offsetHeight,
-      pad = 8;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const pad = 8;
     const r = m.anchor?.getBoundingClientRect();
-    let x = r ? r.left : (m.at?.x ?? 0),
-      y = r ? r.bottom + 4 : (m.at?.y ?? 0);
+    let x = r ? r.left : (m.at?.x ?? 0);
+    let y = r ? r.bottom + 4 : (m.at?.y ?? 0);
     if (x + w > innerWidth - pad) x = Math.max(pad, (r ? r.right : x) - w);
     if (y + h > innerHeight - pad) y = Math.max(pad, (r ? r.top - 4 : y) - h);
     Object.assign(el.style, { left: `${x}px`, top: `${y}px` });

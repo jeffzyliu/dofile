@@ -173,8 +173,8 @@ test("a subscriber of the `engine` signal that throws does not stop the step: it
 // worker does nothing, a call cut by end() rejects with the ending's kind). Here the controller drives the real
 // EngineClient, with client.test.ts's scripted worker, so that those rules are held against the real thing.
 test("the controller on the real transport, with a scripted worker: ready, a run, a crash during a run and the restart, a late stage, then two crashes: failed-twice", async () => {
-  const workers: ReturnType<typeof fakeWorker>[] = [],
-    answerRun: ((result: RunResult) => void)[] = [];
+  const workers: ReturnType<typeof fakeWorker>[] = [];
+  const answerRun: ((result: RunResult) => void)[] = [];
   let silent = false; // the next workers answer nothing
   const transport = new EngineClient({
     wheel: "dofile.whl",
@@ -212,8 +212,8 @@ test("the controller on the real transport, with a scripted worker: ready, a run
 
   // the worker crashes during a run, with a read op waiting: the real end() fails both, and the machine's own result
   // ends the run
-  const cutRun = runCode("long", FILE),
-    waiting = engine.call("describe_file", { path: "d.dta" });
+  const cutRun = runCode("long", FILE);
+  const waiting = engine.call("describe_file", { path: "d.dta" });
   await sleep(10);
   workers[0].onerror!(new Error("boom"));
   state("starting-list");

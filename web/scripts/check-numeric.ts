@@ -32,8 +32,8 @@ if (hasFlag("--child")) {
   process.exit(0);
 }
 
-const shards = Number(arg("--shards", 4)),
-  timeoutS = Number(arg("--timeout", 600));
+const shards = Number(arg("--shards", 4));
+const timeoutS = Number(arg("--timeout", 600));
 const all = readdirSync(`${repo}/tests_opendta/compat/do`)
   .filter((f) => f.endsWith(".do"))
   .map((f) => f.slice(0, -3))
@@ -45,9 +45,9 @@ for (const c of cases)
     process.exit(2);
   }
 mkdirSync(out, { recursive: true });
-const t0 = performance.now(),
-  timeouts: string[] = [],
-  missing: string[] = [];
+const t0 = performance.now();
+const timeouts: string[] = [];
+const missing: string[] = [];
 const runOne = async (c: string) => {
   const started = performance.now();
   rmSync(`${out}/${c}.json`, { force: true }); // a result left by an earlier run would hide a crash

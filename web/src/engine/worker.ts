@@ -33,11 +33,11 @@ declare global {
 // The DOM types make `self` a Window, which has no postMessage(message, transfer).
 declare const self: Window & typeof globalThis & { postMessage(message: unknown, transfer: Transferable[]): void };
 
-let py: SnapshotPy,
-  browser: Browser,
-  interrupt: Int32Array | null = null,
-  fromSnapshot = false,
-  brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
+let py: SnapshotPy;
+let browser: Browser;
+let interrupt: Int32Array | null = null;
+let fromSnapshot = false;
+let brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
 let mirror: WorkMirror | undefined; // /work: made in mount, once Pyodide is there
 
 const stage = (id: Stage) => self.postMessage({ stage: id });
@@ -64,37 +64,37 @@ booted.catch(() => {}); // the error reaches the page through boot's own answer
 // the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (idleStep), so a
 // run sent meanwhile waits for one step at most.
 // IDLE_MS 250 vs 1000: a graph sent 0.5-1.1 s after ready was 0.2-0.5 s faster; a run meeting a step waits as long.
-const IDLE_MS = 250,
-  PROGRESS_MS = 100, // at most one {graphics: "progress"} this often
-  DECODE_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
+const IDLE_MS = 250;
+const PROGRESS_MS = 100; // at most one {graphics: "progress"} this often
+const DECODE_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
 let share: {
-    file: SnapshotFile;
-    hdr: Int32Array | null;
-    sab: SharedArrayBuffer | null;
-    bytes?: Uint8Array;
-    error?: string;
-  } | null = null,
-  brotliWasm: BrotliWasmType | null = null,
-  snapshotBase = "", // mount's `snapshot`: where the part is, for fetchPartNow
-  started = false, // `startup` was answered
-  runs = 0, // runs sent and not ended (counted before the queue)
-  idleSince = 0,
-  idleTimer: ReturnType<typeof setTimeout> | 0 = 0,
-  decode: { steps: Generator<number, Uint8Array, void>; t0: number; how: string; longest: number } | null = null,
-  native = false, // the browser's decoder is unpacking it (idle only)
-  decoded: { raw: Uint8Array; secs: number; how: string; longest: number } | null = null, // unpacked, not yet written
-  graphicsWritten = false,
-  askedAt: number | null = null, // the tries when this run asked the page to fetch a failed part again
-  graphicsError = "", // the part arrived damaged; said once, by the next graph
-  warmAt = 0, // the next step of browser.warm_graphics; -1: done
-  tWarm = 0,
-  warmLongest = 0,
-  prefetching: { stop: AbortController; done: Promise<void> } | null = null, // no shared buffer: the worker's own fetch
-  fetchSaid = false, // waitGraphics said "pending" before this graph's own fetch
-  fresh = false, // the part arrived damaged: the next fetch must skip the HTTP cache
-  copies = 0, // no shared buffer: this worker's copies of the part, counted (copyNow)
-  nativeFailedOn: number | null = null, // the copy (copyNow) the browser's decoder failed on
-  writtenInRun = 0; // performance.now() when a graph of this run wrote the part
+  file: SnapshotFile;
+  hdr: Int32Array | null;
+  sab: SharedArrayBuffer | null;
+  bytes?: Uint8Array;
+  error?: string;
+} | null = null;
+let brotliWasm: BrotliWasmType | null = null;
+let snapshotBase = ""; // mount's `snapshot`: where the part is, for fetchPartNow
+let started = false; // `startup` was answered
+let runs = 0; // runs sent and not ended (counted before the queue)
+let idleSince = 0;
+let idleTimer: ReturnType<typeof setTimeout> | 0 = 0;
+let decode: { steps: Generator<number, Uint8Array, void>; t0: number; how: string; longest: number } | null = null;
+let native = false; // the browser's decoder is unpacking it (idle only)
+let decoded: { raw: Uint8Array; secs: number; how: string; longest: number } | null = null; // unpacked, not yet written
+let graphicsWritten = false;
+let askedAt: number | null = null; // the tries when this run asked the page to fetch a failed part again
+let graphicsError = ""; // the part arrived damaged; said once, by the next graph
+let warmAt = 0; // the next step of browser.warm_graphics; -1: done
+let tWarm = 0;
+let warmLongest = 0;
+let prefetching: { stop: AbortController; done: Promise<void> } | null = null; // no shared buffer: the worker's own fetch
+let fetchSaid = false; // waitGraphics said "pending" before this graph's own fetch
+let fresh = false; // the part arrived damaged: the next fetch must skip the HTTP cache
+let copies = 0; // no shared buffer: this worker's copies of the part, counted (copyNow)
+let nativeFailedOn: number | null = null; // the copy (copyNow) the browser's decoder failed on
+let writtenInRun = 0; // performance.now() when a graph of this run wrote the part
 
 // Which copy of the part is there: the page's fetches of it (each new copy follows one), or this worker's own
 const copyNow = () => (share?.hdr ? partTries(share.hdr) : copies);
@@ -136,8 +136,8 @@ function decodeStep(part?: Uint8Array): Uint8Array | null {
     how: "wasm",
     longest: 0,
   };
-  const t = performance.now(),
-    r = decode.steps.next();
+  const t = performance.now();
+  const r = decode.steps.next();
   decode.longest = Math.max(decode.longest, since(t));
   if (!r.done) return null;
   decoded = { raw: r.value, secs: since(decode.t0), how: decode.how, longest: decode.longest };
@@ -146,9 +146,9 @@ function decodeStep(part?: Uint8Array): Uint8Array | null {
 }
 
 function writePart(where: string) {
-  const d = decoded!,
-    tWrite = performance.now(),
-    n = writeGraphics(py, d.raw);
+  const d = decoded!;
+  const tWrite = performance.now();
+  const n = writeGraphics(py, d.raw);
   graphicsWritten = true;
   decoded = decode = null;
   console.info(
@@ -170,8 +170,8 @@ function waitGraphics(ms: number): string {
     return why;
   }
   for (;;) {
-    let tries = 0,
-      part = null as Uint8Array<ArrayBuffer> | string | null; // set by read()
+    let tries = 0;
+    let part = null as Uint8Array<ArrayBuffer> | string | null; // set by read()
     const read = () => {
       // tries before the state: a retry started between the two loads must show as new tries, not as a failure
       // already the new try's (the graph would wait until a Break)
@@ -242,8 +242,8 @@ function waitGraphics(ms: number): string {
 // part with a synchronous request (allowed in a worker; with no shared buffer there is no Break either: the machine
 // resets). Returns "" when it is here (share.bytes), else why not.
 function fetchPartNow(): string {
-  const at = new URL(`${snapshotBase}${share!.file.name}`, self.location.href),
-    t0 = performance.now();
+  const at = new URL(`${snapshotBase}${share!.file.name}`, self.location.href);
+  const t0 = performance.now();
   // a damaged part may sit in the HTTP cache with the right length; a synchronous XHR cannot reload, so use a new
   // address
   if (fresh) at.searchParams.set("fresh", String(Date.now()));
@@ -285,9 +285,9 @@ function fetchPartNow(): string {
 async function prefetch(): Promise<void> {
   if (!share || share.sab || share.bytes) return Promise.resolve();
   if (prefetching) return prefetching.done;
-  const stop = new AbortController(),
-    url = new URL(`${snapshotBase}${share.file.name}`, self.location.href).href,
-    t0 = performance.now();
+  const stop = new AbortController();
+  const url = new URL(`${snapshotBase}${share.file.name}`, self.location.href).href;
+  const t0 = performance.now();
   const done = (async () => {
     try {
       self.postMessage({ graphics: "fetching" });
@@ -295,10 +295,10 @@ async function prefetch(): Promise<void> {
       const res = await fetch(url, { signal: stop.signal, ...(fresh && { cache: "reload" as const }) });
       if (!res.ok) throw new Error(`${url}: ${res.status}`);
       // read as they come, so that the page can show how much is here (throttled)
-      const out = new Uint8Array(share!.file.size),
-        reader = res.body!.getReader();
-      let n = 0,
-        sent = 0;
+      const out = new Uint8Array(share!.file.size);
+      const reader = res.body!.getReader();
+      let n = 0;
+      let sent = 0;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -356,11 +356,11 @@ function nativeSoon() {
 
 function startNative() {
   if (!share || native || decode || decoded || graphicsWritten || graphicsError) return;
-  const copy = copyNow(), // before the part: a fetch the page starts meanwhile must not take this copy's failure
-    [state, part] = partNow();
+  const copy = copyNow(); // before the part: a fetch the page starts meanwhile must not take this copy's failure
+  const [state, part] = partNow();
   if (state !== PART_LANDED) return;
-  const bytes = part as Uint8Array<ArrayBuffer>,
-    file = share.file;
+  const bytes = part as Uint8Array<ArrayBuffer>;
+  const file = share.file;
   if (bytes.length !== file.size || bytes.length === file.raw) return; // not brotli: the wasm step says what is wrong
   native = true;
   const t0 = performance.now();
@@ -402,8 +402,8 @@ function idleStep() {
     else if (!graphicsWritten) {
       const [state, part] = partNow();
       if (state !== PART_LANDED) return; // the op graphics calls idleSoon when it lands
-      const bytes = part as Uint8Array<ArrayBuffer>,
-        file = share!.file;
+      const bytes = part as Uint8Array<ArrayBuffer>;
+      const file = share!.file;
       // normally under way already (nativeSoon); its end calls idleSoon
       if (nativeNow() && bytes.length === file.size && bytes.length !== file.raw) return startNative();
       decodeStep(bytes);

@@ -117,8 +117,8 @@ const Jump = ({ line, path }: { line: number; path?: string }) => (
  *  held Enter's repeats are ignored (ui/keys.ts), so the toast shows once and `help x` is not run again when the engine
  *  is free. */
 function HelpLink({ command, children }: { command: string; children: ComponentChildren }) {
-  const offer = startOffer(engine.value),
-    off = offer !== null;
+  const offer = startOffer(engine.value);
+  const off = offer !== null;
   return (
     <button
       type="button"

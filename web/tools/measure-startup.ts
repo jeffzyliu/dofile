@@ -177,8 +177,8 @@ const runAndTime = (code: string) =>
       [...document.querySelectorAll("img")].filter(
         (i) => /^(data:image\/png|blob:)/.test(i.src) && i.complete && i.naturalWidth > 0,
       ).length;
-    const before = shown(),
-      t0 = performance.now();
+    const before = shown();
+    const t0 = performance.now();
     window.__dofile.run(code).then((r) => {
       const resultAt = performance.now();
       const n = r?.images?.length ?? 0;

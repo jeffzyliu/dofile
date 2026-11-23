@@ -84,7 +84,8 @@ export const tick = () => sleep(0);
 /** A promise the test settles: ok(value), no(error). A rejection nobody waits for is not an error. */
 export type Later<T = unknown> = Promise<T> & { ok(value?: T | PromiseLike<T>): void; no(error: unknown): void };
 export const later = <T = unknown>(): Later<T> => {
-  let ok!: (value: T | PromiseLike<T>) => void, no!: (error: unknown) => void;
+  let ok!: (value: T | PromiseLike<T>) => void;
+  let no!: (error: unknown) => void;
   const p = new Promise<T>((a, b) => {
     ok = a;
     no = b;

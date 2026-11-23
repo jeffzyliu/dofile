@@ -25,9 +25,9 @@ const PREFIX = /^(cap(?:t|tu|tur|ture)?|qui(?:e|et|etl|etly)?|n(?:o|oi|ois|oisi|
 /** A command without its capture, quietly and noisily prefixes; `shown`: its echoes show (no prefix, or noisily the
  *  last); `any`: it had a prefix. */
 function prefixed(command: string): { rest: string; shown: boolean; any: boolean } {
-  let rest = command.trim(),
-    shown = true,
-    any = false;
+  let rest = command.trim();
+  let shown = true;
+  let any = false;
   for (let m = PREFIX.exec(rest); m; m = PREFIX.exec(rest)) {
     shown = m[1][0] === "n";
     any = true;
@@ -72,8 +72,8 @@ export function echoed(l: LogLine): string | null {
  *  is inside a block comment opened on an earlier line (then echoed only as a continued `> ` line). */
 function comments(code: string[]): { skip: boolean[]; inside: boolean[] } {
   let depth = 0;
-  const skip: boolean[] = [],
-    inside: boolean[] = [];
+  const skip: boolean[] = [];
+  const inside: boolean[] = [];
   for (const line of code) {
     const open = depth > 0;
     for (let i = 0; i < line.length; i++) {
@@ -97,10 +97,10 @@ function comments(code: string[]): { skip: boolean[]; inside: boolean[] } {
  *  Braces in strings, comments and a local's or global's text are not counted. */
 function blocks(code: string[]): { inside: boolean[]; silent: boolean[] } {
   const open: ("loop" | "silent" | "other")[] = []; // the brace blocks open, innermost last
-  let ends = 0, // programs and mata blocks open: each closes at an `end`
-    comment = false;
-  const inside: boolean[] = [],
-    silent: boolean[] = [];
+  let ends = 0; // programs and mata blocks open: each closes at an `end`
+  let comment = false;
+  const inside: boolean[] = [];
+  const silent: boolean[] = [];
   for (const line of code) {
     inside.push(open.length > 0 || ends > 0);
     silent.push(open.includes("silent"));
@@ -143,8 +143,8 @@ export const inBlocks = (code: string[]): boolean[] => blocks(code).inside;
 
 /** The first index in the ascending `list` that is at least `from`. */
 function atLeast(list: readonly number[], from: number): number {
-  let lo = 0,
-    hi = list.length;
+  let lo = 0;
+  let hi = list.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
     if (list[mid] < from) lo = mid + 1;
@@ -163,8 +163,8 @@ export function echoLines(lines: readonly LogLine[], code: string): Map<number, 
   const real = new Array<number>(n + 1).fill(n);
   for (let j = n - 1; j >= 0; j--) real[j] = skip[j] || silent[j] ? real[j + 1] : j;
   // the code's lines by text: all of them, and those the look-ahead may jump to (outside blocks, surely echoed)
-  const all = new Map<string, number[]>(),
-    far = new Map<string, number[]>();
+  const all = new Map<string, number[]>();
+  const far = new Map<string, number[]>();
   const add = (by: Map<string, number[]>, t: string, j: number) => {
     const list = by.get(t);
     if (list) list.push(j);

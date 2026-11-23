@@ -93,8 +93,8 @@ function fakeFetch({
   offline?: string;
   short?: string;
 } = {}) {
-  const calls: string[] = [],
-    modes: (RequestCache | undefined)[] = [];
+  const calls: string[] = [];
+  const modes: (RequestCache | undefined)[] = [];
   const fetch = async (url: string, { signal, cache }: RequestInit = {}) => {
     calls.push(url);
     modes.push(cache);
@@ -103,8 +103,8 @@ function fakeFetch({
     if (path === "start-files.json") return Response.json(LIST);
     if (path === offline) throw new TypeError("fetch failed");
     if (path === missing || !FILES[path]) return new Response("no", { status: 404 });
-    const [whole, type] = FILES[path],
-      data = path === short ? whole.subarray(0, whole.length - 100) : whole;
+    const [whole, type] = FILES[path];
+    const data = path === short ? whole.subarray(0, whole.length - 100) : whole;
     let at = 0;
     const body = new ReadableStream({
       async pull(controller) {
@@ -150,8 +150,8 @@ const cached = async (caches: ReturnType<typeof fakeCaches>, name = "dofile-snap
   [...(caches.all.get(name) ?? new Map()).keys()].map((u) => u.slice(BASE.length)).sort();
 
 test("download: every start file goes into the Cache, the counts rise to the total, before any worker exists", async () => {
-  const caches = fakeCaches(),
-    { fetch, calls, modes } = fakeFetch();
+  const caches = fakeCaches();
+  const { fetch, calls, modes } = fakeFetch();
   await (await caches.open("dofile-snapshot-1")).put(`${BASE}snapshot/heap.bin`, new Response("an older build"));
   const seen: { received: number; total: number }[] = [];
   const done = await client(fetch, caches).download({ onProgress: (p) => seen.push(p) });
@@ -189,8 +189,8 @@ test("download: every start file goes into the Cache, the counts rise to the tot
 });
 
 test("download: an entry of the build's Cache that the list does not name (the same build at an older address) is dropped; the list's own are kept and not fetched again", async () => {
-  const caches = fakeCaches(),
-    { fetch, calls } = fakeFetch();
+  const caches = fakeCaches();
+  const { fetch, calls } = fakeFetch();
   // the same build, cached when the editor was at the site's root
   const cache = await caches.open("dofile-snapshot-777");
   const old = ["https://dofile.test/snapshot/heap.bin", "https://dofile.test/pyodide/pyodide.asm.wasm"];
@@ -204,8 +204,8 @@ test("download: an entry of the build's Cache that the list does not name (the s
 });
 
 test("download: with a worker live, which may be reading the Cache, nothing is dropped from it", async () => {
-  const caches = fakeCaches(),
-    { fetch } = fakeFetch();
+  const caches = fakeCaches();
+  const { fetch } = fakeFetch();
   const cache = await caches.open("dofile-snapshot-777");
   await cache.put("https://dofile.test/snapshot/heap.bin", new Response("the same build, at the old address"));
   const { eng } = scripted(starts, {
@@ -221,8 +221,8 @@ test("download: with a worker live, which may be reading the Cache, nothing is d
 });
 
 test("download: the list can be a URL (start-files.json), fetched fresh, and its paths are relative to it", async () => {
-  const caches = fakeCaches(),
-    { fetch, calls } = fakeFetch();
+  const caches = fakeCaches();
+  const { fetch, calls } = fakeFetch();
   const eng = client(fetch, caches, { startFiles: `${BASE}start-files.json` });
   assert.equal((await eng.download()).cached, true);
   assert.equal(calls[0], `${BASE}start-files.json`);
@@ -230,11 +230,11 @@ test("download: the list can be a URL (start-files.json), fetched fresh, and its
 });
 
 test("download: abort stops the fetches and rejects; a second try keeps the finished files and fetches the rest", async () => {
-  const caches = fakeCaches(),
-    first = fakeFetch({ hold: "snapshot/heap.bin" });
-  const eng = client(first.fetch, caches),
-    stop = new AbortController(),
-    seen: number[] = [];
+  const caches = fakeCaches();
+  const first = fakeFetch({ hold: "snapshot/heap.bin" });
+  const eng = client(first.fetch, caches);
+  const stop = new AbortController();
+  const seen: number[] = [];
   const downloading = eng.download({
     signal: stop.signal,
     onProgress: (p) => {
@@ -252,8 +252,8 @@ test("download: abort stops the fetches and rejects; a second try keeps the fini
   assert.equal(seen.at(-1), 3_000 + 100 + 1_000, "it had counted the big file's first piece");
   assert.equal(eng.worker, null, "no worker: the page goes back to having no engine");
 
-  const second = fakeFetch(),
-    again: number[] = [];
+  const second = fakeFetch();
+  const again: number[] = [];
   eng.fetch = second.fetch as typeof globalThis.fetch;
   const done = await eng.download({ onProgress: (p) => again.push(p.received) });
   assert.deepEqual(second.calls, [`${BASE}snapshot/heap.bin`], "only the unfinished file is fetched, from its start");
@@ -263,8 +263,8 @@ test("download: abort stops the fetches and rejects; a second try keeps the fini
   assert.equal(done.cached, true);
 
   // already aborted: nothing is fetched
-  const third = fakeFetch(),
-    aborted = new AbortController();
+  const third = fakeFetch();
+  const aborted = new AbortController();
   aborted.abort();
   caches.all.clear();
   eng.fetch = third.fetch as typeof globalThis.fetch;
@@ -273,8 +273,8 @@ test("download: abort stops the fetches and rejects; a second try keeps the fini
 });
 
 test("download: a failed fetch rejects (kind failed, reason download) and stops the others", async () => {
-  const caches = fakeCaches(),
-    { fetch } = fakeFetch({ missing: "pyodide/pyodide.asm.wasm", hold: "snapshot/heap.bin" });
+  const caches = fakeCaches();
+  const { fetch } = fakeFetch({ missing: "pyodide/pyodide.asm.wasm", hold: "snapshot/heap.bin" });
   await assert.rejects(client(fetch, caches).download(), {
     kind: "failed",
     reason: "download",
@@ -292,8 +292,8 @@ test("download: a failed fetch rejects (kind failed, reason download) and stops 
 
 test("download: a file that is not the size the build's list says is refused and not cached", async () => {
   // a short answer with status 200 (a cut connection, an error page, a file of another build)
-  const caches = fakeCaches(),
-    { fetch } = fakeFetch({ short: "snapshot/dso.json" });
+  const caches = fakeCaches();
+  const { fetch } = fakeFetch({ short: "snapshot/dso.json" });
   await assert.rejects(client(fetch, caches).download(), {
     kind: "failed",
     reason: "download",
@@ -301,15 +301,15 @@ test("download: a file that is not the size the build's list says is refused and
   });
   assert.ok(!(await cached(caches)).includes("snapshot/dso.json"), "the wrong bytes are not kept");
   // the next try, with the right file, finishes
-  const good = fakeFetch(),
-    eng = client(good.fetch, caches);
+  const good = fakeFetch();
+  const eng = client(good.fetch, caches);
   assert.equal((await eng.download()).cached, true);
   assert.deepEqual(await cached(caches), ["pyodide/pyodide.asm.wasm", "snapshot/dso.json", "snapshot/heap.bin"]);
 });
 
 test("cached(): true only when every download file of the list's build is in its Cache; it writes nothing", async () => {
-  const caches = fakeCaches(),
-    { fetch } = fakeFetch();
+  const caches = fakeCaches();
+  const { fetch } = fakeFetch();
   assert.equal(await client(fetch, caches).cached(), false, "an empty Cache Storage");
   assert.deepEqual([...caches.all.keys()], [], "no empty cache was made");
   // another build's complete cache does not count, and is not deleted
@@ -335,8 +335,8 @@ test("cached(): true only when every download file of the list's build is in its
 });
 
 test("forgetDownload(): every dofile-snapshot-* Cache is deleted, nothing else; it never rejects", async () => {
-  const caches = fakeCaches(),
-    { fetch } = fakeFetch();
+  const caches = fakeCaches();
+  const { fetch } = fakeFetch();
   await client(fetch, caches).download();
   await caches.open("dofile-snapshot-1");
   await caches.open("someone-else");
@@ -360,8 +360,8 @@ test("forgetDownload(): every dofile-snapshot-* Cache is deleted, nothing else; 
 });
 
 test("download: a list from another build than the page says so before anything is fetched", async () => {
-  const caches = fakeCaches(),
-    { fetch, calls } = fakeFetch();
+  const caches = fakeCaches();
+  const { fetch, calls } = fakeFetch();
   const eng = client(fetch, caches, {
     buildId: "the page's build",
     startFiles: { base: `${BASE}start-files.json`, ...LIST, buildId: "a newer build" },
@@ -496,8 +496,8 @@ test("a {id, log} message goes to the run's onLog and never settles the call; th
 });
 
 test("run sends its options; what an ended worker still says settles no call of the next worker, and its stage goes to its own reply", async () => {
-  const sent: Message[] = [],
-    workers: FakePort[] = [];
+  const sent: Message[] = [];
+  const workers: FakePort[] = [];
   const eng = new EngineClient({
     wheel: "dofile.whl",
     createWorker: () => {
@@ -509,8 +509,8 @@ test("run sends its options; what an ended worker still says settles no call of 
       return w;
     },
   });
-  const first: Said = [],
-    second: Said = [];
+  const first: Said = [];
+  const second: Said = [];
   await startWorker(eng, null, first);
   const running = runOn(eng, "while 1 {\n}", { fresh_locals: true, plot_theme: "dark" });
   await sleep(10);
@@ -676,8 +676,8 @@ test("error kinds: an op's error keeps the worker's name; end() fails the pendin
     [{ kind: "failed-twice", reason: "the engine's worker failed twice" }, { kind: "failed-twice" }],
   ] as const;
   for (const [ending, error] of endings) {
-    const running = runOn(eng, "while 1 {\n}"),
-      waiting = eng.query("describe");
+    const running = runOn(eng, "while 1 {\n}");
+    const waiting = eng.query("describe");
     eng.end(live(eng), ending);
     // the machine has cut the run already: its performer says nothing
     await assert.rejects(running, error, `${ending.kind}: the run`);
@@ -840,8 +840,8 @@ test("the store's sync posts `sync`, with nothing in it, to the live worker; a s
   );
   const said: Said = [];
   await startWorker(eng, null, said);
-  const warn = console.warn,
-    warned: unknown[] = [];
+  const warn = console.warn;
+  const warned: unknown[] = [];
   console.warn = (...a: unknown[]) => {
     warned.push(a.join(" "));
   };
@@ -935,9 +935,9 @@ test("download: no network for the list, an HTML page for the list, a Cache that
 
 test("download: an abort with a reason of the caller's own still rejects as an AbortError", async () => {
   for (const reason of ["the user stopped it", new Error("stop"), undefined]) {
-    const caches = fakeCaches(),
-      { fetch } = fakeFetch({ hold: "snapshot/heap.bin" }),
-      stop = new AbortController();
+    const caches = fakeCaches();
+    const { fetch } = fakeFetch({ hold: "snapshot/heap.bin" });
+    const stop = new AbortController();
     const downloading = client(fetch, caches).download({ signal: stop.signal });
     while ((await cached(caches)).length < 2) await sleep(5);
     reason === undefined ? stop.abort() : stop.abort(reason);
@@ -985,8 +985,8 @@ const snapshotStart = (fetch: typeof globalThis.fetch, store = fakeStore()) =>
   );
 
 test("build(): the list, fetched fresh, gives what mount needs; start() puts it in mount's arguments and fetches nothing, no manifest", async () => {
-  const { fetch, calls } = listFetch(),
-    sent: Message[] = [];
+  const { fetch, calls } = listFetch();
+  const sent: Message[] = [];
   const { eng, workers } = scripted(
     (m, post) => {
       sent.push(m);
@@ -1085,10 +1085,10 @@ test("start: a worker that cannot be made is start-failed, reason unknown; the s
 // after end() returned.
 test("a start whose step is answered in the same tick as end(): nothing more is posted or said, the facts stay, and the store is not attached to the dead worker", async () => {
   for (const at of ["mount", "startup"] as const) {
-    const store = fakeStore(),
-      sent: Message[] = [],
-      held: Message[] = [],
-      said: Said = [];
+    const store = fakeStore();
+    const sent: Message[] = [];
+    const held: Message[] = [];
+    const said: Said = [];
     const { eng, workers } = scripted(
       (m) => {
         sent.push(m);
@@ -1187,9 +1187,9 @@ const PART_URL = `${BASE}snapshot/${PART.name}`;
 // The graphics part's fetches answer in turn as `answers` says (a copy's seed, or "offline"), each held until the test
 // lets it go (release()); every other file is fakeFetch's. `modes`: the cache mode of each fetch of the part.
 function partFetch(answers: (number | "offline")[]) {
-  const files = fakeFetch(),
-    modes: (RequestCache | undefined)[] = [],
-    gates: (() => void)[] = [];
+  const files = fakeFetch();
+  const modes: (RequestCache | undefined)[] = [];
+  const gates: (() => void)[] = [];
   const fetch = async (url: string, init: RequestInit = {}) => {
     if (url !== PART_URL) return files.fetch(url, init);
     modes.push(init.cache);
@@ -1211,8 +1211,8 @@ const until = async (ok: () => boolean, what: string) => {
 // a page with a lazy build and a worker that answers its start and the op `graphics` (counted), and hands over the
 // shared buffer it was booted with
 function lazyPage(fetch: Fetch, caches: ReturnType<typeof fakeCaches>) {
-  const told: number[] = [],
-    got: { sab: SharedArrayBuffer | null; port: FakePort | null } = { sab: null, port: null };
+  const told: number[] = [];
+  const got: { sab: SharedArrayBuffer | null; port: FakePort | null } = { sab: null, port: null };
   const eng = client(fetch, caches, {
     startFiles: { base: `${BASE}start-files.json`, ...LAZY } as StartFiles & { base: string },
     createWorker: () => {
@@ -1237,9 +1237,9 @@ function lazyPage(fetch: Fetch, caches: ReturnType<typeof fakeCaches>) {
 const partBytes = (sab: SharedArrayBuffer) => new Uint8Array(sab, PART_HEADER, PART.size).slice();
 
 test("graphics part: the shared buffer is pending while the part is fetched, then landed with its bytes, and kept in the Cache; the worker is told", async () => {
-  const caches = fakeCaches(),
-    f = partFetch([1]),
-    page = lazyPage(f.fetch, caches);
+  const caches = fakeCaches();
+  const f = partFetch([1]);
+  const page = lazyPage(f.fetch, caches);
   const done = await page.eng.download();
   assert.equal(done.cached, true);
   await startWorker(page.eng, done.build);
@@ -1258,9 +1258,9 @@ test("graphics part: the shared buffer is pending while the part is fetched, the
 });
 
 test("graphics part: the worker says it is damaged: dropped from the Cache, pending again (tries + 1), and fetched again with cache reload", async () => {
-  const caches = fakeCaches(),
-    f = partFetch([1, 2]),
-    page = lazyPage(f.fetch, caches);
+  const caches = fakeCaches();
+  const f = partFetch([1, 2]);
+  const page = lazyPage(f.fetch, caches);
   const done = await page.eng.download();
   await startWorker(page.eng, done.build);
   await f.release();
@@ -1280,9 +1280,9 @@ test("graphics part: the worker says it is damaged: dropped from the Cache, pend
 });
 
 test("graphics part: after a damaged copy, a re-fetch that fails is retried with cache reload too, until a copy lands", async () => {
-  const caches = fakeCaches(),
-    f = partFetch([1, "offline", 2]),
-    page = lazyPage(f.fetch, caches);
+  const caches = fakeCaches();
+  const f = partFetch([1, "offline", 2]);
+  const page = lazyPage(f.fetch, caches);
   const done = await page.eng.download();
   await startWorker(page.eng, done.build);
   await f.release();
@@ -1301,8 +1301,8 @@ test("graphics part: after a damaged copy, a re-fetch that fails is retried with
 
 test("graphics part: a failed fetch writes the reason with state failed; the worker's `again` fetches it once more, and so does the browser coming back online", async (t) => {
   // Node has no window events: a stand-in for addEventListener("online", ..., { once: true })
-  const online: (() => void)[] = [],
-    had = Object.getOwnPropertyDescriptor(globalThis, "addEventListener");
+  const online: (() => void)[] = [];
+  const had = Object.getOwnPropertyDescriptor(globalThis, "addEventListener");
   Object.defineProperty(globalThis, "addEventListener", {
     configurable: true,
     writable: true,
@@ -1312,9 +1312,9 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
     if (had) Object.defineProperty(globalThis, "addEventListener", had);
     else delete (globalThis as { addEventListener?: unknown }).addEventListener;
   });
-  const caches = fakeCaches(),
-    f = partFetch(["offline", "offline", 3]),
-    page = lazyPage(f.fetch, caches);
+  const caches = fakeCaches();
+  const f = partFetch(["offline", "offline", 3]);
+  const page = lazyPage(f.fetch, caches);
   const done = await page.eng.download();
   await startWorker(page.eng, done.build);
   await f.release();

@@ -144,10 +144,10 @@ export const resolvedTheme = computed(() =>
 export const wrap = signal(saved.get("dofile.wrap") === "1"); // kept in localStorage
 
 // ---- dialogs, banners, toast, the live region ----
-const toastText = signal<string | null>(null),
-  bannerList = signal<Banner[]>([]),
-  toastIsError = signal(false),
-  announced = signal("");
+const toastText = signal<string | null>(null);
+const bannerList = signal<Banner[]>([]);
+const toastIsError = signal(false);
+const announced = signal("");
 export const toast: ReadonlySignal<string | null> = toastText; // set through showToast(); it clears itself (toastMs)
 // the toast reports an error (the warning icon), not a confirmation
 export const toastError: ReadonlySignal<boolean> = toastIsError;

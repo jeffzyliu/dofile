@@ -59,9 +59,9 @@ test("the phone keyboard: watchViewport sets data-keyboard and --vv-height while
 
 test("the phone keyboard where the browser shrinks the layout viewport: open while a text field has the focus and the page is well below its tallest at this width; not on a rotation or without focus", () => {
   // an older Android browser: the layout and visual viewports shrink together, so they never differ
-  let h = 800,
-    w = 390,
-    focused = false;
+  let h = 800;
+  let w = 390;
+  let focused = false;
   const vv = Object.assign(new EventTarget(), { height: h, offsetTop: 0, scale: 1 });
   const vars = new Map<string, string>();
   const root = {
@@ -121,8 +121,8 @@ function keyboardPage({
     dataset: {} as DOMStringMap,
     style: { setProperty: (k: string, v: string) => vars.set(k, v), removeProperty: (k: string) => vars.delete(k) },
   });
-  let clock = 0,
-    scrolled = false;
+  let clock = 0;
+  let scrolled = false;
   const timers: { at: number; fn: () => void }[] = [];
   const seen = { phone, unpans: 0, reveals: 0, selected }; // what the page's callbacks read and count
   return {
@@ -215,15 +215,15 @@ test("the phone keyboard: a scroll of the page that no update has seen is scroll
 test("the phone keyboard: the drag guard cancels a touchmove that no scroller under the finger can follow, only while the keyboard is open", () => {
   // elements as a chain of parents; `room` says which of them can scroll towards the end (+1), the start (-1), or
   // neither
-  const page = { parentElement: null as unknown },
-    bar = { parentElement: page },
-    pane = { parentElement: page, room: [-1, 1] },
-    top = { parentElement: page, room: [1] }, // at its start: it can only go on
-    line = { parentElement: pane }, // a touch on something inside a scroller: the walk up finds it
-    dead = { parentElement: bar },
-    touch = new EventTarget(),
-    selected = new Set<unknown>(),
-    p = keyboardPage({ touch, selected });
+  const page = { parentElement: null as unknown };
+  const bar = { parentElement: page };
+  const pane = { parentElement: page, room: [-1, 1] };
+  const top = { parentElement: page, room: [1] }; // at its start: it can only go on
+  const line = { parentElement: pane }; // a touch on something inside a scroller: the walk up finds it
+  const dead = { parentElement: bar };
+  const touch = new EventTarget();
+  const selected = new Set<unknown>();
+  const p = keyboardPage({ touch, selected });
   // a touchstart at (x0, y0), then a touchmove to (x1, y1) with `touches` fingers; whether the touchmove was cancelled
   const drag = (target: unknown, [x0, y0, x1, y1]: number[], touches = 1) => {
     const send = (type: string, x: number, y: number) => {

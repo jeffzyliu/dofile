@@ -88,9 +88,9 @@ async function makeParents(t: IDBTransaction, path: string) {
 }
 
 async function tree(t: IDBTransaction, path: string): Promise<[FileInfo[], [string, ArrayBuffer][]]> {
-  const info = t.objectStore("info"),
-    data = t.objectStore("data"),
-    top = await req(info.get(path));
+  const info = t.objectStore("info");
+  const data = t.objectStore("data");
+  const top = await req(info.get(path));
   const infos: FileInfo[] = [...(top ? [top] : []), ...(await req(info.getAll(under(path))))];
   return [
     infos,
@@ -272,8 +272,8 @@ export class FileStore {
     if (to === from) return;
     if (to.startsWith(`${from}/`)) throw new Error(`cannot move ${from} into itself`);
     await this.change({ op: "rename", path: from, to }, async (t) => {
-      const info = t.objectStore("info"),
-        data = t.objectStore("data");
+      const info = t.objectStore("info");
+      const data = t.objectStore("data");
       const old: FileInfo | undefined = await req(info.get(from));
       if (!old) throw new Error(`no such file: ${from}`);
       const there: FileInfo | undefined = await req(info.get(to));
@@ -318,8 +318,8 @@ export class FileStore {
         data: bytes.get(i.path) ?? new Uint8Array(0),
       })),
     );
-    const d = new Date(),
-      two = (n: number) => String(n).padStart(2, "0");
+    const d = new Date();
+    const two = (n: number) => String(n).padStart(2, "0");
     return new File(parts, `dofile-${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}.zip`, {
       type: "application/zip",
     });
@@ -357,13 +357,13 @@ export class FileStore {
    */
   async applyRun(changes: RunChange[]): Promise<AppliedRun> {
     return this.tx(ALL, "readwrite", async (t) => {
-      const info = t.objectStore("info"),
-        data = t.objectStore("data"),
-        pending = t.objectStore("pending");
+      const info = t.objectStore("info");
+      const data = t.objectStore("data");
+      const pending = t.objectStore("pending");
       const rows: PendingRow[] = await req(pending.getAll());
-      const deep: string[] = [],
-        made: string[] = [],
-        gone: string[] = []; // what the page renamed (the old name) or removed
+      const deep: string[] = [];
+      const made: string[] = [];
+      const gone: string[] = []; // what the page renamed (the old name) or removed
       for (const r of rows) {
         if (r.op === "mkdir") made.push(r.path);
         else deep.push(r.path, ...(r.to ? [r.to] : []));
@@ -371,10 +371,10 @@ export class FileStore {
       }
       const pageHas = (p: string) => deep.some((h) => within(p, h));
       const above = (p: string) => made.includes(p) || [...deep, ...made].some((h) => h.startsWith(`${p}/`));
-      const written: FileChange[] = [],
-        skipped: string[] = [],
-        emptied: string[] = [],
-        replace = [...deep];
+      const written: FileChange[] = [];
+      const skipped: string[] = [];
+      const emptied: string[] = [];
+      const replace = [...deep];
       for (const c of changes) {
         if (pageHas(c.path)) {
           // listed only when lost with a folder the page renamed or removed

@@ -41,8 +41,8 @@ test("inflate gives back the original bytes, in steps of any size", () => {
 test("unpackSteps decodes in steps (the lazy graphics part: a run or a Break between two), to the same bytes", () => {
   const file = { raw: data.length, size: packed.length };
   const it = unpackSteps(brotli, packed, file, 64 << 10);
-  let steps = 0,
-    r = it.next();
+  let steps = 0;
+  let r = it.next();
   for (; !r.done; r = it.next()) steps++;
   assert.ok(steps >= Math.floor(packed.length / (64 << 10)) - 1, `${steps} steps`);
   assert.ok(Buffer.from(r.value).equals(data));
@@ -125,9 +125,12 @@ test("the bundle leaves out test folders and type stubs, and nothing that runs",
 const fakePy = (module: object): SnapshotPy => ({ _module: module }) as unknown as SnapshotPy;
 
 test("zeroLibraryCopies zeroes every handle's copy that equals its file, the unlogged ones too, and no other", () => {
-  const heap = new Uint8Array(4096).fill(7),
-    u32 = new Uint32Array(heap.buffer),
-    files: Record<string, Uint8Array> = { "/a.so": new Uint8Array(100).fill(7), "/b.so": new Uint8Array(100).fill(9) };
+  const heap = new Uint8Array(4096).fill(7);
+  const u32 = new Uint32Array(heap.buffer);
+  const files: Record<string, Uint8Array> = {
+    "/a.so": new Uint8Array(100).fill(7),
+    "/b.so": new Uint8Array(100).fill(9),
+  };
   const handle = (at: number, path: string, ptr: number, size: number) => {
     u32[(at + 28) >> 2] = ptr;
     u32[(at + 32) >> 2] = size;
@@ -150,8 +153,8 @@ test("zeroLibraryCopies zeroes every handle's copy that equals its file, the unl
 });
 
 test("zeroFreeMemory zeroes the free blocks only, frees them all again, and lifts its heap cap afterwards", () => {
-  const heap = new Uint8Array(1 << 22).fill(5),
-    free: { at: number; len: number }[] = [{ at: 100_000, len: 3_000_000 }]; // everything else is in use
+  const heap = new Uint8Array(1 << 22).fill(5);
+  const free: { at: number; len: number }[] = [{ at: 100_000, len: 3_000_000 }]; // everything else is in use
   const mod: any = {
     HEAPU8: heap,
     _sbrk: () => heap.length,
@@ -186,9 +189,9 @@ test("zeroFreeMemory zeroes the free blocks only, frees them all again, and lift
 });
 
 test("the graphics part (a lazy snapshot): packGraphics, then writeGraphics puts each file back, and refuses one that does not add up", () => {
-  const written = new Map<string, Uint8Array>(),
-    dirs: string[] = [],
-    ran: string[] = [];
+  const written = new Map<string, Uint8Array>();
+  const dirs: string[] = [];
+  const ran: string[] = [];
   const py = {
     FS: {
       mkdirTree: (d: string) => dirs.push(d),

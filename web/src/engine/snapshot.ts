@@ -148,17 +148,17 @@ export const makeSnapshot = (py: SnapshotPy): Uint8Array => {
  */
 export function zeroLibraryCopies(py: SnapshotPy): { zeroed: number; bytes: number; kept: number } {
   const m = py._module;
-  let zeroed = 0,
-    bytes = 0,
-    kept = 0;
+  let zeroed = 0;
+  let bytes = 0;
+  let kept = 0;
   for (const key of Object.keys(m.LDSO.loadedLibsByHandle)) {
     const handle = Number(key); // handle 0 is the main module, which has no C struct
     if (!handle) continue;
-    const ptr = m.HEAPU32[(handle + 28) >> 2],
-      size = m.HEAPU32[(handle + 32) >> 2];
+    const ptr = m.HEAPU32[(handle + 28) >> 2];
+    const size = m.HEAPU32[(handle + 32) >> 2];
     if (!ptr || !size) continue;
-    const file = m.FS.readFile(m.UTF8ToString(handle + 36, 4096)),
-      copy = m.HEAPU8.subarray(ptr, ptr + size);
+    const file = m.FS.readFile(m.UTF8ToString(handle + 36, 4096));
+    const copy = m.HEAPU8.subarray(ptr, ptr + size);
     let same = file.length === size;
     for (let i = 0; same && i < size; i++) if (file[i] !== copy[i]) same = false;
     if (same) {
@@ -178,16 +178,16 @@ export function zeroLibraryCopies(py: SnapshotPy): { zeroed: number; bytes: numb
  * makeSnapshot.
  */
 export function zeroFreeMemory(py: SnapshotPy): { bytes: number; blocks: number } {
-  const m = py._module,
-    len = m.HEAPU8.length,
-    got: [number, number][] = [];
+  const m = py._module;
+  const len = m.HEAPU8.length;
+  const got: [number, number][] = [];
   let bytes = 0;
   m.dofileHeapMax = len;
   try {
     for (let size = 1 << 20; size >= 16; size >>= 1)
       for (;;) {
-        const before = m._sbrk(0),
-          p = m._malloc(size);
+        const before = m._sbrk(0);
+        const p = m._malloc(size);
         if (!p) break;
         if (m._sbrk(0) !== before) {
           m._free(p);
@@ -219,19 +219,19 @@ export function bundle(
   py: SnapshotPy,
   site: string,
 ): { dso: DsoRecord[] | undefined; index: BundleIndex; blob: Uint8Array } {
-  const files: string[] = [],
-    walk = (dir: string) => {
-      for (const name of py.FS.readdir(dir)) {
-        if (name === "." || name === "..") continue;
-        const full = `${dir}/${name}`,
-          st = py.FS.stat(full);
-        if (py.FS.isDir(st.mode)) walk(full);
-        else if (py.FS.isFile(st.mode) && !isDeadWeight(full.slice(site.length + 1))) files.push(full);
-      }
-    };
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    for (const name of py.FS.readdir(dir)) {
+      if (name === "." || name === "..") continue;
+      const full = `${dir}/${name}`;
+      const st = py.FS.stat(full);
+      if (py.FS.isDir(st.mode)) walk(full);
+      else if (py.FS.isFile(st.mode) && !isDeadWeight(full.slice(site.length + 1))) files.push(full);
+    }
+  };
   walk(site);
-  const index: BundleIndex = [],
-    parts: Uint8Array[] = [];
+  const index: BundleIndex = [];
+  const parts: Uint8Array[] = [];
   for (const path of files) {
     const data = py.FS.readFile(path);
     index.push({ path, size: data.length });
@@ -250,8 +250,8 @@ export function bundle(
 // bytes, little-endian), the index (JSON, a BundleIndex of absolute paths under site-packages), then the files in its
 // order.
 export function packGraphics(index: BundleIndex, blob: Uint8Array): Uint8Array {
-  const head = new TextEncoder().encode(JSON.stringify(index)),
-    out = new Uint8Array(4 + head.length + blob.length);
+  const head = new TextEncoder().encode(JSON.stringify(index));
+  const out = new Uint8Array(4 + head.length + blob.length);
   new DataView(out.buffer).setUint32(0, head.length, true);
   out.set(head, 4);
   out.set(blob, 4 + head.length);
@@ -286,8 +286,8 @@ export function restoreOptions(
   { snapshot, dso, index, blob }: { snapshot: Uint8Array; dso: DsoRecord[]; index: BundleIndex; blob: Uint8Array },
   lap: (name: string) => void = () => {},
 ): PyodideConfig {
-  const e = new Uint32Array(snapshot.buffer, snapshot.byteOffset, 3),
-    image = snapshot.length - e[1];
+  const e = new Uint32Array(snapshot.buffer, snapshot.byteOffset, 3);
+  const image = snapshot.length - e[1];
   const createPyodideModule = async (cfg: Parameters<CreateModule>[0]) => {
     const m = await create(cfg);
     lap("start the wasm module");
@@ -301,8 +301,8 @@ export function restoreOptions(
     lap("write site-packages");
     // The recorded addresses come from the original heap's malloc; here malloc doesn't know them, so a library's
     // start-up allocations could land on another library's range. Reserve the whole span first.
-    const lo = Math.min(...dso.map((r) => r.memoryBase)),
-      hi = Math.max(...dso.map((r) => r.memoryBase + r.memorySize));
+    const lo = Math.min(...dso.map((r) => r.memoryBase));
+    const hi = Math.max(...dso.map((r) => r.memoryBase + r.memorySize));
     const reserved = m._malloc(hi);
     if (reserved > lo) throw snapshotError(`snapshot: cannot reserve ${lo}..${hi}, malloc returned ${reserved}`);
     m.__dsoReplay = dso.map((r) => ({ ...r }));
@@ -353,11 +353,11 @@ export function* inflateSteps(
   rawSize: number,
   { inStep = 2 << 20, outStep = 4 << 20 } = {},
 ): Generator<number, Uint8Array, void> {
-  const out = new Uint8Array(rawSize),
-    stream = new brotli.DecompressStream(),
-    Code = brotli.BrotliStreamResultCode;
-  let at = 0,
-    code: number | undefined;
+  const out = new Uint8Array(rawSize);
+  const stream = new brotli.DecompressStream();
+  const Code = brotli.BrotliStreamResultCode;
+  let at = 0;
+  let code: number | undefined;
   for (let inAt = 0; inAt < input.length || code === undefined; inAt += inStep) {
     const chunk = input.subarray(inAt, inAt + inStep);
     let used = 0;

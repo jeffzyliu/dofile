@@ -91,9 +91,9 @@ export class WorkMirror {
   walk(dir = ROOT, out: FileInfo[] = []): FileInfo[] {
     for (const name of this.#fs.readdir(dir)) {
       if (name === "." || name === ".." || (dir === ROOT && name === HIDDEN)) continue;
-      const full = `${dir}/${name}`,
-        st = this.#fs.stat(full),
-        isDir = this.#fs.isDir(st.mode);
+      const full = `${dir}/${name}`;
+      const st = this.#fs.stat(full);
+      const isDir = this.#fs.isDir(st.mode);
       out.push({ path: full.slice(ROOT.length + 1), dir: isDir, size: isDir ? 0 : st.size, mtime: st.mtime.getTime() });
       if (isDir) this.walk(full, out);
     }
@@ -113,8 +113,8 @@ export class WorkMirror {
    */
   beforeRun(): FileInfo[] {
     const before = this.walk();
-    const now = Date.now(),
-      newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
+    const now = Date.now();
+    const newest = before.reduce((m, f) => (f.mtime <= now ? Math.max(m, f.mtime) : m), 0);
     while (Date.now() <= newest) {
       /* one clock step (up to 100 ms with a clamped clock) */
     }
@@ -133,13 +133,13 @@ export class WorkMirror {
    * If /work then cannot take the page's version, takeOutOfStep() says why.
    */
   async saveRun(before: FileInfo[]): Promise<SavedRun> {
-    const was = new Map(before.map((f) => [f.path, f])),
-      now = new Set<string>(),
-      changes: RunChange[] = [];
+    const was = new Map(before.map((f) => [f.path, f]));
+    const now = new Set<string>();
+    const changes: RunChange[] = [];
     for (const f of this.walk()) {
       now.add(f.path);
-      const old = was.get(f.path),
-        failed = this.#unsaved.get(f.path);
+      const old = was.get(f.path);
+      const failed = this.#unsaved.get(f.path);
       const what = failed
         ? failed.status === "created"
           ? "created"
@@ -193,8 +193,8 @@ export class WorkMirror {
     const mtimes = new Map(infos.map((i) => [i.path, i.mtime]));
     for (const i of infos) if (i.dir) this.#fs.mkdirTree(`${ROOT}/${i.path}`);
     for (const [path, bytes] of data) {
-      const full = `${ROOT}/${path}`,
-        mtime = mtimes.get(path as string) ?? Date.now();
+      const full = `${ROOT}/${path}`;
+      const mtime = mtimes.get(path as string) ?? Date.now();
       this.#fs.mkdirTree(this.#path.dirname(full));
       this.#fs.writeFile(full, new Uint8Array(bytes), { canOwn: true }); // the bytes just read: no second copy
       this.#fs.utime(full, mtime, mtime);
@@ -221,8 +221,8 @@ export class WorkMirror {
   #foldersAt(path: string, self: boolean): void {
     const parts = path.split("/");
     for (let n = 1; n <= parts.length - (self ? 0 : 1); n++) {
-      const p = parts.slice(0, n).join("/"),
-        full = `${ROOT}/${p}`;
+      const p = parts.slice(0, n).join("/");
+      const full = `${ROOT}/${p}`;
       if (this.#exists(full) && !this.#fs.isDir(this.#fs.stat(full).mode)) {
         this.#fs.unlink(full);
         this.#forget(p);

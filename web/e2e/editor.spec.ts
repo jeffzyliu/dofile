@@ -1807,8 +1807,8 @@ const contrastOf = (page: Page, selector: string, pseudo: string | null) =>
         });
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
       };
-      const text = getComputedStyle(el, pseudo as string | null),
-        ground = getComputedStyle(el);
+      const text = getComputedStyle(el, pseudo as string | null);
+      const ground = getComputedStyle(el);
       if (Number(text.opacity) !== 1 || Number(ground.opacity) !== 1) return 0; // greyed by opacity: not measured here
       const [a, b] = [lum(text.color), lum(ground.backgroundColor)].sort((x, y) => y - x);
       return (a + 0.05) / (b + 0.05);
@@ -1837,8 +1837,8 @@ test("the command line with no engine: disabled, with the hint while it is empty
   // the hint shows whole, beside the phone's wider button too
   const room = await field.evaluate((el: HTMLInputElement) => {
     const c = document.createElement("canvas").getContext("2d")!;
-    const hint = getComputedStyle(el, "::placeholder"),
-      box = getComputedStyle(el);
+    const hint = getComputedStyle(el, "::placeholder");
+    const box = getComputedStyle(el);
     c.font = `${hint.fontStyle} ${hint.fontWeight} ${hint.fontSize} ${hint.fontFamily}`;
     return {
       hint: c.measureText(el.placeholder).width,

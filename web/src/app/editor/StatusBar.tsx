@@ -115,8 +115,8 @@ export function StatusBar() {
 export function GraphsLoading() {
   const g = graphicsPart.value;
   if (g?.state !== "fetching" || !engineUp(engine.value)) return null;
-  const pct = g.total ? Math.min(100, (100 * g.received) / g.total) : 0,
-    mb = (n: number) => megabytes(n, 1);
+  const pct = g.total ? Math.min(100, (100 * g.received) / g.total) : 0;
+  const mb = (n: number) => megabytes(n, 1);
   return (
     <span
       class="graphs-loading"

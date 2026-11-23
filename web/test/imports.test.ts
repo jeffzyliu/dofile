@@ -31,17 +31,17 @@ function files(dir: string, ext = /\.(ts|tsx|mjs)$/): string[] {
  *  expression where a value is expected. */
 function code(text: string, blank = false): string {
   let out = "";
-  const n = text.length,
-    templates: number[] = []; // the brace depth at which each open `${` closes
-  let depth = 0,
-    last = ""; // last: the last character of code that is not a space
+  const n = text.length;
+  const templates: number[] = []; // the brace depth at which each open `${` closes
+  let depth = 0;
+  let last = ""; // last: the last character of code that is not a space
   const value = () =>
     last === "" ||
     "(,=:[!&|?{};+-*%<>~^".includes(last) ||
     /\b(return|typeof|case|in|of|void|throw|new|delete|do|else)$/.test(out.trimEnd());
   for (let i = 0; i < n; ) {
-    const c = text[i],
-      d = text[i + 1];
+    const c = text[i];
+    const d = text[i + 1];
     if (c === "/" && d === "/") {
       while (i < n && text[i] !== "\n") i++;
       continue;
@@ -74,8 +74,8 @@ function code(text: string, blank = false): string {
     }
     if (c === "/" && value()) {
       // a regular expression
-      let j = i + 1,
-        set = false;
+      let j = i + 1;
+      let set = false;
       while (j < n && (set || text[j] !== "/") && text[j] !== "\n") {
         if (text[j] === "[") set = true;
         else if (text[j] === "]") set = false;
@@ -105,8 +105,8 @@ const having = (list: string[], pattern: RegExp, blank = true) =>
 /** The imports of a file: what it names (a path from web/ when it is a file of ours), and whether only types come. */
 type Import = { from: string; file: string | null; typeOnly: boolean };
 function importsOf(path: string): Import[] {
-  const text = source(path),
-    out: Import[] = [];
+  const text = source(path);
+  const out: Import[] = [];
   const add = (spec: string, typeOnly: boolean) => {
     let file: string | null = null;
     if (spec.startsWith(".")) {

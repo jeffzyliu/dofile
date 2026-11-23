@@ -8,8 +8,8 @@ export const CSV_COLORS = 5;
 /** The fields of one line: [from, to) offsets in the line, and the column (0-based). Separators lie between them. */
 export function csvFields(line: string, sep: "," | "\t"): { from: number; to: number; col: number }[] {
   const out: { from: number; to: number; col: number }[] = [];
-  let from = 0,
-    quoted = false;
+  let from = 0;
+  let quoted = false;
   for (let i = 0; i <= line.length; i++) {
     const c = line[i];
     if (c === '"')

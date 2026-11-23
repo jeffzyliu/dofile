@@ -30,8 +30,8 @@ export const runChild = (
     const child = spawn(process.execPath, [script, ...childArgs], {
       stdio: onLine ? ["ignore", "pipe", "inherit"] : "ignore",
     });
-    let pending = "",
-      timedOut = false;
+    let pending = "";
+    let timedOut = false;
     const timer =
       limitS !== undefined
         ? setTimeout(() => {

@@ -27,19 +27,19 @@ const TAP = 4;
  *  (dy > 0) scrolls the content towards its end. The axis counts that the finger mostly moves along; under TAP either
  *  may go (a zero move, either way). */
 const scrolls = (el: Element, dx: number, dy: number) => {
-  const style = getComputedStyle(el),
-    room = (overflow: string, at: number, end: number, move: number) =>
-      /auto|scroll/.test(overflow) && (move > 0 ? at < end - 1 : move < 0 ? at > 0 : at > 0 || at < end - 1),
-    y = room(style.overflowY, el.scrollTop, el.scrollHeight - el.clientHeight, dy),
-    x = room(style.overflowX, el.scrollLeft, el.scrollWidth - el.clientWidth, dx);
+  const style = getComputedStyle(el);
+  const room = (overflow: string, at: number, end: number, move: number) =>
+    /auto|scroll/.test(overflow) && (move > 0 ? at < end - 1 : move < 0 ? at > 0 : at > 0 || at < end - 1);
+  const y = room(style.overflowY, el.scrollTop, el.scrollHeight - el.clientHeight, dy);
+  const x = room(style.overflowX, el.scrollLeft, el.scrollWidth - el.clientWidth, dx);
   return Math.max(Math.abs(dx), Math.abs(dy)) < TAP ? x || y : Math.abs(dy) >= Math.abs(dx) ? y : x;
 };
 
 /** Whether the touch is on selected text, in the page or in a field (a drag of a selection handle): left to the browser.
  *  Not on what holds the selection (the page, .app, the editor): that would switch the guard off. */
 const selecting = (target: Element) => {
-  const selection = globalThis.getSelection?.(),
-    field = target as HTMLInputElement; // a field's own selection is not in getSelection()
+  const selection = globalThis.getSelection?.();
+  const field = target as HTMLInputElement; // a field's own selection is not in getSelection()
   return (
     (selection?.isCollapsed === false && // a caret alone is not a selection
       selection.containsNode(target, true) &&
@@ -88,16 +88,16 @@ export function watchViewport({
   onSelection?: (target: Element) => boolean;
 } = {}): { update: () => void; stop: () => void } {
   if (!vv || !root) return { update: () => {}, stop: () => {} };
-  let width = 0,
-    tallest = 0, // the tallest layout viewport seen at this width
-    quiet = 0; // counts the updates, so only the last one's timer reveals
+  let width = 0;
+  let tallest = 0; // the tallest layout viewport seen at this width
+  let quiet = 0; // counts the updates, so only the last one's timer reveals
   // The drag guard. While the keyboard is open, iOS lets a drag scroll the window by the keyboard's height from
   // anything that cannot scroll, even with overflow: hidden; scrolling back would only snap it each frame, and CSS
   // touch-action was not enough on an iPhone. So a touchmove that nothing under the finger can follow is cancelled. Its
   // limits: docs/phone-keyboard-experiment.md, "The drag guard".
-  let x = 0,
-    y = 0,
-    guarding = false;
+  let x = 0;
+  let y = 0;
+  let guarding = false;
   const start = (e: Event) => {
     ({ clientX: x, clientY: y } = (e as TouchEvent).touches[0]);
   };
@@ -119,8 +119,8 @@ export function watchViewport({
     touch?.[listen]("touchmove", drag, { passive: false, capture: true });
   };
   const update = () => {
-    const h = layoutHeight(),
-      w = layoutWidth();
+    const h = layoutHeight();
+    const w = layoutWidth();
     if (w !== width) {
       width = w;
       tallest = 0;

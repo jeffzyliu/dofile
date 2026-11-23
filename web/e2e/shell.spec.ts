@@ -265,8 +265,8 @@ test("?snapshot=0: the normal boot still starts and runs the sample", async ({ p
     `the engine is ${now.s}, reason ${now.reason}, detail ${now.detail}, message ${now.message}\n${output()}`,
   ).toBe("ready");
   const r = await page.evaluate(async (code) => {
-    const d = window.__dofile,
-      r = await d.run(code);
+    const d = window.__dofile;
+    const r = await d.run(code);
     return { mode: d.engine.startup?.mode, rc: r?.rc, images: r?.images.length };
   }, SAMPLE);
   expect(r).toEqual({ mode: "normal", rc: 0, images: 1 });
@@ -327,8 +327,8 @@ test("the toolbar does not move: its box and every button's box are the same in 
             const r = e.getBoundingClientRect();
             return [r.x, r.y, r.width, r.height].map((v) => v.toFixed(1)).join(",");
           };
-          const bar = document.querySelector("header.toolbar")!,
-            doc = document.scrollingElement!;
+          const bar = document.querySelector("header.toolbar")!;
+          const doc = document.scrollingElement!;
           return [
             `bar ${box(bar)}`,
             `page ${doc.scrollWidth}x${doc.scrollHeight}`,

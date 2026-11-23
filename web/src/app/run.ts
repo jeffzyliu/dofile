@@ -95,15 +95,15 @@ function ended(r: RunResult) {
   const run = current;
   if (!run) return;
   current = null;
-  const { id } = run,
-    seconds = (performance.now() - run.t0) / 1000;
+  const { id } = run;
+  const seconds = (performance.now() - run.t0) / 1000;
   const own = engine.fromClient(r); // no log of its own
   const reset = own && r.kind !== "run-failed"; // the engine is gone (or another tab has it); run-failed keeps it
 
   // a rename during the run moved the log's run head (state.ts runMoved), not `run.head`
-  const at = W.log.value.findIndex((i) => i.t === "text" && i.run === id),
-    shown = W.log.value[at - 1],
-    head = shown?.t === "runhead" ? shown.run : run.head;
+  const at = W.log.value.findIndex((i) => i.t === "text" && i.run === id);
+  const shown = W.log.value[at - 1];
+  const head = shown?.t === "runhead" ? shown.run : run.head;
   const offset = head.kind === "selection" && head.lines ? head.lines[0] - 1 : 0;
   const line = r.error_line == null ? null : r.error_line + offset;
   const end: LastRun = { ...head, rc: r.rc, line, seconds };

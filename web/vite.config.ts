@@ -41,9 +41,9 @@ import { startListDev } from "./scripts/vite/start-list-dev.ts";
 
 // What the page is built from (scripts/build-id.ts): the dofile wheel (the newest in .wheel/), the extra wheels
 // (web/wheels/: pyreadstat built for Pyodide) and the Pyodide version, with their hashes.
-const inputs = readInputs(),
-  wheel = inputs.wheel,
-  extraWheels = Object.keys(inputs.extraWheels);
+const inputs = readInputs();
+const wheel = inputs.wheel;
+const extraWheels = Object.keys(inputs.extraWheels);
 // One stamp per `vite build`, or per dev-server start (this file is loaded once for each). The page's build id and the one
 // in start-files.json are both made with it (client.ts, checkBuild).
 const stamp = randomUUID();
@@ -66,12 +66,12 @@ function stageFiles() {
 stageFiles();
 const pyodide = inputs.pyodide;
 
-const publicDir = fileURLToPath(new URL("./public", import.meta.url)),
-  siteDir = fileURLToPath(new URL(`./${SITE_OUT}`, import.meta.url)), // the pages' root: what their Worker serves
-  // the editor's build: EDITOR_OUT unless `vite build --outDir` says otherwise; the site's build reads the editor's
-  // start-files.json from DOFILE_EDITOR_DIR, else from here
-  editorDefault = fileURLToPath(new URL(`./${EDITOR_OUT}`, import.meta.url)),
-  editorSource = resolve(process.env.DOFILE_EDITOR_DIR ?? editorDefault);
+const publicDir = fileURLToPath(new URL("./public", import.meta.url));
+const siteDir = fileURLToPath(new URL(`./${SITE_OUT}`, import.meta.url)); // the pages' root: what their Worker serves
+// the editor's build: EDITOR_OUT unless `vite build --outDir` says otherwise; the site's build reads the editor's
+// start-files.json from DOFILE_EDITOR_DIR, else from here
+const editorDefault = fileURLToPath(new URL(`./${EDITOR_OUT}`, import.meta.url));
+const editorSource = resolve(process.env.DOFILE_EDITOR_DIR ?? editorDefault);
 // start-files.json (scripts/start-files.ts): a build writes it into dist/ once the page's own files exist, and its total
 // into dist/index.html; it fails on a stale snapshot (scripts/vite/editor-plugins.ts). The dev server makes it from public/.
 const devList = startListDev(publicDir, stamp, inputs);

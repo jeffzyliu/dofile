@@ -27,8 +27,8 @@ const request = <T>(r: IDBRequest<T>) =>
   });
 
 if (workerData.storePort) {
-  const port = workerData.storePort,
-    waiting = new Map<number, { ok: (result: unknown) => void; err: (error: Error) => void }>();
+  const port = workerData.storePort;
+  const waiting = new Map<number, { ok: (result: unknown) => void; err: (error: Error) => void }>();
   let n = 0;
   port.on(
     "message",
@@ -64,8 +64,8 @@ if (workerData.storePort) {
 async function databases() {
   const out: Record<string, { version: number | undefined; stores: Record<string, [IDBValidKey, unknown][]> }> = {};
   for (const { name, version } of await indexedDB.databases()) {
-    const db = await request(indexedDB.open(name!)),
-      stores: Record<string, [IDBValidKey, unknown][]> = {};
+    const db = await request(indexedDB.open(name!));
+    const stores: Record<string, [IDBValidKey, unknown][]> = {};
     for (const s of db.objectStoreNames) {
       const t = db.transaction(s, "readonly").objectStore(s);
       const [keys, values] = [await request(t.getAllKeys()), await request(t.getAll())];

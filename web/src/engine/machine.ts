@@ -422,9 +422,9 @@ function TWICE(m: In<"starting-worker">, reason: FailReason, cause: string): Ste
 /** RESET: the worker is ended and a new start begins with the build's list, fetched fresh. A run in progress ends with
  *  rc 9998, as the last effect. The banner and "Engine reset" only when the engine being replaced had been ready. */
 function RESET(m: In<WorkerLive>, kind: ResetKind, reason: string, at: number, cause: CrashCause | null): Step {
-  const old = m.state,
-    next = issue(m),
-    effects: Effect[] = [];
+  const old = m.state;
+  const next = issue(m);
+  const effects: Effect[] = [];
   if (old.s === "breaking") effects.push({ do: "cancel-break-timer" });
   effects.push(
     { do: "end-worker", n: old.worker, ending: { kind: "reset", reset: kind, reason: lost(reason) } },
@@ -450,8 +450,8 @@ function RESET(m: In<WorkerLive>, kind: ResetKind, reason: string, at: number, c
 
 /** LOST: another tab took the tab lock. Whatever this tab was doing ends. */
 function LOST(m: In<Exclude<RowName, OtherTab>>): Step {
-  const old = m.state,
-    effects: Effect[] = [];
+  const old = m.state;
+  const effects: Effect[] = [];
   if (old.s === "downloading") effects.push({ do: "abort-download", n: old.download });
   if (old.s === "breaking") effects.push({ do: "cancel-break-timer" });
   if (workerLive(old)) {
@@ -514,8 +514,8 @@ const TABLE: { [R in RowName]: Row<R> } = {
     "lock-lost": LOST,
     "download-progress": (m, e) => step({ ...m, state: { ...m.state, received: e.received, total: e.total } }),
     "download-done": (m, e) => {
-      const next = issue(m),
-        stage = firstStage(m.env);
+      const next = issue(m);
+      const stage = firstStage(m.env);
       return step(
         {
           ...m,

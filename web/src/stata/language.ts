@@ -41,8 +41,8 @@ const SORTED = Object.keys(COMMANDS).sort();
 export function isCommand(word: string): boolean {
   if (word in COMMANDS) return true;
   // an abbreviation: some command starts with it and allows this short a form
-  let lo = 0,
-    hi = SORTED.length;
+  let lo = 0;
+  let hi = SORTED.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
     if (SORTED[mid] < word) lo = mid + 1;

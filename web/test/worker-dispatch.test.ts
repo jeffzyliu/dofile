@@ -30,8 +30,8 @@ type Stand = Partial<Omit<OpEntry<Op>, "handle">> & { handle?: (args: unknown, i
 
 /** Every op answers undefined in the queue, but those given. */
 function setup(entries: Partial<Record<Op, Stand>> = {}, afterResult?: () => void) {
-  const posted: { message: unknown; transfer: Transferable[] }[] = [],
-    events: string[] = [];
+  const posted: { message: unknown; transfer: Transferable[] }[] = [];
+  const events: string[] = [];
   const table = Object.fromEntries(
     OPS.map((op) => [op, { queued: true, handle: () => undefined, ...entries[op] }]),
   ) as unknown as OpTable;

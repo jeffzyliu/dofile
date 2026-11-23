@@ -34,8 +34,8 @@ const NAME: Partial<Record<string, string>> = {
 /** Run's label and whether it can be pressed, by engine state (SPEC section 5's Run column). `start`: the button is
  *  "Start engine" (there is no engine, and a press starts it), not a run. */
 function runState(): { label: (typeof RUN)[number]; disabled: boolean; busy: boolean; start: boolean } {
-  const st = engine.value,
-    s = st.s;
+  const st = engine.value;
+  const s = st.s;
   const offer = startOffer(st);
   if (offer !== null) {
     // no engine. A start that cannot be tried again from here (the banner says to reload, or to use another browser)
@@ -77,19 +77,19 @@ const pressBreak = () => {
 };
 
 export function RunControls() {
-  const run = runState(),
-    brk = breakState(),
-    sel = selection.value;
+  const run = runState();
+  const brk = breakState();
+  const sel = selection.value;
   const tab = tabs.value.find((t) => t.path === activeTab.value);
   const dirty = tab?.dirty ?? false;
   const text = tab?.kind === "text"; // Save saves a text tab; a .dta tab has nothing to save
   const usable = !run.disabled && !run.busy && !run.start; // a run can be sent
   // new elements for each label: one vnode is not placed twice
-  const play = () => <Icon name="play" />,
-    stop = () => <Icon name="stop" />,
-    enter = () => <Key mod k="↩" />;
-  const keyS = () => <Key mod k="S" />,
-    dot = () => <span class="dot" role="img" aria-label="unsaved changes" />;
+  const play = () => <Icon name="play" />;
+  const stop = () => <Icon name="stop" />;
+  const enter = () => <Key mod k="↩" />;
+  const keyS = () => <Key mod k="S" />;
+  const dot = () => <span class="dot" role="img" aria-label="unsaved changes" />;
   return (
     <>
       {/* Off, Run is aria-disabled, never disabled: a focused Run keeps the focus, so a second Enter can't reach Break. */}
@@ -172,9 +172,9 @@ export function RunControls() {
 export function PhoneRun() {
   const st = engine.value;
   const running = runOn(st);
-  const run = runState(),
-    brk = breakState(),
-    sel = running ? null : selection.value;
+  const run = runState();
+  const brk = breakState();
+  const sel = running ? null : selection.value;
   const range = sel && !run.disabled && !run.start ? (sel[0] === sel[1] ? `${sel[0]}` : `${sel[0]}–${sel[1]}`) : null;
   const time = running ? pillTime(since(st.t0)) : "";
   const all = [

@@ -35,8 +35,8 @@ const byPath = (a: FileInfo, b: FileInfo) => (a.path < b.path ? -1 : 1);
 // The store and /work hold the same folders and files, byte for byte. The `files` op waits in the worker's queue behind
 // every page change posted before it, so /work is compared after those are in.
 async function same(store: FileStore, eng: EngineClient) {
-  const inWork = (await eng.query("files")).sort(byPath),
-    inStore = await store.list();
+  const inWork = (await eng.query("files")).sort(byPath);
+  const inStore = await store.list();
   assert.deepEqual(
     inWork.map((f) => [f.path, f.dir, f.size]),
     inStore.map((f) => [f.path, f.dir, f.size]),
@@ -53,8 +53,8 @@ const writes = (path: string, content: string) =>
 // streams before each command), so a test makes its changes while what follows (a `sleep`) goes on. No guess of how
 // long it takes.
 function untilGo(eng: EngineClient, code: string) {
-  let log = "",
-    go!: () => void;
+  let log = "";
+  let go!: () => void;
   const going = new Promise<void>((ok) => {
     go = ok;
   });
@@ -74,8 +74,8 @@ const setMtime = (store: FileStore, path: string, mtime: number) =>
     "readwrite",
     (t) =>
       new Promise<void>((ok, err) => {
-        const info = t.objectStore("info"),
-          r = info.get(path);
+        const info = t.objectStore("info");
+        const r = info.get(path);
         r.onsuccess = () => {
           info.put({ ...r.result, mtime });
           ok();
@@ -192,8 +192,8 @@ test("the store and the engine: the start copy, the after-run difference, page c
 
   // Hold the worker's syncs while `changes` runs, so their rows wait in the journal; then one sync.
   const oneSync = async (changes: () => Promise<unknown>) => {
-    const sync = store.sync!,
-      onClosed = store.onClosed;
+    const sync = store.sync!;
+    const onClosed = store.onClosed;
     let held = 0;
     store.attach(
       () => {
@@ -270,8 +270,8 @@ test("the store and the engine: the start copy, the after-run difference, page c
       await store.write("change.txt", bytes("KEEP")); // same size as what the run copies over it: only the time tells
       await store.write("gone.txt", bytes("to be erased"));
       const big = await store.write("big.bin", new Uint8Array(3 << 20).fill(7));
-      const seen: string[] = [],
-        applyRun = store.applyRun.bind(store);
+      const seen: string[] = [];
+      const applyRun = store.applyRun.bind(store);
       store.applyRun = (changes) => {
         seen.push(...changes.map((c) => c.path));
         return applyRun(changes);
@@ -824,9 +824,9 @@ test("a run's files are kept but /work cannot take the page's version afterwards
 test("the browser deletes the database under a live worker: the transport says `crashed`, cause storage; a new worker copies the store as it is now", {
   timeout: 120_000,
 }, async () => {
-  const factory = new IDBFactory(),
-    store = openStore({ indexedDB: factory }),
-    said: Answer<"start-worker">[] = [];
+  const factory = new IDBFactory();
+  const store = openStore({ indexedDB: factory });
+  const said: Answer<"start-worker">[] = [];
   const eng = new EngineClient({ createWorker: () => nodeWorker({ store }), wheel, extraWheels, store });
   const starting = startWorker(eng, null, said);
   for (let i = 0; i < 5; i++) await store.write(`m${i}.txt`, bytes("x")); // while it mounts
@@ -975,9 +975,9 @@ test("the engine with its own database: the old /work database is left alone; Br
   });
 
   await t.test("run: the log streams to onLog while the run prints, and the result still has all of it", async () => {
-    const chunks: string[] = [],
-      at: number[] = [],
-      t0 = Date.now();
+    const chunks: string[] = [];
+    const at: number[] = [];
+    const t0 = Date.now();
     const r = await runOn(eng, 'forvalues i = 1/6 {\n display "line `i\'"\n sleep 250\n}', {
       onLog: (c) => {
         chunks.push(c);

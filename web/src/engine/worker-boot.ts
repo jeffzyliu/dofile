@@ -179,8 +179,8 @@ async function loadFromSnapshot(
 ) {
   const t0 = performance.now();
   let last = t0;
-  const laps: string[] = [],
-    secs: [string, number][] = []; // laps: text for the console; secs: [name, seconds] for the page's summary
+  const laps: string[] = [];
+  const secs: [string, number][] = []; // laps: text for the console; secs: [name, seconds] for the page's summary
   const notCached: string[] = []; // why there is no Cache to read, if there is none
   const isFile = base.startsWith("file:"); // Node, the tests: no Cache API by design
   const refused = (e: any, url?: string) => {
@@ -192,8 +192,8 @@ async function loadFromSnapshot(
     }
   };
   const lap = (what: string) => {
-    const t = performance.now(),
-      s = (t - last) / 1000;
+    const t = performance.now();
+    const s = (t - last) / 1000;
     laps.push(`${what} ${s.toFixed(2)}s`);
     secs.push([what, s]);
     last = t;

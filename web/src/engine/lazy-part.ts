@@ -32,8 +32,8 @@ export function landPart(sab: SharedArrayBuffer, bytes: Uint8Array): void {
 
 /** Page: the fetch failed; the reason is cut to the room there is. */
 export function failPart(sab: SharedArrayBuffer, why: string): void {
-  const text = new TextEncoder().encode(why).subarray(0, sab.byteLength - PART_HEADER),
-    hdr = partHeader(sab);
+  const text = new TextEncoder().encode(why).subarray(0, sab.byteLength - PART_HEADER);
+  const hdr = partHeader(sab);
   new Uint8Array(sab, PART_HEADER).set(text);
   Atomics.store(hdr, HDR_LENGTH, text.length);
   Atomics.store(hdr, HDR_STATE, PART_FAILED);

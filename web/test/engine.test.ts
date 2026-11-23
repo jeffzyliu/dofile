@@ -104,8 +104,8 @@ const stagesOf = (said: Answer<"start-worker">[]) => said.map((a) => (a.type ===
 test("engine worker: files, run, describe, matrix, Break, a new worker after end()", {
   timeout: 180_000,
 }, async (t) => {
-  const said: Answer<"start-worker">[] = [],
-    { store, createWorker: storeWorker } = pageStore();
+  const said: Answer<"start-worker">[] = [];
+  const { store, createWorker: storeWorker } = pageStore();
   let buffer!: Int32Array; // the live worker's interrupt buffer, as its boot was given it
   const createWorker = () => {
     const w = storeWorker();
@@ -379,8 +379,8 @@ test("files can be listed, written and read while the engine is still loading, a
 // one).
 const snapshotDir = fileURLToPath(new URL("../public/snapshot/", import.meta.url));
 const manifest = readManifest();
-const current = inputs(),
-  haveSnapshot = Boolean(manifest) && staleness(manifest!, current) === null;
+const current = inputs();
+const haveSnapshot = Boolean(manifest) && staleness(manifest!, current) === null;
 // What the build's list (start-files.json) says of the snapshot: the transport compares its build id with the page's
 // (checkBuild) and gives the worker the build's time (`built`) and the snapshot's two big files. The worker reads the
 // files from disk, so their own entries are not needed here.
@@ -403,8 +403,8 @@ test("engine from a memory snapshot: native code, graphs, files, Break; the work
   const bare = mkdtempSync(join(tmpdir(), "dofile-snapshot-"));
   after(() => rmSync(bare, { recursive: true, force: true }));
   for (const f of readdirSync(snapshotDir)) if (f !== "manifest.json") symlinkSync(`${snapshotDir}${f}`, join(bare, f));
-  const said: Answer<"start-worker">[] = [],
-    { store, createWorker } = pageStore();
+  const said: Answer<"start-worker">[] = [];
+  const { store, createWorker } = pageStore();
   const eng = new EngineClient({
     createWorker,
     wheel,

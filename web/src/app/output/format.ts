@@ -10,8 +10,8 @@ import type { Graph } from "../types.ts";
 const dropZero = (s: string) => s.replace(/^(-?)0\./, "$1.");
 
 /** At 1e8 and above, and below 1e-5, a number is shown in exponent form, as `%9.0g` would: 1.2345679e+08. */
-const BIG = 1e8,
-  SMALL = 1e-5;
+const BIG = 1e8;
+const SMALL = 1e-5;
 
 /** A value to 8 significant digits, as the tables show it: trailing zeros and a leading zero dropped (500, .40913736,
  *  3046.9852), exponent form for 1e8 and up and below 1e-5. A missing value (null, also an infinity) is `.`; the

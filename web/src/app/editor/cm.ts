@@ -172,8 +172,8 @@ interface Marks {
   gutter: RangeSet<GutterMarker>;
 }
 function lineMarks(state: EditorState, lines: [number, number], m: typeof RUN) {
-  const deco = new RangeSetBuilder<Decoration>(),
-    gut = new RangeSetBuilder<GutterMarker>();
+  const deco = new RangeSetBuilder<Decoration>();
+  const gut = new RangeSetBuilder<GutterMarker>();
   const last = Math.min(lines[1], state.doc.lines);
   for (let n = Math.max(1, lines[0]); n <= last; n++) {
     const at = state.doc.line(n).from;

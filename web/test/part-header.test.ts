@@ -22,14 +22,14 @@ import {
 
 // what the worker sees, in the order it reads (tries before state)
 const see = (sab: SharedArrayBuffer) => {
-  const hdr = partHeader(sab),
-    tries = partTries(hdr),
-    state = partState(hdr);
+  const hdr = partHeader(sab);
+  const tries = partTries(hdr);
+  const state = partState(hdr);
   return { state, tries, data: partData(sab, hdr) };
 };
-const land = landPart,
-  fail = failPart,
-  retry = retryPart;
+const land = landPart;
+const fail = failPart;
+const retry = retryPart;
 
 test("a new buffer is pending, with no bytes and no tries", () => {
   const r = see(new SharedArrayBuffer(PART_HEADER + 8));

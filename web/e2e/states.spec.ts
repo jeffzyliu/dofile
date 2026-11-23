@@ -217,8 +217,8 @@ test("the phone's command line at 320 px with no engine: the hint shows whole be
   await expect(page.locator(".cmdline").getByRole("button", { name: "Start engine" })).toBeVisible();
   const room = await field.evaluate((el: HTMLInputElement) => {
     const c = document.createElement("canvas").getContext("2d")!;
-    const hint = getComputedStyle(el, "::placeholder"),
-      box = getComputedStyle(el);
+    const hint = getComputedStyle(el, "::placeholder");
+    const box = getComputedStyle(el);
     c.font = `${hint.fontStyle} ${hint.fontWeight} ${hint.fontSize} ${hint.fontFamily}`;
     const line = document.querySelector(".cmdline")!;
     return {

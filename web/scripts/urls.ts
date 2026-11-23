@@ -39,9 +39,9 @@ export const SITE_OUT = "dist/site";
 export const EDITOR_OUT = "dist/app";
 
 const env = (name: string) => process.env[name] || undefined; // empty: unset
-const urls = env("DOFILE_URLS"),
-  siteGiven = env("DOFILE_SITE_URL"),
-  editorGiven = env("DOFILE_EDITOR_URL");
+const urls = env("DOFILE_URLS");
+const siteGiven = env("DOFILE_SITE_URL");
+const editorGiven = env("DOFILE_EDITOR_URL");
 // the links are joined to these ("commands/", "#browsers"): a URL without its slash would give "https://x.workers.devcommands/".
 // Both must be whole http(s) URLs: "x.workers.dev/" would make a relative link, and the build would take the site and the
 // editor for one origin (the editor's isolation headers on the landing page).

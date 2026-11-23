@@ -16,12 +16,12 @@ const load = (dir: string): Report =>
       .filter((f) => f.endsWith(".json"))
       .map((f) => [f, JSON.parse(readFileSync(`${dir}/${f}`, "utf8"))]),
   );
-const base = load(baseDir),
-  wasm = load(wasmDir);
+const base = load(baseDir);
+const wasm = load(wasmDir);
 
-const count: Record<string, number> = {},
-  diffs: { id: string; base: string; wasm: string; why: string }[] = [],
-  slow: { id: string; ratio: number; b: number; w: number }[] = [];
+const count: Record<string, number> = {};
+const diffs: { id: string; base: string; wasm: string; why: string }[] = [];
+const slow: { id: string; ratio: number; b: number; w: number }[] = [];
 for (const f of Object.keys(base)) {
   if (!wasm[f]) continue;
   for (const [id, b] of Object.entries(base[f].tests)) {
@@ -34,8 +34,8 @@ for (const f of Object.keys(base)) {
   for (const id of Object.keys(wasm[f].tests))
     if (!base[f].tests[id]) diffs.push({ id, base: "(not run)", wasm: wasm[f].tests[id].outcome, why: "" });
 }
-const missingWasm = Object.keys(base).filter((f) => !wasm[f]),
-  missingBase = Object.keys(wasm).filter((f) => !base[f]);
+const missingWasm = Object.keys(base).filter((f) => !wasm[f]);
+const missingBase = Object.keys(wasm).filter((f) => !base[f]);
 const nb = Object.values(base).reduce((n, r) => n + Object.keys(r.tests).length, 0);
 console.log(
   `${Object.keys(base).length} files, ${nb} tests on CPython: ${Object.entries(count)

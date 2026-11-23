@@ -37,10 +37,10 @@ function graph(files: string[]): Map<string, string[]> {
 
 /** The groups of two or more files that reach one another (strongly connected components, Tarjan), as paths from src. */
 export function cycles(g: Map<string, string[]>): string[][] {
-  const index = new Map<string, number>(),
-    low = new Map<string, number>(),
-    stack: string[] = [],
-    out: string[][] = [];
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const stack: string[] = [];
+  const out: string[][] = [];
   let next = 0;
   const visit = (v: string) => {
     index.set(v, next);

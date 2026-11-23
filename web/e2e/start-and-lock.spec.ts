@@ -62,8 +62,8 @@ test.describe(() => {
     page.on("pageerror", (e) => console.log(`page error: ${e.message}`));
     await page.addInitScript(() => {
       // count the page's calls of storage.persist()
-      const storage = navigator.storage,
-        real = storage?.persist?.bind(storage);
+      const storage = navigator.storage;
+      const real = storage?.persist?.bind(storage);
       if (!real) return;
       window.__persistCalls = 0;
       storage.persist = () => {
@@ -172,8 +172,8 @@ test("download: the counts reach the total, abort keeps the finished files, and 
 
   // a first try, stopped a third of the way in
   const first = await page.evaluate(async () => {
-    const stop = new AbortController(),
-      seen: number[] = [];
+    const stop = new AbortController();
+    const seen: number[] = [];
     try {
       await window.__dofile.engine.download({
         signal: stop.signal,
