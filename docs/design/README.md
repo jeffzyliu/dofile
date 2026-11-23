@@ -17,7 +17,7 @@ The build spec for the pages is [`SPEC.md`](SPEC.md). This README is the history
 | `specimen/` | the font specimen; the chosen IBM Plex files and their license are in `web/src/styles/fonts/` |
 | `axe.mjs`, `tabwalk.mjs`, `contrast.mjs`, `fonts.mjs` | the checks (`cd web && npm run axe`, `tabwalk`, `contrast`, `fonts`) |
 | [`staging.md`](staging.md) | the R5 note (web audit): who stages `public/`, who reads it, and the design that replaces the config's module-load copies |
-| [`lazy-graphics.md`](lazy-graphics.md) | the R1 note (web audit): the lazy graphics part's states and events on the page and in the worker, the races between them, the tests, and R1's three items. Proposed 2026-11-23 |
+| [`lazy-graphics.md`](lazy-graphics.md) | the R1 note (web audit): the lazy graphics part's shared region, written and read only through a seqlock utility (`seqlock.ts`), the page's and the worker's machines on it, the races between them, the tests, and R1's three items. Proposed 2026-11-23 |
 | `shot.mjs` | screenshots any page with Playwright from `web/node_modules` |
 | `workspace.md` | design note S0 of the web audit (`../web-audit-plan.md`, section 6): who owns the file list, the tabs and the open documents, the order of writes, the target modules. Proposed 2026-11-16; S1 to S6 and R7r are built from it once approved |
 

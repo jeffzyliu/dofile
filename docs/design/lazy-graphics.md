@@ -65,8 +65,8 @@ several stores are not one step (a reader can see the first without the next); a
 all (a browser refuses to block it). The page hears the worker only by messages; the worker never changes the part's
 data, so there is nothing there for the page to watch.
 
-**Without a buffer** (plain http to a LAN address, say), the part is not lazy: the worker fetches it with the start
-files, before "ready", and writes it at `boot`, so no graph ever waits for it (decision A, section 5). "Lazy" in this
+**Without a buffer** (plain http to a LAN address, say), the part is not lazy: the worker fetches it during `boot`,
+before "ready", and writes it there, so no graph ever waits for it (decision A, section 5). "Lazy" in this
 note always means "with a shared buffer". Without isolation there is no **Break** either (Break stops a run at its next
 safe point; it uses a second, 4-byte shared buffer), so a stuck run resets the worker.
 
@@ -79,8 +79,8 @@ sets the state to pending. The graph reads length 0: the reason is "" (empty). B
 wait. Each of the page's steps was atomic, and the graph's length read is a plain one; the trouble is that the graph's
 three reads were not one snapshot and the page's three writes were not one step. Section 3 gives the fix: a **seqlock**,
 a counter the page moves around every write so that the graph can tell a write overlapped its reads, built as a small
-utility (`writeSeq` and `readSeq`, (new)) through which every write and every read must go, so that the rule cannot be
-broken. Section 6 lists every race found.
+utility (`writeSeq` and `readSeq`, (new)) through which every write and every read must go, so that no other module can
+break the rule. Section 6 lists every race found.
 
 ## In pictures
 
@@ -106,8 +106,8 @@ sequenceDiagram
     else brotli-wasm
         W->>W: idle step, unpack unpacking(c), one unpack step per task
     end
-    Note over W: every idle step waits for runs = 0 and IDLE_MS of idle
-    W->>W: idle step, writePart ("written while idle"), unpack written(c)
+    Note over W: every idle step waits for runsInFlight = 0 and IDLE_MS of idle
+    W->>W: idle step, writeUnpacked ("written while idle"), unpack written(c)
     W->>Y: graphics_written
     loop until warmAt is -1
         W->>Y: idle step, warm_graphics(warmAt, 1 or 20)
@@ -123,7 +123,7 @@ sequenceDiagram
     participant B as Shared region (seqlock.ts)
     participant W as Worker (worker.ts)
     participant Y as browser.py
-    P->>W: run (arrived, runs++)
+    P->>W: run (arrived, runsInFlight + 1)
     Note over Y: the graph store's put, or an import of matplotlib
     Y->>Y: _LazyGraphics.ensure
     loop while the part is pending
@@ -138,7 +138,7 @@ sequenceDiagram
     loop unpack-more, in the same call
         W->>W: unpackStep, 256 KB of brotli-wasm (copy c)
     end
-    W->>W: write, writePart ("written in a run")
+    W->>W: write, writeUnpacked ("written in a run")
     W-->>Y: "" (written)
     Y->>Y: ready, import matplotlib, draw
     W->>W: run's finally ("in the run, after the write")
@@ -170,7 +170,7 @@ sequenceDiagram
 **What the page owns.** The page owns the download, the Cache, the copy number and the progress the status bar shows;
 the worker owns everything after the bytes arrive (section 2). What they share is the region's fields (state, length,
 copy number, counter, and the bytes or the reason), nothing else. The two machines do not mirror each other: the page's
-is small (3 shared states, two local facts, about 9 events), the worker's larger (7 unpack states, the idle clock, a
+is small (3 shared states, four local facts, about 10 events), the worker's larger (7 unpack states, the idle clock, a
 waiting graph's steps). A guess until R1c builds it; names are R1c's to choose.
 
 **Today, in short** (what R1c replaces, and what the pins in section 7 hold): `client.ts`'s section "a lazy snapshot's
@@ -201,9 +201,16 @@ the worker to look at the header, nothing more.
   so an `again` or `online` retry after a failed fresh fetch is fresh too (`test/client.test.ts`, "after a damaged copy,
   a re-fetch that fails is retried with cache reload too"). It stays a page-local flag, `fresh` here, set by `damaged`
   and cleared by a landing.
+- **The damaged copy's number is kept too** (decision B, Decisions). `fresh` is cleared by the landing, so it cannot
+  tell that the copy now landed is the one fetched right after a damaged copy. The page keeps the copy number the last
+  `damaged` it acted on named, `damagedCopy` (new), and never clears it (the region's copy only grows). A `damaged`
+  for copy c when `damagedCopy` is c - 1 writes `failPart` instead of `retryPart`: the copy fetched right after a
+  damaged copy is damaged too, so the page stops there, and the failed part's own rules (a graph's `again`, `online`)
+  bound the re-fetches, one per graph that asks. Without it, damage tied to its copy (race 11's fix, section 2) would
+  fetch, unpack and find damage again in a loop, with no run and no click (race 11).
 
-Page-local, then: the fetch in flight (`{copy, downloading, received}` or none), `fresh`, and whether the part's one
-`online` listener is set. `progress`, `loading` and `damaged` go.
+Page-local, then: the fetch in flight (`{copy, downloading, received}` or none), `fresh`, `damagedCopy`, and whether
+the part's one `online` listener is set. `progress`, `loading` and `damaged` go.
 
 What it removes: `progress.state` as a stored copy of the header, and so `#refetchDamaged`'s rewrite of it to "failed"
 (a value the header never had) only to steer `#retryGraphics`; the state comparisons in the three guards, which become
@@ -237,7 +244,8 @@ listeners. No other code writes progress, and nothing stores it.
 | pending | fetch for copy c | fetch failed (c, why) | c is the region's copy | `#writePart`: `failPart` with a `PartReason`; local fetch cleared; the part's `online` listener if not yet set | failed |
 | failed | | worker posts `again` (c) | c is the region's copy | retry: `#writePart`: `retryPart` (copy c + 1, pending); local fetch for c + 1, fetch | pending, fetch on its way |
 | failed | | `online` | | retry, as above | pending, fetch on its way |
-| landed | | worker posts `damaged` (c) | c is the region's copy | `fresh` set; retry, as above (the Cache entry deleted first) | pending, fetch on its way |
+| landed | `damagedCopy` is not c - 1 | worker posts `damaged` (c) | c is the region's copy | `fresh` set; `damagedCopy = c`; retry, as above (the Cache entry deleted first) | pending, fetch on its way |
+| landed | `damagedCopy` is c - 1 (c was fetched right after a damaged copy) | worker posts `damaged` (c) | c is the region's copy | decision B: `fresh` set; `damagedCopy = c`; the Cache entry deleted; `#writePart`: `failPart` with a `PartReason` (its words R1's); the part's `online` listener if not yet set; no fetch | failed |
 | any | | `again` or `damaged` naming another copy, or from a worker that is not `live`; `online` when not failed | | none (dropped) | same |
 | any | | a new worker (`start()`, a restart) | | none: the new worker gets the same buffer at `boot` and reads the region at `startup`; want follows `started` | same |
 | | | a new build | | a new part (first row); every event of the old part dropped (one check at the entry: the part is `#graphics`) | the new part's |
@@ -256,11 +264,12 @@ stateDiagram-v2
     fetch --> landed: fetch landed for copy c, #35;writePart, landPart
     fetch --> failed: fetch failed for copy c, #35;writePart, failPart
     failed --> fetch: again naming copy c, or online, #35;writePart, retryPart (copy c + 1)
-    landed --> fetch: damaged naming copy c, fresh set, #35;writePart, retryPart (copy c + 1)
+    landed --> fetch: damaged naming copy c, damagedCopy not c - 1, fresh set, #35;writePart, retryPart (copy c + 1)
+    landed --> failed: damaged naming copy c, damagedCopy c - 1 (decision B), #35;writePart, failPart, no fetch
     note right of failed
         pending, landed and failed are the region's.
         The fetch on its way, downloading, received
-        and fresh are the page's own.
+        fresh and damagedCopy are the page's own.
         again or damaged naming another copy is dropped.
         #35;writePart ends with #35;tellGraphics and the progress.
     end note
@@ -269,10 +278,10 @@ stateDiagram-v2
 **What R1c builds from it.** In `client.ts`: `GraphicsPart` as the page-local fields above (no `progress`, `loading`,
 `damaged`); the transitions as one pure function over (the region's state and copy, the local fields, the event)
 returning the next local fields and the effects, tested as a table as `waitStep` is; `#writePart` and the progress
-function; one `online` listener per part; messages from a worker that is not `live` dropped. In `types.ts`
-(`FromWorker`) and SPEC section 6 together: `again` and `damaged` with the copy. In `worker.ts`: `again` and `damaged`
-naming the copy of the read that produced them (section 4). R1b's region, copy numbers and the removal of the path
-without a buffer come first; R1c needs them.
+function; `damagedCopy` and decision B's row (built first in R1b, section 8); one `online` listener per part; messages
+from a worker that is not `live` dropped. In `types.ts` (`FromWorker`) and SPEC section 6 together: `again` and
+`damaged` with the copy. In `worker.ts`: `again` and `damaged` naming the copy of the read that produced them (section
+4). R1b's region, copy numbers and the removal of the path without a buffer come first; R1c needs them.
 
 **Which tests come first**, before a line of `client.ts` moves:
 - Pins of today, which must stay green: the four "graphics part" tests in `test/client.test.ts`, the sticky `fresh`
@@ -282,7 +291,9 @@ without a buffer come first; R1c needs them.
   the page drops the good copy); an `again` or `damaged` from an ended worker is dropped (race 10's check, kept for the
   two messages that remain; whether a browser still delivers it is a guess, so the test sends it through the client
   directly); an old build's download does not reach the listeners (if it passes today, the guess above was wrong, and it
-  stays as a pin).
+  stays as a pin); a second damaged copy in a row starts no fetch without a graph (decision B: `damaged` for copy 0,
+  copy 1 lands, `damaged` for copy 1: no fetch, the region failed at copy 1; then `again` for copy 1: one fetch, with
+  reload; today the page fetches at the second `damaged`), written in R1b (section 8) and kept here as a pin.
 - Then the pure table: each row above, including the dropped events.
 
 ## 2. The worker's machine (R1b)
@@ -321,8 +332,8 @@ that `table`'s `boot` entry defines; `since` went there too), and the dispatch i
 
 | Group | Today | Proposed field (names R1's to choose) |
 |---|---|---|
-| given at start | `share`, `snapshotBase`, `brotliWasm`, `started` | `part` (`{file, region}`: the `SeqRegion` of section 3, no views), `wasm`, `started` (`snapshotBase` served only the worker's own fetch: section 5) |
-| idle clock | `runs`, `idleSince`, `idleTimer` | `runs`, `idleSince`, `timer` |
+| given at start | `share`, `snapshotBase`, `brotliWasm`, `started` | `part` (`{file, region}`: the `SeqRegion` of section 3, no views and no buffer), `brotliWasm` (not `wasm`, which `client.ts` uses for WebAssembly itself), `started` (`snapshotBase` served only the worker's own fetch: section 5) |
+| idle clock | `runs`, `idleSince`, `idleTimer` | `runsInFlight` (new; the glossary: a count says what it counts), `idleSince`, `timer` |
 | unpack | `decode`, `native`, `decoded`, `graphicsWritten`, `warmAt`, `tWarm`, `warmLongest` | one `unpack` state with its copy and data (below) |
 | copies and damage | `copies`, `nativeFailedOn`, `fresh`, `graphicsError` | `nativeFailedOn`, `damage` (`{copy, why, said}`) (`copies` and `fresh` serve only the path without a buffer: section 5) |
 | this run | `askedAt`, `fetchSaid`, `writtenInRun` | `run: {askedOn, writtenAt}` (`fetchSaid` goes with that path) |
@@ -338,35 +349,41 @@ with that path), `damaged(e)` (a verb's job: it drops the copy; not the field `d
 **Proposed: the unpack as one state, tied to its copy.** A guess until R1b builds it. The unpack is one field, each
 phase but none and warmed naming the copy it came from: none, native(c), unpacking(c) (brotli-wasm steps), unpacked(c)
 (not written), written(c), warming(c, at), warmed. Damage is a field beside it, not a phase:
-`damage = {copy, why, said}`, the copy it was found on, which saying it does not clear. "The current copy" below is the
-copy of the last whole `readPart`; the copy a phase or a finding carries is the copy of the read that produced its
-bytes, never a later read (by then a fresh copy may have landed). The glossary's verb is unpack, so R1b renames
-today's `decode` and `decoded` to `unpacking` and `unpacked`, `decodeStep` and `DECODE_STEP` to `unpackStep` and
-`UNPACK_STEP`, `waitStep`'s "decode" and "decode-more" to "unpack" and "unpack-more", and `inflateNative` to
-`unpackNative` (in `snapshot.ts`, which the heap's unpack and `test/snapshot.test.ts` use too).
+`damage = {copy, why, said}`, the copy it was found on, which saying it does not clear. Every guard on damage compares
+it with the copy of a read made in the same step, never with a copy remembered from an earlier read (a landing may have
+moved it on since); the copy a phase or a finding carries is the copy of the read that produced its bytes, never a later
+read (by then a fresh copy may have landed). The glossary's verb is unpack, so R1b renames today's `decode` and
+`decoded` to `unpacking` and `unpacked`, `decodeStep` and `DECODE_STEP` to `unpackStep` and `UNPACK_STEP`,
+`waitStep`'s "decode" and "decode-more" to "unpack" and "unpack-more", and the unpack's `how` ("wasm" or "native") to
+`decoder`, the glossary's word for which one. Today's `writePart` (`worker.ts`: the unpacked files into Pyodide's file
+system) becomes `writeUnpacked` (new), so that "part" in `readPart` and the page's `#writePart` means the region only.
+`inflateNative` becomes `unpackNative` in `snapshot.ts`, which the heap's unpack and `test/snapshot.test.ts` use too;
+the plan's R1 row does not name that file, so the rename belongs to the item that owns it (rule 12), or to R1b only
+with the orchestrator's yes. This note uses the new name.
 
 | Event | Guard | Effect |
 |---|---|---|
 | `startup` answered | | `started`, `idleSince`; the native gate; the idle timer |
 | op `graphics` (a page write ended) | | the native gate; the idle timer |
-| run arrives (`arrived`) | | `runs + 1` |
+| run arrives (`arrived`) | | `runsInFlight + 1` |
 | run starts | | `run = {askedOn: null}` |
-| run ends (`finally`) | | the "in the run, after the write" line; `runs - 1`, `idleSince`; the native gate; the idle timer |
-| the native gate (one predicate for today's lines 352, 358 and 408) | started; unpack none; `readPart` at `waitMs` 0 gives landed copy c, brotli-sized; no damage on c; `useNative(...)` for c | unpack native(c); `unpackNative` in a task |
+| run ends (`finally`) | | the "in the run, after the write" line; `runsInFlight - 1`, `idleSince`; the native gate; the idle timer |
+| the native gate (one predicate for today's lines 352, 358 and 408) | started; unpack none; `readPart` at `waitMs` 0, without the bytes, gives landed copy c; no damage on c; `useNative(...)` for c; then a second `readPart` with `withBytes` gives the same copy c, brotli-sized (else nothing: the op `graphics` brings it back) | unpack native(c); `unpackNative` in a task |
 | native done (c, raw) | unpack is still native(c) | unpack unpacked(c); the idle timer (0) |
 | native failed (c) | | `nativeFailedOn = c`; unpack none if still native(c); the idle timer (0) |
-| the idle timer (today's line 387) | started; part; no timer; not native; no damage on the current copy; not warmed | timer to `idleSince + IDLE_MS` |
-| idle step | `runs === 0`; idle `IDLE_MS` | by phase: unpacked(c), the write, then written(c) and `browser.graphics_written`; unpacking(c), one unpack step; none, `readPart` at `waitMs` 0: landed c, the native gate or the first unpack step (busy or not landed: nothing, the op `graphics` brings it back); written or warming, one `warm_graphics` step (its throw: a console warning, and the warm-up stops, as warmed: finding 15, decided); an unpack or write step's throw: damage on the phase's copy |
+| the idle timer (today's line 387) | started; part; no timer; not native; not warmed (no damage check: the idle step's own read decides, so a stale finding never keeps a fresh copy waiting) | timer to `idleSince + IDLE_MS` |
+| idle step | `runsInFlight === 0`; idle `IDLE_MS` | by phase: unpacked(c), the write, then written(c) and `browser.graphics_written`; unpacking(c), one unpack step; none, `readPart` at `waitMs` 0: landed c without damage on c, the native gate or the first unpack step (busy, not landed, or damage on c: nothing, the op `graphics` brings it back); written or warming, one `warm_graphics` step (its throw: a console warning, and the warm-up stops, as warmed: finding 15, decided); an unpack or write step's throw: damage on the phase's copy |
 | a graph's wait (`waitGraphics(waitMs)`) | | the steps below |
 | damage (c, e) | an unpack or write step of copy c threw (a warm step's throw is not damage: finding 15, decided) | `damage = {copy: c, why, said: false}` (said already when the graph that found it answers with it); unpack none; posts `damaged` (c) |
 
 **A waiting graph's steps** (`waitStep`, pure as today, its table extended): break (the interrupt buffer); written: "";
 unpacked: write; unpacking: unpack-more; then one `readPart` (`waitMs`: the slice): busy: wait; damage on the read's
-copy not yet said: say it (`said = true`); landed: unpack (unpacking(c)); failed, not asked: ask-again (`run.askedOn =
-c`, post `again` (c), wait); failed, the copy moved past `askedOn`: give-up, answering the read's `PartReason` (never
-"", section 3); failed otherwise, and pending: wait. Every wait is one `waitSeq` on the counter from the read's count,
-then "pending" (today's wait-failed and wait-pending become one step, since the counter, not the state, is what
-changes).
+copy not yet said: say it (`said = true`); landed with damage on its copy already said: wait (the page's write for that
+`damaged` moves the counter; no second unpack of a known-damaged copy); landed: unpack (unpacking(c)); failed, not
+asked: ask-again (`run.askedOn = c`, post `again` (c), wait); failed, the copy moved past `askedOn`: give-up, answering
+the read's `PartReason` (never "", section 3); failed otherwise, and pending: wait. Every wait is one `waitSeq` on the
+counter from the read's count, then "pending" (today's wait-failed and wait-pending become one step, since the counter,
+not the state, is what changes).
 
 ```mermaid
 stateDiagram-v2
@@ -384,16 +401,16 @@ stateDiagram-v2
     native --> nothing: native failed (c), nativeFailedOn = c
     unpacking --> unpacking: idle step, or unpack-more (one step)
     unpacking --> unpacked: the last step
-    unpacked --> written: idle step, or a graph's write (writePart)
+    unpacked --> written: idle step, or a graph's write (writeUnpacked)
     written --> warming: idle step, warm_graphics
     warming --> warmed: warm_graphics until warmAt is -1, or a warm step throws (a warning)
     unpacking --> nothing: damage (c), a step throws
     unpacked --> nothing: damage (c), the write throws
     note right of nothing
         damage keeps its copy c beside the state.
-        It blocks the native gate and the idle timer
-        only while c is the current copy, and a graph
-        says it only if c is the current copy.
+        It blocks the native gate and the idle step
+        only for a read in the same step that gives
+        copy c, and a graph says it only then.
     end note
 ```
 
@@ -406,6 +423,15 @@ refetch is a download), so damage found by an idle step is stale almost at once:
 waits for the refetch (its waiting line, for the download's length) and draws, or reports that fetch's failure. The same
 holds for a damaged copy whose `damaged` message the page has not yet acted on: the graph then still reports it. Decided
 (finding 15, section 6): a warm step's throw, after the write, is a warning that stops the warm-up, not damage.
+
+The bound on re-fetches (decision B, section 1). Today `graphicsError` stops the idle work until a graph has said the
+damage, so a part that fails on every copy costs at most two downloads per graph; tying damage to its copy removes that
+throttle. A part can fail on every copy: a server that keeps sending damaged bytes at the right size, or a throw that is
+not about the bytes (any throw of an unpack or write step is damage; a phone that cannot allocate the 33 MB is a guess).
+Without a bound the page would fetch, the worker unpack and find damage, and the page fetch again, in a loop with no run
+and no click. The page ends it: a `damaged` for the copy fetched right after a damaged copy writes `failPart`, not
+`retryPart`. The copy then stays, its damage keeps blocking the idle work, the next graph says the damage (rc 199) if no
+graph has, and a new copy is fetched only on a graph's `again` (one download per graph that asks) or on `online`.
 
 **What stays a side effect.** Pure, and testable as tables: what a waiting graph does (`waitStep`), whether to unpack
 natively (`useNative`), and, new in R1, what an idle step does and the native gate, and the page's transitions (section
@@ -559,7 +585,9 @@ load), so a read meets a moved count once or twice at most, and a count limit wo
 needs it. The time bound is what the callers need: `waitGraphics` passes its slice (100 ms), so it answers "pending" in
 time and Python checks for a Break between slices; the idle step and the native gate pass 0 and never block (busy then
 means "not now": the op `graphics` after the write brings them back, as today). A writer stopped inside a section (a
-debugger paused on the page) blocks the reader in `Atomics.wait`, not in a spin, and only up to its deadline.
+debugger paused on the page) blocks the reader in `Atomics.wait`, not in a spin, and only up to its deadline; a graph's
+slice can then last twice `waitMs` (a `readPart` that waits out the odd count, then `waitSeq`), so a Break is taken
+within about 200 ms, not 100.
 
 **`waitSeq`** is `Atomics.wait(counter, seq, waitMs)` with the count a read returned. It returns at once if the page has
 written since that read, else when a write's notify wakes it, or after `waitMs`. Waiting on the counter, not the state:
@@ -582,6 +610,8 @@ export function failPart(part: SeqRegion, reason: PartReason): void;
 export function retryPart(part: SeqRegion): void;
 // (new) one readSeq
 export function readPart(part: SeqRegion, waitMs: number, options?: { withBytes?: boolean }): SeqRead<PartRead>;
+// (new) readPart's callback, exported so that race 3's test can wrap it (section 6)
+export function partSnapshot(reader: SeqReader, options?: { withBytes?: boolean }): PartRead;
 ```
 
 `withBytes` is an option, named at the call, not a bare `true` in the middle of the arguments. `HDR_TRIES` becomes
@@ -597,23 +627,21 @@ export function landPart(part: SeqRegion, bytes: Uint8Array): void {
   });
 }
 
-export function readPart(part: SeqRegion, waitMs: number, { withBytes = false } = {}): SeqRead<PartRead> {
-  return readSeq(
-    part,
-    (reader): PartRead => {
-      const copy = reader.readWord(HDR_COPY);
-      const length = reader.readWord(HDR_LENGTH);
-      switch (reader.readWord(HDR_STATE)) {
-        case PART_LANDED:
-          return { state: "landed", copy, bytes: withBytes ? reader.readBytes(length) : null };
-        case PART_FAILED:
-          return { state: "failed", copy, reason: partReason(new TextDecoder().decode(reader.readBytes(length))) };
-        default:
-          return { state: "pending", copy };
-      }
-    },
-    waitMs,
-  );
+export function partSnapshot(reader: SeqReader, { withBytes = false } = {}): PartRead {
+  const copy = reader.readWord(HDR_COPY);
+  const length = reader.readWord(HDR_LENGTH);
+  switch (reader.readWord(HDR_STATE)) {
+    case PART_LANDED:
+      return { state: "landed", copy, bytes: withBytes ? reader.readBytes(length) : null };
+    case PART_FAILED:
+      return { state: "failed", copy, reason: partReason(new TextDecoder().decode(reader.readBytes(length))) };
+    default:
+      return { state: "pending", copy };
+  }
+}
+
+export function readPart(part: SeqRegion, waitMs: number, options: { withBytes?: boolean } = {}): SeqRead<PartRead> {
+  return readSeq(part, (reader) => partSnapshot(reader, options), waitMs);
 }
 
 // worker.ts: the idle step takes the bytes at once; a waiting graph reads, then waits on the count it read.
@@ -622,12 +650,14 @@ const read = readPart(part, 100, { withBytes: true });
 if ("value" in read && read.value.state === "pending") waitSeq(part, read.seq, 100);
 ```
 
-`partHeader`, `partTries`, `partState`, `partData` and `waitPartChange` go (and `HDR_TRIES` becomes `HDR_COPY`): nothing
-outside `seqlock.ts` makes a view of the buffer. On the worker, `partNow`, `waitGraphics`'s `read()` and `copyNow`
+`partHeader`, `partTries`, `partState`, `partData` and `waitPartChange` go (and `HDR_TRIES` becomes `HDR_COPY`): no
+module but `seqlock.ts` makes a view of the buffer (a rule of the modules, not of the language: "What still rests on a
+convention", below). On the worker, `partNow`, `waitGraphics`'s `read()` and `copyNow`
 become `readPart`, and the waits become `waitSeq`.
 
 **The non-empty reason, as a type.** `failPart` takes a `PartReason`, and `readPart`'s failed snapshot carries one. Only
-`partReason` makes a `PartReason` (its brand is a symbol no other module can name), and it never returns "": it is the
+`partReason` makes a `PartReason` (its brand is a symbol no other module can name; a cast, `"" as PartReason`, still
+type-checks), and it never returns "": it is the
 one place with a check. So `waitStep`'s give-up answers a value whose type cannot be "", and no caller compares a reason
 with "". With the seqlock a whole read of a failed part always has the writer's reason; the type keeps the one wrong
 answer that matters ("" means "written") away even from a reader that gets the snapshot wrong. (Changing the answer for
@@ -635,7 +665,8 @@ answer that matters ("" means "written") away even from a reader that gets the s
 proposed.)
 
 **What becomes impossible to break** (each a rule R1b would otherwise follow by hand):
-- A write outside a write section: nothing outside `seqlock.ts` can reach the views, and its only write is `writeSeq`.
+- A write outside a write section, from code that uses the region: no module but `seqlock.ts` is given a view or a
+  writer, and its only write is `writeSeq` (the buffer itself stays reachable to whoever holds it: below).
 - A write section without its two adds, or without the notify: `writeSeq` does them; a callback cannot touch the counter
   (`setWord` refuses its index).
 - An asynchronous write section: refused by its type (a callback must return `undefined`, which an `async` function's
@@ -643,8 +674,8 @@ proposed.)
 - A half write published, or the counter left odd, by a throw; slow work inside the odd phase: the callback's writes are
   staged and applied after it returns.
 - A torn read accepted: `readSeq` is the only read; it never runs its callback on an odd count and always re-checks.
-- A forgotten re-check, or one that is a plain `Atomics.load` (not sound, below): the re-check is inside `readSeq`, an
-  `Atomics.add` of 0.
+- A forgotten re-check: it is inside `readSeq`, an `Atomics.add` of 0. That it is an add and not a plain load (not
+  sound, below) rests on that one line and the argument, not on a test ("What guards the re-check", below).
 - A copy that is a view into the buffer, or a view kept past the read: the reader hands out numbers and copies, and is
   closed after the callback.
 - Two loads in the wrong order (race 1), or a copy number not paired with the bytes it came from (race 2): the state,
@@ -653,6 +684,17 @@ proposed.)
 - An empty reason answered as "written": the type above.
 
 **What still rests on a convention** (none is new; each is one place to look):
+- How far "by construction" reaches: the module boundary. A `SharedArrayBuffer` must cross `postMessage`, so it exists
+  raw in two places: `client.ts`, which makes it in `#graphicsOf` and keeps it for the part's life to post it to each
+  new worker in `boot`'s arguments (`BootArgs.graphics.sab`, `types.ts`), and the worker, where `boot`'s arguments pass
+  through `startEngine` (`worker-boot.ts`) to the hook `lazyGraphics` (`worker.ts`). Whoever holds it can make a view
+  (`new Int32Array(sab)[0] = 1`) and write outside any section; test 4 does so on purpose, and `test/client.test.ts`'s
+  `page.header()` reads the header through its own view today. R1b keeps the buffer out of other hands: `#graphicsOf`
+  wraps it with `seqRegion` at once, and the part reads and writes only through the `SeqRegion`, the raw buffer kept in
+  one private field read only where `boot`'s arguments are built; `worker-boot.ts` hands it on untouched, and
+  `lazyGraphics` wraps it at once and keeps only the region (the record's `part` holds no buffer). The rule left is that
+  no module but `seqlock.ts` makes a typed array on a region's buffer: the one rule here a source check could hold (as
+  `test/imports.test.ts` holds the imports); the principle prefers construction to checks, so it is not proposed.
 - One writer per region: whoever holds the buffer can wrap it with `seqRegion` and call `writeSeq`. Only `client.ts`'s
   `#writePart` writes the part's region; the worker only reads. A source test could check it, but the principle prefers
   construction to checks, and the one write site is easy to see.
@@ -677,8 +719,9 @@ load returns the old count. The re-check would then pass over a torn copy. On AR
 processor itself allows this (V8, in Chrome on Macs and Android, compiles `Atomics.load` to a load-acquire, which does
 not hold back earlier reads; every browser on an iPhone runs WebKit's JavaScriptCore instead, whose optimising tiers
 compile `Atomics.load` itself as a read-modify-write, so the reordering does not show there: an engine's choice, not the
-language's promise, and the language's memory model allows the same reordering in every engine); on x86 it cannot
-happen, so a test on a PC would never show it.
+language's promise, and the language's memory model allows the same reordering in every engine); on x86 the processor
+does not reorder a read with a later read, so a test on a PC would not show it (a compiler still may: the language
+allows it).
 
 A read-modify-write on the same word closes it. `Atomics.add(hdr, HDR_SEQ, 0)` reads the counter and writes the same
 value back, in one step. The page's first add is a read-modify-write on that word too, and the steps on one word happen
@@ -696,6 +739,16 @@ torn read (it interleaves whole steps); a test with the reader and the writer on
 below shows. The problem and this fix are the ones Hans-J. Boehm describes for C++ seqlocks ("Can Seqlocks Get Along
 With Programming Language Memory Models?", MSPC 2012, doi:10.1145/2247684.2247688).
 
+**What guards the re-check: the argument and the spike, not a test of `readSeq`.** The re-check is one line inside
+`readSeq`, which no caller can leave out. That the line is right rests on the argument above and on the spike's runs
+below (millions of torn copies accepted with a load in V8 and SpiderMonkey on ARM64, none with the add in five engines).
+Test 6 does not guard it: a reviewer's two-thread run of a prototype of `readSeq` as this section builds it (`readWord`
+calls, `readBytes` a `slice`), its re-check swapped for `Atomics.load`, accepted 9.3 million snapshots of 16 bytes,
+24,000 of 4 KB and 39 of 1 MB (Node 26.10, Apple M4 Pro) and none was torn; the spike's `slice` variants with a load
+did not tear either. The tearing the spike caught came from a copy loop inlined beside the re-check, a shape
+`readSeq`'s callback does not have. So a change of that line to a load would pass every test proposed here: it is the
+line of the utility a review must read.
+
 **Tested, 2026-11-23: a spike, on an Apple M4 Pro (ARM64).** A writer on one thread and a reader on another (in the
 browsers: the writer on the page's main thread, the reader in a Worker, with cross-origin isolation, as in the app) ran
 the seqlock for seconds at a time, with headers of 4 to 1,024 Int32 words, and counted every copy the reader accepted
@@ -707,9 +760,10 @@ JavaScriptCore compiles `Atomics.load` as a read-modify-write (its DFG and FTL t
 lower tiers were not read): an engine detail, not a guarantee. The controls (no re-check; plain reads of the counter)
 tore in every engine, so the harness can see tearing. Re-checking with `Atomics.add(seq, 0)` accepted no torn copy in
 about 73 million accepted copies across the five engines. That is evidence, not proof: a test can only show a failure.
-Not tested: x86, an iPhone, SpiderMonkey's compiled code (Firefox's was not read, only run), sizes beyond 1,024 words
-(the load re-check tore only at 4 and 16 words), and the copy by `slice` as `readPart` makes it (no variant using it
-tore, the load re-check included). The harness is not in the repository:
+Not tested: x86, an iPhone, SpiderMonkey's compiled code (Firefox's was not read, only run), and sizes beyond 1,024
+words (the load re-check tore at 4 and 16 words, and once at 64 words in Firefox). The copy by `slice`, as `readPart`
+makes it, was run with small samples: its two re-checked variants did not tear, the load one included, and its control
+without a re-check (`C_slice`) did. The harness is not in the repository:
 `.claude/orchestrate/20261123-0810-audit-s10-session4c/scratch/seqlock-spike/` in the maintainer's checkout; it is a
 candidate for R1b's two-thread test (section 3, the utility's test 6).
 
@@ -720,8 +774,9 @@ candidate for R1b's two-thread test (section 3, the utility's test 6).
    it was; a `SeqWriter` used after `writeSeq` returns throws; `setWord` on the counter's index throws.
 3. The interleaving, in whole steps, on one thread: a read callback that calls `writeSeq` on the same region halfway
    through its reads (a page write between the reader's two counter reads) is run again, and `readSeq` returns the new
-   snapshot whole, never a mix; with `waitMs` 0 it answers busy. Race 3's failing-first test in `test/lazy-part.test.ts`
-   uses the same trick with `retryPart`.
+   snapshot whole, never a mix; with `waitMs` 0 it answers busy. Race 3's test in `test/lazy-part.test.ts` uses the same
+   trick through a seam: `readPart`'s callback is exported as `partSnapshot` (new), a function of a `SeqReader`; the
+   test wraps it to call `retryPart` after its first reads and hands the wrapper to `readSeq`.
 4. An odd counter (made odd by the test's own `Int32Array` on the buffer it made, as a writer stopped mid-section):
    `readSeq` does not run its callback and answers busy after about `waitMs`; a second thread (Node `worker_threads`)
    that then ends the section (an add and a notify) wakes it with the value before `waitMs`. `waitSeq` likewise returns
@@ -730,16 +785,20 @@ candidate for R1b's two-thread test (section 3, the utility's test 6).
    later write does not change; a length beyond the room is clamped.
 6. Two threads, many rounds: a writer thread writes sections whose words and bytes all hold one number k, a reader
    thread checks that every snapshot it accepts holds one k throughout. On x86 it passes whatever the re-check is; on
-   ARM64 (an Apple-silicon Mac) it is the only test that can catch a re-check that is a plain load: the spike's harness
-   (end of "Why the second read is a read-modify-write") caught millions in Node, and is the candidate to start from. A
-   pass is evidence, not proof.
+   ARM64 (an Apple-silicon Mac) it tests the plumbing on two threads, not the re-check: through `readSeq` it passed with
+   a plain load too ("What guards the re-check"). What could tell the two apart: the re-check as one function of
+   `seqlock.ts` (`recheckSeq` (new)) that `readSeq` calls and that the spike's inline harness (end of "Why the second
+   read is a read-modify-write") calls in its own copy loop, run twice: with a load in its place the harness must tear,
+   which shows it sees tearing on that machine, and with the function it must not. Guess, not tried: it tests the line
+   only where the engine inlines it into the loop as the spike's code was. A pass is evidence, not proof.
 
 And `test/seqlock.types.ts` (new), checked by `npm run check` as `test/signals.types.ts` is: an `async` writer, a writer
 returning a value, an `async` or thenable read result, and a plain string as a `PartReason` are each a type error
 (`@ts-expect-error`). Tried on a scratch file of the signatures above with the project's TypeScript (7.0.2, `--strict`):
 the four refused, the good calls accepted, including a read whose result type is inferred. The behaviour in 2 to 5 was
-tried on a scratch prototype under Node 26 (one thread, plus an odd counter set by hand); the second thread of test 4
-was not, and test 6 only as the spike's harness, not as this utility.
+tried on a scratch prototype under Node 26 (one thread, plus an odd counter set by hand); a reviewer's prototype also
+ran test 4's second thread (woken at 155 ms of a 2,000 ms limit) and test 6 through `readSeq` (none torn, with either
+re-check).
 
 **Cost.** In `seqlock.ts` about the sketch above; in `lazy-part.ts` the three writers and `readPart` on it,
 `PartReason`; in `worker.ts`, `partNow`, `waitGraphics`'s `read()`, `copyNow` and the waits; in `client.ts`,
@@ -751,8 +810,16 @@ thrown-away copy (up to the part's size, a few MB) on the rare read that meets a
 **Design principle for R1** (the maintainer, quoted in Decisions): rely on the concurrency the design already has to
 remove duplication, add no fragility or complexity, and fix by construction rather than by checks. Read here as: R1 uses
 the region, its counter and the copy number wherever they remove a duplicate or make a race impossible; it adds no
-second shared region, no second writer per region, and no second transport for one piece of state. Each candidate, with
-what it removes, what it fixes by construction, and what it adds:
+second shared region, no second writer per region, and no second transport for one piece of state. Its scope: the
+seqlock is the tool for the one place the code is forced into shared memory, a graph blocked in Python that reads no
+messages; everywhere else messages, tickets and the state machine stay the default.
+
+**A companion rule, proposed by the reviewer, for the maintainer to accept:** when a redesign removes a guard or a flag,
+list everything that guard was doing, not only the race it was there for, and keep or replace each. The example is race
+11: `graphicsError` was the race, and also the only throttle on re-fetches of a part that keeps failing (decision B,
+section 2). R1b's changes give each guard they remove that list (section 8).
+
+Each candidate, with what it removes, what it fixes by construction, and what it adds:
 
 - **The copy number in the messages that are about a copy.** The region holds it, read with the state and the bytes in
   one snapshot. The worker's two messages, `again` ("this copy failed, fetch another") and `damaged` ("this copy will
@@ -764,10 +831,10 @@ what it removes, what it fixes by construction, and what it adds:
   in two messages. The number travels with the bytes: the unpack, the unpacked result and the native result carry the
   copy of the read that produced them, and `damaged` names that copy, never a later read's. **Recommended** (R1c, with
   R1b's worker half).
-- **The copy number on the worker's own findings.** Not shared state, the same idea inside the worker (section 2): the
-  unpack's phase and the damage each keep the copy they are about, and are used only while it is still the current copy;
-  the damage's copy is not cleared by saying it. Fixes by construction: races 11 and 13. Adds: a copy in the unpack
-  field and in `damage`. **Recommended**; race 11's fix is decided (R1b).
+-  **The copy number on the worker's own findings.** Not shared state, the same idea inside the worker (section 2): the
+  unpack's phase and the damage each keep the copy they are about, and are used only for a read that still gives that
+  copy; the damage's copy is not cleared by saying it. Fixes by construction: races 11 and 13. Adds: a copy in the
+  unpack field and in `damage`. **Recommended**; race 11's fix is decided (R1b).
 - **A worker region** (a second region the worker writes: the copy it is working on, its unpack phase, damage with its
   copy; it would replace `again` and `damaged`), re-weighed after decision A. Decision A removed one objection: a lazy
   part now always has a buffer, so a worker region would never need a message twin on a path without one; and with
@@ -817,20 +884,27 @@ shared (`say-fetching`, `fetch`, and its `shared` flag), the `{graphics}` messag
 `failed` and the meaning of `damaged` without a buffer, `#workerSaysGraphics`'s switch, and `start()`'s reset of the
 progress for a new worker (`client.ts`); the console lines `fetched by the worker`, `fetched by the worker in a run`,
 `the worker's own fetch was still on its way` and `the worker's fetch failed` (R1b says so where e2e reads them). What
-comes: one more file in the start's fetches (`loadFromSnapshot`, `worker-boot.ts`, beside the heap and the bundle,
-through `fetchBytes`), and its unpack and write before `boot` answers. Decided (Decisions): it is
-then still warmed in idle steps, and a damaged part fails the start the way a damaged heap does (`loadFromSnapshot`
-deletes the file from the Cache and throws; the next start fetches it again). R1b's to choose and state: that `boot`'s
-`graphics` argument says which way (a `sab` or none), as it does today.
+comes: in `boot` (`startEngine`, `worker-boot.ts`), once Pyodide is up and before `boot` answers, one more fetch
+through `fetchBytes` (the snapshot's Cache, else the network), then the part's unpack and write. Not in `mount`'s
+fetches beside the heap and the bundle (`loadFromSnapshot`): whether there is a buffer is `boot`'s `graphics` argument
+(a `sab` or null, as today), and the page sends `boot` only after `mount` is answered, so `mount` cannot know without
+a wire change to `MountArgs`; nor can the worker test `typeof SharedArrayBuffer` itself, since test c removes it from
+the test's thread only. The cost: on this path the part's download no longer overlaps the heap's. Decided (Decisions):
+it is then still warmed in idle steps, and a damaged part fails the start the way a damaged heap does: a throw of the
+unpack or the write deletes the file from the snapshot's Cache (`snapshotCache`, as `loadFromSnapshot` does for the
+heap) and fails `boot`; the next start fetches it again.
 
 What it costs: without isolation, the start downloads the part too (about 7.7 MB more) and unpacks and writes it before
 "ready". What the start screen shows then, from the code: over plain http to a LAN address the page is not a secure
 context, so it has no Cache API, `download()` returns `cached: false` and the worker downloads every start file by
 itself, uncounted: the start screen shows the stages, not bytes, and the part is uncounted the same way. On a secure
 origin without isolation (https or localhost without COOP and COEP, a misconfiguration; how often it happens is a guess)
-`download()` counts bytes against a `total` that is `list.download` less the part's size: it can count the part by
-fetching it as one more start file and not subtracting it, and the worker then reads it from the Cache as it reads the
-heap.
+`download()` counts bytes against a `total` that is `list.download` less the part's size, and the part is no start file
+(`list.files`); the worker never writes the Cache. Left so, the worker would download the part at every start,
+uncounted, and a return visit offline would fail at the start although the heap is cached. So R1b makes it a start file
+there: without a buffer, `download()` fetches the part with the start files into the Cache and counts it (no
+subtraction), and the worker reads it from the Cache as it reads the heap, with a case in `test/client.test.ts`. That
+keeps decision A (an eager part) and follows `web/CLAUDE.md`'s rule that only the page writes the start files' Cache.
 
 What it fixes by construction: races 9, 10 (for the download messages) and 14, and the dead `share.error` branch
 (section 2). Without isolation there is still no Break, so a stuck run still resets the worker; it only no longer holds
@@ -858,10 +932,13 @@ e496b4c; the fix is the design above.
    `{"step":"give-up","reason":""}`; `browser.py`'s reading of "" is read, not run. Rating: rare (a few instructions
    wide, and only while the browser goes online during a graph's wait after its asked-for fetch failed), but a wrong
    answer rather than a slow one; no data is lost. **Fixed in R1b's first change, test first**: section 3's utility, and
-   a `PartReason` that cannot be "". The failing test, in `test/lazy-part.test.ts`: a read that meets a page write
-   between its two reads of the counter (the test calls `retryPart` inside the read, where the reviewer's script forced
-   it between the state load and the length read) never answers "": it answers pending, or a whole non-empty reason; it
-   fails today. It tests the order of whole steps, not the memory model (section 3, "Why the second read is a
+   a `PartReason` that cannot be "". The test, in `test/lazy-part.test.ts`: a read that meets a page write between
+   its two reads of the counter never answers "": it answers pending, or a whole non-empty reason. Its seam is
+   `partSnapshot` (new; section 3, test 3), wrapped to call `retryPart` after it has read the state and the length,
+   where the reviewer's script forced it. `readPart` does not exist today, so what is written first, and fails first,
+   is the same moment on today's functions: `partState`, then `retryPart`, then `partData`, then `waitStep`, by hand,
+   answers `{"step":"give-up","reason":""}` (above); R1b's first change then writes it on `partSnapshot`, where it
+   passes. It tests the order of whole steps, not the memory model (section 3, "Why the second read is a
    read-modify-write").
 4. The graph's `again` and the `online` event: both go through `#retryGraphics`, whose guard (failed, not loading)
    starts one fetch; the graph's `askedAt` makes either fetch's failure final for it. Ordered by the guard today; by the
@@ -884,7 +961,13 @@ e496b4c; the fix is the design above.
     fresh copy waits; the next graph reports the damage (rc 199) although a fresh copy is there, the one after it draws.
     As `damaged()`'s comment says. **Decided: "yes, fix race 11".** R1b fixes it by construction (section 2): the damage
     keeps the copy it was found on, so damage found on one copy no longer blocks a newer good copy; the next graph then
-    waits for the refetch and draws (or reports that fetch's failure) instead of reporting the damage.
+    waits for the refetch and draws (or reports that fetch's failure) instead of reporting the damage. **Its bound,
+    decided: "B, then fix round and handoff".** `graphicsError` was also the only throttle on re-fetches of a part that
+    fails on every copy (at most two downloads per graph); without it the page would fetch again after every `damaged`,
+    in a loop with no run and no click. Decision B: a `damaged` for the copy fetched right after a damaged copy writes
+    `failPart` instead of `retryPart` (the damaged copy's number kept page-side, `damagedCopy`, since the landing
+    clears `fresh`), so a new copy comes only on a graph's `again` or `online` (sections 1 and 2). Test first: "a second
+    damaged copy in a row starts no fetch without a graph" (section 7, tests e).
 12. Each failed page fetch adds one `online` listener (`once`); they pile up until the browser is online, each a no-op
     after the first. Not a race; noted; R1c keeps one per part.
 13. **A native decode of a copy a graph has already found damaged is written again** (read, not run). The part lands,
@@ -907,7 +990,9 @@ e496b4c; the fix is the design above.
     After the write, a `warm_graphics` step that throws goes to `damaged()`: it posts `damaged` and sets
     `graphicsError`, so the page deletes the Cache entry and downloads the part again, and the idle steps stop. But
     `graphicsWritten` stays true, and `waitGraphics` checks it first, so every later graph gets "" and the damage is
-    never said; the fresh copy is never used. Not a race; rare (an import that fails after the files were written).
+    never said; the fresh copy is never used. Not a race; rarer than an import error: `warm_graphics` catches an
+    `Exception` for each module (`src/dofile/browser.py`), and a Break while no run is busy is put back, not raised
+    (`_on_interrupt`), so only a `BaseException` or a failure of the call itself reaches the step.
     Decided (Decisions): a warm step's throw is not damage to the copy (the files are written; a real import error
     shows in the graph that needs the module) but a warning that stops the warm-up; R1b does that.
 
@@ -965,7 +1050,9 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
 - e. Pure tables for whatever R1 makes pure (idle step, native gate, page transitions), as `lazy-part.test.ts` does,
   with cases written to fail first: race 3 (a page write inside a read never gives ""), race 13 (a native result of a
   copy found damaged is not kept), race 11 (damage on copy c does not block copy c + 1, and is not said once the copy
-  has moved).
+  has moved; run with no native decoder too, where the native gate takes no bytes), and race 11's bound, decision B
+  ("a second damaged copy in a row starts no fetch without a graph", in `test/client.test.ts`: it fails today, since
+  the page fetches at every `damaged`).
 
 ## 8. R1 in three items (proposed)
 
@@ -977,25 +1064,33 @@ already is; add none.
    throughout (tests a and b, `client.test.ts`'s four "graphics part" tests, `graphics.spec.ts`'s tests with a buffer):
    - **First change: the shared region by construction** (section 3). `seqlock.ts` with tests d; then `lazy-part.ts`'s
      writers and `readPart` on it, with `PartReason`, race 3's failing test first; `client.ts` wraps the buffer with
-     `seqRegion` in `#graphicsOf` and makes its failure text with `partReason` (`#tellGraphics` stays where it is until
+     `seqRegion` in `#graphicsOf`, keeps the raw buffer only for `boot`'s arguments (section 3, "What still rests on a
+     convention") and makes its failure text with `partReason` (`#tellGraphics` stays where it is until
      R1c's `#writePart`); `worker.ts`'s `partNow`, `waitGraphics`'s `read()`, `copyNow` and `waitPartChange` become
      `readPart` and `waitSeq`. Closes races 1, 2 and 3. It leaves the path without a buffer as it is (its branch does
      not read the region).
-   - Second: the path without a buffer goes and the part is loaded at the start (section 5), test c written first;
+   - Second: the path without a buffer goes and the part is loaded in `boot` (section 5), test c written first;
+     `download()` fetches and counts the part as a start file when there is no buffer, with its case first;
      `prefetch`, `fetchPartNow` and the four download messages removed on both sides at once (a wire change: the worker,
      `#workerSaysGraphics` and `start()` in `client.ts`, `FromWorker` in `types.ts` and SPEC section 6), the e2e tests
      without isolation rewritten. It removes five of the 22 variables before the record is built.
    - Then the record (section 2) in a module `worker.ts` imports statically, with the unpack as one state tied to its
      copy; the idle step and the native gate as pure functions next to `waitStep`; the renames; `table`'s hooks call it;
      wire and words unchanged (section 2). Its behaviour fixes, each with its failing test (tests e): race 13 (the
-     native result tied to its copy) and race 11 (decided: damage tied to its copy, a behaviour change). Finding 15 as
-     decided: a warm step's throw is a warning that stops the warm-up.
+     native result tied to its copy) and race 11 (decided: damage tied to its copy, a behaviour change), with its bound
+     in the same change (decision B, section 1): race 11's fix without it re-fetches in a loop, so today's
+     `#refetchDamaged` keeps `damagedCopy` (the region's copy when it acts) and writes `failPart` for the copy right
+     after a damaged one, its test in `test/client.test.ts` first. Finding 15 as decided: a warm step's throw is a
+     warning that stops the warm-up. Each guard or flag R1b removes (`graphicsError`, the four-flag guard, `decode`,
+     `decoded`, `graphicsWritten`, ...) gets, in its change, the list of everything it was doing and where each now
+     lives (the companion rule of section 4, if the maintainer accepts it).
 3. **R1c, the page's machine and the docs (2.4).** `client.ts`'s part as section 1's machine (no rewrite of
    `progress.state` to steer a guard; progress derived for the status bar; `#writePart`); the `online` listener once per
    part; race 10's `live` check; `again` and `damaged` name the copy they are about, and the page acts only on its
-   current copy. One shared region only, the page's (section 4). Then `docs/lazy-matplotlib.md` brought up to date
-   (section 10), `src/dofile/browser.py`'s section comment, and `docs/test-map.md`. It leaves `app/state.ts` and
-   `app/engine.ts` alone (`onGraphics` keeps its shape).
+   current copy; decision B's row, built in R1b, moves into the table on the copy the message names. One shared region
+   only, the page's (section 4). Then `docs/lazy-matplotlib.md` brought up to date (section 10),
+   `src/dofile/browser.py`'s section comment, and `docs/test-map.md`. It leaves `app/state.ts` and `app/engine.ts` alone
+   (`onGraphics` keeps its shape).
 
 ## 9. Building it: the Node harness and the iOS limit
 
@@ -1057,15 +1152,22 @@ The maintainer's, all on 2026-11-23, quoted as given.
   complexity, just rely on existing complexity. fixing issues by construction is far more desirable than fixing through
   exhaustive checks or linter rules". Applied in sections 1 to 4.
 - **Race 11.** "yes, fix race 11". In R1b, with the behaviour change in section 2.
+- **Race 11's bound (decision B).** "B, then fix round and handoff". B is the second of the two ways a review offered to
+  bound the re-fetches that race 11's fix would leave unbounded: on the page, a `damaged` for the copy fetched right
+  after a damaged copy writes `failPart` instead of `retryPart`, so the failed part's existing rules (a graph's
+  `again`, `online`) bound the re-fetches; the damaged copy's number is kept page-side (`damagedCopy`), since the
+  landing clears `fresh`. Set aside: the worker posting `damaged` from an idle step only once its last damage was
+  said. Sections 1 and 2, race 11; built in R1b with race 11's fix, kept in R1c's table (section 8).
 - **Without cross-origin isolation.** "A, eager part without isolation". Without cross-origin isolation the worker
   fetches the part at boot, before "ready"; lazy always has the buffer (section 5).
-- **Asked for, not yet decided: this pass and section 3's utility.** "do we need to do a pass over the note entirely
+- **This pass and section 3's utility, asked for.** "do we need to do a pass over the note entirely
   after A is chosen now? since we can drop a lot of redundancy now, and our limitations have completely changed re: how
   we plan to use the shared buffer", and "add proposal to turn the "rule r1b adopts" into actual design enforced by
   construction. for example making a seqlock utility where we have to pass in a function to a sort of seq-writer
   function, which enforces the count increment and runs all of our code synchronously in the middle. same with a reader
   side function that handles the retry by construction". Proposed in section 3; its one difference from the
-  sketch (the callback's writes are staged and applied between the adds) is accepted (below).
+  sketch (the callback's writes are staged and applied between the adds) is accepted (below). Still undecided: the
+  utility as a whole, until this note is approved.
 - **Names, and the four recommendations.** "fix names first, as well as word/bytes within the seqwriter/reader--those
   are functions and should be verblike and also be disambiguated from each other. accept all 4 recommendations". The
   names: `copy` and `HDR_COPY` for the copy number, `SeqReader`, `setWord`/`setBytes` and `readWord`/`readBytes`,
@@ -1077,3 +1179,5 @@ The maintainer's, all on 2026-11-23, quoted as given.
     still warmed in idle steps (section 5).
   - **The `Atomics.waitAsync` browser floor**: stays open. It matters only if the op `graphics` ever moves to
     `Atomics.waitAsync`, which R1 does not do (section 4).
+- **Proposed, not yet decided: the companion rule** (section 4), from a reviewer: a redesign that removes a guard or a
+  flag lists everything it was doing.
