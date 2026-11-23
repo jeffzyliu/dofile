@@ -1128,7 +1128,7 @@ marked.
   number: `partStep` checks the state as well as the copy (`lazy-part.ts:147`, `lazy-part.ts:152`).
 - The row "a new build: every event of the old part dropped": `again`, `damaged` and `online` of an older build's part are
   dropped, but its fetch result still writes its own part's region and tells the live worker, and shows no progress
-  (`client.ts:466-471`, `client.ts:444-448`). A worker booted with that part may be waiting on its region. Not decided by
+  (`client.ts:466-471`, `#writePart` at `client.ts:452-457`). A worker booted with that part may be waiting on its region. Not decided by
   the maintainer.
 - "The Cache entry deleted first" on the retry rows: a fetch for a `fresh` part deletes the entry itself and awaits that
   before it looks (`client.ts:513`). Decision B's row deletes it with `void #uncache(part)`, not awaited
@@ -1137,7 +1137,8 @@ marked.
   of the region) is not: `ReadFailed` (`worker-graphics.ts:25-26`, `:86-92`) ends in `readFailed` (`:94-100`), a console
   warning and the graph's answer "the graphics files could not be read (...); the next graph reads them again", with
   nothing posted and no fetch, in a graph (`:208`), the browser decoder's own task (`:234`) and an idle step (`:304`, which
-  leaves the idle work to the next wake). Not decided by the maintainer.
+  leaves the idle work to the next wake). Decided (see Decisions, "A read of the part that throws"); on `startNative`'s timer it logs a
+  warning instead of ending the worker.
 - Section 10's list is done: `docs/lazy-matplotlib.md`, `src/dofile/browser.py`'s section comment and `docs/test-map.md` are
   brought up to date.
 
@@ -1208,6 +1209,10 @@ The maintainer's, all on 2026-11-23, quoted as given.
   `again`, `online`) bound the re-fetches; the damaged copy's number is kept page-side (`damagedCopy`), since the
   landing clears `fresh`. Set aside: the worker posting `damaged` from an idle step only once its last damage was
   said. Sections 1 and 2, race 11; built in R1b with race 11's fix, kept in R1c's table (section 8).
+- **A read of the part that throws.** "keep option 1". Option 1: a read of the graphics part that throws (an allocation
+  failure copying the bytes out of the region) is not damage: nothing is posted, no re-fetch, the graph says "the graphics
+  files could not be read (<reason>); the next graph reads them again", and the next graph or idle step reads again; on
+  `startNative`'s timer it logs a warning instead of ending the worker. The maintainer, 2026-11-23. Built in R1c part 1b's fix rounds (#151); listed in section 8, As built.
 - **Without cross-origin isolation.** "A, eager part without isolation". Without cross-origin isolation the worker
   fetches the part at boot, before "ready"; lazy always has the buffer (section 5).
 - **This pass and section 3's utility, asked for.** "do we need to do a pass over the note entirely
