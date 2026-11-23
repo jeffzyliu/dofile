@@ -242,3 +242,18 @@ estimated splits) are the study's, not checked again here.
   and the runtime half (`hasNativeBrotli`, `inflateNative`, `unpackSteps`, `writeGraphics`) is imported by `worker.ts`'s
   graphics section, which R1 owns: a split must not run while that section changes. Taken by W1 (the sweep of
   `src/engine/`) after R1. 2026-11-22.
+
+## Lazy graphics part (added 2026-11-23)
+
+Paths in this section are from the repository root.
+
+- **The experiment branch `exp-e1c` is a reference copy, for after the audit.** Local only, never pushed: 22 commits
+  ahead of `main`, the first lazy-graphics design (experiment E1c) and its fix rounds, later redone on `main`, plus the
+  eager-import switch (`4465722`), `?graphics=eager&eagerdelay=<s>` (`17577c0`) and timing lines (`59489d1`), both
+  marked "drop before any PR". Kept as the only copy of that code; the maintainer: "exp-e1c is a reference copy--icebox
+  it for after the audit". No work is live on it, so it does not hold up R1 (the audit plan's condition on R1).
+- **The phone's graphics import time, far after the audit.** The same import took 12 s, 2.5 s and 0.8-1.2 s in
+  different captures on a phone, and the cause was not found; the eager switch did not help
+  (`docs/archive/lazy-graphics-experiments.md`). Untried: the eager import in steps of one task each, as the shipped
+  idle import runs, in place of one long call. The maintainer: "idle-wait work is done for now--remaining experiments
+  are iceboxed for far after the audit".
