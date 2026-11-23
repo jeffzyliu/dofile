@@ -22,8 +22,8 @@
 // - What must wait for something outside the store goes after the turn, in the caller. Save is the case: its turn
 //   issues the write without waiting for it (`io.issue`) and returns it wrapped; the caller awaits the answer and
 //   applies it after the turn, so a slow write holds no rename.
-// - Calling `fileTurn` inside a body is refused: that call rejects, and so does the outer turn. Neither turn could be
-//   waited for in the other.
+// - Calling `fileTurn` inside a body is refused: that call rejects (the body runs on to its next `yield*`, which the
+//   runner refuses), and so does the outer turn. Neither turn could be waited for in the other.
 // - Each operation has a time limit. An IndexedDB call cannot be cancelled, so one that runs over may still be applied
 //   later: the turn rejects with a TurnTimeout error and its body is ended (`return`: its finally blocks run) without
 //   being told the operation failed, since nobody knows. The next turn starts; the store applies calls in the order

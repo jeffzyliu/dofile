@@ -17,6 +17,7 @@ const A = await import("../src/app/files/actions.ts");
 const { fileTurn } = await import("../src/app/files/turns.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
+const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 const stored = async (path: string) => new TextDecoder("utf-8", { ignoreBOM: true }).decode(await store.read(path));
 const has = async (path: string) => (await store.list()).some((f) => f.path === path);
 const edit = (path: string, insert = "edited ") => D.update(path, { changes: { from: 0, insert } });
@@ -213,8 +214,10 @@ test("an upload's Replace answered while a Save of the tab waits: the Save write
   const done = A.upload([{ path: "a.do", data: enc("uploaded") }]);
   await asked();
   const open = await hold();
+  const edited = D.textOf("a.do");
   const saved = D.save("a.do");
   const { write } = store;
+  const writes: string[] = [];
   let released = false;
   const release = () => {
     if (released) return;
@@ -223,20 +226,32 @@ test("an upload's Replace answered while a Save of the tab waits: the Save write
   };
   // the held turn ends when the upload's write is issued, or after 50 ms when that write waits for its turn
   store.write = (...args: Parameters<typeof write>) => {
+    writes.push(dec(args[1]));
     const w = write.apply(store, args);
     release();
     return w;
   };
   const timer = setTimeout(release, 50);
+  const clashDialogs = new Set<unknown>();
+  const count = effect(() => {
+    if (S.dialog.value?.d === "clash") clashDialogs.add(S.dialog.value);
+  });
   const stop = answering({ replace: true, same: false }); // the open dialog, and any asked again
   try {
     await done;
     await saved;
   } finally {
     stop();
+    count();
     clearTimeout(timer);
     store.write = write;
   }
+  assert.deepEqual(
+    writes,
+    [edited, "uploaded", "uploaded"],
+    "the Save writes first; the upload's Replace is refused (the file changed), asked again, then written",
+  );
+  assert.equal(clashDialogs.size, 2, "the upload asks again: the file changed while it was asked");
   assert.equal(await stored("a.do"), "uploaded", "the later action, the upload's Replace, wins");
   assert.equal(D.textOf("a.do"), "uploaded");
   assert.equal(tab("a.do")?.dirty, false);
