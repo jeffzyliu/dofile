@@ -1,34 +1,21 @@
-// The Log pane's foot and head actions, and the phone's strip (docs/design/SPEC.md, sections 3.5 and 3.6).
-//  - CommandLine: Enter runs the field through runCommand; when the command is "started" the field clears, when it is
-//    "refused" the text stays and a toast says why. ↑ ↓ recall `history`, and ↓ past the newest gives back what was
-//    being typed. The field stays on while the engine is on its way but not `ready`, so a draft can be typed; the
-//    button is off. With no engine the field is off and keeps its text, and the button is "Start engine".
-//    Nothing here is ever `disabled`: an off field is aria-disabled and read-only, an off button aria-disabled and
-//    `.off`. A disabled element loses the focus to the page, and the states change under the visitor's hands (a start
-//    that fails while a command is typed; "Start engine" pressed, which becomes the off "Run command" in its place).
-//  - LogActions: the Log head's three links (.log-link) and one "Log actions" ⋯ menu button (.log-more); ui.css shows
-//    one by a container query on the head's width (the unsplit head only), so the tabs are never clipped. The phone
-//    hides the Log head, so the same logMenuItems() are the "Log ⋯" button in its strip.
-//  - PhoneStrip: under the phone's top bar, on every view (the phone has no status bar): the last run, or the state's
-//    words. Its children go at its right end.
+// The Log pane's command line (docs/design/SPEC.md, section 3.5): Enter runs the field through runCommand; when the
+// command is "started" the field clears, when it is "refused" the text stays and a toast says why. ↑ ↓ recall
+// `history`, and ↓ past the newest gives back what was being typed. The field stays on while the engine is on its way
+// but not `ready`, so a draft can be typed; the button is off. With no engine the field is off and keeps its text, and
+// the button is "Start engine". Nothing here is ever `disabled`: an off field is aria-disabled and read-only, an off
+// button aria-disabled and `.off`. A disabled element loses the focus to the page, and the states change under the
+// visitor's hands (a start that fails while a command is typed; "Start engine" pressed, which becomes the off "Run
+// command" in its place).
 import { signal } from "@preact/signals-core";
-import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
 import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
-import { since } from "../editor/clock.ts";
-import { editorCommands } from "../editor/commands.ts";
-import { GraphsLoading, stateWords } from "../editor/StatusBar";
-import { jumpLine, linesWords, memoryTitle, memoryWords, refusedRunWords, seconds, ticking } from "../editor/words.ts";
-import { saveAs } from "../files/save.ts";
-import { canClearLog, runCommand } from "../run.ts";
+import { refusedRunWords } from "../editor/words.ts";
+import { runCommand } from "../run.ts";
 import { startEngine, startHint, startOffer } from "../start.ts";
-import { dialog, engine, history, isPhone, lastRun, log, memory, showToast } from "../state.ts";
-import { breakAsked, takesRun } from "../states/predicates.ts";
+import { engine, history, isPhone, showToast } from "../state.ts";
+import { takesRun } from "../states/predicates.ts";
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
-import { MenuButton, type MenuItem } from "../ui/Menu";
-import { plainLog } from "./classify.ts";
-import { openFind } from "./LogView";
 import { inTurnWords, runInTurn } from "./paste.ts";
 import { pastePlan, putBack, runOne } from "./pasterun.ts";
 
@@ -219,96 +206,6 @@ export function CommandLine() {
           Run command
         </button>
       )}
-    </div>
-  );
-}
-
-function downloadLog() {
-  saveAs(new Blob([plainLog(log.value)], { type: "text/plain" }), "dofile.log");
-}
-
-/** Asks first (ClearLogDialog): the log and the graphs cannot be brought back. */
-const askClearLog = () => {
-  dialog.value = { d: "clear-log" };
-};
-
-export const LogActions = () => (
-  <>
-    <button type="button" class="head-link log-link" onClick={(e) => openFind(e.currentTarget as HTMLElement)}>
-      Find
-    </button>
-    <button type="button" class="head-link log-link" onClick={downloadLog}>
-      Download log
-    </button>
-    <button
-      type="button"
-      class="head-link log-link danger"
-      aria-label="Clear log…"
-      disabled={!canClearLog()}
-      onClick={askClearLog}
-    >
-      Clear…
-    </button>
-    <MenuButton label="Log actions" class="head-link icon log-more" items={logMenuItems}>
-      <Icon name="more" />
-    </MenuButton>
-  </>
-);
-
-/** The Log head's actions as menu items, in the head's order. */
-export const logMenuItems = (): MenuItem[] => [
-  { label: "Find", onSelect: () => openFind(null) },
-  { label: "Download log", onSelect: downloadLog },
-  { label: "Clear log…", danger: true, disabled: !canClearLog(), onSelect: askClearLog },
-];
-
-export function PhoneStrip({ children }: { children?: ComponentChildren }) {
-  const st = engine.value;
-  const r = lastRun.value;
-  const mem = memory.value;
-  let parts: ComponentChildren;
-  if (st.s === "running")
-    parts = (
-      <span>
-        <b>{"Running"}</b>
-        {st.run.lines ? ` ${linesWords(st.run.lines)}` : ""}
-      </span>
-    );
-  else if (st.s === "ready" && r) {
-    const jump = jumpLine(r);
-    parts = (
-      <>
-        {r.rc !== 0 && <span class="rc-err">{`r(${r.rc})`}</span>}
-        <span>
-          {r.line !== null && r.rc !== 0 && r.kind !== "command"
-            ? `${r.rc === 1 ? "before line" : "line"} ${r.line} · ${seconds(r.seconds)}`
-            : `${r.rc === 0 ? "Last run: " : ""}${seconds(r.seconds)}`}
-        </span>
-        {mem && <span title={memoryTitle}>{memoryWords(mem, true)}</span>}
-        <span class="spacer" />
-        {jump !== null && (
-          <button type="button" class="jump" onClick={() => editorCommands.goToLine(jump, r.path)}>
-            {`Go to line ${jump}`}
-          </button>
-        )}
-      </>
-    );
-  } else {
-    const [bold, rest] = stateWords(st);
-    parts = (
-      <span>
-        {bold && <b>{bold}</b>}
-        {rest}
-        {breakAsked(st) && ` · ${ticking(since(st.t0))}`}
-      </span>
-    );
-  }
-  return (
-    <div class="phone-strip">
-      {parts}
-      {!(st.s === "ready" && r) && mem && <span title={memoryTitle}>{memoryWords(mem, true)}</span>}
-      <GraphsLoading />
-      {children}
     </div>
   );
 }

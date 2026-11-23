@@ -1,17 +1,16 @@
 // The log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[]) and draws the head, then per run its run-head and
 // its text (run-parts.ts makes its parts, LogParts.tsx draws them), each line by its kind (classify.ts). The head,
 // run-heads and the page's notes are shown only: Download log has the runs' text alone.
-import { signal } from "@preact/signals";
 import { Fragment, type RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { codeOf } from "../editor/commands.ts";
 import { runheadWords } from "../editor/words.ts";
 import { ABOUT } from "../env";
-import { graphs, isPhone, log, outputTab, split, wrap } from "../state.ts";
+import { graphs, isPhone, log, wrap } from "../state.ts";
 import type { RunHead } from "../types.ts";
 import { fromAnywhere, useFocusRequest } from "../ui/focus-hooks.ts";
 import { isMac } from "../ui/Icon";
-import { findAt, findOpen, findText } from "./find.ts";
+import { findAsked, findAt, findOpen, findReturn, findText } from "./find.ts";
 import { useFollowEnd } from "./follow.ts";
 import { drawRunParts, GraphLink, type Marker, marked } from "./LogParts.tsx";
 import { runParts } from "./run-parts.ts";
@@ -99,18 +98,6 @@ function FindBar({ total, pre }: { total: number; pre: RefObject<HTMLPreElement 
     </div>
   );
 }
-const findAsked = signal(false); // openFind asks; the field takes it when drawn
-let findReturn: HTMLElement | null = null;
-/** Open Find: the field takes the focus; Esc and Close give it back to `from` (the phone's ⋯ passes none: the focus is
- *  then on the ⋯ button, which the menu gave it back to). On the desktop with the Output pane unsplit and another tab
- *  showing, the Log tab is shown first, so the field can be seen. */
-export function openFind(from: HTMLElement | null) {
-  findReturn = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  findAsked.value = true;
-  if (!isPhone.value && !split.value && outputTab.value !== "log") outputTab.value = "log";
-  findOpen.value = true;
-}
-
 export function LogView() {
   const pre = useRef<HTMLPreElement>(null);
   const items = log.value;
