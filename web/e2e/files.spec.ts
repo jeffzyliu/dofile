@@ -393,6 +393,7 @@ test("the row menu (Shift+F10, right click, the ⋯): Delete asks, Cancel is the
   await expect(head.getByRole("menuitem")).toHaveText([
     "New .do file",
     "New folder",
+    "Upload files",
     "Upload a folder",
     "Download all (.zip)",
     "Restore the sample", // above Delete all files…
@@ -1223,7 +1224,7 @@ test("a file that isn't UTF-8 opens no tab: the Files pane's banner offers Downl
 });
 
 // A picker's synthetic click on the hidden input must not reach the empty-space handler (it would make the top current)
-test('Upload and Upload a folder, cancelled: the current folder stays, and the "+" still names it', async ({
+test('Upload, Upload files and Upload a folder, cancelled: the current folder stays, and the "+" still names it', async ({
   page,
 }) => {
   await setUp(page, tree3);
@@ -1237,11 +1238,14 @@ test('Upload and Upload a folder, cancelled: the current folder stays, and the "
     await expect(plus(page)).toHaveAccessibleName("New file in data/");
     await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
   }
-  const chooser = page.waitForEvent("filechooser");
-  await (await fileActions(page)).getByRole("menuitem", { name: "Upload a folder" }).click();
-  await chooser;
-  await expect(plus(page)).toHaveAccessibleName("New file in data/");
-  await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
+  for (const name of ["Upload files", "Upload a folder"]) {
+    const chooser = page.waitForEvent("filechooser");
+    await (await fileActions(page)).getByRole("menuitem", { name }).click();
+    const picker = await chooser;
+    if (name === "Upload files") expect(picker.isMultiple()).toBe(true); // the dropzone's input: one file or several
+    await expect(plus(page)).toHaveAccessibleName("New file in data/");
+    await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
+  }
 });
 
 test("the head menu's New .do file and New folder, and the dropzone's New .do file, make the entry in the current folder", async ({
