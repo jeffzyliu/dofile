@@ -13,6 +13,7 @@ import {
   cancel,
   focusNow,
   focusRequest,
+  focusStable,
   fromAnywhere,
   fromNothing,
   register,
@@ -20,8 +21,6 @@ import {
   TARGET_NAMES,
   takeRequest,
 } from "../src/app/ui/focus-targets.ts";
-
-import { focusStable } from "../src/app/states/focus.ts";
 
 interface Fake {
   isConnected: boolean;

@@ -299,6 +299,17 @@ test("one door: in src/app/ the store keeps its name (no renamed or namespace im
   assert.deepEqual(having(app, copied), {}, "copied or destructured");
 });
 
+test("ui/ imports nothing from states/ or files/ (types included): the shared pieces sit below the features", () => {
+  const ui = files("src/app/ui");
+  assert.ok(ui.length >= 8, "the scan found the shared pieces");
+  const up = ui.flatMap((f) =>
+    importsOf(f)
+      .filter((i) => i.file !== null && /^src\/app\/(states|files)\//.test(i.file))
+      .map((i) => `${f} imports ${i.from}`),
+  );
+  assert.deepEqual(up, []);
+});
+
 test("a state module imports values only from the signals package, app/paths.ts and other state modules", () => {
   const stateFiles = files("src/app/state");
   assert.ok(stateFiles.length >= 6, "the scan found the state modules");

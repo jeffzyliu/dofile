@@ -75,6 +75,14 @@ export function focusNow(name: TargetName, key?: string): boolean {
   return hit.el.ownerDocument.activeElement === hit.el;
 }
 
+/** Put the focus on the editor, or on the visible "More actions" button when the editor cannot take it (the Editor pane
+ *  hidden, a phone on another view). It focuses at once, and with a .dta tab active the editor's target is that tab's own
+ *  (editor/Editor.tsx), so the focus moves once. Where the focus goes when what held it leaves the page: never <body>
+ *  (docs/web-page-flows.md, section 1). */
+export function focusStable() {
+  if (!focusNow("editor")) focusNow("more-actions");
+}
+
 interface FocusRequest {
   name: TargetName;
   key: string | undefined;

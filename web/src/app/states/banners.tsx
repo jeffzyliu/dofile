@@ -14,7 +14,8 @@ import * as eng from "../engine.ts";
 import { downloadAll } from "../files.ts";
 
 import { DismissibleBanner } from "../ui/DismissibleBanner";
-import { useFocusOnMount } from "../ui/focus-hooks.ts";
+import { useFocusOnLeave, useFocusOnMount } from "../ui/focus-hooks.ts";
+import { focusStable } from "../ui/focus-targets.ts";
 import { Banner } from "../ui/Live";
 
 import { breakPending, resetsIn, since } from "../editor/clock.ts";
@@ -25,7 +26,6 @@ import { ticking } from "../editor/words.ts";
 
 import { megabytes } from "../bytes.ts";
 import { LANDING_URL } from "../env";
-import { focusStable, useFocusOnLeave } from "./focus.ts";
 import {
   FAILED_HEAD,
   FILES_SAFE,

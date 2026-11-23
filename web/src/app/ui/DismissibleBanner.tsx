@@ -2,8 +2,7 @@ import type { Banner as BannerRecord } from "../types.ts";
 
 import { dismiss } from "../state/notices.ts";
 
-import { useFocusOnLeave } from "../states/focus.ts";
-
+import { useFocusOnLeave } from "./focus-hooks.ts";
 import type { BannerProps } from "./Live";
 import { Banner } from "./Live";
 

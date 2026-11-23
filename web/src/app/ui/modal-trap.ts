@@ -2,7 +2,7 @@
 // docs/design/focus-targets.md, section 5; the rules it keeps are docs/web-page-flows.md, section 1.
 import { useLayoutEffect, useRef } from "preact/hooks";
 
-import { focusStable } from "../states/focus.ts";
+import { focusStable } from "./focus-targets.ts";
 
 /** What the caller decides; the rest is the trap's. */
 export interface ModalTrap {
