@@ -193,8 +193,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   task at a time in order, each call's value, a failed task rejects its call and the queue goes on, two queues
   independent.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
-  build
-  mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
+  build mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
   SIGINT is written again while the run is on, never into the next run); store failures (`started` with `storeFailed`,
   `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`); the start's facts
   (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
@@ -206,12 +205,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     graphs saying one damage, race 13's late `damaged`, a late `again`), is dropped. The progress the listeners see, read
     from the region (a miss with its bytes, a damage, a failed re-fetch, a retry, a Cache hit); an older build's part, its
     download still on its way, says nothing to them, and once failed is not fetched again when the browser is back
-    online.
+    online; a new build's part takes over the listeners. Without a shared buffer (no cross-origin isolation) `download()`
+    fetches the part with the start files into the Cache and counts it, and `cached()` checks it.
 - `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
   counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
   word refused to a writer; a kept writer or reader throws; a page write between a reader's two counter reads is read
-  again whole (busy with `waitMs` 0, at the count its copy began at, so a `waitSeq` on it returns at once); an odd counter is busy after `waitMs`, woken by a second thread's notify;
-  `waitSeq` returns at once on a moved count and is woken by another thread's write; `readBytes` a clamped copy; and a
+  again whole (busy with `waitMs` 0, at the count its copy began at, so a `waitSeq` on it returns at once); an odd
+  counter is busy after `waitMs`, woken by a second thread's notify; `waitSeq` returns at once on a moved count and is woken by another thread's write; `readBytes` a clamped copy; and a
   writer thread against a reader for 0.4 s, no torn snapshot accepted (it accepted torn ones with the re-check as an
   `Atomics.load` on an Apple-silicon Mac).
 - `part-header.test.ts`: the shared region the graphics part is handed over in (`engine/lazy-part.ts`, on the seqlock):
@@ -243,8 +243,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   stops the warm-up (no `damaged`, no further step), and a graph draws.
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
-- `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
-  test,
+- `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one test,
   without a current snapshot).
 - `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break (also one pressed while the run waits
   behind a describe: rc 1 before its first line; and one after its run ended), a matrix request ahead of, behind and
@@ -451,7 +450,7 @@ Specs:
   them in order while the run goes, in steps that each extend the last, and complete at the end) and, with
   `DOFILE_STREAM_BENCH=1`, a measurement of the log's cost per chunk over 50 and 500 lines (no assertion beyond the run
   completing).
-- `graphics.spec.ts` (experiment E1c, a lazy snapshot only; skipped without a graphics part): the part's request held or
+- `graphics.spec.ts` (a lazy snapshot only; skipped without a graphics part): the part's request held or
   refused with `page.route`. A run at ready that draws nothing does not wait for it; a Break while a graph waits is rc 1
   with the data kept and the part fetched once; "Graphs loading" and its ring while it downloads (every project, the
   phone's strip on iphone); written and imported while idle; a graph that waits while it lands draws; a return visit reads
