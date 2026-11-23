@@ -91,7 +91,7 @@ test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed par
       retryPart(part); // the graph asked again at copy 0
       failPart(part, partReason("offline again"));
 
-      // the browser comes back online midway: #retryGraphics
+      // the browser comes back online midway: the page retries
       let readCount = 0;
       const online = () => {
         if (++readCount === after) retryPart(part);

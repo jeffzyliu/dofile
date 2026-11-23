@@ -219,26 +219,27 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   `readPart` sees it (the bytes only when asked for; an empty reason never read back empty), and the header's layout
   (state, length, copy, counter) and size.
 - `lazy-part.test.ts`: the page's and the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): the
-  page's machine as a table (`partStep`: each row, and the events it drops); what a waiting graph
-  does (Break, write, unpack, ask again once per run, a final failure with its reason, wait, also on a
-  busy read; race 11: damage said once, by a graph whose read gives its copy, a landed copy whose damage was said
-  waits, a fresh copy is unpacked); races 1 to 3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy,
-  never the empty reason (the answer for written); when the browser's own decoder is used (never when mount forces
-  brotli-wasm; not on the copy it failed on, again on a fresh one); the native gate (started, no unpack, the decoder not running,
-  and only then a read: a landed, brotli-sized copy without damage on it, or a read without the bytes on its copy); and
-  what an idle step does (a run in flight, IDLE_MS of idle, then by the unpack's phase, nothing while native; with none, the native gate or
-  brotli-wasm, nothing on a busy or unlanded read or one of a copy with damage).
+  page's machine as a table (`partStep`: each row, and the events it drops); what a waiting graph does (Break, write,
+  unpack, ask again once per run, a final failure with its reason, wait, also on a busy read; race 11: damage said once,
+  by a graph whose read gives its copy, a landed copy whose damage was said waits, a fresh copy is unpacked); races 1 to
+  3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy, never the empty reason
+  (the answer for written); when the browser's own decoder is used (never when mount forces brotli-wasm; not on the copy
+  it failed on, again on a fresh one); the native gate (started, no unpack, the decoder not running, and only then a
+  read: a landed, brotli-sized copy without damage on it, or a read without the bytes on its copy); and what an idle
+  step does (a run in flight, IDLE_MS of idle, then by the unpack's phase, nothing while native; with none, the native
+  gate or brotli-wasm, nothing on a busy or unlanded read or one of a copy with damage).
 - `worker-graphics.test.ts`: the worker's record of the graphics part (`engine/worker-graphics.ts`) with a fake engine
   and a real shared region (a small brotli part; Node's `DecompressionStream` as the browser's decoder, held when a test
   needs it): the idle steps stop for a run in flight and go on at its end with nothing else to wake them; a graph after
   the write answers at once, with no second unpack or write; a graph that finds the part failed asks once, its `again`
-  naming the copy it read, and the failure of that fetch is its answer; race 13: the decoder's late result of a copy a graph found
-  damaged meanwhile is dropped, not written (its `damaged` names the copy); one browser decode at a time (a fresh copy waits for the running one); a
-  Break during a graph's own unpack while the decoder runs: nothing is written until the decoder ends; race
-  11, with both decoders: damage an idle step finds blocks only its copy (a graph before the fresh copy waits, not saying
-  it, and the fresh copy is written while idle); damage the page has not acted on is said by the next graph, and the one
-  after waits rather than unpack that copy again; finding 15: a warm step's throw is a warning that stops the warm-up
-  (no `damaged`, no further step), and a graph draws.
+  naming the copy it read, and the failure of that fetch is its answer; race 13: the decoder's late result of a copy a
+  graph found damaged meanwhile is dropped, not written (its `damaged` names the copy); one browser decode at a time (a
+  fresh copy waits for the running one); a Break during a graph's own unpack while the decoder runs: nothing is written
+  until the decoder ends; race 11, with both decoders: damage an idle step finds blocks only its copy (a graph before
+  the fresh copy waits, not saying it, and the fresh copy is written while idle); damage the page has not acted on is
+  said by the next graph, and the one after waits rather than unpack that copy again; a read of the part that throws is
+  not damage: nothing is posted, the graph's reason promises no fetch, and the next graph draws that copy; finding 15: a
+  warm step's throw is a warning that stops the warm-up (no `damaged`, no further step), and a graph draws.
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
