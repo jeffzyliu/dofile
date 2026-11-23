@@ -1223,8 +1223,15 @@ test("a file that isn't UTF-8 opens no tab: the Files pane's banner offers Downl
   await expect(banner).toBeHidden();
 });
 
-// A picker's synthetic click on the hidden input must not reach the empty-space handler (it would make the top current)
-test('Upload, Upload files and Upload a folder, cancelled: the current folder stays, and the "+" still names it', async ({
+// A picker's synthetic click on the hidden input must not reach the empty-space handler (it would make the top current).
+// Each hidden input is clicked once per test: on Firefox a second picker on an input whose first one Playwright took
+// (the chooser is never answered) often opens nothing under load, so the filechooser event never comes (CI, 2026-11-23).
+const keepsCurrent = async (page: Page) => {
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
+};
+
+test('Upload, and Upload a folder, cancelled: the current folder stays, and the "+" still names it', async ({
   page,
 }) => {
   await setUp(page, tree3);
@@ -1235,17 +1242,24 @@ test('Upload, Upload files and Upload a folder, cancelled: the current folder st
     const chooser = page.waitForEvent("filechooser");
     await upload.click();
     await chooser; // the picker opened; nothing is chosen
-    await expect(plus(page)).toHaveAccessibleName("New file in data/");
-    await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
+    await keepsCurrent(page);
   }
-  for (const name of ["Upload files", "Upload a folder"]) {
-    const chooser = page.waitForEvent("filechooser");
-    await (await fileActions(page)).getByRole("menuitem", { name }).click();
-    const picker = await chooser;
-    if (name === "Upload files") expect(picker.isMultiple()).toBe(true); // the dropzone's input: one file or several
-    await expect(plus(page)).toHaveAccessibleName("New file in data/");
-    await expect(row(page, /^data\//)).toHaveAttribute("aria-current", "true");
-  }
+  const folder = page.waitForEvent("filechooser");
+  await (await fileActions(page)).getByRole("menuitem", { name: "Upload a folder" }).click();
+  await folder;
+  await keepsCurrent(page);
+});
+
+test("the Files menu's Upload files, cancelled, opens the dropzone's picker (one file or several): the current folder stays", async ({
+  page,
+}) => {
+  await setUp(page, tree3);
+  await row(page, /^data\//).click();
+  await expect(plus(page)).toHaveAccessibleName("New file in data/");
+  const chooser = page.waitForEvent("filechooser");
+  await (await fileActions(page)).getByRole("menuitem", { name: "Upload files" }).click();
+  expect((await chooser).isMultiple()).toBe(true);
+  await keepsCurrent(page);
 });
 
 test("the head menu's New .do file and New folder, and the dropzone's New .do file, make the entry in the current folder", async ({
