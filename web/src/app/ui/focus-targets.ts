@@ -9,7 +9,15 @@ export const fromNothing: From = (at) => !at || at === at.ownerDocument.body;
 export const fromAnywhere: From = () => true;
 
 /** Every target, once: a component registers each of these by name (test/focus-targets.test.ts checks that one does). */
-export const TARGET_NAMES = ["editor", "open-file-tab", "dta-load", "more-actions"] as const;
+export const TARGET_NAMES = [
+  "editor",
+  "open-file-tab",
+  "dta-load",
+  "more-actions",
+  "tree",
+  "find-field",
+  "files-toggle",
+] as const;
 export type TargetName = (typeof TARGET_NAMES)[number];
 
 interface Entry {
@@ -23,10 +31,10 @@ const entries = new Set<Entry>();
 
 const isShown = (el: HTMLElement | null): el is HTMLElement => !!el?.isConnected && el.getClientRects().length > 0;
 
-/** Entries of one name, several allowed: the first shown one wins. */
+/** Entries of one name, several allowed: the first shown one with the same key (none for none) wins. */
 const shownEntry = (name: TargetName, key?: string) => {
   for (const entry of entries) {
-    if (entry.name !== name || (key !== undefined && entry.key !== key)) continue;
+    if (entry.name !== name || entry.key !== key) continue;
     const el = entry.get();
     if (isShown(el)) return { entry, el };
   }
@@ -36,7 +44,8 @@ const shownEntry = (name: TargetName, key?: string) => {
 /**
  * Make `name` a target until the returned function is called.
  * @param get - the element, or null while there is none; read at each use, so one entry follows a ref that changes
- * @param key - tells entries of one name apart; a request with a key reaches only that entry
+ * @param key - tells entries of one name apart: a request reaches only the entries with its own key, and one with no key
+ *   only the entries with none (so a target that is one of many, and also "the one in the tab order", registers twice)
  * @param focus - how the element takes the focus, when `el.focus()` is not enough
  */
 export function register(
@@ -89,7 +98,7 @@ export function cancel(name: TargetName) {
  *  `from` allows it. Whether the focus moved. */
 export function takeRequest(name: TargetName, key?: string): boolean {
   const request = waiting.peek();
-  if (!request || request.name !== name || (request.key !== undefined && request.key !== key)) return false;
+  if (!request || request.name !== name || request.key !== key) return false;
   waiting.value = null;
   const hit = shownEntry(name, request.key);
   if (!hit || !request.from(hit.el.ownerDocument.activeElement)) return false;
