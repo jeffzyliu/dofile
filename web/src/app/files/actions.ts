@@ -6,7 +6,7 @@ import { type Expect, isConflict, StoreConflict } from "../../engine/store.ts";
 import { zipParts } from "../../engine/zip.ts";
 import { CONTROL } from "../../stata/quote.ts";
 import { close, closeUnder, moved, reload, retype, tabs } from "../editor/documents.ts";
-import { addBanner, banners, dialog, files, say, showToast } from "../state.ts";
+import { addBanner, banners, dialog, files, runMoved, say, showToast } from "../state.ts";
 import { store } from "../store.ts";
 import type { Dialog, FileInfo } from "../types.ts";
 import { decodeText, noteNotText } from "./open.ts";
@@ -42,6 +42,7 @@ function* renameNow(io: Io, from: string, to: string): Turn<void> {
   yield* io.rename(from, to);
   for (const t of left()) if (!t.dirty) close(t.path);
   const before = new Set(tabs.value.map((t) => t.path));
+  runMoved(from, to); // the last run and the log's run heads: Go to line follows the rename
   // the reset banner's cut file follows too, open in a tab or not (one banner: addBanner replaces it)
   for (const b of banners.value)
     if (b.b === "reset" && b.run?.path !== undefined && within(b.run.path, from))

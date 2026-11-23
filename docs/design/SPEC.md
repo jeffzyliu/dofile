@@ -101,7 +101,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   top current (the way back on a phone, where the Files head is hidden). Folding the current folder, or a folder above it, makes
   the folded folder's parent current (Left on a current top-level folder: the top). Up, Down, Home, End, Right and Left move or
   fold only and select nothing.
-- **Upload:** the Upload link, "Upload a folder", or a drop anywhere; folder paths are kept. A name that exists asks (3.10).
+- **Upload:** the Upload link, "Upload files", "Upload a folder", or a drop anywhere; folder paths are kept. A name that exists asks (3.10).
   Replacing the open file reloads it in the editor (`F 3.3`). P1 stores a .zip as one file. Uploads run one at a time, a
   name clash never replaces another dialog (it waits for it to close), and a drop while a dialog is open, or while another
   tab has the files, uploads nothing. A name with a control character (a line break) is refused, as the store refuses a
@@ -117,8 +117,8 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   nearest folder above it); its label names the folder: "New file in data/", "New file". In a new file's or folder's name field only (not a rename) the name may be a path,
   "sub/x.do": each part is checked as a name, a part before the last may not be a file, and the store makes the missing
   folders; a folder the path goes through that is folded is unfolded.
-- **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload a folder", "Download all (.zip)",
-  "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`, OQ-13; built in step 5) sits above "Delete all files…", after a rule.
+- **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload files", "Upload a folder",
+  "Download all (.zip)", "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`, OQ-13; built in step 5) sits above "Delete all files…", after a rule.
 - **States:** drawn: open, unsaved dot, hover, folder open and closed, size, new badge (`E`), row menu (`S 13`). In the flows'
   list, not drawn: drop target, upload count (`WS 4`), inline rename and "name already exists" (DS-7), could not save, too big
   (OQ-16).
@@ -187,7 +187,9 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   "dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax" from `ABOUT` (`web/src/app/env.ts`: compiled in, section 8); "Files stay in this browser. Try: help regress"); per run a
   run-head (`.runhead`, section 4); each echo (`.echo`); output; notes (`.note`: the path shim's "(path … is … in the working
   folder)"); the error and its `r(N);` (`.err`); the engine's hint (`.hint`); "Go to line 17" (`.jump`), which moves the
-  editor's cursor. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
+  editor's cursor. A rename of the run's file, or of a folder above it, moves the last run's path and every run-head's and
+  run end's too (`runMoved`, `state.ts`), so the link opens the renamed file; a file that cannot be read (deleted) opens
+  nothing and a toast says so. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
   exception: they wrap in the pane (section 8, "As built in step 4b").
 - The head, run-heads and the page's own notes are shown only: never in Download log or a log file (`S 15`).
 - The log streams during a run (OQ-1): the worker posts `{id, log}` chunks, and the page appends them. When the run ends, the

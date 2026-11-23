@@ -240,6 +240,7 @@ const askDelete = (path: string) => {
 export const fileMenuItems = (): MenuItem[] => [
   { label: "New .do file", onSelect: () => startDraft("file", newFileDir()) },
   { label: "New folder", onSelect: () => startDraft("folder", newFileDir()) },
+  { label: "Upload files", onSelect: () => pickFiles?.click() },
   { label: "Upload a folder", onSelect: () => pickFolder?.click() },
   {
     label: "Download all (.zip)",

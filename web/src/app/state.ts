@@ -4,6 +4,7 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
+import { movedPath, within } from "./files/tree.ts";
 import type {
   Banner,
   BrowseRows,
@@ -98,6 +99,17 @@ export const runWriter = {
   memory: signal<Memory | null>(null),
   graphs: signal<Graph[]>([]), // a run's graphs, and a .png opened from the files; "Clear log" empties
 };
+/** A rename moved the file or folder `from` to `to`: the last run and the log's run heads and ends follow it, so
+ *  "Go to line" opens the renamed file, not the old name (which a new file may take). Lives here, not in run.ts, which
+ *  files/actions.ts cannot import (run.ts imports files.ts). */
+export function runMoved(from: string, to: string) {
+  const move = <T extends { path?: string }>(r: T): T =>
+    r.path !== undefined && within(r.path, from) ? { ...r, path: movedPath(r.path, from, to) } : r;
+  if (runWriter.lastRun.value) runWriter.lastRun.value = move(runWriter.lastRun.value);
+  runWriter.log.value = runWriter.log.value.map((i) =>
+    i.t === "runhead" ? { ...i, run: move(i.run) } : i.t === "text" && i.end ? { ...i, end: move(i.end) } : i,
+  );
+}
 export const log: ReadonlySignal<LogItem[]> = runWriter.log;
 export const lastRun: ReadonlySignal<LastRun | null> = runWriter.lastRun;
 export const engineRuns: ReadonlySignal<number> = runWriter.engineRuns;

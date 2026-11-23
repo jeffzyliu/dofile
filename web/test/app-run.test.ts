@@ -122,6 +122,16 @@ test("a run's graphs keep the theme the run was sent, not the one at its end", a
   assert.equal(S.graphs.value.at(-1)!.theme, "light");
 });
 
+test("a rename during a run: the run's end and the last run carry the new path", async () => {
+  await readyEngine();
+  const done = runCode("x", FILE);
+  S.runMoved("a.do", "b.do");
+  client.run1.done.ok(result({ rc: 111, error_line: 1 }));
+  await done;
+  assert.equal(S.lastRun.value?.path, "b.do");
+  assert.equal(logItems().find((i) => i.t === "text")!.end!.path, "b.do");
+});
+
 test("each run's text item keeps how it ended (rc, line, skipped, store_error) and the files unsaved when it started", async () => {
   await readyEngine();
   D.addText("a.do", "");
