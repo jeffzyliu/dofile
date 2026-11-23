@@ -157,6 +157,20 @@ stateDiagram-v2
     end note
 ```
 
+**Mirrors? No: the page's machine is much smaller.** Today the page's part has 4 states (pending, fetching, landed,
+failed), two flags beside them (`loading`, `damaged`), 7 event rows and 7 transitions; the worker's has 7 unpack
+states (none, native, decode, decoded, graphicsWritten, warmed, graphicsError), 14 event rows and 13 transitions, plus
+the idle clock and a waiting graph's 10 steps (`waitStep`). Proposed (R1; the counts are a guess until it is built):
+the page keeps its 4 states, with `damaged` as the argument of a retry rather than a flag, and about 6 events (want,
+landed, failed, again, damaged, online); the worker keeps its 7 states as one field of its record, and about 11 events
+(startup, the op `graphics`, run arrives, run ends, idle step, native done, native failed, a graph's wait, own fetch
+landed, own fetch failed, damage). They own different things: the page owns the download, the Cache, the copy number
+(`tries`) and the progress the status bar shows; the worker owns everything after the bytes arrive (unpack, write
+into Python's files, warm-up, the idle clock, the waiting graph) and, without a buffer, the download too. What they
+share is the buffer's three states (`PART_PENDING`, `PART_LANDED`, `PART_FAILED`) and `tries`, nothing else. The
+page's names pending, landed and failed match the buffer's; its fetching is not in the buffer; the worker's names match
+neither. Without a buffer the page's machine shrinks to a display of the worker's messages (`#workerSaysGraphics`).
+
 ## 2. The 22 variables as one record
 
 All at `worker.ts:70-97`, one `let` each. S8 moved none of them. It moved what surrounds them: the boot work into
@@ -225,7 +239,69 @@ Safari run the entry twice, and the second copy took every later message. So R1'
 `worker.ts` imports statically (as `lazy-part.ts`, `worker-boot.ts`, `worker-dispatch.ts` are), never into a chunk
 or a second worker of its own. This also rules out, for R1, the "decode on another thread" idea in lazy-matplotlib.md.
 
-## 6. Races between the page and the worker
+## 6. The shared state
+
+**What is shared.** A `SharedArrayBuffer` is memory both threads see at once; `Atomics` are the operations on it that
+each happen in one indivisible step, in one order both threads agree on. One rule makes a hand-over safe: data written
+with plain writes before an `Atomics.store` is seen by a thread whose `Atomics.load` sees that store ("write, then
+publish"). The part's buffer (`lazy-part.ts`) is an Int32 header of `PART_HEADER` (16) bytes, then the bytes:
+
+| Field | Written by (page, `client.ts`) | Read by (worker, `worker.ts`) |
+|---|---|---|
+| state (`HDR_STATE`) | `landPart`, `failPart`, `retryPart`: `Atomics.store`, then `Atomics.notify` | `partState` (`Atomics.load`) in `partNow`; `waitPartChange` (`Atomics.wait`) |
+| length (`HDR_LENGTH`) | the same three: `Atomics.store` | `partData`: a plain read |
+| tries (`HDR_TRIES`) | `retryPart`: `Atomics.add` | `partTries` (`Atomics.load`): `waitGraphics`'s `read()`, `copyNow` |
+| the fourth Int32 | nobody (always 0) | nobody |
+| bytes, from `PART_HEADER` | `landPart` (the part), `failPart` (the reason): plain writes | `partData`: a plain copy (`slice`) |
+
+The interrupt buffer is separate (4 bytes, one Int32, made in `client.ts`'s `start()`): the page stores 2 (SIGINT)
+on Break (`interrupt()`) and 0 when it sends a run; Pyodide reads it during a run; `waitGraphics` reads it between
+its waits and stores 0 when it takes the Break; `browser.py`'s `keep_breaks` puts a SIGINT back. It is not the part's.
+
+**What is one step today.** Each `Atomics` call is one step; no transition is. `landPart` and `failPart` are four:
+the bytes (plain), length, state, notify. `retryPart` is four: length 0, tries + 1, state pending, notify. The worker's
+read is four too: tries, state (`partNow`), then length and the bytes (`partData`). It works today by order alone:
+the page writes data only while the state is pending, which the worker never copies from, and publishes the state
+last. Two places break that order. The worker must load `tries` before `state` (race 1, a rule nothing enforces),
+and `retryPart` clears the length while the state still says failed, which is race 3.
+
+**Two ways to make every read consistent.**
+- (a) A seqlock-style reader, with `tries` as the generation. The worker loads tries and state, copies the length
+  and bytes if landed or failed, then loads tries and state again; if either moved, it starts again (and then finds
+  the part pending, and waits). The page invalidates first and publishes last: `retryPart` moves state and tries
+  before it touches the length (or stops clearing it). Both halves are needed: a re-check alone can fall between
+  today's length write and the tries add, and the new order alone still lets a read cross the retry. Cost: two more
+  loads per read, a thrown-away copy (up to the part's size, a few MB) on the rare read that meets a retry, three
+  lines reordered in `retryPart`. The layout, `waitPartChange` and `test/part-header.test.ts`'s layout test stay.
+- (b) One Int32 holding state (low bits) and tries (the rest, a generation), stored by the page in one step, with the
+  length and bytes written before it. State and tries can then never disagree (race 1 closed by design). But the
+  bytes are still separate memory: a read that loaded "failed" can still overlap a retry and a fast Cache hit, so (b)
+  needs the same re-check after the copy. `Atomics.compareExchange` would add nothing: the page's main thread is
+  the only writer. Cost: a new layout (the `HDR_*` indexes, both threads, the layout test), and `waitPartChange`
+  waits on the whole word.
+
+**Recommended: (a).** It is the smaller change and keeps the layout; (b) needs its re-check anyway. The rule R1b
+adopts: *the page writes the length and bytes only while the state is pending, and leaves landed or failed by moving
+state and tries before anything else; the worker uses a length and bytes only when the tries and state it loaded
+before and after the copy are equal.* Race 3 is then closed by design: a retry during the read moves tries, so the
+empty reason is never used; the graph reads again, finds the part pending and waits. As a second guard, a failed part's
+reason is never empty (`failPart` always has one), so an empty one can be taken as a torn read. Race 13 is not a
+buffer race (it is between the worker's own decode and its own damage finding), so the rule does not touch it, but its
+fix uses the same idea: `tries` (`copyNow`; `copies` without a buffer) is the copy number, and a native result is
+kept only while it is still the copy the decode started from.
+
+**Why the rest of each machine cannot live in the buffer.** A `SharedArrayBuffer` holds numbers and bytes, not
+objects, promises or functions. Most of each machine is a resource of its own thread that the other could not use
+even if it knew its state: the page's fetch and its reader, the Cache, the `online` listener and the `onGraphics`
+listeners; the worker's brotli-wasm decode, the native decode's promise, its timers, Pyodide's files and Python's
+`ready`. There is no `SharedArrayBuffer` at all without cross-origin isolation (plain http on a LAN), so the path
+without one must work by messages anyway, and the buffer can only be the fast way to hand the part over. And the
+page's main thread may not block on `Atomics.wait` (browsers forbid it), so it cannot watch the buffer: it hears the
+worker's findings by message (`again`, `damaged`). The worker reads the buffer because a graph blocked in Python
+receives no messages. So the buffer carries the hand-over only (one copy, its state, its number), and each thread
+keeps its own machine.
+
+## 7. Races between the page and the worker
 
 1. A page retry between a graph's two header loads: `waitGraphics`'s `read()` loads `tries` before `state`
    (`partTries`'s doc), so the retry shows as new tries, not as the new fetch's failure. Ordered by load order.
@@ -243,8 +319,8 @@ or a second worker of its own. This also rules out, for R1, the "decode on anoth
    wide, and only while the browser goes online during a graph's wait after its asked-for fetch failed), but a wrong
    answer rather than a slow one; no data is lost. **Fixed in R1b, as its first change, test first**: a case in
    `test/lazy-part.test.ts` that forces `retryPart` between the state load and the length read (as the reviewer's
-   script does) and expects no "" (the graph waits again, or gets a non-empty reason); it fails today. The fix: read
-   the state again after the copy and read again if it moved, or let `give-up` never answer "".
+   script does) and expects no "" (the graph waits again, or gets a non-empty reason); it fails today. The fix: section
+   6's rule (read the state again after the copy and read again if it moved), with `give-up` never answering "".
 4. The graph's `again` and the `online` event: both go through `#retryGraphics`, whose guard (failed, not loading)
    starts one fetch; the graph's `askedAt` makes either fetch's failure final for it. Ordered by the guard.
 5. The part lands before `startup` is answered: the op `graphics` arrives, `nativeSoon` and `idleSoon` return on
@@ -305,7 +381,7 @@ sequenceDiagram
     Note over Y: matplotlib is not there, so this graph fails, and later graphs skip the wait
 ```
 
-## 7. Tests
+## 8. Tests
 
 **Pinning today, before any line moves:** `e2e/graphics.spec.ts` (7 tests; skipped without a part). It reads the
 worker's and page's `[dofile] graphics part` lines (order "landed ... written ... warmed"; "written while idle"; written
@@ -330,7 +406,7 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
   with two cases written to fail first: race 3 (a retry between the state and the length read) and race 13 (a native
   result of a copy found damaged is not kept).
 
-## 8. R1 in three items (proposed)
+## 9. R1 in three items (proposed)
 
 1. **R1a, the nets (2.3).** Tests a to c with their harness changes; `share.error` either set by the no-buffer
    failures or removed (the test says which); no change to behaviour.
@@ -344,7 +420,7 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
    `src/dofile/browser.py`'s section comment, and `docs/test-map.md`. It leaves `app/state.ts` and
    `app/engine.ts` alone (`onGraphics` keeps its shape).
 
-## 9. Where lazy-matplotlib.md is out of date
+## 10. Where lazy-matplotlib.md is out of date
 
 - "`SharedArrayBuffer(16 + size)`": the code says `PART_HEADER + file.size` (`#graphicsOf`); the value holds.
 - The worker's own fetch is called `fetch` ("`fetch`, off the engine's way"; "the worker's `fetch` uses
