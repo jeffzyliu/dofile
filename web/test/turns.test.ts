@@ -70,21 +70,18 @@ test("a turn's body that yields anything but a store operation is refused", asyn
   await assert.rejects(fileTurn(body), /not a store operation/);
 });
 
-test("a turn started inside a turn's body is refused: it throws there, the outer turn rejects even when the body catches it, and the chain goes on", async () => {
-  let inner: unknown = null;
+test("a turn started inside a turn's body is refused: that call rejects, the outer turn rejects too, and the chain goes on", async () => {
+  let inner: Promise<unknown> | undefined;
   const outer = fileTurn(function* (io) {
     yield* io.list();
-    try {
-      fileTurn(function* (io) {
-        yield* io.list();
-      });
-    } catch (e) {
-      inner = e;
-    }
+    inner = fileTurn(function* (io) {
+      yield* io.list();
+    });
     return "done";
   });
   await assert.rejects(outer, /a turn cannot start inside another turn/);
-  assert.match(String(inner), /a turn cannot start inside another turn/);
+  assert.ok(inner);
+  await assert.rejects(inner, /a turn cannot start inside another turn/);
   assert.deepEqual(
     await fileTurn(function* (io) {
       return yield* io.list();

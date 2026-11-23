@@ -17,6 +17,7 @@ const A = await import("../src/app/files/actions.ts");
 const { fileTurn } = await import("../src/app/files/turns.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
+const dec = (b: Uint8Array) => new TextDecoder().decode(b);
 const stored = async (path: string) => new TextDecoder("utf-8", { ignoreBOM: true }).decode(await store.read(path));
 const has = async (path: string) => (await store.list()).some((f) => f.path === path);
 const edit = (path: string, insert = "edited ") => D.update(path, { changes: { from: 0, insert } });
@@ -40,17 +41,27 @@ async function opened(path: string, text: string) {
   await openFile(path);
 }
 
-/** A turn that holds the chain until `open()` (its one store read answers then): a Save pressed meanwhile is pending. */
-function hold() {
+/** A turn that holds the chain until `open()` (its one store read answers then): a Save pressed meanwhile is pending.
+ *  Resolves once that read has been asked for, so the turn is in progress, not merely queued. */
+async function hold() {
   const { read } = store;
   let open = () => {};
   const held = new Promise<Uint8Array<ArrayBuffer>>((r) => {
     open = () => r(new Uint8Array(0));
   });
-  store.read = (path) => (path === "held" ? held : read.call(store, path));
-  fileTurn(function* (io) {
+  let started = () => {};
+  const asked = new Promise<void>((r) => {
+    started = r;
+  });
+  store.read = (path) => {
+    if (path !== "held") return read.call(store, path);
+    started();
+    return held;
+  };
+  void fileTurn(function* (io) {
     yield* io.read("held");
   });
+  await asked;
   return () => {
     store.read = read;
     open();
@@ -78,7 +89,7 @@ test("Save writes the tab's text in the file's form and clears the dot and the b
   await opened("win.csv", "\uFEFFa\r\nb\r\n");
   edit("win.csv", "x");
   S.addBanner({ b: "run-changed", path: "win.csv" });
-  const open = hold();
+  const open = await hold();
   const saved = D.save();
   edit("win.csv", "y"); // typed after Save was pressed
   open();
@@ -116,12 +127,23 @@ test("Save: no tab, or a .dta tab, saves nothing; a store that refuses gives the
 test("Save against rename: a rename pressed before it is honoured, the text written under the new name", async () => {
   await opened("a.do", "1");
   edit("a.do");
-  const open = hold();
+  const open = await hold();
+  const { write } = store;
+  const written: string[] = [];
+  store.write = (path, data) => {
+    written.push(path);
+    return write.call(store, path, data);
+  };
   const renamed = A.renameEntry("a.do", "b.do");
   const saved = D.save("a.do");
   open();
-  await renamed;
-  assert.equal(await saved, true);
+  try {
+    await renamed;
+    assert.equal(await saved, true);
+  } finally {
+    store.write = write;
+  }
+  assert.deepEqual(written, ["b.do"], "the Save waited for the rename and wrote under the new name");
   assert.equal(await has("a.do"), false);
   assert.equal(await stored("b.do"), "edited 1");
   assert.deepEqual(D.tabs.value, [{ path: "b.do", kind: "text", dirty: false }]);
@@ -151,7 +173,7 @@ test("Save against rename: a Save that answers after a rename leaves its outcome
 
 test("Save against a rename that retypes its clean tab (a.do to a.dta): nothing is written", async () => {
   await opened("a.do", "1"); // an edited tab keeps its text under the new name: no retype
-  const open = hold();
+  const open = await hold();
   const renamed = A.renameEntry("a.do", "a.dta");
   const saved = D.save("a.do");
   open();
@@ -165,7 +187,7 @@ test("Save against a rename that retypes its clean tab (a.do to a.dta): nothing 
 test("Save against delete: a delete pressed before it closes the tab, and nothing is written", async () => {
   await opened("a.do", "1");
   edit("a.do");
-  const open = hold();
+  const open = await hold();
   const deleted = A.deleteEntries(["a.do"]);
   const saved = D.save("a.do");
   open();
@@ -183,7 +205,7 @@ test("Save rule: an upload's Replace of the tab whose turn comes before a pendin
   edit("a.do");
   const done = A.upload([{ path: "a.do", data: enc("uploaded") }]);
   await asked();
-  const open = hold();
+  const open = await hold();
   S.dialog.value = null;
   A.answerClash({ replace: true, same: false }); // the upload's write takes the turn after the held one
   await new Promise((r) => setTimeout(r, 0));
@@ -202,9 +224,11 @@ test("an upload's Replace answered while a Save of the tab waits: the Save write
   edit("a.do");
   const done = A.upload([{ path: "a.do", data: enc("uploaded") }]);
   await asked();
-  const open = hold();
+  const open = await hold();
+  const edited = D.textOf("a.do");
   const saved = D.save("a.do");
   const { write } = store;
+  const writes: string[] = [];
   let released = false;
   const release = () => {
     if (released) return;
@@ -213,20 +237,29 @@ test("an upload's Replace answered while a Save of the tab waits: the Save write
   };
   // the held turn ends when the upload's write is issued, or after 50 ms when that write waits for its turn
   store.write = (...args: Parameters<typeof write>) => {
+    writes.push(dec(args[1]));
     const w = write.apply(store, args);
     release();
     return w;
   };
   const timer = setTimeout(release, 50);
+  const clashDialogs = new Set<unknown>();
+  const count = effect(() => {
+    if (S.dialog.value?.d === "clash") clashDialogs.add(S.dialog.value);
+  });
   const stop = answering({ replace: true, same: false }); // the open dialog, and any asked again
   try {
     await done;
     await saved;
   } finally {
     stop();
+    count();
     clearTimeout(timer);
     store.write = write;
   }
+  assert.equal(writes[0], edited, "the Save writes first");
+  assert.equal(writes.at(-1), "uploaded", "the upload's Replace writes last");
+  assert.equal(clashDialogs.size, 2, "the upload asks again: the file changed while it was asked");
   assert.equal(await stored("a.do"), "uploaded", "the later action, the upload's Replace, wins");
   assert.equal(D.textOf("a.do"), "uploaded");
   assert.equal(tab("a.do")?.dirty, false);
@@ -237,7 +270,7 @@ test('Save rule: "Reload from the run" whose turn comes before a pending Save of
   edit("out.log");
   await store.write("out.log", enc("the run's")); // as the run wrote it
   S.addBanner({ b: "run-changed", path: "out.log" });
-  const open = hold();
+  const open = await hold();
   const reloaded = reloadFromStore("out.log");
   const saved = D.save("out.log");
   open();
@@ -251,7 +284,7 @@ test('Save rule: "Reload from the run" whose turn comes before a pending Save of
 
 test("Save rule: a run's text shown in the tab in a turn before a pending Save's cancels the Save: the store keeps the run's text", async () => {
   await opened("t.csv", "old");
-  const open = hold();
+  const open = await hold();
   await store.write("t.csv", enc("the run's")); // the run's write, not a turn
   const ran = afterRun([{ name: "t.csv", status: "modified", bytes: 9 }]);
   const saved = D.save("t.csv"); // a clean tab: Save would write
@@ -266,22 +299,25 @@ test("Save rule: a run's text shown in the tab in a turn before a pending Save's
 test("a run against unsaved edits (afterRun keeps them): a Save pressed while it waits still writes, and replaces the run's version", async () => {
   await opened("out.log", "old");
   edit("out.log");
-  const open = hold();
+  const open = await hold();
   await store.write("out.log", enc("the run's"));
   const ran = afterRun([{ name: "out.log", status: "modified", bytes: 9 }]);
-  const saved = D.save("out.log");
-  const raised = new Promise<void>((r) => {
-    const stop = effect(() => {
-      if (S.banners.value.some((b) => b.b === "run-changed"))
-        queueMicrotask(() => {
-          stop();
-          r();
-        });
-    });
-  });
-  open();
-  await ran;
-  await raised; // the run kept the edits and said so before the Save's turn
+  const { write } = store;
+  let bannerAtWrite: boolean | null = null;
+  store.write = (path, data) => {
+    bannerAtWrite = S.banners.value.some((b) => b.b === "run-changed");
+    return write.call(store, path, data);
+  };
+  let saved: Promise<boolean>;
+  try {
+    saved = D.save("out.log");
+    open();
+    await ran;
+    await saved;
+  } finally {
+    store.write = write;
+  }
+  assert.equal(bannerAtWrite, true, "the run kept the edits and said so before the Save's turn wrote");
   assert.equal(D.textOf("out.log"), "edited old", "kept");
   assert.equal(await saved, true);
   assert.equal(await stored("out.log"), "edited old");
@@ -337,7 +373,7 @@ test("a Save whose turn comes before a reload's writes first: the reload then re
   await opened("out.log", "old");
   edit("out.log");
   await store.write("out.log", enc("the run's"));
-  const open = hold();
+  const open = await hold();
   const saved = D.save("out.log");
   const reloaded = reloadFromStore("out.log");
   open();
