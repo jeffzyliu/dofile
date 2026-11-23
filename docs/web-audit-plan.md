@@ -23,7 +23,7 @@ Section 2 lists the decisions; all are made.
 
 Left for after the audit (section 8): R2, the DOM test harness of R3, R4, and the rest of R6.
 
-About 50 builder items: the proposal's 42 for B, less 3 halves, plus 3 design notes that were not counted or are new,
+About 53 builder items: the proposal's 42 for B, less 3 halves, plus 3 design notes that were not counted or are new, the `echoLines` pilot, 3.0 and the spacing pass,
 N7, R5, R3r (counted as one more: the registry is larger than the handles it replaces), R7r, R1's 3 and C5. Scaled from
 the proposal's guess for B, that is 13 to 21 million agent tokens. The proposal said 45 to 47 for this scope; that left
 out the notes and N7.
@@ -64,6 +64,9 @@ The proposal's six rules for every brief (its section 5) stand. Added here:
     against the baseline of its base commit. A difference is explained in the pull request or fixed.
 11. **A design note is approved by the maintainer before its first item starts.** S0 before S1; the R5 note before R5;
     the R1 note before R1.
+12. **Renames happen inside the restructure that owns the file, not before.** A rename is never in the same commit as a
+    spacing change. Before a rename, grep `biome/architecture.grit` and `test/imports.test.ts`: they match identifiers by
+    name. The rules are in `web/STYLE.md` (Naming, Spacing).
 
 Agents: `orchestrate:builder` per item in its own worktree, then a fresh `orchestrate:reviewer` at the builder's tier or
 above; at most five at once; 80 tool calls per agent; a failing check goes to `orchestrate:investigator`, a long log to
@@ -154,15 +157,16 @@ against phase 1's changes, then its baseline taken from `main`.
 | a | S7, without graphics: per-start facts, the controller's wiring. It leaves `web/src/main.tsx` alone, or waits for S1, which edits it | C3, and S1 merged if it needs `main.tsx` | 2.1 |
 | a | S8, without graphics: `/work` mirror, boot and loader, typed dispatch (three items in a chain; the boundary is below) | S7 | 2.2 |
 | a | The R1 note | S8, and the condition below | 2.3 |
-| a | R1: the lazy graphics part as one machine, with its Node harness (three items). It leaves `state.ts` and `app/engine.ts` alone: a change it needs there follows R7r | the note approved | 2.3, 2.4 |
+| a | R1: the lazy graphics part as one machine, with its Node harness (three items). It takes the `worker.ts` graphics names (`askedAt`, `at`, the 22-variable `let` chain) and those of `lazy-part.ts`. It leaves `state.ts` and `app/engine.ts` alone: a change it needs there follows R7r | the note approved | 2.3, 2.4 |
 | b, files | S1: editor documents in a DOM-free controller that owns Save, and `tabs` and `activeTab` (three items: the records with the derived signals; Save and the file code's calls; the scroll snapshot). Edits `web/src/main.tsx`. The Doc's shape is settled (decision 2, 2026-11-17: `docs/design/workspace.md` section 2, with the Save rule of section 3; the spike's branch `spike/doc-shape` is kept locally for S1) | start | 2.5 |
 | b | S2, first half: the generator turn design (below), one door for page writes, the order tests | S1 | 2.6 |
 | b | B1: uploads and "Restore the sample" take a turn (failing test first). `store.write` takes an expectation (one transaction); `createEntry` passes "absent"; the re-ask words go into SPEC's "Name clash" row. An engine change: snapshot first | S2's first half | 2.7 |
-| b | S2, second half: `files/actions.ts` split three ways | B1 | 2.8 |
-| b | S3: `FilesPane.tsx` split, `rename.ts` with Node tests | S2 | 2.9 |
+| b | S2, second half: it opens with a commit of the `uploadNow` renames (`ClashNow` and its fields, `ClashAnswer.same`, `ask`, the dialog view, the module-level `now`); then `files/actions.ts` split three ways | B1 | 2.8 |
+| b | S3: `FilesPane.tsx` split, `rename.ts` with Node tests; it takes the `endRename` and `endDraft` names in `FilesPane.tsx` | S2 | 2.9 |
 | b | Run gate: Run, Run selection and the banner's Run are offered only for `.do` and `.ado` tabs, by a computed from the path. A typed `do x.txt` keeps Stata's behaviour | S1, and S5 merged (rule 8: both edit the run controls) | 2.17 |
 | c, views | S4: output readers into `.ts`, one command bar, one variables table | start | 2.10 |
-| c | S5: `runText`, scroll-follow, `CommandLine.tsx`, state logic out of `App.tsx` | S1 (both edit `state.ts`) and S4 (its one command bar is also in `CommandLine.tsx`) | 2.11 |
+| c | `echoLines` in `app/log/align.ts`: its names, and the first use of `web/STYLE.md`'s Spacing rule (the pilot) | start, standalone | 2.18 |
+| c | S5: `runText` (and its names), scroll-follow, `CommandLine.tsx`, state logic out of `App.tsx` | S1 (both edit `state.ts`) and S4 (its one command bar is also in `CommandLine.tsx`) | 2.11 |
 | c | S6 with R3r: one roving-key hook, one modal trap, the focus-target registry, owner functions for the shared signals (not `activeTab`: S1 owns it), and `graphIndex` as a computed with `selectGraph(n)` | S3, S5, and S7 merged (both edit `app/engine.ts`) | 2.12 |
 | c | R7r: `state.ts` split by owner, as S0 lays out; the e2e hook's `state` object unchanged | S6 | 2.13 |
 | c | C5: phone toast placement. When it is merged into the session's branch and the preview is up, the orchestrator tells the maintainer, with the four cases to try on a real phone; the session's merge to `main` waits for that check | R7r | 2.16 |
@@ -205,12 +209,18 @@ every difference accounted for.
 
 A sweep that has to change a test or a shared doc logs the change for W5 or the doc sync; it does not make it.
 
+W1 to W7 each take, in their region, the names that say the wrong thing (the naming survey's first table, outside R1's
+files), units and bare literals (constants without a unit, functions returning seconds without saying so, unnamed
+literals), and promise callbacks (one spelling). Renames follow rule 12.
+
 | Item | After | Pull request |
 |---|---|---|
-| W1, W2: sweep of `src/engine/`, the Python files, controllers and state | phase 2 | 3.1 |
+| 3.0: the glossary's vocabulary applied across `web/` (touches `types.ts` and SPEC section 6); starts after the maintainer has chosen the words (`web/STYLE.md`, Glossary) | phase 2 | 3.0 |
+| W1, W2: sweep of `src/engine/`, the Python files, controllers and state | 3.0 | 3.1 |
 | W3, W4: sweep of the views and `src/stata/` | phase 2 | 3.2 |
 | W6, W7: CSS deletions; scripts, config, site, sample, HTML | phase 2 | 3.3 |
-| W5: sweep of `test/` and `e2e/`, with what the other sweeps logged for it | 3.1 to 3.3 | 3.4 |
+| W5: sweep of `test/` and `e2e/`, with what the other sweeps logged for it; it takes the test helpers (one `until`, one encode and decode pair, distinct `settle` and `settled`) | 3.1 to 3.3 | 3.4 |
+| Spacing pass: `web/STYLE.md`'s Spacing rule over `web/`, whitespace only; its blank-line commits and its comment-move commits are separate; the whitespace commits go in `.git-blame-ignore-revs`; the pull request is merged with a merge commit | 3.1 to 3.4 | 3.7 |
 | Doc sync: `web/CLAUDE.md`, `web/README.md`, `docs/test-map.md`, SPEC sections 5, 6 and 8, `docs/web-engine-data-flow.md`; among them `web/CLAUDE.md`'s claim that every request gets a ticket (tickets are per worker start, 01-F7) | the sweeps | 3.5 |
 | Whole-diff review, G0 to head, by an Opus reviewer that has read none of the items; its report to `docs/archive/web-audit-surveys/` | 3.5 | 3.6 |
 | The census again, by an `orchestrate:surveyor`, with `docs/archive/web-audit-surveys/census/`, against report 04; its report to the same folder | 3.5 | 3.6 |
@@ -259,7 +269,7 @@ How the two fit together:
 `audit/3-close`), cut from `main` when the session starts. Decided by the maintainer 2026-11-16, who also means to
 freeze `main` for the duration.
 
-- Each number in the phase tables is a pull request **into the session's branch**: 36 in all. The orchestrator merges
+- Each number in the phase tables is a pull request **into the session's branch**: 39 in all. The orchestrator merges
   it there once its reviewer accepts and its checks pass. "Merged" in an After column means merged there.
 - **An item is merged with a merge commit too, never rebased or squashed.** The commits the reviewer read land with
   their hashes unchanged; one item is one merge, named by its id, and `git revert -m 1` takes it out whole; an item
@@ -272,19 +282,19 @@ freeze `main` for the duration.
 - If `main` moves all the same (the freeze is the maintainer's to keep or lift), it is merged into the branch before
   the gate.
 
-Why not 36 pull requests to `main`, as the proposal first recommended:
+Why not 39 pull requests to `main`, as the proposal first recommended:
 - every merge to `main` deploys the live demo, and under the views the only net is an emulated phone;
 - a lane no longer waits for the maintainer between items, so stacking and "X merged" cost nothing;
 - a mistake found at the gate is fixed on the branch, before production;
-- the maintainer reviews five times, with a preview, not 36 times.
+- the maintainer reviews five times, with a preview, not 39 times.
 
 Why not one branch for the whole audit:
 - a freeze of `main` is easier to hold for a session than for the whole audit, and whatever lands meanwhile has to be
   ported onto moved code;
-- the first deploy would carry every change at once: a regression seen in production then has 36 suspects;
+- the first deploy would carry every change at once: a regression seen in production then has 39 suspects;
 - an audit that stalls leaves a branch nobody can merge. A session's branch is days old at most.
 
-What it costs against 36 to `main`: bug fixes reach production at the session's end, not one by one; and a session's
+What it costs against 39 to `main`: bug fixes reach production at the session's end, not one by one; and a session's
 merge is larger to read. CI already runs for a pull request into any branch (`web.yml`, `ci.yml` and `lint.yml` have no
 branch filter).
 
@@ -368,5 +378,5 @@ of the planning surveys.
   dependency graph. Not checked: whether B2 or B4 also edit `ResetDialog.tsx`, which C1 edits; whether S2's first half
   edits `state.ts` while S5 runs.
 - N7 is a design on paper: nobody has measured how stable screenshots of this page are.
-- The token figures are scaled guesses. The count of 36 pull requests assumes no item is split. The branch model of
+- The token figures are scaled guesses. The count of 39 pull requests assumes no item is split. The branch model of
   section 5 was not reviewed.
