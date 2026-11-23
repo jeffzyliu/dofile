@@ -4,6 +4,7 @@
 import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { roveKey } from "./keys.ts";
 
 export type MenuItem =
   | "rule"
@@ -174,16 +175,15 @@ export function MenuHost() {
   // The active item is a position among all the items: another item turning enabled or disabled leaves it where it is
   const at = nav?.of === m ? nav.at : ((m.focus === "last" ? on.at(-1) : on[0]) ?? -1);
   const onKeyDown = (e: KeyboardEvent) => {
-    const go = (n: number | undefined) => {
+    // The active item may be a disabled one a click focused: Down goes to the first enabled item after it, Up to the
+    // last before it
+    const before = on.filter((n) => n < at).length;
+    const place = on.includes(at) || e.key !== "ArrowDown" ? before : before - 1;
+    const next = roveKey(e, place, on.length, { axis: "y", wrap: true });
+    if (next !== null) {
       e.preventDefault();
-      if (n !== undefined) setNav({ of: m, at: n });
-    };
-    const plain = !(e.altKey || e.ctrlKey || e.metaKey); // Alt+Left is the browser's Back; Esc and Tab are as they were
-    if (plain && e.key === "ArrowDown") go(on.find((n) => n > at) ?? on[0]);
-    else if (plain && e.key === "ArrowUp") go(on.findLast((n) => n < at) ?? on.at(-1));
-    else if (plain && e.key === "Home") go(on[0]);
-    else if (plain && e.key === "End") go(on.at(-1));
-    else if (e.key === "Escape") {
+      setNav({ of: m, at: on[next] });
+    } else if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
       closeMenu();

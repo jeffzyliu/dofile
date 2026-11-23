@@ -6,6 +6,7 @@ import { type Signal, useSignal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
 import { useFocusRequest } from "./focus-hooks.ts";
+import { roveKey } from "./keys.ts";
 
 export interface TabSpec<T extends string> {
   id: T;
@@ -33,19 +34,15 @@ export function Tablist<T extends string>({
   const list = useRef<HTMLDivElement>(null);
   const asked = useSignal<T | null>(null); // the tab a key moved to: it takes the focus when it is drawn
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back
-    const i = tabs.findIndex((t) => t.id === value);
-    const next = {
-      ArrowRight: i + 1,
-      ArrowDown: i + 1,
-      ArrowLeft: i - 1,
-      ArrowUp: i - 1,
-      Home: 0,
-      End: tabs.length - 1,
-    }[e.key];
-    if (next === undefined) return;
+    const next = roveKey(
+      e,
+      tabs.findIndex((t) => t.id === value),
+      tabs.length,
+      { axis: "both", wrap: true },
+    );
+    if (next === null) return;
     e.preventDefault();
-    const t = tabs[(next + tabs.length) % tabs.length];
+    const t = tabs[next];
     asked.value = t.id;
     onChange(t.id);
   };
@@ -92,7 +89,7 @@ function Tab<T extends string>({
     () => {
       asked.value = null;
     },
-    (at) => !!at && !!list.current?.contains(at),
+    (focused) => !!focused && !!list.current?.contains(focused),
   );
   return (
     <button

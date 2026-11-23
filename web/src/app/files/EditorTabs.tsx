@@ -8,6 +8,7 @@ import type { OpenTab } from "../types.ts";
 import { useFocusRequest, useFocusTarget } from "../ui/focus-hooks.ts";
 import { fromNothing } from "../ui/focus-targets.ts";
 import { Icon } from "../ui/Icon";
+import { roveKey } from "../ui/keys.ts";
 import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { focusAfterClose } from "./close-focus.ts";
 import { baseName, tabLabels } from "./tree.ts";
@@ -32,10 +33,10 @@ export function EditorTabs() {
   };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back
-    const next = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: list.length - 1 }[e.key];
-    if (next !== undefined) {
+    const next = roveKey(e, at, list.length, { axis: "x", wrap: true });
+    if (next !== null) {
       e.preventDefault();
-      select((next + list.length) % list.length);
+      select(next);
     } else if (e.key === "Delete" && at >= 0) {
       e.preventDefault();
       close(list[at].path, true);
@@ -75,7 +76,8 @@ function FileTab({
     () => {
       tabAsked.value = null;
     },
-    (at) => fromNothing(at) || !!list.current?.contains(at), // a closed tab leaves it on nothing
+    // a closed tab leaves the focus on nothing
+    (focused) => fromNothing(focused) || !!list.current?.contains(focused),
   );
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keys are the tablist's (arrows, Home, End, Delete); a tab holds the × (a click target of its own), so it is not a button
