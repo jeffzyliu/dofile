@@ -159,6 +159,32 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     assert.equal((await runOn(eng, "shell ls")).rc, 199);
   });
 
+  // The engine answers one op at a time, in the order they came: a run ahead of a matrix request has replaced the
+  // results the request was made for.
+  await t.test("matrix: refused when a later run replaced the results the request names", async () => {
+    const ask = (runId: number) => eng.query("matrix", { name: "e(b)", runId });
+    const cols = async (answer: ReturnType<typeof ask>) => ((await answer) as Ok<Matrix>).cols;
+    const shown = (await runOn(eng, "regress lwage yrsed")).results!;
+
+    const ahead = ask(shown.runId); // before the next run: answered for the results it names
+    const next = runOn(eng, "regress lwage");
+    assert.deepEqual(await cols(ahead), ["yrsed", "_cons"]);
+    const newer = (await next).results!;
+    assert.ok(newer.runId > shown.runId, "each run's results have a number of their own");
+
+    const running = runOn(eng, "regress lwage yrsed"); // a run on its way, then the request: refused, not answered
+    const behind = ask(newer.runId); // with the later run's matrix
+    assert.deepEqual(await behind, { changed: true });
+    const latest = (await running).results!;
+
+    const twice = [runOn(eng, "regress lwage"), runOn(eng, "regress lwage yrsed, robust")]; // two runs ahead
+    const stale = ask(latest.runId);
+    const [, last] = await Promise.all(twice);
+    assert.deepEqual(await stale, { changed: true });
+    assert.deepEqual(await cols(ask(last.results!.runId)), ["yrsed", "_cons"], "the latest results: answered");
+    assert.deepEqual(await ask(shown.runId), { changed: true }, "an earlier run's number");
+  });
+
   await t.test("the compiled-in ABOUT (scripts/build-id.ts, about()) is what the engine itself answers at boot", () => {
     const { dofile, engine_commit, stata_version } = eng.about!;
     assert.deepEqual(
