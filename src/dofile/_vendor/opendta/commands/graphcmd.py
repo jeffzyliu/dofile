@@ -22,6 +22,7 @@ from ..graphics.store import gph_path, load_gph, save_gph, store
 from ..lang.syntax import find_top, match_options
 from ..lang.words import split_words, strip_outer_quotes
 from .registry import command
+from ._util import shown_path
 from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
@@ -261,14 +262,14 @@ def _export(s: "Session", text: str) -> None:
     g = store(s).get(o["name"].strip() if isinstance(o.get("name"), str) else None)
     path = user_path(path)
     if path.exists() and not o.get("replace"):
-        raise StataError(602, f"file {fname} already exists")
+        raise StataError(602, f"file {shown_path(fname)} already exists")
     fmt, label = R.FORMATS[ext]
     width = int(o["width"]) if isinstance(o.get("width"), str) else None
     height = int(o["height"]) if isinstance(o.get("height"), str) else None
     try:
         R.export(g, path, fmt, width=width, height=height)
     except OSError:
-        raise StataError(603, f"file {fname} could not be opened")
+        raise StataError(603, f"file {shown_path(fname)} could not be opened")
     # on the Mac, Stata 14 shows the full path only for PDF (compat 0701)
     shown = str(path.resolve()) if label == "PDF" else fname
     s.output.write(f"(file {shown} written in {label} format)\n", "text")
@@ -455,5 +456,6 @@ def _base_plot(name: str, abbrev: str | None = None):
 
 for _n, _a in (("quantile", "quantile"), ("symplot", "symplot"), ("serrbar", "serrbar"),
                ("dotplot", "dotplot"), ("sunflower", "sunflower"), ("lpoly", "lpoly"),
-               ("cusum", "cusum"), ("gladder", "gladder")):
+               ("cusum", "cusum"), ("gladder", "gladder"), ("qqplot", "qqplot"),
+               ("qladder", "qladder")):
     _base_plot(_n, _a)

@@ -1,5 +1,5 @@
 diff --git a/src/dofile/_vendor/opendta/commands/progutil.py b/src/dofile/_vendor/opendta/commands/progutil.py
-index 3d11e0b..7b9e25d 100644
+index 70d40b5..3472d66 100644
 --- a/src/dofile/_vendor/opendta/commands/progutil.py
 +++ b/src/dofile/_vendor/opendta/commands/progutil.py
 @@ -14,6 +14,7 @@ import sys
@@ -9,8 +9,8 @@ index 3d11e0b..7b9e25d 100644
 +from ..core import brk
  from ..core.errors import StataError
  from ..lang.adopath import find_file
- from ..lang.words import strip_outer_quotes
-@@ -34,7 +35,10 @@ def cmd_sleep(s: "Session", args: str) -> None:
+ from ..lang.syntax import find_top, match_options
+@@ -35,7 +36,10 @@ def cmd_sleep(s: "Session", args: str) -> None:
      ms = s.eval(args.strip())
      if isinstance(ms, str) or ms != ms or ms < 0:
          raise StataError(198, "invalid syntax")
@@ -63,10 +63,10 @@ index 0000000..2647865
 +    if requested and depth == 0 and by_groups is None:
 +        check()
 diff --git a/src/dofile/_vendor/opendta/estimation/bootstrap.py b/src/dofile/_vendor/opendta/estimation/bootstrap.py
-index af77927..567176d 100644
+index 92a5380..39931f8 100644
 --- a/src/dofile/_vendor/opendta/estimation/bootstrap.py
 +++ b/src/dofile/_vendor/opendta/estimation/bootstrap.py
-@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
+@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
  
  import numpy as np
  
@@ -74,7 +74,7 @@ index af77927..567176d 100644
  from ..core import missing as M
  from ..core.errors import StataError
  from ..core.stats import chi2_tail as _chi2_tail
-@@ -254,6 +255,7 @@ def run(s: "Session", command: str, items: list[tuple[str, str]], o: dict) -> No
+@@ -253,6 +254,7 @@ def run(s: "Session", command: str, items: list[tuple[str, str]], o: dict) -> No
      mis = 0
      try:
          for r in range(reps):
@@ -104,7 +104,7 @@ index 06120a5..a5aa75d 100644
          try:
              np.linalg.cholesky(-H)
 diff --git a/src/dofile/_vendor/opendta/estimation/resample.py b/src/dofile/_vendor/opendta/estimation/resample.py
-index eea45ce..4fe2b5b 100644
+index 65e4231..d722c75 100644
 --- a/src/dofile/_vendor/opendta/estimation/resample.py
 +++ b/src/dofile/_vendor/opendta/estimation/resample.py
 @@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
@@ -123,7 +123,7 @@ index eea45ce..4fe2b5b 100644
              keep_all[u] = False
              s.data = _subset(work, np.flatnonzero(keep_all))
              keep_all[u] = True
-@@ -359,6 +361,7 @@ def cmd_permute(s: "Session", args: str) -> None:
+@@ -358,6 +360,7 @@ def cmd_permute(s: "Session", args: str) -> None:
      mis = 0
      try:
          for r in range(reps):
@@ -132,10 +132,10 @@ index eea45ce..4fe2b5b 100644
              for g in groups:
                  key = rng.RNG.uniform(len(g))
 diff --git a/src/dofile/_vendor/opendta/lang/interpreter.py b/src/dofile/_vendor/opendta/lang/interpreter.py
-index 22b0bb8..77744ae 100644
+index 1eea364..b59fe5b 100644
 --- a/src/dofile/_vendor/opendta/lang/interpreter.py
 +++ b/src/dofile/_vendor/opendta/lang/interpreter.py
-@@ -14,6 +14,7 @@ from __future__ import annotations
+@@ -15,6 +15,7 @@ import os
  import re
  from typing import TYPE_CHECKING
  
@@ -143,7 +143,7 @@ index 22b0bb8..77744ae 100644
  from ..core.errors import (BreakLoop, ContinueLoop, StataError, syntax_error)
  from .expr import Parser, evaluate
  from .lexer import LogicalLine
-@@ -480,6 +481,7 @@ class Interpreter:
+@@ -485,6 +486,7 @@ class Interpreter:
      # -- loops ----------------------------------------------------------------
      def _loop_body(self, lines: list[LogicalLine], a: int, b: int) -> bool:
          """Runs the body; returns False if there was `continue, break`."""
@@ -151,7 +151,7 @@ index 22b0bb8..77744ae 100644
          try:
              self._run_range(lines, a, b, echo=None)
          except ContinueLoop:
-@@ -629,12 +631,17 @@ class Interpreter:
+@@ -640,6 +642,9 @@ class Interpreter:
              raise err
          if self.s.by_groups is not None and not spec.byable and not spec.prefix:
              raise StataError(190, f"{spec.name} may not be combined with by")
@@ -159,8 +159,9 @@ index 22b0bb8..77744ae 100644
 +        counted = spec.name not in ("do", "run", "include")
 +        brk.depth += counted
          try:
-             spec.fn(self.s, rest)
-         except StataError as err:
+             try:
+                 spec.fn(self.s, rest)
+@@ -649,6 +654,8 @@ class Interpreter:
              if err.context is None:
                  err.context = (spec.name, text)   # for the error explanation
              raise

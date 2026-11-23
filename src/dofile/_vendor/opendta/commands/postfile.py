@@ -24,6 +24,7 @@ from ..io.dta import write_dta
 from ..lang.syntax import match_options, parse_standard
 from .files import dta_path
 from .registry import command
+from ._util import shown_path
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -108,14 +109,14 @@ def cmd_postfile(s: "Session", args: str) -> None:
     names, types = _declare(s, decl)
     path = dta_path(p.using)
     if path.exists() and not o.get("replace"):
-        raise StataError(602, f"file {path} already exists")
+        raise StataError(602, f"file {shown_path(path)} already exists")
     if not path.exists() and o.get("replace"):
-        s.output.write(f"(note: file {path} not found)\n", "text")
+        s.output.write(f"(note: file {shown_path(path)} not found)\n", "text")
     post = _Post(path, names, types)
     try:
         write_dta(_dataset(post), path)
-    except OSError as e:
-        raise StataError(603, f"file {path} could not be opened ({e.strerror})")
+    except OSError:
+        raise StataError(603, f"file {shown_path(path)} could not be opened")
     posts[postname] = post
 
 
@@ -190,8 +191,8 @@ def _close(s: "Session", name: str) -> None:
     post = _posts(s).pop(name)
     try:
         write_dta(_dataset(post), post.path)
-    except OSError as e:
-        raise StataError(603, f"file {post.path} could not be opened ({e.strerror})")
+    except OSError:
+        raise StataError(603, f"file {shown_path(post.path)} could not be opened")
 
 
 @command("postclose")

@@ -44,7 +44,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-25 | `describe` prints a long wrong `Sorted by:` list for a Stata-written file whose sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`shlex` in POSIX mode) | found 2026-11-06 (path shim tests) | unverified |
 | ODT-27 | `save using name, replace` writes `using name.dta`; Stata presumably refuses it (assumed) | found 2026-11-06 (web demo); not checked against Stata | unverified |
-| ODT-28 | Python errors escaping a command (`OSError` for a missing folder or a directory, `MemoryError`) give uncatchable rc 9999 instead of r(603)/r(909); a failed command leaves the data partly changed | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; expected codes assumed, not checked against Stata | patched (the partly changed data is not) |
+| ODT-28 | Python errors escaping a command (`OSError` for a missing folder or a directory, `MemoryError`) give uncatchable rc 9999 instead of r(603)/r(909); a failed command leaves the data partly changed | found 2026-11-07 (web demo); `tests/test_engine.py::test_odt28_*`; the 603 text is in compat 2006, 909 assumed | `OSError`: vendored (upstream 00cd4dc); `MemoryError`: patched; the partly changed data is not |
 | ODT-29 | numpy `RuntimeWarning: overflow encountered in exp` in delta-method intervals (`mleq.py:157`, `models2.py:759`); results `inf`, as in Stata's logs. Details under ODT-31, the same issue | `poe slow`: `test_matches_stata14_reference_log[1907_models]` and `[1918_models3]`; `tests_opendta/tests/test_models_block_c.py::test_nb1_nbreg_and_tnbreg` (`mleq.py:157` only); no test of our own | left as is |
 | ODT-30 | the ML optimizer's Newton steps from a nearly singular numerical Hessian: `gnbreg` in compat 1907 falsely converges at alpha = 0, and the path depends on rounding | found 2026-11-07 comparing CPython with Pyodide (`web/scripts/compare_numeric.py`); perturbation experiment in `browser-engine.md`, "`gnbreg` in 1907_models"; no test | unverified |
 | ODT-32 | a missing optional package (pyreadstat, pandas) gave rc 610 "file not Stata format" with `pip install` advice | found 2026-11-09 (the web demo ships without pandas); `tests/test_engine.py::test_odt32_*`, `web/e2e/engine.spec.ts` | patched |
@@ -175,6 +175,10 @@ reports a standard error for `lnalpha` where dofile now shows missing.
   header, and `r(table)` is reposted. Another estimation in between gives rc 301 `last estimates not found`. The first
   `mean x y` output is identical to the replay (tested). This patch applies before `opendta-patch1-r-table.patch`
   (patches apply in name order), which edits the same function and adds the `r(table)` call to the replay.
+- Upstream 16a72e0 (vendored at 10632aa) added its own replay for these four commands (`_replay` in
+  `estimation/summaries.py`, compat 2005), through `postest.replay`, which shows only the table and ignores `level()`.
+  The patch routes that `_replay` to its own, so the header and `level()` still work; it also takes upstream's
+  `notable`.
 
 ### ODT-14: Python `eval()` on expression text (security)
 `tsset t`, `arch y, arch(1) archm archmexp(().__class__.__mro__.__len__()*X)` ran (rc 0).
@@ -357,6 +361,9 @@ areg y x [aweight=w], absorb(id)  // 0.47292
   ([P] File formats .dta) on the terminator. A file that dofile writes has zeros after the list and reads back fine.
 - Patched (`opendta-odt25-dta-sort-list.patch`): the reader stops at the first 0 (`_sort_keys` in `io/dta.py`, for the old
   and the 117+ formats). `castle.dta` now reports `Sorted by: sid`.
+- Upstream 8f38df1 (vendored at 10632aa) added `_valid_sortlist`: a list that repeats a variable counts as unsorted.
+  Without the patch `castle.dta` would now show an empty `Sorted by:`; the patch applies upstream's check after
+  `_sort_keys`, so it still shows `sid`.
 
 ### ODT-26: `mkdir`, `rmdir`, `copy`, `dir` delete backslashes from an unquoted path
 `mkdir C:\proj\out` makes a folder named `C:projout`: `commands/datautil.py` splits the arguments with
@@ -397,8 +404,8 @@ traceback, and `capture` (which catches only `StataError`, `lang/interpreter.py`
   save`/`export`, `erase` 693, `mkdir`/`rmdir` 693, `cd` 170).
 - Probed: 48 file commands with a missing folder and with a directory. Not covered: commands outside those 48,
   permission errors that are not the sandbox's, and the rc of `merge`/`cross` with a directory (459 and 110).
-- Expected in Stata: **assumed, not checked.** r(603), `file hi/hi.smcl could not be opened`, as `save` already gives
-  here (the engine's own handlers raise 603 with `(strerror)`); 603 assumed for a directory too.
+- Expected in Stata: r(603), `file hi/hi.smcl could not be opened`, with no system reason; `log using` shows the full
+  path (`tests_opendta/compat/expected/2006_probe_errors_in_files.log`, a Stata 14 log). 603 assumed for a directory.
 
 **Out of memory:** a numpy `MemoryError` (`Unable to allocate 763. MiB ...`) escaped the same way. In the web demo
 (WebAssembly heap stops at 4 GB), with 100 million observations `gen double x = 1` and `gen double y = x` worked (heap
@@ -413,11 +420,16 @@ Any error inside a command (a `StataError` too) can do this. So r(603) or r(909)
 - Not patched: each command would need to work on a copy, or a snapshot before every command would double memory use
   just where memory is short.
 
+**Upstream** (00cd4dc, vendored at 10632aa): the dispatcher in `lang/interpreter.py` turns an `OSError` that escapes a
+command into `StataError(603, "file <name> could not be opened")` (`_as_stata_error`) and an `IndexError`, `KeyError` or
+`ValueError` into r(198) `invalid syntax`; `log`, `copy`, `outfile` and the rest catch their own `OSError`, and the
+messages no longer carry the system reason. A sandbox refusal (`PermissionError`) inside a command is one of these
+603s now; `Engine.run` adds the sandbox's reason under the line (`_annotate_refusals`).
+
 **The patch** (`opendta-odt28-python-errors-as-stata.patch`): `commands/registry.py` wraps every registered command, so
-an escaping `OSError` becomes `StataError(603, "file <name> could not be opened (<strerror>)")` and a `MemoryError`
-`StataError(909, "op. sys. refuses to provide memory")`; `capture` catches them. A command's own `StataError` is
-untouched. `PermissionError` is left alone for the sandbox (ODT-23: `capture` converts it; `Engine.run` turns an uncaught
-one into 603). The wrapper is in the registry because PATCH-2 edits the dispatcher's `spec.fn` lines. An error outside a
+a `MemoryError` becomes `StataError(909, "op. sys. refuses to provide memory")`, which `capture` catches. Upstream's
+`OSError` handling replaced the patch's own (which added `(<strerror>)` to the message, unlike Stata). A command's own
+`StataError` is untouched. The wrapper is in the registry because PATCH-2 edits the dispatcher's `spec.fn` lines. An error outside a
 command (macro expansion, the interpreter) still gives rc 9999. Class statements (`.obj = .cls.new`, `.obj.prog`;
 `lang/classeval.py`, upstream at 29a3b28) are one such place: the interpreter runs them before the registry lookup, so the
 wrapper does not cover them. Malformed class statements under `capture` all gave a Stata rc (111, 198, 4023, 4026,

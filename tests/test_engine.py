@@ -575,7 +575,8 @@ ODT28_DIRECTORY = [
 
 def test_odt28_a_missing_folder_or_a_directory_is_rc_603_not_an_internal_error(eng, tmp_path):
     """ODT-28: log, cmdlog, outfile, file open, copy, bcal create (missing folder) and use, append, type, ... (a directory
-    in place of a file) let a Python OSError escape: rc 9999. Stata: r(603) "file ... could not be opened"."""
+    in place of a file) let a Python OSError escape: rc 9999. Stata: r(603) "file ... could not be opened", with the
+    full path for `log using` (tests_opendta/compat/expected/2006_probe_errors_in_files.log)."""
     eng.run("clear\nset obs 3\ngen x = _n\nsave base, replace")
     for name in ("adir", "adir.dta", "adir.txt", "adir.raw", "adir.smcl"):
         (tmp_path / name).mkdir()
@@ -586,7 +587,7 @@ def test_odt28_a_missing_folder_or_a_directory_is_rc_603_not_an_internal_error(e
         assert "could not be opened" in r.error and "internal engine error" not in r.log, (cmd, r.error)
     assert (
         eng.run("log using nodir/a, replace").error
-        == "file nodir/a.smcl could not be opened (No such file or directory)"
+        == f"file {(tmp_path / 'nodir' / 'a.smcl').as_posix()} could not be opened"
     )
 
 
@@ -818,9 +819,11 @@ def test_same_treats_nan_as_unchanged_and_names_match_whole_files():
         [
             ("/x/a.png", "dofile sandbox: cannot write /x/a.png"),
             ("/x/my plot.png", "dofile sandbox: cannot write /x/my plot.png"),
+            ("/x/b.dta.opendta-tmp", "dofile sandbox: cannot write /x/b.dta.opendta-tmp"),
         ]
     )
     assert _refusal_for("file my plot.png could not be opened").endswith("my plot.png")
     assert _refusal_for("file data.png could not be opened") is None  # a.png is not inside data.png
     assert _refusal_for("file ../a.png could not be opened").endswith("a.png")
+    assert _refusal_for("file ../b.dta could not be opened").endswith("b.dta.opendta-tmp")  # save writes a temp file
     sandbox.refusals.clear()

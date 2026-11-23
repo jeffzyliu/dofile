@@ -311,7 +311,7 @@ def _read_old(path: Path) -> Dataset:
         var.label = varlabels[j]
         var.value_label = vlabels[j]
         ds.vars.append(var)
-    ds.sortlist = _sort_keys(sort_idx, names, K)
+    ds.sortlist = _valid_sortlist(_sort_keys(sort_idx, names, K))
     ds.label = label
     ds.timestamp = ts
     ds.value_labels = value_labels
@@ -555,6 +555,12 @@ def _cstr(b: bytes, release: int = 118) -> str:
         return raw.decode("latin-1")
 
 
+def _valid_sortlist(order: list[str]) -> list[str]:
+    """A sort order that repeats a variable cannot have been written by Stata: the data count as
+    unsorted (VERIFY: seen in a Vigitel file, where Stata 14 shows an empty "Sorted by:")."""
+    return [] if len(set(order)) != len(order) else order
+
+
 def _fix_text(text: str) -> str:
     """Undoes UTF-8 read as Latin-1 ('joÃ£o' -> 'joão'), the case of ReadStat
     with old files written in UTF-8."""
@@ -796,7 +802,7 @@ def _read_117plus(f, path: Path) -> Dataset:
         var.value_label = vlabels[j]
         ds.vars.append(var)
         cols[j] = None
-    ds.sortlist = _sort_keys(sort_idx, names, K)
+    ds.sortlist = _valid_sortlist(_sort_keys(sort_idx, names, K))
     ds.label = label
     ds.timestamp = ts
     ds.value_labels = value_labels

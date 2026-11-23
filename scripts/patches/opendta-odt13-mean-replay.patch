@@ -1,20 +1,21 @@
 diff --git a/src/dofile/_vendor/opendta/estimation/summaries.py b/src/dofile/_vendor/opendta/estimation/summaries.py
-index 2f18e72..c87bd8b 100644
+index 6cf2d58..1b675b1 100644
 --- a/src/dofile/_vendor/opendta/estimation/summaries.py
 +++ b/src/dofile/_vendor/opendta/estimation/summaries.py
-@@ -273,8 +273,22 @@ class SRS:
+@@ -273,8 +273,23 @@ class SRS:
  # the command
  # ---------------------------------------------------------------------------
  
 +def _replay_summary(s: "Session", stat: str, args: str) -> None:
-+    """dofile patch (ODT-13): `mean`, `mean, level(90)`, `mean, noheader` redisplay the last mean/proportion/ratio/total."""
++    """dofile patch (ODT-13): `mean`, `mean, level(90)`, `mean, noheader`, `mean, notable` redisplay the last
++    mean/proportion/ratio/total, with its header as typed the first time."""
 +    from .postest import current
 +    est = current(s)
 +    replay = getattr(est, "replay_summary", None)
 +    if est.cmd != stat or replay is None:
 +        raise StataError(301, "last estimates not found")
-+    o = match_options(args.lstrip(", "), {"level": 1, "noheader": 6}) if args.strip(" ,") else {}
-+    replay(s, float(o["level"]) if o.get("level") else None, bool(o.get("noheader")))
++    o = match_options(args.lstrip(", "), {"level": 1, "noheader": 6, "notable": 5}) if args.strip(" ,") else {}
++    replay(s, float(o["level"]) if o.get("level") else None, bool(o.get("noheader")), bool(o.get("notable")))
 +
 +
  def summary_stat(s: "Session", stat: str, args: str,
@@ -25,7 +26,7 @@ index 2f18e72..c87bd8b 100644
      req = parse_request(s, stat, args)
      eng = engine(s, req)
      groups = _over_groups(s, req.over, eng.rows)
-@@ -285,9 +299,9 @@ def summary_stat(s: "Session", stat: str, args: str,
+@@ -285,9 +300,9 @@ def summary_stat(s: "Session", stat: str, args: str,
      se = np.sqrt(np.maximum(np.diag(V), 0)) if V.size else np.zeros(0)
      if np.isnan(V).any():
          se = np.full(len(vals), np.nan)
@@ -38,7 +39,7 @@ index 2f18e72..c87bd8b 100644
          if req.over:
              out.write("\n" + "".join(ln + "\n" for ln in fit.legend), "text")
          if stat == "ratio":
-@@ -295,6 +309,9 @@ def summary_stat(s: "Session", stat: str, args: str,
+@@ -295,6 +310,9 @@ def summary_stat(s: "Session", stat: str, args: str,
                        "text")
          out.write("\n", "text")
  
@@ -48,17 +49,29 @@ index 2f18e72..c87bd8b 100644
      def table(ss, *_a, **_kw):
          summary_table(ss, req.info.column, fit.labels, vals, se, df, req.level, vcetype, req.over)
      table(s)
-@@ -302,6 +319,13 @@ def summary_stat(s: "Session", stat: str, args: str,
+@@ -302,6 +320,15 @@ def summary_stat(s: "Session", stat: str, args: str,
      est.rows = []
      est.level = req.level
      est.display = table
 +
-+    def replay(ss, level=None, noheader=False):   # dofile patch (ODT-13)
++    def replay(ss, level=None, noheader=False, notable=False):   # dofile patch (ODT-13)
 +        lv = req.level if level is None else level
 +        if not noheader:
 +            header(ss)
++        if notable:
++            return
 +        summary_table(ss, req.info.column, fit.labels, vals, se, df, lv, vcetype, req.over)
 +    est.replay_summary = replay
      eng.post(s, est, req, fit, df)
+ 
+ 
+@@ -352,8 +379,7 @@ def _replay(s: "Session", cmd: str, args: str) -> bool:
+     """Without a varlist the command shows its last results (compat 2005: prop -> r(301))."""
+     if args.strip() and not args.strip().startswith(","):
+         return False
+-    from .postest import replay
+-    replay(s, cmd, args)
++    _replay_summary(s, cmd, args)   # dofile patch (ODT-13): postest.replay shows only the table
+     return True
  
  

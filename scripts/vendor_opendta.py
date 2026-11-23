@@ -21,7 +21,7 @@ from datetime import date
 from pathlib import Path
 
 REPO = "https://github.com/yaskepalhares/opendta.git"
-COMMIT = "29a3b2879dd432c7b854c7cd96dfdfa1d8473989"
+COMMIT = "10632aa1a550397094546cb8413d1d90cbdefe31"
 DROP = ["gui", "__main__.py"]
 # tests that need the Qt GUI (imported at module level) cannot run without it
 DROP_TESTS = ["test_gui.py", "test_settings_window.py", "test_rules.py"]

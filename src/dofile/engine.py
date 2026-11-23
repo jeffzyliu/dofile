@@ -43,7 +43,8 @@ def _refusal_for(error: str | None) -> str | None:
     if not error:
         return None
     for path, message in reversed(sandbox.refusals):
-        name = os.path.basename(path.rstrip("/\\"))
+        # OpenDTA writes a .dta or Excel file through <name>.opendta-tmp, and its error names <name>
+        name = os.path.basename(path.rstrip("/\\")).removesuffix(".opendta-tmp")
         if name and re.search(rf"(?<![\w.-]){re.escape(name)}", error):  # whole name, so a.png isn't found in data.png
             return message
     return None

@@ -1,6 +1,8 @@
+diff --git a/src/dofile/_vendor/opendta/estimation/results.py b/src/dofile/_vendor/opendta/estimation/results.py
+index a3e23be..729045d 100644
 --- a/src/dofile/_vendor/opendta/estimation/results.py
 +++ b/src/dofile/_vendor/opendta/estimation/results.py
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,7 @@ The table follows the Stata 14 layout (78 columns):
  
  from __future__ import annotations
  
@@ -8,7 +10,7 @@
  from dataclasses import dataclass, field
  from typing import TYPE_CHECKING
  
-@@ -100,6 +101,14 @@
+@@ -115,6 +116,14 @@ def post(s: "Session", est: Estimates, scalars: list[tuple[str, float]],
          e[name] = m
      # matrices first in insertion = listed last; scalars and macros keep the order above
      s.e = e
@@ -23,7 +25,7 @@
      s.data.esample = np.asarray(sample, dtype=bool).copy()
      s._estimates = est
  
-@@ -151,10 +160,120 @@
+@@ -166,10 +175,120 @@ def level_text(level: float) -> str:
      return f"{level:g}"
  
  
@@ -144,6 +146,8 @@
      out = s.output
      lv = level_text(level)
      ci = f"[{lv}% Conf. Interval]"
+diff --git a/src/dofile/_vendor/opendta/estimation/summaries.py b/src/dofile/_vendor/opendta/estimation/summaries.py
+index 1b675b1..99c5139 100644
 --- a/src/dofile/_vendor/opendta/estimation/summaries.py
 +++ b/src/dofile/_vendor/opendta/estimation/summaries.py
 @@ -19,7 +19,7 @@ from ..core import missing as M
@@ -155,7 +159,7 @@
  
  # imported on first use (start-up time; see opendta/lazy.py)
  special = lazy("scipy.special")
-@@ -312,9 +312,11 @@ def summary_stat(s: "Session", stat: str, args: str,
+@@ -313,9 +313,11 @@ def summary_stat(s: "Session", stat: str, args: str,
      if not req.o.get("noheader"):
          header(s)
  
@@ -169,9 +173,9 @@
      est = Estimates(stat, "", fit.colnames, vals, V, eng.n_obs, "t", df)
      est.rows = []
      est.level = req.level
-@@ -325,8 +327,35 @@ def summary_stat(s: "Session", stat: str, args: str,
-         if not noheader:
-             header(ss)
+@@ -328,8 +330,35 @@ def summary_stat(s: "Session", stat: str, args: str,
+         if notable:
+             return
          summary_table(ss, req.info.column, fit.labels, vals, se, df, lv, vcetype, req.over)
 +        _post_r_table(ss, fit.colnames, vals, se, df, lv, req.info.column, vcetype)
      est.replay_summary = replay
@@ -205,7 +209,7 @@
  
  
  def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetype: str, over: str) -> None:
-@@ -362,12 +391,7 @@ def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetyp
+@@ -365,12 +394,7 @@ def summary_table(s: "Session", column: str, labels, vals, se, df, level, vcetyp
          if e is None or not np.isfinite(e):
              out.write(f"  {g9(b):>9}  {'.':>9}     {'.':>9}   {'.':>9}\n", "result")
              continue
@@ -219,9 +223,11 @@
          out.write(f"  {g9(b):>9}  {g9(e):>9}     {g9(lo):>9}   {g9(hi):>9}\n", "result")
      out.write("-" * width + "\n", "text")
  
+diff --git a/src/dofile/_vendor/opendta/lang/interpreter.py b/src/dofile/_vendor/opendta/lang/interpreter.py
+index 3dc179a..1eea364 100644
 --- a/src/dofile/_vendor/opendta/lang/interpreter.py
 +++ b/src/dofile/_vendor/opendta/lang/interpreter.py
-@@ -538,6 +538,7 @@
+@@ -543,6 +543,7 @@ class Interpreter:
      # ------------------------------------------------------------------
      def execute(self, raw: str) -> None:
          """Expands macros and runs a one-line command."""
