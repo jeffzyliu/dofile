@@ -28,3 +28,53 @@ before writing or reviewing code in `web/`. A rule that a check enforces names t
 - **In an object literal, a named function is a method** (`async handle(args) { ... }`), not an arrow property
   (`handle: async (args) => ...`), unless it needs the enclosing `this`. No rule checks it; convert an older file's
   arrow properties when you change the file.
+
+## Naming
+
+- **A name states nothing false.** Text is not a path, `next` is not the last, `At` is a time or a position, `MB`
+  is not MiB.
+- **One word per concept, one concept per word, per module.** The glossary below fixes the domain words.
+- **Length follows lifetime.** A `const` in a callback or a function under about ten lines may be short. A `let`,
+  module state, or anything live across a loop or an `await` says what it holds.
+- **The kind is in the name:** `...Count`, plurals, `...Paths`, `xByKey`, and the unit (`Ms`, `S`, `Px`,
+  `Bytes`, `Mib`). A 1-based position is a `number`, not an `index`.
+- **Booleans:** a bare adjective is fine when the owner supplies the subject or it mirrors a DOM attribute
+  (`disabled`, `open`). Otherwise `is`, `has`, `can`, `will` or a participle with its context. Never
+  negated, never a bare noun or verb.
+- **Functions:** an action is a verb; a pure derivation may be a noun; a notification is past tense (`ended`); a
+  predicate is `is`, `has` or `can`. A participle never names something that returns a non-boolean or has effects.
+- **Two index spaces get two names.** `at` is only ever an index.
+- **A field and the local that feeds it share a name.** A wire name from Python stays and is translated once.
+- **Short names are a closed list:** `e`, `el`, `io`, `rc`, `py`, `st`, `m`, `vv`, and the tags `s`,
+  `d`, `b`, `t`, `do`. `t0` only where the module has one clock.
+- **No type name shadows a DOM global** (`Event`, `Request`, `Storage`).
+- **A name that needs five words** is a sign to extract.
+
+Leave alone: booleans that mirror the DOM or have an owner (`disabled`, `open`, `tab.dirty`, `isPhone`); the
+discriminant tags `s`, `d`, `b`, `t`, `do` (SPEC, tests, the e2e hook); wire names from Python
+(`fresh_locals`, `e_changed`); geometry and math locals; noun-named pure functions (`parentOf`, `baseName`).
+
+Before a rename, grep `biome/architecture.grit` and `test/imports.test.ts`: they match identifiers by name.
+Renames happen inside the restructure that owns the file, and never in the same commit as a spacing change.
+
+### Glossary
+
+To come: the words for ticket, decompression, build number, the Python module, start files, tab, run, snapshot.
+
+## Spacing
+
+**A function body over about twelve lines is written in paragraphs: a blank line between steps, and above a comment
+that opens one.** The line width stays 120.
+
+- A blank line above a full-line comment inside a body, unless it is the first line of its block.
+- A blank line after the opening run of guard clauses.
+- A blank line before and after a multi-line local function, and after a multi-line `if`, `for` or `try` block.
+  No blank line before a lone closing `return` or `continue`.
+- A trailing comment that pushes its line past about 100 columns moves to its own line above.
+- Braces on a conditional that has an `else` or spans more than one line; one-line guards stay.
+- In tests, a blank line between set-up, action and assertions.
+- One declaration per statement, then related declarations grouped by blank lines. Biome's `useSingleVarDeclarator`
+  checks this.
+
+No other rule checks spacing, and the formatter keeps a blank line but never adds one: a reader finds the breaks that
+have no comment and no block edge.
