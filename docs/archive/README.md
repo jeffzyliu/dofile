@@ -4,7 +4,7 @@ Records of finished work. The files here are kept for their history and are not 
 and `docs/web-engine-data-flow.md` say how things are today.
 
 - [lazy-graphics-experiments.md](lazy-graphics-experiments.md): the results of the experiments run while building the lazy
-  graphics part (phone captures, timing against main, the eager import, the page-side unpack, compression), 2026-11.
+  graphics part (phone captures, timing against main, the eager import, the page-side unpack, compression, the first experiment's write-up), 2026-11.
 - [web-audit-surveys/](web-audit-surveys/): the ten read-only survey reports behind `docs/web-audit-proposal.md` (01
   engine protocol, 02 worker and storage, 03 controllers and state, 04 census, 05 and 06 views, 07 unit tests, 08 e2e,
   09 CSS, 10 build and scripts), 11, the review of the proposal's first draft, and 12, the review of the execution plan
