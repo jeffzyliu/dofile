@@ -708,6 +708,8 @@ same fault was rc 9999 "internal engine error" with a traceback. The 198 follows
   `engine error: ValueError: invalid literal for int() with base 10: 'abc'`, `recode x (1=a)` gives
   `engine error: ValueError: could not convert string to float: 'a'`. Check the options and values first; if they
   are right, report it. OpenDTA's hint after the message ("could not read this ... command") is upstream's, unchanged.
-- rc 9999 stays for an exception that escapes outside a command (macro expansion, the interpreter, a loop's own work),
-  and for an `OSError` the engine did not mean (`Engine.run`).
+- rc 9999 stays for any other Python exception, inside a command or outside one (macro expansion, the interpreter, a
+  loop's own work), and for an `OSError` the engine did not mean (`Engine.run`). Upstream converts only `OSError`,
+  `IndexError`, `KeyError` and `ValueError` in a command: a `TypeError`, `AttributeError` or `ZeroDivisionError` there
+  is still 9999 (`tests/test_engine.py::test_a_python_error_other_than_index_key_value_in_a_command_is_rc_9999`).
 - Not for upstream: it is a diagnostic for dofile's agents and bug reports.

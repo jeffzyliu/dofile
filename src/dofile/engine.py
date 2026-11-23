@@ -23,9 +23,7 @@ from ._vendor.opendta.core.output import Capture
 from ._vendor.opendta.lang.programs import Scope
 from ._vendor.opendta.session import Session
 
-RC_INTERNAL = (
-    9999  # a Python exception escaped the interpreter outside a command (a bug; inside one it is rc 198, PATCH-5)
-)
+RC_INTERNAL = 9999  # any other Python exception, inside or outside a command (IndexError/KeyError/ValueError in one: 198, PATCH-5)
 RC_FILE = 603  # Stata: file could not be opened
 RC_BREAK = 1  # Stata: --Break-- (the user pressed Break); the session keeps its data
 BREAK = "--Break--"

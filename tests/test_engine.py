@@ -691,6 +691,17 @@ def test_patch5_no_engine_error_line_when_the_error_is_not_reported(eng, monkeyp
     assert r.rc == 0 and "engine error" not in r.log, (r.rc, r.log)
 
 
+def test_a_python_error_other_than_index_key_value_in_a_command_is_rc_9999(eng, monkeypatch):
+    """MCP-SCHEMA.md, rc 9999: upstream turns only OSError, IndexError, KeyError and ValueError in a command into a
+    Stata error; any other exception, inside a command or outside one, is 9999."""
+    from dofile._vendor.opendta.core.dataset import Dataset
+
+    eng.run("clear\nset obs 3\ngen x = _n")
+    for exc in (TypeError("t"), AttributeError("a"), ZeroDivisionError("z")):
+        monkeypatch.setattr(Dataset, "set_numeric", lambda *a, _e=exc, **k: (_ for _ in ()).throw(_e))
+        r = eng.run("replace x = 2")
+        assert r.rc == 9999 and type(exc).__name__ in r.error and "\nengine error:" not in r.log, (r.rc, r.error)
+
 
 def test_odt22_matrix_pseudofunction(eng):
     """ODT-22: matrix(name) is the matrix name in an expression."""

@@ -160,8 +160,9 @@ class RunResult(TypedDict):
         Field(
             description="return code: 0 success, Stata's codes on error, 1 interrupted "
             "(timeout or cancel; data kept), 199 command disabled by the sandbox, "
-            "603 file not allowed, 9998 session reset, 9999 internal engine error outside a command "
-            "(inside one, a Python error is 198 with an 'engine error:' line in the log)"
+            "603 file not allowed, 9998 session reset, 9999 internal engine error (any other Python exception, "
+            "inside or outside a command; an IndexError, KeyError or ValueError inside a command is 198 with an "
+            "'engine error:' line in the log, which may be a value the command could not read or an engine fault)"
         ),
     ]
     error: Annotated[str | None, Field(description="the error message, or null on success")]

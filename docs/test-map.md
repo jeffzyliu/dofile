@@ -26,9 +26,9 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 **1. Engine adapter** (`test_engine.py`)
 - Result shape: log, rc, `results()`, `r(table)`, the e_changed and r_changed flags, JSON for missing values and
   matrices.
-- Error containment: a Python exception outside a command is rc 9999, inside one an IndexError, KeyError or ValueError is
-  rc 198 with an `engine error:` log line where the error is reported, none when statsby takes it (PATCH-5); a MemoryError or a full WebAssembly heap is r(909) after
-  `on_memory_error`; a crash inside a program closes its scope; each call is a do-file scope.
+- Error containment: a Python exception is rc 9999, inside a command or outside one, except an IndexError, KeyError or
+  ValueError inside a command, which is rc 198 with an `engine error:` log line where the error is reported, none when
+  statsby takes it (PATCH-5); a MemoryError or a full WebAssembly heap is r(909) after `on_memory_error`; a crash inside a program closes its scope; each call is a do-file scope.
 - Regression tests for OpenDTA fixes (`test_odtN_*`, with the patches in `scripts/patches/`); Stata expressions cannot
   reach Python.
 
