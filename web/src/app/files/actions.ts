@@ -257,117 +257,127 @@ export async function upload(items: Incoming[], words: WordsOf = "upload"): Prom
 
 async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
   if (!items.length) return [];
-  const written: string[] = [];
-  let failed = 0;
-  /** Write `it` (in a turn's body), expecting `expect` at its path (none: whatever is there); a replace reloads its
+  const writtenPaths: string[] = [];
+  let failedCount = 0;
+  /** Write `item` (in a turn's body), expecting `expected` at its path (none: whatever is there); a replace reloads its
    *  open tab. True once written, false when refused (counted), or the file found when the expectation fails. */
-  function* put(io: Io, it: Incoming, expect?: Expect, replaces = false): Turn<boolean | FileInfo> {
+  function* writeItem(io: Io, item: Incoming, expected?: Expect, isReplace = false): Turn<boolean | FileInfo> {
     try {
-      if (CONTROL.test(it.path)) throw new Error("a name with a control character");
-      yield* io.write(it.path, it.data, expect);
+      if (CONTROL.test(item.path)) throw new Error("a name with a control character");
+      yield* io.write(item.path, item.data, expected);
     } catch (e) {
-      if (isConflict(e) && e.now === null && expect !== "absent") return yield* put(io, it, undefined, replaces); // deleted since it was asked about: written unasked
+      if (isConflict(e) && e.now === null && expected !== "absent")
+        return yield* writeItem(io, item, undefined, isReplace); // deleted since it was asked about: written unasked
       if (isConflict(e) && e.now?.dir === false) return e.now;
-      failed++;
-      console.warn(`[dofile] upload ${it.path}: ${(e as Error)?.message ?? e}`);
+      failedCount++;
+      console.warn(`[dofile] upload ${item.path}: ${(e as Error)?.message ?? e}`);
       return false;
     }
-    written.push(it.path);
-    if (replaces) reopen(it);
+    writtenPaths.push(item.path);
+    if (isReplace) reopen(item);
     return true;
   }
-  const last = new Map(items.map((it) => [it.path, it])); // the same path twice in one upload: the last one
+  const itemByPath = new Map(items.map((item) => [item.path, item])); // the same path twice in one upload: the last one
   const clashes: Incoming[] = [];
-  let same = 0; // the clashes that hold the uploaded bytes already: not asked, not written
+  let alreadyStoredCount = 0; // the clashes that hold the uploaded bytes already: not asked, not written
   // the list, and the writes of the files that clash with none, in one turn: no page change comes between them
   await fileTurn(function* (io) {
-    const before = new Map((yield* io.list()).map((f) => [f.path, f]));
-    for (const it of last.values()) {
-      if (before.get(it.path)?.dir === false && !CONTROL.test(it.path)) {
-        if (!openUnsaved(it.path) && (yield* holds(io, it))) same++;
-        else clashes.push(it);
-      } else if (typeof (yield* put(io, it, before.has(it.path) ? undefined : "absent")) === "object") clashes.push(it); // a run wrote it meanwhile
+    const storedByPath = new Map((yield* io.list()).map((f) => [f.path, f]));
+    for (const item of itemByPath.values()) {
+      if (storedByPath.get(item.path)?.dir === false && !CONTROL.test(item.path)) {
+        if (!openUnsaved(item.path) && (yield* holds(io, item))) alreadyStoredCount++;
+        else clashes.push(item);
+      } else if (typeof (yield* writeItem(io, item, storedByPath.has(item.path) ? undefined : "absent")) === "object")
+        clashes.push(item); // a run wrote it meanwhile
     }
   });
-  const others = written.length + same;
-  let sticky: boolean | null = null; // "Do the same": replace (true) or keep (false) every clash left
-  let decided = new Map<string, FileInfo | null>(); // the clashes left as they were when "Do the same" with Replace came
-  let shown: Dialog = null; // the last clash dialog this upload opened
-  for (const [i, it] of clashes.entries()) {
-    let replace: boolean | null = sticky;
+  const unaskedCount = writtenPaths.length + alreadyStoredCount; // "N other files uploaded" in the clash dialog
+  let answerForRest: boolean | null = null; // "Do the same": replace (true) or keep (false) every clash left
+  let storedWhenRestDecided = new Map<string, FileInfo | null>(); // the clashes left, as they were when "Do the same" with Replace came
+  let lastClashDialog: Dialog = null;
+  for (const [index, clash] of clashes.entries()) {
+    let willReplace: boolean | null = answerForRest;
     // what a Replace writes over: the file as its dialog showed it, or as it was when "Do the same" decided it
-    let expect: Expect | undefined = sticky ? (decided.get(it.path) ?? "absent") : undefined;
-    let changed = false; // it changed while its dialog was open: asked again
-    let warned = false; // asked with the unsaved words
-    let tries = 0; // writes tried since the last question: every retry asks first, so more than 3 is a bug
+    let expectedStored: Expect | undefined = answerForRest
+      ? (storedWhenRestDecided.get(clash.path) ?? "absent")
+      : undefined;
+    let changedWhileAsked = false; // asked again
+    let askedAboutUnsaved = false; // asked with the unsaved words
+    let triesSinceAnswer = 0; // writes tried since the last question: every retry asks first, so more than 3 is a bug
     for (;;) {
       // an open file with unsaved edits is asked before "Do the same" replaces it; keeping it (Esc, Keep mine for the
       // rest) needs no question
-      const unsaved = openUnsaved(it.path);
-      if (changed || replace === null || (replace === true && unsaved && !warned)) {
+      const hasUnsavedEdits = openUnsaved(clash.path);
+      if (
+        changedWhileAsked ||
+        willReplace === null ||
+        (willReplace === true && hasUnsavedEdits && !askedAboutUnsaved)
+      ) {
         while (dialog.value !== null) await noDialog(); // never over another dialog
-        const mine = await fileTurn((io) => io.info(it.path)); // as it is now, not as the upload first listed it
+        const storedNow = await fileTurn((io) => io.info(clash.path)); // not as the upload first listed it
         if (dialog.value !== null) continue; // another dialog opened while the file was read: wait for it too
-        if (mine === null && !unsaved) {
-          replace = true; // deleted meanwhile: written without asking, as a free path
-          expect = "absent";
+        if (storedNow === null && !hasUnsavedEdits) {
+          willReplace = true; // deleted meanwhile: written without asking, as a free path
+          expectedStored = "absent";
         } else {
           // a file deleted meanwhile whose tab has unsaved edits is asked, in the unsaved words
-          expect = mine ?? "absent";
-          warned = unsaved;
-          tries = 0;
-          const a = await ask(it, i, clashes.length, {
-            path: it.path,
-            yours: mine && { size: mine.size, mtime: mine.mtime },
-            uploaded: it.data.byteLength,
-            others,
-            left: clashes.length - i - 1,
-            unsaved,
-            changed,
+          expectedStored = storedNow ?? "absent";
+          askedAboutUnsaved = hasUnsavedEdits;
+          triesSinceAnswer = 0;
+          const reply = await ask(clash, index, clashes.length, {
+            path: clash.path,
+            yours: storedNow && { size: storedNow.size, mtime: storedNow.mtime },
+            uploaded: clash.data.byteLength,
+            others: unaskedCount,
+            left: clashes.length - index - 1,
+            unsaved: hasUnsavedEdits,
+            changed: changedWhileAsked,
             words: WORDS[words],
           });
-          shown = a.shown;
-          if (a.answer === "stop") sticky = replace = false;
+          lastClashDialog = reply.shown;
+          if (reply.answer === "stop") answerForRest = willReplace = false;
           else {
-            replace = a.answer.replace;
-            if (a.answer.same) sticky = a.answer.replace;
-            if (a.answer.same && a.answer.replace) {
-              const rest = clashes.slice(i + 1).map((c) => c.path);
-              decided = await fileTurn(function* (io) {
-                const now = new Map<string, FileInfo | null>();
-                for (const p of rest) now.set(p, yield* io.info(p));
-                return now;
+            willReplace = reply.answer.replace;
+            if (reply.answer.same) answerForRest = reply.answer.replace;
+            if (reply.answer.same && reply.answer.replace) {
+              const restPaths = clashes.slice(index + 1).map((c) => c.path);
+              storedWhenRestDecided = await fileTurn(function* (io) {
+                const stored = new Map<string, FileInfo | null>();
+                for (const p of restPaths) stored.set(p, yield* io.info(p));
+                return stored;
               });
             }
           }
         }
       }
-      if (!replace) break;
-      if (++tries > 3) {
-        failed++;
-        console.warn(`[dofile] upload ${it.path}: tried again without an answer`);
+      if (!willReplace) break;
+      if (++triesSinceAnswer > 3) {
+        failedCount++;
+        console.warn(`[dofile] upload ${clash.path}: tried again without an answer`);
         break;
       }
-      const done = await fileTurn(function* (io) {
-        if (openUnsaved(it.path) && !warned) return "unsaved"; // edited since: asked in the unsaved words
-        return yield* put(io, it, expect, true);
+      const outcome = await fileTurn(function* (io) {
+        if (openUnsaved(clash.path) && !askedAboutUnsaved) return "unsaved"; // edited since: asked in the unsaved words
+        return yield* writeItem(io, clash, expectedStored, true);
       });
-      if (done === "unsaved") continue;
-      if (typeof done !== "object") break;
-      changed = true; // the file found instead of the one expected: asked again
+      if (outcome === "unsaved") continue;
+      if (typeof outcome !== "object") break;
+      changedWhileAsked = true; // the file found instead of the one expected: asked again
     }
   }
-  if (shown !== null && dialog.value === shown) dialog.value = null;
+  if (lastClashDialog !== null && dialog.value === lastClashDialog) dialog.value = null;
   if (words === "sample") {
-    if (failed) showToast("Couldn't restore the sample", "error");
-    else if (written.length) showToast("Sample restored");
+    if (failedCount) showToast("Couldn't restore the sample", "error");
+    else if (writtenPaths.length) showToast("Sample restored");
     // none asked: what was asked and kept says nothing
     else if (!clashes.length) showToast("The sample is already here");
-  } else if (written.length + same || failed) {
-    const done = `${written.length + same} ${plural(written.length + same, "file", "files")} uploaded`;
-    showToast(failed ? `${done} · ${failed} failed` : done, failed ? "error" : undefined);
+  } else {
+    const uploadedCount = writtenPaths.length + alreadyStoredCount; // the clashes replaced count too
+    if (!uploadedCount && !failedCount) return writtenPaths;
+    const summary = `${uploadedCount} ${plural(uploadedCount, "file", "files")} uploaded`;
+    showToast(failedCount ? `${summary} · ${failedCount} failed` : summary, failedCount ? "error" : undefined);
   }
-  return written;
+  return writtenPaths;
 }
 
 /** Ask the clash `facts` (clash `i` + 1 of `total`) in the clash dialog and wait for the answer. */
