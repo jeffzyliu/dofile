@@ -2,7 +2,8 @@
 // to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
 import { activate, addDta, addText, tabs } from "../editor/documents.ts";
 import { addFileGraph } from "../graphs.ts";
-import { addBanner, banners, dismiss, isPhone, outputTab, say, showFullSize, showPhone, showToast } from "../state.ts";
+import { showFullSize } from "../state/run.ts";
+import { addBanner, banners, dismiss, isPhone, outputTab, say, showPhone, showToast } from "../state.ts";
 import { baseName, extOf } from "./tree.ts";
 import { fileTurn } from "./turns.ts";
 

@@ -80,8 +80,8 @@ or {
   },
   `runWriter` as $m where {
     $filename <: r".*/src/.*",
-    $filename <: not r".*/src/app/(?:state|run)\.ts$",
-    register_diagnostic(span=$m, message="runWriter is named only by state.ts and app/run.ts")
+    $filename <: not r".*/src/app/(?:state/run|run)\.ts$",
+    register_diagnostic(span=$m, message="runWriter is named only by state/run.ts and app/run.ts")
   },
   `filesWriter` as $m where {
     $filename <: r".*/src/.*",

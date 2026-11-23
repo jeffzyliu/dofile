@@ -4,7 +4,7 @@
 import { snapshotStart } from "../env";
 import { engine, graphicsPart } from "../state/engine.ts";
 import { persisted } from "../state/files.ts";
-import { lastRun, memory } from "../state.ts";
+import { lastRun, memory } from "../state/run.ts";
 import { resetsIn, since } from "./clock.ts";
 import { type StatusForm, type StatusPart, statusParts } from "./status.ts";
 

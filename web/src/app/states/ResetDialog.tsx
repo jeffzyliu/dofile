@@ -4,7 +4,8 @@
 import { useEffect } from "preact/hooks";
 import * as eng from "../engine.ts";
 import { engine } from "../state/engine.ts";
-import { closeDialog, engineRuns, openDialog } from "../state.ts";
+import { engineRuns } from "../state/run.ts";
+import { closeDialog, openDialog } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { engineUp } from "./predicates.ts";

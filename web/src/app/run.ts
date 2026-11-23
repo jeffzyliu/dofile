@@ -12,8 +12,8 @@ import { tabs } from "./editor/documents.ts";
 import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
 import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
+import { runWriter as W } from "./state/run.ts";
 import * as S from "./state.ts";
-import { runWriter as W } from "./state.ts";
 import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
 
 /** The run in progress: its number, how it was started, what streamed in, and its promise. */

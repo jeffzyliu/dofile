@@ -5,7 +5,8 @@
 import { useEffect, useRef } from "preact/hooks";
 import { binarySize } from "../bytes.ts";
 import { moreRows } from "../run.ts";
-import { banners, data, memory, pickedVar, rows, say } from "../state.ts";
+import { data, memory, rows } from "../state/run.ts";
+import { banners, pickedVar, say } from "../state.ts";
 import type { BrowseRows, DataSummary } from "../types.ts";
 import { count, cutCell } from "./format.ts";
 import { VarTable } from "./VarTable";

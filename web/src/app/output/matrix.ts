@@ -3,7 +3,8 @@
 // read for (view.ts, openMatrices and copiedRow): after another run they are gone.
 
 import { call } from "../engine.ts";
-import { macros, results, showToast } from "../state.ts";
+import { macros, results } from "../state/run.ts";
+import { showToast } from "../state.ts";
 import type { Results } from "../types.ts";
 import { copyText } from "./clip.ts";
 import { copiedNote, full, hasValues, matrixTsv, type ResultRow } from "./format.ts";

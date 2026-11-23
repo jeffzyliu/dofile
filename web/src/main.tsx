@@ -14,6 +14,7 @@ import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
 import * as Engine from "./app/state/engine.ts";
 import * as Files from "./app/state/files.ts";
+import * as Run from "./app/state/run.ts";
 import * as Saved from "./app/state/saved.ts";
 import * as S from "./app/state.ts";
 import { store } from "./app/store.ts";
@@ -77,7 +78,7 @@ const testHook = {
   start,
   persisted: () => Files.persisted.value,
   engineBytes: Engine.engineBytes,
-  state: { ...S, ...Saved, ...Files, ...Engine, tabs, activeTab }, // one object: the signals, and the tabs from their owner
+  state: { ...S, ...Saved, ...Run, ...Files, ...Engine, tabs, activeTab }, // one object: the signals, and the tabs from their owner
   documents: documentSeeds,
   run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
   breakRun,

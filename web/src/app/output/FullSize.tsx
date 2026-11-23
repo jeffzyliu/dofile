@@ -4,7 +4,8 @@
 // back.
 
 import { useEffect, useRef, useState } from "preact/hooks";
-import { say as announce, closeFullSize, graphFull, graphIndex, graphs, selectGraphAt } from "../state.ts";
+import { closeFullSize, graphFull, graphIndex, graphs, selectGraphAt } from "../state/run.ts";
+import { say as announce } from "../state.ts";
 import { Key } from "../ui/Icon";
 import { useModalTrap } from "../ui/modal-trap.ts";
 import { canCopyImage, copyImage, exportPng } from "./clip.ts";

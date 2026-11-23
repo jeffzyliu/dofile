@@ -5,7 +5,7 @@ import type { RunResult } from "../../engine/types.ts";
 import { runCommand } from "../run.ts";
 import { noEngine } from "../start.ts";
 import { engine } from "../state/engine.ts";
-import { lastRun } from "../state.ts";
+import { lastRun } from "../state/run.ts";
 import { takesRun } from "../states/predicates.ts";
 import { type InTurn, inTurnWords, pastedLines, type RunOne } from "./paste.ts";
 

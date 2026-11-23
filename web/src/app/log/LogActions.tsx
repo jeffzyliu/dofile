@@ -3,7 +3,8 @@
 // are never clipped. The phone hides the Log head, so the same logMenuItems() are the "Log ⋯" button in its strip.
 import { saveAs } from "../files/save.ts";
 import { canClearLog } from "../run.ts";
-import { log, openDialog } from "../state.ts";
+import { log } from "../state/run.ts";
+import { openDialog } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
