@@ -62,12 +62,10 @@ export function failPart(part: SeqRegion, reason: PartReason): void {
 
 /** Page: a fetch starts again, of one more copy. */
 export function retryPart(part: SeqRegion): void {
-  // the page is the region's one writer, so no write of its own is under way here
-  const now = readPart(part, 0);
-  if (!("value" in now)) throw new Error("the graphics part's region is being written by another thread");
+  const { copy } = readOwnPart(part);
   writeSeq(part, (writer) => {
     writer.setWord(HDR_LENGTH, 0);
-    writer.setWord(HDR_COPY, now.value.copy + 1);
+    writer.setWord(HDR_COPY, copy + 1);
     writer.setWord(HDR_STATE, PART_PENDING);
   });
 }
@@ -92,6 +90,14 @@ export function partSnapshot(reader: SeqReader, { withBytes = false } = {}): Par
  */
 export function readPart(part: SeqRegion, waitMs: number, options: { withBytes?: boolean } = {}): SeqRead<PartRead> {
   return readSeq(part, (reader) => partSnapshot(reader, options), waitMs);
+}
+
+/** Page: the part now. The page is the region's one writer and writes it synchronously, so its read never meets a
+ *  write of its own. */
+export function readOwnPart(part: SeqRegion): PartRead {
+  const now = readPart(part, 0);
+  if (!("value" in now)) throw new Error("the graphics part's region is being written by another thread");
+  return now.value;
 }
 
 /** What a waiting graph does next. "wait": wait on the region's counter from the read's count, then answer "pending".

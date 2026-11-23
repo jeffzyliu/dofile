@@ -2,7 +2,7 @@
 // It decides nothing: the controller (app/engine.ts) calls it when the state machine says. One worker is live at a
 // time; `n` is that worker's ticket, which the transport only compares.
 
-import { failPart, landPart, PART_HEADER, partReason, partRegion, readPart, retryPart } from "./lazy-part.ts";
+import { failPart, landPart, PART_HEADER, partReason, partRegion, readOwnPart, retryPart } from "./lazy-part.ts";
 import type { Ending, Reply } from "./machine.ts";
 import type { SeqRegion } from "./seqlock.ts";
 import { isStorageRefusal, openCache } from "./snapshot.ts";
@@ -29,9 +29,10 @@ import type {
 /** One file of the build's list of start files. */
 type StartFile = StartFiles["files"][number];
 /** A lazy snapshot's graphics part: one per build for the page's life, so a restarted worker gets the same and it is
- *  never fetched twice. `region`: what the page writes and the worker reads, or null without cross-origin isolation
- *  (then it is a start file, download(), which the worker writes at boot); `sab`, its buffer, only for boot's
- *  arguments. */
+ *  never fetched twice. `region`: what the page writes and the worker reads (pending, landed or failed, the copy, the
+ *  bytes or the reason), or null without cross-origin isolation (then it is a start file, download(), which the worker
+ *  writes at boot); `sab`, its buffer, only for boot's arguments. The other fields are the page's own: the worker needs
+ *  none of them. */
 type GraphicsPart = {
   built: number;
   file: SnapshotFile;
@@ -39,11 +40,21 @@ type GraphicsPart = {
   heapURL: string;
   sab: SharedArrayBuffer | null;
   region: SeqRegion | null;
-  loading: Promise<void> | null;
-  progress: GraphicsProgress;
-  damaged: boolean; // the worker found the last copy damaged: fetched past the HTTP cache until a copy lands
+  fetch: PartFetch | null; // the fetch on its way: at most one
+  fresh: boolean; // the worker found a copy damaged: fetched past the HTTP cache until a copy lands
   damagedCopy: number | null; // the copy the last `damaged` named (the region's then); never cleared: copies only grow
 };
+/** The graphics part's fetch on its way: whether the Cache missed and it downloads, and the bytes received so far. */
+type PartFetch = { downloading: boolean; received: number };
+/** The part's progress for the status bar, from the region and the page's fetch; nothing stores it. Pending is shown as
+ *  fetching while the fetch downloads; without a region (a start file) it stays pending. */
+function graphicsProgress(part: GraphicsPart): GraphicsProgress {
+  const total = part.file.size;
+  const now = part.region && readOwnPart(part.region);
+  if (now?.state === "landed") return { state: "landed", received: total, total };
+  if (now?.state === "failed") return { state: "failed", received: 0, total, error: now.reason };
+  return { state: part.fetch?.downloading ? "fetching" : "pending", received: part.fetch?.received ?? 0, total };
+}
 /** A call waiting for the worker's answer. */
 type Pending = { resolve: (value: any) => void; reject: (error: ClientError) => void; onLog?: (text: string) => void };
 /** What a start learnt, once it is complete: what boot answered, where its time went (worker.ts, `startup`), and why
@@ -319,7 +330,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // progress is said here first so that the dialog can show its size. Without one it is a start file, which the
     // worker writes at boot.
     const part = this.#graphicsOf(build);
-    if (part?.region) this.#graphicsSay(part, {});
+    if (part?.region) this.#showGraphics(part);
     const files = list.files.filter((f) => f.download);
     if (part && !part.region)
       files.push({ path: part.url, size: part.file.size, compressed: part.file.size, download: true });
@@ -391,13 +402,15 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // matplotlib is one more file (build.files.graphics). The page fetches it at the end of download(), because a worker
   // busy in Python cannot advance a fetch of its own; without a SharedArrayBuffer it is a start file instead
   // (download()), which the worker writes at boot. The worker reads it from a SharedArrayBuffer, so a graph blocked in
-  // Python sees it land. It is cached only beside start files that are cached already. A failed fetch is tried again when a graph finds it
-  // failed, and when the browser is back online.
+  // Python sees it land. It is cached only beside start files that are cached already. A failed fetch is tried again
+  // when a graph finds it failed, and when the browser is back online. The region is the one record of pending, landed
+  // or failed, the copy and the reason; the page writes it only in #writePart, and the status bar's progress is read
+  // from it. The page keeps the rest (the fetch on its way, `fresh`, `damagedCopy`) on the part.
 
   /** The part's progress, now and at each change. @returns the function that removes the listener */
   onGraphics(listener: (p: GraphicsProgress) => void): () => void {
     this.#graphicsListeners.add(listener);
-    if (this.#graphics) listener(this.#graphics.progress);
+    if (this.#graphics) listener(graphicsProgress(this.#graphics));
     return () => this.#graphicsListeners.delete(listener);
   }
 
@@ -414,39 +427,51 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         heapURL: at(build.files.snapshot.name),
         sab,
         region: sab && partRegion(sab),
-        loading: null,
-        progress: { state: "pending", received: 0, total: file.size },
-        damaged: false,
+        fetch: null,
+        fresh: false,
         damagedCopy: null,
       };
     }
     return this.#graphics;
   }
 
-  #graphicsSay(part: GraphicsPart, p: Partial<GraphicsProgress>) {
-    part.progress = { ...part.progress, ...p };
-    if (this.#graphics !== part) return; // an older build's part: the listeners follow the page's current one
-    for (const f of this.#graphicsListeners) f(part.progress);
+  // The listeners see the page's current part; an older build's part says nothing.
+  #showGraphics(part: GraphicsPart) {
+    if (this.#graphics !== part) return;
+    const p = graphicsProgress(part);
+    for (const f of this.#graphicsListeners) f(p);
   }
 
-  // Fetch the part (the Cache first), unless it is here, failed, on its way, or a start file (no shared buffer).
+  // Every write of the region goes through here: then the live worker is told to look at it (the op `graphics`), and
+  // the listeners see it.
+  #writePart(part: GraphicsPart, write: () => void) {
+    write();
+    const live = this.#live;
+    if (live && !live.ended) this.#send(live, "graphics", undefined).catch(() => {});
+    this.#showGraphics(part);
+  }
+
+  // Fetch the first copy (the Cache first) unless one is on its way or the region says it landed or failed. Not
+  // without a region: then it is a start file.
   #wantGraphics(build: Build | null): void {
     const part = this.#graphicsOf(build);
-    if (!part?.region || part.loading || part.progress.state === "landed" || part.progress.state === "failed") return;
-    part.loading = this.#fetchGraphics(part).finally(() => {
-      part.loading = null;
-    });
+    const region = part?.region;
+    if (!part || !region || part.fetch || readOwnPart(region).state !== "pending") return;
+    void this.#fetchGraphics(part, region);
   }
 
-  // A part that failed is fetched again; the worker sees it pending, and a waiting graph waits for it.
+  // A part that failed is fetched again; the worker sees it pending, and a waiting graph waits for it. Failed has no
+  // fetch on its way: a fetch ends in the same step as its write.
   #retryGraphics(part: GraphicsPart): void {
-    if (this.#graphics !== part || !part.region || part.progress.state !== "failed" || part.loading) return;
-    retryPart(part.region);
-    this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
-    this.#tellGraphics(part);
-    part.loading = this.#fetchGraphics(part, part.damaged).finally(() => {
-      part.loading = null;
-    });
+    const region = this.#graphics === part ? part.region : null;
+    if (!region || readOwnPart(region).state !== "failed") return;
+    this.#refetch(part, region);
+  }
+
+  // One copy more: the region pending, and a fetch.
+  #refetch(part: GraphicsPart, region: SeqRegion): void {
+    this.#writePart(part, () => retryPart(region));
+    void this.#fetchGraphics(part, region);
   }
 
   // A part the worker could not unpack: dropped from the Cache (a reload would read it again) and fetched again. The
@@ -454,24 +479,20 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // it again (the worker's damage is tied to its copy, so without this a part that fails on every copy would be fetched
   // and unpacked in a loop).
   #refetchDamaged(part: GraphicsPart): void {
-    if (this.#graphics !== part || !part.region || part.loading || part.progress.state !== "landed") return;
-    const now = readPart(part.region, 0); // the page is the region's one writer: never busy here
-    if (!("value" in now)) return;
-    const { copy } = now.value;
-    const again = part.damagedCopy !== null && copy === part.damagedCopy + 1;
-    part.damagedCopy = copy;
-    part.damaged = true;
-    if (again) {
-      const why = "the graphics files arrived damaged twice in a row; they are fetched again for the next graph";
-      void this.#uncache(part); // a reload would read it again
-      failPart(part.region, partReason(why));
-      console.warn(`[dofile] graphics part: ${why}`);
-      this.#graphicsSay(part, { state: "failed", error: why });
-      this.#tellGraphics(part);
+    const region = this.#graphics === part ? part.region : null;
+    const now = region && readOwnPart(region);
+    if (!region || now?.state !== "landed") return;
+    const again = part.damagedCopy !== null && now.copy === part.damagedCopy + 1;
+    part.damagedCopy = now.copy;
+    part.fresh = true;
+    if (!again) {
+      this.#refetch(part, region); // its fetch drops the copy from the Cache first
       return;
     }
-    part.progress = { ...part.progress, state: "failed" }; // so that #retryGraphics takes it
-    this.#retryGraphics(part);
+    const why = "the graphics files arrived damaged twice in a row; they are fetched again for the next graph";
+    void this.#uncache(part); // a reload would read it again
+    console.warn(`[dofile] graphics part: ${why}`);
+    this.#writePart(part, () => failPart(region, partReason(why)));
   }
 
   // Deletes the part's copy from the Cache; a Cache that cannot be opened has none to delete.
@@ -482,8 +503,12 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     } catch {}
   }
 
-  async #fetchGraphics(part: GraphicsPart, fresh = false): Promise<void> {
-    const region = part.region!; // #wantGraphics and #retryGraphics take only a part with one
+  // The fetch on its way: the Cache, else a download (past the HTTP cache when `fresh`); then the region written landed
+  // or failed, in the same step as the fetch ends.
+  async #fetchGraphics(part: GraphicsPart, region: SeqRegion): Promise<void> {
+    const fetch: PartFetch = { downloading: false, received: 0 };
+    part.fetch = fetch;
+    const fresh = part.fresh;
     const t0 = performance.now();
     let cache: Cache | null = null;
     try {
@@ -492,14 +517,16 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (!isStorageRefusal(e)) console.warn(`[dofile] graphics part: no Cache (${e?.message ?? e})`);
     }
     let hit: Response | undefined;
+    let bytes: Uint8Array<ArrayBuffer> | null = null;
+    let why = "";
     try {
       if (fresh) await cache?.delete(part.url).catch(() => {}); // damaged: not read again, now or after a reload
       hit = await cache?.match(part.url);
-      let bytes: Uint8Array<ArrayBuffer>;
       if (hit) bytes = new Uint8Array(await hit.arrayBuffer());
       else {
-        this.#graphicsSay(part, { state: "fetching" });
-        bytes = await this.#downloadGraphics(part, fresh);
+        fetch.downloading = true;
+        this.#showGraphics(part);
+        bytes = await this.#downloadGraphics(part, fetch, fresh);
         if (cache && (await cache.match(part.heapURL)))
           await cache
             .put(part.url, new Response(bytes, { headers: { "Content-Type": "application/octet-stream" } }))
@@ -507,24 +534,26 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       }
       if (bytes.length !== part.file.size)
         throw new Error(`${part.url}: ${bytes.length} bytes arrived, the build's list says ${part.file.size}`);
-      part.damaged = false;
-      landPart(region, bytes);
-      console.info(
-        `[dofile] graphics part: landed (${hit ? "cache" : "network"}) ${((performance.now() - t0) / 1000).toFixed(2)}s, ${bytes.length} bytes`,
-      );
-      this.#graphicsSay(part, { state: "landed", received: part.file.size });
     } catch (e: any) {
-      const why = `the graphics files could not be downloaded (${e?.message ?? e}); they are fetched again for the next graph`;
-      failPart(region, partReason(why));
-      console.warn(`[dofile] graphics part: ${why}`);
-      this.#graphicsSay(part, { state: "failed", error: why });
-      // back online: fetch it again
-      globalThis.addEventListener?.("online", () => this.#retryGraphics(part), { once: true });
+      why = `the graphics files could not be downloaded (${e?.message ?? e}); they are fetched again for the next graph`;
     }
-    this.#tellGraphics(part);
+    part.fetch = null;
+    if (!why && bytes) {
+      const landed = bytes;
+      part.fresh = false;
+      console.info(
+        `[dofile] graphics part: landed (${hit ? "cache" : "network"}) ${((performance.now() - t0) / 1000).toFixed(2)}s, ${landed.length} bytes`,
+      );
+      this.#writePart(part, () => landPart(region, landed));
+      return;
+    }
+    console.warn(`[dofile] graphics part: ${why}`);
+    this.#writePart(part, () => failPart(region, partReason(why)));
+    // back online: fetch it again
+    globalThis.addEventListener?.("online", () => this.#retryGraphics(part), { once: true });
   }
 
-  async #downloadGraphics(part: GraphicsPart, fresh: boolean): Promise<Uint8Array<ArrayBuffer>> {
+  async #downloadGraphics(part: GraphicsPart, fetch: PartFetch, fresh: boolean): Promise<Uint8Array<ArrayBuffer>> {
     if (part.url.startsWith("file:")) {
       const fsName = "node:fs/promises"; // Node only (the tests); a variable so the bundler leaves it alone
       return new Uint8Array(await (await import(/* @vite-ignore */ fsName)).readFile(new URL(part.url)));
@@ -542,7 +571,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (n + value.length > out.length) throw new Error(`${part.url}: more bytes than the build's list says`);
       out.set(value, n);
       n += value.length;
-      this.#graphicsSay(part, { received: n });
+      fetch.received = n;
+      this.#showGraphics(part);
     }
     return out.subarray(0, n);
   }
@@ -551,13 +581,6 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   #workerSaysGraphics(part: GraphicsPart, m: Extract<FromWorker, { graphics: string }>) {
     if (m.graphics === "damaged") this.#refetchDamaged(part);
     else this.#retryGraphics(part);
-  }
-
-  // Tells the live worker that the part in the shared buffer landed, failed or is fetched again
-  #tellGraphics(_part: GraphicsPart) {
-    const live = this.#live;
-    if (!live || live.ended) return;
-    this.#send(live, "graphics", undefined).catch(() => {});
   }
 
   // ---- Lifecycle: only the effect performer calls these ----

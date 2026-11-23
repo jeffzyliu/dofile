@@ -1270,7 +1270,6 @@ test("graphics part: the worker says it is damaged: dropped from the Cache, pend
   await startWorker(page.eng, done.build);
   await f.release();
   await until(() => page.states.at(-1) === "landed", "landed");
-  await sleep(5); // the fetch's own end (part.loading)
   page.say("damaged");
   assert.deepEqual(page.header(), [0, 0, 1], "pending at once, one more try");
   await until(() => f.modes.length === 2, "the second fetch");
@@ -1313,7 +1312,6 @@ test("graphics part (decision B): a second damaged copy in a row starts no fetch
   const landings = () => page.states.filter((s) => s === "landed").length;
   await f.release();
   await until(() => landings() === 1, "landed");
-  await sleep(5); // the fetch's own end (part.loading)
   page.say("damaged"); // copy 0
   await f.release();
   await until(() => landings() === 2, "copy 1 landed");
@@ -1359,7 +1357,6 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
   assert.match(reason(), /^the graphics files could not be downloaded \(fetch failed\)/);
   assert.equal(online.length, 1, "a retry waits for the browser to be back online");
   assert.ok(!(await cached(caches)).includes(`snapshot/${PART.name}`));
-  await sleep(5); // the fetch's own end (part.loading)
   page.say("again");
   assert.deepEqual(page.header(), [0, 0, 1], "pending at once, one more try");
   await f.release();
