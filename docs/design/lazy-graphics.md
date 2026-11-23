@@ -1108,6 +1108,39 @@ already is; add none.
    `src/dofile/browser.py`'s section comment, and `docs/test-map.md`. It leaves `app/state.ts` and `app/engine.ts` alone
    (`onGraphics` keeps its shape).
 
+### As built (2026-11-23, R1c part 2)
+
+Where the code differs from sections 1 and 2. No decision above is changed; a difference the maintainer has not decided is
+marked.
+
+- Section 1's "Today, in short", `#graphicsSay`, `#tellGraphics`, `#retryGraphics`, `#refetchDamaged`, `loading`, `damaged` and
+  `progress.state` are gone. The page's part is `#partEvent` (`client.ts:468-489`: one entry check, `partStep`, then its
+  effect), `#writePart` (`client.ts:452-457`: the write, the op `graphics`, the progress) and `graphicsProgress`
+  (`client.ts:55-61`, computed from the region and the fetch, stored nowhere). The table is `partStep`
+  (`lazy-part.ts:128-160`); the page's reader is `readOwnPart` (`lazy-part.ts:97-101`), `readPart` at `waitMs` 0 without
+  the bytes, which throws when busy.
+- Rows of section 1's table that are not in `partStep`: "the Cache missed" and "bytes arrive" are updates of the fetch record
+  (`client.ts:517`, `client.ts:559-560`), and "from a worker that is not `live`" is one comparison in `worker.onmessage`
+  (`client.ts:611`), where `live` is in scope.
+- `partStep` has a row the table lacks: the result of a fetch whose copy the region has moved past ends the fetch and writes
+  nothing (`lazy-part.ts:140`). It cannot happen with one fetch at a time.
+- "The state guards follow from the copy" does not hold after decision B, which fails a landed copy without a new copy
+  number: `partStep` checks the state as well as the copy (`lazy-part.ts:147`, `lazy-part.ts:152`).
+- The row "a new build: every event of the old part dropped": `again`, `damaged` and `online` of an older build's part are
+  dropped, but its fetch result still writes its own part's region and tells the live worker, and shows no progress
+  (`client.ts:466-471`, `client.ts:444-448`). A worker booted with that part may be waiting on its region. Not decided by
+  the maintainer.
+- "The Cache entry deleted first" on the retry rows: a fetch for a `fresh` part deletes the entry itself and awaits that
+  before it looks (`client.ts:513`). Decision B's row deletes it with `void #uncache(part)`, not awaited
+  (`client.ts:482`, `client.ts:492-497`); every later fetch of the part is fresh, so none reads the damaged copy back.
+- Section 2's rows say an unpack or write step's throw is damage. A throw of the read of the part (the copy of its bytes out
+  of the region) is not: `ReadFailed` (`worker-graphics.ts:25-26`, `:86-92`) ends in `readFailed` (`:94-100`), a console
+  warning and the graph's answer "the graphics files could not be read (...); the next graph reads them again", with
+  nothing posted and no fetch, in a graph (`:208`), the browser decoder's own task (`:234`) and an idle step (`:304`, which
+  leaves the idle work to the next wake). Not decided by the maintainer.
+- Section 10's list is done: `docs/lazy-matplotlib.md`, `src/dofile/browser.py`'s section comment and `docs/test-map.md` are
+  brought up to date.
+
 ## 9. Building it: the Node harness and the iOS limit
 
 **It already runs, unasserted.** `npm run snapshot` builds a lazy snapshot by default (`SNAPSHOT_NO_MPL` unset), and

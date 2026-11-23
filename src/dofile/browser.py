@@ -176,11 +176,12 @@ def memory() -> str:
     return json.dumps(_eng.memory())
 
 
-# ---- the lazy graphics part (web/src/engine/worker.ts, waitGraphics; experiment E1c) ----
+# ---- the lazy graphics part (web/src/engine/worker-graphics.ts, waitGraphics) ----
 # In a lazy snapshot, matplotlib and what only it needs are not in the heap: the page downloads them after the start and the
-# worker writes them into site-packages. Only a graph waits for them: the graph store's put (inside the graph command, so a
-# Break while waiting is an ordinary Break, rc 1, and nothing is half stored), and a finder for any other import of
-# matplotlib (graph export of a graph drawn earlier). Every other run never waits: the part's other packages (PIL, dateutil,
+# worker writes them into site-packages (without a SharedArrayBuffer the part is a start file, which boot writes before the
+# engine is ready, and no graph waits: lazy_graphics is not called). With the page's download, only a graph waits for
+# them: the graph store's put (inside the graph command, so a Break while waiting is an ordinary Break, rc 1, and nothing
+# is half stored), and a finder for any other import of matplotlib (graph export of a graph drawn earlier). Every other run never waits: the part's other packages (PIL, dateutil,
 # ...) are simply not found until it is written, as an optional import expects.
 GRAPHICS_WAIT = frozenset({"matplotlib", "mpl_toolkits", "pylab"})
 GRAPHICS_RC = 199  # as ODT-32's "not available" errors
@@ -205,7 +206,7 @@ class _LazyGraphics:
         while True:
             brk.check()  # a Break the SIGINT handler took before or between the waits
             # what the run printed so far reaches the page now, not when the graph is done: one wait may take seconds
-            # (it unpacks, writes, or without a shared buffer downloads the part), and brk.check sends only what is
+            # (it unpacks or writes the part, or waits for the page's fetch), and brk.check sends only what is
             # STREAM_EVERY old
             flush_output()
             why = self.wait(100)
