@@ -1046,10 +1046,18 @@ test("a tab keeps its place in its text: shown again after another tab, and on a
   // where it was, give or take a pixel (CodeMirror puts the line at the top back, with its offset)
   const near = (y: number) => async () => Math.abs((await top()) - y);
   const scrollTo = async (y: number) => {
-    await scroller.evaluate((e, y) => {
-      e.scrollTop = y;
-    }, y);
-    await settle(page); // the scroll event has been delivered
+    // A tab just shown has a restore pending (show() dispatches its saved scroll, or the top, which CodeMirror applies
+    // at its next measure, a frame after the aria-label changes). A scrollTop set before that measure is put back to
+    // the top, so set it again until it holds after the frames have run.
+    await expect
+      .poll(async () => {
+        await scroller.evaluate((e, y) => {
+          e.scrollTop = y;
+        }, y);
+        await settle(page); // the scroll event has been delivered
+        return top();
+      })
+      .toBeGreaterThan(y - 5);
   };
   await open(page, "a.do");
   await scrollTo(1500);
