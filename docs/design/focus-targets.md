@@ -19,14 +19,26 @@ rules, only who holds the handles.
    next render (`ask`). No label or class query finds a target any more.
 3. **A target that is gone moves nothing** and the caller's fallback runs; the focus never goes to `<body>` (section 4).
 
-**The maintainer's choices:**
-- a. The registry as above, its names a closed union in one file. Recommended.
-- b. One waiting request at a time (`focusAsked`, new): a newer request replaces an older one, whatever its target.
-  Today each target has its own signal. Recommended; a guess that no flow needs two at once (none found by reading).
-- c. The full-size view moves onto the trap's hand-back (a microtask, only a focus left on nothing, else
-  `focusStable`). Today it focuses its opener at once in its cleanup, whatever has the focus. Recommended.
-- d. The variables table gets the Alt/Ctrl/Cmd guard the other roving widgets have (today it moves on Alt+Down too).
-  Recommended.
+**The maintainer's choices** (today's behaviour, then the cost of each option):
+- a. The registry as above, its names a closed union in one file. Today: each target is an export of its view
+  (`focusTree`, `focusAfterClose`, `openFind`, `filesToggle`, `fullOpener`) or a label or class query (section 1).
+  Cost: a target is found by name at run time, not by an import, so the compiler checks the name (the union) but not
+  that a component registers it; a Node test does. The other option, S6's first reading: keep the exported handles and
+  give each an owner function; it keeps the imports between views and the label queries of `focusStable` and
+  `Editor`. Recommended: the registry.
+- b. One waiting request at a time (`focusRequest`, new): a newer request replaces an older one, whatever its target.
+  Today each target has its own signal, so two can wait together. Cost: a flow that needs two would lose the older one.
+  From the code (section 4) the only request that waits past a render is a tree row's, and a later request moves the
+  focus where that row's `from` would refuse it anyway, so nothing is lost today. The other option, one signal per
+  target, keeps today's seven signals. Recommended: one.
+- c. The full-size view moves onto the trap's hand-back. Today its cleanup focuses its opener at once, whatever has the
+  focus, and an opener that has gone leaves the focus on `<body>`. With the trap: the hand-back is a microtask later,
+  takes no focus that something else placed, and a gone opener gives the focus to `focusStable` (the gain). Cost: one
+  e2e check of the hand-back's new timing (`web/e2e/output.spec.ts` already waits for the focus on "Open full size").
+  The other option: `FullSize` keeps its own hand-back and uses the trap for Tab and Esc only. Recommended: the trap.
+- d. The variables table gets the Alt/Ctrl/Cmd guard of the other roving widgets. Today Alt+Up and Alt+Down move between
+  names there. Cost: those keys go back to the browser, as they do in the tree, the tablists and the menus. The other
+  option: `rove` takes the guard as an option and the table keeps today's keys. Recommended: the guard.
 
 ## 1. The handles the registry replaces (today)
 
@@ -69,8 +81,8 @@ becomes `focusNow("editor") || focusNow("more-actions")`, and `editorAsked` keep
 - `focusNow(name, key?)` (new): synchronous; focuses the first entry whose element is in the page and shown
   (`getClientRects().length > 0`) and returns whether the focus is now on it. `focusStable` needs that answer at once
   (rule 2), which is why `editorCommands.focus` had to focus synchronously.
-- `ask(name, { key?, from })` (new) sets the one waiting request (`focusAsked`, choice b); `cancel(name)` (new) ends it
-  when it is for `name` (`rove` on another row, `startRename`).
+- `ask(name, { key?, from })` (new) sets the one waiting request (`focusRequest`, choice b); `cancel(name)` (new) ends
+  it when it is for `name` (`rove` on another row, `startRename`).
 - `useFocusTarget(name, ref, key?)` (new, `ui/focus-hooks.ts`) does both halves in the component that draws the
   target: it registers in a layout effect, and in a layout effect of the render that follows `ask` it takes a matching
   request on `useFocusRequest`'s terms: the request ends there, taken or not, and the focus moves only when `from`
@@ -84,31 +96,40 @@ becomes `focusNow("editor") || focusNow("more-actions")`, and `editorAsked` keep
 - `focusNow` for a name with no entry, a getter that returns `null`, an element that has left the page or is not shown:
   nothing moves, it returns `false`, and the caller's fallback runs (`focusStable`: `editor`, then `more-actions`).
   A phone on another view makes `editor` "not shown", as today (rule 3).
-- `ask` for a target not drawn yet waits until a component registers it and renders (Delete's rows after the list is
-  read again, the pane `foldFiles` opens). It ends when taken (moved or not), replaced, or cancelled. As today it has no
-  time limit; whether a stale request can fire late today (a tree request while the tree is hidden on a phone) is a
-  guess not checked. An asker that has a choice checks first, as `focusAfterClose` does with `treeShown`.
+- `ask` for a target: every taker is mounted while its target could be asked for, shown or not (`Editor`, whose slot is
+  hidden, not unmounted; `EditorTabs` and each `FileTab`; `FindBar` inside `LogView`, which stays mounted under a
+  hidden panel; `FilesHead`; and the tree's rows in a hidden or folded pane, since `App.tsx`'s `Pane` keeps its
+  children under `hidden`). So a request is taken in the next render; a hidden target ends it with no move
+  (`focus()` on an element under `display: none` does nothing): a tree request while the tree is hidden on a phone is
+  lost, not late. The one request that waits is the tree's for a row not drawn yet: `focusRow(to)` after a rename or
+  a draft until the list is read again, or a row still being renamed. It lands only on a focus at `<body>` or in the
+  tree (its `from`), and `rove` and `startRename` cancel it. Delete asks only after the list is read again
+  (`files/dialogs.tsx` `DeleteDialog`). A request ends when taken (moved or not), replaced, or cancelled; it has no
+  time limit. The roving hook's own requests (`Tablist`'s `asked`, `tabAsked`) stay out of `focusRequest`.
 - Openers are not targets. The trap gives the focus back to its opener if it is still in the page, else `focusStable`;
   Find falls back to the log; a menu's `restore` that has gone moves nothing (as today).
 - No focus move from a timer (`web/biome/architecture.grit`); the registry adds none.
 
 ## 5. The modal trap
 
-`useModalTrap` (new, `ui/`) does what `ui/Dialog.tsx` and `output/FullSize.tsx` each do today: take the opener (the
-focused element; else `leaving`; else an opener the caller passes: `fullOpener`), blur it before `showModal()` (a native
-`<dialog>` only, as today), focus the first target
-(`[data-autofocus]`, the first enabled button, link or input, or the root), and on unmount hand the focus back in a
-microtask, only when it was left on nothing (rule 1), to the opener or `focusStable`. For a modal that is not a native
-`<dialog>` it also keeps Tab inside (the shown, enabled buttons), takes Esc, and yields the keys while a `dialog[open]` is
-over it. `Dialog` keeps `showModal()` (the browser keeps Tab inside); `FullSize` stays a fixed overlay (the toast must
-show over it). This is not one component for both. The menu is not a modal and keeps its `restore`.
+`useModalTrap` (new, `ui/`) does what `ui/Dialog.tsx` and `output/FullSize.tsx` each do today. It takes the opener:
+the opener the caller passes, if it is still in the page (`FullSize`: `fullOpener`, since Safari focuses no pressed
+button); else the focused element, not `<body>`; else `leaving` (`Dialog`). It blurs the opener before `showModal()`
+(a native `<dialog>` only, as today). It focuses the first target the caller names: `FullSize` its root (so a Space
+that opened the view cannot press Close, the first button); `Dialog` `[data-autofocus]`, else the first enabled
+button, link or input. On unmount it hands the focus back in a microtask, only when it was left on nothing (rule 1), to
+the opener or `focusStable`. For a modal that is not a native `<dialog>` it also keeps Tab inside (the shown, enabled
+buttons), takes Esc, and yields the keys while a `dialog[open]` is over it. `Dialog` keeps `showModal()` (the browser
+keeps Tab inside); `FullSize` stays a fixed overlay (the toast must show over it). This is not one component for both.
+The menu is not a modal and keeps its `restore`. No e2e checks that the full-size view's first focus is the view and
+not Close (`web/e2e/output.spec.ts` checks only that the focus is inside it): S6 adds that check before the move.
 
 ## 6. The roving-key hook
 
 One pure function, `rove(key, at, count, { axis, wrap })` (new, `ui/keys.ts`): the next place, or `null` for a key it
-leaves alone (any key with Alt, Ctrl or Cmd: Alt+Left is Back). A small hook on top keeps the moved-to item's request and
-lets the item take it from its render (today's `Tablist` `asked` and `EditorTabs` `tabAsked`). Each widget keeps its
-own extra keys.
+leaves alone (any key with Alt, Ctrl or Cmd: Alt+Left is Back). A small hook on top keeps the moved-to item's request
+and lets the item take it from its render (today's `Tablist` `asked` and `EditorTabs` `tabAsked`). Each widget keeps
+its own extra keys.
 
 | Widget | Arrows | Ends | Kept by the widget |
 |---|---|---|---|
