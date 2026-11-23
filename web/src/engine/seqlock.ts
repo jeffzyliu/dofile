@@ -10,10 +10,10 @@ export type SeqRegion = { readonly [regionTag]: true };
 export type SeqWriter = {
   /** @param at - a word below the counter's index, else a RangeError */
   setWord(at: number, value: number): undefined;
-  /** The bytes from the start of the region's bytes; at most `room` of them, else a RangeError. */
+  /** The bytes from the start of the region's bytes; at most `roomBytes` of them, else a RangeError. */
   setBytes(source: Uint8Array): undefined;
   /** How many bytes the region has after its words. */
-  readonly room: number;
+  readonly roomBytes: number;
 };
 
 /** What a read may do. Usable only during the callback; it hands out numbers and copies, never views. */
@@ -86,7 +86,7 @@ export function writeSeq(region: SeqRegion, write: (writer: SeqWriter) => undefi
       source = given;
       return undefined;
     },
-    room: bytes.length,
+    roomBytes: bytes.length,
   };
 
   let result: unknown;

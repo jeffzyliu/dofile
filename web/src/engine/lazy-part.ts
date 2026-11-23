@@ -53,7 +53,7 @@ export function landPart(part: SeqRegion, bytes: Uint8Array): void {
 /** Page: the fetch failed; the reason is cut to the room there is. */
 export function failPart(part: SeqRegion, reason: PartReason): void {
   writeSeq(part, (writer) => {
-    const text = new TextEncoder().encode(reason).subarray(0, writer.room);
+    const text = new TextEncoder().encode(reason).subarray(0, writer.roomBytes);
     writer.setBytes(text);
     writer.setWord(HDR_LENGTH, text.length);
     writer.setWord(HDR_STATE, PART_FAILED);

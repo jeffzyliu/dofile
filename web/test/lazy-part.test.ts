@@ -29,7 +29,7 @@ const reader = (part: PartRead) => {
   };
   return r;
 };
-const at = (part: PartRead) => () => ({ seq: 0, value: part });
+const readOf = (part: PartRead) => () => ({ seq: 0, value: part });
 const landed = (copy = 0): PartRead => ({ state: "landed", copy, bytes: null });
 const pending = (copy = 0): PartRead => ({ state: "pending", copy });
 const failed = (copy = 0): PartRead => ({ state: "failed", copy, reason: offline });
@@ -48,8 +48,8 @@ test("waitStep: a part that landed is decoded, with a shared buffer or without; 
     assert.equal(waitStep({ ...idle, shared }, r.read), "decode");
     assert.equal(r.reads, 1);
   }
-  assert.equal(waitStep(idle, at(pending())), "wait");
-  assert.equal(waitStep({ ...idle, askedAt: 3 }, at(pending(4))), "wait");
+  assert.equal(waitStep(idle, readOf(pending())), "wait");
+  assert.equal(waitStep({ ...idle, askedAt: 3 }, readOf(pending(4))), "wait");
   assert.equal(
     waitStep(idle, () => ({ seq: 7, busy: true })),
     "wait",
@@ -58,10 +58,14 @@ test("waitStep: a part that landed is decoded, with a shared buffer or without; 
 });
 
 test("waitStep: a failed part is asked for again once per run; that fetch's failure (the copy moved on) is final, with its reason", () => {
-  assert.equal(waitStep(idle, at(failed(2))), "ask-again", "first: ask the page (askedAt := 2)");
-  assert.equal(waitStep({ ...idle, askedAt: 2 }, at(failed(2))), "wait", "the page has not begun");
-  assert.deepEqual(waitStep({ ...idle, askedAt: 2 }, at(failed(3))), { giveUp: offline }, "the asked-for fetch failed");
-  assert.equal(waitStep({ ...idle, askedAt: 2 }, at(pending(3))), "wait", "the asked-for fetch is on its way");
+  assert.equal(waitStep(idle, readOf(failed(2))), "ask-again", "first: ask the page (askedAt := 2)");
+  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(failed(2))), "wait", "the page has not begun");
+  assert.deepEqual(
+    waitStep({ ...idle, askedAt: 2 }, readOf(failed(3))),
+    { giveUp: offline },
+    "the asked-for fetch failed",
+  );
+  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(pending(3))), "wait", "the asked-for fetch is on its way");
 });
 
 test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed part gives a whole snapshot or busy, never the reason "" (the answer for written)', () => {
@@ -114,9 +118,9 @@ test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed par
 test("waitStep: without a shared buffer, a graph says it waits first, then fetches the part itself (pending or failed)", () => {
   for (const part of [pending(), failed()]) {
     const own = { ...idle, shared: false };
-    assert.equal(waitStep(own, at(part)), "say-fetching");
-    assert.equal(waitStep({ ...own, fetchSaid: true }, at(part)), "fetch");
-    assert.equal(waitStep({ ...own, fetchSaid: true, askedAt: 0 }, at(part)), "fetch", "askedAt is the page's");
+    assert.equal(waitStep(own, readOf(part)), "say-fetching");
+    assert.equal(waitStep({ ...own, fetchSaid: true }, readOf(part)), "fetch");
+    assert.equal(waitStep({ ...own, fetchSaid: true, askedAt: 0 }, readOf(part)), "fetch", "askedAt is the page's");
   }
 });
 

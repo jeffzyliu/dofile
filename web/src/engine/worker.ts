@@ -88,7 +88,7 @@ let copies = 0; // no shared buffer: this worker's copies of the part, counted (
 let nativeFailedOn: number | null = null; // the copy the browser's decoder failed on
 let writtenInRun = 0; // performance.now() when a graph of this run wrote the part
 
-const nativeFor = (copy: number) => useNative(brotliMode, hasNativeBrotli(), nativeFailedOn, copy);
+const canUseNative = (copy: number) => useNative(brotliMode, hasNativeBrotli(), nativeFailedOn, copy);
 
 // The part now: one snapshot of the shared region (busy while the page writes it, for up to waitMs), or without a buffer
 // this worker's own copy (its copies counted). withBytes: a copy of the bytes (up to 33 MB) when landed.
@@ -329,7 +329,7 @@ function nativeSoon() {
   if (!started || !share || native || decode || decoded || graphicsWritten || graphicsError) return;
   const read = readGraphics(0, false);
   // busy: the op graphics after the page's write calls this again
-  if (!("value" in read) || !nativeFor(read.value.copy)) return;
+  if (!("value" in read) || !canUseNative(read.value.copy)) return;
   setTimeout(startNative, 0); // a task of its own: never inside the answer to `startup`
 }
 
@@ -386,7 +386,8 @@ function idleStep() {
       const bytes = read.value.bytes!;
       const file = share!.file;
       // normally under way already (nativeSoon); its end calls idleSoon
-      if (nativeFor(read.value.copy) && bytes.length === file.size && bytes.length !== file.raw) return startNative();
+      if (canUseNative(read.value.copy) && bytes.length === file.size && bytes.length !== file.raw)
+        return startNative();
       decodeStep(bytes);
     } else {
       // after the write, the import of what a first graph needs: the three heavy modules one at a time, then 20 a step

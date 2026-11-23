@@ -73,7 +73,7 @@ test("a writer that throws or returns a thenable writes nothing and leaves the c
     kept = writer;
     assert.throws(() => writer.setWord(WORDS - 1, 9), RangeError, "the counter is writeSeq's");
     assert.throws(() => writer.setBytes(new Uint8Array(9)), RangeError, "more than the room");
-    assert.equal(writer.room, 8);
+    assert.equal(writer.roomBytes, 8);
     return undefined;
   });
   assert.throws(() => kept!.setWord(0, 1), TypeError);
