@@ -356,7 +356,7 @@ Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases
 Specs:
 - `shell.spec.ts`: layout and toolbar (its size in every state; the run controls unseen in the other-tab states, seen in the rest).
   - Desktop and phone layout; the first visit; the toolbar stays put from 1440 to 390 px in all sixteen engine states.
-  - Panes never remounted; banners; toast position; no key names on a phone.
+  - Panes never remounted; banners; the phone toast 8 px above the command line or tab bar, or the keyboard, in four cases (Log and Editor views, keyboard closed and open; iPhone project); no key names on a phone.
   - The status bar's "Not affiliated with StataCorp" (at 1440 px, not at 1199 px, not on the iPhone).
   - A stale snapshot, and a file store of a newer version, fail with reason `updated` (a real start).
 - `keyboard.spec.ts`: the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, at 390 by 844 px:
