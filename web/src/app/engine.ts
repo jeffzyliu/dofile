@@ -24,12 +24,12 @@ import type {
 import { initial, RC_RESET, transition } from "../engine/machine.ts";
 import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
 import { BREAK_GRACE_MS } from "../engine/types.ts";
-import { editorAsked } from "./editor/commands.ts";
 import { block, own } from "./files.ts";
 import * as S from "./state.ts";
 import { engineWriter, graphicsWriter } from "./state.ts";
 import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
 import type { EngineState, RunHead } from "./types.ts";
+import { ask as askFocus, fromAnywhere } from "./ui/focus-targets.ts";
 
 // ---- the wiring ----
 
@@ -360,7 +360,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock, handles: Ha
         if (S.dialog.value?.d !== effect.dialog) return;
         S.dialog.value = null;
         // the page is inert while a dialog is open: the editor takes the focus from the render that removed it
-        if (effect.focusEditor) editorAsked.value = {};
+        if (effect.focusEditor) askFocus("editor", { from: fromAnywhere });
         return;
       case "add-reset-banner":
         return S.addBanner({

@@ -1,20 +1,13 @@
 // Where the focus goes when what held it leaves the page (a banner, a dialog's opener): never <body>. The rules and who
 // uses this: docs/web-page-flows.md, section 1.
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { editorCommands } from "../editor/commands.ts";
+import { focusNow } from "../ui/focus-targets.ts";
 
-/** Put the focus on the editor, or on the visible "More actions" button when the editor cannot take it. editorCommands.focus()
- *  must focus at once (not later), for the check that follows it. With a .dta tab active the editor's own target wins (its
- *  tab in "Open files", or its view's Load: editor/Editor.tsx focus()), so the focus moves once; "More actions" only when
- *  editorCommands.focus() moved it nowhere (the Editor pane hidden, a phone on another view). */
-export function focusStable(doc: Document = document) {
-  const before = doc.activeElement;
-  editorCommands.focus();
-  const at = doc.activeElement;
-  if (at?.closest("[data-editor]") || (at && at !== before && at !== doc.body)) return;
-  [...doc.querySelectorAll<HTMLElement>('button[aria-label="More actions"]')]
-    .find((b) => b.getClientRects().length > 0)
-    ?.focus();
+/** Put the focus on the editor, or on the visible "More actions" button when the editor cannot take it (the Editor pane
+ *  hidden, a phone on another view). It focuses at once, and with a .dta tab active the editor's target is that tab's own
+ *  (editor/Editor.tsx), so the focus moves once. */
+export function focusStable() {
+  if (!focusNow("editor")) focusNow("more-actions");
 }
 
 /** A ref for a banner's root: when the banner unmounts with the focus inside it, the focus goes to focusStable(), unless
@@ -33,7 +26,7 @@ export function useFocusOnLeave<T extends HTMLElement>() {
       if (!el?.contains(el.ownerDocument.activeElement)) return;
       const doc = el.ownerDocument;
       queueMicrotask(() => {
-        if (!doc.activeElement || doc.activeElement === doc.body) focusStable(doc);
+        if (!doc.activeElement || doc.activeElement === doc.body) focusStable();
       });
     };
   }, []);

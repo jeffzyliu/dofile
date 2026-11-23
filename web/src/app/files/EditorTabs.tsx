@@ -2,11 +2,11 @@
 // (FileSwitcher). Ctrl/Cmd+W is the browser's: not bound. The tabs are editor/documents.ts's.
 import { signal } from "@preact/signals";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { editorCommands } from "../editor/commands.ts";
 import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
 import { phoneTab } from "../state.ts";
 import type { OpenTab } from "../types.ts";
-import { fromNothing, useFocusRequest } from "../ui/focus-hooks.ts";
+import { useFocusRequest, useFocusTarget } from "../ui/focus-hooks.ts";
+import { focusNow, fromNothing } from "../ui/focus-targets.ts";
 import { Icon } from "../ui/Icon";
 import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { baseName, tabLabels } from "./tree.ts";
@@ -36,7 +36,7 @@ export function EditorTabs() {
     const shown = (strip.current?.getClientRects().length ?? 0) > 0;
     if (shown && activeTab.value !== null) tabAsked.value = activeTab.value;
     else if (treeShown()) focusTree();
-    else editorCommands.focus();
+    else focusNow("editor");
   }, [asked]);
   const list = tabs.value;
   if (!list.length) return null;
@@ -87,6 +87,7 @@ function FileTab({
   list: { current: HTMLElement | null };
 }) {
   const el = useRef<HTMLDivElement>(null);
+  useFocusTarget("open-file-tab", () => (i === at ? el.current : null));
   useFocusRequest(
     tabAsked.value === t.path,
     el,
