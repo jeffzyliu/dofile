@@ -201,6 +201,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
+- `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
+  counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
+  word refused to a writer; a kept writer or reader throws; a page write between a reader's two counter reads is read
+  again whole (busy with `waitMs` 0); an odd counter is busy after `waitMs`, woken by a second thread's notify;
+  `waitSeq` returns at once on a moved count and is woken by another thread's write; `readBytes` a clamped copy; and a
+  writer thread against a reader for 0.4 s, no torn snapshot accepted (it accepted torn ones with the re-check as an
+  `Atomics.load` on an Apple-silicon Mac).
 - `part-header.test.ts`: the shared buffer the graphics part is handed over in (`engine/lazy-part.ts`): what the page's
   writers (land, fail with a reason cut to the room, retry) leave, as the worker's readers see it, and the header's
   layout and size.
@@ -296,6 +303,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
   the failure); a cycle finder on a small graph.
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
+- `seqlock.types.ts` (not run: `npm run check` compiles it): `writeSeq` refuses an asynchronous write and one that
+  returns a value; `readSeq` refuses an asynchronous or thenable result.
 - `dispatch.types.ts` (not run: `npm run check` compiles it): the worker's dispatch table has an entry for every op and
   no other, each handler with its op's arguments and result (a missing op, a wrong result, wrong arguments and an extra
   op each fail to compile).
