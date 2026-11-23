@@ -1245,6 +1245,7 @@ test("graphics part: the shared buffer is pending while the part is fetched, the
   await startWorker(page.eng, done.build);
   assert.ok(page.got.sab, "the worker was booted with the shared buffer");
   assert.deepEqual(page.header(), [0, 0, 0], "pending");
+  assert.equal(await page.eng.cached(), true, "the part follows the start: it is not waited for");
   await f.release();
   await until(() => page.states.at(-1) === "landed", "landed");
   assert.deepEqual(page.header(), [1, PART.size, 0], "landed, its byte count, the first try");
@@ -1342,6 +1343,39 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
   assert.deepEqual(page.header(), [1, PART.size, 2]);
   assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 3));
   assert.deepEqual(f.modes, ["no-cache", "no-cache", "no-cache"], "a failed fetch is not a damaged copy");
+});
+
+test("graphics part without a shared buffer (no cross-origin isolation): download() fetches it with the start files into the Cache and counts it; cached() checks it", async (t) => {
+  // gone from this thread, as on a page without cross-origin isolation
+  const shared = globalThis.SharedArrayBuffer;
+  Reflect.deleteProperty(globalThis, "SharedArrayBuffer");
+  t.after(() => {
+    globalThis.SharedArrayBuffer = shared;
+  });
+  const caches = fakeCaches();
+  const f = partFetch([1]);
+  const eng = client(f.fetch, caches, {
+    startFiles: { base: `${BASE}start-files.json`, ...LAZY } as StartFiles & { base: string },
+  });
+  const seen: { received: number; total: number }[] = [];
+  const said: string[] = [];
+  eng.onGraphics((p) => said.push(p.state));
+  const downloading = eng.download({ onProgress: (p) => seen.push(p) });
+  await f.release();
+  const done = await downloading;
+  assert.deepEqual(said, [], 'no "after the start" line: nothing follows the start');
+  assert.deepEqual(
+    { ...done, build: null },
+    { cached: true, received: LAZY.download, total: LAZY.download, build: null },
+    "the part is counted in the total",
+  );
+  assert.deepEqual(seen[0], { received: 0, total: LAZY.download });
+  assert.deepEqual(f.modes, ["no-cache"], "fetched once, with the start files");
+  assert.ok((await cached(caches)).includes(`snapshot/${PART.name}`), "kept with the start files");
+  assert.equal(await eng.cached(), true);
+  // a start whose unpack of the part threw deleted it from the Cache: the next start downloads it again
+  await (await caches.open("dofile-snapshot-777")).delete(PART_URL);
+  assert.equal(await eng.cached(), false, "the part is a start file");
 });
 
 test("a worker that could not open the file store: `started` says so, the store is detached, and storeError keeps the error's name; a VersionError is start-failed, reason updated", async () => {

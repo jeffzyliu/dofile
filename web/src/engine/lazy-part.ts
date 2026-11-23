@@ -96,22 +96,11 @@ export function readPart(part: SeqRegion, waitMs: number, options: { withBytes?:
 
 /** What a waiting graph does next. "wait": wait on the region's counter from the read's count, then answer "pending".
  *  A give-up carries the read's reason, the graph's answer. */
-export type WaitStep =
-  | "break"
-  | "write"
-  | "decode-more"
-  | "decode"
-  | "say-fetching"
-  | "fetch"
-  | "ask-again"
-  | "wait"
-  | { giveUp: PartReason };
+export type WaitStep = "break" | "write" | "decode-more" | "decode" | "ask-again" | "wait" | { giveUp: PartReason };
 
 /**
  * The part is read through `read()`, only when needed (a copy of up to 33 MB).
  * @param askedAt - the copy when this run asked the page for another fetch, or null
- * @param fetchSaid - without a shared buffer: "pending" was answered before this graph's own fetch
- * @param shared - the part comes in a shared buffer (else this worker fetches it)
  */
 export function waitStep(
   w: {
@@ -119,8 +108,6 @@ export function waitStep(
     decoded: boolean;
     decoding: boolean;
     askedAt: number | null;
-    fetchSaid: boolean;
-    shared: boolean;
   },
   read: () => SeqRead<PartRead>,
 ): WaitStep {
@@ -131,7 +118,6 @@ export function waitStep(
   if (!("value" in now)) return "wait";
   const part = now.value;
   if (part.state === "landed") return "decode";
-  if (!w.shared) return w.fetchSaid ? "fetch" : "say-fetching";
   if (part.state === "failed") {
     // once per run; the failure of the fetch it asked for is final
     if (w.askedAt === null) return "ask-again";

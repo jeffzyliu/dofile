@@ -213,7 +213,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   `readPart` sees it (the bytes only when asked for; an empty reason never read back empty), and the header's layout
   (state, length, copy, counter) and size.
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
-  does (Break, write, decode, fetch it itself, ask again once per run, a final failure with its reason, wait, also on a
+  does (Break, write, decode, ask again once per run, a final failure with its reason, wait, also on a
   busy read); races 1 to 3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy,
   never the empty reason (the answer for written); and when the browser's own decoder is used (never when mount forces
   brotli-wasm; not on the copy it failed on, again on a fresh one).
@@ -228,7 +228,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   (a worker whose result will not parse), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
-- `lazy-graphics.test.ts`: the lazy graphics part with a shared buffer on both threads: the page's half, the real worker,
+- `lazy-graphics.test.ts`: the lazy graphics part on both threads, with a shared buffer and without one: the page's half, the real worker,
   and both threads' `[dofile]` lines (the harness's `onConsole`); skipped without a current snapshot that has a graphics
   part. A graph at `started` waits for the part and writes it in its run, then it is warmed while idle; a restarted
   worker gets the landed part with no fetch and writes and warms it while idle with no run, and no sooner than `IDLE_MS`
@@ -237,6 +237,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   counts them), a Break meanwhile is rc 1 within seconds with the data kept, and a graph draws once it lands (one
   fetch); a damaged copy is r(199) for the graph that finds it, fetched again with `cache: "reload"`, and the next graph
   draws.
+  Without a SharedArrayBuffer (gone from the page's thread only): boot writes the part before it answers, a graph right
+  after the start draws with no waiting line, the worker posts no `{graphics}` message, and the part is warmed while idle.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
   - iPhone, iPad and a touch Mac are capped (750 MB), a Mac without touch is not; `userAgentData.mobile`, `deviceMemory`
     of 4 or less.
@@ -431,10 +433,10 @@ Specs:
   - A return visit (a persistent profile, so every project): the page's "landed (cache)" line comes before "ready" (the
     page's own clock), a graph sent at ready draws, the part is written once and fetched once.
   - A damaged part: the graph says it arrived damaged, the Cache entry is dropped, the next graph fetches it and draws.
-  - Without cross-origin isolation (no SharedArrayBuffer): the worker alone makes one `fetch()` of the part and the
-    graph's synchronous XHR one request, the page never fetches it; a graph at ready draws without waiting for a held
-    fetch and its log says it waits for the files; the ring shows the download (told by the worker) and goes when it lands;
-    other runs work. A damaged part's retry goes to an address of its own (`fresh=`), not the HTTP cache's.
+  - Without cross-origin isolation (no SharedArrayBuffer): the part is a start file: one request for it, the start's
+    download, and the worker writes it before ready; a graph at ready draws with no waiting line and no ring; other runs
+    work. A damaged part fails the start as a damaged heap does: it is dropped from the Cache, and the next start
+    fetches it again and a graph draws.
 - `output.spec.ts` (step 4c): the Output tabs; Copy image twice in the full-size view (fake clock: the first "Copied" timer
   does not clear the second).
   - The full-size view's modal trap (`ui/modal-trap.ts`): a Space that opened it leaves the focus on the view, not on Close; Tab and

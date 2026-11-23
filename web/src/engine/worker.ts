@@ -5,7 +5,7 @@
 
 import type { BrotliWasmType } from "brotli-wasm";
 import type { PartRead } from "./lazy-part.ts";
-import { partReason, partRegion, readPart, useNative, waitStep } from "./lazy-part.ts";
+import { partRegion, readPart, useNative, waitStep } from "./lazy-part.ts";
 import type { SeqRead, SeqRegion } from "./seqlock.ts";
 import { waitSeq } from "./seqlock.ts";
 import type { SnapshotPy } from "./snapshot.ts";
@@ -48,25 +48,23 @@ booted.catch(() => {}); // the error reaches the page through boot's own answer
 // ---- a lazy snapshot's graphics part (docs/lazy-matplotlib.md) ----
 // matplotlib is not in the heap but in one more file (files.graphics). With a SharedArrayBuffer the page fetches it
 // (client.ts), because a worker busy in Python cannot advance a fetch of its own, and hands it over in the buffer given
-// with boot (its layout: lazy-part.ts). A graph that finds it failed posts {graphics: "again"} and waits for the page's next fetch.
-// Without one (no cross-origin isolation) this worker fetches it (prefetch, fetchPartNow): a graph blocked in Python
-// could not be handed the page's bytes. Its {graphics: ...} messages let the page show the download.
+// with boot (its layout: lazy-part.ts). A graph that finds it failed posts {graphics: "again"} and waits for the page's
+// next fetch. Without one (no cross-origin isolation) it is a start file instead: boot fetches, unpacks and writes it
+// (worker-boot.ts), and only its import is left for the idle steps.
 // Only a graph waits for the part (waitGraphics). Nothing happens before `startup` is answered, so a return visit is no
 // slower. Then the browser's own decoder unpacks it off this thread (nativeSoon); the brotli-wasm unpack, the write and
 // the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (idleStep), so a
 // run sent meanwhile waits for one step at most.
 // IDLE_MS 250 vs 1000: a graph sent 0.5-1.1 s after ready was 0.2-0.5 s faster; a run meeting a step waits as long.
 const IDLE_MS = 250;
-const PROGRESS_MS = 100; // at most one {graphics: "progress"} this often
 const DECODE_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
 let share: {
   file: SnapshotFile;
-  region: SeqRegion | null; // the shared buffer's, or null without one
-  bytes?: Uint8Array;
-  error?: string;
+  region: SeqRegion | null; // the shared buffer's; null: there is none, and boot wrote the part
 } | null = null;
 let brotliWasm: BrotliWasmType | null = null;
-let snapshotBase = ""; // mount's `snapshot`: where the part is, for fetchPartNow
+let snapshotBase = ""; // mount's `snapshot`: where the part is, for boot's fetch of it without a shared buffer
+let built = 0; // mount's `built`: the name of the snapshot's Cache, for that fetch
 let started = false; // `startup` was answered
 let runs = 0; // runs sent and not ended (counted before the queue)
 let resultsRunId = 0; // the run that made the engine's results now: counted as each run starts
@@ -81,23 +79,16 @@ let graphicsError = ""; // the part arrived damaged; said once, by the next grap
 let warmAt = 0; // the next step of browser.warm_graphics; -1: done
 let tWarm = 0;
 let warmLongest = 0;
-let prefetching: { stop: AbortController; done: Promise<void> } | null = null; // no shared buffer: the worker's own fetch
-let fetchSaid = false; // waitGraphics said "pending" before this graph's own fetch
-let fresh = false; // the part arrived damaged: the next fetch must skip the HTTP cache
-let copies = 0; // no shared buffer: this worker's copies of the part, counted (readGraphics)
 let nativeFailedOn: number | null = null; // the copy the browser's decoder failed on
 let writtenInRun = 0; // performance.now() when a graph of this run wrote the part
 
 const canUseNative = (copy: number) => useNative(brotliMode, hasNativeBrotli(), nativeFailedOn, copy);
 
-// The part now: one snapshot of the shared region (busy while the page writes it, for up to waitMs), or without a buffer
-// this worker's own copy (its copies counted). withBytes: a copy of the bytes (up to 33 MB) when landed.
+// The part now: one snapshot of the shared region (busy while the page writes it, for up to waitMs). withBytes: a copy
+// of the bytes (up to 33 MB) when landed. Read only while the part is not written, so there is a region (without one,
+// boot wrote it).
 function readGraphics(waitMs: number, withBytes: boolean): SeqRead<PartRead> {
-  const { region, bytes, error } = share!;
-  if (region) return readPart(region, waitMs, { withBytes });
-  if (bytes) return { seq: 0, value: { state: "landed", copy: copies, bytes: withBytes ? bytes.slice() : null } };
-  if (error) return { seq: 0, value: { state: "failed", copy: copies, reason: partReason(error) } };
-  return { seq: 0, value: { state: "pending", copy: copies } };
+  return readPart(share!.region!, waitMs, { withBytes });
 }
 
 // The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the graph
@@ -105,10 +96,6 @@ function readGraphics(waitMs: number, withBytes: boolean): SeqRead<PartRead> {
 function damaged(e: unknown): string {
   graphicsError = `the graphics files arrived damaged (${errorForPage(e).message}); they are fetched again for the next graph`;
   decode = decoded = null;
-  if (share && !share.region) {
-    share.bytes = undefined; // this worker's own copy: the next graph fetches it again
-    fresh = true; // and not from the browser's HTTP cache, which may hold these same bytes
-  }
   self.postMessage({ graphics: "damaged" });
   console.warn(`[dofile] ${graphicsError}`);
   return graphicsError;
@@ -165,8 +152,6 @@ function waitGraphics(ms: number): string {
           decoded: Boolean(decoded),
           decoding: Boolean(decode),
           askedAt,
-          fetchSaid,
-          shared: Boolean(share!.region),
         },
         () => (read = readGraphics(ms, true)),
       );
@@ -186,17 +171,6 @@ function waitGraphics(ms: number): string {
           // waitStep decodes only a landed read
           if ("value" in read && read.value.state === "landed") decodeStep(read.value.bytes!);
           continue;
-        case "say-fetching":
-          // the page cannot hand the part over while this graph runs. "pending" first, so that browser.py prints its
-          // waiting line and sends the log before this call blocks for the download
-          fetchSaid = true;
-          self.postMessage({ graphics: "fetching" });
-          return "pending";
-        case "fetch": {
-          const why = fetchPartNow();
-          if (why) return why;
-          continue;
-        }
         case "ask-again":
           if ("value" in read) askedAt = read.value.copy;
           self.postMessage({ graphics: "again" });
@@ -213,113 +187,6 @@ function waitGraphics(ms: number): string {
       return why;
     }
   }
-}
-
-// Without a SharedArrayBuffer a message from the page cannot reach a graph blocked in Python, so the graph fetches the
-// part with a synchronous request (allowed in a worker; with no shared buffer there is no Break either: the machine
-// resets). Returns "" when it is here (share.bytes), else why not.
-function fetchPartNow(): string {
-  const at = new URL(`${snapshotBase}${share!.file.name}`, self.location.href);
-  const t0 = performance.now();
-  // a damaged part may sit in the HTTP cache with the right length; a synchronous XHR cannot reload, so use a new
-  // address
-  if (fresh) at.searchParams.set("fresh", String(Date.now()));
-  const url = at.href;
-  if (prefetching) {
-    // its bytes could only arrive after this graph: stop it, so the part comes whole once
-    prefetching.stop.abort();
-    prefetching = null;
-    console.info("[dofile] graphics part: the worker's own fetch was still on its way; a graph fetches it now");
-  }
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", url, false);
-    xhr.responseType = "arraybuffer";
-    xhr.send();
-    if (xhr.status !== 200) throw new Error(`${url}: ${xhr.status}`);
-    const bytes = new Uint8Array(xhr.response as ArrayBuffer);
-    if (bytes.length !== share!.file.size)
-      throw new Error(`${url}: ${bytes.length} bytes arrived, the build's list says ${share!.file.size}`);
-    Object.assign(share!, { bytes, error: undefined });
-    copies++;
-    fresh = false;
-    console.info(
-      `[dofile] graphics part: fetched by the worker in a run (no shared buffer) ${since(t0).toFixed(2)}s, ${bytes.length} bytes`,
-    );
-    self.postMessage({ graphics: "landed" });
-    return "";
-  } catch (e) {
-    const why = `the graphics files could not be downloaded (${errorForPage(e).message}); they are fetched again for the next graph`;
-    self.postMessage({ graphics: "failed", why });
-    return why;
-  } finally {
-    fetchSaid = false; // the next graph that fetches it says it is waiting again
-  }
-}
-
-// Without a shared buffer: this worker's own fetch of the part, started after `startup` is answered. A graph that comes
-// first stops it and fetches the part itself.
-async function prefetch(): Promise<void> {
-  if (!share || share.region || share.bytes) return Promise.resolve();
-  if (prefetching) return prefetching.done;
-  const stop = new AbortController();
-  const url = new URL(`${snapshotBase}${share.file.name}`, self.location.href).href;
-  const t0 = performance.now();
-  const done = (async () => {
-    try {
-      self.postMessage({ graphics: "fetching" });
-      // after damage: not from the HTTP cache (and the new bytes replace what it held)
-      const res = await fetch(url, { signal: stop.signal, ...(fresh && { cache: "reload" as const }) });
-      if (!res.ok) throw new Error(`${url}: ${res.status}`);
-      // read as they come, so that the page can show how much is here (throttled)
-      const out = new Uint8Array(share!.file.size);
-      const reader = res.body!.getReader();
-      let n = 0;
-      let sent = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (n + value.length > out.length) throw new Error(`${url}: more bytes than the build's list says`);
-        out.set(value, n);
-        n += value.length;
-        const now = performance.now();
-        if (now - sent >= PROGRESS_MS && !stop.signal.aborted) {
-          sent = now;
-          self.postMessage({ graphics: "progress", received: n });
-        }
-      }
-      if (n !== share!.file.size)
-        throw new Error(`${url}: ${n} bytes arrived, the build's list says ${share!.file.size}`);
-      if (stop.signal.aborted || share!.bytes || graphicsWritten) return; // a graph fetched it meanwhile
-      share!.bytes = out;
-      copies++;
-      fresh = false;
-      console.info(
-        `[dofile] graphics part: fetched by the worker (no shared buffer) ${since(t0).toFixed(2)}s, ${n} bytes`,
-      );
-      self.postMessage({ graphics: "landed" });
-      nativeSoon();
-      idleSoon();
-    } catch (e: any) {
-      // a graph fetches it again (fetchPartNow), and says why if that fails too
-      if (!stop.signal.aborted) {
-        console.warn(`[dofile] graphics part: the worker's fetch failed (${e?.message ?? e})`);
-        self.postMessage({
-          graphics: "failed",
-          why: `the graphics files could not be downloaded (${e?.message ?? e}); they are fetched again for the next graph`,
-        });
-      }
-    } finally {
-      prefetched(stop);
-    }
-  })();
-  prefetching = { stop, done };
-  return done;
-}
-
-// the fetch `stop` belongs to has ended
-function prefetched(stop: AbortController) {
-  if (prefetching?.stop === stop) prefetching = null;
 }
 
 // The browser's own decoder (off this thread) unpacks the part as soon as it is here. A graph that comes meanwhile
@@ -417,6 +284,7 @@ export const table: OpTable = {
     async handle(args) {
       brotliMode = args.brotli;
       snapshotBase = args.snapshot ?? "";
+      built = args.built ?? 0;
       fromSnapshot = Boolean(args.snapshot);
       ({ py, brotli: brotliWasm } = await startPython(args, stage, startup));
       mirror = new WorkMirror(py.FS, py.PATH, errorForPage);
@@ -438,9 +306,15 @@ export const table: OpTable = {
         fromSnapshot,
         stage,
         startup,
-        lazyGraphics(engine, graphics) {
+        part: { snapshotBase, built, brotliWasm, brotliMode },
+        partWritten(graphics) {
+          // no shared buffer: boot wrote it; the idle steps import it
+          share = { file: graphics.file, region: null };
+          graphicsWritten = true;
+        },
+        lazyGraphics(engine, graphics, sab) {
           // the buffer is wrapped at once and not kept
-          share = { file: graphics.file, region: graphics.sab ? partRegion(graphics.sab) : null };
+          share = { file: graphics.file, region: partRegion(sab) };
           engine.lazy_graphics(waitGraphics);
         },
       }));
@@ -456,7 +330,6 @@ export const table: OpTable = {
     async handle() {
       started = true; // the part's work may begin (nativeSoon, idleSoon)
       idleSince = performance.now();
-      if (share && !share.region) setTimeout(() => void prefetch(), 0); // after this answer, as nativeSoon
       nativeSoon();
       idleSoon();
       // mode, filesS and engineS are set by now: the page asks only after boot's answer

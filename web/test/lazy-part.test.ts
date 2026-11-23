@@ -16,7 +16,7 @@ import {
 import type { SeqRead, SeqReader } from "../src/engine/seqlock.ts";
 import { readSeq } from "../src/engine/seqlock.ts";
 
-const idle = { interrupted: false, decoded: false, decoding: false, askedAt: null, fetchSaid: false, shared: true };
+const idle = { interrupted: false, decoded: false, decoding: false, askedAt: null };
 const offline = partReason("offline");
 // a read that counts how often it is made
 const reader = (part: PartRead) => {
@@ -42,12 +42,10 @@ test("waitStep: a Break comes first, then a decoded part is written, then a deco
   assert.equal(r.reads, 0, "the part (a copy of up to 33 MB) is not read");
 });
 
-test("waitStep: a part that landed is decoded, with a shared buffer or without; one that is pending, or a busy read, waits", () => {
-  for (const shared of [true, false]) {
-    const r = reader(landed());
-    assert.equal(waitStep({ ...idle, shared }, r.read), "decode");
-    assert.equal(r.reads, 1);
-  }
+test("waitStep: a part that landed is decoded; one that is pending, or a busy read, waits", () => {
+  const r = reader(landed());
+  assert.equal(waitStep(idle, r.read), "decode");
+  assert.equal(r.reads, 1);
   assert.equal(waitStep(idle, readOf(pending())), "wait");
   assert.equal(waitStep({ ...idle, askedAt: 3 }, readOf(pending(4))), "wait");
   assert.equal(
@@ -112,15 +110,6 @@ test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed par
       const answer = typeof step === "object" ? step.giveUp : "pending";
       assert.notEqual(answer, "", `${where}: never the answer for written`);
     }
-  }
-});
-
-test("waitStep: without a shared buffer, a graph says it waits first, then fetches the part itself (pending or failed)", () => {
-  for (const part of [pending(), failed()]) {
-    const own = { ...idle, shared: false };
-    assert.equal(waitStep(own, readOf(part)), "say-fetching");
-    assert.equal(waitStep({ ...own, fetchSaid: true }, readOf(part)), "fetch");
-    assert.equal(waitStep({ ...own, fetchSaid: true, askedAt: 0 }, readOf(part)), "fetch", "askedAt is the page's");
   }
 });
 

@@ -3,7 +3,7 @@
 // ordinary Break (rc 1, data kept), and without the part (offline on a first visit) a graph fails with a clear error
 // and the part is fetched again for the next graph. A return visit reads it from the Cache while the engine starts, and
 // a run at "ready" does not wait for its unpack or import. Without a SharedArrayBuffer (no cross-origin isolation)
-// graphs still draw: the worker alone fetches the part, and the page shows the download from its messages. The part's
+// the part is a start file instead: downloaded with the others and written before "ready", so no graph waits for it. The part's
 // request is held or refused with page.route (it sees the page's requests and its worker's).
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -272,18 +272,14 @@ test("offline on a first visit: the part never arrives, a graph fails with a cle
   expect(drawn.images).toHaveLength(1);
 });
 
-test("without a SharedArrayBuffer (no cross-origin isolation): the worker alone fetches the part; a graph at ready that finds its fetch on the way fetches it itself and draws; other runs work", async ({
+test("without a SharedArrayBuffer (no cross-origin isolation): the part is a start file, written before ready; a graph at ready draws with no waiting line and no Graphs loading ring; other runs work", async ({
   page,
 }) => {
   await withoutIsolation(page);
-  // every fetch() of the part is held (the worker's own, started once the engine is ready); the graph's synchronous XHR
-  // goes through. The graph must not wait for the held fetch, and the page must not fetch the part at all (one owner)
   const types: string[] = [];
   await page.route(PART, async (route) => {
-    const type = route.request().resourceType();
-    types.push(type);
-    if (type === "fetch") await new Promise((ok) => setTimeout(ok, 15_000));
-    await route.continue().catch(() => {}); // the graph stopped that fetch meanwhile
+    types.push(route.request().resourceType());
+    await route.continue();
   });
   const lines: string[] = [];
   page.on("console", (m) => {
@@ -293,30 +289,17 @@ test("without a SharedArrayBuffer (no cross-origin isolation): the worker alone 
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
   await startEngine(page);
   await ready(page);
-  await expect.poll(() => types.length, { message: "the worker's own fetch began" }).toBeGreaterThan(0);
-  // the download is shown although the page does not fetch it: the worker says it began (a download is never hidden)
-  await expect(page.getByRole("progressbar", { name: /^Graphs loading, \d+\.\d of \d+\.\d MB$/ })).toBeVisible();
-  const t0 = Date.now();
+  await expect.poll(() => lines.join("\n"), { message: "the worker wrote it in boot" }).toMatch(/written at the start/);
+  await expect(page.locator("[data-graphics]"), "no ring: nothing downloads after the start").toHaveCount(0);
   const r = await run(page, "clear\nset obs 5\ngen x = _n\nscatter x x");
   expect(r.rc, r.log).toBe(0);
   expect(r.images).toHaveLength(1);
-  expect(r.log, "the graph that fetches it in a run says it waits, as with a shared buffer").toContain(
-    "(waiting for the graphics files to download)",
-  );
-  expect(Date.now() - t0, "the graph did not wait for the held fetch").toBeLessThan(12_000);
-  await expect(page.locator("[data-graphics]"), "landed: the ring goes").toHaveCount(0);
+  expect(r.log, "the graph did not wait for the part").not.toContain("(waiting for the graphics files to download)");
+  await expect(page.locator("[data-graphics]")).toHaveCount(0);
   const said = lines.join("\n");
-  expect(said).toContain("the worker's own fetch was still on its way");
-  expect(said).toMatch(/fetched by the worker in a run/);
-  expect(said, "the page never fetched the part").not.toMatch(/landed \(/);
-  expect(
-    types.filter((t) => t === "fetch"),
-    "one fetch(), the worker's",
-  ).toHaveLength(1);
-  expect(
-    types.filter((t) => t === "xhr"),
-    "the graph's own request",
-  ).toHaveLength(1);
+  expect(said, "not written by a graph or while idle").not.toMatch(/written (in a run|while idle)/);
+  expect(said, "the page did not fetch it after the start").not.toMatch(/landed \(/);
+  expect(types, "one request for the part: the start's download, whose Cache entry the worker read").toHaveLength(1);
   const ok = await run(page, "summarize x");
   expect(ok.rc, ok.log).toBe(0);
 });
@@ -352,43 +335,44 @@ test("a damaged part: the graph says it will be fetched again, the Cache entry i
   expect(hits, "the damaged entry was not read again: the part came from the network once more").toBe(2);
 });
 
-test("without a SharedArrayBuffer, a damaged part is not taken from the HTTP cache again: the retry has an address of its own", async ({
+test("without a SharedArrayBuffer, a damaged part fails the start as a damaged heap does: it is dropped from the Cache, and the next start fetches it again and a graph draws", async ({
   page,
 }) => {
   const list = await (await page.request.get("start-files.json")).json();
   await withoutIsolation(page);
-  const requests: string[] = [];
-  // PART's glob matches the whole address, so not the retry's `?fresh=`
-  await page.route(/\/snapshot\/graphics\.brotli\.bin(\?.*)?$/, async (route) => {
+  let hits = 0;
+  await page.route(PART, async (route) => {
     // the first request answers a part of the right size that is not brotli; later ones are the real file
-    requests.push(route.request().url());
-    if (requests.length === 1)
+    if (++hits === 1)
       await route.fulfill({
         body: Buffer.alloc(list.snapshot.graphics.size, 7),
         contentType: "application/octet-stream",
       });
     else await route.continue();
   });
-  const lines: string[] = [];
-  page.on("console", (m) => {
-    if (m.text().includes("graphics part")) lines.push(m.text());
-  });
-  await page.goto("?test");
+  await page.goto("?test=manual");
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
-  await startEngine(page);
-  await ready(page);
+  await page.waitForFunction(() => window.__dofile && !window.__dofile.store.blocked); // the tab lock answered
+  const partCached = () =>
+    page.evaluate(
+      async ([name, built]) =>
+        (await (await caches.open(`dofile-snapshot-${built}`)).keys()).some((r) => r.url.endsWith(`/snapshot/${name}`)),
+      [list.snapshot.graphics.name, list.built] as const,
+    );
+  await page.evaluate(() => {
+    window.__dofile.start();
+  });
   await expect
-    .poll(() => lines.join("\n"), { message: "the worker's own fetch landed" })
-    .toMatch(/fetched by the worker/);
-  await run(page, "clear\nset obs 5\ngen x = _n");
-  const bad = await run(page, "scatter x x");
-  expect(bad.rc, bad.log).toBe(199);
-  expect(bad.log).toContain("arrived damaged");
-  const drawn = await run(page, "scatter x x"); // fetches it again, in the run
-  expect(drawn.rc, drawn.log).toBe(0);
-  expect(drawn.images).toHaveLength(1);
-  expect(requests, "one more request").toHaveLength(2);
-  expect(requests[0]).not.toContain("fresh=");
-  expect(requests[1], "the retry is not an address the HTTP cache may hold").toContain("fresh=");
-  await expect(page.locator("[data-graphics]")).toHaveCount(0);
+    .poll(() => page.evaluate(() => window.__dofile.state.engine.value.s), { timeout: 120_000 })
+    .toBe("failed");
+  expect(await partCached(), "the damaged part is not read again").toBe(false);
+  await page.evaluate(() => {
+    window.__dofile.start();
+  });
+  await ready(page);
+  expect(await partCached()).toBe(true);
+  expect(hits, "the next start's download fetched it again").toBe(2);
+  const r = await run(page, "clear\nset obs 5\ngen x = _n\nscatter x x");
+  expect(r.rc, r.log).toBe(0);
+  expect(r.images).toHaveLength(1);
 });
