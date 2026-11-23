@@ -208,12 +208,15 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   `waitSeq` returns at once on a moved count and is woken by another thread's write; `readBytes` a clamped copy; and a
   writer thread against a reader for 0.4 s, no torn snapshot accepted (it accepted torn ones with the re-check as an
   `Atomics.load` on an Apple-silicon Mac).
-- `part-header.test.ts`: the shared buffer the graphics part is handed over in (`engine/lazy-part.ts`): what the page's
-  writers (land, fail with a reason cut to the room, retry) leave, as the worker's readers see it, and the header's
-  layout and size.
+- `part-header.test.ts`: the shared region the graphics part is handed over in (`engine/lazy-part.ts`, on the seqlock):
+  what the page's writers (land, fail with a reason cut to the room, retry: one more copy) leave, as the worker's
+  `readPart` sees it (the bytes only when asked for; an empty reason never read back empty), and the header's layout
+  (state, length, copy, counter) and size.
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
-  does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
-  decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).
+  does (Break, write, decode, fetch it itself, ask again once per run, a final failure with its reason, wait, also on a
+  busy read); races 1 to 3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy,
+  never the empty reason (the answer for written); and when the browser's own decoder is used (never when mount forces
+  brotli-wasm; not on the copy it failed on, again on a fresh one).
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
@@ -304,7 +307,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   the failure); a cycle finder on a small graph.
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
 - `seqlock.types.ts` (not run: `npm run check` compiles it): `writeSeq` refuses an asynchronous write and one that
-  returns a value; `readSeq` refuses an asynchronous or thenable result.
+  returns a value; `readSeq` refuses an asynchronous or thenable result; `failPart` refuses a plain string as its
+  `PartReason`.
 - `dispatch.types.ts` (not run: `npm run check` compiles it): the worker's dispatch table has an entry for every op and
   no other, each handler with its op's arguments and result (a missing op, a wrong result, wrong arguments and an extra
   op each fail to compile).

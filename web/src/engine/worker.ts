@@ -4,18 +4,10 @@
 // OpTable in worker-dispatch.ts, comes from Ops).
 
 import type { BrotliWasmType } from "brotli-wasm";
-import {
-  PART_FAILED,
-  PART_LANDED,
-  PART_PENDING,
-  partData,
-  partHeader,
-  partState,
-  partTries,
-  useNative,
-  waitPartChange,
-  waitStep,
-} from "./lazy-part.ts";
+import type { PartRead } from "./lazy-part.ts";
+import { partReason, partRegion, readPart, useNative, waitStep } from "./lazy-part.ts";
+import type { SeqRead, SeqRegion } from "./seqlock.ts";
+import { waitSeq } from "./seqlock.ts";
 import type { SnapshotPy } from "./snapshot.ts";
 import { hasNativeBrotli, inflateNative, unpackSteps, writeGraphics } from "./snapshot.ts";
 import { openStore } from "./store.ts";
@@ -69,8 +61,7 @@ const PROGRESS_MS = 100; // at most one {graphics: "progress"} this often
 const DECODE_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
 let share: {
   file: SnapshotFile;
-  hdr: Int32Array | null;
-  sab: SharedArrayBuffer | null;
+  region: SeqRegion | null; // the shared buffer's, or null without one
   bytes?: Uint8Array;
   error?: string;
 } | null = null;
@@ -85,7 +76,7 @@ let decode: { steps: Generator<number, Uint8Array, void>; t0: number; how: strin
 let native = false; // the browser's decoder is unpacking it (idle only)
 let decoded: { raw: Uint8Array; secs: number; how: string; longest: number } | null = null; // unpacked, not yet written
 let graphicsWritten = false;
-let askedAt: number | null = null; // the tries when this run asked the page to fetch a failed part again
+let askedAt: number | null = null; // the copy when this run asked the page to fetch a failed part again
 let graphicsError = ""; // the part arrived damaged; said once, by the next graph
 let warmAt = 0; // the next step of browser.warm_graphics; -1: done
 let tWarm = 0;
@@ -93,25 +84,20 @@ let warmLongest = 0;
 let prefetching: { stop: AbortController; done: Promise<void> } | null = null; // no shared buffer: the worker's own fetch
 let fetchSaid = false; // waitGraphics said "pending" before this graph's own fetch
 let fresh = false; // the part arrived damaged: the next fetch must skip the HTTP cache
-let copies = 0; // no shared buffer: this worker's copies of the part, counted (copyNow)
-let nativeFailedOn: number | null = null; // the copy (copyNow) the browser's decoder failed on
+let copies = 0; // no shared buffer: this worker's copies of the part, counted (readGraphics)
+let nativeFailedOn: number | null = null; // the copy the browser's decoder failed on
 let writtenInRun = 0; // performance.now() when a graph of this run wrote the part
 
-// Which copy of the part is there: the page's fetches of it (each new copy follows one), or this worker's own
-const copyNow = () => (share?.hdr ? partTries(share.hdr) : copies);
-const nativeNow = () => useNative(brotliMode, hasNativeBrotli(), nativeFailedOn, copyNow());
+const nativeFor = (copy: number) => useNative(brotliMode, hasNativeBrotli(), nativeFailedOn, copy);
 
-// The part as the page left it: its state, and a copy of the bytes (landed) or the reason (failed)
-function partNow(): [number, Uint8Array<ArrayBuffer> | string | null] {
-  if (!share) return [PART_FAILED, "this build has no graphics part"];
-  if (share.sab && share.hdr) {
-    const state = partState(share.hdr);
-    if (state === PART_PENDING) return [state, null];
-    const data = partData(share.sab, share.hdr);
-    return [state, state === PART_LANDED ? data : new TextDecoder().decode(data)];
-  }
-  if (share.bytes) return [PART_LANDED, share.bytes.slice()];
-  return share.error ? [PART_FAILED, share.error] : [PART_PENDING, null];
+// The part now: one snapshot of the shared region (busy while the page writes it, for up to waitMs), or without a buffer
+// this worker's own copy (its copies counted). withBytes: a copy of the bytes (up to 33 MB) when landed.
+function readGraphics(waitMs: number, withBytes: boolean): SeqRead<PartRead> {
+  const { region, bytes, error } = share!;
+  if (region) return readPart(region, waitMs, { withBytes });
+  if (bytes) return { seq: 0, value: { state: "landed", copy: copies, bytes: withBytes ? bytes.slice() : null } };
+  if (error) return { seq: 0, value: { state: "failed", copy: copies, reason: partReason(error) } };
+  return { seq: 0, value: { state: "pending", copy: copies } };
 }
 
 // The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the graph
@@ -119,7 +105,7 @@ function partNow(): [number, Uint8Array<ArrayBuffer> | string | null] {
 function damaged(e: unknown): string {
   graphicsError = `the graphics files arrived damaged (${errorForPage(e).message}); they are fetched again for the next graph`;
   decode = decoded = null;
-  if (share && !share.sab) {
+  if (share && !share.region) {
     share.bytes = undefined; // this worker's own copy: the next graph fetches it again
     fresh = true; // and not from the browser's HTTP cache, which may hold these same bytes
   }
@@ -171,16 +157,7 @@ function waitGraphics(ms: number): string {
     return why;
   }
   for (;;) {
-    let tries = 0;
-    let part = null as Uint8Array<ArrayBuffer> | string | null; // set by read()
-    const read = () => {
-      // tries before the state: a retry started between the two loads must show as new tries, not as a failure
-      // already the new try's (the graph would wait until a Break)
-      tries = share!.hdr ? partTries(share!.hdr) : 0;
-      const [state, now] = partNow();
-      part = now;
-      return { state, tries, shared: Boolean(share!.hdr) };
-    };
+    let read = { seq: 0, busy: true } as SeqRead<PartRead>; // set by waitStep's read
     try {
       const step = waitStep(
         {
@@ -189,9 +166,11 @@ function waitGraphics(ms: number): string {
           decoding: Boolean(decode),
           askedAt,
           fetchSaid,
+          shared: Boolean(share!.region),
         },
-        read,
+        () => (read = readGraphics(ms, true)),
       );
+      if (typeof step === "object") return step.giveUp;
       switch (step) {
         case "break":
           Atomics.store(interrupt!, 0, 0);
@@ -204,7 +183,8 @@ function waitGraphics(ms: number): string {
           decodeStep();
           continue;
         case "decode":
-          decodeStep(part as Uint8Array);
+          // waitStep decodes only a landed read
+          if ("value" in read && read.value.state === "landed") decodeStep(read.value.bytes!);
           continue;
         case "say-fetching":
           // the page cannot hand the part over while this graph runs. "pending" first, so that browser.py prints its
@@ -217,18 +197,14 @@ function waitGraphics(ms: number): string {
           if (why) return why;
           continue;
         }
-        case "give-up":
-          return part as string;
         case "ask-again":
-          askedAt = tries;
+          if ("value" in read) askedAt = read.value.copy;
           self.postMessage({ graphics: "again" });
-          waitPartChange(share!.hdr!, PART_FAILED, ms);
+          waitSeq(share!.region!, read.seq, ms);
           return "pending";
-        case "wait-failed":
-          waitPartChange(share!.hdr!, PART_FAILED, ms);
-          return "pending";
-        case "wait-pending":
-          waitPartChange(share!.hdr!, PART_PENDING, ms);
+        case "wait":
+          // on the counter, not the state: a whole retry may end in the state it began from
+          waitSeq(share!.region!, read.seq, ms);
           return "pending";
       }
     } catch (e) {
@@ -284,7 +260,7 @@ function fetchPartNow(): string {
 // Without a shared buffer: this worker's own fetch of the part, started after `startup` is answered. A graph that comes
 // first stops it and fetches the part itself.
 async function prefetch(): Promise<void> {
-  if (!share || share.sab || share.bytes) return Promise.resolve();
+  if (!share || share.region || share.bytes) return Promise.resolve();
   if (prefetching) return prefetching.done;
   const stop = new AbortController();
   const url = new URL(`${snapshotBase}${share.file.name}`, self.location.href).href;
@@ -351,16 +327,19 @@ function prefetched(stop: AbortController) {
 // unpacks with brotli-wasm itself and the result is dropped. Does nothing where there is no native decoder (Chromium).
 function nativeSoon() {
   if (!started || !share || native || decode || decoded || graphicsWritten || graphicsError) return;
-  if (!nativeNow()) return;
+  const read = readGraphics(0, false);
+  // busy: the op graphics after the page's write calls this again
+  if (!("value" in read) || !nativeFor(read.value.copy)) return;
   setTimeout(startNative, 0); // a task of its own: never inside the answer to `startup`
 }
 
 function startNative() {
   if (!share || native || decode || decoded || graphicsWritten || graphicsError) return;
-  const copy = copyNow(); // before the part: a fetch the page starts meanwhile must not take this copy's failure
-  const [state, part] = partNow();
-  if (state !== PART_LANDED) return;
-  const bytes = part as Uint8Array<ArrayBuffer>;
+  // the copy and its bytes from one snapshot: a failure is charged to the copy it unpacked
+  const read = readGraphics(0, true);
+  if (!("value" in read) || read.value.state !== "landed") return;
+  const { copy } = read.value;
+  const bytes = read.value.bytes!;
   const file = share.file;
   if (bytes.length !== file.size || bytes.length === file.raw) return; // not brotli: the wasm step says what is wrong
   native = true;
@@ -401,12 +380,13 @@ function idleStep() {
       browser.graphics_written();
     } else if (decode) decodeStep();
     else if (!graphicsWritten) {
-      const [state, part] = partNow();
-      if (state !== PART_LANDED) return; // the op graphics calls idleSoon when it lands
-      const bytes = part as Uint8Array<ArrayBuffer>;
+      const read = readGraphics(0, true);
+      // busy or not landed: the op graphics after the page's write calls idleSoon
+      if (!("value" in read) || read.value.state !== "landed") return;
+      const bytes = read.value.bytes!;
       const file = share!.file;
       // normally under way already (nativeSoon); its end calls idleSoon
-      if (nativeNow() && bytes.length === file.size && bytes.length !== file.raw) return startNative();
+      if (nativeFor(read.value.copy) && bytes.length === file.size && bytes.length !== file.raw) return startNative();
       decodeStep(bytes);
     } else {
       // after the write, the import of what a first graph needs: the three heavy modules one at a time, then 20 a step
@@ -458,7 +438,8 @@ export const table: OpTable = {
         stage,
         startup,
         lazyGraphics(engine, graphics) {
-          share = { ...graphics, hdr: graphics.sab ? partHeader(graphics.sab) : null };
+          // the buffer is wrapped at once and not kept
+          share = { file: graphics.file, region: graphics.sab ? partRegion(graphics.sab) : null };
           engine.lazy_graphics(waitGraphics);
         },
       }));
@@ -474,7 +455,7 @@ export const table: OpTable = {
     async handle() {
       started = true; // the part's work may begin (nativeSoon, idleSoon)
       idleSince = performance.now();
-      if (share && !share.sab) setTimeout(() => void prefetch(), 0); // after this answer, as nativeSoon
+      if (share && !share.region) setTimeout(() => void prefetch(), 0); // after this answer, as nativeSoon
       nativeSoon();
       idleSoon();
       // mode, filesS and engineS are set by now: the page asks only after boot's answer

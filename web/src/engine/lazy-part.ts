@@ -1,72 +1,101 @@
-// A lazy snapshot's graphics part: the shared buffer's layout and its page writers and worker readers, and the
+// A lazy snapshot's graphics part: the shared region's layout, its page writers and its reader (on seqlock.ts), and the
 // worker's decisions about the part, without their side effects (worker.ts acts on them).
 
-// The shared buffer the page hands the part over in (BootArgs.graphics.sab): an Int32 header [state, length, tries, 0]
-// of PART_HEADER bytes, then the compressed part (landed) or the reason it failed, as UTF-8 (failed). The page writes
-// it (client.ts), the worker reads it (worker.ts); `length` is the byte count after the header.
+import type { SeqRead, SeqReader, SeqRegion } from "./seqlock.ts";
+import { readSeq, seqRegion, writeSeq } from "./seqlock.ts";
+
+// The shared buffer the page hands the part over in (BootArgs.graphics.sab): an Int32 header [state, length, copy,
+// counter] of PART_HEADER bytes, then the compressed part (landed) or the reason it failed, as UTF-8 (failed). The page
+// writes it (client.ts), the worker reads it (worker.ts), each through the SeqRegion it wraps the buffer in.
 
 /** The part's state in the header. */
 export const PART_PENDING = 0,
   PART_LANDED = 1,
   PART_FAILED = 2;
 
-/** The header's Int32 indexes: the state, the byte count after the header, and `tries`: the page's fetches of the
- *  part, which a retry counts, so that a graph that asked takes the next failure as final. */
+/** The header's Int32 indexes: the state, the byte count after the header, `copy`: the page's fetches of the part after
+ *  the first, which a retry counts, so that a graph that asked takes the next failure as final; then the seqlock's
+ *  counter. */
 export const HDR_STATE = 0,
   HDR_LENGTH = 1,
-  HDR_TRIES = 2;
+  HDR_COPY = 2,
+  HDR_SEQ = 3;
 
 /** Where the part (or the reason) starts in the buffer; the header's size in bytes. */
 export const PART_HEADER = 16;
 
-export const partHeader = (sab: SharedArrayBuffer) => new Int32Array(sab, 0, PART_HEADER / 4);
+/** Each thread wraps the buffer it holds once, and reads and writes the part only through the region. */
+export const partRegion = (sab: SharedArrayBuffer) => seqRegion(sab, HDR_SEQ + 1);
+
+declare const partReasonTag: unique symbol;
+/** Why a fetch failed: never "", which is waitGraphics's answer for "written". Only partReason makes one. */
+export type PartReason = string & { readonly [partReasonTag]: true };
+
+export function partReason(text: string): PartReason {
+  return (text || "the graphics files could not be downloaded (no reason was given)") as PartReason;
+}
+
+/** One whole snapshot of the part. `bytes`: a copy (up to 33 MB), null unless asked for. */
+export type PartRead =
+  | { state: "pending"; copy: number }
+  | { state: "landed"; copy: number; bytes: Uint8Array<ArrayBuffer> | null }
+  | { state: "failed"; copy: number; reason: PartReason };
 
 /** Page: the part has arrived. */
-export function landPart(sab: SharedArrayBuffer, bytes: Uint8Array): void {
-  new Uint8Array(sab, PART_HEADER).set(bytes);
-  const hdr = partHeader(sab);
-  Atomics.store(hdr, HDR_LENGTH, bytes.length);
-  Atomics.store(hdr, HDR_STATE, PART_LANDED);
-  Atomics.notify(hdr, HDR_STATE);
+export function landPart(part: SeqRegion, bytes: Uint8Array): void {
+  writeSeq(part, (writer) => {
+    writer.setBytes(bytes);
+    writer.setWord(HDR_LENGTH, bytes.length);
+    writer.setWord(HDR_STATE, PART_LANDED);
+  });
 }
 
 /** Page: the fetch failed; the reason is cut to the room there is. */
-export function failPart(sab: SharedArrayBuffer, why: string): void {
-  const text = new TextEncoder().encode(why).subarray(0, sab.byteLength - PART_HEADER);
-  const hdr = partHeader(sab);
-  new Uint8Array(sab, PART_HEADER).set(text);
-  Atomics.store(hdr, HDR_LENGTH, text.length);
-  Atomics.store(hdr, HDR_STATE, PART_FAILED);
-  Atomics.notify(hdr, HDR_STATE);
+export function failPart(part: SeqRegion, reason: PartReason): void {
+  writeSeq(part, (writer) => {
+    const text = new TextEncoder().encode(reason).subarray(0, writer.room);
+    writer.setBytes(text);
+    writer.setWord(HDR_LENGTH, text.length);
+    writer.setWord(HDR_STATE, PART_FAILED);
+  });
 }
 
-/** Page: a fetch starts again. */
-export function retryPart(sab: SharedArrayBuffer): void {
-  const hdr = partHeader(sab);
-  Atomics.store(hdr, HDR_LENGTH, 0);
-  Atomics.add(hdr, HDR_TRIES, 1);
-  Atomics.store(hdr, HDR_STATE, PART_PENDING);
-  Atomics.notify(hdr, HDR_STATE);
+/** Page: a fetch starts again, of one more copy. */
+export function retryPart(part: SeqRegion): void {
+  // the page is the region's one writer, so no write of its own is under way here
+  const now = readPart(part, 0);
+  if (!("value" in now)) throw new Error("the graphics part's region is being written by another thread");
+  writeSeq(part, (writer) => {
+    writer.setWord(HDR_LENGTH, 0);
+    writer.setWord(HDR_COPY, now.value.copy + 1);
+    writer.setWord(HDR_STATE, PART_PENDING);
+  });
 }
 
-/** Worker: the page's fetches of the part so far. Read before the state: a retry between the two loads then shows as
- *  new tries, not as a failure already the new try's. */
-export const partTries = (hdr: Int32Array) => Atomics.load(hdr, HDR_TRIES);
+/** readPart's callback: the copy number, the state and the bytes or the reason, from one reader. */
+export function partSnapshot(reader: SeqReader, { withBytes = false } = {}): PartRead {
+  const copy = reader.readWord(HDR_COPY);
+  const length = reader.readWord(HDR_LENGTH);
+  switch (reader.readWord(HDR_STATE)) {
+    case PART_LANDED:
+      return { state: "landed", copy, bytes: withBytes ? reader.readBytes(length) : null };
+    case PART_FAILED:
+      return { state: "failed", copy, reason: partReason(new TextDecoder().decode(reader.readBytes(length))) };
+    default:
+      return { state: "pending", copy };
+  }
+}
 
-export const partState = (hdr: Int32Array) => Atomics.load(hdr, HDR_STATE);
+/**
+ * The part as one snapshot: busy when the page's writes left none within `waitMs` (0: no wait).
+ * @param options - `withBytes`: copy a landed part's bytes
+ */
+export function readPart(part: SeqRegion, waitMs: number, options: { withBytes?: boolean } = {}): SeqRead<PartRead> {
+  return readSeq(part, (reader) => partSnapshot(reader, options), waitMs);
+}
 
-/** Worker: a copy of the bytes (landed) or the reason (failed); TextDecoder and Blob refuse a shared view. */
-export const partData = (sab: SharedArrayBuffer, hdr: Int32Array) =>
-  new Uint8Array(sab, PART_HEADER, hdr[HDR_LENGTH]).slice();
-
-/** Worker: block up to `ms` while the state is still `state`. */
-export const waitPartChange = (hdr: Int32Array, state: number, ms: number) => Atomics.wait(hdr, HDR_STATE, state, ms);
-
-/** The part as a waiting graph reads it. `tries`: the page's fetches of it, read before `state`. */
-export type PartRead = { state: number; tries: number; shared: boolean };
-
-/** What a waiting graph does next. The part is read through `read()`, only when needed (a copy of up to 33 MB).
- *  "wait-failed" and "wait-pending": wait on the header for a change from that state, then answer "pending". */
+/** What a waiting graph does next. "wait": wait on the region's counter from the read's count, then answer "pending".
+ *  A give-up carries the read's reason, the graph's answer. */
 export type WaitStep =
   | "break"
   | "write"
@@ -75,31 +104,40 @@ export type WaitStep =
   | "say-fetching"
   | "fetch"
   | "ask-again"
-  | "give-up"
-  | "wait-failed"
-  | "wait-pending";
+  | "wait"
+  | { giveUp: PartReason };
 
 /**
- * @param askedAt - the tries when this run asked the page for another fetch, or null
+ * The part is read through `read()`, only when needed (a copy of up to 33 MB).
+ * @param askedAt - the copy when this run asked the page for another fetch, or null
  * @param fetchSaid - without a shared buffer: "pending" was answered before this graph's own fetch
+ * @param shared - the part comes in a shared buffer (else this worker fetches it)
  */
 export function waitStep(
-  w: { interrupted: boolean; decoded: boolean; decoding: boolean; askedAt: number | null; fetchSaid: boolean },
-  read: () => PartRead,
+  w: {
+    interrupted: boolean;
+    decoded: boolean;
+    decoding: boolean;
+    askedAt: number | null;
+    fetchSaid: boolean;
+    shared: boolean;
+  },
+  read: () => SeqRead<PartRead>,
 ): WaitStep {
   if (w.interrupted) return "break";
   if (w.decoded) return "write";
   if (w.decoding) return "decode-more";
-  const { state, tries, shared } = read();
-  if (state === PART_LANDED) return "decode";
-  if (!shared) return w.fetchSaid ? "fetch" : "say-fetching";
-  if (state === PART_FAILED) {
+  const now = read();
+  if (!("value" in now)) return "wait";
+  const part = now.value;
+  if (part.state === "landed") return "decode";
+  if (!w.shared) return w.fetchSaid ? "fetch" : "say-fetching";
+  if (part.state === "failed") {
     // once per run; the failure of the fetch it asked for is final
     if (w.askedAt === null) return "ask-again";
-    if (tries !== w.askedAt) return "give-up";
-    return "wait-failed";
+    if (part.copy !== w.askedAt) return { giveUp: part.reason };
   }
-  return "wait-pending";
+  return "wait";
 }
 
 /**

@@ -1,6 +1,7 @@
 // What the seqlock's types refuse (src/engine/seqlock.ts), checked by `npm run check`: an asynchronous write section, a
 // write that returns a value, and an asynchronous or thenable read result.
 
+import { failPart, partReason, partRegion } from "../src/engine/lazy-part.ts";
 import type { SeqRead } from "../src/engine/seqlock.ts";
 import { readSeq, seqRegion, writeSeq } from "../src/engine/seqlock.ts";
 
@@ -22,3 +23,8 @@ readSeq(region, async (reader) => reader.readWord(0), 0);
 const thenable = { then: () => {} };
 // @ts-expect-error a thenable read result
 readSeq(region, () => thenable, 0);
+
+const part = partRegion(new SharedArrayBuffer(32));
+failPart(part, partReason("offline"));
+// @ts-expect-error a plain string as a PartReason
+failPart(part, "offline");
