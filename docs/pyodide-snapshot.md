@@ -77,7 +77,7 @@ a restore is byte-identical to one from a normal boot (the same seeded program).
 | File | Role |
 |---|---|
 | `web/scripts/make-snapshot.ts` | `npm run snapshot` builds `web/public/snapshot/` (gitignored; about 3 minutes at brotli 11, seconds with `SNAPSHOT_QUALITY=5`; needs the network once for openpyxl) |
-| `web/src/engine/snapshot.ts` | the loader patch, the library log, the restore options, and brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`inflateNative`/`unpackAsync` (the browser's decoder, brotli-wasm as the fallback); used by the script and the worker |
+| `web/src/engine/snapshot.ts` | the loader patch, the library log, the restore options, and brotli decoding: `inflate`/`unpack` (brotli-wasm) and `hasNativeBrotli`/`unpackNative`/`unpackAsync` (the browser's decoder, brotli-wasm as the fallback); used by the script and the worker |
 | `web/src/engine/worker-boot.ts` (called by `worker.ts`) | `mount` loads from the snapshot when the page gives a URL (download or cache, unpack, restore); `boot` then skips the install; the `startup` op returns where the start's time went. It reads everything through one Cache: "The start since prototype 1" below |
 | `web/src/engine/client.ts`, `main.tsx` | pass the URL, the wheel's hash and `?brotli=`; the snapshot is on unless `?snapshot=0`. Where the start's time went: the client's `startup` and the worker's console line `[dofile] snapshot start: …` |
 | `web/spike/snapshot.mjs` | the standalone spike with its own timing comparison (removed; in git history at commit `10e0f1c`) |
@@ -393,7 +393,7 @@ desktop. What was found:
   `public/snapshot/` has not been built. Every worker it starts is ended in an `after` hook, so a failing assertion does
   not leave `npm test` hanging.
 - `web/test/snapshot.test.ts`: `inflate` and `unpack` (a round trip in steps of any size, a file a host already
-  decoded, and truncated, damaged, wrongly sized and mismatched-manifest files refused), and `inflateNative`/`unpackAsync`
+  decoded, and truncated, damaged, wrongly sized and mismatched-manifest files refused), and `unpackNative`/`unpackAsync`
   (the same bytes as brotli-wasm; a truncated file falls back and gives the wasm error; skipped without native brotli).
 - e2e: the snapshot is the default start (`npm run e2e` builds it; a missing one fails the tests). The cached start, a
   reload that reads from the cache, and **everything in the browser's caches between 10 and 80 MB** (about 40 MB; the

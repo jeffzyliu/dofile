@@ -9,7 +9,7 @@ import { partRegion, readPart, useNative, waitStep } from "./lazy-part.ts";
 import type { SeqRead, SeqRegion } from "./seqlock.ts";
 import { waitSeq } from "./seqlock.ts";
 import type { SnapshotPy } from "./snapshot.ts";
-import { hasNativeBrotli, inflateNative, unpackSteps, writeGraphics } from "./snapshot.ts";
+import { hasNativeBrotli, unpackNative, unpackSteps, writeGraphics } from "./snapshot.ts";
 import { openStore } from "./store.ts";
 import type { About, RunOptions, SnapshotFile, Stage, Startup, ToWorker } from "./types.ts";
 import type { MirrorStore } from "./work-mirror.ts";
@@ -211,7 +211,7 @@ function startNative() {
   if (bytes.length !== file.size || bytes.length === file.raw) return; // not brotli: the wasm step says what is wrong
   native = true;
   const t0 = performance.now();
-  inflateNative(bytes, file.raw)
+  unpackNative(bytes, file.raw)
     .then(
       (raw) => {
         // a graph that came meanwhile unpacked the part itself (see nativeSoon): this result is spare
