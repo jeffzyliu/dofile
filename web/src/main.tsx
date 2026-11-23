@@ -5,22 +5,19 @@ import "./styles/app.css";
 import { effect } from "@preact/signals";
 import { render } from "preact";
 import { App } from "./app/App";
-import { activeTab, selection, tabs } from "./app/editor/documents.ts";
+import { selection, tabs } from "./app/editor/documents.ts";
 import { documentSeeds } from "./app/editor/seeds.ts";
 import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
 import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
 import { focusWanted } from "./app/files/tree-state.ts";
 import { connectFiles } from "./app/files.ts";
-import { pickedVar } from "./app/output/view.ts";
+import { hookState } from "./app/hook-state.ts";
 import { handlers, runCode } from "./app/run.ts";
 import * as Engine from "./app/state/engine.ts";
 import * as Files from "./app/state/files.ts";
 import * as Layout from "./app/state/layout.ts";
-import * as Notices from "./app/state/notices.ts";
-import * as Run from "./app/state/run.ts";
-import * as Saved from "./app/state/saved.ts";
 import { store } from "./app/store.ts";
-import { applyTheme, resolvedTheme, theme } from "./app/theme.ts";
+import { applyTheme } from "./app/theme.ts";
 import { watchViewport } from "./app/viewport.ts";
 import { watchWakeLock } from "./app/wakelock.ts";
 import { EngineClient } from "./engine/client.ts";
@@ -80,20 +77,7 @@ const testHook = {
   start,
   persisted: () => Files.persisted.value,
   engineBytes: Engine.engineBytes,
-  // one object: the signals of every state module (and the theme, and the Data tab's pick), and the tabs from their owner
-  state: {
-    ...Engine,
-    ...Files,
-    ...Run,
-    ...Layout,
-    ...Notices,
-    ...Saved,
-    theme,
-    resolvedTheme,
-    pickedVar,
-    tabs,
-    activeTab,
-  },
+  state: hookState(),
   documents: documentSeeds,
   run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
   breakRun,

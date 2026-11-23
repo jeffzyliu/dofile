@@ -324,6 +324,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
 - `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
   the failure); a cycle finder on a small graph.
+- `hook-state.test.ts`: `hookState()` (`src/app/hook-state.ts`, which `main.tsx` gives the e2e hook and `state-all.ts` gives the tests as `S`) has every name the specs read as `state.<name>`.
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals the state modules export (`state/*.ts`, `theme.ts`) are the views' own.
 - `seqlock.types.ts` (not run: `npm run check` compiles it): `writeSeq` refuses an asynchronous write and one that
   returns a value; `readSeq` refuses an asynchronous or thenable result; `failPart` refuses a plain string as its
