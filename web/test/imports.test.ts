@@ -298,3 +298,15 @@ test("one door: in src/app/ the store keeps its name (no renamed or namespace im
   assert.deepEqual(having(app, renamed, false), {}, "renamed");
   assert.deepEqual(having(app, copied), {}, "copied or destructured");
 });
+
+test("a state module imports values only from the signals package, app/paths.ts and other state modules", () => {
+  const stateFiles = files("src/app/state");
+  assert.ok(stateFiles.length >= 6, "the scan found the state modules");
+  const stray = stateFiles.flatMap((f) =>
+    importsOf(f)
+      .filter((i) => !i.typeOnly && i.from !== "@preact/signals-core")
+      .filter((i) => !(i.file !== null && /^src\/app\/(state\/[^/]+|paths)\.ts$/.test(i.file)))
+      .map((i) => `${f} imports ${i.from}`),
+  );
+  assert.deepEqual(stray, []);
+});

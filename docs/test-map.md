@@ -318,6 +318,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
   checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
   - No view reaches the transport through value imports (transitive).
+  - A state module (`src/app/state/`) imports values only from the signals package, `app/paths.ts` and other state modules.
   - `machine.ts`: two casts, no top-level `let` or `var`; the cast to `Ticket` occurs once in `web/`.
   - The transport names no state; `run.ts` subscribes to nothing.
   - The pages' HTML and CSS: `src/site/` apart from the editor's.
