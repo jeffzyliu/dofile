@@ -1258,8 +1258,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     numbered in the log's order; on the desktop with the Output pane unsplit, Find shows the Log tab first; Esc and Close
     give the focus back to the Find button, on a phone to the ⋯ button); Download log saves
     `dofile.log`; the phone's "Run command" is a 44 px icon button (`.send`) that keeps the field's focus (`pointerdown` and `mousedown` cancelled, the click refocuses the field; `aria-disabled` while the field is empty); on a phone the command line has a fixed height
-    (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (taken as 61 px and the safe
-    area, from ui.css's `.tabbar`: a figure, not a measure); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` are highlighted with CodeMirror's
+    (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (`--tabbar-h`, 61 px and the safe
+    area, app.css: the tab bar takes it as its height, so the toast and the bar agree); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` are highlighted with CodeMirror's
     `@codemirror/lang-markdown` (its `markdownLanguage` alone: `markdown()` would bring the HTML, CSS and JavaScript
     languages, about 160 KB more) and `@codemirror/lang-json`, on the Stata tokens' classes (added when 4b and 4d were
     joined). **Pasted lines** (the maintainer's decision: each line runs in turn): a paste
