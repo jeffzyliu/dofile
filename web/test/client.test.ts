@@ -1502,11 +1502,9 @@ test("graphics part: the progress the listeners see, for a miss with its bytes, 
   await startWorker(page.eng, done.build);
   await f.release();
   await until(() => page.states.at(-1) === "landed", "landed");
-  await sleep(5);
   page.say("damaged");
   await f.release();
   await until(() => page.states.at(-1) === "failed", "the re-fetch failed");
-  await sleep(5);
   page.say("again");
   await f.release();
   await until(() => page.states.at(-1) === "landed", "landed again");
