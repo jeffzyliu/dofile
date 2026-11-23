@@ -6,6 +6,68 @@ and proposes how R1 makes it one machine. It changes no code. **Status: proposed
 approval.** Read from the code at e496b4c. Paths are under `web/src/engine/` unless they start with `web/`, `src/` or
 `docs/`. "Guess" marks what was not checked.
 
+## In pictures: the normal path, with a shared buffer
+
+The page fetches the part and hands it over; the engine is idle, so the worker unpacks, writes and imports it:
+
+```mermaid
+sequenceDiagram
+    participant P as Page (client.ts)
+    participant B as Shared buffer (lazy-part.ts)
+    participant W as Worker (worker.ts)
+    participant Y as browser.py
+    P->>W: mount, then boot with graphics file and sab
+    W->>Y: lazy_graphics(waitGraphics)
+    P->>W: startup
+    Note over W: started, then nativeSoon and idleSoon (nothing of the part before this)
+    P->>P: #35;wantGraphics, #35;fetchGraphics (the Cache, else the network)
+    P->>B: landPart (state landed, Atomics.notify)
+    P->>W: op graphics (#35;tellGraphics)
+    W->>B: partNow (a copy of the bytes)
+    alt the browser's decoder (useNative)
+        W->>W: startNative, inflateNative off this thread
+    else brotli-wasm
+        W->>W: idleStep, one decode step per task
+    end
+    Note over W: every idleStep waits for runs = 0 and IDLE_MS of idle
+    W->>W: idleStep, writePart ("written while idle")
+    W->>Y: graphics_written
+    loop until warmAt is -1
+        W->>Y: idleStep, warm_graphics(warmAt, 1 or 20)
+    end
+    Note over W: "warmed"
+```
+
+A graph that comes before the part is written waits for it, and unpacks and writes it in the run:
+
+```mermaid
+sequenceDiagram
+    participant P as Page (client.ts)
+    participant B as Shared buffer (lazy-part.ts)
+    participant W as Worker (worker.ts)
+    participant Y as browser.py
+    P->>W: run (arrived, runs++)
+    Note over Y: the graph store's put, or an import of matplotlib
+    Y->>Y: _LazyGraphics.ensure
+    loop while the part is pending
+        Y->>W: waitGraphics(100)
+        W->>B: waitStep reads tries, then state
+        W->>B: wait-pending, Atomics.wait up to 100 ms
+        W-->>Y: "pending" (the waiting line, once)
+    end
+    P->>B: landPart (state landed, Atomics.notify)
+    Y->>W: waitGraphics(100)
+    W->>B: decode, partNow (a copy of the bytes)
+    loop decode-more, in the same call
+        W->>W: decodeStep, 256 KB of brotli-wasm
+    end
+    W->>W: write, writePart ("written in a run")
+    W-->>Y: "" (written)
+    Y->>Y: ready, import matplotlib, draw
+    W->>W: run's finally ("in the run, after the write")
+    W->>P: the run's answer
+```
+
 ## 1. The two halves
 
 **Page** (`client.ts`, the section "a lazy snapshot's graphics part"): one `GraphicsPart` per build for the page's life
@@ -25,6 +87,26 @@ status bar shows, through `onGraphics`), `loading` (a fetch on its way) and `dam
 
 `#tellGraphics` sends the op `graphics` (no args, answered outside the queue) to the live worker, if any: it tells
 the worker to look at the header, nothing more. It is sent only when there is a buffer.
+
+The page's part, as `progress.state` (the flags `loading` and `damaged` beside it):
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: #35;graphicsOf, in download() or start()
+    pending --> fetching: #35;wantGraphics, #35;fetchGraphics, a Cache miss
+    pending --> landed: #35;fetchGraphics, a Cache hit, landPart
+    fetching --> landed: size checked, landPart, #35;tellGraphics
+    fetching --> failed: failPart, one online listener, #35;tellGraphics
+    failed --> pending: worker posts again, or online, #35;retryGraphics, retryPart
+    landed --> failed: worker posts damaged, #35;refetchDamaged, damaged = true
+    note right of failed
+        #35;refetchDamaged writes failed only so that
+        #35;retryGraphics takes it, at once.
+        While loading, again, damaged and online do nothing.
+        No sab: #35;workerSaysGraphics sets these states
+        from the worker's messages instead.
+    end note
+```
 
 **Worker** (`worker.ts`, the section "a lazy snapshot's graphics part", lines 56 to 425). Pure decisions are already in
 `lazy-part.ts`: `waitStep` (a waiting graph) and `useNative`; the rest decides inline.
@@ -49,6 +131,31 @@ The unpack is one state written as four flags: none, `native`, `decode` (brotli-
 written), `graphicsWritten`, then warmed (`warmAt < 0`); `graphicsError` stops all idle work. Two can hold at once:
 `native` with `decode` (a graph decodes while the browser's decoder runs; its result is then dropped, unless the
 graph found the copy damaged: race 13).
+
+The worker's unpack, as that one state (the table's events on its edges):
+
+```mermaid
+stateDiagram-v2
+    state "none" as nothing
+    [*] --> nothing: boot, lazyGraphics sets share
+    nothing --> native: nativeSoon, then startNative (started, landed, nativeNow)
+    nothing --> decode: idleStep's first decode step, or waitStep decode
+    native --> decoded: inflateNative resolves, no graph unpacked meanwhile
+    native --> nothing: inflateNative fails, nativeFailedOn = copy
+    decode --> decode: idleStep, or waitStep decode-more (one step)
+    decode --> decoded: the last step
+    decoded --> graphicsWritten: idleStep, or waitStep write (writePart)
+    graphicsWritten --> warmed: idleStep, warm_graphics until warmAt is -1
+    decode --> graphicsError: damaged(e), a step throws
+    decoded --> graphicsError: damaged(e), the write throws
+    graphicsWritten --> graphicsError: damaged(e), a warm step throws
+    graphicsError --> nothing: a graph says it once (waitGraphics)
+    note right of native
+        native can hold with decode: a graph
+        decodes while the browser's decoder runs
+        (races 7 and 13)
+    end note
+```
 
 ## 2. The 22 variables as one record
 
@@ -175,6 +282,28 @@ or a second worker of its own. This also rules out, for R1, the "decode on anoth
     (its comment says so). A Break or the run's timeout therefore resets the worker (rc 9998, the data gone); the
     next worker has no copy (`copies` 0, the page's progress set back to pending by `start()`) and starts its
     `prefetch` from zero. Ordered, by the reset; it costs the data and the download.
+
+Race 3, drawn: the shaded step is the page's retry between the worker's state load and its length read.
+
+```mermaid
+sequenceDiagram
+    participant P as Page (client.ts)
+    participant B as Shared buffer (lazy-part.ts)
+    participant W as Worker (waitGraphics)
+    participant Y as browser.py
+    Note over B: failed at tries T, the graph asked again (askedAt T), that fetch failed too (tries T+1)
+    Y->>W: waitGraphics(100)
+    W->>B: read tries (T+1)
+    W->>B: read state (failed)
+    rect rgb(255, 225, 225)
+        P->>B: online, #35;retryGraphics, retryPart (length 0, tries T+2, pending)
+        W->>B: partData reads length 0, so the reason is ""
+    end
+    Note over W: waitStep, give-up (tries is not askedAt)
+    W-->>Y: "" (the answer that means written)
+    Y->>Y: ensure sets ready
+    Note over Y: matplotlib is not there, so this graph fails, and later graphs skip the wait
+```
 
 ## 7. Tests
 
