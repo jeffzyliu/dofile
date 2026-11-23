@@ -60,7 +60,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | PATCH-2 | dofile patch: Break is taken only at safe points, so an interrupt can't leave the data half changed | `tests/test_break.py` | patched |
 | PATCH-3 | dofile patch: every user file name goes through one hook (`core/userpath.user_path`), for the web demo's path shim (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
 | PATCH-4 | dofile patch: `expand` and `stsplit` build `np.repeat` counts as `np.intp`, which wasm32 numpy needs | `expand` and `stsplit` cases of `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.ts`); a CPython test cannot show it | patched (dofile-only, wasm32); the 11 cases pass in Pyodide |
-| PATCH-5 | dofile patch: upstream turns an `IndexError`, `KeyError` or `ValueError` in a command into r(198) "invalid syntax" (00cd4dc); the log gets a line `engine error: <Type>: <message>` before it, so an engine fault is not taken for the user's syntax error | `tests/test_engine.py::test_patch5_*` | patched (dofile-only, not for upstream) |
+| PATCH-5 | dofile patch: upstream turns an `IndexError`, `KeyError` or `ValueError` in a command into r(198) "invalid syntax" (00cd4dc); when the error is reported, the log gets a line `engine error: <Type>: <message>` before it, naming the Python error (an engine fault, or a value the command could not read) | `tests/test_engine.py::test_patch5_*` | patched (dofile-only, not for upstream) |
 
 ## Details
 
@@ -696,10 +696,18 @@ Since 00cd4dc the dispatcher (`lang/interpreter.py`, `_as_stata_error`) turns an
 `ValueError` that escapes a command into r(198) "invalid syntax", with no traceback, so `capture` takes it. Before, the
 same fault was rc 9999 "internal engine error" with a traceback. The 198 follows upstream (maintainer's decision
 2026-11-23, option a), but a bug in the engine then looks like a mistake in the user's code.
-- The patch (`opendta-patch5-engine-error-line.patch`, five lines, after PATCH-2 because both edit that `except`): before it
-  raises, the dispatcher writes `engine error: <ExceptionType>: <message>` (the first line of the message; just the type
-  when the message is empty) as an error line, shown under `quietly` and hidden under `capture`, as the error itself is.
-  A real syntax error has no such line. The line has no traceback and the error text stays "invalid syntax".
+- The patch (`opendta-patch5-engine-error-line.patch`, after PATCH-2 because both edit that `except`): the dispatcher
+  keeps `<ExceptionType>: <message>` (the first line of the message; just the type when the message is empty) on the
+  `StataError`, and `Session.report_error` writes `engine error: <ExceptionType>: <message>` as an error line just
+  before the error message. So the line shows wherever the message shows (the end of the call, also under `quietly`;
+  `capture noisily`; a do-file's echo; `_stata()`) and not when the error is taken silently (`capture`; `statsby`,
+  `bootstrap` and the other replicate commands, which count a failed group or replicate and go on). The line has no
+  traceback and the error text stays "invalid syntax".
+- What the line means: it names the Python error behind the 198, which is an engine bug or a value the command could
+  not read. Upstream's option parsing raises `ValueError` on bad user text: `xtile q = x, nq(abc)` gives
+  `engine error: ValueError: invalid literal for int() with base 10: 'abc'`, `recode x (1=a)` gives
+  `engine error: ValueError: could not convert string to float: 'a'`. Check the options and values first; if they
+  are right, report it. OpenDTA's hint after the message ("could not read this ... command") is upstream's, unchanged.
 - rc 9999 stays for an exception that escapes outside a command (macro expansion, the interpreter, a loop's own work),
   and for an `OSError` the engine did not mean (`Engine.run`).
 - Not for upstream: it is a diagnostic for dofile's agents and bug reports.

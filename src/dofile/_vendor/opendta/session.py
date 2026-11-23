@@ -553,6 +553,10 @@ class Session:
                     hint = render(expl, int(float(self.settings.get("linesize", 80))) - 1)
             except Exception:  # noqa: BLE001 - an explanation never brings down the original error
                 hint = []
+        engine_error = getattr(e, "engine_error", None)   # dofile patch (PATCH-5): the Python error behind an r(198)
+        if engine_error:
+            self.output.ensure_line_start(force=True)
+            self.output.write(f"engine error: {engine_error}\n", "error", force=True)
         from .i18n import translate_error
         self.output.error(translate_error(e.message), e.rc, show_rc=show_rc, hint=hint)
 

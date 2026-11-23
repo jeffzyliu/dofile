@@ -675,6 +675,21 @@ def test_patch5_a_python_error_in_a_command_is_rc_198_with_an_engine_error_line(
     assert "engine error: KeyError: 'v'\n" in eng.run("replace x = 2").log
     monkeypatch.setattr(Dataset, "set_numeric", lambda *a, **k: (_ for _ in ()).throw(IndexError()))
     assert "engine error: IndexError\n" in eng.run("replace x = 2").log
+    r = eng.run("capture noisily replace x = 2")  # the error is shown, so its line is too
+    assert r.rc == 0 and "\nengine error: IndexError\ninvalid syntax\n" in r.log, r.log
+
+
+def test_patch5_no_engine_error_line_when_the_error_is_not_reported(eng, monkeypatch):
+    """PATCH-5: statsby (like bootstrap and the other replicate commands) counts a failed group and goes on; the line
+    goes with the error message, so a 198 that nobody reports leaves no line."""
+    from dofile._vendor.opendta.core.dataset import Dataset
+
+    eng.run("clear\nset obs 8\ngen x = _n\ngen g = mod(_n, 4)")
+    eng.run("program mycmd, rclass\n    replace x = 2\n    return scalar m = 1\nend")
+    monkeypatch.setattr(Dataset, "set_numeric", lambda *a, **k: (_ for _ in ()).throw(ValueError("boom")))
+    r = eng.run("statsby m=r(m), by(g) clear: mycmd")
+    assert r.rc == 0 and "engine error" not in r.log, (r.rc, r.log)
+
 
 
 def test_odt22_matrix_pseudofunction(eng):

@@ -649,12 +649,11 @@ class Interpreter:
             try:
                 spec.fn(self.s, rest)
             except (OSError, IndexError, KeyError, ValueError) as exc:
-                if not isinstance(exc, OSError):   # dofile patch (PATCH-5): an engine fault is not a syntax error
-                    out = self.s.output
+                err = _as_stata_error(exc)
+                if not isinstance(exc, OSError):   # dofile patch (PATCH-5): report_error names the Python error
                     why = (str(exc).strip().splitlines() or [""])[0]
-                    out.ensure_line_start(force=True)
-                    out.write(f"engine error: {type(exc).__name__}{': ' + why if why else ''}\n", "error", force=True)
-                raise _as_stata_error(exc) from exc
+                    err.engine_error = f"{type(exc).__name__}{': ' + why if why else ''}"
+                raise err from exc
         except StataError as err:
             if err.context is None:
                 err.context = (spec.name, text)   # for the error explanation
