@@ -204,7 +204,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
   counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
   word refused to a writer; a kept writer or reader throws; a page write between a reader's two counter reads is read
-  again whole (busy with `waitMs` 0); an odd counter is busy after `waitMs`, woken by a second thread's notify;
+  again whole (busy with `waitMs` 0, at the count its copy began at, so a `waitSeq` on it returns at once); an odd counter is busy after `waitMs`, woken by a second thread's notify;
   `waitSeq` returns at once on a moved count and is woken by another thread's write; `readBytes` a clamped copy; and a
   writer thread against a reader for 0.4 s, no torn snapshot accepted (it accepted torn ones with the re-check as an
   `Atomics.load` on an Apple-silicon Mac).

@@ -23,7 +23,10 @@ export type SeqReader = {
   readBytes(count: number): Uint8Array<ArrayBuffer>;
 };
 
-/** A whole snapshot read at count `seq`, or busy: none could be had within the time given (`seq` is the count then). */
+/**
+ * A whole snapshot read at count `seq`, or busy: none could be had within the time given. A busy `seq` is the count the
+ * last try began at, so a waitSeq on it returns when that try's write ends, at once if it already has.
+ */
 export type SeqRead<T> = { seq: number; value: T } | { seq: number; busy: true };
 
 type NotThenable<T> = T extends PromiseLike<unknown> ? never : T extends { then: unknown } ? never : T;
@@ -147,7 +150,7 @@ export function readSeq<T>(region: SeqRegion, read: (reader: SeqReader) => NotTh
     const now = Atomics.add(words, counter, 0);
     if (now !== seq) {
       // a write overlapped the copy: thrown away, a throw too (it read torn data)
-      if (performance.now() >= deadline) return { seq: now, busy: true };
+      if (performance.now() >= deadline) return { seq, busy: true };
       continue;
     }
     if (thrown) throw thrown.error;
