@@ -88,6 +88,11 @@ const pressBreak = () => {
   else eng.breakRun();
 };
 
+/** Run's accessible name: the reason, as the title and toast say it, goes after a colon in lower case. */
+function unavailable(reason: string): string {
+  return `Run is not available: ${reason.charAt(0).toLowerCase()}${reason.slice(1)}`;
+}
+
 export function RunControls() {
   const run = runState();
   const brk = breakState();
@@ -108,7 +113,7 @@ export function RunControls() {
       <button
         type="button"
         class={`btn primary ${ctl()}${run.busy || run.disabled ? " off" : ""}`}
-        aria-label={run.reason ? `Run is not available: ${run.reason}` : NAME[run.label]}
+        aria-label={run.reason ? unavailable(run.reason) : NAME[run.label]}
         title={run.reason}
         aria-disabled={run.busy || run.disabled || undefined}
         aria-keyshortcuts={(usable && !sel) || (run.start && !run.disabled) ? modShortcut("Enter") : undefined}
@@ -237,7 +242,7 @@ export function PhoneRun() {
     );
   }
   const name = run.reason
-    ? `Run is not available: ${run.reason}`
+    ? unavailable(run.reason)
     : !range
       ? NAME[run.label]
       : range.includes("–")

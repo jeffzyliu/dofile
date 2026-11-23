@@ -163,7 +163,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   button holds in its one cell, so the button is as wide with "Run" as with "Start engine" and the toolbar does not
   move. The table of states is in section 5; the code's one statement of it is `app/start.ts`, and the flow is in
   `docs/web-page-flows.md`, section 2.
-- **Run is for .do and .ado tabs** (the maintainer, 2026-11-23: one rule for every Run control; greyed with the reason, not hidden, as Save is for a .dta). One computed from the active tab's path (`app/editor/runnable.ts`, `activeRunRefusal`) decides it for Run, Run selection, the phone's Run, the reset banner's "Run the file again" (on its own file's path) and Ctrl/Cmd+Enter; the engine's gate (`takesRun`) combines with it in `canRunFile`. On any other tab (a .txt, .csv, .log, .md, .json or .dta) with an engine that takes a run, Run is `aria-disabled` with `.off` and Run selection is disabled, both with the `title` "Only .do and .ado files can run" (Run's name is "Run is not available: Only .do and .ado files can run"); a press of Run, and Ctrl/Cmd+Enter, show that sentence in an error toast and run nothing; on such a tab these words win even while a run is on, since the file can never run there. With no engine "Start engine" and its key still start it, on any tab. Not gated: a typed `do x.txt` in the command line (Stata's behaviour). The reason's words and the toast's are drafts, **for the maintainer to confirm**.
+- **Run is for .do and .ado tabs** (the maintainer, 2026-11-23: one rule for every Run control; greyed with the reason, not hidden, as Save is for a .dta). One computed from the active tab's path (`app/editor/runnable.ts`, `activeRunRefusal`) decides it for Run, Run selection, the phone's Run, the reset banner's "Run the file again" (on its own file's path) and Ctrl/Cmd+Enter; the engine's gate (`takesRun`) combines with it in `canRunFile`. On any other tab (a .txt, .csv, .log, .md, .json or .dta) with an engine that takes a run, Run is `aria-disabled` with `.off` and Run selection is disabled, both with the `title` "Only .do and .ado files can run" (Run's name is "Run is not available: only .do and .ado files can run", the reason lower case after the colon); a press of Run, and Ctrl/Cmd+Enter, show that sentence in an error toast and run nothing; on such a tab these words win even while a run is on, since the file can never run there. With no engine "Start engine" and its key still start it, on any tab. Not gated: a typed `do x.txt` in the command line (Stata's behaviour). The words are the maintainer's, 2026-11-23.
 - **Break** (`.btn.stop`): outlined and disabled when idle, filled red (`.live`) while running; its other labels are in
   section 5. **Save** has the dot when the active tab is unsaved, and the "⌘ S" chip.
 - **⋯ menu** (`S 12`): "Download all (.zip)" (disabled while the store has no file), "Wrap lines" (a switch, below), "Reset the engine…",
@@ -293,8 +293,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   matrix leaves it closed; the icon does not toggle the row. A copy that had to read the matrix, or an open, whose read finds
   that a later run replaced the results (the engine refuses a request that names older results than its latest run's)
   copies and opens nothing and says so in an error toast: "The results changed: copy again" (the maintainer's words,
-  2026-11-23; the capital "T" is for the maintainer to confirm), "The results changed: open it again" for an open (for the
-  maintainer to confirm); the visitor presses again. The engine counts a run when it starts, so a run that fails after the
+  2026-11-23; the capital "T" too), "The results changed: open it again" for an open (the maintainer, 2026-11-23); the visitor presses again. The engine counts a run when it starts, so a run that fails after the
   engine ran (its op rejected: the page keeps the old results) refuses the old row until the next run. A click on a grid cell copies that cell's every digit ("Copied
   e(b)[y1, age]": row name, column name); a text selection in the grid is not a click; cells are for mouse and touch, with
   no keyboard navigation (the copy icon covers it). Each cell shows the pointer and tints on hover (`hover: hover`).
@@ -1215,7 +1214,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
     tab of a `\r\n` file follows a run as any other; Save keeps the file's form, noted when its text is read
     (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
-    a new or empty file and for lone `\r`; the mixed and lone-`\r` cases are for the maintainer to confirm, B 9 of the
+    a new or empty file and for lone `\r`; the mixed and lone-`\r` cases are the maintainer's, 2026-11-23, B 9 of the
     plan's list) and its UTF-8 byte order mark, which the editor never holds (so neither Run nor
     the comparisons see it); Save writes the editor's text in that form (`fileText`), as does the save-failed banner's
     Download, except that a `.do` or `.ado` file (case ignored) is written without its BOM (`dropsBom`), since the engine
@@ -1233,21 +1232,21 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     file removes it, a close or delete of its tab too, and a rename moves it to the new name, as it does `save-failed`).
     A run that writes something that is not text over an open text tab (binary, not UTF-8: a `.dta` saved as `t.csv`)
     keeps the tab's text, edits or not, makes the tab unsaved, and gets the same banner with other words and no reload:
-    "**The run changed t.csv, and it is no longer text.** The editor still shows your text; saving it overwrites the file the run wrote." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost; for the maintainer to confirm, B 7
+    "**The run changed t.csv, and it is no longer text.** The editor still shows your text; saving it overwrites the file the run wrote." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost; the maintainer, 2026-11-23, B 7
     of the plan's list); a later run that writes
     the editor's own text over it makes the tab clean again and takes the banner away. A file the run deleted
     keeps its tab (not handled): the file leaves the file list, the tab keeps its dot as it was, and Save writes the file
     again (an open question: C 7 of the plan's list). The `editor` focus target (`focusNow("editor")`) focuses at once and never changes
     the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
     `[data-editor]`); with a .dta tab active, that tab in "Open files" when it is shown, else its view's first enabled
-    button (Load), else the focus does not move (for the maintainer to confirm, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) the target is not shown, so the focus does not move.
+    button (Load), else the focus does not move (the maintainer, 2026-11-23, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) the target is not shown, so the focus does not move.
     Decisions where this spec is silent: a whole-file run marks no running
     lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
     N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
     by Break. The data is as the last complete command left it.", no line); the notes at a run's end (Break's with its
     "Go to line", OQ-10's, the files not kept) wrap in the Log pane at every width; on a phone, a tap on the Break pill also shows
     the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; for the
-    maintainer to confirm, B 2 of the plan's list); a phone's
+    the maintainer, 2026-11-23, B 2 of the plan's list); a phone's
     inline graph is on the card of its run's theme; Run with no text tab open runs nothing and
     says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
     line out; the page load's status words are "Loading"; a selection's last run is "Last run: lines 6–7 · …" and a
@@ -1272,10 +1271,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     toast says how many were not run, and a line that did not run goes back into the field unless the field is disabled
     by then; with no engine a paste is an ordinary paste and no line runs, and with an engine that is not ready a paste
     of lines is refused whole, the field untouched (`log/pasterun.ts` `pastePlan`, `putBack`)
-    (these stops are for the maintainer to confirm, B 3 of the plan's list). The next line starts in a microtask
+    (these stops: the maintainer, 2026-11-23, B 3 of the plan's list). The next line starts in a microtask
     after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
-    nothing either (for the maintainer to confirm, B 4 of the plan's list). Words the spec does not give, decided by the
+    nothing either (the maintainer, 2026-11-23, B 4 of the plan's list). Words the spec does not give, decided by the
     maintainer on 2026-11-13: "No file is open: open one from the file
     list." (the empty editor); "No file is open to run" (toast); a refused Ctrl/Cmd+Enter's toast: "Run is not available until the current run ends" (`running`,
     `breaking`, `waiting`), "The engine is starting. Try again when it is ready." (the page load, `downloading`, `starting-*`; the Run button's own name is "Starting… Run is not available until the engine is ready"), "Run is not available: the engine isn't running in this tab" (a `failed` start that cannot be tried again,
