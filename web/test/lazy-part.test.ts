@@ -3,7 +3,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PartRead } from "../src/engine/lazy-part.ts";
-import { PART_FAILED, PART_LANDED, PART_PENDING, useNative, waitStep } from "../src/engine/lazy-part.ts";
+import {
+  failPart,
+  PART_FAILED,
+  PART_HEADER,
+  PART_LANDED,
+  PART_PENDING,
+  partData,
+  partHeader,
+  partState,
+  partTries,
+  retryPart,
+  useNative,
+  waitStep,
+} from "../src/engine/lazy-part.ts";
 
 const idle = { interrupted: false, decoded: false, decoding: false, askedAt: null, fetchSaid: false };
 // a read that counts how often it is made
@@ -64,6 +77,24 @@ test("waitStep: a failed part is asked for again once per run; that fetch's fail
     "wait-pending",
     "the asked-for fetch is on its way",
   );
+});
+
+test('race 3: a page retry between a graph\'s read of a failed part and of its reason never answers "" (the answer for written)', () => {
+  const sab = new SharedArrayBuffer(PART_HEADER + 64);
+  failPart(sab, "offline");
+  retryPart(sab); // the graph asked again at tries 0
+  failPart(sab, "offline again");
+
+  // the graph reads the part as waitGraphics does; the browser comes back online after the state
+  const hdr = partHeader(sab);
+  const tries = partTries(hdr);
+  const state = partState(hdr);
+  retryPart(sab);
+  const reason = new TextDecoder().decode(partData(sab, hdr));
+  const step = waitStep({ ...idle, askedAt: 0 }, () => ({ state, tries, shared: true }));
+
+  const answer = step === "give-up" ? reason : "pending";
+  assert.notEqual(answer, "", "a give-up answers a whole reason, never the empty one");
 });
 
 test("waitStep: without a shared buffer, a graph says it waits first, then fetches the part itself (pending or failed)", () => {
