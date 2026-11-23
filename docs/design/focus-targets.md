@@ -135,7 +135,7 @@ its own extra keys.
 |---|---|---|---|
 | `ui/Tablist.tsx` | both axes | wrap | |
 | `files/EditorTabs.tsx` | Left, Right | wrap | Delete closes |
-| `files/FilesPane.tsx` `TreeRow` | Up, Down | stop | Left and Right fold or go to the parent; Enter, Space |
+| `files/TreeRow.tsx` `TreeRow` | Up, Down | stop | Left and Right fold or go to the parent; Enter, Space |
 | `ui/Menu.tsx` | Up, Down, over enabled items only | wrap | Esc, Tab, `keepOpen` |
 | `output/VarTable.tsx` | Up, Down | stop | focuses at once, no request; gains the guard (choice d) |
 
