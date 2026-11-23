@@ -60,7 +60,8 @@ export function graphicsWorker(env: GraphicsEnv) {
     nativeRunning: false, // the browser's decoder is unpacking a copy, which the unpack may have left since
     // copies and damage
     nativeFailedOn: null as number | null, // the copy the browser's decoder failed on
-    damage: null as { copy: number; why: string; said: boolean } | null, // the copy it was found on; said once, by a graph
+    // the copy it was found on; said once, by a graph
+    damage: null as { copy: number; why: string; said: boolean } | null,
     // this run
     run: { askedOn: null as number | null, writtenAt: 0 }, // askedOn: the copy when it asked for a fetch again
   };
@@ -196,7 +197,8 @@ export function graphicsWorker(env: GraphicsEnv) {
   // The browser's own decoder (off this thread) unpacks the part as soon as it is here. A graph that comes meanwhile
   // cannot use the result: it is blocked in Python, so this thread's event loop never delivers the promise. That graph
   // unpacks with brotli-wasm itself (unpacking takes over from native), and the result, kept only while the unpack is
-  // still native for its copy, is dropped. The decoder still runs then: nothing starts a second one until it ends. Does nothing where there is no native decoder (Chromium).
+  // still native for its copy, is dropped. The decoder still runs then: nothing starts a second one until it ends.
+  // Does nothing where there is no native decoder (Chromium).
   function nativeSoon() {
     // busy or not landed: the op graphics after the page's write calls this again
     if (!rec.part || !nativeGate(work(), () => readGraphics(0, false))) return;
