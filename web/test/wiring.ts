@@ -66,6 +66,7 @@ export const { addFileGraph, MAX_GRAPHS } = await import("../src/app/graphs.ts")
 export const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.ts");
 export const { startEngine } = await import("../src/app/start.ts");
 export const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");
+export const { setSplit, toggleWrap } = await import("../src/app/state/layout.ts");
 export const { decodeText } = await import("../src/app/files/open.ts");
 export const { watchViewport, KEYBOARD, SETTLE } = await import("../src/app/viewport.ts");
 
