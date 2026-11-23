@@ -3,8 +3,8 @@
 The R1 note of the web audit (`docs/web-audit-plan.md`, section 6). It states how the lazy snapshot's graphics part
 (matplotlib in a file fetched after the start, `docs/lazy-matplotlib.md`) moves between the page and the worker today,
 and proposes how R1 makes it one machine. It changes no code. **Status: proposed 2026-11-23, for the maintainer's
-approval.** Read from the code at e496b4c. Paths are under `web/src/engine/` unless they start with `web/`, `src/` or
-`docs/`. "Guess" marks what was not checked.
+approval;** section 6's seqlock was decided the same day. Read from the code at e496b4c. Paths are under
+`web/src/engine/` unless they start with `web/`, `src/` or `docs/`. "Guess" marks what was not checked.
 
 ## Primer: the pieces, in plain words
 
@@ -26,45 +26,56 @@ start skips the imports). matplotlib and the packages only it needs are left out
 **The flow.** Once the start files are in, the page fetches the part (from the browser's **Cache**, its offline store
 for files, or else the network) and hands it to the worker. When the engine has been **idle** (no run sent or running)
 for 0.25 s, the worker unpacks it, writes its files into Python's file system and imports the first modules, one short
-step at a time, so that a run sent meanwhile waits for one step at most. A graph that comes before that is done waits
-for the part inside its run, and unpacks and writes it there. Section 1 has both threads' tables, and the pictures
-below show both paths.
+step at a time, so that a run sent meanwhile waits for one step at most. Where the browser has its own brotli decoder,
+the unpack starts as soon as the part is handed over and runs off the worker's thread; only the write and the imports
+wait for idle. A graph that comes before that is done waits for the part inside its run, and unpacks and writes it
+there. Section 1 has both threads' tables, and the pictures below show both paths.
 
 **The shared buffer.** A message cannot reach a graph that waits inside a run: the worker is busy in Python and reads
-none. So the page hands the part over in a **`SharedArrayBuffer`**, memory that both threads see at the same time.
-Its size is 16 + the part's size: a 16-byte header of four 32-bit numbers (the part's state: pending, landed or
-failed; the length of what follows; `tries`, how many times the page has fetched it; one unused), then the part's
-bytes (or, when the fetch failed, the reason as text). The page writes it; the worker only reads it. A buffer is only
-available when the site is **cross-origin isolated** (two HTTP headers that promise the page loads nothing from other
-sites without their consent); production sends them.
+none. So the page hands the part over in a **`SharedArrayBuffer`**, memory that both threads see at the same time. The
+page posts it to the worker once, in `boot`'s arguments; posting a `SharedArrayBuffer` shares the memory, it does not
+copy it. Its size is 16 + the part's size: a 16-byte header of four 32-bit numbers (the part's state: pending, landed or
+failed; the length of what follows; `tries`, how many times the page has fetched it again, 0 after the first fetch; one
+unused today, which section 6 makes a sequence counter), then the part's bytes (or, when the fetch failed, the reason as
+text). The page writes it; the worker reads it (with section 6's counter it also does one `Atomics.add` of 0, which
+writes back the value it read). A buffer is only available when the site is **cross-origin isolated**: served over https
+(or from localhost) with two HTTP headers, COOP and COEP, that keep other sites' windows out and let the page load only
+what other sites allow. Production and the dev server send them, so plain http to a LAN address has no buffer.
 
-**`Atomics`, the operations on shared memory.** Plain reads and writes of shared memory can be seen by the other
-thread late or out of order, and data longer than one number can be seen half written. `Atomics` calls on one 32-bit number cannot be:
+**`Atomics`, the operations on shared memory.** Plain reads and writes of shared memory can be seen by the other thread
+late or out of order, and data longer than one number can be seen half written. `Atomics` calls on one 32-bit number
+cannot be:
 - `Atomics.load` reads the number whole, and the thread then also sees every write the other thread made before its
   `Atomics.store` of the value read ("write the data, then publish the state" relies on this);
 - `Atomics.store` writes it whole, and publishes the writes made before it;
-- `Atomics.add` adds to it in one step, so two adds never lose one;
-- `Atomics.wait` blocks this thread while the number still has a given value, up to a time limit;
+- `Atomics.add` reads the number, adds to it and writes it back in one step (a **read-modify-write**), so two adds never
+  lose one;
+- `Atomics.wait` checks that the number still has a given value and, if so, sleeps until another thread calls
+  `Atomics.notify` on it or a time limit passes (it does not watch the number: a change without a notify does not wake
+  it);
 - `Atomics.notify` wakes the threads waiting on it.
 
-What they do not give: two loads are two moments, not one snapshot (between them the other thread may change
-anything); several stores are not one step (a reader can see the first without the next); and the page's main thread
-may not call `Atomics.wait` at all (a browser refuses to block it), so the page cannot watch the buffer and hears the
-worker only by messages.
+What they do not give: two loads are two moments, not one snapshot (between them the other thread may change anything);
+several stores are not one step (a reader can see the first without the next); a plain read placed before an
+`Atomics.load` may still take its value after it (section 6); and the page's main thread may not call `Atomics.wait` at
+all (a browser refuses to block it). The page hears the worker only by messages; the worker never changes the part's
+buffer, so there is nothing there for the page to watch.
 
 **Without a buffer** (plain http on a LAN address, say), the worker fetches the part itself once the engine is ready,
 and a graph that comes first downloads it with a request that blocks the worker until it ends. Its messages tell the
-page how the download goes, for the progress ring. There is no **Break** then either (Break stops a run at its next safe point; it
-uses a second, 4-byte shared buffer), so a stuck run resets the worker.
+page how the download goes, for the progress ring. There is no **Break** then either (Break stops a run at its next safe
+point; it uses a second, 4-byte shared buffer), so a stuck run resets the worker.
 
 **Where it goes wrong: a race**, when the result depends on which thread gets somewhere first. Race 3 is the worked
 example. A graph has asked the page for one more fetch, and that fetch failed, so the buffer says "failed" with its
 reason. The graph reads the state (failed), and is about to read the reason's length. Just then the browser comes back
 online, and the page starts another fetch: it sets the length to 0 first, then counts a try, then sets the state to
 pending. The graph reads length 0: the reason is "" (empty). But "" is also the worker's answer for "the files are
-written", so Python stops waiting, the graph fails on the missing matplotlib, and later graphs no longer wait. Each step
-was atomic; the trouble is that the graph's three reads were not one snapshot and the page's three writes were not one
-step. Section 6 (the shared state) gives the rule that closes this by design; section 7 lists every race found.
+written", so Python stops waiting, the graph fails on the missing matplotlib, and later graphs no longer wait. Each of
+the page's steps was atomic, and the graph's length read is a plain one; the trouble is that the graph's three reads
+were not one snapshot and the page's three writes were not one step. Section 6 gives the fix the maintainer chose: a
+**seqlock**, a counter the page moves around every write so that the graph can tell a write overlapped its reads.
+Section 7 lists every race found.
 
 ## In pictures: the normal path, with a shared buffer
 
@@ -218,18 +229,19 @@ stateDiagram-v2
 ```
 
 **Mirrors? No: the page's machine is much smaller.** Today the page's part has 4 states (pending, fetching, landed,
-failed), two flags beside them (`loading`, `damaged`), 7 event rows and 7 transitions; the worker's has 7 unpack
-states (none, native, decode, decoded, graphicsWritten, warmed, graphicsError), 14 event rows and 13 transitions, plus
-the idle clock and a waiting graph's 10 steps (`waitStep`). Proposed (R1; the counts are a guess until it is built):
-the page keeps its 4 states, with `damaged` as the argument of a retry rather than a flag, and about 6 events (want,
-landed, failed, again, damaged, online); the worker keeps its 7 states as one field of its record, and about 11 events
-(startup, the op `graphics`, run arrives, run ends, idle step, native done, native failed, a graph's wait, own fetch
-landed, own fetch failed, damage). They own different things: the page owns the download, the Cache, the copy number
-(`tries`) and the progress the status bar shows; the worker owns everything after the bytes arrive (unpack, write
-into Python's files, warm-up, the idle clock, the waiting graph) and, without a buffer, the download too. What they
-share is the buffer's three states (`PART_PENDING`, `PART_LANDED`, `PART_FAILED`) and `tries`, nothing else. The
-page's names pending, landed and failed match the buffer's; its fetching is not in the buffer; the worker's names match
-neither. Without a buffer the page's machine shrinks to a display of the worker's messages (`#workerSaysGraphics`).
+failed), two flags beside them (`loading`, `damaged`), 7 event rows and 7 transitions; the worker's has 7 unpack states
+(none, native, decode, decoded, graphicsWritten, warmed, graphicsError), 13 event rows and 13 transitions, plus the idle
+clock and a waiting graph's 10 steps (`waitStep`). Proposed (R1; the counts are a guess until it is built): the page
+keeps its 4 states, with `damaged` as the argument of a retry rather than a flag, and about 6 events (want, landed,
+failed, again, damaged, online); the worker keeps its 7 states as one field of its record, and about 11 events (startup,
+the op `graphics`, run arrives, run ends, idle step, native done, native failed, a graph's wait, own fetch landed, own
+fetch failed, damage). They own different things: the page owns the download, the Cache, the copy number (`tries`) and
+the progress the status bar shows; the worker owns everything after the bytes arrive (unpack, write into Python's files,
+warm-up, the idle clock, the waiting graph) and, without a buffer, the download too. What they share is the buffer's
+fields (its three states `PART_PENDING`, `PART_LANDED`, `PART_FAILED`, the length, `tries` and the bytes or reason),
+nothing else. The page's names pending, landed and failed match the buffer's; its fetching is not in the buffer; the
+worker's names match neither. Without a buffer the page's machine shrinks to a display of the worker's messages
+(`#workerSaysGraphics`).
 
 ## 2. The 22 variables as one record
 
@@ -311,7 +323,7 @@ publish"). The part's buffer (`lazy-part.ts`) is an Int32 header of `PART_HEADER
 | state (`HDR_STATE`) | `landPart`, `failPart`, `retryPart`: `Atomics.store`, then `Atomics.notify` | `partState` (`Atomics.load`) in `partNow`; `waitPartChange` (`Atomics.wait`) |
 | length (`HDR_LENGTH`) | the same three: `Atomics.store` | `partData`: a plain read |
 | tries (`HDR_TRIES`) | `retryPart`: `Atomics.add` | `partTries` (`Atomics.load`): `waitGraphics`'s `read()`, `copyNow` |
-| the fourth Int32 | nobody (always 0) | nobody |
+| the fourth Int32 | nobody (always 0; R1b: the sequence counter, below) | nobody |
 | bytes, from `PART_HEADER` | `landPart` (the part), `failPart` (the reason): plain writes | `partData`: a plain copy (`slice`) |
 
 The interrupt buffer is separate (4 bytes, one Int32, made in `client.ts`'s `start()`): the page stores 2 (SIGINT)
@@ -325,41 +337,151 @@ the page writes data only while the state is pending, which the worker never cop
 last. Two places break that order. The worker must load `tries` before `state` (race 1, a rule nothing enforces),
 and `retryPart` clears the length while the state still says failed, which is race 3.
 
-**Two ways to make every read consistent.**
-- (a) A seqlock-style reader, with `tries` as the generation. The worker loads tries and state, copies the length
-  and bytes if landed or failed, then loads tries and state again; if either moved, it starts again (and then finds
-  the part pending, and waits). The page invalidates first and publishes last: `retryPart` moves state and tries
-  before it touches the length (or stops clearing it). Both halves are needed: a re-check alone can fall between
-  today's length write and the tries add, and the new order alone still lets a read cross the retry. Cost: two more
-  loads per read, a thrown-away copy (up to the part's size, a few MB) on the rare read that meets a retry, three
-  lines reordered in `retryPart`. The layout, `waitPartChange` and `test/part-header.test.ts`'s layout test stay.
-- (b) One Int32 holding state (low bits) and tries (the rest, a generation), stored by the page in one step, with the
-  length and bytes written before it. State and tries can then never disagree (race 1 closed by design). But the
-  bytes are still separate memory: a read that loaded "failed" can still overlap a retry and a fast Cache hit, so (b)
-  needs the same re-check after the copy. `Atomics.compareExchange` would add nothing: the page's main thread is
-  the only writer. Cost: a new layout (the `HDR_*` indexes, both threads, the layout test), and `waitPartChange`
-  waits on the whole word.
+**Decision, 2026-11-23.** The maintainer, on how to make every read consistent: "i prefer that we use a more idiomatic
+seqlock and have it be called out instead of hiding the parity underneath states that do not look like a counter with a
+parity bit". So R1b adds an explicit sequence counter to the header (the design below). The subsections after it say
+what a seqlock is, why the counter's second read must be a read-modify-write, and the two designs weighed before the
+decision.
 
-**Recommended: (a).** It is the smaller change and keeps the layout; (b) needs its re-check anyway. The rule R1b
-adopts: *the page writes the length and bytes only while the state is pending, and leaves landed or failed by moving
-state and tries before anything else; the worker uses a length and bytes only when the tries and state it loaded
-before and after the copy are equal.* Race 3 is then closed by design: a retry during the read moves tries, so the
-empty reason is never used; the graph reads again, finds the part pending and waits. As a second guard, a failed part's
-reason is never empty (`failPart` always has one), so an empty one can be taken as a torn read. Race 13 is not a
-buffer race (it is between the worker's own decode and its own damage finding), so the rule does not touch it, but its
-fix uses the same idea: `tries` (`copyNow`; `copies` without a buffer) is the copy number, and a native result is
-kept only while it is still the copy the decode started from.
+### What a seqlock is
 
-**Why the rest of each machine cannot live in the buffer.** A `SharedArrayBuffer` holds numbers and bytes, not
-objects, promises or functions. Most of each machine is a resource of its own thread that the other could not use
-even if it knew its state: the page's fetch and its reader, the Cache, the `online` listener and the `onGraphics`
-listeners; the worker's brotli-wasm decode, the native decode's promise, its timers, Pyodide's files and Python's
-`ready`. There is no `SharedArrayBuffer` at all without cross-origin isolation (plain http on a LAN), so the path
-without one must work by messages anyway, and the buffer can only be the fast way to hand the part over. And the
-page's main thread may not block on `Atomics.wait` (browsers forbid it), so it cannot watch the buffer: it hears the
-worker's findings by message (`again`, `damaged`). The worker reads the buffer because a graph blocked in Python
-receives no messages. So the buffer carries the hand-over only (one copy, its state, its number), and each thread
-keeps its own machine.
+A **seqlock** (sequence lock; the Linux kernel's is the textbook one) lets one writer change a block of shared data
+while readers copy it, without a lock that either side waits on. It has one shared counter, `seq`, that starts at 0
+(even) and only grows:
+
+- The writer adds 1 (now odd: "being written"), writes the data, then adds 1 again (even: "done"). This is the "double
+  write".
+
+- A reader reads `seq`. If it is odd, a write is under way: it waits and starts again. Otherwise it copies the data,
+  then reads `seq` a second time. If the two reads differ, a write overlapped the copy: it throws the copy away and
+  starts again. If they are equal, the copy is whole.
+
+Why each half is needed. With one add per write instead of two, a write can hide between a reader's reads: an add only
+at the start lets a reader read the counter just after it, copy while the data is written, and read the same counter
+again; an add only at the end lets a reader read before the write starts and again before it ends. The two adds fence
+the write on both sides, and the odd value in between is what "being written" looks like. On the reader's side, the
+first read refuses a write under way and gives the value to compare; the second read catches a write that started during
+the copy. Neither read alone does both.
+
+What makes "equal counts" mean "whole copy" is the writer's rule, not luck: the writer touches the data only between its
+two adds. So any write that overlapped the copy moved the counter, and the counter never comes back to a value it had
+(it only grows; a 32-bit counter would need two billion writes to wrap). A state cannot serve as the counter for that
+reason: a part's state can come back to the same value (failed, pending, failed) while its reason changed.
+
+### The design: a sequence counter in the header
+
+The header's unused fourth Int32 becomes the counter (called `HDR_SEQ` here; R1b names it), so the buffer's size and its
+other three fields stay. State and `tries` keep their meanings (the part's state; how many times the page fetched it
+again) and carry no parity: "pending" is the part's state while a fetch is on its way, not the odd phase, and a reader
+may copy a pending part's header like any other (it has no bytes). The mapping to the textbook is direct:
+
+| The textbook | Here |
+|---|---|
+| the counter, `seq` | the header's fourth Int32 (today unused, always 0) |
+| the one writer | the page's main thread: `landPart`, `failPart`, `retryPart` (`lazy-part.ts`) |
+| add 1: odd, being written | each of the three starts with `Atomics.add` of 1 on the counter |
+| write the data | its writes to state, length, `tries` and the bytes (or the reason) |
+| add 1: even, done | then `Atomics.add` of 1 again, then `Atomics.notify` on the counter |
+| the reader | the worker: `partNow`, for `waitGraphics`, `startNative` and `idleStep` |
+| read the counter; odd: wait | `Atomics.load` of the counter; odd: answered as pending |
+| copy | state, length, `tries`, then the bytes (`partData`) |
+| read again; moved: start again | `Atomics.add` of 0 on the counter (next subsection); moved: answered as pending |
+
+The rule R1b adopts:
+
+- Page: every write to the header's state, length or `tries`, or to the bytes, happens inside one write section between
+  the two adds, and the section ends with `Atomics.notify` on the counter. The page's three writers are its only write
+  sections, and each is synchronous (one task). The writes inside may stay `Atomics.store`; plain writes would do, since
+  the counter orders them.
+
+- Worker: `partNow` reads the counter, the state, length, `tries` and the bytes, then re-checks the counter with
+  `Atomics.add(hdr, HDR_SEQ, 0)`; it uses them only when the two counts are equal and even. An odd or moved count is
+  answered as pending, with the count it read, rather than read again in a loop: every caller already handles pending
+  (`waitGraphics` waits, then answers "pending" to Python, which calls again; `startNative` and `idleStep` stop, and the
+  op `graphics` that `#tellGraphics` sends after each of the page's write sections brings them back). `tries` comes from
+  that same read, for `waitGraphics`'s `read()` and in place of `copyNow`'s separate load where a copy number is paired
+  with the bytes (`startNative`).
+
+- A failed part's reason is never empty (`failPart` always has one), so `give-up` never answers "": an empty reason is
+  answered as pending. It keeps the one wrong answer that matters ("" means "written") away even from an implementation
+  that gets the ordering wrong.
+
+- The worker waits on the counter, not the state: `waitPartChange` becomes `Atomics.wait(hdr, HDR_SEQ, count, ms)` with
+  the count it read. It returns at once if the page has written since that read, else when the notify after a write
+  section's second add wakes it, or after `ms`. Waiting on the state could sleep through a whole retry that ends in the
+  state it started from (failed, pending, failed); a count that only grows cannot.
+
+What it closes: race 3 (a retry during the read moves the counter, so the empty reason is thrown away, and `give-up`
+never answers "" anyway), and races 1 and 2 by design, since `tries` and the state come from one read and the order of
+their two loads stops mattering. Race 13 is not a buffer race (it is between the worker's own decode and its own damage
+finding), so the counter does not touch it, but its fix uses the copy number the same way: `tries` (`copies` without a
+buffer) is the copy number, and a native result is kept only while it is still the copy the decode started from.
+
+Cost: in `lazy-part.ts`, two adds and a notify on the counter in each of the three writers, one reader that returns the
+state, `tries`, the bytes and the count together, and `waitPartChange` on the counter; in `worker.ts`, `partNow`,
+`waitGraphics`'s `read()` and `startNative`; in `test/part-header.test.ts`, the layout test (the fourth Int32 is the
+counter: 0 in a new buffer, 2 higher and even after each write). At run time: one read-modify-write per read, and a
+thrown-away copy (up to the part's size, a few MB) on the rare read that meets a write.
+
+### Why the second read is a read-modify-write
+
+The first read: the worker's `Atomics.load` of the counter takes its value from the page's second add, and in
+JavaScript's memory model an atomic read that takes its value from an atomic write sees every write the writer made
+before that write. So the copy sees the whole write section that ended there ("write, then publish").
+
+The second read must show the opposite: that the copy saw none of the next write section's writes. An `Atomics.load`
+does not show it. It orders what comes after it, not the plain reads before it: a plain read written before an
+`Atomics.load` in the code may still take its value later, after the page has started its next write section, while the
+load returns the old count. The re-check would then pass over a torn copy. On ARM64 (iPhones, Apple-silicon Macs) the
+processor itself allows this (V8 compiles `Atomics.load` to a load-acquire, which does not hold back earlier reads); on
+x86 it cannot happen, so a test on a PC would never show it.
+
+A read-modify-write on the same word closes it. `Atomics.add(hdr, HDR_SEQ, 0)` reads the counter and writes the same
+value back, in one step. The page's first add is a read-modify-write on that word too, and the steps on one word happen
+in one order both threads agree on. Either the worker's add comes first: the page's add then reads the value the
+worker's add wrote, and the memory model makes everything the worker did before its add (the copy) happen before
+everything the page does after its add (the next write section), so the copy cannot have seen those writes. Or the
+page's add comes first: the worker's add then returns a different count, and the copy is thrown away. On ARM64 the
+read-modify-write ends with a store-release, which waits for the earlier reads. The worker's add writes the value it
+read, in the same indivisible step, so it never loses a page's add; only the page changes the count.
+
+This is reasoned, not proven by a tool: from ECMA-262's memory model (happens-before, synchronizes-with, and the rule
+that a read cannot see a write that happens after it) and ARMv8's acquire and release. No mechanised model (such as
+herd) was run, and a Node test cannot show a torn read (x86, and one interleaving of whole steps at a time). The problem
+and this fix are the ones Hans-J. Boehm describes for C++ seqlocks ("Can Seqlocks Get Along With Programming Language
+Memory Models?", MSPC 2012).
+
+### The designs weighed before the decision
+
+- (a) `tries` as the counter and the state as its parity: `retryPart`'s move to pending is the odd add, `landPart` and
+  `failPart` publishing the state last are the even add, and the worker's reads of `tries` and state before and after
+  the copy are the reader's two reads (`tries` and not the state alone because of failed, pending, failed). The smallest
+  change (no new field), and sound, but only with two orders nothing in the code shows: `retryPart` must store pending
+  before it adds to `tries` (with the add first, a reader can load the new `tries` and the old state between the two,
+  copy the old reason, and the next `failPart` can rewrite the bytes under it while `tries` stays equal), and both
+  before any length or byte write; plus the same read-modify-write re-check, on `tries`. Its parity is hidden in states,
+  which is what the decision rejects.
+
+- (b) One Int32 holding the state in its low bits and `tries` in the rest, each change one `Atomics.exchange` (a
+  read-modify-write) after the bytes: close to the textbook's single counter, since the word moves with every change and
+  the state and `tries` can never disagree. But its odd phase is still the state pending, every reader of the state or
+  `tries` decodes the word (a new layout, both threads, the layout test), and the bytes still need the same re-check.
+
+- Chosen: an explicit counter beside the state and `tries`. One field the header already has, two adds per write
+  section; every rule is the textbook's, and the state and `tries` mean only what they say.
+
+### What stays out of the buffer
+
+**Why the rest of each machine cannot live in the buffer.** A `SharedArrayBuffer` holds numbers and bytes, not objects,
+promises or functions. Most of each machine is a resource of its own thread that the other could not use even if it knew
+its state: the page's fetch and its reader, the Cache, the `online` listener and the `onGraphics` listeners; the
+worker's brotli-wasm decode, the native decode's promise, its timers, Pyodide's files and Python's `ready`. There is no
+`SharedArrayBuffer` at all without cross-origin isolation (plain http on a LAN), so the path without one must work by
+messages anyway, and the buffer can only be the fast way to hand the part over. And the page's main thread may not block
+on `Atomics.wait` (browsers forbid it), and the worker never changes the part's buffer, so the page has nothing there to
+watch: it hears the worker's findings by message (`again`, `damaged`). The worker reads the buffer because a graph
+blocked in Python receives no messages. So the buffer carries the hand-over only (one copy, its state, its number), and
+each thread keeps its own machine.
 
 ## 7. Races between the page and the worker
 
@@ -377,10 +499,12 @@ keeps its own machine.
    land; a reload also clears it. Forced with the real `lazy-part.ts` functions (the reviewer's script, re-run here):
    `{"step":"give-up","reason":""}`; `browser.py`'s reading of "" is read, not run. Rating: rare (a few instructions
    wide, and only while the browser goes online during a graph's wait after its asked-for fetch failed), but a wrong
-   answer rather than a slow one; no data is lost. **Fixed in R1b, as its first change, test first**: a case in
-   `test/lazy-part.test.ts` that forces `retryPart` between the state load and the length read (as the reviewer's
-   script does) and expects no "" (the graph waits again, or gets a non-empty reason); it fails today. The fix: section
-   6's rule (read the state again after the copy and read again if it moved), with `give-up` never answering "".
+   answer rather than a slow one; no data is lost. **Fixed in R1b, as its first change, test first**: section 6's
+   sequence counter, with `give-up` never answering "". The failing test, in `test/lazy-part.test.ts`: a read that meets
+   a page write between its two reads of the counter (the test calls `retryPart` between them, where the reviewer's
+   script forced it between the state load and the length read) never answers "": it answers pending, or a whole
+   non-empty reason; it fails today. A second case: a read that finds the counter odd uses nothing it copied. Both test
+   the order of whole steps, not the memory model (section 6, "Why the second read is a read-modify-write").
 4. The graph's `again` and the `online` event: both go through `#retryGraphics`, whose guard (failed, not loading)
    starts one fetch; the graph's `askedAt` makes either fetch's failure final for it. Ordered by the guard.
 5. The part lands before `startup` is answered: the op `graphics` arrives, `nativeSoon` and `idleSoon` return on
@@ -463,8 +587,8 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
 - c. Node, real worker, without a buffer: `prefetch` lands and the idle steps take it; a graph during `prefetch`
   fetches itself; damage gives a `?fresh=` address. Needs section 4's stand-ins in `test/node-worker.ts`.
 - d. Pure tables for whatever R1 makes pure (idle step, native gate, page transitions), as `lazy-part.test.ts` does,
-  with two cases written to fail first: race 3 (a retry between the state and the length read) and race 13 (a native
-  result of a copy found damaged is not kept).
+  with two cases written to fail first: race 3 (a page write between a read's two reads of the counter) and race 13 (a
+  native result of a copy found damaged is not kept).
 
 ## 9. R1 in three items (proposed)
 
@@ -472,8 +596,9 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
    failures or removed (the test says which); no change to behaviour.
 2. **R1b, the worker's machine (2.3, after R1a).** The 22 variables as one record (section 2) in a module `worker.ts`
    imports statically; the idle step and the native gate as pure functions next to `waitStep`; the renames; `table`'s
-   hooks call it; wire and words unchanged (section 3). Tests d for the worker. Its two behaviour fixes come first,
-   each with its failing test: race 3 (no "" from a failed part) and race 13 (the native result tied to its copy).
+   hooks call it; wire and words unchanged (section 3). Tests d for the worker. Its two behaviour fixes come first, each
+   with its failing test: race 3 (section 6's sequence counter; no "" from a failed part) and race 13 (the native result
+   tied to its copy).
 3. **R1c, the page's machine and the docs (2.4).** `client.ts`'s part as one state with its transitions (no rewrite of
    `progress.state` to steer a guard; `progress` becomes derived for the status bar); the `online` listener once per
    part; race 10 checked against `live`. Then `docs/lazy-matplotlib.md` brought up to date (list below),
