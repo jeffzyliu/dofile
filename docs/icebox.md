@@ -257,3 +257,20 @@ Paths in this section are from the repository root.
   (`docs/archive/lazy-graphics-experiments.md`). Untried: the eager import in steps of one task each, as the shipped
   idle import runs, in place of one long call. The maintainer: "idle-wait work is done for now--remaining experiments
   are iceboxed for far after the audit".
+
+## Web audit phase 2, session 4 (added 2026-11-23)
+
+- **The open file's highlight paints over iOS Safari's scroll bar in the Files tree.** On a real iPhone, the highlighted
+  row of the open file covers the overlay scroll bar instead of passing under it; seen on `main` before #118 too. No
+  cause found; the candidate is `.files li`'s `position: relative` (for the tree's guide lines). The maintainer, during
+  #118: "leave the work for later". 2026-11-23.
+- **CloseTabDialog closes the tab by the path it had when the dialog opened (survey finding A3).** `files/dialogs.tsx`
+  `CloseTabDialog`: Save awaits `saveTab(d.path)`, then calls `closeTab(d.path)`; a rename or move during the await
+  would close by the old path. The dialog is modal, so no way to rename meanwhile was found (read, not tried); not
+  checked: a run already going that moves the file (`runMoved`, #118). A fix (close by the tab's identity) has no
+  failing test without a way to reach it, so it waits for one. 2026-11-23.
+- **The Results tab could show a symmetric matrix as `matrix list` does.** OpenDTA's `matrix list` prints
+  "symmetric" and only the lower triangle when a matrix is square and equal to its transpose
+  (`src/dofile/_vendor/opendta/commands/matrix.py`, `list_matrix`). The worker sends `rows`, `cols` and `data` only
+  (`web/src/engine/types.ts`, `Matrix`), and the Results tab draws the full grid. The page can test it itself from the
+  grid; Copy would still copy the whole matrix. The MCP tool's `get_matrix` stays as it is (decided the same day). 2026-11-23.
