@@ -1418,6 +1418,24 @@ test("graphics part: the progress the listeners see, for a miss with its bytes, 
   assert.equal(f.modes.length, 3, "no fetch for the Cache's copy");
 });
 
+test("graphics part: a new build's part takes over the listeners; the old build's download, still on its way, says nothing to them", async () => {
+  const caches = fakeCaches();
+  const f = partFetch([1, 2]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await until(() => f.modes.length === 1, "the old build's fetch");
+  page.eng.end(live(page.eng), { kind: "reset", reset: "user", reason: "session reset: reset by you." });
+  await startWorker(page.eng, { ...done.build!, built: 778 });
+  await until(() => f.modes.length === 2, "the new build's fetch");
+  const before = page.seen.length;
+  await f.release(); // the old build's copy arrives
+  await sleep(20);
+  assert.deepEqual(progressLines(page.seen.slice(before)), [], "nothing of the old part");
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "the new part landed");
+});
+
 test("graphics part without a shared buffer (no cross-origin isolation): download() fetches it with the start files into the Cache and counts it; cached() checks it", async (t) => {
   // gone from this thread, as on a page without cross-origin isolation
   const shared = globalThis.SharedArrayBuffer;

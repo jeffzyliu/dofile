@@ -425,6 +425,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
 
   #graphicsSay(part: GraphicsPart, p: Partial<GraphicsProgress>) {
     part.progress = { ...part.progress, ...p };
+    if (this.#graphics !== part) return; // an older build's part: the listeners follow the page's current one
     for (const f of this.#graphicsListeners) f(part.progress);
   }
 
