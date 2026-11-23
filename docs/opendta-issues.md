@@ -39,7 +39,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-20 | `histogram`/`bar` outline ignores `lcolor()`/`lwidth()`, so `fcolor(none) lcolor(navy)` draws nothing | `::test_odt20_histogram_outline` | patched |
 | ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | `::test_odt21_default_axis_ticks_are_nice_numbers` | patched |
 | ODT-22 | the `matrix(name)` pseudofunction in expressions gives rc 198 (`trace(matrix(xx))`) | `::test_odt22_matrix_pseudofunction` | patched |
-| ODT-23 | `capture` does not catch the sandbox's `PermissionError` (`type`, ...): the call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_sandbox_refusal_like_any_file_error` | vendored (upstream 00cd4dc) |
+| ODT-23 | `capture` does not catch the sandbox's `PermissionError` (`type`, ...): the call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_sandbox_refusal_like_any_file_error` | patched |
 | ODT-24 | `xtreg ..., fe|re|be` and `areg ..., absorb()` ignore `[aweight=]`, `[pweight=]` and `[fweight=]`: the coefficient is the unweighted one | `tests/test_engine.py::test_odt24_*` | patched |
 | ODT-25 | `describe` prints a long wrong `Sorted by:` list for a Stata-written file whose sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`shlex` in POSIX mode) | found 2026-11-06 (path shim tests) | unverified |
@@ -306,8 +306,8 @@ fill) and never read `lcolor`.
 - Before the patch the call stopped with rc 603: the sandbox raises a Python `PermissionError`, and OpenDTA's `capture`
   caught only its own `StataError` (`use` and `graph export` convert the error themselves).
 - Expected: `capture` catches any file error and sets `_rc` (Stata: 603 `file could not be opened`).
-- Vendored: upstream 00cd4dc turns an `OSError` (a `PermissionError` is one) escaping a command into r(603), which
-  `capture` takes. The patch that did the same in `capture` was dropped at the re-vendor to 10632aa; the test passes without it.
+- Patched (`opendta-odt23-capture-sandbox-refusal.patch`): `capture` turns a `PermissionError` into `StataError(603)`.
+  Only needed because of dofile's sandbox, so not for upstream.
 
 ### ODT-24: weights in `xtreg, fe` and `areg`
 ```stata
@@ -439,7 +439,8 @@ wrapper does not cover them. Malformed class statements under `capture` all gave
 program are wrapped as usual.
 - Tests: `tests/test_engine.py::test_odt28_*` (13 commands, `capture`, the commands that keep their own codes, and a
   `MemoryError` injected into `replace`, with and without `capture`).
-- Related: ODT-23 is the same family for the sandbox's `PermissionError`; upstream's 00cd4dc fixes both.
+- Related: ODT-23 is the same family for the sandbox's `PermissionError`; it stays separate because it exists only for
+  the sandbox and is not for upstream.
 - Side finds: `estimates save`/`use` are GAP-5. `export excel` to a bad path prints a stray `ValueError: I/O operation
   on closed file` from openpyxl to stderr, though it returns 603 (not an entry).
 

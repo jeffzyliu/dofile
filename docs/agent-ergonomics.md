@@ -121,7 +121,7 @@ graph export ../escaped.png, replace    // sandbox refusal, also rc 603
   of this fix blamed that on an unrelated missing folder. The match is by file name (the last path component of
   the refusal appears in the line), so a very short name could match by chance.
 - A refusal raised by a command other than `graph export` (for example `type`) used to end the whole call even inside
-  `capture`; that is ODT-23 in `opendta-issues.md`, fixed upstream and vendored.
+  `capture`; that is ODT-23 in `opendta-issues.md`, patched in the engine.
 - Tests: `tests/test_sandbox.py` (the uncaught case, and `test_a_refusal_is_told_apart_from_a_missing_folder_inside_capture`).
 
 ### ERG-6: limits
