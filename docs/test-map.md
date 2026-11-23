@@ -238,8 +238,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   until the decoder ends; race 11, with both decoders: damage an idle step finds blocks only its copy (a graph before
   the fresh copy waits, not saying it, and the fresh copy is written while idle); damage the page has not acted on is
   said by the next graph, and the one after waits rather than unpack that copy again; a read of the part that throws is
-  not damage: nothing is posted, the graph's reason promises no fetch, and the next graph draws that copy; finding 15: a
-  warm step's throw is a warning that stops the warm-up (no `damaged`, no further step), and a graph draws.
+  not damage, in a graph, an idle step or the browser decoder's own task: nothing is posted, the graph's reason promises
+  no fetch, no error escapes, and that copy is drawn or written later; finding 15: a warm step's throw is a warning that
+  stops the warm-up (no `damaged`, no further step), and a graph draws.
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one

@@ -226,7 +226,14 @@ export function graphicsWorker(env: GraphicsEnv) {
 
   function startNative() {
     // the copy and its bytes from one snapshot: a failure is charged to the copy it unpacked
-    const landed = rec.part && nativeGate(work(), () => readGraphics(0, true));
+    let landed: LandedPart | null | undefined;
+    try {
+      landed = rec.part && nativeGate(work(), () => readGraphics(0, true));
+    } catch (e) {
+      // a task of its own (nativeSoon): a throw here would end the worker
+      if (e instanceof ReadFailed) return void readFailed(e);
+      throw e;
+    }
     if (!landed) return;
     const { copy } = landed;
     rec.unpack = { phase: "native", copy };

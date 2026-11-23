@@ -138,6 +138,15 @@ function part({
   };
 }
 
+/** Each copy of the part's bytes out of the region (a read with them) throws, as an allocation that fails would, until restored. */
+function failReads(t: TestContext) {
+  const slice = Uint8Array.prototype.slice;
+  return t.mock.method(Uint8Array.prototype, "slice", function (this: Uint8Array, start?: number, end?: number) {
+    if (end === SIZE) throw new RangeError("Array buffer allocation failed");
+    return slice.call(this, start, end);
+  });
+}
+
 /** The browser's decoder, each unpack held until release() (in the order they began). `started`: unpacks begun; `most`:
  *  the most under way at once. */
 function heldDecoder(t: TestContext) {
@@ -326,6 +335,37 @@ test("a read of the part that throws (its bytes copied out, a copy a phone may n
   assert.equal(w.wait(), "");
   assert.deepEqual(w.written, [1]);
   w.g.runEnded();
+});
+
+test("a read that throws in the browser decoder's own task is not damage and does not escape: nothing is posted, and a graph draws that copy", async (t) => {
+  const w = part({ page: true });
+  w.land(1);
+  const reads = failReads(t);
+  w.g.startupAnswered();
+  await sleep(IDLE_MS / 2);
+  reads.mock.restore();
+  assert.deepEqual(w.posted, []);
+  w.g.runArrived();
+  w.g.runStarts();
+  assert.equal(w.wait(), "");
+  assert.deepEqual(w.written, [1]);
+  w.g.runEnded();
+});
+
+test("a read that throws in an idle step is not damage: nothing is posted or written, and the next run's end unpacks and writes that copy", async (t) => {
+  const w = part({ brotli: "wasm", page: true });
+  w.land(1);
+  const reads = failReads(t);
+  w.g.startupAnswered();
+  await sleep(3 * IDLE_MS);
+  reads.mock.restore();
+  assert.deepEqual(w.posted, []);
+  assert.deepEqual(w.written, []);
+  w.g.runArrived();
+  w.g.runStarts();
+  w.g.runEnded();
+  await until(() => w.written.length === 1, "the idle steps wrote copy 1");
+  assert.deepEqual(w.posted, []);
 });
 
 test("finding 15: a warm step's throw is a warning that stops the warm-up, not damage: nothing is posted, no further step is tried, and a graph draws", async () => {
