@@ -8,7 +8,7 @@ import { megabytes } from "../bytes.ts";
 import { breakAsked, engineLoading, engineUp } from "../states/predicates.ts";
 import { stageStatus, stagesOf } from "../states/words.ts";
 import type { EngineState, LastRun, Memory } from "../types.ts";
-import { jumpLine, lastRunWords, linesWords, memoryTitle, memoryWords, seconds, ticking } from "./words.ts";
+import { jumpLine, lastRunWords, linesWords, memoryTitle, memoryWords, ticking } from "./words.ts";
 
 /** LICENSE-POLICY.md's sentence; the status bar shows it short. */
 export const AFFILIATION = "Stata is a registered trademark of StataCorp LLC; dofile is not affiliated with StataCorp.";
@@ -107,18 +107,14 @@ function lastRunFull(r: LastRun): StatusPart {
   return { t: "lastRun", lead, rc: w.rc, tail: `${w.where ? ` ${w.where} · ` : " · "}${w.time}` };
 }
 
-/** The same in the short form: "r(111)" and "line 17 · 0.38 s", "before line 17 · 18.4 s" for a Break, "Last run: 0.38 s". */
+/** The same in the short form, from the same words: "r(111)" and "line 17 · 0.38 s", "before line 17 · 18.4 s" for a Break,
+ *  "Last run: 0.38 s". */
 function lastRunShort(r: LastRun): StatusPart {
-  const rc = r.rc !== 0 ? `r(${r.rc})` : null;
-  if (r.line !== null && r.rc !== 0 && r.kind !== "command") {
-    return {
-      t: "lastRun",
-      lead: "",
-      rc,
-      tail: `${r.rc === 1 ? "before line" : "line"} ${r.line} · ${seconds(r.seconds)}`,
-    };
+  const w = lastRunWords(r);
+  if (w.line !== null) {
+    return { t: "lastRun", lead: "", rc: w.rc, tail: `${r.rc === 1 ? "before line" : "line"} ${w.line} · ${w.time}` };
   }
-  return { t: "lastRun", lead: r.rc === 0 ? "Last run: " : "", rc, tail: seconds(r.seconds) };
+  return { t: "lastRun", lead: w.rc === null ? "Last run: " : "", rc: w.rc, tail: w.time };
 }
 
 /** "Graphs loading" and a ring of its percent while the graphics part downloads after the start. Nothing before the

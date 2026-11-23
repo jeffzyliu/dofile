@@ -753,17 +753,21 @@ test("the words: run-heads, lines, times, the last run, memory", () => {
   assert.deepEqual(lastRunWords(run({ rc: 111, line: 17 })), {
     what: "whole file (started with no locals)",
     rc: "r(111)",
+    line: 17,
     where: "at line 17",
     time: "0.38 s",
   });
   assert.deepEqual(lastRunWords(run({ rc: 1, line: 3, seconds: 18.4 })), {
     what: "stopped by Break",
     rc: "r(1)",
+    line: 3,
     where: null,
     time: "18.4 s",
   });
   assert.equal(lastRunWords(run({ kind: "selection", lines: [6, 7], fresh_locals: false })).what, "lines 6–7");
   assert.equal(lastRunWords(run({ kind: "command", path: undefined, rc: 111, line: 1 })).where, null);
+  assert.equal(lastRunWords(run({ kind: "command", path: undefined, rc: 111, line: 1 })).line, null);
+  assert.equal(lastRunWords(run({ rc: 0 })).line, null);
   assert.equal(jumpLine(run({ rc: 111, line: 17 })), 17);
   assert.equal(jumpLine(run({ rc: 1, line: 3 })), 3, "Break: the line it stopped before");
   assert.equal(jumpLine(run({ rc: 0 })), null);
