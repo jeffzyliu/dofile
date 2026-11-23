@@ -78,6 +78,13 @@ addopts = [
 line-length = 120
 extend-exclude = ["src/dofile/_vendor", "tests_opendta", "legacy"]
 
+# Imports sort with isort's rules ("I"), dofile's own modules last.
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["dofile"]
+
 # Task runner: `uv run poe <task>` (or `poe <task>` in the activated .venv); `poe` alone lists them.
 # The uv executor runs each task as `uv run --extra=mcp ...`, so the MCP tests are never skipped.
 [tool.poe]
