@@ -7,7 +7,6 @@ import { graphFull, graphIndex, graphs } from "../state.ts";
 import type { Graph } from "../types.ts";
 import { exportPng } from "./clip.ts";
 import { graphAlt, graphSubject, graphTitle } from "./format.ts";
-import { fullOpener } from "./view.ts";
 
 const NO_GRAPHS = "Graphs drawn by a run appear here, for example ";
 const FILE_HINT = ". A .png from the file list opens here too.";
@@ -77,7 +76,8 @@ export function GraphTab() {
           type="button"
           class="head-link"
           onClick={(e) => {
-            fullOpener.el = e.currentTarget;
+            // Safari focuses no pressed button: the view hands the focus back to the active element
+            e.currentTarget.focus();
             graphIndex.value = at;
             graphFull.value = true;
           }}

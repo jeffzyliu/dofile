@@ -344,7 +344,8 @@ Specs:
 - `files.spec.ts`: files, tabs and the file panel.
   - The tree by keyboard; tabs with and without unsaved edits; Save; inline rename; row and head menus; delete.
   - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page, two quick drops
-    of one path (applied in drop order).
+    of one path (applied in drop order); the re-ask dialog ("changed while you were deciding") takes the focus on Keep
+    mine and hands it back to what had it before the first.
   - New .do file and New folder; drafts in a folder; the current folder (selecting, folding, rename and delete).
   - The phone's strip, file dropdown (44 px targets) and "Files ⋯"; the desktop's tablist.
 - `states.spec.ts` (step 4d): engine states and their banners.
@@ -436,6 +437,10 @@ Specs:
     other runs work. A damaged part's retry goes to an address of its own (`fresh=`), not the HTTP cache's.
 - `output.spec.ts` (step 4c): the Output tabs; Copy image twice in the full-size view (fake clock: the first "Copied" timer
   does not clear the second).
+  - The full-size view's modal trap (`ui/modal-trap.ts`): a Space that opened it leaves the focus on the view, not on Close; Tab and
+    Shift+Tab wrap inside; Esc gives the focus back to Open full size; an opener that has left the page (the Graph tab
+    gone while it is open) gives the focus to the editor; a dialog over it (the other-tab dialog) has the keys: Esc and the
+    arrows leave the view alone, and closing the dialog gives the focus back to the view.
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more; the
     name buttons' arrow keys leave Alt, Ctrl and Cmd alone), the

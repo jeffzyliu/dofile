@@ -42,11 +42,12 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
      nothing;
    - the Editor pane hidden (a phone on another view): the element is not shown, so `focusNow` moves nothing and returns
      false, and `focusStable` goes on to "More actions".
-4. **A dialog gives the focus back to its opener** (what had the focus when it opened). When the opener has left the
-   page, or it had none, the dialog calls `focusStable()`. `<body>` is never an opener. A dialog that opens while
-   another one is still handing the focus back takes that one's opener as its own (`ui/Dialog.tsx`, the module variable
-   `leaving`).
-5. **A view that takes the focus when it appears takes it in a layout effect:** a dialog (`ui/Dialog.tsx`), the
+4. **A modal gives the focus back to its opener** (what had the focus when it opened: a dialog, and the full-size graph
+   view, through `ui/modal-trap.ts` `useModalTrap`). When the opener has left the page, or it had none, the trap calls
+   `focusStable()`. `<body>` is never an opener. A modal that opens while another one is still handing the focus back
+   takes that one's opener as its own (the module variable `leaving`). The Graph tab's "Open full size" focuses itself
+   when pressed, because Safari focuses no pressed button.
+5. **A view that takes the focus when it appears takes it in a layout effect:** a modal (`useModalTrap`), the
    stopping banner's "Don't reset: wait for it", the waiting banner itself (`states/banners.tsx`), and the inline
    rename field (`files/TreeRow.tsx`), the last three through `ui/focus-hooks.ts` `useFocusOnMount`. So a hand-off
    that waits for a microtask finds the focus already taken.
@@ -108,8 +109,8 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 
 | Who | When | Timing | Where to |
 |---|---|---|---|
-| `ui/Dialog.tsx`, opening | it mounts | layout effect | It blurs the opener, then calls `showModal()`. Then `[data-autofocus]`, else the first enabled button, link or input. |
-| `ui/Dialog.tsx`, closing | it unmounts | cleanup (blur inside, `close()`), then a microtask, after the render's other layout effects; only a focus on nothing | the opener if it is still in the page, else `focusStable()` |
+| `ui/modal-trap.ts` `useModalTrap`, opening (`ui/Dialog.tsx`, `output/FullSize.tsx`) | it mounts | layout effect | A dialog: it blurs the opener, then calls `showModal()`; then `[data-autofocus]`, else the first enabled button, link or input. The full-size view: the view itself (so a Space that opened it cannot press Close). The view also keeps Tab and Shift+Tab inside its buttons, takes Esc and the arrow keys, and leaves every key to a `dialog[open]` over it. |
+| `useModalTrap`, closing | it unmounts | cleanup (blur inside, a dialog's `close()`), then a microtask, after the render's other layout effects; only a focus on nothing | the opener if it is still in the page, else `focusStable()` |
 | `states/focus.ts` `useFocusOnLeave` | a banner unmounts with the focus inside | layout cleanup, then a microtask; only a focus on nothing | `focusStable()` |
 | `KeepWaitingButton` (in `StoppingBanner`), `WaitingBanner` (`states/banners.tsx`) | the button appears (1 s after the Break press), the waiting banner mounts | layout effect (`useFocusOnMount`) | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
 | `DeclinedBanner` (`states/banners.tsx`) | "Start engine" | synchronous, before `eng.ask()` | `focusStable()`, so the prompt takes the editor as its opener |
@@ -285,7 +286,7 @@ On a phone one view shows at a time, so the Editor pane is often hidden and `foc
 | Close-tab's Save or "Don't save" | the selected tab in "Open files" | the editor: "Open files" is not shown, and neither is the tree on the Editor view |
 | The engine's dialog closes itself (`started`) | the editor | the editor on the Editor view. On any other view nothing moves, and the dialog's hand-back gives the focus to its opener. With no engine the page offers only "Start engine", which opened the prompt, so no run takes the focus from the Log view. |
 | A dialog opened from a menu (Reset, Delete all, Clear log) | the menu's trigger: ⋯ for Reset, "File actions" for Delete all, "Log actions" for Clear log | the ⋯ trigger for Reset; the strip's "Files ⋯" ("File actions") for Delete all; the strip's "Log ⋯" ("Log actions") for Clear log |
-| The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear), so `ui/Dialog.tsx` hands the focus to `focusStable()` |
+| The Clear log dialog opened from the Log head's "Clear…" | the button, back on Cancel and Esc | after "Clear log" the button is disabled (nothing is left to clear), so the trap (`ui/modal-trap.ts`) hands the focus to `focusStable()` |
 | Find opened from the phone strip's "Log ⋯" | (desktop: the Log head's Find button) | `openFind(null)` takes the focused element, the "Log ⋯" button that `closeMenu` just focused |
 | A tap on the command line while it does not have the focus | the browser's own focus | `log/CommandLine.tsx` takes the tap (`touchend`) and focuses the field itself with `preventScroll`, the caret at the end: the browser's focus would scroll the page up to the field, which iOS does before the page can stop it (`app/viewport.ts`, `docs/phone-keyboard-experiment.md`) |
 
@@ -311,6 +312,12 @@ On a phone one view shows at a time, so the Editor pane is often hidden and `foc
   - "New .do file and New folder: the name field has the focus within the tap's microtasks, …" (rule 8), and the tests
     after it: Esc, Enter, leaving the field, a name in use, a second New while the first is written
   - "a clash dialog that follows another (Keep mine, then the next clash at once): …"
+  - "a clash asked again because the file changed while it was asked: …" (the re-ask dialog's focus)
+- `web/e2e/output.spec.ts`:
+  - "the full-size view: its first focus is the view, not Close; Tab and Shift+Tab wrap inside it; Esc hands the focus back
+    to Open full size"
+  - "the full-size view whose opener has left the page gives the focus to the editor, not to the page"
+  - "a dialog over the full-size view has the keys: …"
 - `web/e2e/editor.spec.ts`: "a .dta tab: Save is off, and when the engine's dialog closes by itself the focus goes to
   that tab"; "Find in the log: … Esc gives the focus back"; "the Output tabs by keyboard: …"
 - `web/e2e/shell.spec.ts`: "the layout: … the ⋯ menu works by keyboard"; "the folded file list: … Esc folds it and

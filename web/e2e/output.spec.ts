@@ -9,7 +9,17 @@
 //    show in the log), so only the full-size view is checked there, opened through `graphFull`.
 import type { Page } from "@playwright/test";
 import { engineState, expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
-import { addBanner, type PhoneTab, seedGraphs, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
+import {
+  addBanner,
+  closeDialog,
+  openDialog,
+  type PhoneTab,
+  seedGraphs,
+  showGraphFull,
+  showPhoneTab,
+  showTabs,
+  showTheme,
+} from "./seed";
 
 declare global {
   interface Window {
@@ -86,6 +96,100 @@ test("Copy image twice in the full-size view: the first 'Copied' timer does not 
   await expect(viewer.locator(".vsaid")).toHaveText("Copied");
   await page.clock.fastForward(2000);
   await expect(viewer.locator(".vsaid")).toHaveText("");
+});
+
+const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+test("the full-size view: its first focus is the view, not Close; Tab and Shift+Tab wrap inside it; Esc hands the focus back to Open full size", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  const stops = () =>
+    viewer.evaluate((root) =>
+      [...root.querySelectorAll<HTMLElement>("button:not([disabled])")]
+        .filter((el) => el.getClientRects().length > 0)
+        .map((el) => el.textContent?.trim()),
+    );
+  const focusedText = () => page.evaluate(() => document.activeElement?.textContent?.trim());
+  if (isPhone(page)) {
+    await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }], { full: true });
+  } else {
+    await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }]);
+    await showTab(page, "graph");
+    const open = page.getByRole("button", { name: "Open full size" });
+    await open.focus();
+    await page.keyboard.press("Space"); // a Space that opened the view must not press Close, the first button
+    await expect(viewer).toBeVisible();
+  }
+  await expect(viewer).toBeFocused();
+  await page.waitForTimeout(200); // a Close pressed by the opening Space would close the view about now
+  await expect(viewer).toBeVisible();
+  const all = await stops();
+  expect(all.length).toBeGreaterThan(1);
+  await page.keyboard.press("Shift+Tab"); // from the view itself: the last stop
+  expect(await focusedText()).toBe(all[all.length - 1]);
+  await page.keyboard.press("Tab"); // from the last: the first
+  expect(await focusedText()).toBe(all[0]);
+  await page.keyboard.press("Shift+Tab"); // from the first: the last
+  expect(await focusedText()).toBe(all[all.length - 1]);
+  if (!isPhone(page)) {
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open full size" })).toBeFocused();
+  }
+});
+
+test("the full-size view whose opener has left the page gives the focus to the editor, not to the page", async ({
+  page,
+}) => {
+  test.skip(isPhone(page), "a phone has no Graph tab, so no Open full size to leave");
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }]);
+  await showTab(page, "graph");
+  await page.getByRole("button", { name: "Open full size" }).click();
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  await expect(viewer).toBeFocused();
+  // the Graph tab, and with it the opener, goes while the view is open
+  await page.evaluate(() => {
+    window.__dofile.state.outputTab.value = "data";
+  });
+  await expect(page.getByRole("button", { name: "Open full size" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]")))).toBe(true);
+});
+
+test("a dialog over the full-size view has the keys: Esc and the arrows leave the view alone, and closing it gives the focus back to the view", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  const graphs = [1, 2].map((n) => ({
+    n,
+    png: PIXEL,
+    theme: "light" as const,
+    from: "run" as const,
+    command: "scatter y x",
+  }));
+  await seedGraphs(page, graphs, { full: true });
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  const title = await viewer.locator(".vtitle").textContent();
+  await openDialog(page, { d: "other-tab" });
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeVisible();
+  await expect(viewer).toBeVisible();
+  await expect(viewer.locator(".vtitle")).toHaveText(title ?? "");
+  if (!isPhone(page)) {
+    await page.keyboard.press("Tab"); // WebKit's Tab skips buttons by default
+    await expect(page.getByRole("button", { name: "Use dofile in this tab" })).toBeFocused();
+  }
+  await closeDialog(page);
+  await expect(viewer).toBeFocused();
 });
 
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
