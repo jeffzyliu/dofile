@@ -1412,6 +1412,32 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
   assert.deepEqual(f.modes, ["no-cache", "no-cache", "no-cache"], "a failed fetch is not a damaged copy");
 });
 
+test("graphics part: an `again` or `damaged` from a worker that has ended is dropped; the live worker's is not", async () => {
+  const caches = fakeCaches();
+  const f = partFetch(["offline", 2]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await f.release();
+  await until(() => page.states.at(-1) === "failed", "failed");
+  const ended = page.got.port!;
+  page.eng.end(live(page.eng), { kind: "reset", reset: "user", reason: "session reset: reset by you." });
+  await startWorker(page.eng, done.build);
+
+  ended.onmessage!({ data: { graphics: "again" } });
+  await sleep(20);
+  assert.equal(f.modes.length, 1, "the ended worker's again fetches nothing");
+  assert.equal(page.header()[0], PART_FAILED);
+
+  page.say("again");
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed");
+  ended.onmessage!({ data: { graphics: "damaged" } });
+  await sleep(20);
+  assert.equal(f.modes.length, 2, "the ended worker's damaged fetches nothing");
+  assert.deepEqual(page.header(), [PART_LANDED, PART.size, 1]);
+});
+
 // what the listeners saw, one line each: the state, the bytes received, and the reason's first words when failed
 const progressLines = (seen: GraphicsProgress[]) =>
   seen.map((p) => `${p.state} ${p.received}/${p.total}${p.error ? `: ${p.error.split(" (")[0]}` : ""}`);

@@ -638,7 +638,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if ("folderError" in data)
         return reply({ type: "crashed", cause: "folder", reason: "unknown", detail: data.folderError });
       if ("graphics" in data) {
-        if (this.#graphics) this.#workerSaysGraphics(this.#graphics, data);
+        // an ended worker's `again` or `damaged` was about its own graphs: dropped
+        if (this.#live === live && this.#graphics) this.#workerSaysGraphics(this.#graphics, data);
         return;
       }
       const p = live.pending.get(data.id);
