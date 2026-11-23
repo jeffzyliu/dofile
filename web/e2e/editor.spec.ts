@@ -826,6 +826,12 @@ test("the Output tabs by keyboard: each key moves the focus to the tab it select
   await page.keyboard.press("Home");
   await expect(tab("Log")).toBeFocused();
   await expect(field).not.toBeFocused();
+  await page.keyboard.press("ArrowDown"); // the tabs take both axes
+  await expect(tab("Graph")).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(tab("Log")).toBeFocused();
+  await page.keyboard.press("ArrowUp"); // wraps
+  await expect(tab("Results")).toBeFocused();
 });
 
 // "Clear log…" asks first (SPEC 3.5, 3.10; log/ClearLogDialog.tsx): the head's "Clear…" button, and on a phone the strip's

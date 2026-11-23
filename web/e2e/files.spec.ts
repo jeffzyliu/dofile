@@ -68,6 +68,14 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect(row(page, /^raw\//)).toBeFocused();
   await page.keyboard.press("End");
   await expect(row(page, /^a\.do/)).toBeFocused();
+  await page.keyboard.press("ArrowDown"); // the last row: the tree stops, it does not wrap
+  await expect(row(page, /^a\.do/)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(items.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp"); // nor at the first
+  await expect(items.nth(0)).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(row(page, /^a\.do/)).toBeFocused();
   await page.keyboard.press("Enter");
   await expect.poll(() => openTabs(page)).toEqual(["a.do"]);
   if (isPhone(page)) {
@@ -118,6 +126,13 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     await tabs.getByRole("tab", { name: "c.do" }).focus();
     await page.keyboard.press("Delete"); // no edits: closes, and the tab to its left is selected and focused
     await expect.poll(() => openTabs(page)).toEqual(["a.do", "b.do"]);
+    await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused();
+    await page.keyboard.press("ArrowDown"); // the file tabs take Left and Right only
+    await page.keyboard.press("ArrowUp");
+    await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused();
+    await page.keyboard.press("ArrowRight"); // wraps to the first
+    await expect(tabs.getByRole("tab", { name: /^a\.do/ })).toBeFocused();
+    await page.keyboard.press("ArrowLeft"); // and back round to the last
     await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused();
     await page.keyboard.press("ArrowLeft");
     await expect(tabs.getByRole("tab", { name: /^a\.do/ })).toHaveAttribute("aria-selected", "true");
@@ -316,6 +331,12 @@ test("a menu's arrow keys skip a disabled item in the middle or at the end, and 
   await page.keyboard.press("ArrowUp"); // and back round to the last
   await expect(item("Restore the sample")).toBeFocused();
   await page.keyboard.press("Home");
+  await expect(item("New .do file")).toBeFocused();
+  await page.keyboard.press("ArrowRight"); // a menu's keys are Up and Down: Left and Right leave the focus
+  await settle(page);
+  await expect(item("New .do file")).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await settle(page);
   await expect(item("New .do file")).toBeFocused();
 });
 

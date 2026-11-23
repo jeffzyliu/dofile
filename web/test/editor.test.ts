@@ -993,7 +993,7 @@ test("which key press is Run (keys.ts isRunKey): Ctrl or Cmd with Enter, no Alt,
   assert.equal(isRunKey(press({ ctrlKey: true, key: "s", code: "KeyS" })), false);
 });
 
-test("the roving-key rule (ui/keys.ts roveKey), each widget's row: Tablist both axes and wraps, the file tabs Left and Right and wrap, the tree and the variables table Up and Down and stop, the menu Up and Down and wraps", () => {
+test("the roving-key rule (ui/keys.ts roveKey), the rows of axis and wrap a widget can ask for (both axes, one axis; wrap, stop), Alt, Ctrl and Cmd, keys not its own, no places", () => {
   const press = (key: string, o: object = {}) => ({ key, altKey: false, ctrlKey: false, metaKey: false, ...o });
   const rows: { axis: RoveAxis; wrap: boolean; moves: [string, number | null][] }[] = [
     // from the middle of three places (at 1), from the first (at 0) and from the last (at 2)

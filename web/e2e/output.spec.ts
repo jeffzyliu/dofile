@@ -318,6 +318,24 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   });
   expect(withModifier).toEqual({ prevented: [], moved: [] });
   await expect(names.nth(1)).toBeFocused();
+  // the list's own axis: Up and Down stop at the ends (no wrap), Home and End jump, Left and Right are not its keys
+  await page.keyboard.press("ArrowUp");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowLeft");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(names.nth(1)).toBeFocused();
   // Browse: 50 of 160 rows, read only
   const subhead = page.locator(".subhead", { hasText: "Browse" });
   await expect(subhead).toContainText("first 50 of 160 rows · read only");
