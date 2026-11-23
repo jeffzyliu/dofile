@@ -6,6 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { focusStable } from "../src/app/states/focus.ts";
 import {
   ask,
   cancel,
@@ -58,20 +59,74 @@ afterEach(() => {
 test("focusNow focuses a registered target and says whether the focus is on it", () => {
   const el = fake();
   reg("editor", () => el);
-  assert.equal(focusNow("editor"), true);
+
+  const on = focusNow("editor");
+
+  assert.equal(on, true);
   assert.equal(doc.activeElement, el);
 });
 
+test("focusNow says false for a target that is shown but whose focus does not land", () => {
+  const el = fake({ focus() {} });
+  reg("editor", () => el);
+
+  const on = focusNow("editor");
+
+  assert.equal(on, false);
+  assert.equal(doc.activeElement, doc.body);
+});
+
 test("focusNow moves nothing and says false for no entry, a getter that returns null, an element gone and one not shown", () => {
-  assert.equal(focusNow("editor"), false);
-  reg("editor", () => null);
-  assert.equal(focusNow("editor"), false);
   const gone = fake({ isConnected: false });
-  reg("more-actions", () => gone);
-  assert.equal(focusNow("more-actions"), false);
   const hidden = fake({ shown: false });
+  reg("editor", () => null);
+  reg("more-actions", () => gone);
   reg("open-file-tab", () => hidden);
+
+  assert.equal(focusNow("dta-load"), false);
+  assert.equal(focusNow("editor"), false);
+  assert.equal(focusNow("more-actions"), false);
   assert.equal(focusNow("open-file-tab"), false);
+  assert.equal(doc.activeElement, doc.body);
+});
+
+test("focusStable focuses the editor when it takes the focus, and More actions is left alone", () => {
+  const editor = fake();
+  const more = fake();
+  reg("editor", () => editor);
+  reg("more-actions", () => more);
+
+  focusStable();
+
+  assert.equal(doc.activeElement, editor);
+});
+
+test("focusStable falls back to More actions when the editor is hidden", () => {
+  const more = fake();
+  reg("editor", () => fake({ shown: false }));
+  reg("more-actions", () => more);
+
+  focusStable();
+
+  assert.equal(doc.activeElement, more);
+});
+
+test("focusStable falls back to More actions when the editor is shown but does not take the focus", () => {
+  const more = fake();
+  reg("editor", () => fake({ focus() {} }));
+  reg("more-actions", () => more);
+
+  focusStable();
+
+  assert.equal(doc.activeElement, more);
+});
+
+test("focusStable moves nothing when neither the editor nor More actions is shown", () => {
+  reg("editor", () => fake({ shown: false }));
+  reg("more-actions", () => fake({ isConnected: false }));
+
+  focusStable();
+
   assert.equal(doc.activeElement, doc.body);
 });
 
@@ -82,7 +137,10 @@ test("of several entries of one name the first shown one takes the focus", () =>
   reg("more-actions", () => hidden);
   reg("more-actions", () => first);
   reg("more-actions", () => second);
-  assert.equal(focusNow("more-actions"), true);
+
+  const on = focusNow("more-actions");
+
+  assert.equal(on, true);
   assert.equal(doc.activeElement, first);
   assert.equal(shownElement("more-actions"), first);
 });
@@ -92,12 +150,18 @@ test("an entry follows its getter, and unregistering ends it", () => {
   const b = fake();
   let at: HTMLElement = a;
   const off = register("editor", () => at);
+
   focusNow("editor");
+
   assert.equal(doc.activeElement, a);
+
   at = b;
   focusNow("editor");
+
   assert.equal(doc.activeElement, b);
+
   off();
+
   assert.equal(shownElement("editor"), null);
 });
 
@@ -113,7 +177,9 @@ test("an entry's own focus function is used", () => {
       e.focus();
     },
   );
+
   focusNow("editor");
+
   assert.deepEqual(used, [el]);
 });
 
@@ -122,19 +188,25 @@ test("a key reaches only the entry with that key", () => {
   const b = fake();
   reg("editor", () => a, "a");
   reg("editor", () => b, "b");
-  assert.equal(focusNow("editor", "b"), true);
+
+  const on = focusNow("editor", "b");
+
+  assert.equal(on, true);
   assert.equal(doc.activeElement, b);
   assert.equal(shownElement("editor", "c"), null);
 });
 
 test("a request waits for a target registered later, and ends when taken", () => {
   ask("editor", { from: fromAnywhere });
+
   assert.equal(focusRequest.value?.name, "editor");
   assert.equal(takeRequest("editor"), false, "no target yet: it ends, taken or not");
   assert.equal(focusRequest.value, null);
+
   ask("editor", { from: fromAnywhere });
   const el = fake();
   reg("editor", () => el);
+
   assert.equal(takeRequest("editor"), true);
   assert.equal(doc.activeElement, el);
   assert.equal(focusRequest.value, null);
@@ -144,9 +216,12 @@ test("a request for another name or another key is not taken by this one", () =>
   const el = fake();
   reg("editor", () => el, "a");
   ask("more-actions", { from: fromAnywhere });
+
   assert.equal(takeRequest("editor", "a"), false);
   assert.equal(focusRequest.value?.name, "more-actions");
+
   ask("editor", { key: "b", from: fromAnywhere });
+
   assert.equal(takeRequest("editor", "a"), false);
   assert.equal(focusRequest.value?.key, "b");
 });
@@ -154,10 +229,15 @@ test("a request for another name or another key is not taken by this one", () =>
 test("a newer request replaces the older one, whatever its target; cancel ends only its own", () => {
   ask("editor", { from: fromAnywhere });
   ask("more-actions", { from: fromAnywhere });
+
   assert.equal(focusRequest.value?.name, "more-actions");
+
   cancel("editor");
+
   assert.equal(focusRequest.value?.name, "more-actions");
+
   cancel("more-actions");
+
   assert.equal(focusRequest.value, null);
 });
 
@@ -167,11 +247,14 @@ test("a request moves the focus only when its from allows it, and ends all the s
   reg("editor", () => el);
   doc.activeElement = other;
   ask("editor", { from: fromNothing });
+
   assert.equal(takeRequest("editor"), false);
   assert.equal(doc.activeElement, other);
   assert.equal(focusRequest.value, null);
+
   doc.activeElement = doc.body;
   ask("editor", { from: fromNothing });
+
   assert.equal(takeRequest("editor"), true);
   assert.equal(doc.activeElement, el);
 });
@@ -180,7 +263,10 @@ test("a request for a target not shown ends with no move", () => {
   const el = fake({ shown: false });
   reg("editor", () => el);
   ask("editor", { from: fromAnywhere });
-  assert.equal(takeRequest("editor"), false);
+
+  const moved = takeRequest("editor");
+
+  assert.equal(moved, false);
   assert.equal(focusRequest.value, null);
 });
 
@@ -195,7 +281,12 @@ const sources = (dir: string): string[] =>
 test("each target name is registered by a component, and a component registers no other name", () => {
   const text = sources(SRC)
     .filter((p) => !p.endsWith("focus-targets.ts"))
-    .map((p) => readFileSync(p, "utf8"))
+    .map((p) =>
+      readFileSync(p, "utf8")
+        .split("\n")
+        .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+        .join("\n"),
+    )
     .join("\n");
   const used = [...text.matchAll(/\buseFocusTarget\(\s*"([^"]+)"/g)].map((m) => m[1]);
   for (const name of TARGET_NAMES) assert.ok(used.includes(name), `${name} is registered by a component`);
