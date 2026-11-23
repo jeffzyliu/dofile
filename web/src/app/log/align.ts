@@ -159,23 +159,31 @@ export function echoLines(lines: readonly LogLine[], code: string): Map<number, 
   const { skip, inside: inComment } = comments(codeLines);
   const { inside: inBlock, silent } = blocks(codeLines);
   const codeCount = codeLines.length;
+
   // the next line that is surely echoed (not skippable, not silent), from each line
   const nextEchoed = new Array<number>(codeCount + 1).fill(codeCount);
   for (let codeAt = codeCount - 1; codeAt >= 0; codeAt--) {
     nextEchoed[codeAt] = skip[codeAt] || silent[codeAt] ? nextEchoed[codeAt + 1] : codeAt;
   }
+
   // the code's lines by text: all of them, and those the look-ahead may jump to (outside blocks, surely echoed)
   const allByText = new Map<string, number[]>();
   const jumpableByText = new Map<string, number[]>();
+
   const addLine = (byText: Map<string, number[]>, text: string, codeAt: number) => {
     const sameText = byText.get(text);
-    if (sameText) sameText.push(codeAt);
-    else byText.set(text, [codeAt]);
+    if (sameText) {
+      sameText.push(codeAt);
+    } else {
+      byText.set(text, [codeAt]);
+    }
   };
+
   codeLines.forEach((text, codeAt) => {
     addLine(allByText, text, codeAt);
     if (!inBlock[codeAt] && !skip[codeAt] && !silent[codeAt]) addLine(jumpableByText, text, codeAt);
   });
+
   // for each log line: whether an `end of do-file` comes before the next echo of a `do` (a nested file's end first:
   // the line may be inside a file a block or a program ran)
   const endComesFirst = new Array<boolean>(lines.length);
@@ -183,35 +191,50 @@ export function echoLines(lines: readonly LogLine[], code: string): Map<number, 
   for (let logAt = lines.length - 1; logAt >= 0; logAt--) {
     endComesFirst[logAt] = endSeen;
     const command = echoed(lines[logAt]);
-    if (lines[logAt].text === "end of do-file") endSeen = true;
-    else if (command !== null && opens(command)) endSeen = false;
+    if (lines[logAt].text === "end of do-file") {
+      endSeen = true;
+    } else if (command !== null && opens(command)) {
+      endSeen = false;
+    }
   }
 
   const logAtByCode = new Map<number, number>();
   let nextCode = 0; // the next code line to find
   let depth = 0; // nested do-files open
-  let mayJump = true; // whether a top-level echo may be taken, and looked for further down: not while a nested file's
-  // echoes may come unannounced (after a `do` in a block, or after a nested file's end)
+
+  // whether a top-level echo may be taken, and looked for further down: not while a nested file's echoes may come
+  // unannounced (after a `do` in a block, or after a nested file's end)
+  let mayJump = true;
+
   for (let logAt = 0; logAt < lines.length; logAt++) {
     const command = echoed(lines[logAt]);
     if (depth > 0) {
       if (lines[logAt].text === "end of do-file") {
         depth--;
-        if (depth === 0) mayJump = false; // more ends than were seen opening may follow (a `do` in a loop of that file)
-      } else if (command !== null && opens(command)) depth++;
+        // more ends than were seen opening may follow (a `do` in a loop of that file)
+        if (depth === 0) mayJump = false;
+      } else if (command !== null && opens(command)) {
+        depth++;
+      }
       continue;
     }
+
     if (command === null) {
-      if (lines[logAt].text === "end of do-file") mayJump = false; // a do-file run from a block, or a program, just ended
+      // a do-file run from a block, or a program, just ended
+      if (lines[logAt].text === "end of do-file") mayJump = false;
       continue;
     }
     const text = command.trimEnd();
     if (!text.trim()) continue;
+
     const isDotLine = lines[logAt].text.startsWith(". ");
     if (!mayJump && isDotLine && !opens(command)) {
-      if (endComesFirst[logAt]) continue; // perhaps inside a do-file a block or a program ran: not known, so passed over
-      mayJump = true; // no nested file's end before the next `do`: the walk is at the top again
+      // perhaps inside a do-file a block or a program ran: not known, so passed over
+      if (endComesFirst[logAt]) continue;
+      // no nested file's end before the next `do`: the walk is at the top again
+      mayJump = true;
     }
+
     // in step: the next line, or a line before it that may be left out but is echoed here
     const isContinued = lines[logAt].text.startsWith(">");
     const echoedAt = nextEchoed[nextCode];
@@ -224,24 +247,30 @@ export function echoLines(lines: readonly LogLine[], code: string): Map<number, 
         break;
       }
     }
+
     let jumped = false;
     if (codeAt < 0) {
       const ahead = mayJump && isDotLine ? (jumpableByText.get(text) ?? []) : [];
       const slot = atLeast(ahead, nextCode + 1);
       if (slot >= ahead.length) {
-        if (opens(command)) depth++; // a do inside a nested file we did not see open: keep the count anyway
+        // a do inside a nested file we did not see open: keep the count anyway
+        if (opens(command)) depth++;
         continue;
       }
       codeAt = ahead[slot];
       jumped = true;
     }
+
     logAtByCode.set(codeAt + 1, logAt);
     nextCode = codeAt + 1;
     if (!jumped && !inBlock[codeAt]) mayJump = true;
     if (opens(command)) {
-      if (inBlock[codeAt])
-        mayJump = false; // its file's echoes come later, or never: pass them over
-      else depth++;
+      if (inBlock[codeAt]) {
+        // its file's echoes come later, or never: pass them over
+        mayJump = false;
+      } else {
+        depth++;
+      }
     }
   }
   return logAtByCode;
