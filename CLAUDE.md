@@ -12,15 +12,9 @@ uv run poe                                            # list tasks (defined in p
 uv run poe test                                       # default suite in parallel, ~35 s; skips the slow Stata comparison
 uv run poe test tests/test_mcp.py::test_stdio_mode_tools   # one test (extra args go to pytest)
 uv run poe test tests                                 # dofile's own tests only (not OpenDTA's vendored suite)
-uv run poe opendta                                    # OpenDTA's vendored unit tests only (~22 s)
-uv run poe slow                                       # Stata 14 log comparison only (~75 s)
 uv run poe ci                                         # every test, as CI runs them
-uv run dofile run path/to/file.do --json out.json     # batch run (sandboxed; --unsafe to lift it)
-uv run poe mcp [--http --port 8000]                   # MCP server, stdio by default
-uv run poe vendor [COMMIT]                            # re-vendor OpenDTA, re-apply patches
 uv run poe format                                     # ruff format: dofile's own Python
 uv run poe lint                                       # ruff format --check, then ruff check, as CI runs them
-uv build                                              # sdist + wheel (the wheel is built from the sdist)
 ```
 
 poe runs every task as `uv run --extra=mcp ...`; plain `pytest` without `--extra mcp` skips `tests/test_mcp.py`. That
@@ -37,8 +31,7 @@ Format and lint: ruff (pinned in `pyproject.toml`, `[tool.ruff]`) for dofile's o
 warning fails as an error does. Run `uv run poe format` at the end of a task or before a commit, not after every edit
 (a reformat between a read and an edit makes the edit's text stop matching). **Never run a formatter on `_vendor/`,
 `tests_opendta/` or `legacy/`** (the vendor script's patches apply to upstream's exact text). A finding is fixed, or
-ignored in place with the rule and the reason (`# noqa: RULE  (reason)`), before a merge. In a new clone run
-`git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+ignored in place with the rule and the reason (`# noqa: RULE  (reason)`), before a merge.
 
 ## Architecture
 
@@ -63,15 +56,12 @@ Layers, bottom up (`src/dofile/`):
   `start_session` tool, each with its own temp workdir. Errors meant for the agent must be raised as `ToolError` (the
   SDK hides others). Calls to one session queue on an async lock (`Sessions.call`), not in threads. Tool outputs are
   `TypedDict`s: they become the advertised `outputSchema`, and the SDK validates every result against them.
-- `browser.py`, `pathshim.py`, `linalgshim.py`: web demo only (`web/CLAUDE.md`); the CLI and MCP server never install
-  them.
 - `cli.py`: `dofile run` runs `do` on the file in one sandboxed `Engine`, passing the path through a local macro so `$`
   and backquotes in it aren't expanded.
 
 **Changing the result format or a tool** means updating the TypedDicts in `mcp_server.py` and `MCP-SCHEMA.md`
-together. While dofile is 0.x, a breaking change to the result format raises the minor version; a patch release never
-changes the schema. The "For dofile `0.1.x`" line of `MCP-SCHEMA.md` is edited by hand, only with a minor bump
-(`tests/test_version.py` fails if it is stale); `__version__` follows `pyproject.toml` by itself.
+together; while dofile is 0.x, a breaking change raises the minor version and a patch release never changes the schema
+(`tests/test_version.py` checks `MCP-SCHEMA.md`'s version line).
 
 ## Tests
 
@@ -93,11 +83,9 @@ changes the schema. The "For dofile `0.1.x`" line of `MCP-SCHEMA.md` is edited b
 - **`main` is protected: never push to it**, except to merge a pull request by fast-forward when the user says so for
   that pull request: `git push origin <sha>:main` once its checks pass and `main` is still its base. Every change is a
   pull request (it need not be up to date with `main`: the run on `main` tests the merge), and `ci ok`, `web ok` and
-  `lint ok` must pass. A pull request that holds a reformat commit named in `.git-blame-ignore-revs` is merged with a
-  merge commit (a rebase or squash changes its hash); any merge method works otherwise. **A merge to `main` deploys
-  the web demo** once its tests pass.
+  `lint ok` must pass. Merge methods (a reformat commit needs a merge commit): `docs/deploying.md`. **A merge to `main`
+  deploys the web demo** once its tests pass.
 - CI and deploy: the table at the top of `docs/deploying.md` (every workflow, its trigger, required check and secrets).
-- Where to look (`docs/`): `phase2-plan.md` (web demo; read it first: status and next steps), `phase3-plan.md` (hosted
-  multi-user MCP server), `opendta-issues.md` (known OpenDTA problems), `agent-ergonomics.md`, `releasing.md` (PyPI),
-  `deploying.md` (Cloudflare, previews), `icebox.md` (left for later; nothing in it blocks a merge), `archive/`
-  (finished work, not kept current). Web demo design: `docs/design/` (`SPEC.md` is the build spec).
+- Where to look: `docs/`. For the web demo read `docs/phase2-plan.md` first (status and next steps); its build spec is
+  `docs/design/SPEC.md`. `docs/icebox.md` is left for later (nothing in it blocks a merge);
+  `docs/archive/` is finished work, not kept current.

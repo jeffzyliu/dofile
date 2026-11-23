@@ -35,6 +35,10 @@ checks are named `ci / ci ok`, `web / web ok` and `lint / lint ok`.
 `build-web` is the composite action `.github/actions/build-web` (the wheel, the snapshot at quality 11, both builds, the
 size check); the tip check is `.github/scripts/is-main-tip.sh`. Why: [How the workflows work](#how-the-workflows-work).
 
+**Merge method.** A pull request that holds a reformat commit named in `.git-blame-ignore-revs` is merged with a merge
+commit: a rebase or squash changes the commit's hash, and the ignore file would name a commit `main` does not have. Any
+merge method works otherwise.
+
 ## 1. Buy the domain
 
 **Use Cloudflare Registrar.** The domain, its DNS zone and the Workers then all sit in one account.
