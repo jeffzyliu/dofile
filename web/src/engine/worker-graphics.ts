@@ -285,7 +285,14 @@ export function graphicsWorker(env: GraphicsEnv) {
     const w =
       u.phase === "warming" ? u : { phase: "warming" as const, copy: u.copy, at: 0, t0: performance.now(), longest: 0 };
     rec.unpack = w;
-    w.at = env.browser().warm_graphics(w.at, w.at < 3 ? 1 : 20);
+    try {
+      w.at = env.browser().warm_graphics(w.at, w.at < 3 ? 1 : 20);
+    } catch (e) {
+      // not damage: the files are written; a real import error shows in the graph that needs the module
+      console.warn(`[dofile] graphics part: warm-up stopped (${env.errorOf(e).message})`);
+      rec.unpack = { phase: "warmed" };
+      return;
+    }
     w.longest = Math.max(w.longest, since(t));
     if (w.at < 0) {
       console.info(

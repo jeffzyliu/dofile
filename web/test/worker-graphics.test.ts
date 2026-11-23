@@ -237,3 +237,24 @@ test("damage the page has not acted on yet: the next graph says it, and the one 
   await sleep(3 * IDLE_MS);
   assert.deepEqual(w.written, [1], "copy 1 is not unpacked or written again");
 });
+
+test("finding 15: a warm step's throw is a warning that stops the warm-up, not damage: nothing is posted, no further step is tried, and a graph draws", async () => {
+  const w = part({ brotli: "wasm" });
+  w.warmThrows();
+  w.land(1);
+  const from = said.length;
+  w.g.startupAnswered();
+  await until(() => w.warmed.length === 1, "the first warm step");
+  w.g.runArrived();
+  w.g.runStarts();
+  w.g.runEnded(); // a run's end and a page write wake the idle steps
+  w.g.pageWrote();
+  await sleep(3 * IDLE_MS);
+  assert.deepEqual(w.warmed, [0]);
+  assert.deepEqual(w.posted, []);
+  assert.match(said.slice(from).join("\n"), /warm-up stopped \(No module named 'pyparsing'\)/);
+  w.g.runArrived();
+  w.g.runStarts();
+  assert.equal(w.wait(), "");
+  assert.deepEqual(w.written, [1]);
+});
