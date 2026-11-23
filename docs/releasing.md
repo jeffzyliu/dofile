@@ -43,7 +43,7 @@ the last release until the next bump, so tagging an unbumped `main` fails at upl
 A push of a tag `vX.Y.Z` (PEP 440: `v0.1.0a1`, `v0.1.0.dev1`, `v0.1.0`) builds, tests and publishes that commit.
 1. On `main`: bump the version (previous section), merge it, and let the `deploy` run on `main` go green (on `main`, ci runs inside it).
 2. Tag the release commit on `main` from git (see "Tagging" below): the tag is the version with a `v`.
-3. The `build` job refuses a tag that is not on `main` or does not match `pyproject.toml`, runs `poe test`, builds, runs
+3. The `test` job runs `poe test` on Ubuntu and macOS × Python 3.12, 3.13, 3.14; `build` waits for all of it. The `build` job refuses a tag that is not on `main` or does not match `pyproject.toml`, runs `poe test`, builds, runs
    `twine check`, installs the wheel alone in a clean environment and runs `dofile run` and `dofile-mcp --help`. The
    `publish` job then uploads with Trusted Publishing (OIDC): no token is stored anywhere. It is a separate job so the
    OIDC permission is never available to the steps that run the project's code.
