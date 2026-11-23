@@ -1,5 +1,5 @@
 // The file panel (docs/design/SPEC.md, section 3.1): the head menu and the body (tree, dropzone). The rows, keys,
-// rename and drafts follow SPEC 3.1 and docs/web-page-flows.md. Files change through the store (actions.ts), never the
+// rename and drafts follow SPEC 3.1 and docs/web-page-flows.md. Files change through the store (ops.ts, upload.ts), never the
 // worker.
 import { signal } from "@preact/signals";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
@@ -13,18 +13,9 @@ import { store } from "../store.ts";
 import { fromAnywhere, fromNothing, useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { closeMenu, MenuButton, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
-import {
-  createEntry,
-  downloadEntry,
-  entriesOf,
-  fromDrop,
-  fromFileList,
-  type Incoming,
-  NEW_NAMES,
-  renameEntry,
-  upload,
-} from "./actions.ts";
+import { entriesOf, fromDrop, fromFileList } from "./intake.ts";
 import { openFile } from "./open.ts";
+import { createEntry, downloadEntry, NEW_NAMES, renameEntry } from "./ops.ts";
 import {
   baseName,
   folderOrAbove,
@@ -39,6 +30,7 @@ import {
   treeRows,
   within,
 } from "./tree.ts";
+import { type Incoming, upload } from "./upload.ts";
 
 const folded = signal<ReadonlySet<string>>(new Set());
 const rovingPath = signal<string | null>(null); // the row in the tab order, once one was focused

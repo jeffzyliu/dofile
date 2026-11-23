@@ -1119,13 +1119,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     an edit with `editor/documents.ts` `update`, as the view would.
     **As built in step 4a:** the plain logic is in `files/tree.ts` (the rows: in each folder its folders first, then its
     files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
-    with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
-    rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
+    with a new name; tab labels, the folder added when two open files share a name), `files/ops.ts` (rename, new,
+    delete, a folder's .zip from the store with `engine/zip.ts`) and `files/upload.ts` (upload: the files that clash with none
     are written first (so is none that holds the uploaded bytes already, unless it is open with unsaved edits), then each clash
     is asked; what the clash dialog shows beyond the `dialog` value, its words included (`upload(items, "sample")` is "Restore
     the sample"), is `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
     open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
-    is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), both tested in Node
+    is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), each tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
     its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). A tab still open at the new name after a run deleted its file closes for the rename, or, with unsaved edits, the rename is refused as if the file were there. After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
     now selected, else the tree's row, else the editor; the close-tab dialog stays open while its Save writes the file,

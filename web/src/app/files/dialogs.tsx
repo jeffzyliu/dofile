@@ -8,10 +8,11 @@ import { refresh } from "../files.ts";
 import { dialog, files } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
-import { answerClash, type ClashAnswer, clashNow, deleteAll, deleteEntries, WORDS } from "./actions.ts";
 import { focusAfterClose } from "./EditorTabs";
 import { focusTree } from "./FilesPane";
+import { deleteAll, deleteEntries } from "./ops.ts";
 import { baseName, shortDate } from "./tree.ts";
+import { answerClash, type ClashAnswer, clashNow, WORDS } from "./upload.ts";
 
 const close = () => {
   dialog.value = null;

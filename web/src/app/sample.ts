@@ -2,9 +2,9 @@
 // made by web/sample/make_sample.py. Their bytes are in sample-files.ts (generated: `npm run sample`). Plain
 // TypeScript, tested in Node (test/sample.test.ts).
 
-import { upload } from "./files/actions.ts";
 import { openFile } from "./files/open.ts";
 import { fileTurn } from "./files/turns.ts";
+import { upload } from "./files/upload.ts";
 import { SAMPLE } from "./sample-files.ts";
 import { saved, showToast } from "./state.ts";
 import { store } from "./store.ts";
