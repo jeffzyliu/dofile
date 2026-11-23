@@ -168,7 +168,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - An upload against the other file changes (each write a turn): a new file of the same name, a clash whose file
     changed while asked or after "Do the same" (asked again), one deleted while asked (written; asked when its tab has
     unsaved edits), one edited before its write's turn (asked in the unsaved words), a dialog opened while a clash's file
-    is read (the clash waits), a Replace against `openFile`'s read.
+    is read (the clash waits), a Replace against `openFile`'s read; the re-ask dialog ("changed while you were deciding") takes the focus on Keep mine and hands it back
+    to what had it before the first.
 - `rename.test.ts`: the inline rename and the draft rows (`app/files/rename.ts`, with the tree's state in
   `tree-state.ts`) over fake-indexeddb, as the focus request and the tree's state show them.
   - A field starting (the row in the tab order, the draft's free default, a blocked store), Enter, Esc and leaving a
@@ -436,6 +437,9 @@ Specs:
     other runs work. A damaged part's retry goes to an address of its own (`fresh=`), not the HTTP cache's.
 - `output.spec.ts` (step 4c): the Output tabs; Copy image twice in the full-size view (fake clock: the first "Copied" timer
   does not clear the second).
+  - The full-size view's modal trap (`ui/modal-trap.ts`): a Space that opened it leaves the focus on the view, not on Close; Tab and
+    Shift+Tab wrap inside; Esc gives the focus back to Open full size; an opener that has left the page (the Graph tab
+    gone while it is open) gives the focus to the editor.
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
   - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more; the
     name buttons' arrow keys leave Alt, Ctrl and Cmd alone), the

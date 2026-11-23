@@ -1306,7 +1306,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     graph's number; the alt text is "Graph: scatter wage educ", and "Graph 2: scatter wage educ" when another kept graph
     has the same command; the card of a run's graph drawn dark is dark (`--graph-card-dark`, OQ-21: the run's theme), and a
     .png from the files is on the light card; the full-size view is a fixed overlay (not a native modal dialog, whose top
-    layer would hide the toast) with its own focus trap, which leaves the keys to a native dialog opened over it, and a
+    layer would hide the toast) with its own focus trap (`ui/modal-trap.ts`, the dialog's too: the first focus is the view, Tab and Shift+Tab wrap inside it, Esc hands the focus back to the opener or, when that has left the page, to `focusStable`), which leaves the keys to a native dialog opened over it, and a
     move to another graph is said through `say()` (the graph's alt text); the .dta bar's size is the tree's
     (`formatSize` in `app/bytes.ts`, decimal units); picking the picked
     name again clears it; a Browse cell over 60 characters, or with a line break, is cut to one line (a break shows as ↵)
@@ -1344,8 +1344,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
     under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (the `editor` target, which focuses at once; with a .dta tab
     active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
-    focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/Dialog.tsx` uses
-    the same `focusStable` when a dialog closes and its opener has left the page (a banner's button: another tab took
+    focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/modal-trap.ts` (which `ui/Dialog.tsx` and the
+    full-size view use) calls the same `focusStable` when a modal closes and its opener has left the page (a banner's button: another tab took
     the lock during a Break, then "Use dofile in this tab"), after the timers its answer set and only for a focus left on
     `<body>`; the opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on
     `close()`, and the dialog gives it back itself, the same way: a focus its answer places (the close-tab dialog's "Don't
@@ -1404,7 +1404,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (focused, as Delete all's); the Log head's button "Clear…" (accessible name "Clear log…") and the menus' item "Clear
     log…" (the "…" says it asks first). They are disabled when `canClearLog()` (`run.ts`) is false: no log item but the
     head and the streaming run's text, and no graph. The view is `log/ClearLogDialog.tsx`. The focus goes back to the
-    opener (a menu's item: the menu's button); when the answer disabled the opener (the head's "Clear…"), `ui/Dialog.tsx`
+    opener (a menu's item: the menu's button); when the answer disabled the opener (the head's "Clear…"), `ui/modal-trap.ts`
     gives it to the editor or "More actions" (`focusStable`), as for an opener that has left the page.
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
@@ -1429,7 +1429,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 - **Primitives** (`web/src/app/ui/`): `Dialog` (a native modal `<dialog>`: `title`, `actions`, `role`, `onCancel` = Esc,
   none = blocking; `data-autofocus` marks the first focus; focus returns to the opener when it unmounts, or, when the
   opener has left the page, to the editor or "More actions" (`states/focus.ts` `focusStable`), after the timers its answer
-  set and only for a focus left on nothing, so it moves once; a bottom sheet
+  set and only for a focus left on nothing, so it moves once (`ui/modal-trap.ts` `useModalTrap`, which the full-size view uses too); a bottom sheet
   under 700 px); `MenuButton` and `openMenu({label, items, anchor | at})` (one menu at a time, in the top layer, arrows,
   Home, End (the menu owns its active item, a position among all its items; an item takes the focus from its own render), Esc returns focus, Tab closes and moves on from the trigger; an item is `{label, onSelect | href, hint,
   danger, disabled, keepOpen}` or `"rule"`; `keepOpen` leaves the menu open with the focus on the item, as the phone's
