@@ -89,6 +89,16 @@ jobs:
     if: always()
     needs: [changes, lint, test]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
+      # A matrix leg GitHub never ran reads as success in needs, so the run's own job list is checked too (the gates are
+      # excluded by name, "ci / ci ok" when called from deploy.yml, where the sibling gates run beside this one).
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bad=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate \
+            --jq '.jobs[] | select((.name | test("(^| / )(ci|web|lint) ok$") | not) and .conclusion != "success" and .conclusion != "skipped") | .name')
+          [ -z "$bad" ] || { echo "not green: $bad"; exit 1; }
