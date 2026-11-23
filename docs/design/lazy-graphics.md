@@ -6,6 +6,66 @@ and proposes how R1 makes it one machine. It changes no code. **Status: proposed
 approval.** Read from the code at e496b4c. Paths are under `web/src/engine/` unless they start with `web/`, `src/` or
 `docs/`. "Guess" marks what was not checked.
 
+## Primer: the pieces, in plain words
+
+For a reader new to Web Workers, Pyodide, `SharedArrayBuffer` and `Atomics`. The sections after it assume it.
+
+**Why Python runs in a worker.** The engine is Python, run in the browser by **Pyodide** (CPython compiled to
+WebAssembly, the browser's portable machine code). A page has one main thread that also draws the page and answers
+clicks; Python running there would freeze the page for the length of a run. So it runs in a **Web Worker**: a second
+thread with its own memory, which talks to the page only by **messages** (`postMessage`; each message arrives as a
+**task**, one unit of work a thread's event loop runs, never in the middle of another task). A run is one long task in
+the worker: while Python runs, the worker reads no messages.
+
+**Why matplotlib is a separate part.** The page starts from a **snapshot** (Python's memory saved at build time, so a
+start skips the imports). matplotlib and the packages only it needs are left out of it and put in one more file, the
+**graphics part**: about 7.7 MB compressed with brotli (a compression format), 32.9 MB and 1,822 files unpacked
+(`docs/lazy-matplotlib.md`, 2026-11-15). The visitor downloads about 33.9 MB before the engine is ready instead of
+41.6 MB, and only a program that draws a graph needs the rest.
+
+**The flow.** Once the start files are in, the page fetches the part (from the browser's **Cache**, its offline store
+for files, or else the network) and hands it to the worker. When the engine has been **idle** (no run sent or running)
+for 0.25 s, the worker unpacks it, writes its files into Python's file system and imports the first modules, one short
+step at a time, so that a run sent meanwhile waits for one step at most. A graph that comes before that is done waits
+for the part inside its run, and unpacks and writes it there. Section 1 has both threads' tables, and the pictures
+below show both paths.
+
+**The shared buffer.** A message cannot reach a graph that waits inside a run: the worker is busy in Python and reads
+none. So the page hands the part over in a **`SharedArrayBuffer`**, memory that both threads see at the same time.
+Its size is 16 + the part's size: a 16-byte header of four 32-bit numbers (the part's state: pending, landed or
+failed; the length of what follows; `tries`, how many times the page has fetched it; one unused), then the part's
+bytes (or, when the fetch failed, the reason as text). The page writes it; the worker only reads it. A buffer is only
+available when the site is **cross-origin isolated** (two HTTP headers that promise the page loads nothing from other
+sites without their consent); production sends them.
+
+**`Atomics`, the operations on shared memory.** Plain reads and writes of shared memory can be seen by the other
+thread late or out of order, and data longer than one number can be seen half written. `Atomics` calls on one 32-bit number cannot be:
+- `Atomics.load` reads the number whole, and the thread then also sees every write the other thread made before its
+  `Atomics.store` of the value read ("write the data, then publish the state" relies on this);
+- `Atomics.store` writes it whole, and publishes the writes made before it;
+- `Atomics.add` adds to it in one step, so two adds never lose one;
+- `Atomics.wait` blocks this thread while the number still has a given value, up to a time limit;
+- `Atomics.notify` wakes the threads waiting on it.
+
+What they do not give: two loads are two moments, not one snapshot (between them the other thread may change
+anything); several stores are not one step (a reader can see the first without the next); and the page's main thread
+may not call `Atomics.wait` at all (a browser refuses to block it), so the page cannot watch the buffer and hears the
+worker only by messages.
+
+**Without a buffer** (plain http on a LAN address, say), the worker fetches the part itself once the engine is ready,
+and a graph that comes first downloads it with a request that blocks the worker until it ends. Its messages tell the
+page how the download goes, for the progress ring. There is no **Break** then either (Break stops a run at its next safe point; it
+uses a second, 4-byte shared buffer), so a stuck run resets the worker.
+
+**Where it goes wrong: a race**, when the result depends on which thread gets somewhere first. Race 3 is the worked
+example. A graph has asked the page for one more fetch, and that fetch failed, so the buffer says "failed" with its
+reason. The graph reads the state (failed), and is about to read the reason's length. Just then the browser comes back
+online, and the page starts another fetch: it sets the length to 0 first, then counts a try, then sets the state to
+pending. The graph reads length 0: the reason is "" (empty). But "" is also the worker's answer for "the files are
+written", so Python stops waiting, the graph fails on the missing matplotlib, and later graphs no longer wait. Each step
+was atomic; the trouble is that the graph's three reads were not one snapshot and the page's three writes were not one
+step. Section 6 (the shared state) gives the rule that closes this by design; section 7 lists every race found.
+
 ## In pictures: the normal path, with a shared buffer
 
 The page fetches the part and hands it over; the engine is idle, so the worker unpacks, writes and imports it:
