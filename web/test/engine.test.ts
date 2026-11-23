@@ -110,6 +110,25 @@ const READ_ARGS: { [K in keyof ReadOps]: ReadOps[K]["args"][] } = {
 /** The stages a start said, in order, and how it ended. */
 const stagesOf = (said: Answer<"start-worker">[]) => said.map((a) => (a.type === "stage" ? a.stage : a.type));
 
+test("matrix: a run whose op fails after the engine ran has replaced the results too: the old number is refused", {
+  timeout: 120_000,
+}, async () => {
+  const { store } = pageStore();
+  const createWorker = () => storeWorker({ store, failParse: "UNREADABLE" });
+  const eng = new EngineClient({ createWorker, wheel, extraWheels, store });
+  await startWorker(eng);
+  const ask = (runId: number) => eng.query("matrix", { name: "e(b)", runId });
+  const shown = (await runOn(eng, "clear\nset obs 20\ngenerate x = _n\ngenerate y = x + mod(_n, 3)\nregress y x"))
+    .results!;
+
+  // the engine ran the regression and its log came back unreadable: the page keeps `shown`, e(b) is the new one
+  await assert.rejects(runOn(eng, 'quietly regress y\ndisplay "UNREADABLE"'), { kind: "op" });
+  assert.deepEqual(await ask(shown.runId), { changed: true });
+
+  const next = (await runOn(eng, "regress y x")).results!; // the next run's results carry the new number
+  assert.deepEqual(((await ask(next.runId)) as Ok<Matrix>).cols, ["x", "_cons"]);
+});
+
 test("engine worker: files, run, describe, matrix, Break, a new worker after end()", {
   timeout: 180_000,
 }, async (t) => {
