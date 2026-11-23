@@ -78,6 +78,11 @@ export type FromWorker =
 /** Where the worker's copy of the file store failed: "open" (the storage did not open, or could not be read), "copy"
  *  (it was read, but the files could not be written into /work). */
 export type StoreCause = "open" | "copy";
+/** An error as the worker tells the page: `type` is the Python exception class of a PythonError. An op's error answer
+ *  carries it as {id, error: message, name, type?}. */
+export type PageError = { message: string; name: string; type?: string };
+/** Why the worker has no file store, and what the error was. */
+export type StoreError = PageError & { cause: StoreCause };
 
 /** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
 export type Wheel = string | { name: string; bytes: Uint8Array };
@@ -127,7 +132,7 @@ export interface Startup {
   notCached?: string[]; // snapshot
   runtimeS?: number;
   packagesS?: number; // normal
-  storeError?: { name: string; message: string; cause: StoreCause }; // the worker has no store; /work started empty
+  storeError?: StoreError; // the worker has no store; /work started empty
 }
 
 export interface FileInfo {
