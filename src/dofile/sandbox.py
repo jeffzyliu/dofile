@@ -69,7 +69,9 @@ refusals: deque[tuple[str, str]] = deque(maxlen=50)  # (path, message)
 class SandboxError(PermissionError):
     def __init__(self, message: str, path: str = ""):
         refusals.append((path, message))
-        super().__init__(errno.EACCES, message)  # strerror = message, so OpenDTA's own 603 errors show it
+        # strerror = message, so OpenDTA's own 603 errors show it; filename = path, so the dispatcher's 603 for a command
+        # without its own file-error handling (type, outfile, hexdump) names the file and Engine.run adds the reason
+        super().__init__(errno.EACCES, message, path or None)
 
 
 def deny_commands(names: tuple[str, ...] = DENIED) -> None:

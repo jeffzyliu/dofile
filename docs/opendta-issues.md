@@ -424,7 +424,8 @@ Any error inside a command (a `StataError` too) can do this. So r(603) or r(909)
 command into `StataError(603, "file <name> could not be opened")` (`_as_stata_error`) and an `IndexError`, `KeyError` or
 `ValueError` into r(198) `invalid syntax`; `log`, `copy`, `outfile` and the rest catch their own `OSError`, and the
 messages no longer carry the system reason. A sandbox refusal (`PermissionError`) inside a command is one of these
-603s now; `Engine.run` adds the sandbox's reason under the line (`_annotate_refusals`).
+603s now: `SandboxError` carries the refused path as its `filename`, so the 603 names the file, and `Engine.run` adds
+the sandbox's reason under the line (`_annotate_refusals`) and to the error.
 
 **The patch** (`opendta-odt28-python-errors-as-stata.patch`): `commands/registry.py` wraps every registered command, so
 a `MemoryError` becomes `StataError(909, "op. sys. refuses to provide memory")`, which `capture` catches. Upstream's
