@@ -178,7 +178,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   read's turn comes first, 03-F5) or before it (it writes, and the read takes its text), and an upload's Replace answered
   while a Save waits (the Save writes first; the upload asks again, and Replace leaves the upload, clean).
 - `turns.test.ts`: the order of the page's file changes (`app/files/turns.ts`) over fake-indexeddb: a turn body's store
-  calls and errors, a yield that is not a store operation and a turn started inside a body refused, the time limit
+  calls and errors (one thrown at once too), a yield that is not a store operation and a turn started inside a body refused, the time limit
   (`TurnTimeout`; the late write still applied, before the next turn's calls), the store's own order (02-F10), Delete
   all's list taken in its turn.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,

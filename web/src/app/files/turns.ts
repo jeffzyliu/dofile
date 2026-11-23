@@ -122,7 +122,7 @@ function callWithTimeout(request: Request): Promise<unknown> {
       );
     }, OP_TIMEOUT);
   });
-  const answer = (async () => request.run())(); // a store method that throws at once rejects here, for the body to catch
+  const answer = (async () => request.run())(); // a store method that throws at once rejects here too, so the timer is still cleared
   return Promise.race([answer, late]).finally(() => clearTimeout(timer));
 }
 
@@ -153,7 +153,7 @@ async function perform<T>(body: (io: Io) => Turn<T>): Promise<T> {
     try {
       value = await callWithTimeout(request);
     } catch (e) {
-      if (e instanceof TurnTimeout) throw end(e); // ended, not told: nobody knows whether the store will still apply it
+      if (e instanceof TurnTimeout) throw end(e);
       next = resume(() => it.throw(e));
       continue;
     }

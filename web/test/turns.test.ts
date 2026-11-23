@@ -47,6 +47,21 @@ test("a turn's body: each yield* io.<op> is one store call whose answer the body
   assert.deepEqual(await paths(), ["c.do"], "what the turn did before the error stays done");
 });
 
+test("a store method that throws at once, not through its promise, is thrown at the body's line too", async (t) => {
+  t.mock.method(store, "list", () => {
+    throw new Error("list broke");
+  });
+  const caught = await fileTurn(function* (io) {
+    try {
+      yield* io.list();
+    } catch (e) {
+      return (e as Error).message;
+    }
+    return "";
+  });
+  assert.equal(caught, "list broke");
+});
+
 test("a turn's body that yields anything but a store operation is refused", async () => {
   const body = function* () {
     yield Promise.resolve();
