@@ -3,85 +3,124 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PartRead } from "../src/engine/lazy-part.ts";
-import { PART_FAILED, PART_LANDED, PART_PENDING, useNative, waitStep } from "../src/engine/lazy-part.ts";
+import {
+  failPart,
+  PART_HEADER,
+  partReason,
+  partRegion,
+  partSnapshot,
+  retryPart,
+  useNative,
+  waitStep,
+} from "../src/engine/lazy-part.ts";
+import type { SeqRead, SeqReader } from "../src/engine/seqlock.ts";
+import { readSeq } from "../src/engine/seqlock.ts";
 
-const idle = { interrupted: false, decoded: false, decoding: false, askedAt: null, fetchSaid: false };
+const idle = { interrupted: false, decoded: false, decoding: false, askedAt: null, fetchSaid: false, shared: true };
+const offline = partReason("offline");
 // a read that counts how often it is made
 const reader = (part: PartRead) => {
   const r = {
     reads: 0,
-    read: () => {
+    read: (): SeqRead<PartRead> => {
       r.reads++;
-      return part;
+      return { seq: 0, value: part };
     },
   };
   return r;
 };
-const shared = (state: number, tries = 0): PartRead => ({ state, tries, shared: true });
+const readOf = (part: PartRead) => () => ({ seq: 0, value: part });
+const landed = (copy = 0): PartRead => ({ state: "landed", copy, bytes: null });
+const pending = (copy = 0): PartRead => ({ state: "pending", copy });
+const failed = (copy = 0): PartRead => ({ state: "failed", copy, reason: offline });
 
 test("waitStep: a Break comes first, then a decoded part is written, then a decode goes on; none of them reads the part", () => {
-  const r = reader(shared(PART_LANDED));
+  const r = reader(landed());
   assert.equal(waitStep({ ...idle, interrupted: true, decoded: true, decoding: true }, r.read), "break");
   assert.equal(waitStep({ ...idle, decoded: true, decoding: true }, r.read), "write");
   assert.equal(waitStep({ ...idle, decoding: true }, r.read), "decode-more");
   assert.equal(r.reads, 0, "the part (a copy of up to 33 MB) is not read");
 });
 
-test("waitStep: a part that landed is decoded, with a shared buffer or without; one that is pending waits", () => {
-  for (const part of [shared(PART_LANDED), { state: PART_LANDED, tries: 0, shared: false }]) {
-    const r = reader(part);
-    assert.equal(waitStep(idle, r.read), "decode");
+test("waitStep: a part that landed is decoded, with a shared buffer or without; one that is pending, or a busy read, waits", () => {
+  for (const shared of [true, false]) {
+    const r = reader(landed());
+    assert.equal(waitStep({ ...idle, shared }, r.read), "decode");
     assert.equal(r.reads, 1);
   }
+  assert.equal(waitStep(idle, readOf(pending())), "wait");
+  assert.equal(waitStep({ ...idle, askedAt: 3 }, readOf(pending(4))), "wait");
   assert.equal(
-    waitStep(idle, () => shared(PART_PENDING)),
-    "wait-pending",
-  );
-  assert.equal(
-    waitStep({ ...idle, askedAt: 3 }, () => shared(PART_PENDING, 4)),
-    "wait-pending",
+    waitStep(idle, () => ({ seq: 7, busy: true })),
+    "wait",
+    "the page is writing it",
   );
 });
 
-test("waitStep: a failed part is asked for again once per run; that fetch's failure (tries moved on) is final", () => {
-  assert.equal(
-    waitStep(idle, () => shared(PART_FAILED, 2)),
-    "ask-again",
-    "first: ask the page (askedAt := 2)",
-  );
-  assert.equal(
-    waitStep({ ...idle, askedAt: 2 }, () => shared(PART_FAILED, 2)),
-    "wait-failed",
-    "the page has not begun",
-  );
-  assert.equal(
-    waitStep({ ...idle, askedAt: 2 }, () => shared(PART_FAILED, 3)),
-    "give-up",
+test("waitStep: a failed part is asked for again once per run; that fetch's failure (the copy moved on) is final, with its reason", () => {
+  assert.equal(waitStep(idle, readOf(failed(2))), "ask-again", "first: ask the page (askedAt := 2)");
+  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(failed(2))), "wait", "the page has not begun");
+  assert.deepEqual(
+    waitStep({ ...idle, askedAt: 2 }, readOf(failed(3))),
+    { giveUp: offline },
     "the asked-for fetch failed",
   );
-  assert.equal(
-    waitStep({ ...idle, askedAt: 2 }, () => shared(PART_PENDING, 3)),
-    "wait-pending",
-    "the asked-for fetch is on its way",
-  );
+  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(pending(3))), "wait", "the asked-for fetch is on its way");
+});
+
+test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed part gives a whole snapshot or busy, never the reason "" (the answer for written)', () => {
+  // copy, length, state, then the reason's bytes: the retry comes after each read in turn
+  for (let after = 1; after <= 4; after++) {
+    for (const waitMs of [100, 0]) {
+      const sab = new SharedArrayBuffer(PART_HEADER + 64);
+      const part = partRegion(sab);
+      failPart(part, offline);
+      retryPart(part); // the graph asked again at copy 0
+      failPart(part, partReason("offline again"));
+
+      // the browser comes back online midway: #retryGraphics
+      let readCount = 0;
+      const online = () => {
+        if (++readCount === after) retryPart(part);
+      };
+      const read = readSeq(
+        part,
+        (r: SeqReader) =>
+          partSnapshot(
+            {
+              readWord(word) {
+                const value = r.readWord(word);
+                online();
+                return value;
+              },
+              readBytes(count) {
+                const bytes = r.readBytes(count);
+                online();
+                return bytes;
+              },
+            },
+            { withBytes: true },
+          ),
+        waitMs,
+      );
+      const step = waitStep({ ...idle, askedAt: 0 }, () => read);
+
+      const where = `retry after read ${after}, waitMs ${waitMs}`;
+      assert.ok(readCount >= after, `${where}: the retry was made`);
+      if (waitMs === 0) assert.ok("busy" in read, `${where}: busy`);
+      else assert.deepEqual("value" in read && read.value, { state: "pending", copy: 2 }, `${where}: the new snapshot`);
+      const answer = typeof step === "object" ? step.giveUp : "pending";
+      assert.notEqual(answer, "", `${where}: never the answer for written`);
+    }
+  }
 });
 
 test("waitStep: without a shared buffer, a graph says it waits first, then fetches the part itself (pending or failed)", () => {
-  for (const state of [PART_PENDING, PART_FAILED]) {
-    const part = { state, tries: 0, shared: false };
-    assert.equal(
-      waitStep(idle, () => part),
-      "say-fetching",
-    );
-    assert.equal(
-      waitStep({ ...idle, fetchSaid: true }, () => part),
-      "fetch",
-    );
-    assert.equal(
-      waitStep({ ...idle, fetchSaid: true, askedAt: 0 }, () => part),
-      "fetch",
-      "askedAt is the page's",
-    );
+  for (const part of [pending(), failed()]) {
+    const own = { ...idle, shared: false };
+    assert.equal(waitStep(own, readOf(part)), "say-fetching");
+    assert.equal(waitStep({ ...own, fetchSaid: true }, readOf(part)), "fetch");
+    assert.equal(waitStep({ ...own, fetchSaid: true, askedAt: 0 }, readOf(part)), "fetch", "askedAt is the page's");
   }
 });
 

@@ -2,8 +2,9 @@
 // It decides nothing: the controller (app/engine.ts) calls it when the state machine says. One worker is live at a
 // time; `n` is that worker's ticket, which the transport only compares.
 
-import { failPart, landPart, PART_HEADER, retryPart } from "./lazy-part.ts";
+import { failPart, landPart, PART_HEADER, partReason, partRegion, retryPart } from "./lazy-part.ts";
 import type { Ending, Reply } from "./machine.ts";
+import type { SeqRegion } from "./seqlock.ts";
 import { isStorageRefusal, openCache } from "./snapshot.ts";
 import type { FileStore } from "./store.ts";
 import type {
@@ -28,14 +29,15 @@ import type {
 /** One file of the build's list of start files. */
 type StartFile = StartFiles["files"][number];
 /** A lazy snapshot's graphics part: one per build for the page's life, so a restarted worker gets the same and it is
- *  never fetched twice. `sab`: what the worker reads, or null without cross-origin isolation (then the worker fetches
- *  it). */
+ *  never fetched twice. `region`: what the page writes and the worker reads, or null without cross-origin isolation
+ *  (then the worker fetches it); `sab`, its buffer, only for boot's arguments. */
 type GraphicsPart = {
   built: number;
   file: SnapshotFile;
   url: string;
   heapURL: string;
   sab: SharedArrayBuffer | null;
+  region: SeqRegion | null;
   loading: Promise<void> | null;
   progress: GraphicsProgress;
   damaged: boolean; // the worker found the last copy damaged: fetched past the HTTP cache until a copy lands
@@ -396,12 +398,14 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     if (!build || !file || !this.snapshot) return null;
     if (this.#graphics?.built !== build.built) {
       const at = (name: string) => new URL(`${this.snapshot}${name}`, globalThis.location?.href).href;
+      const sab = typeof SharedArrayBuffer === "undefined" ? null : new SharedArrayBuffer(PART_HEADER + file.size);
       this.#graphics = {
         built: build.built,
         file,
         url: at(file.name),
         heapURL: at(build.files.snapshot.name),
-        sab: typeof SharedArrayBuffer === "undefined" ? null : new SharedArrayBuffer(PART_HEADER + file.size),
+        sab,
+        region: sab && partRegion(sab),
         loading: null,
         progress: { state: "pending", received: 0, total: file.size },
         damaged: false,
@@ -418,7 +422,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // Fetch the part (the Cache first), unless it is here, failed, on its way, or the worker's to fetch.
   #wantGraphics(build: Build | null): void {
     const part = this.#graphicsOf(build);
-    if (!part?.sab || part.loading || part.progress.state === "landed" || part.progress.state === "failed") return;
+    if (!part?.region || part.loading || part.progress.state === "landed" || part.progress.state === "failed") return;
     part.loading = this.#fetchGraphics(part).finally(() => {
       part.loading = null;
     });
@@ -426,8 +430,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
 
   // A part that failed is fetched again; the worker sees it pending, and a waiting graph waits for it.
   #retryGraphics(part: GraphicsPart): void {
-    if (this.#graphics !== part || !part.sab || part.progress.state !== "failed" || part.loading) return;
-    retryPart(part.sab);
+    if (this.#graphics !== part || !part.region || part.progress.state !== "failed" || part.loading) return;
+    retryPart(part.region);
     this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
     this.#tellGraphics(part);
     part.loading = this.#fetchGraphics(part, part.damaged).finally(() => {
@@ -444,7 +448,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   }
 
   async #fetchGraphics(part: GraphicsPart, fresh = false): Promise<void> {
-    const sab = part.sab!; // #wantGraphics and #retryGraphics take only a part with one
+    const region = part.region!; // #wantGraphics and #retryGraphics take only a part with one
     const t0 = performance.now();
     let cache: Cache | null = null;
     try {
@@ -469,14 +473,14 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (bytes.length !== part.file.size)
         throw new Error(`${part.url}: ${bytes.length} bytes arrived, the build's list says ${part.file.size}`);
       part.damaged = false;
-      landPart(sab, bytes);
+      landPart(region, bytes);
       console.info(
         `[dofile] graphics part: landed (${hit ? "cache" : "network"}) ${((performance.now() - t0) / 1000).toFixed(2)}s, ${bytes.length} bytes`,
       );
       this.#graphicsSay(part, { state: "landed", received: part.file.size });
     } catch (e: any) {
       const why = `the graphics files could not be downloaded (${e?.message ?? e}); they are fetched again for the next graph`;
-      failPart(sab, why);
+      failPart(region, partReason(why));
       console.warn(`[dofile] graphics part: ${why}`);
       this.#graphicsSay(part, { state: "failed", error: why });
       // back online: fetch it again
@@ -511,7 +515,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // With a SharedArrayBuffer the worker says only that a graph found the part failed ("again") or damaged. Without one
   // its messages are the page's only news of the download; the page still writes the progress it shows.
   #workerSaysGraphics(part: GraphicsPart, m: Extract<FromWorker, { graphics: string }>) {
-    if (part.sab) {
+    if (part.region) {
       if (m.graphics === "damaged") this.#refetchDamaged(part);
       else if (m.graphics === "again") this.#retryGraphics(part);
       return;
@@ -624,7 +628,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // Each step goes through this worker's own record, so one that resumes after end() rejects and reaches no other.
     const part = this.#graphicsOf(build);
     // no shared buffer: the part is this worker's own (a restarted worker has none), so not begun until it says
-    if (part && !part.sab) this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
+    if (part && !part.region) this.#graphicsSay(part, { state: "pending", received: 0, error: undefined });
     const steps = async () => {
       await this.#send(live, "mount", mount);
       const about = await this.#send(live, "boot", {

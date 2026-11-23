@@ -91,13 +91,19 @@ async function line(lines: Line[], pattern: RegExp, count = 1): Promise<Line> {
 
 /** A transport whose workers send their `[dofile]` lines to `lines`. `fetch`: the page's; with it the snapshot is
  *  served (served()). */
-function client(snapshot: string, lines: Line[], fetch?: typeof globalThis.fetch, brotli?: "wasm") {
+function client(
+  snapshot: string,
+  lines: Line[],
+  fetch?: typeof globalThis.fetch,
+  brotli?: "wasm",
+  waits?: SharedArrayBuffer,
+) {
   const served = fetch && { url: snapshot, dir: pathToFileURL(snapshotDir).href };
   const onConsole = (l: ConsoleLine) => {
     if (l.text.includes("[dofile]")) lines.push({ ...l, from: "worker" });
   };
   return new EngineClient({
-    createWorker: () => nodeWorker({ onConsole, served }),
+    createWorker: () => nodeWorker({ onConsole, served, waits }),
     wheel,
     extraWheels,
     buildId: buildId(STAMP, current),
@@ -236,7 +242,8 @@ test("a Break while a graph waits for a part held on its way is rc 1 within seco
   const lines = dofileLines(t);
   const net = partFetch();
   const release = net.hold();
-  const eng = client(await served(t), lines, net.fetch);
+  const waits = new SharedArrayBuffer(4);
+  const eng = client(await served(t), lines, net.fetch, undefined, waits);
   await startWorker(eng, await eng.build());
 
   let log = "";
@@ -249,6 +256,10 @@ test("a Break while a graph waits for a part held on its way is rc 1 within seco
     () => log.includes("(waiting for the graphics files to download)"),
     () => log,
   );
+  const timedOut = new Int32Array(waits);
+  const waitsBefore = Atomics.load(timedOut, 0);
+  await sleep(1000);
+  const pauseCount = Atomics.load(timedOut, 0) - waitsBefore;
   eng.interrupt(live(eng));
   const pressed = now();
   const broken = await within(running, () => `${log}\n${shown(lines)}`);
@@ -258,6 +269,8 @@ test("a Break while a graph waits for a part held on its way is rc 1 within seco
   await line(lines, /landed \(network\)/);
   const drawn = await runOn(eng, "scatter x x");
 
+  // each pause a 100 ms slice; a graph that answers "pending" without waiting spins through browser.py's loop instead
+  assert.ok(pauseCount >= 3, `a graph waiting for a held part paused ${pauseCount} times in 1 s`);
   assert.equal(broken.rc, 1, broken.log);
   assert.ok(breakMs < 5000, `the Break took ${breakMs.toFixed(0)} ms`); // the graph waits in slices of 100 ms
   assert.equal(broken.images.length, 0);

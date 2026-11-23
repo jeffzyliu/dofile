@@ -110,4 +110,15 @@ if (workerData.failParse) {
     return parse(text, reviver);
   };
 }
+if (workerData.waits) {
+  // each Atomics.wait that ran to its time limit is counted in word 0 of this buffer: a graph waiting for the part
+  // pauses so in slices, where one that spins never waits
+  const timedOutCount = new Int32Array(workerData.waits as SharedArrayBuffer);
+  const wait = Atomics.wait;
+  Atomics.wait = ((...args: Parameters<typeof Atomics.wait>) => {
+    const result = wait(...args);
+    if (result === "timed-out") Atomics.add(timedOutCount, 0, 1);
+    return result;
+  }) as typeof Atomics.wait;
+}
 await import(workerData.script);
