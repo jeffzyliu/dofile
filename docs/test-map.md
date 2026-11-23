@@ -47,6 +47,8 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 - Reads and writes outside the allowed folders are blocked; symlinks cannot leave the workdir.
 - A refusal is rc 603 that names the file and ends with the sandbox's reason, also in commands with no file-error
   handling of their own (`type`, `hexdump`, `outfile`).
+- `capture` takes a refusal also when it is raised outside a command: the ado autoload from an `adopath` or `sysdir`
+  folder, macro expansion inside a `capture { }` block (ODT-23).
 - `c()` works with the sandbox on (on macOS it reads one system file).
 - The audit hook blocks network access and subprocesses.
 - Unsafe mode over HTTP is allowed only on loopback.

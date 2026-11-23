@@ -218,3 +218,20 @@ def test_capture_catches_a_sandbox_refusal_like_any_file_error(work):
         work, 'capture type /etc/passwd\ndisplay "after rc=" _rc\ncapture noisily type /etc/passwd\ndisplay "again"'
     )[0]
     assert r["rc"] == 0 and "after rc=603" in r["log"] and "again" in r["log"]
+
+
+def test_capture_catches_a_refusal_raised_outside_a_command(work, tmp_path):
+    """ODT-23: upstream turns a refusal inside a command into r(603); the autoload of an ado file and macro expansion in
+    a `capture { }` block run outside one, so only the patch lets capture take those refusals."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "foo.ado").write_text('program foo\n    display "foo ran"\nend\n')
+    after = '\ndisplay "after rc=" _rc'
+    results = sandboxed(
+        work,
+        f'adopath + "{outside}"\ncapture foo' + after,
+        f'sysdir set PERSONAL "{outside}"\ncapture foo' + after,
+        f'capture {{\n    display `"`: dir "{outside}" files "*"\'"\'\n}}' + after,
+    )
+    failed = [r for r in results if not (r["rc"] == 0 and "after rc=603" in r["log"] and "foo ran" not in r["log"])]
+    assert failed == [], failed

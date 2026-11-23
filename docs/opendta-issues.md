@@ -39,7 +39,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-20 | `histogram`/`bar` outline ignores `lcolor()`/`lwidth()`, so `fcolor(none) lcolor(navy)` draws nothing | `::test_odt20_histogram_outline` | patched |
 | ODT-21 | numeric axis ticks step by 2.5 (`0.0 2.5 5.0 ... 20.0`, with `.0` labels) where Stata uses 1/2/5/10 steps (`5 10 15 20`) | `::test_odt21_default_axis_ticks_are_nice_numbers` | patched |
 | ODT-22 | the `matrix(name)` pseudofunction in expressions gives rc 198 (`trace(matrix(xx))`) | `::test_odt22_matrix_pseudofunction` | patched |
-| ODT-23 | `capture` does not catch the sandbox's `PermissionError` (`type`, ...): the call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_sandbox_refusal_like_any_file_error` | patched |
+| ODT-23 | `capture` does not catch the sandbox's `PermissionError` raised outside a command (the autoload of an ado file on an `adopath` or `sysdir` folder outside the workdir, macro expansion inside a `capture { }` block): the call stops with rc 603 | `tests/test_sandbox.py::test_capture_catches_a_refusal_raised_outside_a_command`, `::test_capture_catches_a_sandbox_refusal_like_any_file_error` | patched (upstream 00cd4dc covers a refusal inside a command only) |
 | ODT-24 | `xtreg ..., fe|re|be` and `areg ..., absorb()` ignore `[aweight=]`, `[pweight=]` and `[fweight=]`: the coefficient is the unweighted one | `tests/test_engine.py::test_odt24_*` | patched |
 | ODT-25 | `describe` prints a long wrong `Sorted by:` list for a Stata-written file whose sort list is one variable | found 2026-11-05 (castle.dta); `tests/test_engine.py::test_odt25_the_sort_list_ends_at_the_first_zero` rebuilds the bytes | patched |
 | ODT-26 | `mkdir`, `rmdir`, `copy` and `dir` delete the backslashes of an unquoted path (`shlex` in POSIX mode) | found 2026-11-06 (path shim tests) | unverified |
@@ -308,6 +308,13 @@ fill) and never read `lcolor`.
 - Expected: `capture` catches any file error and sets `_rc` (Stata: 603 `file could not be opened`).
 - Patched (`opendta-odt23-capture-sandbox-refusal.patch`): `capture` turns a `PermissionError` into `StataError(603)`.
   Only needed because of dofile's sandbox, so not for upstream.
+- Upstream 00cd4dc turns an `OSError` raised inside a command (the dispatcher's `spec.fn` call) into r(603), which
+  covers `capture type` and the other file commands. A refusal raised before the command runs is still a bare
+  `PermissionError`, so the patch still stands for those: the autoload of `foo.ado` from an `adopath +` or
+  `sysdir set PERSONAL` folder outside the workdir, then `capture foo`; and macro expansion of a line inside
+  `capture { }` (`` display `"`: dir "<outside>" files "*"'"' ``). Without the patch (10632aa re-vendor, 2026-11-23)
+  each of these stopped the call with r(603); `tests/test_sandbox.py::test_capture_catches_a_refusal_raised_outside_a_command`
+  runs all three.
 
 ### ODT-24: weights in `xtreg, fe` and `areg`
 ```stata
