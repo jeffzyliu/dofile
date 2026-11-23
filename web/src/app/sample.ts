@@ -26,7 +26,7 @@ export const sampleFiles = (): { path: string; bytes: Uint8Array }[] =>
 
 /** The first visit's write of the sample's files, in one turn with the list that finds the store empty: false, writing
  *  nothing, when it is not. */
-function put(): Promise<boolean> {
+async function put(): Promise<boolean> {
   return fileTurn(function* (io) {
     if ((yield* io.list()).length) return false;
     for (const f of sampleFiles()) yield* io.write(f.path, f.bytes, "absent");

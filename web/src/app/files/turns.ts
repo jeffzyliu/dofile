@@ -22,8 +22,8 @@
 // - What must wait for something outside the store goes after the turn, in the caller. Save is the case: its turn
 //   issues the write without waiting for it (`io.issue`) and returns it wrapped; the caller awaits the answer and
 //   applies it after the turn, so a slow write holds no rename.
-// - Calling `fileTurn` inside a body is refused: it throws there, and the outer turn rejects even if the body catches
-//   it. Neither turn could be waited for in the other.
+// - Calling `fileTurn` inside a body is refused: that call rejects, and so does the outer turn. Neither turn could be
+//   waited for in the other.
 // - Each operation has a time limit. An IndexedDB call cannot be cancelled, so one that runs over may still be applied
 //   later: the turn rejects with a TurnTimeout error and its body is ended (`return`: its finally blocks run) without
 //   being told the operation failed, since nobody knows. The next turn starts; the store applies calls in the order
@@ -32,6 +32,7 @@
 import type { Expect, FileStore } from "../../engine/store.ts";
 import { store } from "../store.ts";
 import type { FileInfo } from "../types.ts";
+import { sequentialPromiseQueue } from "./sequential-promise-queue.ts";
 
 declare const opBrand: unique symbol;
 /** A store operation a body asks for; only `Io` makes one. */
@@ -92,19 +93,17 @@ const io: Io = {
   issue: (path, data) => op(`issue ${path}`, async () => ({ answer: target.write(path, data) })),
 };
 
-let turns: Promise<unknown> = Promise.resolve(); // the turns, one after the other
+const enqueueTurn = sequentialPromiseQueue();
 let inBody: { nested: boolean } | null = null; // the turn whose body is running now (synchronously)
 
 /** Run `body` once the turns started before it have ended (a rejection ends one too). Resolves as `body` returns, or
  *  rejects with what it throws, a store error it does not catch, or a TurnTimeout. */
-export function fileTurn<T>(body: (io: Io) => Turn<T>): Promise<T> {
+export async function fileTurn<T>(body: (io: Io) => Turn<T>): Promise<T> {
   if (inBody) {
     inBody.nested = true;
     throw new Error("a turn cannot start inside another turn");
   }
-  const run = turns.then(() => perform(body));
-  turns = run.catch(() => {});
-  return run;
+  return enqueueTurn(() => perform(body));
 }
 
 class TurnTimeout extends Error {

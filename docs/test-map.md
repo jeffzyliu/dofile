@@ -181,6 +181,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   calls and errors (one thrown at once too), a yield that is not a store operation and a turn started inside a body refused, the time limit
   (`TurnTimeout`; the late write still applied, before the next turn's calls), the store's own order (02-F10), Delete
   all's list taken in its turn.
+- `sequential-promise-queue.test.ts`: the queue behind turns and uploads (`app/files/sequential-promise-queue.ts`): one
+  task at a time in order, each call's value, a failed task rejects its call and the queue goes on, two queues
+  independent.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
   mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost

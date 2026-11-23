@@ -160,7 +160,8 @@ plan's S2 row (`docs/web-audit-plan.md`, phase 2) has the design. The rules belo
 changes. S2's first half built them: `fileTurn(body)` in `files/turns.ts` takes a `function*` over `Io`, and
 the comment at the top of that file is the guide to writing one. B1 built the rest of this section: the upload's
 writes, the first visit's sample and `openFile` take turns; `store.write` takes the expectation and `store.info` reads
-one path. Whole uploads stay on their own chain in `files/actions.ts` (`upload`), not a `serial()` in `turns.ts`.
+one path. Whole uploads run on their own queue in `files/actions.ts` (`upload`); it and the turns' queue come from
+`sequentialPromiseQueue()` (`files/sequential-promise-queue.ts`).
 The words of a dialog asked again are the maintainer's (SPEC, "Name clash"): its title and question, not its meta line.
 
 **The unit of order is a turn: the store calls that no question separates, and what must stay next to them. Never a
@@ -175,8 +176,8 @@ whole operation.**
 4. An operation that asks the visitor takes one turn per write. An upload's every write, and every replace with its
    reload, is a turn; the clash dialog is awaited between turns. So an open dialog holds no Save. What was checked
    before the dialog is checked again in the write's turn (below).
-5. Whole uploads still run one at a time: a second chain from the same factory, `serial()` (new). It may wait for the
-   visitor and takes turns; a turn never takes it.
+5. Whole uploads still run one at a time: a second queue from the same factory, `sequentialPromiseQueue()`. It may
+   wait for the visitor and takes turns; a turn never takes it.
 6. A store read whose answer is applied to a document is a turn: `followOpen` (`files.ts:96-113`), "Reload from the
    run" (`editor/banners.tsx:49-53`), and `openFile`'s read with the tab it adds (`files/open.ts:56, 75-77`), so a
    replace or a rename cannot land between them. No turn calls `openFile`: `retype` takes a text read inside the
@@ -270,7 +271,7 @@ Not in a turn, or not wholly, at f947053, and the item that brings each in:
 | Module | Signals it owns | Exports | Item |
 |---|---|---|---|
 | `editor/documents.ts` (new) | the records; `tabs`, `activeTab`, `selection` | `addText(path, text)`, `addDta(path)`, `activate(path)`; `close(path)`, `askClose(path)`, `closeUnder(top)`; `moved(from, to)`, `retype(path, text)`, `reload(path, text)`, `ranOver(path, text)`; `save(path?)`; `stateOf(path)`, `textOf(path)`, `savedIsText(path)`, `update(path, spec)`, `edited(state)`; `attachView(surface)` | S1 |
-| `files/turns.ts` (new) | none | `fileTurn(body)`, the types `Io`, `Turn`, `Issued`; `serial()` with the upload's turns | S1 moves `fileTurn` as it is; S2, first half, makes it run generators over `Io`; B1 adds `serial()` |
+| `files/turns.ts` (new) | none | `fileTurn(body)`, the types `Io`, `Turn`, `Issued` (its queue: `sequentialPromiseQueue()`, shared with `upload`) | S1 moves `fileTurn` as it is; S2, first half, makes it run generators over `Io`; the queue factory came after B1 |
 | `files/open.ts` | none | as today; it calls `addText`, `addDta`, `activate` | S1 edits it |
 | `files.ts` | `files`, `hasFiles`, `fresh`, `persisted` | as today, and `reloadFromStore(path)` (new) | S1 |
 | `files/ops.ts` (new) | none | `renameEntry`, `createEntry`, `deleteEntries`, `deleteAll`, `zipFolder`, `downloadEntry`, `NEW_NAMES` | S2, second half |

@@ -11,6 +11,7 @@ import { store } from "../store.ts";
 import type { Dialog, FileInfo } from "../types.ts";
 import { decodeText, noteNotText } from "./open.ts";
 import { saveAs } from "./save.ts";
+import { sequentialPromiseQueue } from "./sequential-promise-queue.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
 import { fileTurn, type Io, type Turn } from "./turns.ts";
 
@@ -28,7 +29,7 @@ const kindOf = (path: string) => {
  *  says, in its place, unless it has unsaved edits (the editor keeps them); one whose new name opens in no tab (a .png)
  *  just closes, and the Graph tab is left alone. Rejects as the store does (`to` exists, ...), and when a tab with
  *  unsaved edits is still open at `to` (its file deleted by a run); such a tab with no edits closes. */
-export function renameEntry(from: string, to: string): Promise<void> {
+export async function renameEntry(from: string, to: string): Promise<void> {
   return fileTurn((io) => renameNow(io, from, to)); // a Save pressed meanwhile waits for the tabs to have the new name
 }
 
@@ -101,7 +102,7 @@ export const NEW_NAMES = { file: "untitled.do", folder: "folder" } as const;
  *  docs/web-page-flows.md section 1): `name` in `dir`, or with no `name` the first free `untitled.do` (`untitled-2.do`,
  *  ...) or `folder`. The store is listed fresh and in a turn, so two quick ones cannot both take a name; a `name` in
  *  use rejects with a StoreConflict, "already exists" (a write would replace it). Returns its path. */
-export function createEntry(kind: keyof typeof NEW_NAMES, dir = "", name?: string): Promise<string> {
+export async function createEntry(kind: keyof typeof NEW_NAMES, dir = "", name?: string): Promise<string> {
   return fileTurn(function* (io) {
     const listed = yield* io.list();
     const taken = listed.map((f) => f.path);
@@ -116,7 +117,7 @@ export function createEntry(kind: keyof typeof NEW_NAMES, dir = "", name?: strin
 
 /** Delete each path (a folder with everything under it) and close their tabs (in a turn: a Save pressed meanwhile finds
  *  its tab closed and writes nothing). */
-export function deleteEntries(paths: string[]): Promise<void> {
+export async function deleteEntries(paths: string[]): Promise<void> {
   return fileTurn((io) => removeAll(io, paths));
 }
 
@@ -128,7 +129,7 @@ function* removeAll(io: Io, paths: string[]): Turn<void> {
 }
 
 /** "Delete all files…": every file and folder the store has when its turn comes; every tab closes. */
-export function deleteAll(): Promise<void> {
+export async function deleteAll(): Promise<void> {
   return fileTurn(function* (io) {
     const top = (yield* io.list()).filter((f) => !f.path.includes("/")).map((f) => f.path);
     yield* removeAll(io, top);
@@ -237,7 +238,7 @@ const noDialog = () =>
     });
   });
 
-let uploads: Promise<unknown> = Promise.resolve(); // the uploads in progress, one after the other
+const enqueueUpload = sequentialPromiseQueue();
 
 /** Upload `items` into the store. Files that clash with none are written first; then each clash is asked in its own
  *  dialog (Keep mine is the default). A clash whose stored bytes are the uploaded ones is neither asked nor written
@@ -250,10 +251,8 @@ let uploads: Promise<unknown> = Promise.resolve(); // the uploads in progress, o
  *  @param words - "sample" (a restore, sample.ts) has the dialog and the toast say "Sample restored", "The sample is
  *  already here" (nothing to write, nothing asked), "Couldn't restore the sample".
  *  @returns the paths written */
-export function upload(items: Incoming[], words: WordsOf = "upload"): Promise<string[]> {
-  const run = uploads.then(() => uploadNow(items, words));
-  uploads = run.catch(() => {});
-  return run;
+export async function upload(items: Incoming[], words: WordsOf = "upload"): Promise<string[]> {
+  return enqueueUpload(() => uploadNow(items, words));
 }
 
 async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
