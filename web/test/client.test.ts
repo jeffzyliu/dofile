@@ -1438,6 +1438,28 @@ test("graphics part: an `again` or `damaged` from a worker that has ended is dro
   assert.deepEqual(page.header(), [PART_LANDED, PART.size, 1]);
 });
 
+test("graphics part: an older build's part that failed is not fetched again when the browser is back online; the new build's part is", async (t) => {
+  const online = fakeOnline(t);
+  const caches = fakeCaches();
+  const f = partFetch(["offline", "offline", 3]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await f.release();
+  await until(() => page.states.at(-1) === "failed", "the old build's part failed");
+  page.eng.end(live(page.eng), { kind: "reset", reset: "user", reason: "session reset: reset by you." });
+  await startWorker(page.eng, { ...done.build!, built: 778 });
+  await f.release();
+  await until(() => page.states.at(-1) === "failed" && f.modes.length === 2, "the new build's part failed");
+  assert.equal(online.length, 2, "each part has its listener");
+
+  for (const back of online.splice(0)) back(); // back online
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "the new build's part landed");
+  await sleep(20);
+  assert.equal(f.modes.length, 3, "only the new build's part is fetched");
+});
+
 // what the listeners saw, one line each: the state, the bytes received, and the reason's first words when failed
 const progressLines = (seen: GraphicsProgress[]) =>
   seen.map((p) => `${p.state} ${p.received}/${p.total}${p.error ? `: ${p.error.split(" (")[0]}` : ""}`);
