@@ -50,22 +50,27 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    stopping banner's "Don't reset: wait for it", the waiting banner itself (`states/banners.tsx`), and the inline
    rename field (`files/TreeRow.tsx`), the last three through `ui/focus-hooks.ts` `useFocusOnMount`. So a hand-off
    that waits for a microtask finds the focus already taken.
-6. **After a tab closes** (`files/EditorTabs.tsx` `focusAfterClose` sets `closeAsked`, which `EditorTabs` takes in a
-   layout effect of its next render) the focus goes to the selected tab (its `tabAsked` request), else the file tree's
-   row in the tab order when the tree is shown (`focusTree`), else `focusNow("editor")`. When that moves nothing, the
-   close-tab dialog's own hand-back follows (its opener, else `focusStable`).
-7. **A focus request is taken by the render of the component that draws the target.** The action sets a signal (the
-   tree's `focusWanted`, the open-file tabs' `tabAsked` and `closeAsked`, a tablist's own, Find's `findAsked`; the
-   editor's is the registry's `ask("editor")`); the target takes it in a layout effect of its own render (`ui/focus-hooks.ts`
-   `useFocusRequest`, or a plain layout effect where taking it is more than a focus: Go to line, a closed tab), and the
-   request ends there, taken or not. No timer stands in for that render: Preact renders the queued components
+6. **After a tab closes** (`files/close-focus.ts` `focusAfterClose`) the focus goes to the selected tab (`ask("open-file-tab")`),
+   else the file tree's row in the tab order when the tree is shown (`focusTree`), else the editor (`ask("editor")`). The
+   choice is made in the handler, from the tabs as they stand and whether the strip is drawn; the target takes the request
+   in its next render, after the closed tab has left the page. When that moves nothing, the close-tab dialog's own
+   hand-back follows (its opener, else `focusStable`).
+7. **A focus request is taken by the render of the component that draws the target.** The action sets a request: the
+   registry's one `focusRequest` (`ask(name)`: the tree, Find's field, the editor, the selected tab after a close; a
+   newer request replaces an older one, whatever its target) or a tablist's own signal (`tabAsked`, `Tablist`'s). The
+   target takes it in a layout effect of its own render (`ui/focus-hooks.ts` `useFocusTarget`, `useFocusRequest` for
+   the tablists, or a plain layout effect where taking it is more than a focus: Go to line), and the request ends there,
+   taken or not. No timer stands in for that render: Preact renders the queued components
    shallowest first, so `App` shows a pane, and the dialog host closes its dialog, before a deeper target takes its
    request.
    - **Whose focus each may take** (`from`): the tablists, from inside their own list (or the page body, after a
      close); the tree's rows, from the page body or the tree; the Files button's request, Find and the editor, from
      anywhere.
-   - **The tree's request** names a row (`focusRow`) or none (`focusTree`: the row in the tab order, or with no rows
-     the head's File actions). It is set once its action has succeeded (a rename, a delete once the list has been read
+   - **The tree's request** names a row (`focusRow`: the request's key is its path) or none (`focusTree`: the row in the
+     tab order, or with no rows the head's File actions). A request reaches the entries with its own key and no others, so
+     each `TreeRow` registers twice: once with its path, and once with no key while it is the row in the tab order (and
+     File actions with no key while the list is empty). A row with its rename field open is not a target. The test hook
+     reads the request as `focusWanted` (`{ path }`, `{ path: null, anywhere }` or `null`). It is set once its action has succeeded (a rename, a delete once the list has been read
      again). It also ends when a new one replaces it, a rename starts, or the visitor focuses or clicks another row.
    - **A tablist's request is set by a key, never by a click:** Safari does not focus a tapped button (`ui/Menu.tsx`
      focuses a `keepOpen` item itself for that reason), so a request from a click would move the focus where a click
@@ -109,7 +114,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `KeepWaitingButton` (in `StoppingBanner`), `WaitingBanner` (`states/banners.tsx`) | the button appears (1 s after the Break press), the waiting banner mounts | layout effect (`useFocusOnMount`) | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
 | `DeclinedBanner` (`states/banners.tsx`) | "Start engine" | synchronous, before `eng.ask()` | `focusStable()`, so the prompt takes the editor as its opener |
 | `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | `ask("editor")` in the step; the Editor takes it in a layout effect of the render that removes the dialog (`useFocusTarget`) | the `editor` target |
-| `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | sets `closeAsked` (rule 6) | rule 6 |
+| `files/close-focus.ts` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | `ask` for the selected tab, the tree or the editor (rule 6) | rule 6 |
 | `files/dialogs.tsx` `DeleteDialog` | Delete's store change is done and the list read again (`files.ts` `refresh`) | `focusTree()`, taken by the tree's render; only a focus on nothing or in the tree | the tree's row in the tab order; with no rows, the head's File actions (`FilesHead`) |
 | `files/fold.ts` `foldFiles` (the Files button in `App.tsx`) | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere | as `DeleteDialog` |
 | `ui/Menu.tsx` `closeMenu(true)` | Esc, Tab, a picked item (before its `onSelect`) | synchronous | the trigger (`restore`, else `anchor`). A click outside, a resize or the window's blur close it with no focus move. |
@@ -117,8 +122,8 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `files/TreeRow.tsx` `RenameField` | F2, New .do file, New folder: the field mounts (a New's field is a draft, `renaming.draft`, rule 8) | layout effect (`useFocusOnMount`), then the name without its extension selected | the field |
 | `files/rename.ts` `endDraft` | Esc in a draft's field | `focusTree()`, as `DeleteDialog` | as `DeleteDialog` (File actions is hidden on a phone) |
 | `ui/Tablist.tsx` `Tab`, `files/EditorTabs.tsx` `FileTab` | an arrow, Home or End in the tablist | `useFocusRequest` (rule 7) | the tab moved to, only while the focus is inside that tablist |
-| `files/TreeRow.tsx` `TreeRow` (`useRovingFocus`, on `useFocusRequest`) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and `focusWanted`; `focusTree` sets a keyless request | rule 7 | the row, only while the focus is on the page body or inside the tree (the tree's `role`) |
-| `log/LogView.tsx` `FindBar` open | `openFind` (`log/find.ts`) sets `findAsked` | `useFocusRequest`; once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
+| `files/TreeRow.tsx` `TreeRow` (`useFocusTarget("tree")`, twice) | `focusRow` (after a rename, a new file or folder is written, the arrow keys) sets the roving path and asks `tree` with the path as key; `focusTree` asks with no key | rule 7 | the row, only while the focus is on the page body or inside the tree (the tree's `role`) |
+| `log/LogView.tsx` `FindBar` open | `openFind` (`log/find.ts`) asks `find-field` | `useFocusTarget`; once per `openFind`, so the Log drawn again with Find open takes no focus | the field |
 | `log/LogView.tsx` `FindBar` close | Esc or Close | synchronous | what opened Find (`openFind`'s `from`, kept as `findReturn` in `log/find.ts`, else the focus at that time), if it is visible; else the log `<pre>` |
 | `editor/Editor.tsx` `goToLine` | "Go to line N" | sets `editorAsked` (`{ path, line }`) after `openFile`; the Editor takes it in a layout effect of its next render, after the render that shows its pane | CodeMirror, at the line, if that file is shown |
 | `output/clip.ts` `fallbackCopy` | a copy without the clipboard API (plain HTTP): Results, Copy on a .dta tab or a file's bar | synchronous: the hidden field takes the focus to copy, then gives it back only to an element that had keyboard focus (`:focus-visible`) | that element; after a click the focus stays off (the page body), so no ring shows. The Results tab moves no other focus: every value is a Tab stop, no arrow keys (SPEC 3.9) |
@@ -252,16 +257,16 @@ sequenceDiagram
     Ed-->>CT: true
     CT->>CT: dialog = null
     CT->>A: close(path) (editor/documents.ts): the record, the active tab, its banners
-    CT->>ET: focusAfterClose(), closeAsked = true
+    CT->>ET: focusAfterClose(): ask("open-file-tab"), or the tree, or ask("editor")
   else Do not save
     V->>CT: Don't save
     CT->>CT: dialog = null
     CT->>A: close(path)
-    CT->>ET: focusAfterClose(), closeAsked = true
+    CT->>ET: focusAfterClose()
   end
   Note over D,ET: one microtask renders both, the dialog host first (shallower)
   D->>D: cleanup, blur inside, close(), queue microtask T
-  ET->>ET: layout effect, tabAsked for the selected tab (FileTab takes it in the same loop), or focusTree(), or focusNow("editor")
+  ET->>ET: layout effects: the selected FileTab takes the request (or the tree's row, or the Editor)
   D->>D: T, the focus is not on body, nothing moves
 ```
 
@@ -286,7 +291,7 @@ On a phone one view shows at a time, so the Editor pane is often hidden and `foc
 
 ### Tests that hold this
 
-`web/test/focus-targets.test.ts` covers the registry and `focusStable`'s order (the stand-in elements); the rest of the rules hold only in a browser.
+`web/test/focus-targets.test.ts` covers the registry and `focusStable`'s order, and `web/test/tree-focus.test.ts` the tree's, Find's and the close's requests (the stand-in elements); the rest of the rules hold only in a browser.
 
 - `web/e2e/keyboard.spec.ts`: "a tap on the phone's command line focuses it without scrolling the page, …"
 - `web/e2e/states.spec.ts`:
