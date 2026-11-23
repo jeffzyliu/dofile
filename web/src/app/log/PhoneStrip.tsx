@@ -13,14 +13,15 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
   const r = lastRun.value;
   const mem = memory.value;
   let parts: ComponentChildren;
-  if (st.s === "running")
+
+  if (st.s === "running") {
     parts = (
       <span>
         <b>{"Running"}</b>
         {st.run.lines ? ` ${linesWords(st.run.lines)}` : ""}
       </span>
     );
-  else if (st.s === "ready" && r) {
+  } else if (st.s === "ready" && r) {
     const jump = jumpLine(r);
     parts = (
       <>
@@ -49,6 +50,7 @@ export function PhoneStrip({ children }: { children?: ComponentChildren }) {
       </span>
     );
   }
+
   return (
     <div class="phone-strip">
       {parts}

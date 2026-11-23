@@ -19,7 +19,8 @@ import { ignoreHeldEnter } from "../ui/keys.ts";
 import { inTurnWords, runInTurn } from "./paste.ts";
 import { pastePlan, putBack, runOne } from "./pasterun.ts";
 
-const field = signal(""); // the command line's text; a signal, as the pane may be drawn again when the layout changes
+// the command line's text; a signal, as the pane may be drawn again when the layout changes
+const field = signal("");
 let recall = -1; // the history entry ↑ ↓ show, or -1 for the text being typed
 let typed = ""; // what was being typed before ↑
 
@@ -43,16 +44,22 @@ function submit() {
   if (runCommand(field.value).how === "started") {
     field.value = "";
     recall = -1;
-  } else if (field.value.trim()) sayRefused();
+  } else if (field.value.trim()) {
+    sayRefused();
+  }
 }
 
 export function CommandLine() {
   const input = useRef<HTMLInputElement>(null);
   const phone = isPhone.value;
-  const offer = startOffer(engine.value); // not null: no engine, so the field is off and the button starts the engine
-  const busy = offer === null && !takesRun(engine.value); // the engine takes no command now: the button is off
+  // not null: no engine, so the field is off and the button starts the engine
+  const offer = startOffer(engine.value);
+  // the engine takes no command now: the button is off
+  const busy = offer === null && !takesRun(engine.value);
+
   const onKey = (e: KeyboardEvent) => {
     const list = history.value;
+
     if (offer !== null) {
       // read-only: no key changes it, and Enter says what its hint says
       if (e.key === "Enter" && !e.isComposing) {
@@ -61,6 +68,7 @@ export function CommandLine() {
       }
       return;
     }
+
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault();
       if (!e.repeat) submit();
@@ -78,9 +86,12 @@ export function CommandLine() {
       if (recall >= list.length) {
         recall = -1;
         field.value = typed;
-      } else field.value = list[recall];
+      } else {
+        field.value = list[recall];
+      }
     }
   };
+
   // Typed text only (not a paste or a drop, and not what is already in the field): a phone's Smart Punctuation makes
   // curly quotes and dashes of it, which Stata-syntax code cannot use.
   const onInput = (e: Event) => {
@@ -89,14 +100,18 @@ export function CommandLine() {
     const data = ie.data ?? ie.dataTransfer?.getData("text/plain") ?? "";
     const fixed =
       isTypedInput(ie.inputType) && data ? straightenInserted(el.value, el.selectionStart ?? 0, data) : null;
+
     if (fixed) {
       el.value = fixed.value;
       el.setSelectionRange(fixed.caret, fixed.caret);
     }
+
     field.value = el.value;
     recall = -1;
   };
+
   const keepFocus = (e: Event) => e.preventDefault();
+
   const onPaste = (e: ClipboardEvent) => {
     const el = e.currentTarget as HTMLInputElement;
     const text = e.clipboardData?.getData("text/plain") ?? "";
@@ -105,16 +120,22 @@ export function CommandLine() {
       text,
       el.value.slice(el.selectionEnd ?? el.value.length),
     );
-    if (plan.do === "ordinary") return; // no line break, or no engine (the field is read-only then)
+
+    // no line break, or no engine (the field is read-only then)
+    if (plan.do === "ordinary") return;
     e.preventDefault();
+
     if (plan.do === "refused") {
-      showToast(plan.words, "error"); // the field stays exactly as it was
+      // the field stays exactly as it was
+      showToast(plan.words, "error");
       return;
     }
+
     field.value = "";
     recall = -1;
     if (plan.lines.length) runPasted(plan.lines);
   };
+
   // On a phone a tap on the unfocused field focuses it here, with preventScroll: the browser's own focus scrolls the
   // page up to the field, which iOS does before the page can stop it (app/viewport.ts). The caret goes to the end.
   const onTouchEnd = (e: TouchEvent) => {
@@ -124,6 +145,7 @@ export function CommandLine() {
     el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
   };
+
   return (
     <div class="cmdline">
       <span class="prompt" aria-hidden="true">
@@ -185,8 +207,12 @@ export function CommandLine() {
           onMouseDown={keepFocus}
           onKeyDown={ignoreHeldEnter}
           onClick={() => {
-            if (busy) sayRefused();
-            else if (field.value.trim()) submit();
+            if (busy) {
+              sayRefused();
+            } else if (field.value.trim()) {
+              submit();
+            }
+
             input.current?.focus({ preventScroll: true });
           }}
         >
@@ -199,8 +225,11 @@ export function CommandLine() {
           aria-disabled={busy ? "true" : undefined}
           onKeyDown={ignoreHeldEnter}
           onClick={() => {
-            if (busy) sayRefused();
-            else submit();
+            if (busy) {
+              sayRefused();
+            } else {
+              submit();
+            }
           }}
         >
           Run command
