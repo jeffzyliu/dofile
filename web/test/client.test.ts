@@ -1300,7 +1300,7 @@ test("graphics part: after a damaged copy, a re-fetch that fails is retried with
   assert.deepEqual(f.modes, ["no-cache", "reload", "reload"], "a 304 would hand back the damaged copy");
 });
 
-test("graphics part (decision B): a second damaged copy in a row starts no fetch without a graph: the part fails; a graph's `again` fetches it once more", async () => {
+test("graphics part (decision B): a second damaged copy in a row starts no fetch without a graph: the part fails and is dropped from the Cache; a graph's `again` fetches it once more", async () => {
   const caches = fakeCaches();
   const f = partFetch([1, 2, 3]);
   const page = lazyPage(f.fetch, caches);
@@ -1319,6 +1319,7 @@ test("graphics part (decision B): a second damaged copy in a row starts no fetch
   assert.equal(f.modes.length, 2, "no third fetch");
   assert.equal(page.states.at(-1), "failed");
   assert.deepEqual(page.header(), [PART_FAILED, page.header()[1], 1], "failed, on the same copy");
+  assert.ok(!(await cached(caches)).includes(`snapshot/${PART.name}`), "copy 1 is out of the Cache: a reload fetches");
   page.say("again"); // a graph asks
   await f.release();
   await until(() => landings() === 3, "copy 2 landed");
