@@ -40,7 +40,3 @@ export interface DtaInfo {
   result: { nobs: number; nvars: number; variables: DtaVariable[] } | { error: string };
 }
 export const dtaInfo = signal<Readonly<Record<string, DtaInfo>>>({});
-
-/** What opened the full-size view, for the focus to return to: Safari does not focus a button when it is pressed, so
- *  the active element is not enough. The Graph tab's "Open full size" sets it; the view takes it and clears it. */
-export const fullOpener: { el: HTMLElement | null } = { el: null };
