@@ -1,9 +1,9 @@
 // The sample project (web/sample/) run in the page's own engine (Pyodide in a worker thread, the built wheel): its
-// do-files end with rc 0 and draw a graph, and the run the landing page shows is the one it makes. Run `uv build
-// --wheel` first.
+// do-files end with rc 0 and draw a graph, and the run the landing page shows is the one it makes. Run `npm run
+// wheel` first.
 
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import "fake-indexeddb/auto";
@@ -11,21 +11,11 @@ import { IDBFactory } from "fake-indexeddb";
 import { SAMPLE } from "../src/app/sample-files.ts";
 import { EngineClient } from "../src/engine/client.ts";
 import { openStore } from "../src/engine/store.ts";
-import { endWorkers, runOn, startWorker, nodeWorker as storeWorker } from "./harness.ts";
+import { endWorkers, extraWheels, runOn, startWorker, nodeWorker as storeWorker, wheel } from "./harness.ts";
 
 after(endWorkers);
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
-const wheel = (() => {
-  const name = readdirSync(`${root}/dist`)
-    .filter((f) => f.endsWith(".whl"))
-    .sort()
-    .at(-1)!;
-  return { name, bytes: readFileSync(`${root}/dist/${name}`) };
-})();
-const extraWheels = readdirSync(`${root}/web/wheels`)
-  .filter((f) => f.endsWith(".whl"))
-  .map((f) => ({ name: f, bytes: readFileSync(`${root}/web/wheels/${f}`) }));
 
 const bytes = (f: (typeof SAMPLE)[number]) =>
   f.base64 !== undefined ? Uint8Array.from(Buffer.from(f.base64, "base64")) : new TextEncoder().encode(f.text);

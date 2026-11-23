@@ -13,6 +13,7 @@ import {
   canClearLog,
   clearLog,
   client,
+  D,
   engine,
   expectDrops,
   FILE,
@@ -121,12 +122,21 @@ test("a run's graphs keep the theme the run was sent, not the one at its end", a
   assert.equal(S.graphs.value.at(-1)!.theme, "light");
 });
 
+test("a rename during a run: the run's end and the last run carry the new path", async () => {
+  await readyEngine();
+  const done = runCode("x", FILE);
+  S.runMoved("a.do", "b.do");
+  client.run1.done.ok(result({ rc: 111, error_line: 1 }));
+  await done;
+  assert.equal(S.lastRun.value?.path, "b.do");
+  assert.equal(logItems().find((i) => i.t === "text")!.end!.path, "b.do");
+});
+
 test("each run's text item keeps how it ended (rc, line, skipped, store_error) and the files unsaved when it started", async () => {
   await readyEngine();
-  S.tabs.value = [
-    { path: "a.do", kind: "text", dirty: false },
-    { path: "clean.do", kind: "text", dirty: true },
-  ];
+  D.addText("a.do", "");
+  D.addText("clean.do", "");
+  D.update("clean.do", { changes: { from: 0, insert: "edited" } });
   const head: RunHead = { kind: "selection", path: "a.do", lines: [5, 9], fresh_locals: false };
   const done = runCode("x", head);
   assert.deepEqual(logItems().find((i) => i.t === "text")!.unsaved, ["clean.do"]);
@@ -382,14 +392,18 @@ test("showToast, holdToast; addBanner replaces one of a kind and path, dismiss r
 test("J5: a run's promise settles even when the after-run work throws (an open tab's follow-up fails)", async () => {
   await readyEngine();
   store.blocked = false;
-  const { editorCommands } = await import("../src/app/editor/commands.ts");
-  const kept = { ranOver: editorCommands.ranOver, reload: editorCommands.reload };
-  const fail = () => {
-    throw new Error("the editor failed");
-  };
-  Object.assign(editorCommands, { ranOver: fail, reload: fail });
+  // a view that fails to show a run's text in the open tab
+  const detach = D.attachView({
+    extensions: [],
+    show() {},
+    dispatch(spec) {
+      if (spec.changes) throw new Error("the editor failed");
+    },
+    scrollSnapshot: () => null,
+  });
   try {
-    writable(S.tabs).value = [{ path: "t.csv", kind: "text", dirty: false }];
+    D.addText("t.csv", "old");
+    D.activate("t.csv");
     store.texts.set("t.csv", "new");
     const done = runCode("x", FILE);
     client.run1.done.ok(result({ files: [{ name: "t.csv", status: "modified", bytes: 3 }] }));
@@ -397,8 +411,7 @@ test("J5: a run's promise settles even when the after-run work throws (an open t
     assert.equal(settled, "settled");
     state("ready");
   } finally {
-    Object.assign(editorCommands, kept);
-    writable(S.tabs).value = [];
+    detach();
   }
 });
 

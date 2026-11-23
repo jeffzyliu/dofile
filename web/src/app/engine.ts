@@ -46,23 +46,27 @@ type Lock = { take(o?: { steal?: boolean }): Promise<boolean> };
 /** An event that changed nothing: its type, the ticket it presented (when it has one), the state it found, and why. */
 export type Drop = { type: Event["type"]; n?: number; row: RowName; why: "stale" | "not-valid" };
 
-// Each connectEngine makes a new wiring. A reply captures the one that performed its effect and does nothing once it
-// has been replaced: every machine counts its tickets from 1, so a ticket says which request, not which machine.
-let wiring: object = {};
-let env: Env | null = null;
-let reader: Reader | null = null; // the transport's read ops: `call`
-let perform: (effect: Effect) => void = () => {
-  throw new Error("the engine controller is not connected: call connectEngine() first");
+/** Handles made by one effect and released by another; the next connectEngine releases them all. */
+type Handles = {
+  breakTimer: ReturnType<typeof setTimeout> | undefined; // start-break-timer, cancel-break-timer
+  download: { n: Ticket; stop: AbortController } | null; // start-download, abort-download
+  offGraphics: (() => void) | null; // the transport's graphics subscription
 };
+/** What one connectEngine was given, its performer and that performer's handles. A reply captures the wiring that
+ *  performed its effect and does nothing once it has been replaced: every machine counts its tickets from 1, so a ticket
+ *  says which request, not which machine. */
+type Wiring = {
+  env: Env;
+  reader: Reader; // the transport's read ops: `call`
+  perform: (effect: Effect) => void;
+  handles: Handles;
+};
+let wiring: Wiring | null = null; // null until connectEngine
 let machine: Machine | null = null; // null until open()
 let queue: Event[] = []; // events raised while a step's effects are performed
 let stepping = false; // a step is in progress: its effects are being performed
 let dropped: Drop[] = []; // the last DROPS_KEPT
 const DROPS_KEPT = 200;
-// handles made by one effect and released by another
-let breakTimer: ReturnType<typeof setTimeout> | undefined; // start-break-timer, cancel-break-timer
-let offGraphics: (() => void) | null = null; // the transport's graphics subscription, ended by the next connectEngine
-let download: { n: Ticket; stop: AbortController } | null = null; // start-download, abort-download
 let runs: RunHandlers = { began() {}, log() {}, ended() {}, engineReady() {}, engineGone() {} };
 
 /** Wire the controller to the page's transport and tab lock. A second call replaces the wiring: the machine, the queue,
@@ -87,22 +91,35 @@ export function connectEngine({
   graceMs?: number;
   canInterrupt?: boolean;
 }) {
-  offGraphics?.();
-  offGraphics =
-    client.onGraphics?.((p) => {
-      graphicsWriter.part.value = p;
-    }) ?? null;
-  clearTimeout(breakTimer);
-  download?.stop.abort();
-  breakTimer = undefined;
-  download = null;
-  wiring = {};
+  if (wiring) {
+    const { offGraphics, breakTimer, download } = wiring.handles;
+    offGraphics?.();
+    clearTimeout(breakTimer);
+    download?.stop.abort();
+  }
+  const handles: Handles = {
+    breakTimer: undefined,
+    download: null,
+    offGraphics:
+      client.onGraphics?.((p) => {
+        graphicsWriter.part.value = p;
+      }) ?? null,
+  };
+  wiring = {
+    env: { snapshot, canInterrupt, graceMs, engineBytes: S.engineBytes, manual },
+    reader: client,
+    perform: performer(client, client, lock, handles),
+    handles,
+  };
   machine = null;
   queue = [];
   dropped = [];
-  env = { snapshot, canInterrupt, graceMs, engineBytes: S.engineBytes, manual };
-  reader = client;
-  perform = performer(client, client, lock);
+}
+
+/** The current wiring. */
+function connected(): Wiring {
+  if (!wiring) throw new Error("the engine controller is not connected: call connectEngine() first");
+  return wiring;
 }
 
 /** Give the controller what run.ts does for it. */
@@ -118,7 +135,7 @@ export const drops = (): Drop[] => [...dropped];
 
 /** The page load: the machine starts, and asks for the tab lock. Once for each wiring. */
 export function open(): void {
-  if (!env) throw new Error("the engine controller is not connected: call connectEngine() first");
+  const { env } = connected();
   if (machine) throw new Error("open() was called twice on one wiring");
   const first = initial(env);
   stepping = true;
@@ -192,7 +209,7 @@ function apply(step: Step, event: Event | null) {
   try {
     if (step.machine.state !== before?.state) engineWriter.engine.value = view(step.machine.state);
   } finally {
-    for (const effect of step.effects) perform(effect);
+    for (const effect of step.effects) connected().perform(effect);
   }
 }
 
@@ -235,12 +252,13 @@ const failReason = (e: ClientError): "download" | "updated" | "unknown" =>
 
 const ENDINGS = new Set<ClientError["kind"] | undefined>(["reset", "stopped", "failed", "failed-twice"]);
 
-/** The effect performer: the only holder of the transport's Lifecycle and Builds, and the tab lock. */
-function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: Effect) => void {
+/** The effect performer: the only holder of the transport's Lifecycle and Builds, and the tab lock. It keeps its
+ *  handles in its wiring's `handles`. */
+function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock, handles: Handles): (effect: Effect) => void {
   /** An AbortError (abort-download) raises nothing. */
   function startDownload(n: Ticket, say: Reply<"start-download">) {
     const stop = new AbortController();
-    download = { n, stop };
+    handles.download = { n, stop };
     builds
       .download({
         signal: stop.signal,
@@ -292,7 +310,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
       case "start-download":
         return startDownload(effect.n, reply(effect));
       case "abort-download":
-        if (download?.n === effect.n) download.stop.abort();
+        if (handles.download?.n === effect.n) handles.download.stop.abort();
         return;
       case "fetch-list": {
         const say = reply(effect);
@@ -320,12 +338,12 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock): (effect: E
         return lifecycle.interrupt(effect.n);
       case "start-break-timer": {
         const say = reply(effect);
-        breakTimer = setTimeout(() => say({ type: "break-timeout" }), effect.ms);
+        handles.breakTimer = setTimeout(() => say({ type: "break-timeout" }), effect.ms);
         return;
       }
       case "cancel-break-timer":
-        clearTimeout(breakTimer);
-        breakTimer = undefined;
+        clearTimeout(handles.breakTimer);
+        handles.breakTimer = undefined;
         return;
       case "end-run":
         return runs.ended(effect.result);
@@ -428,9 +446,8 @@ export function run(code: string, head: RunHead): boolean {
 
 /** A read op: the page's one way to ask the engine for data. It raises no event. Rejects with the transport's error:
  *  kind "no-engine" with no worker, "reset" when a reset cut it. */
-export function call<K extends ViewOp>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
-  if (!reader) throw new Error("the engine controller is not connected: call connectEngine() first");
-  return reader.query(op, args);
+export async function call<K extends ViewOp>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
+  return connected().reader.query(op, args);
 }
 
 /** Whether a result is the machine's own rc 9998, with no log of its own: a run cut (a reset, another tab) or, with

@@ -101,7 +101,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   top current (the way back on a phone, where the Files head is hidden). Folding the current folder, or a folder above it, makes
   the folded folder's parent current (Left on a current top-level folder: the top). Up, Down, Home, End, Right and Left move or
   fold only and select nothing.
-- **Upload:** the Upload link, "Upload a folder", or a drop anywhere; folder paths are kept. A name that exists asks (3.10).
+- **Upload:** the Upload link, "Upload files", "Upload a folder", or a drop anywhere; folder paths are kept. A name that exists asks (3.10).
   Replacing the open file reloads it in the editor (`F 3.3`). P1 stores a .zip as one file. Uploads run one at a time, a
   name clash never replaces another dialog (it waits for it to close), and a drop while a dialog is open, or while another
   tab has the files, uploads nothing. A name with a control character (a line break) is refused, as the store refuses a
@@ -117,8 +117,8 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   nearest folder above it); its label names the folder: "New file in data/", "New file". In a new file's or folder's name field only (not a rename) the name may be a path,
   "sub/x.do": each part is checked as a name, a part before the last may not be a file, and the store makes the missing
   folders; a folder the path goes through that is folded is unfolded.
-- **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload a folder", "Download all (.zip)",
-  "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`, OQ-13; built in step 5) sits above "Delete all files…", after a rule.
+- **Head menu** ("File actions", `S 13` caption): "New .do file", "New folder", "Upload files", "Upload a folder",
+  "Download all (.zip)", "Delete all files…" (asks first, `FD`; the words are in 3.10). "Restore the sample" (`F 2.4`, OQ-13; built in step 5) sits above "Delete all files…", after a rule.
 - **States:** drawn: open, unsaved dot, hover, folder open and closed, size, new badge (`E`), row menu (`S 13`). In the flows'
   list, not drawn: drop target, upload count (`WS 4`), inline rename and "name already exists" (DS-7), could not save, too big
   (OQ-16).
@@ -133,6 +133,12 @@ Files and the editor work in every engine state except `other-tab` (section 5).
 - **Keyboard and ARIA:** `role="tablist" aria-label="Open files"`; tabs have `aria-selected` and `aria-keyshortcuts="Delete"`;
   arrows move; Delete closes the selected tab. The × is `aria-hidden`, mouse only, 22 px. Do not bind Ctrl/Cmd+W: the browser
   owns it. The dot is `role="img" aria-label="unsaved changes"`.
+- **Place in the text:** a tab shown again is where it was left: after another tab or a .dta tab, and on a phone after
+  another view, also when the active tab changed while the Editor view was hidden. A tab opened, and a tab a rename
+  retyped (.dta to text), starts at the top. A reload ("Replace with uploaded", "Restore the sample" over it, "Reload from
+  the run") keeps the tab's place in the new text as near as that text allows (the line that was at the top, by its
+  position), and a run's text shown in a clean tab keeps it as it is. `editor/documents.ts` keeps each hidden tab's
+  `EditorView.scrollSnapshot()`; the view hands it the last one it saw while its pane is hidden.
 
 ### 3.3 Editor (P1, step 4b)
 - CodeMirror 6 with `web/src/stata/language.ts` for .do and .ado; other text as in 3.11. Edits are never blocked, during a run
@@ -181,7 +187,9 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   "dofile 0.1.0 · OpenDTA 0c3f3a2 · Stata 14 syntax" from `ABOUT` (`web/src/app/env.ts`: compiled in, section 8); "Files stay in this browser. Try: help regress"); per run a
   run-head (`.runhead`, section 4); each echo (`.echo`); output; notes (`.note`: the path shim's "(path … is … in the working
   folder)"); the error and its `r(N);` (`.err`); the engine's hint (`.hint`); "Go to line 17" (`.jump`), which moves the
-  editor's cursor. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
+  editor's cursor. A rename of the run's file, or of a folder above it, moves the last run's path and every run-head's and
+  run end's too (`runMoved`, `state.ts`), so the link opens the renamed file; a file that cannot be read (deleted) opens
+  nothing and a toast says so. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
   exception: they wrap in the pane (section 8, "As built in step 4b").
 - The head, run-heads and the page's own notes are shown only: never in Download log or a log file (`S 15`).
 - The log streams during a run (OQ-1): the worker posts `{id, log}` chunks, and the page appends them. When the run ends, the
@@ -294,7 +302,7 @@ focus returns to what opened it (`DS`). A destructive button is `.btn.stop.live`
 | Dialog | Drawn | Content and rules |
 |---|---|---|
 | Download prompt, progress | `S 1`, `S 8`; `S 2`, `S 3` | Section 5. Download is the default (Enter) on purpose (UX-037). The bar is `role="progressbar"` with `aria-valuetext`; screen readers hear the stages, not the megabytes. |
-| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is asked even after "Do the same" with Replace (not after Esc, or "Do the same" with Keep mine: keeping it loses nothing; an open question: plan, "Step 4: decisions and open questions", C 14). A clash whose stored bytes are the uploaded bytes is not asked and not written (it counts as uploaded in the toast and among "the other n files"), unless the file is open with unsaved edits. "Restore the sample" asks its clashes in this dialog with the sample's words (3.12). |
+| Name clash (4a) | `P/Name clash` | `role="alertdialog"`. "data/wages.dta is already here" / "The upload has a file with the same name. Keep yours, or replace it with the uploaded one?" / "Yours: 8 KB, 9 Nov · uploaded: 15 KB · clash 2 of 5 · the other 37 files are uploaded." / checkbox "Do the same for the other 3 clashes" / "Replace with uploaded", "Keep mine" (primary, focused). Enter keeps this one. Esc keeps yours for every remaining clash and stops asking. For the open file with unsaved edits: "analysis.do is open with unsaved edits; replacing it discards them"; such a clash is asked even after "Do the same" with Replace (not after Esc, or "Do the same" with Keep mine: keeping it loses nothing; an open question: plan, "Step 4: decisions and open questions", C 14). A clash whose stored bytes are the uploaded bytes is not asked and not written (it counts as uploaded in the toast and among "the other n files"), unless the file is open with unsaved edits. "Restore the sample" asks its clashes in this dialog with the sample's words (3.12). "Yours" is the file as it is when the dialog opens, and a Replace writes only over that file. Asked again (decided by the maintainer, 2026-11-22): when the visitor answered "Replace with uploaded" but the stored file changed while the dialog was open, the upload writes nothing and asks again: "data/wages.dta changed while you were deciding" / "It was saved again since you were asked. Keep yours, or replace it with the uploaded one?" (the sample's: "… replace it with the sample's?"), with the same buttons and the "Yours: …" line at the new size and date. Always ask: it is asked even after "Do the same" with Replace, as for a file with unsaved edits (a clash that "Do the same" decided is asked when its file changed after that answer, or when its tab got unsaved edits before its write); a file deleted meanwhile is written without asking, unless its tab is open with unsaved edits: that one is asked in the unsaved-edits words, with no "Yours" part, even after "Do the same" with Replace (decided by the maintainer, 2026-11-22: "Ask"); a new file or an upload's file that finds its name taken since the list was read gets the ordinary clash dialog (an upload) or "already exists" (a new file's name field). |
 | Delete (4a) | `P/Notices` | "Delete clean.do?" / "It exists only in this browser. This can't be undone." / Cancel (focused), Delete. `DS` words it differently: OQ-19. |
 | Reset | `S 14` | `role="alertdialog"`. "Reset the engine?" / "The data in memory, e() and r() results, macros and graphs are cleared, as if you had reloaded. Your files are kept." / Cancel (focused), Reset. Not asked while the engine is new or just reset (nothing has run on it since it started). |
 | Upload report | `P/Upload report` | Drawn with P2 content only. P1: the toast "3 files uploaded" (OQ-19). |
@@ -596,8 +604,10 @@ cross-origin isolated (some hosts, or plain HTTP on a local network). The data i
 
 The page posts `{id, op, args}`; the worker answers `{id, result}` or `{id, error, name, type?}` (`type`: the Python exception class, set for a `PythonError`; a start fails with reason `memory` for a `RangeError` or a `type` of `MemoryError`, never from the message), posts `{stage}` (a typed `Stage` id,
 never text) as each start-up stage begins, and `{id, log}` chunks while a run prints. Ops run one at a time in a queue, except
-`boot`. The ops are one typed map, `Ops` in `web/src/engine/types.ts`, in three sets; each op belongs to one set, in the types
-and in the worker (`web/src/engine/worker.ts` has one handler object for each set), and the set decides who may send it:
+`boot` and `graphics`. The ops are one typed map, `Ops` in `web/src/engine/types.ts`, in three sets; each op belongs to one
+set, and the set decides who may send it. The worker answers them through one table keyed by op (`OpTable` in
+`web/src/engine/worker-dispatch.ts`, filled in `web/src/engine/worker.ts`), typed from `Ops`: an op without a handler, or a
+handler with another op's arguments or result, fails the type check (`web/test/dispatch.types.ts`).
 
 - **`LifecycleOps`** (`mount`, `boot`, `startup`, `run`) change the engine. Only the transport's `start()` and `run()` send
   them, and only the machine's effect performer calls those.
@@ -708,7 +718,9 @@ As built:
   worker's queue; if its worker is ended first it rejects with the ending's kind.
 - `storeError` holds the error (`{name, message, cause}`; `cause` `open` when the store did not open or could not be read, `copy` when its files could not be written into `/work`) with which the worker has no store at `mount` (also `startup.storeError`); `/work` then
   starts empty, and the transport detaches the store from that worker, so the page's changes stay in the store and do not reach
-  it (section 7). The transport also keeps `about` and `startup`, the facts of the last start, for the tests and the hook.
+  it (section 7). `about` and `startup` are the other facts of the start: with `storeError` they are kept on the live worker's
+  record once its start is complete, for the tests and the hook, and are null before that and with no live worker (after an
+  ending, until the next start is complete).
 - **Errors** are `Error`s with `kind`: `"failed"` (`download()` or `build()` could not get the build's list or a file as
   listed, or the build has no snapshot, with `reason` `"download" | "unknown"`; also a call cut because its worker's start
   failed, with no `reason`: why the start failed is the machine's `FailReason`), `"failed-twice"` (a call cut because its
@@ -742,8 +754,8 @@ interface LifecycleOps {                         // sent only by the transport's
   graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
-// start files: Int32 [state 0 pending / 1 landed / 2 failed, byte count, attempt (the page's fetches of it; a graph that
-// finds it failed posts {graphics: "again"} and waits for one more), 0] then from byte 16 (PART_HEADER) the compressed part (or the reason), in `sab`;
+// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; the
+// buffer's layout, the header and the states: src/engine/lazy-part.ts);
 // `sab` null (no SharedArrayBuffer): the worker fetches the part itself once started, and the page never does (a graph
 // that finds it missing stops that fetch and makes a synchronous request); the worker tells the page how it goes, for the
 // "Graphs loading" ring and the download total: {graphics: "fetching"}, {graphics: "progress", received}, {graphics: "landed"},
@@ -779,8 +791,11 @@ interface Startup {                              // seconds; the fields depend o
   fetched?: "download" | "read from cache"; fetchS?: number; unpackS?: number; heapS?: number; sitePackagesS?: number;
   decoder?: "native" | "wasm" | "none"; restoreS?: number; notCached?: string[];        // snapshot
   runtimeS?: number; packagesS?: number;                                                  // normal
-  storeError?: { name: string; message: string; cause: "open" | "copy" }; // no store; `/work` started empty
+  storeError?: StoreError;                                                                // no store; `/work` started empty
 }
+// an error as the worker tells the page (`type`: a PythonError's exception class); an op's error answer is {id, error: message, name, type?}
+type PageError = { message: string; name: string; type?: string };
+type StoreError = PageError & { cause: "open" | "copy" };
 interface FileInfo { path: string; dir: boolean; size: number; mtime: number }           // path inside the working folder
 
 type Value = number | string | null;             // null: missing "." (or infinity); ".a" to ".z": extended missing
@@ -862,7 +877,9 @@ never hold `..` or a leading `/`. A path whose first part is `.dofile` is refuse
 interface FileStore {                                // the page's API: works with no worker, during a run, after a failed start
   list(): Promise<FileInfo[]>;                       // reads `info` only
   read(path: string): Promise<Uint8Array>;
-  write(path: string, data: Uint8Array): Promise<FileInfo>;   // makes parent folders
+  info(path: string): Promise<FileInfo | null>;      // one path's record (the clash dialog's "Yours"); null: none
+  write(path: string, data: Uint8Array, expect?: "absent" | {size: number, mtime: number}): Promise<FileInfo>;
+                                                     // makes parent folders; `expect`: see "Expectation" below
   mkdir(path: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;   // a file, or a folder with everything under it
   remove(path: string): Promise<void>;               // the same
@@ -880,15 +897,17 @@ interface FileStore {                                // the page's API: works wi
 |---|---|
 | Page change while a worker exists | **The journal is the only way a page change reaches `/work`.** One transaction changes `info` and `data` and adds a `pending` row; then the store calls `sync`, which posts the worker the op `sync`, with no arguments and no bytes. The worker, in one transaction, reads the `pending` rows, takes the store's version of those paths (the path and everything under it, both names of a rename; for a `mkdir` row, the folder) and clears the journal; then it puts that version into `/work`, replacing what `/work` had there. A sync that finds the journal empty (an earlier sync, a `mount` or a run's after-run write took it) does nothing. So the order in which the syncs arrive does not matter, and no change is applied twice: whichever sync or copy finds a row takes the store's version as it is then. A sync that `/work` cannot take is said on the console. Cost, accepted: the worker reads an upload back from the store, and a renamed folder is copied again, not renamed in place. `rename` rejects when `to` exists or lies inside `from`; `write` rejects when the path is a folder or a parent is a file. |
 | Page change with no worker | One transaction changes `info` and `data`; no row is written and nothing is posted. The next `mount` copies the whole store. |
+| Expectation | `write`'s `expect` is compared inside the write's own transaction (one more `info` read): "absent" wants no file or folder at the path, `{size, mtime}` the file as it was read. A mismatch writes nothing, adds no row and rejects with an error named `StoreConflict` (its `now`: the record at the path, or null); `rename` onto a taken name rejects with that name too. The page decides from the name (`isConflict`), never from the text. A write never gives a path the mtime it had: it takes the clock, or the old mtime plus 1 ms when the clock has not moved on, so two writes of the same size in one millisecond are still told apart (a run's write takes /work's mtime, which the run's clock step makes later). |
 | Engine start | `mount` copies every record into `/work`, a plain in-memory folder, and clears `pending`, in one transaction. A worker started after a reset does the same: files come back, data in memory does not. |
-| After each run | Inside the `run` op, the worker lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone; in the same transaction it takes the journal, as `sync` does. A file counts as changed when its modification time or its size changed. Before the run the worker waits until the clock is past the newest mtime in the list that is not in the future (one clock step, up to 100 ms with a clamped clock): that makes the time enough for any write of one byte or more, which gets a later time than any file had (or, for a time in the future, another one), so a same-size rewrite is seen. The size catches a truncation (a file the run empties), which MEMFS does not stamp with a time. `RunResult.files` lists what it wrote. A write the store refused is tried again by the next run, unless the page changes that path first, or makes a folder where the run left a file (then the page's version wins in `/work` and the store, and nothing is owed for it). |
+| After each run | Inside the `run` op, the worker (its `/work` mirror, `web/src/engine/work-mirror.ts`) lists `/work` (path, size, mtime) before and after the run. It writes created and changed files to the store, and deletes from the store only files that were in the "before" list and are gone; in the same transaction it takes the journal, as `sync` does. A file counts as changed when its modification time or its size changed. Before the run the worker waits until the clock is past the newest mtime in the list that is not in the future (one clock step, up to 100 ms with a clamped clock): that makes the time enough for any write of one byte or more, which gets a later time than any file had (or, for a time in the future, another one), so a same-size rewrite is seen. The size catches a truncation (a file the run empties), which MEMFS does not stamp with a time. `RunResult.files` lists what it wrote. A write the store refused is tried again by the next run, unless the page changes that path first, or makes a folder where the run left a file (then the page's version wins in `/work` and the store, and nothing is owed for it). |
 | A page change during a run wins | The page's syncs wait behind the run in the worker's queue. The after-run write reads `pending` and leaves those paths (both names of a rename) out of the difference: a changed path is left out when it is a pending path, under one, or above one (for a `mkdir` row: the path and the paths above it only). The store's records for those paths go into `/work`, and the waiting syncs then find the journal empty. A run's file under a folder the page removed, or under a folder's old name after a page rename, is not saved and is listed in `RunResult.skipped`; the other dropped cases are not listed (see `RunResult.skipped`). So after a save during a run that writes the same file, the store and `/work` both hold the user's text. |
 | A run that is cut | A reset, a crash or a closed tab while the run's code is still running: nothing is written to the store. A reset that lands during the after-run write may leave that run's files in the store although the machine reports rc 9998. |
 | Tab lock | The tab that holds the Web Lock `dofile-engine` (*proposed*) owns the engine. A tab that cannot get it shows the take-over dialog (section 5), starts no worker and writes nothing to the store (OQ-16). "Use dofile in this tab" takes the lock with `steal`; the tab that loses it ends its worker and shows the same dialog. A closed tab frees the lock. Without Web Locks (not a secure context: plain HTTP on a LAN, the dev server only) every tab owns the engine; accepted. |
 | Persistence | The page calls `navigator.storage.persist()` once at start (a browser may show its own prompt, `F1` branches) and puts `persisted()` in the `persisted` signal. |
 | Failures | A failed write (quota exceeded) rejects with the browser's error, keeps the old record and writes no row; the tab stays unsaved. A failed after-run write sets `RunResult.store_error` (the log says "The files this run wrote couldn't be kept in this browser"). A worker that cannot open the store still mounts, with an empty `/work`, and sets the client's `storeError` (the error's name and message); it cannot read the journal, so the client detaches the store from it: the page's changes stay in the store and do not reach `/work`, and the `store-failed` banner says so (section 5). A run whose files the store kept but whose `/work` then cannot take the page's version, and a failed `sync`, leave `/work` out of step with the store: the worker is replaced (`crashed`, cause `folder`), and the run's result has no `store_error`. When the browser closes the database, the worker is replaced (`crashed`, cause `storage`). If another page deleted it ("Clear site data"), `/work` may hold files the store no longer has, which no row says, and the new worker's `mount` copies the store as it is now (empty, with what the page wrote since). If another page upgraded it to a newer version, this page still opens version 1, which fails (`VersionError`) in both threads: the start fails with reason `updated` ("Reload the page"). A database that cannot be opened (storage refused, some private modes) leaves nowhere to keep files. The page's own failure to list the store is not drawn (OQ-16). |
 
-**Tests step 2 must have** (Node with `fake-indexeddb` and the real `worker.ts`, unless "e2e"):
+**Tests step 2 must have** (Node with `fake-indexeddb` and the real `worker.ts`, unless "e2e"; the mirror alone, on a fake file
+system and store: `test/work-mirror.test.ts`):
 1. Store API: write, list, read, mkdir; rename and remove of a file and of a folder; a path that leaves the folder is refused;
    `list` reads no file bytes.
 2. No engine: every call works with no worker, while `mount` runs, and after a start that failed.
@@ -969,8 +988,6 @@ export const memory: ReadonlySignal<Memory | null>;      // run controller, afte
 export const files: ReadonlySignal<FileInfo[]>;          // file service, after every store change and every run
 export const fresh: ReadonlySignal<Set<string>>;         // file service: paths the last run created or changed (the "new" badge)
 export const persisted: ReadonlySignal<boolean | null>;  // file service, from storage.persist() and persisted()
-export const tabs: Signal<OpenTab[]>;            // editor tabs (4a); `dirty` only through setDirty(path, on) (the editor, 4b)
-export const activeTab: Signal<string | null>;   // editor tabs, and the file tree when it opens a file (4a, files/open.ts)
 export const split: Signal<boolean>;             // the Log head's Split and Unsplit; kept in localStorage
 export const outputTab: Signal<"log" | "graph" | "data" | "results" | "help">;   // the Output tablist; "log" only unsplit; Unsplit always shows it
 export const phoneTab: Signal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar; Run sets "log";
@@ -1009,8 +1026,15 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `engine`; `memory`, `log`, `lastRun`, `history`, `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`,
   `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`). The owner
   writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state.ts`), which only its owner imports (a
-  test checks it). The others stay writable by views: `graphIndex`, `graphFull`, `dialog`, `tabs`, `activeTab`, `split`,
+  test checks it). The others stay writable by views: `graphIndex`, `graphFull`, `dialog`, `split`,
   `outputTab`, `phoneTab`, `pickedVar`, `theme`, `layout`, `isolated`.
+- **The open tabs** are not in `state.ts`: `editor/documents.ts` keeps one record per tab (its path and its document,
+  or nothing for a .dta tab) and exports `tabs: ReadonlySignal<OpenTab[]>`, `activeTab: ReadonlySignal<string | null>`
+  and `selection` (the shown text tab's whole selected lines), all computed from the records; a tab's `dirty` is its
+  text against the store's, stored nowhere. Tabs change only through its functions (`addText`, `addDta`, `activate`,
+  `close`, `askClose`, `closeUnder`, `moved`, `retype`, `reload`, `ranOver`, `update`); it needs no view, and the
+  editor's view attaches to it when it mounts (`attachView`). The test hook's `state` has `tabs` and `activeTab` beside
+  the signals of `state.ts`.
 - **`ABOUT`** (`web/src/app/env.ts`) is compiled in: `dofile` (the version), `engine_commit` and `stata_version`. It is there
   from the first paint, with or without an engine; there is no `about` signal. `web/test/engine.test.ts` compares it with what
   `boot` answers.
@@ -1038,8 +1062,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     read ops (`ViewOp`: `describe`, `describe_file`, `matrix`, `macros`, `browse`, `memory`); views use `matrix` and
     `describe_file`. It raises no event, and rejects with kind `no-engine` with no worker and `reset` when a reset cut it.
     `drops()` lists the last 200 events that changed nothing (`{type, n?, row, why}`, `why` "stale" or "not-valid"). A second
-    `connectEngine` replaces the wiring: the machine, the queue, the timers and the drop record are cleared, and nothing of
-    the earlier wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
+    `connectEngine` replaces the wiring (one record: what it was given, the performer and the performer's handles: the Break
+    timer, the download and the graphics subscription): the old handles are released (the timer cleared, the download
+    aborted, the subscription ended), the machine, the queue and the drop record are cleared, and nothing of the earlier
+    wiring can act again. `FAILED[reason]` and `FAILED_TWICE` are the visitor's messages of a failed start
     (`UPDATED` is reason "updated"'s); `stageNow` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
@@ -1073,7 +1099,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`hasFiles`).
   - The page's one store: `web/src/app/store.ts`; views change files through it. It starts `blocked` and is unblocked
     once the tab lock is this tab's (`files.ts` `own()`).
-  - Helpers in `state.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `setDirty(path, on)`, `saved`
+  - Helpers in `state.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `saved`
     (localStorage); computed `isPhone` (the layout is the phone's: read it, never pass a `phone` prop) and `hasFiles`
     (the store has a file; folders do not count).
 - **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
@@ -1082,15 +1108,15 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
-    delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Writes `tabs`
-    (not `dirty`), `activeTab`, `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
+    delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Opens, closes,
+    renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
     a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
     `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
-    `editorCommands.open`, `reload`, `renamed`, `closed`, `save(path)` and `focus` (after a tab closes), `addFileGraph`,
+    `editor/documents.ts` `save(path)` and `editorCommands.focus` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
-    inline rename) calls `preventDefault()`. No tab can become dirty before 4b's
-    editor exists, so 4a's tests of the close-tab and reload paths call `setDirty(path, true)` themselves.
+    inline rename) calls `preventDefault()`. The Node tests of the close-tab and reload paths make
+    an edit with `editor/documents.ts` `update`, as the view would.
     **As built in step 4a:** the plain logic is in `files/tree.ts` (the rows: in each folder its folders first, then its
     files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
     with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
@@ -1101,7 +1127,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
     is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), both tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
-    its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
+    its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). A tab still open at the new name after a run deleted its file closes for the rename, or, with unsaved edits, the rename is refused as if the file were there. After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
     now selected, else the tree's row, else the editor; the close-tab dialog stays open while its Save writes the file,
     so the focus moves once there too. The commands built from a path (Import here, Load in 4c) come
     from `web/src/stata/quote.ts` `fileCommand` (3.11). The page's drop listeners are the window's, in the capture phase,
@@ -1121,13 +1147,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     data/?" / "The folder and its files exist only in this browser. This can't be undone."); an upload with files
     the store refused ("2 files uploaded · 1 failed", the pattern "N files uploaded · M failed"); the live region's "survey.xlsx can't be opened in the
     editor" and "Couldn't create the file", "Couldn't create the folder", "The upload failed". The rename's refusal from the store is "That name isn't allowed.", the same sentence as for `.` and `..` (`NAME_NOT_ALLOWED`).
-  - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands` and `selection`), `editor/RunControls.tsx`
+  - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands`), `editor/RunControls.tsx`
     (built for the section 5 states, each button at one size, 3.4; 4b adds the timers, and the pill's time goes into
     its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the
     timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px),
     `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
     `log/CommandLine.tsx` (`CommandLine`, `LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too,
-    `PhoneStrip`). Writes `dirty` only through `setDirty`, `banners` (`addBanner` for save-failed; `dismiss` for
+    `PhoneStrip`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
     save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
     Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
@@ -1163,7 +1189,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     Ctrl/Cmd+S saves once, and a held Ctrl/Cmd+Enter runs once; a Ctrl/Cmd+Enter that the engine does not take (run.ts
     `requestRun` answers it was refused, where the Run buttons are disabled) says why in a toast, in the words of the
     engine's state (`editor/words.ts` `refusedRunWords`, decided by the maintainer, plan's list A; nothing where the
-    press runs, `ready`, or does what "Start engine" does: `none`, `asking`, `declined`, `other-tab-idle`, and a `failed` start that can be tried again); with a dialog open it saves nothing (the browser's Save page is still kept away; C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast), and a Save pressed while a rename or a delete is being written waits for it, then writes under the new name or, for a deleted file, nothing; Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
+    press runs, `ready`, or does what "Start engine" does: `none`, `asking`, `declined`, `other-tab-idle`, and a `failed` start that can be tried again); with a dialog open it saves nothing (the browser's Save page is still kept away; C 8 of the plan's list); a failed save adds the banner `save-failed`, which a Save that works removes, and so does the editor taking the store's text again (`reload`: "Reload from the run", "Replace with uploaded"); a Save that answers after a rename of its tab follows the tab to its new name (its dot, its noted form, its banner, its toast), and a Save pressed while a rename or a delete is being written waits for it, then writes under the new name or, for a deleted file, nothing. **The Save rule: the later action wins.** A Save takes the tab's document when pressed; a reload (an upload's Replace, "Restore the sample" over the tab), "Reload from the run", or a run's text shown in the tab (the tab was clean) before its turn comes swaps in another document and cancels it: nothing is written, no answer and no banner, and it resolves false. This holds for a tab with unsaved edits too ("Reload from the run" is offered only for one). A run that keeps the tab's edits (the run-changed banner) swaps nothing, so a Save pressed before it still writes and replaces the run's version. A Save pressed while "Reload from the run" or a run's read of the tab waits on its store read is cancelled too: the read and what the tab does with it share a turn (`docs/design/workspace.md`, section 3), which comes before the Save's. A Save whose turn comes first writes, and the read then takes what it wrote. An upload's Replace takes a turn too: one whose turn comes before a pending Save's cancels it, and one that comes after finds the file changed and asks again (3.10's dialogs, "Name clash"). Save (and Ctrl/Cmd+S) is off unless the active tab is a text tab. The error
     mark keeps to its text when the tab is left and shown again. **The error mark's rule** (`editor/errormark.ts`, one
     place to change it; the joining agent's, for the maintainer to approve: `docs/phase2-history.md`, "Step 4: decisions and open questions", B 1): the mark belongs to the file's last run: set
     when a run of that file (whole or a selection) ends with an error on a line (not Break's rc 1); cleared when a new run
@@ -1171,7 +1197,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     clears every mark; a run the reset cut is `lastRun` again in the same step, rc 9998 with no line), and when the marked line is
     deleted; it moves with edits; a command from the command line and a run of another file leave it; it lives in the
     tab's editor state, so it goes when the tab closes (a file opened again has none) and stays with a renamed tab. **A run that
-    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `editorCommands.ranOver`; the decision
+    rewrites an open file** (files.ts `afterRun`, from the run's `files`, through `ranOver` of `editor/documents.ts`; the decision
     in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
     tab of a `\r\n` file follows a run as any other; Save keeps the file's form, noted when its text is read
     (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
@@ -1338,7 +1364,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     "Unpacking the engine", "Starting Python", "Loading your files", "Loading packages", "Starting the engine", "step N
     of M". OQ-18: "Browsers that work" goes to `/#browsers` (`BROWSERS_URL` in `states/banners.tsx`), the section
     step 5 built listing the browsers that run dofile, opened in a new tab. OQ-10, the
-    notes (`noteFor(rc, error)` in `words.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
+    notes (`noteFor(rc, error)` in `log/notes.ts`; 4b's log shows the note as a `.note` line after the run's text, under its
     error, where `error` is the error the run ended with, its last error line that is not `r(N);`, not one an earlier
     `capture noisily` caught: `log/classify.ts` `runError`): `restore` with nothing preserved (r(622);
     the engine prints only "nothing to restore") "Nothing was preserved. A run restores its data when it ends, so put preserve and restore in the same run."; a community command (the engine says "command reghdfe is unrecognized" with r(199), which the code matches, so the note shows; it may suggest a near name, "did you mean recode?") (r(199), `reghdfe`, `esttab`, `estout`, `outreg2`, `ivreg2`, `xtivreg2`, `ftools`, `winsor2`)
@@ -1371,16 +1397,15 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
     on a phone every view draws it (store-failed, download-failed, run-changed); the hidden views are `display: none`, so it is read and tabbed once.
-- **The editor's interface** (`editor/commands.ts`; no-op defaults until 4b's editor mounts, so 4a can call them first):
-  `runFile()`, `runSelection()`, `save(path?)` (resolves true once saved), `focus()`, and for 4a `open(path, text)` (a
-  text file was opened: its tab is in `tabs`), `reload(path, text)` (an upload replaced an open file, F 3.3: edits
-  dropped), `renamed(from, to)` (an open file was renamed or moved: the editor keeps text, edits and undo), `closed(path)`
-  (a tab closed, the close-tab dialog's "Don't save" too, or its file deleted: the state is dropped); for 4b's log and 4d
-  `goToLine(line, path?)`; for files.ts `ranOver(path, text)` (a run rewrote an open text file; `text` is null when the
-  run's version is not text; it answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on
-  "kept"). `reload` returns at once when the file has no tab or state. 4a changes `tabs` first, then calls these. `selection` is the editor's. The editor fills
-  `editorCommands` field by field when it mounts: call through the object (`editorCommands.save(path)`) and never
-  destructure it or keep a field, or the caller keeps the no-op.
+- **The editor's interface.** The tabs' documents are `editor/documents.ts`'s, which needs no view: `addText(path, text)`
+  (a text file was opened), `reload(path, text)` (an upload replaced an open file, F 3.3: edits dropped), `moved(from,
+  to)` (an open file or a folder was renamed or moved: the tabs keep text, edits and undo), `retype(path, text?)` (a
+  rename changed how a tab opens), `close(path)` (a tab closed, the close-tab dialog's "Don't save" too, or its file
+  deleted), `ranOver(path, text)` (a run rewrote an open text file; `text` is null when the run's version is not text; it
+  answers "same", "shown" or "kept", and files.ts adds the banner `run-changed` on "kept"), `save(path?)` (resolves true
+  once written; the Save rule is in 4b). `reload` does nothing when the file has no text tab. What needs the mounted view is `editor/commands.ts` (no-op defaults until the editor mounts):
+  `runFile()`, `runSelection()`, `focus()`, and for 4b's log and 4d `goToLine(line, path?)`. The editor fills
+  `editorCommands` field by field when it mounts: call through the object (`editorCommands.runFile(path)`) and never destructure it or keep a field, or the caller keeps the no-op.
 - **Slots in `App.tsx`.** `FileBar` above the editor; the editor sits in `.editor-slot`, hidden (never unmounted) while a
   `dta` tab shows `DtaView`; `FullSize` once, after `main`; on a phone the Log head is hidden, so its actions are in the strip's "Log ⋯"
   button through `logMenuItems()` (its "Clear log…" asks first) while the Log view is shown (the phone's top bar, `PhoneTopBar` in `App.tsx`, which also
@@ -1567,7 +1592,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   7. The domain is new, so no tab of an older build is open on it. The one-origin build was deployed before, at the `dofile`
      Worker's workers.dev address (the editor under `/app/`): that address now serves the landing page, and files kept there
      stay with that origin (`docs/deploying.md`, section 6).
-- **One setting: `web/scripts/urls.ts`.** `EDITOR_BASE` (`/`; or `DOFILE_EDITOR_BASE`) is the editor's Vite `base`; the folders
+- **One setting: `web/scripts/urls.ts`.** The editor's Vite `base` is `/`; the folders
   are `EDITOR_OUT` (`dist/app/`) and `SITE_OUT` (`dist/site/`), which the Wrangler configs spell (a test compares them);
   `EDITOR_URL` is what the static pages link to; `SITE_URL` is the landing page, from the editor. A build has no default for
   them and refuses to start without one of: `DOFILE_URLS=production` (`https://dofile.dev/` and `https://app.dofile.dev/`:
@@ -1576,7 +1601,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   build, and what `npm run preview` serves); or both `DOFILE_SITE_URL` and `DOFILE_EDITOR_URL` (a pull request preview, set to
   its two `workers.dev` addresses; `npm run cf:dev`). Both URLs must end in `/` (the file throws otherwise: the editor joins
   `commands/` and `#browsers` to the landing page's). The dev servers need none (`DEV_EDITOR_PORT`, `DEV_SITE_PORT`). `vite.config.ts`, `playwright.config.ts`,
-  `e2e/global-setup.ts`, `scripts/start-files.ts` and `scripts/measure-startup.ts` read it; the tests compare with the setting.
+  `e2e/global-setup.ts`, `scripts/start-files.ts` and `tools/measure-startup.ts` read it; the tests compare with the setting.
   `e2e/global-setup.ts` fails with a message when the servers serve another build, or one made for other addresses (the page's
   link to the editor, and the editor's script, are checked for the local origins). `test/site.test.ts` fails if another
   source (`.ts`, `.tsx`, `.mjs`, `.html`, `.css`, `.json`), script, e2e test, config, page or workflow spells the editor's old path
@@ -1584,7 +1609,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   from pieces, `"/" + "app"`, is not caught: never write one), and checks the two Wrangler configs (names, folders, domains,
   `workers_dev`, `html_handling`, `not_found_handling`) against the file.
   **The steps of the move** (done; the exact list the builder followed):
-  1. The editor: `vite build` (`DOFILE_EDITOR_BASE` `/`) into `dist/app/`: the editor at the folder's root, its
+  1. The editor: `vite build` into `dist/app/`: the editor at the folder's root, its
      `start-files.json`, and its own `_headers` with every path isolated (`/*`). Vite empties the folder first.
   2. The static pages: `vite build --mode site` into `dist/site/`. The download size comes from the editor's list
      (`DOFILE_EDITOR_DIR`, default `dist/app/`); no `_headers` (the editor is elsewhere, and the pages need none). The site's
@@ -1598,8 +1623,8 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   4. The e2e setup serves the two folders on two ports (`vite preview --mode site` and `vite preview`; Playwright's `baseURL` is
      the editor's origin, and the specs spell the site's: `LOCAL_SITE_URL`); the tests that cross between the pages compare whole
      addresses, since `/` is a path of both origins. The theme test records that the choice is per origin.
-  5. The dev server is the editor's at `/`; the static pages are another site's and are not served in dev (their middleware stays
-     for an `EDITOR_BASE` other than `/`, a one-origin layout the scripts and the e2e tests no longer build: see "Builds").
+  5. The dev server is the editor's at `/`; the static pages are another site's and are not served in dev (the one-origin layout, the
+     editor under a path with the pages at `/`, is gone: see "Builds").
      Since then `npm run dev` starts the pages' own dev server too (`vite --mode site`, port 5174, the same middleware at `/`),
      and each server links to the other at the page's own host name on the other's port.
   What does not follow the editor to a new origin, because the browser keeps it per origin: the visitors' files (IndexedDB
@@ -1617,10 +1642,7 @@ questions" (`docs/phase2-history.md`); the first real deploy's checks are below,
   Both builds take their folder from Vite's resolved `build.outDir`, so `--outDir` moves the whole output, `start-files.json`
   included. `vite preview` serves the editor's folder (every path isolated, as its `_headers` says; `/index.html` redirected) and,
   with `--mode site`, the pages' (the folder redirects, no isolation), each as its Worker does. The editor's dev server
-  (base `/`, port 5173) is one of the two `npm run dev` starts; the pages' (`vite --mode site`, port 5174) is the other. With
-  `EDITOR_BASE` another path the editor's also serves the pages at `/` and `/commands/` (a middleware; their scripts are
-  then served from under the base, a dev-only detail), which is the layout of step 5 (the editor under `/app/` on the site's
-  origin) and is not exercised since the split.
+  (base `/`, port 5173) is one of the two `npm run dev` starts; the pages' (`vite --mode site`, port 5174) is the other.
 - **Files.** `web/landing.html`, `web/commands.html`; `web/src/site/` (`site.css`, the one stylesheet of these two pages, which
   the editor does not load; `site.ts`, the theme button and the Copy buttons, shared; `theme.ts`, the theme button's words,
   the editor's (a test compares them); `landing.ts`; `commands.ts` and `filter.ts`, the filter). These import nothing but

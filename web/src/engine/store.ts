@@ -33,6 +33,26 @@ export const DB_NAME = "dofile";
 const HIDDEN = ".dofile"; // never listed, copied or zipped
 const ALL = ["info", "data", "pending"];
 
+/** The name of the error a change rejects with when the store does not hold what the caller expected: a name taken
+ *  (`rename`'s `to`, `write` expecting "absent") or a file changed since it was read (`write` expecting its info). The
+ *  page decides from the name, never from the text. */
+export const CONFLICT = "StoreConflict";
+
+/** What `write` expects at its path: "absent" (no file or folder), or the file as it was read. Two writes of one path never
+ *  share an mtime (`write` moves it on by 1 ms when the clock has not), so the size and mtime tell them apart. */
+export type Expect = "absent" | Pick<FileInfo, "size" | "mtime">;
+
+export class StoreConflict extends Error {
+  declare now: FileInfo | null; // what the store holds at the path
+  constructor(message: string, now: FileInfo | null) {
+    super(message);
+    this.name = CONFLICT;
+    this.now = now;
+  }
+}
+
+export const isConflict = (e: unknown): e is StoreConflict => (e as Error | null)?.name === CONFLICT;
+
 /** Throws unless `path` is inside the working folder: relative, with "/", no "..", not in the hidden folder. */
 export function cleanPath(path: string): string {
   const parts = typeof path === "string" ? path.split("/") : [""];
@@ -171,7 +191,7 @@ export class FileStore {
   /** A change made by the page: the records and, when a worker is live, a `pending` row in one transaction; then
    *  `sync`. Changes apply in the order called: `tx` makes its transaction right after the shared `opened` promise, and
    *  IndexedDB runs readwrite transactions over the same stores in the order made (a write called before a rename is
-   *  moved by it; the page's Save relies on that: app/files/actions.ts fileTurn). */
+   *  moved by it; the page's Save relies on that: app/files/turns.ts fileTurn). */
   async change<T>(row: PendingRow, fn: (t: IDBTransaction) => T | Promise<T>): Promise<T> {
     if (this.blocked) throw new Error("dofile is open in another tab");
     const sync = this.sync;
@@ -204,17 +224,40 @@ export class FileStore {
     return new Uint8Array(bytes);
   }
 
-  async write(path: string, data: Uint8Array): Promise<FileInfo> {
+  /** Rejects with a StoreConflict, writing nothing, when the path does not hold what `expect` says (checked in the
+   *  write's transaction). */
+  async write(path: string, data: Uint8Array, expect?: Expect): Promise<FileInfo> {
     cleanPath(path);
     const bytes = exact(data); // only the view's bytes, not the whole buffer under it
-    const info: FileInfo = { path, dir: false, size: bytes.byteLength, mtime: Date.now() };
-    await this.change({ op: "write", path }, async (t) => {
+    return this.change({ op: "write", path }, async (t) => {
       await makeParents(t, path);
-      if ((await req(t.objectStore("info").get(path)))?.dir) throw new Error(`${path} is a folder`);
+      const old: FileInfo | undefined = await req(t.objectStore("info").get(path));
+      if (expect === "absent" && old) throw new StoreConflict(`${path} already exists`, old);
+      if (
+        expect !== undefined &&
+        expect !== "absent" &&
+        (old?.dir !== false || old.size !== expect.size || old.mtime !== expect.mtime)
+      )
+        throw new StoreConflict(`${path} changed since it was read`, old ?? null);
+      if (old?.dir) throw new Error(`${path} is a folder`);
+      const info: FileInfo = {
+        path,
+        dir: false,
+        size: bytes.byteLength,
+        mtime: Math.max(Date.now(), (old?.mtime ?? 0) + 1),
+      };
       t.objectStore("info").put(info);
       t.objectStore("data").put(bytes, path);
+      return info;
     });
-    return info;
+  }
+
+  /** The record of `path`, a file or a folder; null when there is none. */
+  async info(path: string): Promise<FileInfo | null> {
+    cleanPath(path);
+    return (
+      (await this.tx(["info"], "readonly", (t) => req<FileInfo | undefined>(t.objectStore("info").get(path)))) ?? null
+    );
   }
 
   async mkdir(path: string): Promise<void> {
@@ -233,7 +276,8 @@ export class FileStore {
         data = t.objectStore("data");
       const old: FileInfo | undefined = await req(info.get(from));
       if (!old) throw new Error(`no such file: ${from}`);
-      if (await req(info.get(to))) throw new Error(`${to} already exists`);
+      const there: FileInfo | undefined = await req(info.get(to));
+      if (there) throw new StoreConflict(`${to} already exists`, there);
       await makeParents(t, to);
       for (const i of [old, ...(old.dir ? await req<FileInfo[]>(info.getAll(under(from))) : [])]) {
         const dest = to + i.path.slice(from.length);

@@ -1132,7 +1132,7 @@ input.filter::placeholder {
   width: 44px;
   justify-content: center;
 }
-@container (max-width: 340px) {
+@container (max-width: 420px) {
   .phone-strip .strip-word {
     display: none;
   }

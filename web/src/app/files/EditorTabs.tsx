@@ -1,14 +1,14 @@
 // The editor's tabs (docs/design/SPEC.md, section 3.2) in the Editor pane's head, and the phone's file switcher
-// (FileSwitcher). Ctrl/Cmd+W is the browser's: not bound. `dirty` is the editor's (state.ts setDirty).
+// (FileSwitcher). Ctrl/Cmd+W is the browser's: not bound. The tabs are editor/documents.ts's.
 import { signal } from "@preact/signals";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { editorCommands } from "../editor/commands.ts";
-import { activeTab, phoneTab, tabs } from "../state.ts";
+import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
+import { phoneTab } from "../state.ts";
 import type { OpenTab } from "../types.ts";
 import { fromNothing, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
-import { askCloseTab } from "./actions.ts";
 import { focusTree, treeShown } from "./FilesPane";
 import { baseName, tabLabels } from "./tree.ts";
 
@@ -44,10 +44,10 @@ export function EditorTabs() {
   const at = list.findIndex((t) => t.path === activeTab.value);
   const select = (i: number) => {
     tabAsked.value = list[i].path;
-    activeTab.value = list[i].path;
+    activate(list[i].path);
   };
   const close = (path: string, keyboard: boolean) => {
-    if (askCloseTab(path) && keyboard) focusAfterClose();
+    if (askClose(path) && keyboard) focusAfterClose();
   };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back
@@ -107,7 +107,7 @@ function FileTab({
       tabIndex={i === at || (at < 0 && i === 0) ? 0 : -1}
       title={t.path}
       onClick={() => {
-        activeTab.value = t.path;
+        activate(t.path);
       }}
       onAuxClick={(e) => {
         if (e.button === 1) close(t.path, false); // the middle button, as browsers' own tabs
@@ -141,7 +141,7 @@ const switcherItems = (): MenuItem[] => {
       label: "Save",
       disabled: tabs.value.find((t) => t.path === active)?.kind !== "text", // as the toolbar's Save
       onSelect: () => {
-        editorCommands.save();
+        save();
       },
     },
     "rule",
@@ -158,13 +158,13 @@ const switcherItems = (): MenuItem[] => {
           hint: t.path === active ? "open" : undefined,
           current: t.path === active,
           onSelect: () => {
-            activeTab.value = t.path;
+            activate(t.path);
           },
         }),
       ),
     },
     ...(list.length ? ["rule" as const] : []),
-    ...(active ? [{ label: `Close ${baseName(active)}`, onSelect: () => askCloseTab(active) }] : []),
+    ...(active ? [{ label: `Close ${baseName(active)}`, onSelect: () => askClose(active) }] : []),
     {
       label: "Show all files",
       onSelect: () => {

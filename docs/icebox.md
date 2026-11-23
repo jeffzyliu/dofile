@@ -232,3 +232,13 @@ estimated splits) are the study's, not checked again here.
   "in memory" uses binary ones (`binarySize`): a file of 1,048,576 bytes reads "1.0 MB" in the tree and "1 MB" in Data
   (06-F14). C4 put the formatters in `app/bytes.ts` and kept each unit, because it changes no visitor-facing text. Left
   for the maintainer to decide whether to unify them, and on which unit, since it changes what visitors read. 2026-11-17.
+
+## Web audit phase 2: left by the moves (added 2026-11-22)
+
+- **`web/src/engine/snapshot.ts` mixes the build-only helpers with the runtime codec (02-F13).** `makeOptions`,
+  `makeSnapshot`, the `zero*` pair, `bundle`, `packGraphics` and `isDeadWeight` share a module with the runtime codec and
+  the page's Cache helpers, and some size checks are written twice. The build-only helpers are imported only by
+  `scripts/make-snapshot.ts` and `test/snapshot.test.ts`. Left because it is not graphics state, so R1 does not need it,
+  and the runtime half (`hasNativeBrotli`, `inflateNative`, `unpackSteps`, `writeGraphics`) is imported by `worker.ts`'s
+  graphics section, which R1 owns: a split must not run while that section changes. Taken by W1 (the sweep of
+  `src/engine/`) after R1. 2026-11-22.

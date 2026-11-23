@@ -5,7 +5,8 @@ import "./styles/app.css";
 import { effect } from "@preact/signals";
 import { render } from "preact";
 import { App } from "./app/App";
-import { selection } from "./app/editor/commands.ts";
+import { activeTab, selection, tabs } from "./app/editor/documents.ts";
+import { documentSeeds } from "./app/editor/seeds.ts";
 import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
 import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
 import { focusWanted } from "./app/files/FilesPane.tsx";
@@ -58,7 +59,7 @@ effect(() => {
   document.documentElement.dataset.engine = S.engine.value.s;
 });
 addEventListener("beforeunload", (e) => {
-  if (S.tabs.value.some((t) => t.dirty)) e.preventDefault();
+  if (tabs.value.some((t) => t.dirty)) e.preventDefault();
 });
 
 connectFiles(store);
@@ -73,7 +74,8 @@ const testHook = {
   start,
   persisted: () => S.persisted.value,
   engineBytes: S.engineBytes,
-  state: S,
+  state: { ...S, tabs, activeTab }, // one object: the signals, and the tabs from their owner
+  documents: documentSeeds,
   run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
   breakRun,
   reset,

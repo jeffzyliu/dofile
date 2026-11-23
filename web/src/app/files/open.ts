@@ -1,21 +1,10 @@
 // Opening a file (docs/design/SPEC.md, section 3.11): every way to open one (the tree, the phone's file switcher, "Go
 // to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
-import { editorCommands } from "../editor/commands.ts";
+import { activate, addDta, addText, tabs } from "../editor/documents.ts";
 import { addFileGraph } from "../graphs.ts";
-import {
-  activeTab,
-  addBanner,
-  banners,
-  dismiss,
-  graphFull,
-  isPhone,
-  outputTab,
-  phoneTab,
-  say,
-  tabs,
-} from "../state.ts";
-import { store } from "../store.ts";
+import { addBanner, banners, dismiss, graphFull, isPhone, outputTab, phoneTab, say, showToast } from "../state.ts";
 import { baseName, extOf } from "./tree.ts";
+import { fileTurn } from "./turns.ts";
 
 /** A file's text when its bytes are strict UTF-8, else null: the editor would change such a file, so it is not opened
  *  as text. A leading BOM is dropped, or with `keepBom` kept as "\uFEFF": the editor's text is decoded so
@@ -37,42 +26,52 @@ export function toBase64(bytes: Uint8Array): string {
 
 /** Make `path` the active tab; on a phone show the Editor view. */
 function show(path: string) {
-  activeTab.value = path;
+  activate(path);
   if (isPhone.value) phoneTab.value = "editor";
 }
 
-/** Open `path` from the store as section 3.11 says: `tabs` first, then the editor. Resolves once it is shown; a file
- *  the store cannot read (deleted meanwhile) opens nothing, and the reason goes to the console. A file that is not
+/** Open `path` from the store as section 3.11 says. Resolves once it is shown; a file
+ *  the store cannot read (deleted meanwhile) opens nothing: a toast says so, and the reason goes to the console. A file that is not
  *  text, .dta or .png gets no tab but the not-text banner (one at a time: an earlier file's goes). */
 export async function openFile(path: string): Promise<void> {
   if (tabs.value.some((t) => t.path === path)) return show(path);
   const ext = extOf(path);
   if (ext === ".dta") {
-    tabs.value = [...tabs.value, { path, kind: "dta", dirty: false }];
+    addDta(path);
     return show(path);
   }
-  let bytes: Uint8Array;
-  try {
-    bytes = await store.read(path);
-  } catch (e) {
-    console.warn(`[dofile] open ${path}: ${(e as Error)?.message ?? e}`);
-    return;
-  }
-  if (ext === ".png") {
-    addFileGraph(path, toBase64(bytes));
-    if (isPhone.value) graphFull.value = true;
-    else outputTab.value = "graph";
-    return;
-  }
-  const text = decodeText(bytes, true);
+  // the read and the tab in one turn: an upload's Replace of the file comes wholly before it or after it (and reloads
+  // the tab), so the tab never keeps bytes the store has replaced
+  return fileTurn(function* (io) {
+    let bytes: Uint8Array;
+    try {
+      bytes = yield* io.read(path);
+    } catch (e) {
+      console.warn(`[dofile] open ${path}: ${(e as Error)?.message ?? e}`);
+      showToast(`Couldn't open ${baseName(path)}: the file is gone.`, "error");
+      return;
+    }
+    if (ext === ".png") {
+      addFileGraph(path, toBase64(bytes));
+      if (isPhone.value) graphFull.value = true;
+      else outputTab.value = "graph";
+      return;
+    }
+    const text = decodeText(bytes, true);
+    noteNotText(path, text);
+    if (text === null) return;
+    if (tabs.value.some((t) => t.path === path)) return show(path); // opened twice at once: the first one won
+    addText(path, text);
+    show(path);
+  });
+}
+
+/** A file is opened as text (`text`) or cannot be (null): the not-text banner of an earlier file goes, and one comes
+ *  for `path` when it is not text. */
+export function noteNotText(path: string, text: string | null): void {
   for (const b of banners.value) if (b.b === "not-text") dismiss(b);
   if (text === null) {
     addBanner({ b: "not-text", path });
     say(`${baseName(path)} can't be opened in the editor`); // the banner has no role: the focus stays in the tree
-    return;
   }
-  if (tabs.value.some((t) => t.path === path)) return show(path); // opened twice at once: the first one won
-  tabs.value = [...tabs.value, { path, kind: "text", dirty: false }];
-  show(path);
-  editorCommands.open(path, text);
 }

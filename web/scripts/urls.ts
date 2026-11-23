@@ -2,7 +2,7 @@
 //
 // The site is two origins, built into two folders and deployed as two Workers (wrangler.jsonc, wrangler.app.jsonc):
 //   dist/site/   the landing and commands pages, at https://dofile.dev/
-//   dist/app/    the editor, at the root of https://app.dofile.dev/ (EDITOR_BASE "/", every path cross-origin isolated)
+//   dist/app/    the editor, at the root of https://app.dofile.dev/ (every path cross-origin isolated)
 // `npm run build` makes both. The two URLs they link each other by come from the environment, and a build refuses to
 // start without them (no default, so nothing builds for production by accident). One of:
 //   DOFILE_URLS=production   the production addresses (below): what deploy.yml and `npm run deploy` build
@@ -10,8 +10,7 @@
 //   DOFILE_SITE_URL=<the landing page's URL> DOFILE_EDITOR_URL=<the editor's URL>   both, each a whole URL ending in "/":
 //                            a preview deployment (two workers.dev addresses), `npm run cf:dev`
 // An empty value counts as unset. The dev servers need none: each finds the other at the page's own host name on the
-// other's port (DEV_SITE_PORT, DEV_EDITOR_PORT). DOFILE_EDITOR_BASE moves the editor to a path (it is "/" at its own
-// origin).
+// other's port (DEV_SITE_PORT, DEV_EDITOR_PORT).
 
 /** The production addresses: what DOFILE_URLS=production links to. */
 export const PRODUCTION_SITE_URL = "https://dofile.dev/";
@@ -38,10 +37,6 @@ export function devURL(host: string, port: number): string {
 /** The two build folders, from web/ (the Wrangler configs' `assets.directory` spell them: a test compares). */
 export const SITE_OUT = "dist/site";
 export const EDITOR_OUT = "dist/app";
-
-/** The editor's path on its origin, with a slash at each end: Vite's `base` for the editor's build and dev server. */
-export const EDITOR_BASE = process.env.DOFILE_EDITOR_BASE ?? "/";
-if (!/^\/(.*\/)?$/.test(EDITOR_BASE)) throw new Error(`EDITOR_BASE must start and end with "/": ${EDITOR_BASE}`);
 
 const env = (name: string) => process.env[name] || undefined; // empty: unset
 const urls = env("DOFILE_URLS"),

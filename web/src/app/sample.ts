@@ -4,6 +4,7 @@
 
 import { upload } from "./files/actions.ts";
 import { openFile } from "./files/open.ts";
+import { fileTurn } from "./files/turns.ts";
 import { SAMPLE } from "./sample-files.ts";
 import { saved, showToast } from "./state.ts";
 import { store } from "./store.ts";
@@ -23,9 +24,14 @@ export const sampleFiles = (): { path: string; bytes: Uint8Array }[] =>
     bytes: f.base64 !== undefined ? decode(f.base64) : new TextEncoder().encode(f.text),
   }));
 
-/** The first visit's write of the sample's files. */
-async function put() {
-  for (const f of sampleFiles()) await store.write(f.path, f.bytes);
+/** The first visit's write of the sample's files, in one turn with the list that finds the store empty: false, writing
+ *  nothing, when it is not. */
+async function put(): Promise<boolean> {
+  return fileTurn(function* (io) {
+    if ((yield* io.list()).length) return false;
+    for (const f of sampleFiles()) yield* io.write(f.path, f.bytes, "absent");
+    return true;
+  });
 }
 
 /** On a first visit, write the sample into an empty store and open its main do-file. A first visit is the localStorage
@@ -39,11 +45,10 @@ export async function seedSample(): Promise<boolean> {
     const q = new URLSearchParams(globalThis.location.search);
     if (q.has("test") && !q.has("sample")) return false;
     if (saved.get(MARK) || store.blocked) return false;
-    if ((await store.list()).length) {
+    if (!(await put())) {
       saved.set(MARK, "1"); // the visitor has files of their own: never the sample
       return false;
     }
-    await put();
     // only once it is all there: a seed cut short is tried again on a later visit to an empty store
     saved.set(MARK, "1");
     await openFile(SAMPLE_MAIN);

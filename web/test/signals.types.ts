@@ -14,8 +14,6 @@ export type OnlyTheViewsOwnSignalsAreWritable = Expect<
   Same<
     WritableSignals,
     | "dialog"
-    | "tabs"
-    | "activeTab"
     | "split"
     | "outputTab"
     | "phoneTab"

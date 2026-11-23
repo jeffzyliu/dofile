@@ -78,6 +78,11 @@ export type FromWorker =
 /** Where the worker's copy of the file store failed: "open" (the storage did not open, or could not be read), "copy"
  *  (it was read, but the files could not be written into /work). */
 export type StoreCause = "open" | "copy";
+/** An error as the worker tells the page: `type` is the Python exception class of a PythonError. An op's error answer
+ *  carries it as {id, error: message, name, type?}. */
+export type PageError = { message: string; name: string; type?: string };
+/** Why the worker has no file store, and what the error was. */
+export type StoreError = PageError & { cause: StoreCause };
 
 /** The dofile wheel, or one of the extra wheels: a URL, or its name and bytes. */
 export type Wheel = string | { name: string; bytes: Uint8Array };
@@ -86,8 +91,8 @@ export type BootArgs = {
   wheel: Wheel;
   extraWheels?: Wheel[];
   interruptBuffer?: Int32Array | null;
-  /** A lazy snapshot's graphics part. `sab`: Int32 [state 0 pending, 1 landed, 2 failed; byte count; tries: the page's
-   *  fetches of it; 0], then from PART_HEADER the compressed part or the reason; null: the worker fetches it itself. */
+  /** A lazy snapshot's graphics part. `sab`: the buffer the page hands it over in (layout: lazy-part.ts); null: the
+   *  worker fetches it itself. */
   graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null };
 };
 
@@ -127,7 +132,7 @@ export interface Startup {
   notCached?: string[]; // snapshot
   runtimeS?: number;
   packagesS?: number; // normal
-  storeError?: { name: string; message: string; cause: StoreCause }; // the worker has no store; /work started empty
+  storeError?: StoreError; // the worker has no store; /work started empty
 }
 
 export interface FileInfo {
@@ -311,6 +316,11 @@ export interface SnapshotManifest {
   extraWheels: Record<string, string>;
   pyodide: string;
   built: number;
+  /** The build's settings (scripts/build-id.ts, SnapshotKnobs): PYTHONOPTIMIZE, Brotli quality, no matplotlib in the heap,
+   *  Pyodide's trampoline kept. Optional in the type: a manifest from before they were recorded has none of the last three. */
   optimize: 0 | 2;
+  quality?: number;
+  noMpl?: boolean;
+  trampoline?: boolean;
   files: SnapshotFiles;
 }

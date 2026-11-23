@@ -58,6 +58,8 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 
 export const S = await import("../src/app/state.ts");
+/** The open tabs and their documents. */
+export const D = await import("../src/app/editor/documents.ts");
 export const engine = await import("../src/app/engine.ts");
 export const { runCode, runCommand, clearLog, canClearLog, moreRows, handlers } = await import("../src/app/run.ts");
 export const { addFileGraph, MAX_GRAPHS } = await import("../src/app/graphs.ts");
@@ -202,7 +204,7 @@ export class FakeTransport implements Reader, Lifecycle, Builds {
     this.interrupted.push(n);
   }
 
-  query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
+  async query<K extends keyof ReadOps>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
     this.calls.push([op, args]);
     if (!this.live) return Promise.reject(failure("the engine is not running", { kind: "no-engine" }));
     const answer = this.hold ? later() : Promise.resolve({ op });
@@ -309,6 +311,7 @@ export function resetState() {
   handlers.engineGone(); // the controllers' own state: the count of the session's runs, what the old engine left
   for (const [name, signal] of writables) signal.value = structuredClone(initial.get(name));
   S.holdToast(true); // no toast timer left over
+  for (const t of D.tabs.value) D.close(t.path);
   clearLog();
 }
 

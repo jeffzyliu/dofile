@@ -3,20 +3,18 @@
 // The CPython side is `uv run python web/scripts/numeric_probe.py CASE tests_opendta/tools OUT.json`;
 // `uv run python web/scripts/compare_numeric.py CPY_DIR WASM_DIR` diffs the two number by number.
 
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPyodide } from "pyodide";
 import { installEngine } from "./install-engine.ts";
+import { arg, hasFlag } from "./lib/args.ts";
+import { repo } from "./lib/paths.ts";
+import { runChild, runShards } from "./lib/shards.ts";
 
-const args = process.argv.slice(2);
-const arg = <T>(name: string, fallback: T): string | T =>
-  args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
-const repo = fileURLToPath(new URL("../..", import.meta.url));
 const out = resolve(arg("--out", `${repo}/.dofile/numeric-wasm`));
 
-if (args.includes("--child")) {
+if (hasFlag("--child")) {
   const caseName = arg("--child", "");
   const py = await loadPyodide({ stdout: () => {}, stderr: () => {} });
   await py.loadPackage(["numpy", "scipy", "matplotlib"], { messageCallback: () => {} });
@@ -24,7 +22,7 @@ if (args.includes("--child")) {
   py.FS.mkdirTree("/od");
   py.FS.mount(py.FS.filesystems.NODEFS, { root: `${repo}/tests_opendta` }, "/od");
   py.FS.writeFile("/tmp/numeric_probe.py", readFileSync(`${repo}/web/scripts/numeric_probe.py`));
-  if (!args.includes("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
+  if (!hasFlag("--no-shim")) py.runPython("from dofile import linalgshim; linalgshim.install()");
   py.globals.set("CASE", caseName);
   py.runPython(
     `import sys; sys.path.insert(0, "/tmp"); import numeric_probe; numeric_probe.main(CASE, "/od/tools", "/tmp/result.json")`,
@@ -49,47 +47,21 @@ for (const c of cases)
 mkdirSync(out, { recursive: true });
 const t0 = performance.now(),
   timeouts: string[] = [],
-  missing: string[] = [],
-  queue = [...cases];
-const runOne = (c: string) =>
-  new Promise<void>((done) => {
-    const started = performance.now();
-    rmSync(`${out}/${c}.json`, { force: true }); // a result left by an earlier run would hide a crash
-    const child = spawn(
-      process.execPath,
-      [
-        fileURLToPath(import.meta.url),
-        "--child",
-        c,
-        "--out",
-        out,
-        ...(args.includes("--no-shim") ? ["--no-shim"] : []),
-      ],
-      { stdio: "ignore" },
-    );
-    const timer = setTimeout(() => {
-      timeouts.push(c);
-      child.kill("SIGKILL");
-    }, timeoutS * 1000);
-    child.on("exit", () => {
-      clearTimeout(timer);
-      if (!existsSync(`${out}/${c}.json`)) missing.push(c);
-      if (timeouts.includes(c) || !existsSync(`${out}/${c}.json`))
-        console.log(
-          `${timeouts.includes(c) ? "TIMEOUT" : "no result"} ${c} (${((performance.now() - started) / 1000).toFixed(0)} s)`,
-        );
-      done();
-    });
-  });
-await Promise.all(
-  Array.from({ length: shards }, async () => {
-    for (;;) {
-      const c = queue.shift();
-      if (!c) break;
-      await runOne(c);
-    }
-  }),
-);
+  missing: string[] = [];
+const runOne = async (c: string) => {
+  const started = performance.now();
+  rmSync(`${out}/${c}.json`, { force: true }); // a result left by an earlier run would hide a crash
+  const { timedOut } = await runChild(
+    fileURLToPath(import.meta.url),
+    ["--child", c, "--out", out, ...(hasFlag("--no-shim") ? ["--no-shim"] : [])],
+    { limitS: timeoutS },
+  );
+  if (timedOut) timeouts.push(c);
+  if (!existsSync(`${out}/${c}.json`)) missing.push(c);
+  if (timedOut || !existsSync(`${out}/${c}.json`))
+    console.log(`${timedOut ? "TIMEOUT" : "no result"} ${c} (${((performance.now() - started) / 1000).toFixed(0)} s)`);
+};
+await runShards(cases, shards, runOne);
 console.log(
   `\n${((performance.now() - t0) / 1000).toFixed(0)} s: ${cases.length} cases, ${timeouts.length} timed out, ${missing.length} without a result`,
 );

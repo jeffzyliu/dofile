@@ -8,6 +8,7 @@
 // what streamed in stays, with the reason as a note.
 
 import type { BrowseRows, ClientError, RunResult } from "../engine/types.ts";
+import { tabs } from "./editor/documents.ts";
 import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
 import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
@@ -48,7 +49,7 @@ export function requestRun(code: string, head: RunHead): Requested {
 }
 
 /** Run `code` as `head` says (SPEC section 4). Resolves with the result, or null when it did not run. */
-export function runCode(code: string, head: RunHead): Promise<RunResult | null> {
+export async function runCode(code: string, head: RunHead): Promise<RunResult | null> {
   return requestRun(code, head).done;
 }
 
@@ -71,7 +72,7 @@ function began(head: RunHead, theme: "light" | "dark") {
   const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.value === 0 }];
   // now, not after the run: a reset that cuts it starts the count again, and the next run is first
   W.engineRuns.value++;
-  const unsaved = S.tabs.value.filter((t) => t.dirty).map((t) => t.path); // for the note under a nested do
+  const unsaved = tabs.value.filter((t) => t.dirty).map((t) => t.path); // for the note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
   S.say("Run started");
   let done!: (result: RunResult) => void;
@@ -94,11 +95,15 @@ function ended(r: RunResult) {
   const run = current;
   if (!run) return;
   current = null;
-  const { id, head } = run,
+  const { id } = run,
     seconds = (performance.now() - run.t0) / 1000;
   const own = engine.fromClient(r); // no log of its own
   const reset = own && r.kind !== "run-failed"; // the engine is gone (or another tab has it); run-failed keeps it
 
+  // a rename during the run moved the log's run head (state.ts runMoved), not `run.head`
+  const at = W.log.value.findIndex((i) => i.t === "text" && i.run === id),
+    shown = W.log.value[at - 1],
+    head = shown?.t === "runhead" ? shown.run : run.head;
   const offset = head.kind === "selection" && head.lines ? head.lines[0] - 1 : 0;
   const line = r.error_line == null ? null : r.error_line + offset;
   const end: LastRun = { ...head, rc: r.rc, line, seconds };

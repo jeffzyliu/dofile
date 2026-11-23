@@ -3,12 +3,12 @@
 // answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
-import { editorCommands } from "../editor/commands.ts";
+import { close as closeTab, save as saveTab } from "../editor/documents.ts";
 import { refresh } from "../files.ts";
 import { dialog, files } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
-import { answerClash, type ClashAnswer, clashNow, closeTab, deleteAll, deleteEntries, WORDS } from "./actions.ts";
+import { answerClash, type ClashAnswer, clashNow, deleteAll, deleteEntries, WORDS } from "./actions.ts";
 import { focusAfterClose } from "./EditorTabs";
 import { focusTree } from "./FilesPane";
 import { baseName, shortDate } from "./tree.ts";
@@ -50,7 +50,7 @@ export function ClashDialog({ dialog: d }: { dialog: DialogOf<"clash"> }) {
   return (
     <Dialog
       role="alertdialog"
-      title={words.title(d.path)}
+      title={facts?.changed ? words.changedTitle(d.path) : words.title(d.path)}
       describedBy="clash-question"
       onCancel={() => give("stop")}
       actions={
@@ -64,10 +64,10 @@ export function ClashDialog({ dialog: d }: { dialog: DialogOf<"clash"> }) {
         </>
       }
     >
-      <p id="clash-question">{words.question}</p>
+      <p id="clash-question">{facts?.changed ? words.changedQuestion : words.question}</p>
       {facts?.unsaved && <p>{baseName(d.path)} is open with unsaved edits; replacing it discards them.</p>}
       <p class="meta">
-        {facts && `Yours: ${formatSize(facts.yours.size)}, ${shortDate(facts.yours.mtime)} · `}
+        {facts?.yours && `Yours: ${formatSize(facts.yours.size)}, ${shortDate(facts.yours.mtime)} · `}
         {facts && `${words.theirs}: ${formatSize(facts.uploaded)} · `}
         {`clash ${d.index} of ${d.total}`}
         {others > 0 && ` · ${words.others(others)}`}.
@@ -155,7 +155,7 @@ export function CloseTabDialog({ dialog: d }: { dialog: DialogOf<"close-tab"> })
   const save = async () => {
     if (saving.current) return;
     saving.current = true;
-    const saved = await editorCommands.save(d.path);
+    const saved = await saveTab(d.path);
     if (dialog.value === d) close(); // not a dialog that replaced this one meanwhile
     if (saved) {
       closeTab(d.path);

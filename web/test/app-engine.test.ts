@@ -873,8 +873,8 @@ test("runCode while a run is on does nothing; with no engine a run is refused, s
   const refused = runCode("not kept", FILE);
   let settled = false;
   refused.then(() => (settled = true));
-  await Promise.resolve();
-  assert.equal(settled, true, "it settles at once: nothing waits for the engine");
+  for (let i = 0; i < 10; i++) await Promise.resolve(); // runCode is async: a few microtasks, and no timer or engine event
+  assert.equal(settled, true, "it settles without waiting for the engine");
   assert.equal(await refused, null);
   assert.equal(S.dialog.value, null, "a run opens no prompt");
   assert.equal(startEngine(), "prompt");
@@ -957,6 +957,20 @@ test("a reply of an earlier wiring does nothing: the first wiring's download com
   );
   assert.deepEqual(engine.drops(), [], "and it is not recorded: the drop record belongs to the new wiring");
   await begin(); // the new wiring's own download is taken
+});
+
+test("the download handle is the wiring's own: a second connectEngine aborts the first wiring's download, and the new wiring's Stop download aborts its own", async () => {
+  await load();
+  engine.start();
+  const first = client.dl;
+  await load(); // connectEngine and open() again
+  assert.equal(first.signal.aborted, true, "the first wiring's download is aborted when the wiring is replaced");
+  engine.start();
+  const own = client.dl;
+  assert.equal(own.signal.aborted, false);
+  engine.stopDownload();
+  assert.deepEqual(S.engine.value, { s: "declined" });
+  assert.equal(own.signal.aborted, true, "Stop download aborts the new wiring's download");
 });
 
 // A wrong ticket: the old download's reply is bound to its own ticket.

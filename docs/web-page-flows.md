@@ -181,7 +181,7 @@ sequenceDiagram
   D->>D: cleanup and microtask T2, opener 1 gets the focus
 ```
 
-T1 can also run before the upload goes on (after "Replace with uploaded" the upload first awaits `store.write`). Then
+T1 can also run before the upload goes on (the upload first awaits its turns: a Replace's write, and the next clash's read of its file). Then
 T1 gives the focus to opener 1, and clash 2 takes it as the active element: the same result.
 
 ### A dialog whose opener leaves the page (other-tab over the stopping banner)
@@ -248,15 +248,15 @@ sequenceDiagram
   participant D as ui/Dialog.tsx
   alt Save
     V->>CT: Save
-    CT->>Ed: await editorCommands.save(path), the dialog stays open
+    CT->>Ed: await documents.ts save(path), the dialog stays open
     Ed-->>CT: true
     CT->>CT: dialog = null
-    CT->>A: closeTab(path), tabs and activeTab, then editorCommands.closed
+    CT->>A: close(path) (editor/documents.ts): the record, the active tab, its banners
     CT->>ET: focusAfterClose(), closeAsked = true
   else Do not save
     V->>CT: Don't save
     CT->>CT: dialog = null
-    CT->>A: closeTab(path)
+    CT->>A: close(path)
     CT->>ET: focusAfterClose(), closeAsked = true
   end
   Note over D,ET: one microtask renders both, the dialog host first (shallower)
@@ -612,19 +612,23 @@ the line.
 
 ## 3. An open file's state in the editor
 
-The editor (`editor/Editor.tsx`) keeps, per open text tab, keyed by path:
+`editor/documents.ts` keeps one record per open tab (its path and its content: a text tab's document, or nothing for a
+.dta tab), with no DOM. A text tab's document has:
 
-- `states`: the `EditorState`. The shown one lives in the view and is copied back when the tab is hidden.
-- `savedText`: the store's text in the editor's form, or null when the store's version is not text.
-- `forms`: the noted line break and BOM.
-- `saving`: each Save in progress with the path its tab has now (`renamed` moves it, `closed` sets it to null), so a
-  Save that answers after a rename leaves its outcome on the renamed tab. A Save writes in its turn
-  (`files/actions.ts` `fileTurn`): a rename or a delete keeps the turn until the tabs have followed it, so a Save pressed
-  meanwhile writes under the new name, or nothing when its tab was closed; a Save's turn ends once its write is issued,
-  and the store applies changes in the order they are called, so a rename after it moves the bytes it wrote.
+- `state`: the `EditorState`, always current. While it is shown the view's changes reach it through `edited()`.
+- `saved`: the store's text in the editor's form, or null when the store's version is not text.
+- `form`: the noted line break and BOM.
+- `dirty`: computed, the text against `saved`; the unsaved dot in `tabs` is derived from it and stored nowhere.
 
-`tabs[].dirty` (the unsaved dot) is written only through `state.ts` `setDirty`. The file code (`files/open.ts`,
-`files/actions.ts`) changes `tabs` and `activeTab` first, then calls the editor through `editorCommands`.
+A reload, a rename's retype and a run's text shown put a new document in the record; a close drops the record. Save
+(`documents.ts` `save`) holds the record and the document it took when pressed: it writes under the record's path when
+its turn comes, so a Save that answers after a rename leaves its outcome on the renamed tab, and it writes nothing (and
+applies no answer) when the record was closed or holds another document by then (the Save rule: the later action wins,
+SPEC 4b). A Save writes in its turn (`files/turns.ts` `fileTurn`): a rename or a delete keeps the turn until the tabs have followed
+it, so a Save pressed meanwhile writes under the new name, or nothing when its tab was closed; a Save's turn ends once
+its write is issued, and the store applies changes in the order they are called, so a rename after it moves the bytes it
+wrote. The file code (`files/open.ts`, `files/actions.ts`, `files.ts`) calls the owner's functions; the view attaches to
+it when the Editor mounts (`attachView`).
 
 ### The three text forms
 
@@ -656,15 +660,16 @@ flowchart LR
 
 | Event | Editor's text | Saved text | Noted form | Unsaved dot | Error mark | run-changed, save-failed | The store |
 |---|---|---|---|---|---|---|---|
-| **Open** (`openFile` → `open`) | `editorText` of the file | the same | `formOf` the file | off (the tab is added clean) | none (the mark lives in the tab's state, which a close drops) | none (`openFile` dismisses any not-text banner) | read only |
-| **Edit** | changed | unchanged | unchanged | on when the text differs from the saved text (`follow`, on each change) | moves with the text; gone when its line is deleted (`cm.ts` `lineMarksField`, `errormark.ts` `lineDeleted`) | unchanged | unchanged |
+| **Open** (`openFile` → `addText`) | `editorText` of the file | the same | `formOf` the file | off (the tab is added clean) | none (the mark lives in the tab's state, which a close drops) | none (`openFile` dismisses any not-text banner) | read only |
+| **Edit** | changed | unchanged | unchanged | on when the text differs from the saved text (the document's computed `dirty`) | moves with the text; gone when its line is deleted (`cm.ts` `lineMarksField`, `errormark.ts` `lineDeleted`) | unchanged | unchanged |
 | **Undo back to the saved text** | equals the saved text | unchanged | unchanged | off | mapped as any edit | unchanged | unchanged |
 | **Save succeeds** (`save`) | unchanged | the text Save wrote | `savedForm`: a `.do` or `.ado` loses its BOM, by the name it was written under | off, unless the text changed while it was written | unchanged | both dismissed for the tab's path; toast "Saved name". A tab renamed while it was written gets all of this under its new path. | `fileText` bytes |
+| **Save cancelled** (a reload, "Reload from the run" or a run's text shown before its turn; its tab closed or retyped) | as the later action left it | as the later action left it | as the later action left it | as the later action left it | unchanged | unchanged; no toast | not written (also when pressed while "Reload from the run"'s or a run's store read waits: that read's turn comes first; an upload's Replace takes a turn too: one whose turn comes first cancels the Save, and one that comes after finds the file changed and asks again) |
 | **Save fails** | unchanged | unchanged | unchanged | stays on | unchanged | save-failed added (one per path, under the tab's path at the time it fails; none for a tab closed meanwhile); the live region says it | unchanged |
-| **Rename** (`renameEntry` → `renamed`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (`saving`) | the same bytes under the new name |
+| **Rename** (`renameEntry` → `moved`) | the same state, its language set by the new name | moved to the new path | moved, BOM and all; the new name decides at the next Save | kept | kept | both moved to the new path; a Save in progress answers there (it holds the record) | the same bytes under the new name |
 | **Rename across a `.do` name** | as Rename | as Rename | `a.txt` with a BOM renamed `a.do`: the next Save writes no BOM. `a.do` with a BOM, never saved here, renamed `a.txt`: the next Save keeps it. | kept | kept | moved | the same bytes |
-| **Rename to a name that opens another way** | a clean tab is closed and opened again in its place (as Close, then Open); a tab with edits stays as it is; a `.png` name closes a clean tab | | | | | | |
-| **Close** (`closeTab` → `closed`) | dropped | dropped | dropped | the tab is gone | dropped with the tab's state | both dismissed | unchanged ("Don't save" loses the edits) |
+| **Rename to a name that opens another way** | a clean tab takes the new kind in its place (`retype`: a text name is read from the store first, in the rename's turn; a name that is not text, or a file the store cannot give, closes it); a tab with edits stays as it is; a `.png` name closes a clean tab | | | | | | |
+| **Close** (`close`) | dropped | dropped | dropped | the tab is gone | dropped with the tab's state | both dismissed | unchanged ("Don't save" loses the edits) |
 | **First visit's sample** (`sample.ts` `seedSample`: an empty store and no mark) | as Open, of `analysis.do`, once the three files are written | the same | `\n`, no BOM | off | none | none; the seed's own writes bring no storage banner (`files.ts`, by the store's change row) | the sample's three files |
 | **"Restore the sample" over an open tab** (an upload: `reopen` → `reload`) | the sample's text (`decodeText(bytes, true)`), a new state | the same | `formOf` it: `\n`, no BOM, so a `\r\n` or BOM tab saves the sample's form from then on | off | gone (new state) | both dismissed | the sample's bytes. Asked first (the clash dialog, the sample's words) when the file differs from the sample or the tab has unsaved edits; a file that holds the sample's bytes, with no unsaved edits, is not written and its tab is left as it is; a missing file is written with no question, and its open tab, if any, is not reloaded. |
 | **Upload and "Replace with uploaded"** (`reopen` → `reload`) | the uploaded text, a new state (undo history gone) | the same | `formOf` the upload | off | gone (new state) | both dismissed | the uploaded bytes. Not text: the tab closes. A clash with the same bytes, no unsaved edits, is not written and its tab is left as it is. |
@@ -683,11 +688,11 @@ What "the run changed" means: the worker compares `/work` before and after the r
 writes the changes in `store.applyRun` (`engine/store.ts`), leaving out any path the page changed during the run (the
 page's version wins). `RunResult.files` lists only what it wrote. `files.ts` `afterRun` calls `followOpen` for each
 listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM kept, null when not UTF-8), and calls
-`editorCommands.ranOver`, which applies `ranover.ts` `followRun`.
+`ranOver` (`editor/documents.ts`), which applies `ranover.ts` `followRun`.
 
 ### Rules a change must keep
 
-- **Compare in the editor's form.** The dot (document against `savedText`) and a run's version (`followRun` passes the
+- **Compare in the editor's form.** The dot (document against `saved`) and a run's version (`followRun` passes the
   run's text through `editorText`) are compared with `\n` breaks and no BOM. Otherwise a clean `\r\n` tab is never
   clean.
 - **Save is the editor's only write to the store.** Run sends the text and writes nothing. The Download in save-failed
@@ -695,20 +700,25 @@ listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM 
   (`ranOver`).
 - **A `.do` or `.ado` file is written without its BOM,** by the name it is saved under (`savedForm`). After a Save,
   the noted form is the one written.
-- **`tabs` first, then the editor.** `open`, `renamed` and `closed` assume the tab already has its new state in `tabs`
-  and `activeTab`.
-- **A null `savedText` means "the store's version is not text".** Keep it null when it moves (`renamed`), and keep
+- **One record per tab, changed only by `editor/documents.ts`.** `tabs`, `activeTab`, `selection` and the dot are
+  computed from the records; a new field written as a plain value would leave them stale.
+- **A null `saved` means "the store's version is not text".** Keep it null when the tab moves (`moved`), and keep
   `?? null` where it is read.
 
 ### Tests that hold this
 
 - `web/test/editor.test.ts`: "a run's version of an open file (editor/ranover.ts): …"; "a file's form
   (editor/ranover.ts): …"; "the error mark's rule (editor/errormark.ts): …"
-- `web/test/app-*.test.ts`: "a run that rewrites an open file: the editor follows it (ranOver); …"; "setDirty sets one
-  tab's dot; decodeText takes strict UTF-8 only"
-- `web/test/files-ui.test.ts`: "openFile: a text file gets a tab, made active, before the editor is told; …"; "closing
+- `web/test/app-*.test.ts`: "a run that rewrites an open file: the editor follows it (ranOver); …"; "decodeText takes
+  strict UTF-8 only"
+- `web/test/files-ui.test.ts`: "openFile: a text file gets a tab with its document, made active; …"; "closing
   a tab: …"; "rename: an open file, and a folder with open files under it: …"; "upload over an open file: …"; "rename:
-  a .dta tab renamed to .csv opens again as text in its place; …"
+  a .dta tab renamed to .csv opens again as text in its place; …"; "rename: a .dta tab renamed to a text name is read
+  before its tab moves, …"; "rename to a text name: a file that is not text closes its tab …"
+- `web/test/documents.test.ts`: every test (open, close, move, retype, reload, a run over a tab, the dot derived, the
+  view attached)
+- `web/test/save.test.ts`: every test (Save against a rename and a delete, the Save rule's cases, a run that keeps
+  the edits, a Save pressed while a reload's or a run's read waits, a Save whose turn comes before a reload's)
 - `web/e2e/editor.spec.ts`:
   - "the editor: typing marks the tab unsaved, Ctrl/Cmd+S saves it with a toast, a failed save shows a banner; …"
   - "a failed save's banner goes when the editor's text is replaced: …"
@@ -724,17 +734,18 @@ listed path open in a text tab; `followOpen` reads it, decodes it strictly (BOM 
 
 ### If you change this
 
-- **`ranOver` calls `setDirty` itself.** The `follow` listener sees only the shown view's transactions; a hidden tab
-  changed through `update()` gives the listener nothing.
+- **A hidden tab changes through `update()`, the shown one through the view.** `update` dispatches on the view when it
+  shows that document, else changes the state in place; either way the document's `state` is current, and its dot
+  follows.
 - **The error mark's effects (`followRuns`, `followErrors`) must read only their one signal.** If they also read
-  `shown`, a tab switch would place the error again at the run's line number, not where its text has moved.
-- **`renamed` shows the new path itself.** `activeTab` changed before the call, when the editor had no state for the
-  new name and showed the empty view.
-- **A rename must keep `savedText`'s null.** Code such as `savedText.get(from) ?? ""` would make a not-text tab look
-  like an empty saved text.
-- **A Save answers for the path its tab has when the store answers** (`saving`). Code that awaits between taking a
-  tab's path and writing the editor's maps under it must follow a rename the same way, or it writes under the old name.
-- **A change that tabs follow takes a turn** (`fileTurn`). A new action that renames, moves or removes files and then
+  the shown tab, a tab switch would place the error again at the run's line number, not where its text has moved.
+- **A rename's retype reads the store before the tab moves,** and moves and retypes the tabs in one batch, so no tab
+  shows its new name as the wrong kind (a .dta view on a .csv).
+- **A Save holds its record and the document it took** (`documents.ts` `save`), never a path. Code that awaits between
+  taking a tab and writing to its document holds the record and compares the document with `content` after the await,
+  or it writes under the old name or over a reload.
+- **A change that tabs follow takes a turn** (`fileTurn`, a generator body over `Io`: `files/turns.ts`; the page writes
+  the store nowhere else, a Biome rule). A store read whose answer a tab takes shares that turn. A new action that renames, moves or removes files and then
   updates the tabs must hold a turn until the tabs have followed it, or a Save pressed in between writes under the old
   name (and brings a deleted file back).
 
@@ -867,7 +878,7 @@ matching `end of do-file` is passed over. A `do` echoed inside that file raises 
   unsaved file with that name. A loop's or program's body is echoed once, where it is defined, so a `do` there gets
   one note after that echo, however many passes run the file (for a program, at its definition, not its call). A `do`
   whose file name is on a continued `> ` line gets none.
-- **OQ-10's note.** When the run ended with rc above 1, `states/words.ts` `noteFor(end.rc, runError(lines))` picks
+- **OQ-10's note.** When the run ended with rc above 1, `log/notes.ts` `noteFor(end.rc, runError(lines))` picks
   the note, which goes at the run's end, after "Go to line" when that is there (Break's note is rc 1's, so never with
   it).
 - **Caches.** `kinds` (each item's `classify`) and `aligned` (each item's echoes, kept with the code they were

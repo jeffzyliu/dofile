@@ -115,16 +115,21 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   wiring, and the drop record checked at the end of each test. It makes the localStorage stand-in before it imports the
   controllers.
 - `app-engine.test.ts`: the engine controller (`app/engine.ts`).
-  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios.
+  - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios; a second
+    `connectEngine` releases the earlier wiring's handles (download, graphics subscription).
   - No engine: a run or command is refused.
 - `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners.
   - "Clear log" and `canClearLog`; no engine: a command is refused and stays out of `history`; a run's promise settles when
     the after-run work throws.
 - `app-files.test.ts`: the files controller (`app/files.ts`): the storage banner, a run that rewrites an open file
   (`ranOver`, the run-changed banner), Download all, `persisted`.
-- `app-theme-tabs.test.ts`: the theme button and `applyTheme`; `setDirty`; strict UTF-8 (`decodeText`).
+- `app-theme-tabs.test.ts`: the theme button and `applyTheme`; strict UTF-8 (`decodeText`).
 - `app-dta.test.ts`: `readDta` (`app/output/dta.ts`): one describe_file per .dta file and version, even when its tab is mounted again
+- `command-bar.test.ts`: `barButton` (`app/start.ts`), the off and disabled rule of the Import and Load buttons.
   while the first is pending; a failed call is asked again.
+- `app-matrix.test.ts`: the Results tab's matrix protocol (`app/output/matrix.ts`): a read's loading entry and answer, an error,
+  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; Copy of an open and a
+  closed matrix; the copied check's timer.
 - `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
 - `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
   real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
@@ -134,26 +139,68 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `files.test.ts`: store and engine worker together: the journal, what a run changed, a worker that cannot open its
   store (the error's name kept; a newer database is reason `updated`), a `/work` that cannot take the page's version
   after a run (`crashed`, cause `folder`).
+- `work-mirror.test.ts`: the worker's `/work` mirror (`engine/work-mirror.ts`) on a fake file system and store: mount's
+  copy and a store that cannot be opened or copied; `sync` of a write, remove, rename and mkdir; a run's created,
+  deleted and renamed files, a same-size rewrite (time only) and an emptied file (size only), an untouched file not
+  read; a refused write tried again until the page replaces it; a file where the store has a folder; a `/work` that
+  cannot take the page's version (said once).
+- `worker-boot.test.ts`: the worker's start (`engine/worker-boot.ts`) without Pyodide: `fetchBytes` and `watchFetch`
+  (the Cache first, a .wasm's type, a missing or failed fetch a `DownloadError`, the real `fetch` put back), a refused
+  or absent Cache, the snapshot start's stage order and errors (a missing file `DownloadError`, a broken Cache its own
+  error, a refused one still fetched), and `boot`'s steps on a stand-in Pyodide (wheels only on the normal boot, the
+  Break callback, the graphics hook).
+- `worker-dispatch.test.ts`: the worker's dispatch (`engine/worker-dispatch.ts`) over stand-in handlers: an unknown op
+  (also a name every object has) and a throwing or rejecting handler answered `{id, error, name, type?}` (a
+  `PythonError`'s `type`, an errno named) with the queue going on; queued ops in order, `graphics` answered beside a
+  waiting run, `run` counted as it arrives; the folder check after a result only; boot's answer posted before it settles
+  `booted`; a hook that throws after a result posts no second answer, calls `answered` once and leaves the queue going;
+  a file's bytes moved.
 - `machine.test.ts`: the state machine.
   - The transition table, SPEC section 5 matching the code, the race scenarios.
   - Invariants: stale events change nothing, one ticket issued once, one live worker, no state keeps a run's code.
   - Start engine's event `ask` in each state.
   - SPEC section 5's states x groups table matching the groups in `machine.ts`.
-- `files-ui.test.ts`: the file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb.
+- `files-ui.test.ts`: the file panel's and tabs' logic (step 4a, `src/app/files/*.ts`) over fake-indexeddb, with the real
+  open documents (`editor/documents.ts`, no view).
   - The tree and the current folder; opening each kind of file (SPEC 3.11), closing, renaming, deleting with open tabs.
   - A folder's .zip; upload and its name clashes; `newPathProblem`; paths in `use` and `import delimited`.
+  - An upload against the other file changes (each write a turn): a new file of the same name, a clash whose file
+    changed while asked or after "Do the same" (asked again), one deleted while asked (written; asked when its tab has
+    unsaved edits), one edited before its write's turn (asked in the unsaved words), a dialog opened while a clash's file
+    is read (the clash waits), a Replace against `openFile`'s read.
+- `documents.test.ts`: the open tabs and their documents (`app/editor/documents.ts`), no view or a stand-in one: open,
+  activate, close and ask, close under a folder, a move, a retype, a reload, a run over a tab, the dot and `selection`
+  derived, a view attached after a file opened.
+- `save.test.ts`: Save (`app/editor/documents.ts` `save`) over fake-indexeddb with the real file actions: its form and
+  the keystroke typed while it waits, a refusal's banner, a rename or a delete before it, a rename while it writes, a
+  rename that retypes its tab, and the Save rule (an upload's Replace, "Reload from the run", a run's text shown cancel a
+  pending Save; a run that keeps the edits does not), a Save pressed while a reload's or a run's read waits (cancelled: the
+  read's turn comes first, 03-F5) or before it (it writes, and the read takes its text), and an upload's Replace answered
+  while a Save waits (the Save writes first; the upload asks again, and Replace leaves the upload, clean).
+- `turns.test.ts`: the order of the page's file changes (`app/files/turns.ts`) over fake-indexeddb: a turn body's store
+  calls and errors (one thrown at once too), a yield that is not a store operation and a turn started inside a body refused, the time limit
+  (`TurnTimeout`; the late write still applied, before the next turn's calls), the store's own order (02-F10), Delete
+  all's list taken in its turn.
+- `sequential-promise-queue.test.ts`: the queue behind turns and uploads (`app/files/sequential-promise-queue.ts`): one
+  task at a time in order, each call's value, a failed task rejects its call and the queue goes on, two queues
+  independent.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
   build
   mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
   SIGINT is written again while the run is on, never into the next run); store failures (`started` with `storeFailed`,
-  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`).
+  `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`); the start's facts
+  (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
+- `part-header.test.ts`: the shared buffer the graphics part is handed over in (`engine/lazy-part.ts`): what the page's
+  writers (land, fail with a reason cut to the room, retry) leave, as the worker's readers see it, and the header's
+  layout and size.
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
   does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
   decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).
-- `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock.
+- `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
+  expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
   test,
   without a current snapshot).
@@ -180,7 +227,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
 - `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
-- `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`).
+- `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`); the denied commands come from `commands.json`, generated from `browser.DENIED`.
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
     page's canonical address in a production build.
@@ -216,10 +263,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
   the failure); a cycle finder on a small graph.
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
+- `dispatch.types.ts` (not run: `npm run check` compiles it): the worker's dispatch table has an entry for every op and
+  no other, each handler with its op's arguments and result (a missing op, a wrong result, wrong arguments and an extra
+  op each fail to compile).
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
-- `build-id.test.ts`: build id and the staleness check.
+- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set).
 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
@@ -260,6 +310,8 @@ Specs:
   - Typing and the unsaved dot, Ctrl/Cmd+S, a failed save's banner, Save during a rename's or a delete's write.
   - Save keeps a file's form: `\r\n`, `\n` and BOM (written back for a .csv, dropped for a .do).
   - Tokens by file type; a file dropped on the editor is uploaded; 16 px on a phone.
+  - A tab's place in its text when shown again: after another tab, and on a phone after another view or a tab switched
+    while the Editor view was hidden.
   - The log: formatting, Go to line, the run-head, Download log, Find, Clear log; the unsplit Output tabs by keyboard.
   - The error line: kept across a tab switch, its clear rules, back when its file is closed and opened with the same
     text.
@@ -298,7 +350,8 @@ Specs:
 - `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
   URL flag.
 - `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
-  put the page's state in a shape (an engine state, a banner, log items, ...); `fixtures.ts` holds the helpers shared by
+  put the page's state in a shape (an engine state, a banner, log items, ...); the tabs' helpers (`markDirty`, `showTabs`,
+  `seedEditorBox`) call the page's `src/app/editor/seeds.ts` through the hook's `documents`, so a seeded tab has a document; `fixtures.ts` holds the helpers shared by
   several specs (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`, `toolbarOf`).
   `settle(page)` replaces a fixed sleep that asserts "nothing moved after this" (a late focus, a late write, a key's late
   effect): three frames, each followed by a task, and with `{ store: true }` a read of the store between them. Use it after
@@ -339,14 +392,37 @@ Specs:
 
 ### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)
 
-Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own and takes one screenshot
-of each state of a fixed list into `web/.shots/baseline/` (git ignores `.shots/`); `npm run shots` builds this tree
-and compares each state with it (plan rule 10: a view move changes no pixel). Its own config (`screenshots.config.ts`:
-Chromium and the iPhone profile only, one worker, no retry), its own folder, no CI job. `shots.spec.ts` holds the
-list: the engine walk (ready with the sample, the log after a run, a results table, the graph and its full-size view,
-a .dta view; the status bar's run time and memory are put back to fixed values), several tabs with one unsaved, each dialog,
-each menu open, the tree with a rename field and with a draft row, a log with an error, each banner, the phone's three
-views. The states are seeded through `e2e/seed.ts`.
+Not a test suite: `npm run shots:baseline -- <commit>` builds a commit in a worktree of its own (for its `E2E_PORT`:
+`.claude/worktrees/shots-baseline-<port>` in the caller's checkout, removed by `node scripts/shots.ts clean`) and takes
+one screenshot of each state of a fixed list into `web/.shots/<port>/baseline/` (git ignores `.shots/`); `npm run shots`
+builds this tree and compares each state with it (plan rule 10: a view move changes no pixel) and prints the near-misses
+(below). Its own config (`screenshots.config.ts`: Chromium and the iPhone profile only, one worker, no retry), its own
+folder, no CI job. `shots.spec.ts` holds the list: the engine walk (ready with the sample, the log after a run, a results
+table, the Data tab, the graph and its full-size view, a .dta view; the status bar's run time and memory are put back to
+fixed values), several tabs with one unsaved, a .dta tab and a .csv tab with no engine (the command bars), each dialog,
+each menu open, the tree with a rename field and with a draft row, a log with an error, each banner (the reset banner
+as the user's and as a crash, store-failed with each cause, the others), the engine-state banners above the editor
+(failed unknown, failed updated, failed twice, declined), the phone's three views. #92 (the engine state groups)
+intended no visible change and none is shot for it. The states are seeded through `e2e/seed.ts`.
+
+Stability (N7 tightening, measured on macOS: one baseline of c5d7a85, then 11 compares of the same build, one of them
+through `npm run shots`'s own build step, the others with `--app`; all 81 shots, Chromium and the "iphone" project, which
+is WebKit, so Chromium's flags do not reach it). Result: **0 pixels in every shot of every compare**, so `ALLOW` in
+`shots.spec.ts` is empty (a per-state allowance stays possible there, with the rules in its comment: the measured
+maximum over 10+ compares plus a stated margin, under 12 pixels, else the state is dropped). The causes found, in the
+order they were found: (1) with no flags, Chromium differed by up to 34 pixels in 26 of 39 states; (2) an overlay
+scrollbar in the log pane, drawn under a dialog's backdrop, flickered the dialogs by 34 pixels (the `::-webkit-scrollbar`
+and `scrollbar-width` rule in `FREEZE` removed it; `--hide-scrollbars` alone did not); (3) the rounded corners of the Run
+button and of the panes antialiased differently from run to run (1 to 12 pixels, in the states with an enabled Run
+button), and `--font-render-hinting=none --force-color-profile=srgb --hide-scrollbars --num-raster-threads=1
+--disable-skia-runtime-opts --disable-partial-raster --disable-gpu-rasterization` removed it (the four rasterizer flags
+together; not tried one by one). `--disable-gpu` and `--disable-lcd-text` did nothing for it. The first measure, 3 compares
+at 2 times the maximum, was too small a sample: an earlier version of this paragraph said 10 pixels; that was wrong.
+`npm run shots` still prints and writes the near-misses (a diff of 1 to the allowance), empty while `ALLOW` is.
+Limits: the scrollbars are hidden, so a pane that starts to overflow is not seen by itself (content clipped or shifted still is); the download size in the page ("about 48 MB") is fixed in the spec, since the snapshot's size differs between builds of one commit (a changed size text is not seen); the comparison has threshold 0, so one colour level of one pixel fails; a baseline is per machine and per
+Chromium build. Two known gaps: the failed-engine banners are seeded with `FAILED.*` read from the caller's checkout, so
+a change of those words shows in neither the baseline nor the compare (the app computes them only in a real failed
+start; seeding the kind alone needs an app change); Firefox and desktop WebKit are not shot.
 
 ## Conformance corpus: value and limits
 
@@ -390,7 +466,8 @@ views. The states are seeded through `e2e/seed.ts`.
   not the Preact views.
 - The Pyodide engine against CPython: `check-snapshot` runs in CI on a pull request and on a push to `main` (`web.yml`,
   the snapshot job; on `main` `deploy.yml` calls `web.yml` and deploys only if it, `ci.yml` and `lint.yml` passed);
-  `check-pytest` and `check-numeric` are run by hand.
+  `check-pytest` and `check-numeric` are run by hand. The three check scripts share `web/scripts/lib/` (argument parser,
+  shard pool, repo paths, `wheels()`); nothing tests them but running them.
 - Probes check rc 0 only, not output.
 
 ## Known flaky tests
@@ -424,7 +501,7 @@ Sightings in CI, not fixed (2026-11-12 unless said). A run id is a GitHub Action
 
 ## Running them
 
-See `CLAUDE.md` (Commands) for the full list. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
+`uv run poe` lists the Python tasks and `web/README.md` the web scripts. In short: `uv run poe test` (Python, parallel, skips the slow comparison),
 `uv run poe slow` (Stata 14 logs), `uv run poe opendta` (vendored suite), `cd web && npm test` and `npm run check`
 (Biome,
 then `tsc`), `npm run e2e` (Playwright), `npm run shots` (the screenshot run, kept out of CI). The format and lint gates are `uv run poe lint` and
