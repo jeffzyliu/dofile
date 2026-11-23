@@ -201,9 +201,12 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, a copy counted, fetched again with `cache: "reload"`; a second damaged copy in a row fails the
     part with no fetch until a graph's `again`, and drops it from the Cache (decision B); failed: the reason written,
-    then the worker's `again` and the browser's `online` fetch it again. The progress the listeners see, read from the
-    region (a miss with its bytes, a damage, a failed re-fetch, a retry, a Cache hit); an older build's part, its
-    download still on its way, says nothing to them.
+    then the worker's `again` and the browser's `online` fetch it again, with one `online` listener per part (decision
+    B's failure sets it too). An `again` or `damaged` from an ended worker, or naming a copy the page has replaced (two
+    graphs saying one damage, race 13's late `damaged`, a late `again`), is dropped. The progress the listeners see, read
+    from the region (a miss with its bytes, a damage, a failed re-fetch, a retry, a Cache hit); an older build's part, its
+    download still on its way, says nothing to them, and once failed is not fetched again when the browser is back
+    online.
 - `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
   counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
   word refused to a writer; a kept writer or reader throws; a page write between a reader's two counter reads is read
@@ -215,7 +218,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   what the page's writers (land, fail with a reason cut to the room, retry: one more copy) leave, as the worker's
   `readPart` sees it (the bytes only when asked for; an empty reason never read back empty), and the header's layout
   (state, length, copy, counter) and size.
-- `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
+- `lazy-part.test.ts`: the page's and the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): the
+  page's machine as a table (`partStep`: each row, and the events it drops); what a waiting graph
   does (Break, write, unpack, ask again once per run, a final failure with its reason, wait, also on a
   busy read; race 11: damage said once, by a graph whose read gives its copy, a landed copy whose damage was said
   waits, a fresh copy is unpacked); races 1 to 3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy,
@@ -227,8 +231,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `worker-graphics.test.ts`: the worker's record of the graphics part (`engine/worker-graphics.ts`) with a fake engine
   and a real shared region (a small brotli part; Node's `DecompressionStream` as the browser's decoder, held when a test
   needs it): the idle steps stop for a run in flight and go on at its end with nothing else to wake them; a graph after
-  the write answers at once, with no second unpack or write; race 13: the decoder's late result of a copy a graph found
-  damaged meanwhile is dropped, not written; one browser decode at a time (a fresh copy waits for the running one); a
+  the write answers at once, with no second unpack or write; a graph that finds the part failed asks once, its `again`
+  naming the copy it read, and the failure of that fetch is its answer; race 13: the decoder's late result of a copy a graph found
+  damaged meanwhile is dropped, not written (its `damaged` names the copy); one browser decode at a time (a fresh copy waits for the running one); a
   Break during a graph's own unpack while the decoder runs: nothing is written until the decoder ends; race
   11, with both decoders: damage an idle step finds blocks only its copy (a graph before the fresh copy waits, not saying
   it, and the fresh copy is written while idle); damage the page has not acted on is said by the next graph, and the one
