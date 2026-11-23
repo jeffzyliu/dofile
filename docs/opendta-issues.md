@@ -641,7 +641,8 @@ Evidence:
   opened. Sites: `use`/`save`/`append`/`merge` and other `using` files (`dta_path`), `type`, `erase`, delimited, Excel,
   `infile`/`infix`, `putexcel`, `mkdir`/`rmdir`/`copy`/`dir` (`datautil._path`), `log`/`cmdlog`, `describe using`,
   `outfile`, a `saving()` file (`statsby`'s is in `commands/statsby.py` since 29a3b28), `do`/`run`, `confirm file`, `graph export`/`save`/`use`, `file open`, the `dir`
-  macro function, SAS/SPSS import, `irf`, `bcal create`, `view`.
+  macro function, SAS/SPSS import, `irf`, `bcal create`, `view`, `hexdump`, and the functions `fileexists()`,
+  `filereadable()`, `fileread()` and `filewrite()`.
 - Not hooked: `cd` (dofile replaces the command when the shim is on), `adopath`/`sysdir`, `program ..., plugin`,
   console hints.
 - With the hook unset (the CLI and MCP server) the engine behaves as before: the full suite and the Stata 14

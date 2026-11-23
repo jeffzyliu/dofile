@@ -14,6 +14,7 @@ import datetime as _dt
 import fnmatch
 import math
 import os
+from pathlib import Path  # dofile patch (PATCH-3)
 import re
 from typing import Any, Callable
 
@@ -23,6 +24,7 @@ from ..core import missing as M
 from ..core import stdate
 from ..core.errors import StataError, type_mismatch
 from ..core.formats import STATA_EPOCH, format_value, parse_format
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 from ..lazy import lazy
 
 # scipy is imported when a distribution function is first called (start-up time)
@@ -818,15 +820,24 @@ def _autocode(x: Value, n: Value, lo: Value, hi: Value) -> float:
 
 # -- files (paths relative to the working folder) -----------------------------------------
 
-register("fileexists", 1)(_str1(lambda f: float(os.path.isfile(f))))
-register("filereadable", 1)(_str1(lambda f: float(os.path.isfile(f) and os.access(f, os.R_OK))))
+def _user_file(f: str) -> Path:
+    """dofile patch (PATCH-3): a file name through the host's path hook."""
+    return user_path(Path(f))
+
+
+def _readable(p: Path) -> float:
+    return float(os.path.isfile(p) and os.access(p, os.R_OK))
+
+
+register("fileexists", 1)(_str1(lambda f: float(os.path.isfile(_user_file(f)))))
+register("filereadable", 1)(_str1(lambda f: _readable(_user_file(f))))
 
 
 @register("fileread", 1)
 def _fileread(f: Value) -> str:
     """Contents of the file; "fileread() error 601" when it cannot be read (VERIFY: code)."""
     try:
-        with open(_s(f), "rb") as fh:
+        with open(_user_file(_s(f)), "rb") as fh:
             return fh.read().decode("utf-8", errors="replace")
     except OSError:
         return "fileread() error 601"
@@ -836,7 +847,7 @@ def _fileread(f: Value) -> str:
 def _filewrite(f: Value, text: Value, r: Value = 0.0) -> float:
     """Writes text to f (r = 1 replaces, r = 2 appends, otherwise f must not exist); returns
     the bytes written or a negative error code. VERIFY: the error codes."""
-    f, data, r = _s(f), _s(text).encode("utf-8"), _n(r)
+    f, data, r = _user_file(_s(f)), _s(text).encode("utf-8"), _n(r)  # dofile patch (PATCH-3): f is the hooked path
     if r not in (1.0, 2.0) and os.path.exists(f):
         return -602.0
     try:

@@ -4,12 +4,14 @@ of the kinds of characters it has."""
 from __future__ import annotations
 
 import os
+from pathlib import Path  # dofile patch (PATCH-3)
 from typing import TYPE_CHECKING
 
 from ..core.errors import StataError
 from ..lang.syntax import find_top, match_options
 from ..lang.words import strip_outer_quotes
 from .registry import command
+from ..core.userpath import user_path  # dofile patch (PATCH-3)
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -126,9 +128,10 @@ def cmd_hexdump(s: "Session", args: str) -> None:
                             "noextended": 5})
     if o.get("tabulate"):
         raise StataError(198, "option tabulate is not available yet in OpenDTA")
-    if not os.path.isfile(name):
+    path = user_path(Path(name))  # dofile patch (PATCH-3)
+    if not os.path.isfile(path):
         raise StataError(601, f"file {name} not found")
-    with open(name, "rb") as fh:
+    with open(path, "rb") as fh:
         data = fh.read()
     lo = int(o["from"]) if o.get("from") else 0
     hi = int(o["to"]) + 1 if o.get("to") else len(data)

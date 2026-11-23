@@ -209,6 +209,38 @@ index 5c5d10d..2e637b8 100644
      if not path.exists():
          raise StataError(601, f"file {shown_path(path)} not found")
      hook = s.ui_hooks.get("view")
+diff --git a/src/dofile/_vendor/opendta/commands/hexdump.py b/src/dofile/_vendor/opendta/commands/hexdump.py
+index 33ca600..2a6e8bf 100644
+--- a/src/dofile/_vendor/opendta/commands/hexdump.py
++++ b/src/dofile/_vendor/opendta/commands/hexdump.py
+@@ -4,12 +4,14 @@ of the kinds of characters it has."""
+ from __future__ import annotations
+ 
+ import os
++from pathlib import Path  # dofile patch (PATCH-3)
+ from typing import TYPE_CHECKING
+ 
+ from ..core.errors import StataError
+ from ..lang.syntax import find_top, match_options
+ from ..lang.words import strip_outer_quotes
+ from .registry import command
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ 
+ if TYPE_CHECKING:
+     from ..session import Session
+@@ -126,9 +128,10 @@ def cmd_hexdump(s: "Session", args: str) -> None:
+                             "noextended": 5})
+     if o.get("tabulate"):
+         raise StataError(198, "option tabulate is not available yet in OpenDTA")
+-    if not os.path.isfile(name):
++    path = user_path(Path(name))  # dofile patch (PATCH-3)
++    if not os.path.isfile(path):
+         raise StataError(601, f"file {name} not found")
+-    with open(name, "rb") as fh:
++    with open(path, "rb") as fh:
+         data = fh.read()
+     lo = int(o["from"]) if o.get("from") else 0
+     hi = int(o["to"]) + 1 if o.get("to") else len(data)
 diff --git a/src/dofile/_vendor/opendta/commands/infile.py b/src/dofile/_vendor/opendta/commands/infile.py
 index 0e2f59b..5d183b4 100644
 --- a/src/dofile/_vendor/opendta/commands/infile.py
@@ -442,3 +474,60 @@ index d7cf691..5ed1ae7 100644
  
  
  def save_gph(g: Graph, path: Path, *, replace: bool, out=None) -> None:
+diff --git a/src/dofile/_vendor/opendta/lang/functions.py b/src/dofile/_vendor/opendta/lang/functions.py
+index 2a97ac6..6974189 100644
+--- a/src/dofile/_vendor/opendta/lang/functions.py
++++ b/src/dofile/_vendor/opendta/lang/functions.py
+@@ -14,6 +14,7 @@ import datetime as _dt
+ import fnmatch
+ import math
+ import os
++from pathlib import Path  # dofile patch (PATCH-3)
+ import re
+ from typing import Any, Callable
+ 
+@@ -23,6 +24,7 @@ from ..core import missing as M
+ from ..core import stdate
+ from ..core.errors import StataError, type_mismatch
+ from ..core.formats import STATA_EPOCH, format_value, parse_format
++from ..core.userpath import user_path  # dofile patch (PATCH-3)
+ from ..lazy import lazy
+ 
+ # scipy is imported when a distribution function is first called (start-up time)
+@@ -818,15 +820,24 @@ def _autocode(x: Value, n: Value, lo: Value, hi: Value) -> float:
+ 
+ # -- files (paths relative to the working folder) -----------------------------------------
+ 
+-register("fileexists", 1)(_str1(lambda f: float(os.path.isfile(f))))
+-register("filereadable", 1)(_str1(lambda f: float(os.path.isfile(f) and os.access(f, os.R_OK))))
++def _user_file(f: str) -> Path:
++    """dofile patch (PATCH-3): a file name through the host's path hook."""
++    return user_path(Path(f))
++
++
++def _readable(p: Path) -> float:
++    return float(os.path.isfile(p) and os.access(p, os.R_OK))
++
++
++register("fileexists", 1)(_str1(lambda f: float(os.path.isfile(_user_file(f)))))
++register("filereadable", 1)(_str1(lambda f: _readable(_user_file(f))))
+ 
+ 
+ @register("fileread", 1)
+ def _fileread(f: Value) -> str:
+     """Contents of the file; "fileread() error 601" when it cannot be read (VERIFY: code)."""
+     try:
+-        with open(_s(f), "rb") as fh:
++        with open(_user_file(_s(f)), "rb") as fh:
+             return fh.read().decode("utf-8", errors="replace")
+     except OSError:
+         return "fileread() error 601"
+@@ -836,7 +847,7 @@ def _fileread(f: Value) -> str:
+ def _filewrite(f: Value, text: Value, r: Value = 0.0) -> float:
+     """Writes text to f (r = 1 replaces, r = 2 appends, otherwise f must not exist); returns
+     the bytes written or a negative error code. VERIFY: the error codes."""
+-    f, data, r = _s(f), _s(text).encode("utf-8"), _n(r)
++    f, data, r = _user_file(_s(f)), _s(text).encode("utf-8"), _n(r)  # dofile patch (PATCH-3): f is the hooked path
+     if r not in (1.0, 2.0) and os.path.exists(f):
+         return -602.0
+     try:

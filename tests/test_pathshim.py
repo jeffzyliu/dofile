@@ -66,6 +66,15 @@ CASES = {
     "cmdlog": ("cmdlog using {P}/out/c, replace\ncmdlog close", "out/c.txt", None),
     "do": ("do {P}/code/sub", None, "\n42\n"),
     "type": ("type {P}/code/sub.do", None, "display 40 + 2"),
+    "hexdump": ("hexdump {P}/code/sub.do", None, "address"),
+    "file functions": (
+        (
+            'display filewrite("{P}/out/w.txt", "hi", 1)\n'
+            'display fileread("{P}/out/w.txt") + " " + string(fileexists("{P}/out/w.txt") + filereadable("{P}/out/w.txt"))'
+        ),
+        "out/w.txt",
+        "\nhi 2\n",
+    ),
     "mkdir": ('mkdir "{P}/made"', "made", None),  # quoted: unquoted, OpenDTA's shlex drops backslashes (ODT-26)
     "erase": (
         (
