@@ -4,16 +4,12 @@
 // back.
 
 import { useEffect, useRef, useState } from "preact/hooks";
-import { say as announce, graphFull, graphIndex, graphs } from "../state.ts";
+import { say as announce, closeFullSize, graphFull, graphIndex, graphs, selectGraphAt } from "../state.ts";
 import { Key } from "../ui/Icon";
 import { useModalTrap } from "../ui/modal-trap.ts";
 import { canCopyImage, copyImage, exportPng } from "./clip.ts";
 import { graphAlt, graphTitle } from "./format.ts";
-import { GraphCard, shownGraph, Thumbs } from "./GraphTab";
-
-const close = () => {
-  graphFull.value = false;
-};
+import { GraphCard, Thumbs } from "./GraphTab";
 
 function Viewer() {
   const root = useRef<HTMLDivElement>(null);
@@ -21,15 +17,13 @@ function Viewer() {
   const saidTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(saidTimer.current), []);
   const list = graphs.value;
-  const at = shownGraph(list, graphIndex.value);
+  const at = graphIndex.value;
   const g = list[at];
-  const move = (by: number) => {
-    graphIndex.value = Math.min(Math.max(at + by, 0), list.length - 1);
-  };
+  const move = (by: number) => selectGraphAt(at + by);
   // the focus goes to the view itself, so a Space that opened it cannot press Close, the first button
   useModalTrap(root, {
     first: (view) => view,
-    onEscape: close,
+    onEscape: closeFullSize,
     onKey: (e) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       e.preventDefault();
@@ -48,7 +42,7 @@ function Viewer() {
   return (
     <div class="viewer" ref={root} role="dialog" aria-modal="true" aria-label="Full-size graph" tabIndex={-1}>
       <div class="vhead">
-        <button type="button" class="btn quiet vclose" aria-keyshortcuts="Escape" onClick={close}>
+        <button type="button" class="btn quiet vclose" aria-keyshortcuts="Escape" onClick={closeFullSize}>
           Close <Key k="Esc" />
         </button>
         <span class="vtitle">{graphTitle(g, list)}</span>
@@ -97,7 +91,7 @@ export function FullSize() {
   const none = graphs.value.length === 0;
   // with no graph left (Clear log) there is nothing to show: close it, from an effect, not while drawing
   useEffect(() => {
-    if (open && none) close();
+    if (open && none) closeFullSize();
   }, [open, none]);
   return open && !none ? <Viewer /> : null;
 }

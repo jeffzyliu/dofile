@@ -1012,8 +1012,8 @@ export const rows: ReadonlySignal<BrowseRows | null>;    // run controller alone
                                                  // moreRows() for the Data tab's "Show 50 more"
 export const pickedVar: Signal<string | null>;   // the Data tab
 export const graphs: ReadonlySignal<Graph[]>;            // run controller: a run's, and addFileGraph() for a .png; "Clear log" empties
-export const graphIndex: Signal<number>;         // the Graph tab, the full-size view and the log's graph links (by `n`)
-export const graphFull: Signal<boolean>;         // the full-size view is open: 4c's Open full size and Close, 4b's inline tap
+export const graphIndex: ReadonlySignal<number>; // the shown graph's place in `graphs` (computed from the picked `n`; the last when none or gone); selectGraph(n), selectGraphAt(place)
+export const graphFull: ReadonlySignal<boolean>; // the full-size view is open: showFullSize() (4c's Open full size, 4b's inline tap), closeFullSize()
 export const theme: Signal<"system" | "light" | "dark">;   // the theme button
 export const wrap: Signal<boolean>;              // "Wrap lines" in the ⋯ menus (state/layout.ts toggleWrap); views read it; kept in localStorage
 export const toast: ReadonlySignal<string | null>;       // anyone, through showToast(text, kind?); it clears itself (toastMs: 4 to 10 s)
@@ -1036,7 +1036,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `engine`; `memory`, `log`, `lastRun`, `history`, `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`,
   `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`). The owner
   writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state.ts`), which only its owner imports (a
-  test checks it). The others stay writable by views: `graphIndex`, `graphFull`, `dialog`, `split`,
+  test checks it). The others stay writable by views: `dialog`, `split`,
   `outputTab`, `phoneTab`, `pickedVar`, `theme`, `layout`, `isolated`.
 - **The open tabs** are not in `state.ts`: `editor/documents.ts` keeps one record per tab (its path and its document,
   or nothing for a .dta tab) and exports `tabs: ReadonlySignal<OpenTab[]>`, `activeTab: ReadonlySignal<string | null>`
@@ -1079,7 +1079,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`UPDATED` is reason "updated"'s); `stageNow` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
-    `history`; it also moves `graphIndex` to the newest graph (views write `graphIndex` too). It reads no engine state: the engine controller tells it, through the
+    `history`; it also shows the newest graph (`selectGraph(null)`; views pick a graph with `selectGraph(n)`). It reads no engine state: the engine controller tells it, through the
     handlers it gives to `connectRun` (a run began, a chunk of its log, its end, an engine is ready, the engine is gone).
     It clears `results`, `macros`, `data`, `rows`, `memory` and `lastRun` when the engine is gone (a reset, or another tab
     took it: the machine's effect `engine-gone`), and asks for `memory` when an engine is ready. Actions: `runCode(code,
@@ -1122,7 +1122,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
     delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Opens, closes,
     renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
-    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
+    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `showFullSize()` (phone); the phone's
     `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
     `editor/documents.ts` `save(path)` and `focusNow("editor")` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
@@ -1167,8 +1167,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
     `log/CommandLine.tsx` (`CommandLine`), `log/LogActions.tsx` (`LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too),
     `log/PhoneStrip.tsx` (`PhoneStrip`: draws the short form), `log/find.ts` (Find's signals and `openFind`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
-    save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
-    Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
+    save-failed and run-changed), `outputTab` (a graph link; `outputTab` "log" when Find opens with the
+    Output pane unsplit), and selects a graph with `selectGraph` (a graph link), and opens the full-size view with `showFullSize` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
     ("Reset now"), `openFile` (Go to line in a file that is not open), `store.write`, `saveAs` (Download log, the
     save-failed banner's Download), `reloadFromStore` (the run-changed banner's "Reload from the
@@ -1295,7 +1295,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **4c** `output/tabs.tsx` (`GraphTab`, `DataTab`, `ResultsTab`; they may be mounted again when the layout changes, so
     their state lives in signals), `output/FullSize.tsx` (`FullSize`, placed once over the page for every width, open
     while `graphFull`), `output/DtaView.tsx` (`DtaView({path})`, a .dta tab, shown in the editor's place). Writes
-    `graphIndex`, `graphFull`, `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
+    through `selectGraph`, `selectGraphAt`, `showFullSize`, `closeFullSize`, and `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
     run.ts `moreRows()`, which appends (run.ts is the one writer of `rows`). Calls
     `call("matrix" | "describe_file", ...)`, `moreRows()`, `runCommand` (Load), `showToast` ("Copied").
     As built (step 4c): `tabs.tsx` only re-exports the three tabs, one file each (`GraphTab.tsx`, `DataTab.tsx`,

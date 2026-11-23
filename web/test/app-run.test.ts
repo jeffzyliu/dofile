@@ -432,3 +432,91 @@ test("a read after a run swallows only no-engine and reset; any other failure is
   assert.match(String(warn.mock.calls[0].arguments[0]), /it said no/);
   warn.mock.restore();
 });
+
+test("selectGraph picks a graph by its number, and it stays shown when the oldest drop off the front", async () => {
+  await readyEngine();
+  for (let i = 0; i < 3; i++) addFileGraph(`p${i}.png`, "PNG");
+  const [a, b] = S.graphs.value;
+  assert.equal(S.graphIndex.value, 2, "a new graph is the one shown");
+  S.selectGraph(b.n);
+  assert.equal(S.graphIndex.value, 1);
+  assert.equal(S.graphs.value[S.graphIndex.value], b);
+  S.selectGraph(a.n);
+  assert.equal(S.graphIndex.value, 0);
+  S.selectGraph(b.n);
+  // the oldest (a) drops off the front: b moves to the front of the list and is still the one shown
+  writable(S.graphs).value = S.graphs.value.slice(1);
+  assert.equal(S.graphs.value[0], b);
+  assert.equal(S.graphIndex.value, 0);
+  assert.equal(S.graphs.value[S.graphIndex.value], b);
+});
+
+test("a graph number no longer kept shows the last graph; null is the newest", async () => {
+  await readyEngine();
+  addFileGraph("a.png", "A");
+  addFileGraph("b.png", "B");
+  addFileGraph("c.png", "C");
+  S.selectGraph(S.graphs.value[0].n);
+  assert.equal(S.graphIndex.value, 0);
+  addFileGraph("d.png", "D");
+  assert.equal(S.graphIndex.value, 3, "a graph added is shown, whatever was picked");
+  S.selectGraph(9999);
+  assert.equal(S.graphIndex.value, 3, "a number that was never kept: the last");
+  S.selectGraph(S.graphs.value[1].n);
+  assert.equal(S.graphIndex.value, 1);
+  S.selectGraph(null);
+  assert.equal(S.graphIndex.value, 3);
+  const oldest = S.graphs.value[0].n;
+  S.selectGraph(oldest);
+  for (let i = 0; i < MAX_GRAPHS; i++) addFileGraph(`p${i}.png`, "PNG");
+  assert.equal(
+    S.graphs.value.findIndex((g) => g.n === oldest),
+    -1,
+    "the picked graph dropped off",
+  );
+  assert.equal(S.graphIndex.value, S.graphs.value.length - 1);
+});
+
+test("Clear log: no graphs, and the numbers that start again from 1 do not meet an old pick", async () => {
+  await readyEngine();
+  addFileGraph("a.png", "A");
+  addFileGraph("b.png", "B");
+  S.selectGraph(S.graphs.value[0].n);
+  await clearLog();
+  assert.equal(S.graphs.value.length, 0);
+  assert.equal(S.graphIndex.value, 0);
+  const done = runCode("x", FILE);
+  client.run1.done.ok(result({ images: ["A", "B", "C"], graph_commands: ["a", "b", "c"], graph_lines: [1, 2, 3] }));
+  await done;
+  assert.deepEqual(
+    S.graphs.value.map((g) => g.n),
+    [1, 2, 3],
+  );
+  assert.equal(S.graphIndex.value, 2, "the newest, not the number picked before the clear");
+});
+
+test("selectGraphAt steps by position and stops at both ends", async () => {
+  await readyEngine();
+  S.selectGraphAt(0);
+  assert.equal(S.graphIndex.value, 0, "no graphs: nothing to select");
+  for (let i = 0; i < 3; i++) addFileGraph(`p${i}.png`, "PNG");
+  const [a, b, c] = S.graphs.value;
+  S.selectGraphAt(S.graphIndex.value + 1);
+  assert.equal(S.graphs.value[S.graphIndex.value], c, "after the last: stays on the last");
+  S.selectGraphAt(S.graphIndex.value - 1);
+  assert.equal(S.graphs.value[S.graphIndex.value], b);
+  S.selectGraphAt(S.graphIndex.value - 1);
+  S.selectGraphAt(S.graphIndex.value - 1);
+  assert.equal(S.graphs.value[S.graphIndex.value], a, "before the first: stays on the first");
+  S.selectGraphAt(-5);
+  assert.equal(S.graphIndex.value, 0);
+  S.selectGraphAt(40);
+  assert.equal(S.graphIndex.value, 2);
+});
+
+test("the full-size view opens and closes through its owner's functions", () => {
+  S.showFullSize();
+  assert.equal(S.graphFull.value, true);
+  S.closeFullSize();
+  assert.equal(S.graphFull.value, false);
+});

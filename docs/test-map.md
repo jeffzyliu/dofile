@@ -118,7 +118,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios; a second
     `connectEngine` releases the earlier wiring's handles (download, graphics subscription).
   - No engine: a run or command is refused.
-- `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners.
+- `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners; the shown graph (`graphIndex`, a computed of the picked graph's number: `selectGraph` keeps it when the oldest drop off, a number no longer kept falls back to the last, a cleared log's restarted numbers meet no old pick, `selectGraphAt` stops at both ends) and `showFullSize`/`closeFullSize`.
   - "Clear log" and `canClearLog`; no engine: a command is refused and stays out of `history`; a run's promise settles when
     the after-run work throws.
 - `app-files.test.ts`: the files controller (`app/files.ts`): the storage banner, a run that rewrites an open file
